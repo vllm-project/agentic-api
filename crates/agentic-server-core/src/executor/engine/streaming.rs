@@ -68,7 +68,7 @@ pub(super) async fn run_stream(
     let clock = execution.clock().clone();
     let relay_clock = clock.clone();
     let mut frames = Box::pin(stream! {
-        let failure_context = StreamFailureContext::from(&ctx);
+        let failure_context = ResponseShell::from(&ctx);
         let (event_tx, event_rx) = mpsc::channel(STREAM_EVENT_BUFFER);
         let exec_ctx_for_run = Arc::clone(&exec_ctx);
         let relay = StreamRelay::client(event_tx, RelayLimits::with_event_bytes(options.max_event_bytes));
@@ -160,7 +160,7 @@ pub(super) async fn run_stream(
 
 fn failed_stream_chunk(
     error: &ExecutorError,
-    context: &StreamFailureContext,
+    context: &ResponseShell,
     accumulator: &mut GatewayStreamAccumulator,
     next_sequence_number: u64,
 ) -> String {
@@ -183,7 +183,7 @@ fn failed_stream_chunk(
 fn mcp_list_tools_failed_chunk(
     listing: &McpListTools,
     error: &ExecutorError,
-    context: &StreamFailureContext,
+    context: &ResponseShell,
     accumulator: &mut GatewayStreamAccumulator,
 ) -> Result<String, ExecutorError> {
     let item = OutputItem::McpListTools(listing.clone());
@@ -271,7 +271,9 @@ async fn completed_stream_chunk(
     }
 }
 
-pub(super) struct StreamFailureContext {
+/// The request-derived fields of a response that has no upstream payload:
+/// a stream failure, or a background response before its terminal result.
+pub(super) struct ResponseShell {
     response_id: String,
     conversation_id: Option<String>,
     model: String,
@@ -283,7 +285,7 @@ pub(super) struct StreamFailureContext {
     standard_fields: crate::types::request_response::StandardResponseFields,
 }
 
-impl From<&RequestContext> for StreamFailureContext {
+impl From<&RequestContext> for ResponseShell {
     fn from(ctx: &RequestContext) -> Self {
         Self {
             response_id: ctx.response_id.clone(),
@@ -307,28 +309,25 @@ impl From<&RequestContext> for StreamFailureContext {
     }
 }
 
-impl StreamFailureContext {
+impl ResponseShell {
     pub(super) fn failed_payload(&self, error: &ExecutorError) -> ResponsePayload {
+        let mut payload = self.payload("failed");
+        payload.error = Some(error.failed_response_error());
+        payload
+    }
+
+    /// The response with `status`, no output, and no error, created now.
+    pub(super) fn payload(&self, status: &str) -> ResponsePayload {
         ResponsePayload {
             id: self.response_id.clone(),
             object: "response".to_owned(),
             created_at: utcnow_str(),
             model: self.model.clone(),
-            status: "failed".to_owned(),
+            status: status.to_owned(),
             output: Vec::new(),
             usage: None,
             incomplete_details: None,
-            error: Some({
-                let mut details = serde_json::json!({
-                    "message": error.error_message(),
-                    "type": error.error_type(),
-                    "code": error.error_code(),
-                });
-                if let Some(param) = error.error_param() {
-                    details["param"] = serde_json::json!(param);
-                }
-                details
-            }),
+            error: None,
             previous_response_id: self.previous_response_id.clone(),
             conversation: self.conversation_id.clone(),
             instructions: self.instructions.clone(),

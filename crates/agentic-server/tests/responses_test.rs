@@ -1582,20 +1582,13 @@ async fn test_unsupported_parameters_are_rejected_for_both_store_values() {
     let (gateway_url, gateway) = spawn_gateway(fixture.state.clone()).await;
     let client = reqwest::Client::new();
     let post = |request: serde_json::Value| client.post(format!("{gateway_url}/v1/responses")).json(&request).send();
-    let unsupported = [
-        (
-            "background",
-            serde_json::json!(true),
-            "unsupported_value",
-            "background mode is not supported; omit `background` or set it to false",
-        ),
-        (
-            "prompt",
-            serde_json::json!({"id": "pmpt_1", "version": "2"}),
-            "unsupported_parameter",
-            "reusable prompt templates are not supported; send `instructions` and `input` instead of `prompt`",
-        ),
-    ];
+    // `background: true` runs in background mode; background_responses_test covers its rejected combinations.
+    let unsupported = [(
+        "prompt",
+        serde_json::json!({"id": "pmpt_1", "version": "2"}),
+        "unsupported_parameter",
+        "reusable prompt templates are not supported; send `instructions` and `input` instead of `prompt`",
+    )];
 
     // All HTTP Responses requests validate before inference.
     for route in [

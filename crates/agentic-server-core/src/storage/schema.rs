@@ -18,7 +18,7 @@ use crate::config::DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS;
 type DbResult<T> = Result<T, sqlx::Error>;
 
 const POSTGRES_SCHEMA_ADVISORY_LOCK: i64 = 7_194_963_546_799_751;
-const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 22;
+const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 25;
 const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 7;
 const REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT: i64 = 5;
 const POSTGRES_INTEGER_WIDENING_SQL: &str = "
@@ -91,7 +91,10 @@ where
                  ('responses', 'metadata', 'text', 'YES'), \
                  ('responses', 'created_at', 'integer', 'NO'), \
                  ('responses', 'tenant_id', 'text', 'YES'), \
-                 ('responses', 'raw_tokens', 'text', 'YES') \
+                 ('responses', 'raw_tokens', 'text', 'YES'), \
+                 ('responses', 'background_status', 'text', 'YES'), \
+                 ('responses', 'background_owner', 'text', 'YES'), \
+                 ('responses', 'background_lease_expires_at', 'integer', 'YES') \
          ) \
          SELECT COUNT(*) \
          FROM required \
@@ -603,6 +606,7 @@ mod tests {
             include_str!("../../migrations/0005_conversation_revision.sql"),
             include_str!("../../migrations/0006_item_references.sql"),
             include_str!("../../migrations/0007_response_item_public_ids.sql"),
+            include_str!("../../migrations/0008_background_responses.sql"),
         ] {
             sqlx::raw_sql(migration)
                 .execute(&mut *connection)

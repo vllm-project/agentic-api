@@ -1,5 +1,6 @@
 //! Database models organized by entity.
 
+pub mod background;
 pub mod conversation;
 pub mod item;
 pub mod response;

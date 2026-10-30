@@ -3,7 +3,9 @@
 //! Silently dropping `background` or `prompt` would answer a different request
 //! than the client sent, so executor admission rejects them with a typed
 //! parameter error instead. Absent and `null` values (and `background: false`)
-//! are the defaults the executor already honours, so they stay accepted.
+//! are the defaults the executor already honours, so they stay accepted. The
+//! HTTP background driver takes `background: true` before admission; every
+//! other entry point still rejects it here.
 //!
 //! The HTTP router parses every request before choosing a route, and direct
 //! pass-through forwards the original body for the upstream to judge. So both
@@ -94,7 +96,7 @@ impl<'de> Visitor<'de> for BackgroundVisitor {
 /// that is not a boolean.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum UnsupportedParameterError {
-    #[error("background mode is not supported; omit `background` or set it to false")]
+    #[error("background mode is only supported by HTTP POST /v1/responses; omit `background` or set it to false")]
     BackgroundMode,
     #[error("Invalid type for 'background': expected a boolean, but got {0} instead.")]
     BackgroundType(JsonKind),
@@ -127,6 +129,16 @@ impl UnsupportedParameterError {
 }
 
 impl RequestPayload {
+    /// Takes `background: true` for the driver that runs it. Any other value
+    /// stays for [`Self::ensure_supported_parameters`] to judge.
+    pub fn take_background(&mut self) -> bool {
+        let requested = matches!(self.background, Some(Background(WireBackground::Boolean(true))));
+        if requested {
+            self.background = None;
+        }
+        requested
+    }
+
     /// Rejects request members typed execution recognizes but cannot honour.
     ///
     /// # Errors

@@ -10,6 +10,7 @@ use std::sync::Arc;
 use either::Either;
 use tracing::{Instrument as _, debug};
 
+use super::background::BackgroundRequest;
 use super::retained::PreparedRetainedResponse;
 use super::run_blocking;
 use super::streaming::{StreamOptions, run_stream};
@@ -304,12 +305,40 @@ impl ExecuteRequest {
     /// Execute an HTTP response, retaining initial upstream failures as HTTP errors.
     /// Streaming startup waits for the first client frame before returning success.
     /// Later failures remain SSE events; dropping the request cancels its producer.
+    /// A `background: true` request runs as [`Self::run_background`].
     ///
     /// # Errors
     /// Returns preparation errors and upstream failures before the first client frame.
     pub async fn run_http(mut self) -> ExecutorResult<Either<ResponsePayload, BoxStream>> {
+        if self.payload.take_background() {
+            return Box::pin(self.run_background()).await.map(Either::Left);
+        }
         self.defer_http_status = true;
         self.run().await
+    }
+
+    /// Prepare the request exactly as a foreground request, store it as
+    /// `queued`, and return that snapshot while a supervised job runs it.
+    ///
+    /// # Errors
+    /// Returns the request's preparation errors, a
+    /// [`BackgroundError`](crate::executor::BackgroundError) for an option
+    /// background mode does not run or for full capacity, or the storage error
+    /// that kept the row from being stored.
+    pub async fn run_background(mut self) -> ExecutorResult<ResponsePayload> {
+        self.payload.take_background();
+        self.validate_direct_execution()?;
+        let execution = self
+            .execution
+            .take()
+            .unwrap_or_else(|| ExecutionSpan::start(Api::Responses, Route::Executor, false, &self.exec_ctx.metrics));
+        let request = BackgroundRequest {
+            payload: self.payload,
+            exec_ctx: self.exec_ctx,
+            client_auth: self.client_auth,
+            in_session: self.continuation.is_some(),
+        };
+        Box::pin(super::background::run(request, execution)).await
     }
 
     /// Execute one stateful conversation turn.
@@ -382,6 +411,7 @@ impl ExecuteRequest {
             tool_search_state,
             &self.exec_ctx,
             self.client_auth.as_ref(),
+            None,
         ))
         .await;
         match result {
@@ -424,7 +454,7 @@ pub fn prepare_non_generating_turn(mut ctx: RequestContext, exec: &ExecutionCont
     Ok(ctx)
 }
 
-async fn prepare(
+pub(super) async fn prepare(
     payload: RequestPayload,
     exec: &ExecutionContext,
     continuation: Option<ResponseContinuation>,

@@ -10,7 +10,7 @@ use crate::executor::modes::{ConversationHandler, ResponseHandler};
 use crate::executor::prepare::prepare_request_tools;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::telemetry::metrics::{ExecutorMetrics, Stage};
-use crate::storage::ResponseMetadata;
+use crate::storage::{ResponseMetadata, StorageError};
 use crate::tool::{ToolSearchMetadata, ToolSearchState};
 use crate::types::event::ResponseStatus;
 use crate::types::io::InOutItem;
@@ -47,7 +47,12 @@ pub(crate) async fn persist_if_needed(
     let persisted = persist_prepared_response(payload, ctx, tool_search_metadata, conv_handler, resp_handler).await;
     timer.finish_result(&persisted);
     match persisted {
-        Err(error @ (ExecutorError::Conflict(_) | ExecutorError::PayloadTooLarge(_))) => Err(error),
+        // A lost background claim means another writer finished the row: expected, not a storage failure.
+        Err(
+            error @ (ExecutorError::Conflict(_)
+            | ExecutorError::PayloadTooLarge(_)
+            | ExecutorError::Storage(StorageError::BackgroundClaimLost { .. })),
+        ) => Err(error),
         Err(source) => {
             error!(error = ?source, "failed to persist response");
             Err(ExecutorError::Persistence(Box::new(source)))

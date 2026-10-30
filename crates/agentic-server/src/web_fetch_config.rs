@@ -55,7 +55,10 @@ fn env_bool(env: &impl Fn(&str) -> Option<String>, name: &str) -> Result<Option<
     }
 }
 
-fn env_parsed<T: std::str::FromStr>(env: &impl Fn(&str) -> Option<String>, name: &str) -> Result<Option<T>, Error>
+pub(crate) fn env_parsed<T: std::str::FromStr>(
+    env: &impl Fn(&str) -> Option<String>,
+    name: &str,
+) -> Result<Option<T>, Error>
 where
     T::Err: std::fmt::Display,
 {

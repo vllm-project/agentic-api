@@ -15,4 +15,6 @@ pub use conversations::{create_conversation, delete_conversation, retrieve_conve
 pub use embeddings::embeddings;
 pub use messages::{count_tokens, messages};
 pub use models::{health, models, ready, retrieve_model};
-pub use responses::{compact_response, delete_response, list_input_items, responses, retrieve_response};
+pub use responses::{
+    cancel_response, compact_response, delete_response, list_input_items, responses, retrieve_response,
+};

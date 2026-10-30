@@ -212,6 +212,7 @@ impl From<&ExecutorError> for FailureCategory {
             ExecutorError::CompactionFailed { .. } => Self::Compaction,
             ExecutorError::Tool(_) | ExecutorError::McpListToolsFailed(_) => Self::Tool,
             ExecutorError::StreamProducerPanicked => Self::Panic,
+            ExecutorError::Background(error) => error.failure_category(),
         }
     }
 }

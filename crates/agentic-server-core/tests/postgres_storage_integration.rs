@@ -621,3 +621,114 @@ async fn postgres_get_or_create_creates_then_returns_the_existing_conversation()
 
     pool.close().await;
 }
+
+#[tokio::test]
+#[ignore = "requires TEST_POSTGRES_URL pointing to an isolated PostgreSQL database"]
+async fn postgres_background_rows_change_only_through_their_allowed_writer() {
+    use agentic_core::storage::BackgroundStatus::{Cancelled, Completed, Failed, InProgress, Queued};
+    use agentic_core::storage::models::background::{
+        TurnRow, Writer, active_lease, expired, finalize_in_tx, insert_queued, renew, transition,
+    };
+
+    let database_url = std::env::var("TEST_POSTGRES_URL").expect("TEST_POSTGRES_URL must be set");
+    let pool =
+        create_pool_with_schema_and_configs(Some(&database_url), SqliteConfig::default(), PostgresConfig::default())
+            .await
+            .expect("initialize PostgreSQL database");
+    let pool = pool.as_ref();
+    let active = [Queued, InProgress];
+    let id = format!("resp_background_{}", uuid::Uuid::now_v7());
+    insert_queued(pool, &id, "{}", 1, "bgo_a", 1_000)
+        .await
+        .expect("enqueue");
+
+    // Only the owner claims and renews its row.
+    assert!(
+        !transition(pool, &id, &[Queued], Writer::Owner("bgo_b"), InProgress, "{}")
+            .await
+            .unwrap()
+    );
+    assert!(
+        transition(pool, &id, &[Queued], Writer::Owner("bgo_a"), InProgress, "{}")
+            .await
+            .unwrap()
+    );
+    assert!(!renew(pool, &id, "bgo_b", 5_000).await.unwrap());
+    assert!(renew(pool, &id, "bgo_a", 2_000).await.unwrap());
+    assert_eq!(active_lease(pool, &id).await.unwrap(), Some(2_000));
+
+    // Recovery may fail the row only after its lease expires.
+    assert!(!expired(pool, 2_000, 100).await.unwrap().contains(&id));
+    assert!(expired(pool, 2_001, 100).await.unwrap().contains(&id));
+    let recovery = |now| Writer::Recovery { now };
+    assert!(
+        !transition(pool, &id, &active, recovery(2_000), Failed, "{}")
+            .await
+            .unwrap()
+    );
+
+    // A client cancels it; a terminal row never moves again.
+    assert!(
+        transition(pool, &id, &active, Writer::Client, Cancelled, "{}")
+            .await
+            .unwrap()
+    );
+    for writer in [Writer::Owner("bgo_a"), Writer::Client, recovery(i64::MAX)] {
+        assert!(!transition(pool, &id, &active, writer, Failed, "{}").await.unwrap());
+    }
+    assert!(!renew(pool, &id, "bgo_a", 9_000).await.unwrap());
+    assert_eq!(active_lease(pool, &id).await.unwrap(), None);
+
+    // The owner completes an in-progress row in its persistence transaction.
+    let finished = format!("resp_background_{}", uuid::Uuid::now_v7());
+    insert_queued(pool, &finished, "{}", 1, "bgo_a", i64::MAX)
+        .await
+        .expect("enqueue");
+    assert!(
+        transition(pool, &finished, &[Queued], Writer::Owner("bgo_a"), InProgress, "{}")
+            .await
+            .unwrap()
+    );
+    let row = TurnRow {
+        id: &finished,
+        conversation_id: None,
+        previous_response_id: None,
+        history_item_ids: "[]",
+        metadata: "{\"model\":\"m\"}",
+    };
+    for (owner, completes) in [("bgo_b", false), ("bgo_a", true), ("bgo_a", false)] {
+        let mut tx = pool.begin().await.expect("begin");
+        assert_eq!(
+            finalize_in_tx(&mut tx, row, owner, Completed).await.unwrap(),
+            completes,
+            "{owner}"
+        );
+        tx.commit().await.expect("commit");
+    }
+    let (status, history): (String, String) =
+        sqlx::query_as("SELECT background_status, history_item_ids FROM responses WHERE id = $1")
+            .bind(&finished)
+            .fetch_one(pool)
+            .await
+            .expect("read the finished row");
+    assert_eq!((status.as_str(), history.as_str()), ("completed", "[]"));
+
+    // The recovery scan's predicate matches the partial index.
+    let mut connection = pool.acquire().await.expect("acquire");
+    sqlx::query("SET enable_seqscan = off")
+        .execute(&mut *connection)
+        .await
+        .expect("prefer index scans");
+    let plan: Vec<String> = sqlx::query_scalar(
+        "EXPLAIN SELECT id FROM responses \
+         WHERE background_status IN ('queued', 'in_progress') AND background_lease_expires_at < 1 \
+         ORDER BY background_lease_expires_at, id LIMIT 100",
+    )
+    .fetch_all(&mut *connection)
+    .await
+    .expect("explain the recovery scan");
+    assert!(
+        plan.iter().any(|line| line.contains("idx_responses_background_active")),
+        "{plan:#?}"
+    );
+}

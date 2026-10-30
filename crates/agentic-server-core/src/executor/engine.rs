@@ -6,6 +6,7 @@
 //! need per-request configuration.
 
 mod agent_turn;
+mod background;
 mod execute;
 mod multi_agent;
 pub(crate) mod retained;
@@ -29,6 +30,7 @@ use super::compaction::{CompactionCarryOver, compact_items};
 use super::gateway::{
     compaction_event_plans, emit_gateway_completed_events, emit_gateway_start_events, emit_response_start_events,
 };
+use crate::executor::background::BackgroundRun;
 use crate::executor::error::ExecutorResult;
 use crate::executor::persist::persist_if_needed;
 use crate::executor::pipeline::AgentPipeline;
@@ -257,19 +259,30 @@ fn finalize_loop(
     ctx.inject_ids(payload);
 }
 
+/// Run a turn to its terminal payload and persist it. A background turn keeps
+/// its admission identity and completes the row its job owns instead of inserting one.
 async fn run_blocking(
     ctx: RequestContext,
     tool_search_state: Option<ToolSearchState>,
     exec_ctx: &ExecutionContext,
     auth: Option<&UpstreamHeaders>,
+    background: Option<&BackgroundRun>,
 ) -> ExecutorResult<ResponsePayload> {
     let mut agent = AgentPipeline::new(ctx, tool_search_state, StreamRelay::detached());
-    let (payload, tool_search_metadata) =
+    let (mut payload, tool_search_metadata) =
         Box::pin(run_until_gateway_tools_complete(&mut agent, exec_ctx, auth, false)).await?;
     let (ctx, _) = agent.into_parts();
 
-    let ch = exec_ctx.conv_handler.clone();
-    let rh = exec_ctx.resp_handler.clone();
+    let (ch, rh) = match background {
+        Some(run) => {
+            run.apply(&mut payload);
+            (
+                exec_ctx.conv_handler.finalizing_background(run.owner()),
+                exec_ctx.resp_handler.finalizing_background(run.owner()),
+            )
+        }
+        None => (exec_ctx.conv_handler.clone(), exec_ctx.resp_handler.clone()),
+    };
     Box::pin(persist_if_needed(
         payload.clone(),
         ctx,
