@@ -1,5 +1,8 @@
 use std::collections::HashMap;
 
+mod file_search;
+pub use file_search::FileSearchToolParam;
+
 use super::domain::DomainFilters;
 pub use super::tool_search::{ToolSearchExecution, ToolSearchStatus, ToolSearchToolParam};
 use serde::{Deserialize, Serialize};
@@ -293,17 +296,6 @@ pub struct WebSearchToolParam {
     pub unsupported_async: Option<bool>,
 }
 
-/// Parameters for a file search tool.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct FileSearchToolParam {
-    pub vector_store_ids: Option<Vec<String>>,
-    /// `async` applies only to function and custom tools; captured so declaration validation can reject it.
-    #[serde(default, rename = "async", skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "openapi", schema(ignore))]
-    pub unsupported_async: Option<bool>,
-}
-
 /// The only `OpenAI` container selector supported by the gateway.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -464,6 +456,9 @@ impl utoipa::PartialSchema for ResponsesTool {
         use utoipa::openapi::schema::{AdditionalProperties, AllOfBuilder, ObjectBuilder, SchemaType, Type};
 
         fn tagged(type_value: &str, schema: &str) -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+            if let Some(schema) = file_search::tagged_schema(type_value) {
+                return schema;
+            }
             AllOfBuilder::new()
                 .item(
                     ObjectBuilder::new()
@@ -916,6 +911,23 @@ mod tests {
         let back = serde_json::to_value(&tool).unwrap();
         assert_eq!(back["type"], "file_search");
         assert_eq!(back["vector_store_ids"][0], "vs_abc");
+    }
+
+    #[test]
+    fn file_search_preserves_typed_options_and_rejects_unsupported_fields() {
+        let wire = serde_json::json!({
+            "type": "file_search", "vector_store_ids": ["vs_1"], "max_num_results": 3,
+            "filters": {"type":"eq","key":"category","value":"policy"},
+            "ranking_options": {"ranker":"auto","score_threshold":0.4,"hybrid_search":null}
+        });
+        let tool: ResponsesTool = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(serde_json::to_value(tool).unwrap(), wire);
+        assert!(
+            serde_json::from_value::<ResponsesTool>(serde_json::json!({
+                "type":"file_search","vector_store_ids":["vs_1"],"rewrite_query":true
+            }))
+            .is_err()
+        );
     }
 
     #[test]

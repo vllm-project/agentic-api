@@ -56,6 +56,7 @@ pub enum SSEEventType {
     ReasoningSummaryTextDone,
 
     // Built-in tool calls
+    FileSearchCallInProgress,
     FileSearchCallSearching,
     FileSearchCallCompleted,
     WebSearchCallInProgress,
@@ -120,6 +121,7 @@ impl From<&str> for SSEEventType {
             "response.reasoning_part.done" => Self::ReasoningPartDone,
             "response.reasoning_summary_text.delta" => Self::ReasoningSummaryTextDelta,
             "response.reasoning_summary_text.done" => Self::ReasoningSummaryTextDone,
+            "response.file_search_call.in_progress" => Self::FileSearchCallInProgress,
             "response.file_search_call.searching" => Self::FileSearchCallSearching,
             "response.file_search_call.completed" => Self::FileSearchCallCompleted,
             "response.web_search_call.in_progress" => Self::WebSearchCallInProgress,
@@ -176,6 +178,7 @@ impl TryFrom<SSEEventType> for &'static str {
             SSEEventType::ReasoningPartDone => Ok("response.reasoning_part.done"),
             SSEEventType::ReasoningSummaryTextDelta => Ok("response.reasoning_summary_text.delta"),
             SSEEventType::ReasoningSummaryTextDone => Ok("response.reasoning_summary_text.done"),
+            SSEEventType::FileSearchCallInProgress => Ok("response.file_search_call.in_progress"),
             SSEEventType::FileSearchCallSearching => Ok("response.file_search_call.searching"),
             SSEEventType::FileSearchCallCompleted => Ok("response.file_search_call.completed"),
             SSEEventType::WebSearchCallInProgress => Ok("response.web_search_call.in_progress"),
@@ -549,6 +552,7 @@ mod tests {
             SSEEventType::ReasoningPartDone,
             SSEEventType::ReasoningSummaryTextDelta,
             SSEEventType::ReasoningSummaryTextDone,
+            SSEEventType::FileSearchCallInProgress,
             SSEEventType::FileSearchCallSearching,
             SSEEventType::FileSearchCallCompleted,
             SSEEventType::WebSearchCallInProgress,

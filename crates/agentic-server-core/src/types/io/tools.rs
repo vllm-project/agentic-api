@@ -21,6 +21,7 @@ pub enum ToolChoice {
     None,
     Required,
     Shell,
+    FileSearch,
     Function {
         namespace: Option<String>,
         name: NonEmptyToolName,
@@ -40,12 +41,88 @@ pub enum ToolChoice {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+/// A named tool selector, or the built-in file-search selector with its canonical internal name.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AllowedTool {
-    #[serde(rename = "type")]
     pub type_: NonEmptyToolName,
     pub name: NonEmptyToolName,
+}
+
+impl Serialize for AllowedTool {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let built_in = self.type_.as_str() == "file_search";
+        let mut map = serializer.serialize_map(Some(if built_in { 1 } else { 2 }))?;
+        map.serialize_entry("type", &self.type_)?;
+        if !built_in {
+            map.serialize_entry("name", &self.name)?;
+        }
+        map.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for AllowedTool {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Fields {
+            #[serde(rename = "type")]
+            type_: NonEmptyToolName,
+            name: Option<NonEmptyToolName>,
+        }
+        let fields = Fields::deserialize(deserializer)?;
+        let name = if fields.type_.as_str() == "file_search" {
+            if fields.name.is_some() {
+                return Err(de::Error::custom("file_search selector does not accept a name"));
+            }
+            file_search_name()
+        } else {
+            fields.name.ok_or_else(|| de::Error::missing_field("name"))?
+        };
+        Ok(Self {
+            type_: fields.type_,
+            name,
+        })
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl utoipa::PartialSchema for AllowedTool {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        use utoipa::openapi::{
+            ObjectBuilder, Ref,
+            schema::{OneOfBuilder, SchemaType, Type},
+        };
+        OneOfBuilder::new()
+            .item(
+                ObjectBuilder::new()
+                    .property(
+                        "type",
+                        ObjectBuilder::new()
+                            .schema_type(SchemaType::new(Type::String))
+                            .enum_values(Some(["file_search"])),
+                    )
+                    .required("type"),
+            )
+            .item(
+                ObjectBuilder::new()
+                    .property("type", Ref::from_schema_name("NonEmptyToolName"))
+                    .required("type")
+                    .property("name", Ref::from_schema_name("NonEmptyToolName"))
+                    .required("name"),
+            )
+            .into()
+    }
+}
+#[cfg(feature = "openapi")]
+impl utoipa::ToSchema for AllowedTool {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("AllowedTool")
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -70,6 +147,11 @@ impl utoipa::PartialSchema for ToolChoice {
 
         OneOfBuilder::new()
             .item(str_type().enum_values(Some(["auto", "none", "required"])))
+            .item(
+                ObjectBuilder::new()
+                    .property("type", str_type().enum_values(Some(["file_search", "shell"])))
+                    .required("type"),
+            )
             .item(
                 ObjectBuilder::new()
                     .property("type", str_type().enum_values(Some(["function"])))
@@ -140,6 +222,11 @@ impl Serialize for ToolChoice {
                 map.serialize_entry("type", "shell")?;
                 map.end()
             }
+            Self::FileSearch => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("type", "file_search")?;
+                map.end()
+            }
             Self::Function { namespace, name } => {
                 let mut map = serializer.serialize_map(Some(2 + usize::from(namespace.is_some())))?;
                 map.serialize_entry("type", "function")?;
@@ -194,6 +281,12 @@ impl<'de> Deserialize<'de> for ToolChoice {
             Value::Object(object) => {
                 if object.get("type").and_then(Value::as_str) == Some("shell") {
                     return Ok(Self::Shell);
+                }
+                if object.get("type").and_then(Value::as_str) == Some("file_search") {
+                    if object.len() != 1 {
+                        return Err(de::Error::custom("file_search selector accepts only type"));
+                    }
+                    return Ok(Self::FileSearch);
                 }
                 if object.get("type").and_then(Value::as_str) == Some("function") {
                     let namespace = object.get("namespace").and_then(Value::as_str).map(str::to_string);
@@ -275,13 +368,14 @@ impl ToolChoice {
             | Self::None
             | Self::Required
             | Self::Shell
+            | Self::FileSearch
             | Self::Function { .. }
             | Self::Custom { .. }
             | Self::AllowedTools { .. } => true,
         }
     }
 
-    /// Converts client-facing custom-tool selectors to the function-tool shape
+    /// Converts client-facing custom, shell, and file-search selectors to the function-tool shape
     /// used by the normalized upstream tool declarations.
     #[must_use]
     pub(crate) fn normalized_for_upstream(&self) -> Self {
@@ -290,6 +384,10 @@ impl ToolChoice {
                 namespace: None,
                 name: NonEmptyToolName::try_from(crate::tool::shell::SHELL_FUNCTION_NAME)
                     .expect("shell is a non-empty tool name"),
+            },
+            Self::FileSearch => Self::Function {
+                namespace: None,
+                name: file_search_name(),
             },
             Self::Custom { name } => Self::Function {
                 namespace: None,
@@ -307,8 +405,15 @@ impl ToolChoice {
     }
 }
 
+fn file_search_name() -> NonEmptyToolName {
+    NonEmptyToolName::try_from("file_search").expect("file_search is a non-empty tool name")
+}
+
 fn normalize_allowed_tool(mut tool: AllowedTool) -> AllowedTool {
-    if tool.type_.as_str() == "custom" {
+    if tool.type_.as_str() == "file_search" {
+        tool.name = file_search_name();
+    }
+    if matches!(tool.type_.as_str(), "custom" | "file_search") {
         tool.type_ = NonEmptyToolName::try_from("function").expect("function is a non-empty tool type");
     }
     tool
@@ -349,6 +454,28 @@ pub(crate) fn resolve_tool_choice(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_search_tool_choice_round_trips_and_normalizes() {
+        let public = serde_json::json!({"type":"file_search"});
+        let choice: ToolChoice = serde_json::from_value(public.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&choice).unwrap(), public);
+        assert_eq!(
+            serde_json::to_value(choice.normalized_for_upstream()).unwrap(),
+            serde_json::json!({"type":"function","name":"file_search"})
+        );
+    }
+
+    #[test]
+    fn file_search_allowed_selector_needs_no_name_and_normalizes() {
+        let public = serde_json::json!({"type":"allowed_tools","mode":"required","tools":[{"type":"file_search"},{"type":"function","name":"weather"}]});
+        let choice: ToolChoice = serde_json::from_value(public.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&choice).unwrap(), public);
+        assert_eq!(
+            serde_json::to_value(choice.normalized_for_upstream()).unwrap(),
+            serde_json::json!({"type":"allowed_tools","mode":"required","tools":[{"type":"function","name":"file_search"},{"type":"function","name":"weather"}]})
+        );
+    }
 
     #[test]
     fn function_tool_choice_rejects_empty_name() {

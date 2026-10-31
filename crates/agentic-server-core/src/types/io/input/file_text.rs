@@ -25,7 +25,7 @@ use super::{InputFileContent, InputTextContent};
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum InputFileError {
     #[error(
-        "input_file with file_id is not supported: this gateway has no Files API; send the file inline as \
+        "input_file with file_id is not supported in Responses input; send the file inline as \
          file_data (a base64 UTF-8 text file) or as input_text"
     )]
     FileId,

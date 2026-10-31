@@ -53,6 +53,9 @@ use utoipa::OpenApi;
     ),
     components(schemas(
         FileUploadRequest,
+        agentic_core::types::io::FileSearchCall,
+        agentic_core::types::io::FileSearchCallResult,
+        agentic_core::types::io::FileCitation,
         agentic_core::types::request_response::PromptCacheOptions,
         agentic_core::types::request_response::PromptCacheMode,
         agentic_core::types::request_response::PromptCacheTtl,
@@ -516,7 +519,13 @@ mod tests {
                 .any(|param| param["name"] == "limit" && param["in"] == "query")
         );
         let schemas = &spec["components"]["schemas"];
-        for name in ["FileObject", "VectorStoreObject", "SearchResult"] {
+        for name in [
+            "FileObject",
+            "VectorStoreObject",
+            "SearchResult",
+            "FileSearchCall",
+            "FileCitation",
+        ] {
             assert!(schemas[name].is_object(), "missing file search schema {name}");
         }
     }
@@ -803,7 +812,7 @@ mod tests {
             serde_json::json!({"type": "tool_search", "execution": "client"}),
             serde_json::json!({"type": "mcp", "server_label": "s"}),
             serde_json::json!({"type": "web_search_preview"}),
-            serde_json::json!({"type": "file_search"}),
+            serde_json::json!({"type": "file_search", "vector_store_ids": ["vs_abc"]}),
             serde_json::json!({"type": "code_interpreter", "container": {"type": "auto"}}),
             serde_json::json!({"type": "shell", "environment": {"type": "local"}}),
             serde_json::json!({"type": "namespace", "name": "ns", "tools": []}),
@@ -969,6 +978,11 @@ mod tests {
         validate("ResponsesTool", &ns_tool);
         let _: agentic_core::types::tools::ResponsesTool =
             serde_json::from_value(ns_tool).expect("serde must accept namespace with tools");
+
+        validate(
+            "ResponsesTool",
+            &serde_json::json!({"type": "file_search", "vector_store_ids": ["vs_abc"]}),
+        );
 
         // -- InputItem: structured custom tool output --
         let structured_output = serde_json::json!({

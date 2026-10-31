@@ -1,4 +1,7 @@
 mod apply_done;
+mod file_search;
+mod history;
+pub use file_search::{FileCitation, FileSearchCall, FileSearchCallResult};
 pub(crate) mod tool_search_call;
 mod web_search_status;
 pub use apply_done::ApplyDone;
@@ -17,7 +20,6 @@ use crate::types::tools::{ToolSearchExecution, ToolSearchStatus};
 use crate::utils::common::{deserialize_from_value_opt, deserialize_nullable_vec};
 use crate::utils::uuid7_str;
 
-use super::InOutItem;
 use super::code_interpreter::CodeInterpreterCall;
 use super::input::{
     CompactionItem, InputFunctionToolCall, InputItem, InputTextContent, InputToolSearchCall, ToolSearchOutputMessage,
@@ -892,6 +894,8 @@ pub enum OutputItem {
     CustomToolCall(CustomToolCall),
     #[serde(rename = "shell_call")]
     ShellCall(ShellCall),
+    #[serde(rename = "file_search_call")]
+    FileSearchCall(FileSearchCall),
     #[serde(rename = "web_search_call")]
     WebSearchCall(WebSearchCall),
     #[serde(rename = "mcp_call")]
@@ -937,6 +941,7 @@ impl utoipa::PartialSchema for OutputItem {
             .item(tagged("tool_search_output", "ToolSearchOutputMessage"))
             .item(tagged("custom_tool_call", "CustomToolCall"))
             .item(tagged("shell_call", "ShellCall"))
+            .item(tagged("file_search_call", "FileSearchCall"))
             .item(tagged("web_search_call", "WebSearchCall"))
             .item(tagged("mcp_call", "McpCall"))
             .item(tagged("mcp_list_tools", "McpListTools"))
@@ -969,6 +974,7 @@ impl OutputItem {
             Self::ToolSearchOutput(item) => item.agent.as_ref(),
             Self::CustomToolCall(item) => item.agent.as_ref(),
             Self::ShellCall(item) => item.agent.as_ref(),
+            Self::FileSearchCall(item) => item.agent.as_ref(),
             Self::WebSearchCall(item) => item.agent.as_ref(),
             Self::McpCall(item) => item.agent.as_ref(),
             Self::McpListTools(item) => item.agent.as_ref(),
@@ -991,6 +997,7 @@ impl OutputItem {
             Self::ToolSearchOutput(item) => &mut item.agent,
             Self::CustomToolCall(item) => &mut item.agent,
             Self::ShellCall(item) => &mut item.agent,
+            Self::FileSearchCall(item) => &mut item.agent,
             Self::WebSearchCall(item) => &mut item.agent,
             Self::McpCall(item) => &mut item.agent,
             Self::McpListTools(item) => &mut item.agent,
@@ -1012,6 +1019,7 @@ impl OutputItem {
             | Self::ShellCall(_)
             | Self::Message(_)
             | Self::CodeInterpreterCall(_)
+            | Self::FileSearchCall(_)
             | Self::WebSearchCall(_)
             | Self::McpCall(_)
             | Self::McpListTools(_)
@@ -1035,6 +1043,7 @@ impl OutputItem {
             Self::Message(_)
             | Self::ToolSearchOutput(_)
             | Self::CodeInterpreterCall(_)
+            | Self::FileSearchCall(_)
             | Self::WebSearchCall(_)
             | Self::McpCall(_)
             | Self::McpListTools(_)
@@ -1045,41 +1054,6 @@ impl OutputItem {
             | Self::AgentMessage(_)
             | Self::Unknown { .. } => false,
         }
-    }
-
-    /// Whether this public item is one the executor records as the turn's
-    /// history in round order (a hosted tool-search item), rather than as output.
-    #[must_use]
-    pub(crate) fn is_recorded_as_history(&self) -> bool {
-        match self {
-            Self::ToolSearchCall(call) => call.execution == ToolSearchExecution::Server,
-            Self::ToolSearchOutput(_) => true,
-            Self::Message(_)
-            | Self::FunctionCall(_)
-            | Self::CustomToolCall(_)
-            | Self::ShellCall(_)
-            | Self::CodeInterpreterCall(_)
-            | Self::WebSearchCall(_)
-            | Self::McpCall(_)
-            | Self::McpListTools(_)
-            | Self::Reasoning(_)
-            | Self::Compaction(_)
-            | Self::MultiAgentCall(_)
-            | Self::MultiAgentCallOutput(_)
-            | Self::AgentMessage(_)
-            | Self::Unknown { .. } => false,
-        }
-    }
-
-    /// Whether persistence must leave this output out because the turn's
-    /// history items already hold it under the same id. A turn that did not
-    /// record it (multi-agent rounds keep their own history) stores it as output.
-    #[must_use]
-    pub(crate) fn is_already_in_history(&self, history: &[InOutItem]) -> bool {
-        self.is_recorded_as_history()
-            && self
-                .id()
-                .is_some_and(|id| history.iter().any(|item| item.id() == Some(id)))
     }
 
     /// Shapes a stored output item as continuation input.
@@ -1111,6 +1085,7 @@ impl OutputItem {
             Self::ToolSearchCall(_)
             | Self::ToolSearchOutput(_)
             | Self::CodeInterpreterCall(_)
+            | Self::FileSearchCall(_)
             | Self::WebSearchCall(_)
             | Self::McpCall(_)
             | Self::Unknown { .. } => None,
@@ -1309,6 +1284,20 @@ mod tests {
                 "content": [{"type": "output_text", "text": "The parser handles errors correctly.", "annotations": []}]
             })
         );
+    }
+
+    #[test]
+    fn file_search_call_preserves_retrieved_identifiers() {
+        let wire = serde_json::json!({
+            "type": "file_search_call", "id": "fs_1", "status": "completed",
+            "queries": ["policy"], "results": [{"file_id": "file_1", "filename": "policy.txt",
+                "score": 0.9, "attributes": {}, "text": "Policy text"}]
+        });
+        let item: OutputItem = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(item.id(), Some("fs_1"));
+        assert_eq!(serde_json::to_value(&item).unwrap(), wire);
+        assert!(!item.requires_client_action(&ToolRegistry::default()));
+        assert!(item.to_input_item().is_none());
     }
 
     #[test]
