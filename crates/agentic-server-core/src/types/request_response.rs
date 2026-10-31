@@ -375,6 +375,7 @@ impl RequestPayload {
         let input = self.upstream_input(declarations.as_deref(), namespace_map.as_ref(), history)?;
         let tool_choice = CodexNamespaceHandler.resolve_tool_choice(namespace_map.as_ref(), self.tool_choice.as_ref());
         CustomHandler::validate_tool_choice(declarations.as_deref(), &tool_choice)?;
+        crate::tool::file_search::FileSearchHandler::validate_tool_choice(declarations.as_deref(), &tool_choice)?;
         Ok(UpstreamRequest {
             store: (!self.store).then_some(false),
             model: &self.model,

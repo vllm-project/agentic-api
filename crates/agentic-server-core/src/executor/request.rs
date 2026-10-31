@@ -177,9 +177,14 @@ impl ExecutionContext {
         self
     }
 
-    /// Installs a file search service for the Files and vector-store APIs.
+    /// Installs one file search service for both the Files API and the
+    /// gateway-executed built-in tool.
     #[must_use]
     pub fn with_file_search_service(mut self, service: crate::tool::file_search::FileSearchService) -> Self {
+        self.gateway_executors
+            .insert(GatewayExecutorRegistration::FileSearch(Arc::new(
+                crate::tool::file_search::FileSearchHandler::new(service.clone()),
+            )));
         self.file_search = Some(service);
         self
     }

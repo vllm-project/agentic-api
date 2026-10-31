@@ -2,6 +2,7 @@ mod hosted_search;
 mod mcp_listing;
 
 use std::collections::HashMap;
+mod file_search;
 use std::collections::HashSet;
 use std::collections::hash_map::Entry;
 use std::future::{Future, ready};
@@ -27,7 +28,7 @@ use super::{CodexNamespaceHandler, McpHandler, NamespaceMap, ToolError, ToolOutp
 use hosted_search::insert_tool_search_entry;
 
 use crate::types::io::output::{FunctionToolCall, McpListTools};
-use crate::types::tools::{CodeInterpreterToolParam, FileSearchToolParam, WebFetchToolParam};
+use crate::types::tools::{CodeInterpreterToolParam, WebFetchToolParam};
 
 const MAX_MCP_SERVERS_PER_REQUEST: usize = 64;
 const MAX_DISCOVERED_MCP_TOOLS_PER_REQUEST: usize = 128;
@@ -179,15 +180,6 @@ fn insert_unique_tool_entries(
 pub struct GatewayDispatchResult {
     pub tool_type: ToolType,
     pub output: Result<ToolOutput, ToolError>,
-}
-
-// TODO: move to a dedicated file_search module alongside its `ToolHandler`
-// once file_search execution is implemented.
-fn insert_file_search_entry(entries: &mut HashMap<String, ToolEntry>, _params: &FileSearchToolParam) {
-    entries.insert(
-        "file_search".to_owned(),
-        ToolEntry::gateway(ToolType::FileSearch, None, None),
-    );
 }
 
 fn insert_code_interpreter_entry(
@@ -363,9 +355,7 @@ impl ToolRegistry {
                     })?;
                 }
                 ToolDeclaration::WebFetch(p) => insert_web_fetch_binding(&mut entries, executors, p)?,
-                ToolDeclaration::FileSearch(p) => {
-                    insert_unique_tool_entries(&mut entries, |resolved| insert_file_search_entry(resolved, p))?;
-                }
+                ToolDeclaration::FileSearch(p) => file_search::insert_file_search_binding(&mut entries, executors, p)?,
                 ToolDeclaration::CodeInterpreter(param) => {
                     insert_code_interpreter_entry(&mut entries, executors, param)?;
                 }
@@ -1002,7 +992,7 @@ mod tests {
             ("mcp__counter__increment", ToolType::Mcp, Some("counter"), true),
             ("mcp__counter__get_value", ToolType::Mcp, Some("counter"), true),
             ("web_search", ToolType::WebSearch, None, true),
-            ("file_search", ToolType::FileSearch, None, false),
+            ("file_search", ToolType::FileSearch, None, true),
             (
                 "agentic_ns__mcp__shell__run",
                 ToolType::CodexNamespace,

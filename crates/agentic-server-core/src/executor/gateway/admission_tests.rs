@@ -22,6 +22,7 @@ use crate::types::tools::{ResponsesTool, WebSearchToolParam};
 #[derive(Default)]
 struct CountingSearch {
     executions: AtomicUsize,
+    hide_call_id: Option<&'static str>,
 }
 
 impl ToolHandler for CountingSearch {
@@ -60,7 +61,11 @@ impl GatewayExecutor for CountingSearch {
     }
 
     fn plan_gateway_events(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> GatewayToolEventPlan {
-        GatewayToolEventPlan::new(crate::tool::web_search::started_output_item(call))
+        GatewayToolEventPlan::new(
+            (self.hide_call_id != Some(call.call_id.as_str()))
+                .then(|| crate::tool::web_search::started_output_item(call))
+                .flatten(),
+        )
     }
 
     fn public_output(
@@ -216,19 +221,18 @@ async fn client_function_calls_never_consume_the_budget() {
 
 #[tokio::test]
 async fn omitted_refusals_keep_later_public_indexes_contiguous() {
-    let search = Arc::new(CountingSearch::default());
-    let registry = registry(
-        &search,
-        serde_json::json!([{"type": "web_search"}, {"type": "file_search", "vector_store_ids": ["vs"]}]),
-    )
-    .await;
-    // The refused file search has no public item, so the trailing message moves up.
+    let search = Arc::new(CountingSearch {
+        hide_call_id: Some("b"),
+        ..CountingSearch::default()
+    });
+    let registry = registry(&search, serde_json::json!([{"type": "web_search"}])).await;
+    // A refused gateway call without a started item has no public slot, so the trailing message moves up.
     let message: OutputItem = serde_json::from_value(serde_json::json!({
         "type": "message", "id": "msg_1", "role": "assistant", "status": "completed",
         "content": [{"type": "output_text", "text": "done", "annotations": []}]
     }))
     .expect("message item");
-    let items = [call("web_search", "a"), call("file_search", "b"), message];
+    let items = [call("web_search", "a"), call("web_search", "b"), message];
     let mut budget = limit(1);
     let mut scheduler =
         GatewayScheduler::plan_with_budget(&items, &registry, 5, GatewaySchedulerPolicy::default(), &mut budget);
@@ -295,15 +299,14 @@ fn received_events(receiver: &mut mpsc::Receiver<StreamEvent>) -> Vec<Value> {
 
 #[tokio::test]
 async fn an_omitted_refusal_leaves_the_public_slot_for_a_later_one() {
-    let search = Arc::new(CountingSearch::default());
-    let registry = registry(
-        &search,
-        serde_json::json!([{"type": "web_search"}, {"type": "file_search", "vector_store_ids": ["vs"]}]),
-    )
-    .await;
+    let search = Arc::new(CountingSearch {
+        hide_call_id: Some("b"),
+        ..CountingSearch::default()
+    });
+    let registry = registry(&search, serde_json::json!([{"type": "web_search"}])).await;
     let items = [
         call("web_search", "a"),
-        call("file_search", "b"),
+        call("web_search", "b"),
         call("web_search", "c"),
         call("web_search", "d"),
     ];

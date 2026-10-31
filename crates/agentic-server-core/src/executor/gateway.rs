@@ -459,6 +459,10 @@ impl GatewayScheduler {
         };
         let (output, status) = match dispatched {
             Ok(output) => (output, GatewayCallStatus::Completed),
+            Err(ToolError::FileSearch(error)) => (
+                execution_error_output(&call, &error.public_message())?,
+                GatewayCallStatus::Failed,
+            ),
             Err(ToolError::Execution(message) | ToolError::Config(message)) => {
                 (execution_error_output(&call, &message)?, GatewayCallStatus::Failed)
             }
@@ -1209,10 +1213,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn scheduler_retains_event_slot_for_gateway_tool_without_handler() {
+    async fn scheduler_retains_event_slot_for_failed_file_search() {
         let file_search: ResponsesTool = serde_json::from_value(serde_json::json!({
-            "type": "file_search",
-            "vector_store_ids": ["vs_test"]
+            "type": "file_search", "vector_store_ids": ["vs_1"]
         }))
         .expect("file_search tool param");
         let web_search: ResponsesTool =
@@ -1225,6 +1228,7 @@ mod tests {
 
         let mut file_search_call = web_search_call("call_file");
         file_search_call.name = "file_search".to_owned();
+        file_search_call.arguments = r#"{"queries":["policy"]}"#.to_owned();
         let mut search_call = web_search_call("call_web");
         search_call.arguments = r#"{"query":"weather"}"#.to_owned();
         let output_items = [
@@ -1237,7 +1241,7 @@ mod tests {
             let plans = scheduler.event_plans().collect::<Vec<_>>();
             assert_eq!(plans.len(), 2, "every gateway-owned call needs one scheduled slot");
             assert_eq!(plans[0].output_index, 7);
-            assert!(plans[0].started_output.is_none());
+            assert!(matches!(plans[0].started_output, Some(OutputItem::FileSearchCall(_))));
             assert_eq!(plans[1].output_index, 8);
             assert!(matches!(plans[1].started_output, Some(OutputItem::WebSearchCall(_))));
         }
@@ -1245,7 +1249,7 @@ mod tests {
         let results = scheduler.execute().await.expect("all scheduled slots complete");
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].item_index, 0);
-        assert!(results[0].public_output.is_none());
+        assert!(matches!(results[0].public_output, Some(OutputItem::FileSearchCall(_))));
         assert_eq!(results[1].item_index, 1);
         assert!(matches!(results[1].public_output, Some(OutputItem::WebSearchCall(_))));
 
@@ -1262,11 +1266,15 @@ mod tests {
             .map(|event| parse_named_sse_event(&event.content))
             .collect::<Vec<_>>();
         assert!(!events.is_empty());
-        assert!(events.iter().all(|event| event["output_index"] == 8));
+        assert!(
+            events
+                .iter()
+                .all(|event| event["output_index"] == 7 || event["output_index"] == 8)
+        );
         assert!(events.iter().all(|event| {
             event["item"]["type"]
                 .as_str()
-                .is_none_or(|type_| type_ == "web_search_call")
+                .is_none_or(|type_| type_ == "file_search_call" || type_ == "web_search_call")
         }));
     }
 

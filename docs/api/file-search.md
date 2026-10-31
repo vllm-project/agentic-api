@@ -3,6 +3,8 @@
 Agentic API stores uploaded file bytes on the local filesystem. File metadata,
 vector stores, chunks, and vectors use its SQLite or PostgreSQL database. The
 Files and vector-store HTTP APIs can ingest and search documents directly.
+The Responses `file_search` built-in tool uses the same service to supply
+retrieved passages to the model.
 
 ## Configure local file storage
 
@@ -76,7 +78,8 @@ configured files directory uses this same local-files implementation.
 
 Rust integrations can instead supply implementations of `FileSearchRepository`
 and `FileBlobStore` through `FileSearchService::with_providers`, then install the
-service with `ExecutionContext::with_file_search_service`. A repository adapter
+service with `ExecutionContext::with_file_search_service`. The HTTP routes and
+Responses built-in tool use that service. A repository adapter
 can compose SQL metadata with Milvus or another vector index; a blob-store
 adapter can use S3, GCS, or Azure Blob Storage. This layer provides SQL and
 sqlite-vec repositories and the local blob store. Other adapters and a
@@ -172,6 +175,34 @@ Filters support `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `in`, and `nin`, combined 
 nested `and` and `or` filters. Comparisons use the attribute's actual string,
 number, or boolean type. Result limits range from 1 to 50 and apply globally
 across queries and selected stores.
+
+## Use the Responses built-in tool
+
+```json
+{
+  "model": "your-generation-model",
+  "input": "What is our leave policy?",
+  "tools": [{
+    "type": "file_search",
+    "vector_store_ids": ["vs_REPLACE"],
+    "max_num_results": 5
+  }],
+  "tool_choice": {"type": "file_search"},
+  "include": ["file_search_call.results"]
+}
+```
+
+The model-facing declaration is normalized to a function and executed inside
+Agentic API. Public output contains `file_search_call`; retrieved passages appear
+there only when `file_search_call.results` is included. Private tool call outputs
+remain available for stored continuation. The tool works alongside client-executed
+functions and supports `previous_response_id` continuation.
+
+Answers may include `【file-id】` citation markers. Valid markers produce typed
+`file_citation` annotations containing the uploaded file ID and filename. A source
+is annotated only when the model cites a retrieved file. Streaming keeps text
+deltas and final text identical, and includes annotations on completed content
+parts, output items, and the terminal response.
 
 ## Manage stored data
 

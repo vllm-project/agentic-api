@@ -159,6 +159,8 @@ impl PlannedResult {
 pub enum ToolError {
     #[error("execution failed: {0}")]
     Execution(String),
+    #[error("file_search failed: {}", .0.public_message())]
+    FileSearch(#[from] crate::types::file_search::FileSearchError),
     #[error("invalid tool config: {0}")]
     Config(String),
     #[error("upstream returned an invalid tool-search call")]
@@ -203,10 +205,9 @@ pub trait ToolHandler: Send + Sync {
 
 /// Extension of [`ToolHandler`] for tool types that are executed by the gateway.
 ///
-/// Only executable gateway handlers implement this trait. MCP and web search
-/// implement it unconditionally; the Eryx-backed code interpreter implements
-/// it when its Cargo feature is enabled. File search remains gateway-owned in
-/// the registry without an executor. Client-owned tools (`Function`,
+/// Only executable gateway handlers implement this trait. MCP, web search, and
+/// file search implement it unconditionally; the Eryx-backed code interpreter
+/// implements it when its Cargo feature is enabled. Client-owned tools (`Function`,
 /// `ToolSearch`, `Custom`, `CodexNamespace`) do not implement it, so they cannot
 /// be dispatched through this interface.
 ///

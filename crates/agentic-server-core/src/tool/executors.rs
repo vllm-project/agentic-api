@@ -5,6 +5,7 @@ use tokio::sync::RwLock;
 
 use super::code_interpreter::CodeInterpreterHandler;
 use super::declaration::ToolDeclaration;
+use super::file_search::handler::{FileSearchExecutor, FileSearchHandler};
 use super::mcp::handler::McpServerToolSet;
 use super::mcp::{McpClientPool, McpDiscoveredHandler, McpHandler};
 use super::normalize::code_interpreter_unavailable_error;
@@ -22,6 +23,7 @@ const WEB_FETCH_UNAVAILABLE: &str = "web_fetch is disabled by operator configura
 
 pub enum GatewayExecutorRegistration {
     WebSearch(Arc<WebSearchExecutor>),
+    FileSearch(Arc<FileSearchExecutor>),
     WebFetch(Arc<WebFetchExecutor>),
     Mcp {
         server_label: String,
@@ -60,6 +62,8 @@ pub struct GatewayExecutors {
     mcp_discovered: Arc<RwLock<HashMap<String, Vec<McpDiscoveredHandler>>>>,
     mcp_allowed_hosts: Vec<String>,
     web_search: Option<Arc<WebSearchExecutor>>,
+    file_search: Option<Arc<FileSearchExecutor>>,
+    pub(crate) include_file_search_results: bool,
     /// Present unless the operator disabled the built-in `web_fetch` executor.
     web_fetch: Option<Arc<WebFetchExecutor>>,
     /// Present only after an opted-in provider passes startup readiness checks.
@@ -70,6 +74,8 @@ impl GatewayExecutors {
     #[must_use]
     pub fn from_env(client: Arc<reqwest::Client>) -> Self {
         Self {
+            file_search: None,
+            include_file_search_results: false,
             mcp: HashMap::new(),
             mcp_configs: HashMap::new(),
             mcp_clients: Arc::new(RwLock::new(HashMap::new())),
@@ -109,6 +115,8 @@ impl GatewayExecutors {
         #[cfg(not(feature = "embedded-code-interpreter"))]
         let code_interpreter = None;
         let executors = Self {
+            file_search: None,
+            include_file_search_results: false,
             mcp: HashMap::new(),
             mcp_configs: config.mcp_servers.clone(),
             mcp_clients: Arc::new(RwLock::new(HashMap::new())),
@@ -149,6 +157,7 @@ impl GatewayExecutors {
     pub fn insert(&mut self, registration: impl Into<GatewayExecutorRegistration>) {
         match registration.into() {
             GatewayExecutorRegistration::WebSearch(executor) => self.web_search = Some(executor),
+            GatewayExecutorRegistration::FileSearch(executor) => self.file_search = Some(executor),
             GatewayExecutorRegistration::WebFetch(executor) => self.web_fetch = Some(executor),
             GatewayExecutorRegistration::Mcp { server_label, handlers } => {
                 if handlers.is_empty() {
@@ -170,6 +179,14 @@ impl GatewayExecutors {
         self.web_search
             .clone()
             .unwrap_or_else(|| Arc::new(WebSearchHandler::spec_only()))
+    }
+
+    /// Returns an executable handler or an actionable configuration-error fallback.
+    #[must_use]
+    pub fn file_search_handler(&self) -> Arc<FileSearchExecutor> {
+        self.file_search
+            .clone()
+            .unwrap_or_else(|| Arc::new(FileSearchHandler::spec_only()))
     }
 
     /// The `web_fetch` executor. The one owner of the availability policy: a
@@ -395,7 +412,10 @@ impl std::fmt::Debug for GatewayExecutors {
             .field("mcp_discovered", &Arc::strong_count(&self.mcp_discovered))
             .field("mcp_allowed_hosts", &self.mcp_allowed_hosts)
             .field("web_search", &self.web_search.is_some())
+            .field("file_search", &self.file_search.is_some())
             .field("web_fetch", &self.web_fetch.is_some());
+        debug.field("file_search", &self.file_search.is_some());
+        debug.field("include_file_search_results", &self.include_file_search_results);
         debug.field("code_interpreter", &self.code_interpreter.is_some());
         debug.finish()
     }

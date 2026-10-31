@@ -701,8 +701,8 @@ async fn a_turn_that_cannot_be_stored_is_refused() {
         [
             created,
             in_progress,
-            r#"data: {"type":"response.output_item.added","output_index":0,"item":{"type":"file_search_call","id":"fs_1","status":"in_progress","queries":["rust"]}}"#,
-            r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"file_search_call","id":"fs_1","status":"completed","queries":["rust"]}}"#,
+            r#"data: {"type":"response.output_item.added","output_index":0,"item":{"type":"future_tool_call","id":"future_1","status":"in_progress"}}"#,
+            r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"future_tool_call","id":"future_1","status":"completed"}}"#,
             completed,
         ]
         .join("\n\n"),

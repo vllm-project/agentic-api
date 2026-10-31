@@ -27,6 +27,7 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
         registry.withheld_names(),
         state.is_some_and(ToolSearchState::is_active),
     )
+    .with_file_search_context(&agent.request.enriched_request.input)
     .with_self_namespaced_functions(registry.hosted_deferred_functions())
     .with_collaboration(
         agent

@@ -1521,8 +1521,8 @@ round:
   permits are acquired. These permit waits do not count toward it, so it is not a
   deadline for the entire round or total call latency. Timeout, execution, and tool-config
   failures become failed tool outputs that can be fed back to the model instead of
-  failing the whole response. A tool registered as gateway-owned without an
-  implementation (currently file search) likewise produces an error tool result.
+  failing the whole response. A gateway-owned tool without an executable
+  binding likewise produces an error tool call output.
 - Parallel safety is a per-handler contract. `GatewayExecutor::supports_parallel_execution`
   defaults to `false`; registration turns that into a `GatewayBinding::self_exclusion`
   semaphore. The semaphore serializes only simultaneous calls to the **same
@@ -1813,9 +1813,8 @@ RequestPayload::to_upstream_request
 
 `RequestPayload::to_upstream_request` is the only request-level seam that prepares
 tools for vLLM. New callers must use it rather than rebuilding function schemas or
-normalizing declarations in the executor. Declared placeholders that are not yet
-supported, currently file search, produce no upstream function declaration until they
-have a complete handler and execution path. Code interpreter has a fixed
+normalizing declarations in the executor. File search normalizes to a built-in
+function contract and binds the request's configured vector stores. Code interpreter has a fixed
 normalization contract in every build. Requests that declare it fail before
 inference unless the binary includes the `embedded-code-interpreter` feature,
 the operator enables it, and Eryx runtime readiness succeeds.
@@ -1839,18 +1838,26 @@ the operator enables it, and Eryx runtime readiness succeeds.
   `ToolDeclaration`. These are the declaration-level validation and normalization entry
   points used by `RequestPayload::to_upstream_request` on the converted declarations. Each supported variant's
   policy belongs to its corresponding `ToolHandler`: `FunctionHandler`,
-  `ToolSearchHandler`, `McpHandler`, `WebSearchHandler`, `WebFetchHandler`,
+  `ToolSearchHandler`, `McpHandler`, `WebSearchHandler`, `WebFetchHandler`, `FileSearchHandler`,
   `CodexNamespaceHandler`, `CustomHandler`, or `CodeInterpreterHandler`. Web search's fixed canonical builder
   is shared with `WebSearchHandler::normalize`; it remains one schema even though it has no
   per-declaration normalization state. The method name is plural because namespace and
   MCP declarations may expand to several model-visible function tools.
-  `FileSearch` remains an unsupported placeholder and normalizes to nothing. The
-  code interpreter normalizes to one fixed function contract in every build, while
+  The code interpreter normalizes to one fixed function contract in every build, while
   request validation rejects unavailable runtimes before upstream inference.
   Feature-enabled builds bind the ready private `CodeInterpreterExecutor` to the provider.
   `ToolDeclaration::declares_async` and `declares_unsupported_async` answer which
   declarations make a tool async and which carry `async` where it is not accepted;
   `GatewayExecutors::validate_declarations` rejects the latter with its declared index.
+- **`file_search/`** — `FileSearchHandler` normalizes the built-in declaration and
+  projects typed call items and citations. Its shared `FileSearchService` handles
+  file ingestion and semantic, keyword, and hybrid retrieval against
+  injected `FileSearchRepository` and `FileBlobStore` implementations. The default
+  repository uses `storage::file_search`, while the default blob store uses local
+  files. `ExecutionContext::from_config` initializes these defaults; embedders may
+  install a service with alternate providers. The Files and vector
+  store HTTP handlers call this same service. See [file search](docs/api/file-search.md) for configuration,
+  resource limits, and optional PDF ingestion.
 - **`async_execution.rs`** — the model-visible hints for async client tools. A vLLM-served
   model stops at a call, so the gateway continues the response with the call pending.
   `FunctionHandler`, `CustomHandler`, and `CodexNamespaceHandler` normalization append
