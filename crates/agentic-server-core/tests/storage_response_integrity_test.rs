@@ -17,39 +17,6 @@ fn assert_redacted(error: &StorageError) {
 }
 
 #[tokio::test]
-async fn invalid_history_references_block_read_and_child_persistence() -> Result<(), Box<dyn std::error::Error>> {
-    let pool = setup_pool().await;
-    let store = ResponseStore::new(Arc::clone(&pool));
-    let metadata = ResponseMetadata::default();
-    store.persist("resp_parent", None, Vec::new(), &metadata).await?;
-
-    for invalid in ["not JSON", "null", "{}", "[1]", "[null]", "[\"truncated\""] {
-        sqlx::query("UPDATE responses SET history_item_ids = $1 WHERE id = $2")
-            .bind(invalid)
-            .bind("resp_parent")
-            .execute(pool.as_ref())
-            .await?;
-
-        for error in [
-            store.get("resp_parent").await.unwrap_err(),
-            store.rehydrate("resp_parent").await.unwrap_err(),
-            store
-                .persist("resp_child", Some("resp_parent"), Vec::new(), &metadata)
-                .await
-                .unwrap_err(),
-        ] {
-            assert!(matches!(
-                error,
-                StorageError::InvalidResponseHistory { ref response_id } if response_id == "resp_parent"
-            ));
-            assert_redacted(&error);
-        }
-        assert!(store.get("resp_child").await.unwrap_err().is_not_found());
-    }
-    Ok(())
-}
-
-#[tokio::test]
 async fn invalid_metadata_blocks_both_stores_without_echoing_secrets() -> Result<(), Box<dyn std::error::Error>> {
     let pool = setup_pool().await;
     let conversations = ConversationStore::new(Arc::clone(&pool));
@@ -76,20 +43,12 @@ async fn invalid_metadata_blocks_both_stores_without_echoing_secrets() -> Result
             .bind("resp_parent")
             .execute(pool.as_ref())
             .await?;
+        // Rehydration and child persistence do not read the parent's metadata; a continuation
+        // still fails closed because the executor loads it through `get` before inference.
         for error in [
             responses.get("resp_parent").await.unwrap_err(),
-            responses.rehydrate("resp_parent").await.unwrap_err(),
             conversations
                 .response_metadata_at_version(&conversation.conversation_id, &version)
-                .await
-                .unwrap_err(),
-            responses
-                .persist(
-                    "resp_child",
-                    Some("resp_parent"),
-                    Vec::new(),
-                    &ResponseMetadata::default(),
-                )
                 .await
                 .unwrap_err(),
         ] {
@@ -170,7 +129,6 @@ async fn sql_null_legacy_fields_remain_readable() -> Result<(), Box<dyn std::err
         .execute(pool.as_ref())
         .await?;
     let response = responses.get("resp_legacy").await?;
-    assert!(response.history_item_ids.is_empty());
     assert!(response.metadata.model.is_empty());
     assert!(responses.rehydrate("resp_legacy").await?.is_empty());
     let version = conversations

@@ -45,8 +45,6 @@ pub struct ResponseData {
     pub previous_response_id: Option<String>,
     /// Creation timestamp as Unix timestamp in seconds
     pub created_at: i64,
-    /// Deserialized history item IDs (vec of item IDs)
-    pub history_item_ids: Vec<String>,
     /// Response metadata with effective configuration (fully typed)
     pub metadata: ResponseMetadata,
 }
@@ -56,11 +54,6 @@ impl TryFrom<StorageDbResponse> for ResponseData {
 
     fn try_from(row: StorageDbResponse) -> Result<Self, Self::Error> {
         // Do not propagate parser diagnostics: enum errors may echo stored secrets.
-        let history_item_ids = row
-            .history_item_ids_vec()
-            .map_err(|_| StorageError::InvalidResponseHistory {
-                response_id: row.id.clone(),
-            })?;
         let metadata = decode_metadata(&row)
             .map_err(|_| StorageError::InvalidResponseMetadata {
                 response_id: row.id.clone(),
@@ -72,7 +65,6 @@ impl TryFrom<StorageDbResponse> for ResponseData {
             conversation_id: row.conversation_id,
             previous_response_id: row.previous_response_id,
             created_at: row.created_at,
-            history_item_ids,
             metadata,
         })
     }
@@ -152,13 +144,14 @@ mod tests {
                     .to_string(),
             ),
             created_at: 1_704_067_200,
+            history_base: 1,
+            conversation_revision: None,
         };
 
         let response = ResponseData::try_from(db_row).expect("valid stored response");
         assert_eq!(response.response_id, "resp_123");
         assert_eq!(response.conversation_id, Some("conv_456".to_string()));
         assert_eq!(response.created_at, 1_704_067_200);
-        assert_eq!(response.history_item_ids, vec!["item_1".to_string()]);
         assert_eq!(response.metadata.model, "gpt-4");
     }
 
@@ -171,12 +164,13 @@ mod tests {
             history_item_ids: None,
             metadata: None,
             created_at: 1_704_067_200,
+            history_base: 1,
+            conversation_revision: None,
         };
 
         let response = ResponseData::try_from(db_row).expect("legacy optional fields");
         assert_eq!(response.response_id, "resp_789");
         assert!(response.conversation_id.is_none());
-        assert!(response.history_item_ids.is_empty());
         assert_eq!(response.metadata.model, "");
     }
 
@@ -202,6 +196,8 @@ mod tests {
             history_item_ids: Some("[]".to_owned()),
             metadata: Some(metadata.to_string()),
             created_at: 1_704_067_200,
+            history_base: 1,
+            conversation_revision: None,
         };
 
         let stored = ResponseData::try_from(row).expect("decode pre-rename stored metadata");
@@ -341,12 +337,11 @@ mod tests {
             history_item_ids: Some(r#"["item_1","item_2","item_3"]"#.to_string()),
             metadata: Some(r#"{"model":"gpt-3.5","effective_tool_choice":"auto"}"#.to_string()),
             created_at: 1_704_067_200,
+            history_base: 1,
+            conversation_revision: None,
         };
 
         let response = ResponseData::try_from(db_row).expect("valid stored response");
-        assert_eq!(response.history_item_ids.len(), 3);
-        assert_eq!(response.history_item_ids[0], "item_1");
-        assert_eq!(response.history_item_ids[2], "item_3");
         assert_eq!(response.previous_response_id, Some("resp_prev".to_string()));
     }
 
@@ -394,6 +389,8 @@ mod tests {
                 history_item_ids: None,
                 metadata: Some(metadata.to_string()),
                 created_at: 0,
+                history_base: 1,
+                conversation_revision: None,
             })
         };
 

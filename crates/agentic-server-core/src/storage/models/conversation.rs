@@ -71,8 +71,8 @@ pub async fn get_or_create(pool: &DbPool, id: &str) -> DbResult<Conversation> {
     // The no-op update makes `RETURNING` yield the existing row. PostgreSQL rejects an
     // unqualified `created_at` here as ambiguous with `EXCLUDED.created_at`.
     sqlx::query_as::<_, Conversation>(
-        "INSERT INTO conversations (id, created_at) \
-         VALUES ($1, $2) \
+        "INSERT INTO conversations (id, tenant_id, created_at) \
+         VALUES ($1, 'default_tenant', $2) \
          ON CONFLICT (id) DO UPDATE SET created_at = conversations.created_at \
          RETURNING *",
     )
@@ -87,7 +87,7 @@ pub async fn get_or_create(pool: &DbPool, id: &str) -> DbResult<Conversation> {
 /// # Errors
 /// Returns `DbResult::Err` if the database query fails.
 pub async fn get(pool: &DbPool, id: &str) -> DbResult<Option<Conversation>> {
-    sqlx::query_as::<_, Conversation>("SELECT * FROM conversations WHERE id = $1")
+    sqlx::query_as::<_, Conversation>("SELECT * FROM conversations WHERE id = $1 AND deleted_at IS NULL")
         .bind(id)
         .fetch_optional(pool)
         .await
@@ -101,14 +101,16 @@ pub async fn get_snapshot(pool: &DbPool, id: &str) -> DbResult<ConversationSnaps
     let rows = sqlx::query_as::<_, ConversationSnapshotRow>(
         "SELECT conversations.latest_response_id, conversations.revision, \
                 items.id AS item_id, items.reference_id AS item_reference_id, \
-                items.public_id AS item_public_id, items.data AS item_data, \
+                entries.public_id AS item_public_id, items.data AS item_data, \
                 items.created_at AS item_created_at, \
-                items.conversation_id AS item_conversation_id, \
-                items.seq AS item_sequence \
+                entries.conversation_id AS item_conversation_id, \
+                entries.seq AS item_sequence \
          FROM conversations \
-         LEFT JOIN items ON items.conversation_id = conversations.id \
-         WHERE conversations.id = $1 \
-         ORDER BY items.seq ASC",
+         LEFT JOIN conversation_entries entries \
+           ON entries.conversation_id = conversations.id AND entries.removed_revision IS NULL \
+         LEFT JOIN items ON items.id = entries.item_id \
+         WHERE conversations.id = $1 AND conversations.deleted_at IS NULL \
+         ORDER BY entries.seq ASC",
     )
     .bind(id)
     .fetch_all(pool)
@@ -161,13 +163,15 @@ pub async fn get_snapshot(pool: &DbPool, id: &str) -> DbResult<ConversationSnaps
 /// Returns `DbResult::Err` if the database query fails or the conversation does not exist.
 pub async fn lock_in_tx(tx: &mut DbTransaction<'_>, id: &str) -> DbResult<Conversation> {
     if DatabaseBackend::from_connection(tx.as_mut()) == DatabaseBackend::Postgres {
-        return sqlx::query_as::<_, Conversation>("SELECT * FROM conversations WHERE id = $1 FOR UPDATE")
-            .bind(id)
-            .fetch_one(&mut **tx)
-            .await;
+        return sqlx::query_as::<_, Conversation>(
+            "SELECT * FROM conversations WHERE id = $1 AND deleted_at IS NULL FOR UPDATE",
+        )
+        .bind(id)
+        .fetch_one(&mut **tx)
+        .await;
     }
 
-    let result = sqlx::query("UPDATE conversations SET created_at = created_at WHERE id = $1")
+    let result = sqlx::query("UPDATE conversations SET created_at = created_at WHERE id = $1 AND deleted_at IS NULL")
         .bind(id)
         .execute(&mut **tx)
         .await?;
@@ -222,7 +226,7 @@ pub async fn create_in_tx(
 /// # Errors
 /// Returns an error if the query fails.
 pub async fn get_by_tenant(pool: &DbPool, tenant_id: &str, conversation_id: &str) -> DbResult<Option<Conversation>> {
-    sqlx::query_as("SELECT * FROM conversations WHERE id = $1 AND tenant_id = $2")
+    sqlx::query_as("SELECT * FROM conversations WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL")
         .bind(conversation_id)
         .bind(tenant_id)
         .fetch_optional(pool)
@@ -239,36 +243,46 @@ pub async fn update_metadata(
     conversation_id: &str,
     metadata: &str,
 ) -> DbResult<Conversation> {
-    sqlx::query_as("UPDATE conversations SET metadata = $1 WHERE id = $2 AND tenant_id = $3 RETURNING *")
-        .bind(metadata)
-        .bind(conversation_id)
-        .bind(tenant_id)
-        .fetch_one(pool)
-        .await
+    sqlx::query_as(
+        "UPDATE conversations SET metadata = $1 WHERE id = $2 AND tenant_id = $3 AND deleted_at IS NULL RETURNING *",
+    )
+    .bind(metadata)
+    .bind(conversation_id)
+    .bind(tenant_id)
+    .fetch_one(pool)
+    .await
 }
 
-/// Delete a locked conversation after its items have been detached.
+/// Delete a locked conversation. Stored responses keep reading its earlier states, so the row is
+/// removed only once no response refers to it; until then it is hidden from every lookup.
 ///
 /// # Errors
 /// Returns an error if deletion fails.
 pub async fn delete_in_tx(tx: &mut DbTransaction<'_>, conversation_id: &str) -> DbResult<()> {
-    sqlx::query("DELETE FROM conversations WHERE id = $1")
+    sqlx::query("UPDATE conversations SET deleted_at = $1, revision = revision + 1 WHERE id = $2")
+        .bind(utcnow_str())
         .bind(conversation_id)
         .execute(&mut **tx)
         .await?;
+    sqlx::query(
+        "DELETE FROM conversations WHERE id = $1 \
+         AND NOT EXISTS (SELECT 1 FROM responses WHERE responses.conversation_id = conversations.id)",
+    )
+    .bind(conversation_id)
+    .execute(&mut **tx)
+    .await?;
     Ok(())
 }
 
-/// Advance the item revision while holding the conversation lock.
+/// Advance the item revision while holding the conversation lock and return the new revision.
 ///
 /// # Errors
-/// Returns an error if the update fails.
-pub async fn bump_revision_in_tx(tx: &mut DbTransaction<'_>, id: &str) -> DbResult<()> {
-    sqlx::query("UPDATE conversations SET revision = revision + 1 WHERE id = $1")
+/// Returns an error if the update fails or the conversation does not exist.
+pub async fn bump_revision_in_tx(tx: &mut DbTransaction<'_>, id: &str) -> DbResult<i64> {
+    sqlx::query_scalar("UPDATE conversations SET revision = revision + 1 WHERE id = $1 RETURNING revision")
         .bind(id)
-        .execute(&mut **tx)
-        .await?;
-    Ok(())
+        .fetch_one(&mut **tx)
+        .await
 }
 
 #[cfg(test)]

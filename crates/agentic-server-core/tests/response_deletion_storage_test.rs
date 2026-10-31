@@ -4,9 +4,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use agentic_core::storage::models::{conversation as conversation_model, response as response_model};
-use agentic_core::storage::{
-    ConversationStore, DbPool, ResponseMetadata, ResponseStore, StorageError, create_pool_with_schema,
-};
+use agentic_core::storage::{ConversationStore, DbPool, ResponseMetadata, ResponseStore, create_pool_with_schema};
 use agentic_core::types::io::InOutItem;
 use serde_json::json;
 
@@ -72,6 +70,13 @@ async fn response_deletion_uses_the_callers_transaction() {
     turn(&store, "resp_parent", None).await;
     turn(&store, "resp_child", Some("resp_parent")).await;
     let original = store.get("resp_child").await.unwrap();
+    let original_history = store
+        .get_items("resp_child")
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|row| row.id)
+        .collect::<Vec<_>>();
 
     let mut tx = pool.begin().await.unwrap();
     assert!(response_model::delete_in_tx(&mut tx, "resp_parent").await.unwrap());
@@ -88,7 +93,16 @@ async fn response_deletion_uses_the_callers_transaction() {
     assert!(store.get("resp_parent").await.is_ok());
     let restored = store.get("resp_child").await.unwrap();
     assert_eq!(restored.previous_response_id, original.previous_response_id);
-    assert_eq!(restored.history_item_ids, original.history_item_ids);
+    assert_eq!(
+        store
+            .get_items("resp_child")
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|row| row.id)
+            .collect::<Vec<_>>(),
+        original_history
+    );
     assert_eq!(item_count(&pool).await, 4);
 }
 
@@ -108,12 +122,7 @@ async fn deleting_a_parent_removes_its_context_and_preserves_child_history_order
     // Deletion only removes response records, preserving all shared item rows.
     store.delete("resp_a").await.unwrap();
     assert_eq!(item_count(&pool).await, 6);
-    let rows = store.get_items("resp_b").await.unwrap();
-    let ids = store.get("resp_b").await.unwrap().history_item_ids;
-    assert_eq!(
-        rows.iter().map(|row| &row.id).collect::<Vec<_>>(),
-        ids.iter().collect::<Vec<_>>()
-    );
+    assert_eq!(store.get_items("resp_b").await.unwrap().len(), 2);
     let history = store.rehydrate("resp_b").await.unwrap();
     assert_eq!(history, vec![message("resp_b"), answer("msg_resp_b")]);
     store.delete("resp_b").await.unwrap();
@@ -169,7 +178,7 @@ async fn deleting_a_conversation_latest_response_clears_its_pointer_and_keeps_it
 }
 
 #[tokio::test]
-async fn item_lookup_distinguishes_missing_empty_and_invalid_history() {
+async fn item_lookup_distinguishes_missing_and_empty_history() {
     let pool = pool().await;
     let store = ResponseStore::new(Arc::clone(&pool));
     assert!(store.get_items("resp_missing").await.unwrap_err().is_not_found());
@@ -178,28 +187,4 @@ async fn item_lookup_distinguishes_missing_empty_and_invalid_history() {
         .await
         .unwrap();
     assert!(store.get_items("resp_empty").await.unwrap().is_empty());
-    sqlx::query("UPDATE responses SET history_item_ids = NULL WHERE id = 'resp_empty'")
-        .execute(pool.as_ref())
-        .await
-        .unwrap();
-    assert!(store.get_items("resp_empty").await.unwrap().is_empty());
-    for invalid in ["not-json", "null", "{}"] {
-        sqlx::query("UPDATE responses SET history_item_ids = $1 WHERE id = 'resp_empty'")
-            .bind(invalid)
-            .execute(pool.as_ref())
-            .await
-            .unwrap();
-        assert!(matches!(
-            store.get_items("resp_empty").await,
-            Err(StorageError::InvalidResponseHistory { .. })
-        ));
-    }
-    sqlx::query("UPDATE responses SET history_item_ids = '[\"item_missing\"]' WHERE id = 'resp_empty'")
-        .execute(pool.as_ref())
-        .await
-        .unwrap();
-    assert!(matches!(
-        store.get_items("resp_empty").await,
-        Err(StorageError::InvalidHistoryItem { .. })
-    ));
 }

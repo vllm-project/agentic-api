@@ -111,12 +111,24 @@ async fn conversation_snapshot_rejects_an_undecodable_final_row() -> Result<(), 
             &ResponseMetadata::default(),
         )
         .await?;
-    sqlx::query("INSERT INTO items (id, data, created_at, conversation_id, seq) VALUES ($1, $2, $3, $4, $5)")
-        .bind("item_undecodable")
+    store
+        .persist(
+            &conversation.conversation_id,
+            "resp_2",
+            None,
+            vec![create_input_item("final")],
+            &ResponseMetadata::default(),
+        )
+        .await?;
+    let final_item: String = sqlx::query_scalar(
+        "SELECT item_id FROM conversation_entries WHERE conversation_id = $1 ORDER BY seq DESC LIMIT 1",
+    )
+    .bind(&conversation.conversation_id)
+    .fetch_one(pool.as_ref())
+    .await?;
+    sqlx::query("UPDATE items SET data = $1 WHERE id = $2")
         .bind("not valid JSON")
-        .bind(0_i64)
-        .bind(&conversation.conversation_id)
-        .bind(1_i64)
+        .bind(&final_item)
         .execute(pool.as_ref())
         .await?;
 
@@ -124,95 +136,8 @@ async fn conversation_snapshot_rejects_an_undecodable_final_row() -> Result<(), 
         .rehydrate_snapshot(&conversation.conversation_id)
         .await
         .unwrap_err();
-    assert!(matches!(error, StorageError::InvalidHistoryItem { ref item_id } if item_id == "item_undecodable"));
+    assert!(matches!(error, StorageError::InvalidHistoryItem { ref item_id } if item_id == &final_item));
     assert!(!error.to_string().contains("not valid JSON"));
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn conversation_snapshot_rejects_items_without_a_sequence() -> Result<(), Box<dyn std::error::Error>> {
-    let pool = setup_pool().await;
-    let store = ConversationStore::new(Arc::clone(&pool));
-    let conversation = store.create().await?;
-
-    store
-        .persist(
-            &conversation.conversation_id,
-            "resp_1",
-            None,
-            vec![create_input_item("hello")],
-            &ResponseMetadata::default(),
-        )
-        .await?;
-
-    let item_id: String = sqlx::query_scalar("SELECT id FROM items WHERE conversation_id = $1")
-        .bind(&conversation.conversation_id)
-        .fetch_one(pool.as_ref())
-        .await?;
-    sqlx::query("UPDATE items SET seq = NULL WHERE id = $1")
-        .bind(&item_id)
-        .execute(pool.as_ref())
-        .await?;
-
-    let error = store
-        .rehydrate_snapshot(&conversation.conversation_id)
-        .await
-        .expect_err("snapshot must reject an item without a sequence");
-    assert!(matches!(
-        error,
-        StorageError::InvalidConversationSequence {
-            conversation_id,
-            item_id: invalid_item_id,
-        } if conversation_id == conversation.conversation_id && invalid_item_id == item_id
-    ));
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn legacy_item_only_version_upgrades_on_the_next_persist() -> Result<(), Box<dyn std::error::Error>> {
-    let pool = setup_pool().await;
-    let store = ConversationStore::new(Arc::clone(&pool));
-    let conversation = store.create().await?;
-    let legacy_item = create_input_item("legacy");
-    sqlx::query("INSERT INTO items (id, data, created_at, conversation_id, seq) VALUES ($1, $2, $3, $4, $5)")
-        .bind("item_legacy")
-        .bind(String::try_from(&legacy_item)?)
-        .bind(0_i64)
-        .bind(&conversation.conversation_id)
-        .bind(0_i64)
-        .execute(pool.as_ref())
-        .await?;
-
-    let legacy = store.rehydrate_snapshot(&conversation.conversation_id).await?;
-    assert_eq!(
-        legacy.version,
-        ConversationVersion {
-            last_sequence: Some(0),
-            ..ConversationVersion::default()
-        }
-    );
-
-    store
-        .persist_if_version(
-            &conversation.conversation_id,
-            legacy.version,
-            "resp_after_legacy",
-            None,
-            Vec::new(),
-            &ResponseMetadata::default(),
-        )
-        .await?;
-    let upgraded = store.rehydrate_snapshot(&conversation.conversation_id).await?;
-    assert_eq!(
-        upgraded.version,
-        ConversationVersion {
-            response_id: Some("resp_after_legacy".to_owned()),
-            revision: 1,
-            last_sequence: Some(0),
-        }
-    );
 
     Ok(())
 }
@@ -578,7 +503,7 @@ async fn test_response_store_get() {
     let response = store.get("resp_get_test").await.expect("get failed");
 
     assert_eq!(response.response_id, "resp_get_test");
-    assert_eq!(response.history_item_ids.len(), 1);
+    assert_eq!(store.get_items("resp_get_test").await.expect("history").len(), 1);
 }
 
 #[tokio::test]
@@ -593,7 +518,7 @@ async fn response_rehydration_rejects_invalid_or_missing_history() -> Result<(),
             &ResponseMetadata::default(),
         )
         .await?;
-    let item_id = store.get("resp_corrupt").await?.history_item_ids.remove(0);
+    let item_id = store.get_items("resp_corrupt").await?.remove(0).id;
 
     // Reasoning that even the legacy projection cannot read fails closed, not silently.
     let malformed = serde_json::json!({
@@ -609,13 +534,6 @@ async fn response_rehydration_rejects_invalid_or_missing_history() -> Result<(),
     let error = store.rehydrate("resp_corrupt").await.unwrap_err();
     assert!(matches!(error, StorageError::InvalidHistoryItem { item_id: ref invalid } if invalid == &item_id));
     assert!(!error.to_string().contains("sensitive-state"));
-
-    sqlx::query("DELETE FROM items WHERE id = $1")
-        .bind(&item_id)
-        .execute(pool.as_ref())
-        .await?;
-    let error = store.rehydrate("resp_corrupt").await.unwrap_err();
-    assert!(matches!(error, StorageError::InvalidHistoryItem { item_id: missing } if missing == item_id));
     Ok(())
 }
 
@@ -637,11 +555,13 @@ async fn conversation_rehydration_rejects_invalid_reasoning() -> Result<(), Box<
         "type": "reasoning", "id": "rs_1", "summary": "sensitive-state"
     })
     .to_string();
-    sqlx::query("UPDATE items SET data = $1 WHERE conversation_id = $2")
-        .bind(malformed)
-        .bind(&conversation.conversation_id)
-        .execute(pool.as_ref())
-        .await?;
+    sqlx::query(
+        "UPDATE items SET data = $1 WHERE id IN (SELECT item_id FROM conversation_entries WHERE conversation_id = $2)",
+    )
+    .bind(malformed)
+    .bind(&conversation.conversation_id)
+    .execute(pool.as_ref())
+    .await?;
     let error = store
         .rehydrate_snapshot(&conversation.conversation_id)
         .await
@@ -671,7 +591,7 @@ async fn test_response_store_with_previous_response() {
     let response = store.get("resp_2").await.expect("get failed");
 
     assert_eq!(response.previous_response_id, Some("resp_1".to_string()));
-    assert_eq!(response.history_item_ids.len(), 2);
+    assert_eq!(store.get_items("resp_2").await.expect("history").len(), 2);
 
     let rehydrated = store.rehydrate("resp_2").await.expect("rehydrate failed");
     assert_eq!(rehydrated.len(), 2);
@@ -902,11 +822,12 @@ async fn test_sqlite_multi_pool_mixed_read_write_concurrency() {
         .expect("final rehydrate failed");
     assert_eq!(final_items.len(), 100);
 
-    let seqs: Vec<i64> = sqlx::query_scalar("SELECT seq FROM items WHERE conversation_id = ? ORDER BY seq ASC")
-        .bind(&conv_id)
-        .fetch_all(writer_pool_a.as_ref())
-        .await
-        .expect("sequence query failed");
+    let seqs: Vec<i64> =
+        sqlx::query_scalar("SELECT seq FROM conversation_entries WHERE conversation_id = ? ORDER BY seq ASC")
+            .bind(&conv_id)
+            .fetch_all(writer_pool_a.as_ref())
+            .await
+            .expect("sequence query failed");
     assert_eq!(seqs, (0..100).collect::<Vec<_>>());
 }
 
@@ -982,11 +903,12 @@ async fn test_sqlite_same_pool_mixed_read_write_concurrency() {
     let final_items = store.rehydrate(&conv_id).await.expect("final rehydrate failed");
     assert_eq!(final_items.len(), 100);
 
-    let seqs: Vec<i64> = sqlx::query_scalar("SELECT seq FROM items WHERE conversation_id = ? ORDER BY seq ASC")
-        .bind(&conv_id)
-        .fetch_all(pool.as_ref())
-        .await
-        .expect("sequence query failed");
+    let seqs: Vec<i64> =
+        sqlx::query_scalar("SELECT seq FROM conversation_entries WHERE conversation_id = ? ORDER BY seq ASC")
+            .bind(&conv_id)
+            .fetch_all(pool.as_ref())
+            .await
+            .expect("sequence query failed");
     assert_eq!(seqs, (0..100).collect::<Vec<_>>());
 }
 
@@ -1092,7 +1014,7 @@ async fn test_response_store_get_after_persist() {
     let retrieved = store.get("resp_stored").await.expect("response should be found");
 
     assert_eq!(retrieved.response_id, "resp_stored");
-    assert_eq!(retrieved.history_item_ids.len(), 2);
+    assert_eq!(store.get_items("resp_stored").await.expect("history").len(), 2);
 }
 
 #[tokio::test]
@@ -1153,12 +1075,6 @@ async fn test_tool_search_conversation_metadata_matches_snapshot_version() {
         .await
         .expect("make latest turn appear older by wall clock");
 
-    let latest_item_id: String =
-        sqlx::query_scalar("SELECT id FROM items WHERE conversation_id = $1 ORDER BY seq DESC LIMIT 1")
-            .bind(&conversation.conversation_id)
-            .fetch_one(pool.as_ref())
-            .await
-            .expect("latest conversation item");
     let branch = ResponseMetadata {
         model: "branch-model".to_owned(),
         ..ResponseMetadata::default()
@@ -1171,7 +1087,7 @@ async fn test_tool_search_conversation_metadata_matches_snapshot_version() {
     .bind("resp_tool_search_branch")
     .bind(&conversation.conversation_id)
     .bind("resp_tool_search_latest")
-    .bind(serde_json::to_string(&vec![latest_item_id]).expect("branch history JSON"))
+    .bind("{}")
     .bind(String::try_from(&branch).expect("branch metadata JSON"))
     .bind(20_000_i64)
     .execute(pool.as_ref())

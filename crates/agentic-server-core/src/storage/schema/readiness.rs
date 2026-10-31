@@ -16,25 +16,37 @@ pub(crate) async fn verify_persistence_writable(pool: &DbPool) -> DbResult<()> {
             .execute(&mut *transaction)
             .await?;
         crate::storage::models::conversation::lock_in_tx(&mut transaction, &conversation_id).await?;
-        crate::storage::models::item::create_in_tx(
+        let revision =
+            crate::storage::models::conversation::bump_revision_in_tx(&mut transaction, &conversation_id).await?;
+        crate::storage::models::response::create_in_tx(
             &mut transaction,
-            vec![(item_id.clone(), "{}".to_owned())],
-            Some(&conversation_id),
+            &crate::storage::models::response::NewResponse {
+                id: &response_id,
+                tenant_id: "default_tenant",
+                conversation_id: Some(&conversation_id),
+                conversation_revision: Some(revision),
+                previous_response_id: None,
+                history_base: crate::storage::models::response::HistoryBase::Conversation,
+                metadata: Some("{}"),
+            },
+        )
+        .await?;
+        crate::storage::models::item::attach_to_conversation_in_tx(
+            &mut transaction,
+            &conversation_id,
+            "default_tenant",
+            revision,
+            vec![crate::storage::models::item::InsertItem::unmarked(
+                item_id,
+                "{}".to_owned(),
+            )],
+            Some(&response_id),
         )
         .await
         .map_err(|error| match error {
             crate::storage::StorageError::Database(error) => error,
             other => sqlx::Error::Configuration(Box::new(other)),
         })?;
-        crate::storage::models::response::create_in_tx(
-            &mut transaction,
-            &response_id,
-            Some(&conversation_id),
-            None,
-            Some(&format!("[\"{item_id}\"]")),
-            Some("{}"),
-        )
-        .await?;
         crate::storage::models::conversation::set_latest_response_in_tx(
             &mut transaction,
             &conversation_id,

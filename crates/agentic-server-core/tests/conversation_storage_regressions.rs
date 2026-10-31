@@ -77,36 +77,31 @@ async fn regression_cursor_follows_sequence() {
         .create_with_metadata_and_items(Some("default_tenant"), None, vec![])
         .await
         .unwrap();
-    let data = String::try_from(&regression_message("hello")).unwrap();
-    let earlier_id = agentic_core::utils::common::uuid7_str("item_");
-    let later_id = agentic_core::utils::common::uuid7_str("item_");
+    let earlier_id = agentic_core::utils::common::uuid7_str("msg_");
+    let later_id = agentic_core::utils::common::uuid7_str("msg_");
     assert!(earlier_id < later_id);
     // IDs are allocated before awaiting storage, so creation order can differ from insertion order.
-    insert_with_ids(
-        store.pool().unwrap(),
-        &conv.conversation_id,
-        vec![(later_id.clone(), data.clone())],
-    )
-    .await
-    .unwrap();
-    insert_with_ids(
-        store.pool().unwrap(),
-        &conv.conversation_id,
-        vec![(earlier_id.clone(), data)],
-    )
-    .await
-    .unwrap();
+    for id in [&later_id, &earlier_id] {
+        store
+            .create_items(
+                "default_tenant",
+                &conv.conversation_id,
+                vec![message_with_id(id, "hello")],
+            )
+            .await
+            .unwrap();
+    }
     let page = store
         .list_items("default_tenant", &conv.conversation_id, 1, None, ItemOrder::Asc)
         .await
         .unwrap();
-    assert_eq!(page[0].id, later_id);
+    assert_eq!(page[0].public_id(), later_id);
     let next = store
         .list_items(
             "default_tenant",
             &conv.conversation_id,
             1,
-            Some(&page[0].id),
+            Some(page[0].public_id()),
             ItemOrder::Asc,
         )
         .await
@@ -131,7 +126,7 @@ async fn regression_delete_invalidates_version() {
         .await
         .unwrap();
     store
-        .delete_item("default_tenant", &conv.conversation_id, &items[0].id)
+        .delete_item("default_tenant", &conv.conversation_id, items[0].public_id())
         .await
         .unwrap();
     let result = store
@@ -179,18 +174,6 @@ async fn regression_concurrent_item_creation() {
     assert!(errors.is_empty(), "{errors:?}");
 }
 
-async fn insert_with_ids(
-    pool: &agentic_core::storage::DbPool,
-    id: &str,
-    items: Vec<(String, String)>,
-) -> agentic_core::storage::StoreResult<()> {
-    let mut tx = pool.begin().await?;
-    agentic_core::storage::models::conversation::lock_in_tx(&mut tx, id).await?;
-    item_model::create_in_tx(&mut tx, items, Some(id)).await?;
-    tx.commit().await?;
-    Ok(())
-}
-
 #[tokio::test]
 async fn deletion_preserves_stored_response_history_and_invalidates_empty_snapshot() {
     let store = test_store().await;
@@ -215,7 +198,7 @@ async fn deletion_preserves_stored_response_history_and_invalidates_empty_snapsh
         .await
         .unwrap();
     store
-        .delete_item("default_tenant", &conv.conversation_id, &rows[0].id)
+        .delete_item("default_tenant", &conv.conversation_id, rows[0].public_id())
         .await
         .unwrap();
     let result = store
@@ -283,7 +266,7 @@ async fn response_checkpoint_preserves_manual_items_after_conversation_deletion(
         .await
         .unwrap();
     store
-        .delete_item("default_tenant", &conv.conversation_id, &added[0].id)
+        .delete_item("default_tenant", &conv.conversation_id, added[0].public_id())
         .await
         .unwrap();
 
@@ -317,7 +300,7 @@ async fn item_operations_reject_another_tenant_and_another_conversations_cursor(
         .list_items("tenant_a", &conv.conversation_id, 100, None, ItemOrder::Asc)
         .await
         .unwrap();
-    let id = &items[0].id;
+    let id = items[0].public_id();
     assert!(
         store
             .retrieve_item("tenant_b", &conv.conversation_id, id)
@@ -404,7 +387,8 @@ async fn regression_database_rejects_duplicate_items_and_rolls_back_all_batches(
             assert!(error.is_validation());
             assert!(matches!(error, StorageError::ItemAlreadyInConversation));
         } else {
-            assert!(error.is_unique_violation());
+            // A repeated new ID is rejected before any row is written.
+            assert!(error.is_validation());
         }
         let rows = store
             .list_items(
@@ -417,7 +401,7 @@ async fn regression_database_rejects_duplicate_items_and_rolls_back_all_batches(
             .await
             .unwrap();
         assert_eq!(rows.len(), 1, "failed insertion must leave the history unchanged");
-        assert_eq!(rows[0].id, "msg_existing");
+        assert_eq!(rows[0].public_id(), "msg_existing");
         assert_eq!(rows[0].as_inout().unwrap(), message_with_id("msg_existing", "original"));
     }
     let created = store
@@ -445,7 +429,7 @@ async fn regression_duplicate_initial_items_roll_back_conversation_creation() {
         )
         .await
         .unwrap_err();
-    assert!(error.is_unique_violation());
+    assert!(error.is_validation());
     for query in ["SELECT COUNT(*) FROM conversations", "SELECT COUNT(*) FROM items"] {
         let count: i64 = sqlx::query_scalar(query)
             .fetch_one(store.pool().unwrap())
@@ -519,10 +503,14 @@ async fn response_history_keeps_each_occurrence_of_a_public_id() {
     let mut expected = replay;
     expected.push(updated);
     assert_eq!(responses.rehydrate("resp_next").await.unwrap(), expected);
-    let ids = responses.get("resp_next").await.unwrap().history_item_ids;
-    assert_eq!(ids.iter().collect::<std::collections::HashSet<_>>().len(), 4);
-    let rows = item_model::get_items(store.pool().unwrap(), &ids).await.unwrap();
-    assert_eq!(rows.len(), 4);
+    let rows = responses.get_items("resp_next").await.unwrap();
+    assert_eq!(
+        rows.iter()
+            .map(|row| &row.id)
+            .collect::<std::collections::HashSet<_>>()
+            .len(),
+        4
+    );
     assert!(rows.iter().all(|row| row.public_id() == "msg_reused"));
 }
 
@@ -550,8 +538,7 @@ async fn response_history_does_not_reuse_another_tenants_item() {
         store.rehydrate(&conversation.conversation_id).await.unwrap(),
         vec![original]
     );
-    let ids = responses.get("resp_shared").await.unwrap().history_item_ids;
-    let rows = item_model::get_items(store.pool().unwrap(), &ids).await.unwrap();
+    let rows = responses.get_items("resp_shared").await.unwrap();
     assert_eq!(rows[0].public_id(), "msg_shared");
     assert_eq!(rows[0].tenant_id.as_deref(), Some("default_tenant"));
     assert!(rows[0].reference_id.is_none());

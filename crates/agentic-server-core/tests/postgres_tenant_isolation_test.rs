@@ -270,7 +270,7 @@ async fn postgres_item_crud_uses_turn_locking_and_preserves_history() {
             "crud_tenant",
             &conv.conversation_id,
             100,
-            Some(&first[0].id),
+            Some(first[0].public_id()),
             ItemOrder::Asc,
         )
         .await
@@ -278,12 +278,12 @@ async fn postgres_item_crud_uses_turn_locking_and_preserves_history() {
     assert_eq!(after.len(), 8);
     assert!(
         store
-            .retrieve_item("other_tenant", &conv.conversation_id, &first[0].id)
+            .retrieve_item("other_tenant", &conv.conversation_id, first[0].public_id())
             .await
             .is_err()
     );
     store
-        .delete_item("crud_tenant", &conv.conversation_id, &first[0].id)
+        .delete_item("crud_tenant", &conv.conversation_id, first[0].public_id())
         .await
         .unwrap();
     let stale = store

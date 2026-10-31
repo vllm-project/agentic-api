@@ -206,8 +206,8 @@ impl Fixture {
                 .expect("persist response fixture");
             json!({"previous_response_id":response_id})
         };
-        let stored = response_store.get(response_id).await.expect("stored response");
-        assert_eq!(stored.history_item_ids.len(), 1);
+        let stored = response_store.get_items(response_id).await.expect("stored history");
+        assert_eq!(stored.len(), 1);
         // Install exact wire JSON independently of typed parsing. This preserves
         // the file even on the old baseline, which would deserialize it as Unknown.
         let mut raw = user_input(&file_part())[0].clone();
@@ -215,13 +215,13 @@ impl Fixture {
         raw["_agentic_item_kind"] = json!("input");
         let changed = sqlx::query("UPDATE items SET data = $1 WHERE id = $2")
             .bind(raw.to_string())
-            .bind(&stored.history_item_ids[0])
+            .bind(&stored[0].id)
             .execute(self.pool.as_ref())
             .await
             .expect("install raw history");
         assert_eq!(changed.rows_affected(), 1);
         let persisted: String = sqlx::query_scalar("SELECT data FROM items WHERE id = $1")
-            .bind(&stored.history_item_ids[0])
+            .bind(&stored[0].id)
             .fetch_one(self.pool.as_ref())
             .await
             .expect("read raw history");

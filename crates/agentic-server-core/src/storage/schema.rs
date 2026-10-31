@@ -1,5 +1,6 @@
 //! Database schema management and migrations.
 
+mod chain_history;
 mod readiness;
 pub(crate) use readiness::{verify_persistence_ready, verify_persistence_writable};
 
@@ -333,6 +334,11 @@ async fn run_embedded_migrations(pool: &DbPool, postgres_migration_timeout: Dura
     } else {
         Ok(())
     };
+    let conversion_result = if migration_result.is_ok() && postgres_result.is_ok() {
+        chain_history::convert_history_lists(&mut connection).await
+    } else {
+        Ok(())
+    };
     let close_result = if is_postgres {
         connection.close().await
     } else {
@@ -342,6 +348,7 @@ async fn run_embedded_migrations(pool: &DbPool, postgres_migration_timeout: Dura
 
     migration_result?;
     postgres_result?;
+    conversion_result?;
     close_result
 }
 

@@ -3,6 +3,8 @@
 use std::convert::TryFrom;
 use std::sync::Arc;
 
+use super::models::item::InsertItem;
+use super::models::response::{HistoryBase, NewResponse};
 use super::models::{conversation, item, response};
 use super::pool::DbPool;
 use super::types::response::decode_metadata;
@@ -14,6 +16,9 @@ use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 use crate::types::io::ItemOrder;
 use crate::utils::common::{serialize_to_string, uuid7_str};
+
+/// Owner of conversations created before tenants were recorded.
+const DEFAULT_TENANT_ID: &str = "default_tenant";
 
 /// Conversation storage operations.
 #[derive(Clone, Debug)]
@@ -206,23 +211,7 @@ impl ConversationStore {
     ) -> StoreResult<()> {
         let pool = self.pool()?;
 
-        let new_items = new_items
-            .into_iter()
-            .map(|item| {
-                let prefix = match &item {
-                    InOutItem::Input(input) => input.id_prefix(),
-                    InOutItem::Output(output) => output.id_prefix(),
-                };
-                if item.id() == Some("") {
-                    return Err(StorageError::Validation("item id cannot be an empty string".to_owned()));
-                }
-                let id = item
-                    .id()
-                    .map_or_else(|| uuid7_str(prefix.unwrap_or("item_")), str::to_owned);
-                let data = String::try_from(&item)?;
-                Ok((id, data))
-            })
-            .collect::<StoreResult<Vec<_>>>()?;
+        let new_items = InsertItem::prepare_all(new_items)?;
 
         let metadata_json = String::try_from(metadata)?;
 
@@ -247,23 +236,38 @@ impl ConversationStore {
                 });
             }
         }
-        item::create_in_tx(&mut tx, new_items, Some(conversation_id)).await?;
-        // A response branch must see the conversation as it existed at this turn,
-        // including manually added items that may later be detached or deleted.
-        let history_item_ids = item::ids_for_conversation_in_tx(&mut tx, conversation_id).await?;
-        let history_item_ids_json = serialize_to_string(&history_item_ids)?;
-
-        response::create_in_tx(
+        // The turn's history is the conversation at this revision, so a branch keeps seeing it
+        // even after items are later added, deleted, or the conversation itself is deleted.
+        let revision = conversation::bump_revision_in_tx(&mut tx, conversation_id).await?;
+        let tenant_id = locked_conversation.tenant_id.as_deref().unwrap_or(DEFAULT_TENANT_ID);
+        let created = response::create_in_tx(
             &mut tx,
-            response_id,
-            Some(conversation_id),
-            previous_response_id,
-            Some(&history_item_ids_json),
-            Some(&metadata_json),
+            &NewResponse {
+                id: response_id,
+                tenant_id,
+                conversation_id: Some(conversation_id),
+                conversation_revision: Some(revision),
+                previous_response_id,
+                history_base: HistoryBase::Conversation,
+                metadata: Some(&metadata_json),
+            },
+        )
+        .await?;
+        if created.is_none() {
+            return Err(StorageError::ResponseNotFound {
+                id: previous_response_id.unwrap_or_default().to_owned(),
+            });
+        }
+        item::attach_to_conversation_in_tx(
+            &mut tx,
+            conversation_id,
+            tenant_id,
+            revision,
+            new_items,
+            Some(response_id),
         )
         .await?;
         conversation::set_latest_response_in_tx(&mut tx, conversation_id, response_id).await?;
-        conversation::bump_revision_in_tx(&mut tx, conversation_id).await?;
         tx.commit().await?;
 
         Ok(())
@@ -282,31 +286,16 @@ impl ConversationStore {
         for (index, item) in initial_items.iter().enumerate() {
             item.validate_client_id(format!("items[{index}].id"))?;
         }
-        let initial_items = initial_items
-            .into_iter()
-            .map(|item| {
-                let prefix = match &item {
-                    InOutItem::Input(input) => input.id_prefix(),
-                    InOutItem::Output(output) => output.id_prefix(),
-                };
-                if item.id() == Some("") {
-                    return Err(StorageError::Validation("item id cannot be an empty string".to_owned()));
-                }
-                let id = item
-                    .id()
-                    .map_or_else(|| uuid7_str(prefix.unwrap_or("item_")), str::to_owned);
-                let data = String::try_from(&item)?;
-                Ok((id, data))
-            })
-            .collect::<StoreResult<Vec<_>>>()?;
+        let initial_items = InsertItem::prepare_all(initial_items)?;
 
         let metadata = metadata.map(|value| serialize_to_string(&value)).transpose()?;
         let id = uuid7_str("conv_");
         let mut tx = self.pool()?.begin().await?;
         let row = conversation::create_in_tx(&mut tx, &id, tenant_id, metadata.as_deref()).await?;
         if !initial_items.is_empty() {
-            item::create_in_tx(&mut tx, initial_items, Some(&id)).await?;
-            conversation::bump_revision_in_tx(&mut tx, &id).await?;
+            let revision = conversation::bump_revision_in_tx(&mut tx, &id).await?;
+            let owner = tenant_id.unwrap_or(DEFAULT_TENANT_ID);
+            item::attach_to_conversation_in_tx(&mut tx, &id, owner, revision, initial_items, None).await?;
         }
         tx.commit().await?;
         Ok(row.into())
@@ -347,7 +336,6 @@ impl ConversationStore {
     pub async fn delete(&self, tenant_id: &str, id: &str) -> StoreResult<()> {
         let mut tx = self.pool()?.begin().await?;
         lock_owned(&mut tx, tenant_id, id).await?;
-        item::detach_from_conversation_in_tx(&mut tx, id, None).await?;
         conversation::delete_in_tx(&mut tx, id).await?;
         tx.commit().await?;
         Ok(())
@@ -361,30 +349,15 @@ impl ConversationStore {
         for (index, item) in items.iter().enumerate() {
             item.validate_client_id(format!("items[{index}].id"))?;
         }
-        let items = items
-            .into_iter()
-            .map(|item| {
-                let prefix = match &item {
-                    InOutItem::Input(input) => input.id_prefix(),
-                    InOutItem::Output(output) => output.id_prefix(),
-                };
-                if item.id() == Some("") {
-                    return Err(StorageError::Validation("item id cannot be an empty string".to_owned()));
-                }
-                let id = item
-                    .id()
-                    .map_or_else(|| uuid7_str(prefix.unwrap_or("item_")), str::to_owned);
-                let data = String::try_from(&item)?;
-                Ok((id, data))
-            })
-            .collect::<StoreResult<Vec<_>>>()?;
+        let items = InsertItem::prepare_all(items)?;
 
+        if items.is_empty() {
+            return Ok(Vec::new());
+        }
         let mut tx = self.pool()?.begin().await?;
         lock_owned(&mut tx, tenant_id, id).await?;
-        let rows = item::create_in_tx(&mut tx, items, Some(id)).await?;
-        if !rows.is_empty() {
-            conversation::bump_revision_in_tx(&mut tx, id).await?;
-        }
+        let revision = conversation::bump_revision_in_tx(&mut tx, id).await?;
+        let rows = item::attach_to_conversation_in_tx(&mut tx, id, tenant_id, revision, items, None).await?;
         tx.commit().await?;
         Ok(rows)
     }
@@ -427,10 +400,10 @@ impl ConversationStore {
     pub async fn delete_item(&self, tenant_id: &str, id: &str, item_id: &str) -> StoreResult<ConversationData> {
         let mut tx = self.pool()?.begin().await?;
         let row = lock_owned(&mut tx, tenant_id, id).await?;
-        if item::detach_from_conversation_in_tx(&mut tx, id, Some(item_id)).await? == 0 {
+        let revision = conversation::bump_revision_in_tx(&mut tx, id).await?;
+        if item::detach_from_conversation_in_tx(&mut tx, id, Some(item_id), revision).await? == 0 {
             return Err(StorageError::not_found("Conversation item", item_id));
         }
-        conversation::bump_revision_in_tx(&mut tx, id).await?;
         tx.commit().await?;
         Ok(row.into())
     }
