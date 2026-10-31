@@ -128,3 +128,7 @@ fn function_event_index(payload: &EventPayload) -> Option<u32> {
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "placement/mod.rs"]
+mod placement;

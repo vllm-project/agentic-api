@@ -77,6 +77,11 @@ tokio = { workspace = true, features = ["full", "test-util"] }
 toml.workspace = true
 tracing-subscriber.workspace = true
 
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+# Safe process-wide CPU accounting for the private placement measurement only.
+# Reuse the already-locked nix version; production default features are unchanged.
+nix = { version = "0.31.3", default-features = false, features = ["resource"] }
+
 [[bench]]
 name = "benches"
 harness = false
