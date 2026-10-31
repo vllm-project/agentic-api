@@ -493,6 +493,7 @@ impl std::fmt::Debug for WebSearchProviderConfig {
 
 #[derive(Debug, Clone)]
 pub struct ToolRuntimeConfig {
+    pub file_search: crate::types::file_search::FileSearchConfig,
     pub web_search: WebSearchProviderConfig,
     /// Settings of the built-in `web_fetch` executor; enabled by default.
     pub web_fetch: WebFetchConfig,
@@ -514,6 +515,7 @@ pub struct ToolRuntimeConfig {
 impl Default for ToolRuntimeConfig {
     fn default() -> Self {
         Self {
+            file_search: crate::types::file_search::FileSearchConfig::default(),
             web_search: WebSearchProviderConfig::default(),
             web_fetch: WebFetchConfig::default(),
             mcp_servers: HashMap::default(),

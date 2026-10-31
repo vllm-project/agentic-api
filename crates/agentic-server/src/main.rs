@@ -463,6 +463,20 @@ fn build_config(llm_api_base: String, common: &CommonArgs, file: &FileConfig) ->
         postgres,
         sqlite,
         tools: ToolRuntimeConfig {
+            file_search: agentic_core::types::file_search::FileSearchConfig {
+                sqlite_vec_extension_path: std::env::var_os("AGENTIC_FILE_SEARCH_SQLITE_VEC_EXTENSION_PATH")
+                    .map(std::path::PathBuf::from)
+                    .or_else(|| file.file_search.sqlite_vec_extension_path.clone()),
+                files_storage_dir: std::env::var_os("AGENTIC_FILES_STORAGE_DIR")
+                    .map(std::path::PathBuf::from)
+                    .or_else(|| file.files.storage_dir.clone()),
+                embedding_base_url: environment_value("AGENTIC_FILE_SEARCH_EMBEDDING_BASE_URL")
+                    .or_else(|| file.file_search.embedding_base_url.clone()),
+                embedding_model: environment_value("AGENTIC_FILE_SEARCH_EMBEDDING_MODEL")
+                    .or_else(|| file.file_search.embedding_model.clone()),
+                embedding_api_key: environment_value("AGENTIC_FILE_SEARCH_EMBEDDING_API_KEY")
+                    .or_else(|| file.file_search.api_key_env.as_deref().and_then(environment_value)),
+            },
             web_search,
             web_fetch,
             mcp_servers: file.mcp_servers.clone(),

@@ -78,6 +78,13 @@ jobs:
       - name: Run tests
         run: cargo test
 
+      - name: Test file APIs with the OpenAI Python client
+        run: |
+          python3 -m venv "${RUNNER_TEMP}/openai-file-client"
+          "${RUNNER_TEMP}/openai-file-client/bin/python" -m pip install --disable-pip-version-check openai==3.8.0
+          cargo build --locked -p agentic-server --bin agentic-server
+          "${RUNNER_TEMP}/openai-file-client/bin/python" scripts/tests/openai-file-search-client-test.py
+
       - name: Verify SQLite vector provider
         run: |
           curl --fail --location --silent --show-error \
@@ -283,6 +290,12 @@ jobs:
 
       - name: Verify PostgreSQL migrations and restart persistence
         run: cargo test -p agentic-server-core --test postgres_storage_integration -- --ignored --test-threads=1
+
+      - name: Verify PostgreSQL file search persistence
+        run: cargo test -p agentic-server-core --test file_search_service postgres_file_search -- --ignored --test-threads=1
+
+      - name: Verify bounded PDF ingestion
+        run: cargo test -p agentic-server-core --features file-search-pdf --test file_search_service pdf
 
       - name: Verify PostgreSQL conversation CRUD and tenant isolation
         run: cargo test -p agentic-server-core --test postgres_tenant_isolation_test -- --ignored --test-threads=1

@@ -359,6 +359,7 @@ pub fn build_router_with_auth(
         input_items_route = input_items_route.route_layer(middleware::from_fn_with_state(key.clone(), require_api_key));
     }
     let protected_routes = Router::new()
+        .merge(crate::handler::http::file_search::router())
         .route("/v1/conversations", post(create_conversation))
         .route(
             "/v1/conversations/{conversation_id}",

@@ -5,6 +5,15 @@ against managed PostgreSQL and an external OpenAI-compatible inference service. 
 portable base does not choose an identity provider or expose an Ingress. Enable the gateway's native OIDC validation
 or put an authenticated application boundary in front of it before allowing traffic from outside the cluster.
 
+## Local Files API storage
+
+The base deployment uses PostgreSQL for API metadata and a read-only container
+filesystem. To use the Files API, add a persistent writable volume and set
+`AGENTIC_FILES_STORAGE_DIR` to its mount path. The default two replicas must share
+that volume; otherwise, use a single replica with persistent local storage.
+Back up uploaded bytes together with the database. See the
+[Files and vector stores API guide](../api/file-search.md).
+
 ## Prepare the image and configuration
 
 Build and publish the production image described in the [container guide](container.md). The base uses

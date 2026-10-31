@@ -1301,6 +1301,7 @@ async fn embedding_service() -> (
     let files = tempfile::tempdir().unwrap();
     let config = FileSearchConfig {
         files_storage_dir: Some(files.path().to_owned()),
+        sqlite_vec_extension_path: None,
         embedding_base_url: Some(format!("http://{addr}/v1")),
         embedding_model: Some("fixture".into()),
         embedding_api_key: Some("never-log-this-key".into()),
@@ -1591,6 +1592,7 @@ fn ogx_vector_mode_alias_and_secret_safe_debug_are_supported() {
     );
     let config = FileSearchConfig {
         files_storage_dir: None,
+        sqlite_vec_extension_path: None,
         embedding_base_url: Some("https://private.example/v1".into()),
         embedding_model: Some("model".into()),
         embedding_api_key: Some("secret-credential".into()),

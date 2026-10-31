@@ -8,6 +8,7 @@ use super::FileSearchService;
 use crate::{
     storage::{DbPool, file_search::FileSearchStorage, local_files::LocalFiles},
     tool::file_search::{
+        SqliteVecRepository,
         embeddings::Embeddings,
         provider::{FileBlobStore, FileSearchRepository},
     },
@@ -15,6 +16,32 @@ use crate::{
 };
 
 impl FileSearchService {
+    /// Builds the configured SQL or sqlite-vec provider and local blob store.
+    ///
+    /// # Errors
+    /// Returns an error if the trusted extension cannot be loaded or providers cannot initialize.
+    pub async fn configured(
+        pool: Arc<DbPool>,
+        client: Arc<reqwest::Client>,
+        config: FileSearchConfig,
+    ) -> Result<Self, FileSearchError> {
+        let Some(extension_path) = &config.sqlite_vec_extension_path else {
+            return Self::new(pool, client, config);
+        };
+        let directory = match &config.files_storage_dir {
+            Some(directory) => directory.clone(),
+            None => crate::config::agentic_api_home()
+                .map_err(|error| FileSearchError::Configuration(Box::new(error)))?
+                .join("files"),
+        };
+        Self::with_providers(
+            Arc::new(SqliteVecRepository::open(pool, extension_path).await?),
+            Arc::new(LocalFiles::new(directory)?),
+            client,
+            &config,
+        )
+    }
+
     /// Creates a service; no embeddings configuration selects keyword retrieval.
     ///
     /// # Errors

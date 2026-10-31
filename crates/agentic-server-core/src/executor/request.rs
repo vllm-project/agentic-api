@@ -95,6 +95,8 @@ impl RequestContext {
 /// rather than stored here, keeping this context purely shared and immutable.
 #[derive(Clone, Debug)]
 pub struct ExecutionContext {
+    /// Shared in-tree file ingestion and retrieval, available when persistence is configured.
+    pub file_search: Option<crate::tool::file_search::FileSearchService>,
     pub conv_handler: ConversationHandler,
     pub resp_handler: ResponseHandler,
     pub client: Arc<reqwest::Client>,
@@ -140,6 +142,7 @@ impl ExecutionContext {
     ) -> Self {
         let gateway_executors = GatewayExecutors::from_env(Arc::clone(&client));
         Self {
+            file_search: None,
             conv_handler,
             resp_handler,
             client,
@@ -171,6 +174,13 @@ impl ExecutionContext {
     #[must_use]
     pub fn with_gateway_executor(mut self, executor: impl Into<GatewayExecutorRegistration>) -> Self {
         self.gateway_executors.insert(executor);
+        self
+    }
+
+    /// Installs a file search service for the Files and vector-store APIs.
+    #[must_use]
+    pub fn with_file_search_service(mut self, service: crate::tool::file_search::FileSearchService) -> Self {
+        self.file_search = Some(service);
         self
     }
 
@@ -221,7 +231,18 @@ impl ExecutionContext {
         let client = Arc::new(reqwest::Client::new());
         let gateway_executors = GatewayExecutors::from_config(Arc::clone(&client), &cfg.tools)
             .map_err(|error| Error::Config(format!("failed to validate configured gateway tool policies: {error}")))?;
+        let file_search = crate::tool::file_search::FileSearchService::configured(
+            Arc::clone(&pool),
+            Arc::clone(&client),
+            cfg.tools.file_search.clone(),
+        )
+        .await
+        .map_err(|error| Error::Config(error.public_message()))?;
+        if let Err(error) = file_search.reconcile_blob_cleanup().await {
+            tracing::warn!(%error, "file blob reconciliation will retry while the gateway runs");
+        }
         Ok(Self {
+            file_search: None,
             conv_handler,
             resp_handler,
             client,
@@ -238,7 +259,8 @@ impl ExecutionContext {
             responses_config: cfg.responses,
             metrics: ExecutorMetrics::from_global(),
             storage_pool: Some(pool),
-        })
+        }
+        .with_file_search_service(file_search))
     }
 }
 

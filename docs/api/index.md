@@ -1,5 +1,8 @@
 # API Reference
 
+See [Files, vector stores, and file search](file-search.md) for document ingestion
+and retrieval through the HTTP API.
+
 ## Authentication
 
 Inbound authentication is optional. When the gateway starts with both `OIDC_ISSUER` and `OIDC_AUDIENCE`, every
