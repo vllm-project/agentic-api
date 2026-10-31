@@ -17,7 +17,7 @@ use crate::executor::relay::{Release, StreamRelay};
 use crate::executor::request::RequestContext;
 use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::types::io::output::{McpCallStatus, WebSearchCallStatus};
-use crate::types::io::{CodeInterpreterCallStatus, CodeInterpreterCallStreamEvent, OutputItem};
+use crate::types::io::{CodeInterpreterCallStatus, CodeInterpreterCallStreamEvent, FileSearchCall, OutputItem};
 use crate::types::request_response::ResponsePayload;
 use crate::types::tools::ToolSearchStatus;
 use crate::utils::common::{deserialize_from_value, serialize_to_value};
@@ -99,6 +99,27 @@ async fn emit_code_interpreter_start_events(
     Ok(())
 }
 
+async fn emit_file_search_start_events(
+    call: &FileSearchCall,
+    output_index: u32,
+    relay: &mut StreamRelay,
+) -> ExecutorResult<()> {
+    for event_type in [
+        SSEEventType::FileSearchCallInProgress,
+        SSEEventType::FileSearchCallSearching,
+    ] {
+        let mut event = synthetic_event(
+            event_type,
+            [
+                ("item_id".to_owned(), serde_json::json!(call.id)),
+                ("output_index".to_owned(), serde_json::json!(output_index)),
+            ],
+        )?;
+        relay.emit_local(&mut event).await?;
+    }
+    Ok(())
+}
+
 pub(in crate::executor) async fn emit_response_start_events(
     payload: &ResponsePayload,
     relay: &mut StreamRelay,
@@ -156,21 +177,7 @@ pub(in crate::executor) async fn emit_gateway_start_events<'a>(
         };
         emit_gateway_added_event(plan.output_index, output_item, relay).await?;
         match output_item {
-            OutputItem::FileSearchCall(call) => {
-                for event_type in [
-                    SSEEventType::FileSearchCallInProgress,
-                    SSEEventType::FileSearchCallSearching,
-                ] {
-                    let mut event = synthetic_event(
-                        event_type,
-                        [
-                            ("item_id".to_owned(), serde_json::json!(call.id)),
-                            ("output_index".to_owned(), serde_json::json!(plan.output_index)),
-                        ],
-                    )?;
-                    relay.emit_local(&mut event).await?;
-                }
-            }
+            OutputItem::FileSearchCall(call) => emit_file_search_start_events(call, plan.output_index, relay).await?,
             OutputItem::WebSearchCall(web_search_call) => {
                 let mut in_progress_event = synthetic_event(
                     SSEEventType::WebSearchCallInProgress,
