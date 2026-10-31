@@ -11,6 +11,7 @@ use futures::future::join_all;
 use serde_json::Value;
 use tokio::sync::Semaphore;
 
+use crate::executor::error::ExecutorResult;
 use crate::executor::gateway::GatewaySchedulerPolicy;
 use crate::executor::messages_context::MessagesRequestContext;
 use crate::executor::messages_request::{
@@ -337,4 +338,32 @@ async fn dispatch(
             "gateway tool '{name}' timed out after {GATEWAY_TOOL_TIMEOUT:?}"
         )),
     }
+}
+
+/// Resume only connector calls validated by request preparation, before inference.
+/// Both response modes use the same dispatch and history mutation.
+pub(super) async fn resume_pending_mcp(
+    ctx: &mut MessagesRequestContext,
+    registry: &ToolRegistry,
+    map: &tool_seam::GatewayToolMap,
+    view: ServerToolView<'_>,
+    policy: &GatewaySchedulerPolicy,
+    metrics: &ExecutorMetrics,
+) -> ExecutorResult<Vec<GatewayToolResult>> {
+    let pending = ctx.take_pending_mcp();
+    if pending.is_empty() {
+        return Ok(Vec::new());
+    }
+    let calls = pending
+        .into_iter()
+        .map(|call| MessagesToolCall {
+            id: call.id,
+            name: call.name,
+            input: Ok(call.input),
+        })
+        .collect();
+    let executed = execute_gateway_calls(calls, ctx, registry, map, view, policy, metrics).await;
+    let results = executed.into_iter().map(|call| call.tool_result).collect::<Vec<_>>();
+    ctx.complete_pending_mcp(&results)?;
+    Ok(results)
 }

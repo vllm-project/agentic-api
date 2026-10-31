@@ -738,6 +738,16 @@ client's own function, so it stays hidden from the client, as does a plain funct
 
 > Note: allow and block domain lists are mutually exclusive, matching Anthropic's native tool contract.
 
+### Remote MCP tools with the Messages connector
+
+Messages applications can declare remote HTTPS MCP servers through `mcp_servers` and
+`tools: [{"type":"mcp_toolset","mcp_server_name":"example"}]`, using the
+`mcp-client-2025-11-20` connector shape. The gateway reuses its MCP registry and execution policy,
+returns `mcp_tool_use` / `mcp_tool_result` blocks, and handles replay and token counting.
+Mixed client/MCP calls wait for the client's matching outputs before MCP execution.
+See [the connector contract](docs/design/mcp-gateway-integration.md#messages-mcp-connector)
+for configuration, authentication, deferred loading, and supported-beta limits.
+
 ### Fetching pages with the native web fetch tool
 
 Applications that call the Messages API through the Anthropic SDK can declare Claude's native

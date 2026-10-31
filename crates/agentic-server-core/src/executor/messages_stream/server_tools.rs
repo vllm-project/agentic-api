@@ -13,24 +13,29 @@ use serde_json::{Value, json};
 
 use super::ingestion::Frame;
 use super::{MessagesRoundDecision, MessagesStreamAccumulator, sse};
+use crate::executor::messages_server_tools::{ClientToolUse, client_tool_result};
 use crate::executor::messages_tools::ExecutedCall;
-use crate::types::messages::{GatewayToolResult, ServerToolUseBlock};
+use crate::types::messages::GatewayToolResult;
+use crate::types::messages::mcp::McpContentBlock;
 
 impl MessagesStreamAccumulator {
     /// Release the blocks held since the round's first native call, showing
     /// the native calls when `show_native_calls` (the round runs them).
-    pub(super) fn release_held(&mut self, show_native_calls: bool) -> Vec<Frame> {
+    pub(super) fn release_held(&mut self, show_native_calls: bool, show_mcp_calls: bool) -> Vec<Frame> {
         let held = std::mem::take(&mut self.held);
         let mut frames = Vec::with_capacity(held.len());
         for event in held {
             let up_index = event.get("index").and_then(Value::as_u64).unwrap_or(0);
             if self.suppressed_indices.contains(&up_index) {
                 // Only a native call's start is held, to keep its place.
-                let call = self
-                    .blocks
-                    .get(&up_index)
-                    .and_then(|block| self.native.server_tool_use(&block.completed_block()));
-                if show_native_calls && let Some(call) = call {
+                let call = self.blocks.get_mut(&up_index).and_then(|block| {
+                    if !show_native_calls && block.input().is_err() {
+                        return None;
+                    }
+                    self.native
+                        .client_tool_use(&block.completed_block(), &self.gateway_map, show_native_calls)
+                });
+                if let Some(call) = call.filter(|call| show_mcp_calls || matches!(call, ClientToolUse::Native(_))) {
                     let index = self.next_client_index();
                     frames.extend(server_tool_use_frames(index, call));
                 }
@@ -45,7 +50,8 @@ impl MessagesStreamAccumulator {
     /// with the native calls hidden like any unexecuted gateway call, then the
     /// message's terminal.
     pub(super) fn terminal_frames(&mut self, decision: MessagesRoundDecision) -> Vec<Frame> {
-        let mut frames = self.release_held(false);
+        let show_mcp = self.has_completed_round();
+        let mut frames = self.release_held(false, show_mcp);
         frames.extend(self.finish(decision).into_iter().map(|frame| (frame, false)));
         frames
     }
@@ -53,12 +59,16 @@ impl MessagesStreamAccumulator {
     /// The result blocks of the round's executed native calls, in call order,
     /// and every call's `tool_result` for the next round; each call's server
     /// tool uses join the turn's usage.
-    pub(super) fn record_executed(&mut self, executed: Vec<ExecutedCall>) -> (Vec<Frame>, Vec<GatewayToolResult>) {
+    pub(super) fn record_executed(
+        &mut self,
+        executed: Vec<ExecutedCall>,
+        content: &[Value],
+    ) -> (Vec<Frame>, Vec<GatewayToolResult>) {
         let mut frames = Vec::new();
         let mut tool_results = Vec::with_capacity(executed.len());
         for call in executed {
             self.usage.add_server_tool_uses(call.uses);
-            if let Some(result) = call.server_result {
+            if let Some(result) = client_tool_result(&call, content, &self.gateway_map) {
                 let index = self.next_client_index();
                 let start = json!({"type": "content_block_start", "index": index, "content_block": result});
                 frames.push((sse("content_block_start", &start), false));
@@ -68,11 +78,25 @@ impl MessagesStreamAccumulator {
         }
         (frames, tool_results)
     }
+    /// A resumed response starts with the prior calls' results, never repeats calls.
+    pub(super) fn release_pending_results(&mut self) -> Vec<Frame> {
+        if !self.message_started {
+            return Vec::new();
+        }
+        let mut frames = Vec::new();
+        for result in std::mem::take(&mut self.pending_mcp_results) {
+            let index = self.next_client_index();
+            let event = json!({"type":"content_block_start", "index":index,
+                "content_block":McpContentBlock::result(&result)});
+            frames.push((sse("content_block_start", &event), false));
+            frames.push((stop_frame(index), false));
+        }
+        frames
+    }
 }
 
-fn server_tool_use_frames(index: u32, call: ServerToolUseBlock) -> [Frame; 3] {
-    let input = serde_json::to_string(&call.input).unwrap_or_else(|_| "{}".to_owned());
-    let skeleton = ServerToolUseBlock::new(call.id, call.name, json!({}));
+fn server_tool_use_frames(index: u32, call: ClientToolUse) -> [Frame; 3] {
+    let (skeleton, input) = call.streamed();
     let start = json!({"type": "content_block_start", "index": index, "content_block": skeleton});
     let delta = json!({
         "type": "content_block_delta", "index": index,
@@ -90,4 +114,40 @@ fn stop_frame(index: u32) -> String {
         "content_block_stop",
         &json!({"type": "content_block_stop", "index": index}),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn truncated_calls_keep_valid_arguments_public_without_empty_fallback_or_results() {
+        for input in [r#"{"text":"你好"}"#, r#"{"text":"#] {
+            let valid = input.ends_with('}');
+            let mut acc = MessagesStreamAccumulator::default();
+            acc.gateway_map
+                .insert_mcp("mcp_echo".to_owned(), "s".to_owned(), "echo".to_owned());
+            acc.push(r#"data: {"type":"message_start","message":{"id":"m"}}"#);
+            acc.push(r#"data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"c","name":"mcp_echo","input":{}}}"#);
+            acc.push(&format!(
+                "data: {}",
+                json!({"type":"content_block_delta", "index":0,
+                "delta":{"type":"input_json_delta", "partial_json":input}})
+            ));
+            acc.push(r#"data: {"type":"content_block_stop","index":0}"#);
+            acc.push(r#"data: {"type":"message_delta","delta":{"stop_reason":"max_tokens"}}"#);
+            acc.push(r#"data: {"type":"message_stop"}"#);
+            let frames = acc
+                .terminal_frames(MessagesRoundDecision::Finish)
+                .into_iter()
+                .map(|(frame, _)| frame)
+                .collect::<String>();
+            assert_eq!(frames.contains("mcp_tool_use"), valid);
+            assert!(!frames.contains("mcp_tool_result"));
+            assert!(frames.contains("max_tokens"));
+            if valid {
+                assert!(frames.contains("你好"));
+            }
+        }
+    }
 }

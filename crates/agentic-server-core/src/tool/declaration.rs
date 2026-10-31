@@ -20,6 +20,7 @@ use crate::types::tools::{
     WebFetchToolParam, WebSearchToolParam, WebSearchUserLocation,
 };
 use crate::utils::common::deserialize_from_value_opt;
+use serde_json::Value;
 
 /// A declared tool as the tool layer understands it.
 ///
@@ -191,6 +192,7 @@ pub fn registry_tools(tools: Option<&Vec<ToolParam>>, map: &GatewayToolMap) -> V
 
 fn map_tool(tool: &ToolParam, map: &GatewayToolMap) -> Option<ToolDeclaration> {
     match tool {
+        ToolParam::McpToolset(_) => None,
         ToolParam::WebFetch(_) => web_fetch_config(tool).map(ToolDeclaration::WebFetch),
         // Keep unsupported fetch versions on the validation path; they must not
         // become client tools and bypass the existing version rejection.
@@ -202,17 +204,17 @@ fn map_tool(tool: &ToolParam, map: &GatewayToolMap) -> Option<ToolDeclaration> {
 }
 
 fn map_named_tool(tool: &ToolParam, map: &GatewayToolMap) -> Option<ToolDeclaration> {
-    if map.canonical_executor(tool.name()) == Some(WEB_SEARCH_EXECUTOR) {
+    if map.canonical_executor(tool.name()?) == Some(WEB_SEARCH_EXECUTOR) {
         return Some(ToolDeclaration::WebSearch(web_search_config(tool)));
     }
-    let fields = tool.fields();
-    let name = tool.name().try_into().ok()?;
+    let fields = tool.fields()?;
+    let name = tool.name()?.try_into().ok()?;
     Some(ToolDeclaration::Function(FunctionToolParam {
         name,
         description: fields.description.clone(),
         parameters: fields.input_schema.clone(),
         strict: None,
-        defer_loading: None,
+        defer_loading: fields.extra.get("defer_loading").and_then(Value::as_bool),
         async_execution: None,
         extra: std::collections::HashMap::new(),
     }))
@@ -227,7 +229,9 @@ pub(crate) fn web_search_config(tool: &ToolParam) -> WebSearchToolParam {
         return WebSearchToolParam::default();
     }
 
-    let fields = tool.fields();
+    let Some(fields) = tool.fields() else {
+        return WebSearchToolParam::default();
+    };
     let allowed_domains = fields
         .extra
         .get("allowed_domains")
@@ -262,7 +266,7 @@ pub(crate) fn web_search_config(tool: &ToolParam) -> WebSearchToolParam {
 /// built, so a failure here is a desynchronized parser: the declaration is
 /// dropped rather than registered with weaker filters, and logged.
 fn web_fetch_config(tool: &ToolParam) -> Option<WebFetchToolParam> {
-    WebFetchToolParam::from_declaration(|field| tool.fields().extra.get(field))
+    WebFetchToolParam::from_declaration(|field| tool.fields().and_then(|fields| fields.extra.get(field)))
         .inspect_err(|error| tracing::error!(error, "web_fetch declaration unreadable after validation"))
         .ok()
 }

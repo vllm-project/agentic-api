@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use crate::tool::{GatewayBinding, ToolEntry, ToolType};
 
 use super::McpDiscoveredHandler;
+use super::handler::McpServerToolSet;
+use crate::types::tools::McpToolParam;
 
 /// Registers one tool returned by MCP `tools/list`, keyed by its internal
 /// model-visible name while binding its typed discovered-tool parameters to
@@ -19,4 +21,13 @@ pub(crate) fn insert_discovered_mcp_entry(entries: &mut HashMap<String, ToolEntr
             Some(GatewayBinding::new(handler, param)),
         ),
     );
+}
+
+/// Apply connector configuration before registering executable names or retaining discovery metadata.
+pub(crate) fn apply_messages_config(set: &mut McpServerToolSet, param: &McpToolParam) {
+    if let Some(config) = &param.messages_config {
+        set.discovered_handlers
+            .retain(|handler| config.effective(&handler.param.tool_name).0);
+        set.list_tools_item.tools.retain(|tool| config.effective(&tool.name).0);
+    }
 }

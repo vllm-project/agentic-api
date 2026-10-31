@@ -19,7 +19,10 @@ mod projection;
 pub(crate) mod replay;
 pub(crate) mod sealing;
 
-use serde_json::Value;
+use crate::executor::messages_tools::ExecutedCall;
+use crate::types::messages::mcp::McpContentBlock;
+use serde::Serialize;
+use serde_json::{Value, json};
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::messages_usage::ServerToolUses;
@@ -80,7 +83,10 @@ impl NativeServerTools {
                     web_fetch: true,
                     ..native
                 },
-                ToolParam::WebSearch(_) | ToolParam::Function(_) | ToolParam::Provider(_) => native,
+                ToolParam::WebSearch(_)
+                | ToolParam::Function(_)
+                | ToolParam::Provider(_)
+                | ToolParam::McpToolset(_) => native,
             })
     }
 
@@ -106,6 +112,22 @@ impl NativeServerTools {
         ))
     }
 
+    /// One shared projection for native and MCP calls in JSON and SSE.
+    pub(super) fn client_tool_use(
+        self,
+        block: &Value,
+        map: &GatewayToolMap,
+        show_native: bool,
+    ) -> Option<ClientToolUse> {
+        if let Some(call) = map.public_mcp_call(block) {
+            Some(ClientToolUse::Mcp(call))
+        } else if show_native {
+            self.server_tool_use(block).map(ClientToolUse::Native)
+        } else {
+            None
+        }
+    }
+
     /// What the client sees of one executed round: the model's blocks in
     /// order, each native call as its `server_tool_use` block and any other
     /// gateway call hidden, then the native calls' result blocks.
@@ -116,7 +138,7 @@ impl NativeServerTools {
         self,
         content: &[Value],
         gateway_map: &GatewayToolMap,
-        results: impl IntoIterator<Item = &'b ServerToolResultBlock>,
+        results: impl IntoIterator<Item = ClientToolResult<'b>>,
     ) -> ExecutorResult<Vec<Value>> {
         let mut shown = Vec::with_capacity(content.len());
         for block in content {
@@ -124,7 +146,7 @@ impl NativeServerTools {
                 && gateway_map.is_gateway_owned(block.get("name").and_then(Value::as_str).unwrap_or_default());
             if !gateway_call {
                 shown.push(block.clone());
-            } else if let Some(call) = self.server_tool_use(block) {
+            } else if let Some(call) = self.client_tool_use(block, gateway_map, true) {
                 shown.push(serde_json::to_value(call).map_err(ExecutorError::JsonError)?);
             }
         }
@@ -182,3 +204,54 @@ pub(super) enum ReplayFailure {
 
 #[cfg(test)]
 mod tests;
+
+/// Transport-neutral call and result projections shared by JSON and SSE.
+#[derive(Serialize)]
+#[serde(untagged)]
+pub(super) enum ClientToolUse {
+    Native(ServerToolUseBlock),
+    Mcp(McpContentBlock),
+}
+
+impl ClientToolUse {
+    pub(super) fn streamed(self) -> (Value, String) {
+        match self {
+            Self::Native(call) => {
+                let input = serde_json::to_string(&call.input).unwrap_or_else(|_| "{}".to_owned());
+                (
+                    serde_json::to_value(ServerToolUseBlock::new(call.id, call.name, json!({}))).unwrap_or_default(),
+                    input,
+                )
+            }
+            Self::Mcp(call) => {
+                let input = call.input_json().unwrap_or_else(|| "{}".to_owned());
+                (serde_json::to_value(call.with_empty_input()).unwrap_or_default(), input)
+            }
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+pub(super) enum ClientToolResult<'a> {
+    Native(&'a ServerToolResultBlock),
+    Mcp(McpContentBlock),
+}
+
+/// Project an executed result using the same call identity as the public call.
+pub(super) fn client_tool_result<'a>(
+    executed: &'a ExecutedCall,
+    content: &[Value],
+    map: &GatewayToolMap,
+) -> Option<ClientToolResult<'a>> {
+    if let Some(result) = &executed.server_result {
+        Some(ClientToolResult::Native(result))
+    } else if content
+        .iter()
+        .any(|block| block["id"] == executed.tool_result.tool_use_id && map.public_mcp_call(block).is_some())
+    {
+        Some(ClientToolResult::Mcp(McpContentBlock::result(&executed.tool_result)))
+    } else {
+        None
+    }
+}

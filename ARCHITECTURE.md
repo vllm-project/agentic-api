@@ -1715,7 +1715,7 @@ whether to forward the rewritten body.
 
 Both loops take a `MessagesRequestContext` (`messages_context.rs`), the per-request
 type that replaced a bare `serde_json::Value` at that boundary. It holds two views of
-one request: typed fields for reading `tools`/`stream`/`model`, the current
+one request: typed fields for reading `tools`/`mcp_servers`/`stream`/`model`, the current
 `MessagesToolChoice`, and the raw JSON body that is actually forwarded upstream. The raw body is deliberately *not*
 re-serialized from the typed view — `ContentBlock` catches unmodeled block types in
 `#[serde(other)] Unknown` and models only the fields the gateway reads, so a typed
@@ -1745,16 +1745,22 @@ request context accepts that stop only when the selected gateway tool appears in
 the round. Streaming additionally requires `message_stop`; client-executed
 function tools and truncated rounds remain terminal. A completed client-executed
 `tool_use` is surfaced with public `stop_reason: tool_use`, correcting vLLM's
-`end_turn` in JSON and the final SSE `message_delta`. Mixed rounds hide gateway
-calls and await the client's output. Token limits, other stop reasons and streams
-without a completed round keep their original terminal semantics.
+`end_turn` in JSON and the final SSE `message_delta`. Mixed rounds return pending
+MCP calls alongside client-executed calls without executing them; native server-tool
+calls follow their existing terminal policy. The next user message must contain only
+matching client `tool_result` blocks. Request preparation validates the pending calls
+against the current registry before execution. Their results lead the new response and
+refer to the previous call IDs; completed historical calls do not run again.
 
-Hide-the-call covers every terminal round, not only a mixed one. A round can end while a
-gateway `tool_use` is present whenever the stop reason is not a tool-call stop — a
-`max_tokens` truncation mid-call, or an `end_turn` the context does not accept — and that
-call is never executed. `messages_loop.rs`'s `deliver` strips gateway-owned `tool_use`
-blocks from the returned message, matching the streaming accumulator, which suppresses them
-on every round. The assistant turn fed back to the model still carries the call.
+Internal gateway `tool_use` blocks never reach the client directly. Native calls stay
+hidden when the stop reason does not permit execution. MCP calls use the same typed
+call/result projection in JSON and SSE. At a completed terminal, a valid MCP call can
+remain public even for `max_tokens`, with the original stop reason and no execution.
+Invalid truncated arguments stay hidden; invalid mixed-round arguments for `tool_use`
+or the compatible `end_turn` are refused before pending calls are published. Pending
+terminal calls receive no result; gateway-processed calls return success or error
+`mcp_tool_result` blocks. The internal assistant content fed back to the model retains
+the original calls.
 
 A call to a native server tool is shown rather than hidden (`messages_server_tools.rs`,
 #409). When the client declared Anthropic's native `web_search` or `web_fetch`, each
@@ -1797,6 +1803,19 @@ pass through from the final round, a single-round turn is returned unchanged, an
 round that omits `usage` still reports the hidden rounds' counters. `usage.server_tool_use`
 adds the gateway's successful native searches (one per query) and fetches to the counters
 the upstream reported.
+
+`messages_connector.rs` normalizes connector declarations and replay within the existing
+Messages request preparation. `tool/mcp/messages.rs` maps toolsets to `ToolDeclaration::Mcp`;
+`ToolRegistry::build_with_handlers` discovers and registers enabled tools through the
+same MCP client, outbound policy, bounded transport, and typed bindings as Responses.
+The request-scoped `GatewayToolMap` retains original MCP identities for public projections.
+Historical MCP blocks lower to ordinary upstream tool history without adding execution
+bindings. Token counting uses the same discovery and normalization, without dispatch.
+Deferred definitions retain `defer_loading`; the explicit Messages hosted-search
+version policy recognizes the regex and BM25 `20251119` declarations. An upstream-hosted search owns
+loading and search, and the existing Messages accumulator folds its streamed arguments
+for replay. See [MCP gateway integration](docs/design/mcp-gateway-integration.md) for the
+connector contract and upstream support requirement.
 
 ### `storage/` — persistence
 

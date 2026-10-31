@@ -152,6 +152,9 @@ use utoipa::OpenApi;
         agentic_core::types::messages::SystemPrompt,
         agentic_core::types::messages::SystemBlock,
         agentic_core::types::messages::ToolParam,
+        agentic_core::types::messages::mcp::MessagesMcpServer,
+        agentic_core::types::messages::mcp::McpToolConfig,
+        agentic_core::types::messages::mcp::MessagesMcpToolset,
         agentic_core::types::messages::ToolResultContent,
         agentic_core::types::messages::ToolResultBlock,
         agentic_core::types::messages::OutputConfig,
@@ -260,6 +263,8 @@ pub struct CountTokensRequest {
     pub system: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<serde_json::Value>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp_servers: Option<Vec<agentic_core::types::messages::mcp::MessagesMcpServer>>,
 }
 
 /// Response from Anthropic's `count_tokens` endpoint (proxied from upstream).
@@ -536,10 +541,14 @@ mod tests {
     #[test]
     fn messages_tool_schema_preserves_named_provider_declarations() {
         let spec = serde_json::to_value(ApiDoc::openapi()).unwrap();
-        let schema = &spec["components"]["schemas"]["ToolParam"];
-        let validator = jsonschema::validator_for(schema).unwrap();
+        let mut schema = spec["components"]["schemas"]["ToolParam"].clone();
+        schema["components"] = spec["components"].clone();
+        let validator = jsonschema::validator_for(&schema).unwrap();
         for value in [
             serde_json::json!({"name":"echo","input_schema":{"type":"object"}}),
+            serde_json::json!({"type":"mcp_toolset","mcp_server_name":"test", "configs":{"echo":{"enabled":true}}}),
+            serde_json::json!({"type":"mcp_toolset","mcp_server_name":"test", "name":"opaque"}),
+            serde_json::json!({"type":"mcp_toolset","mcp_server_name":"test", "default_config":null,"configs":null}),
             serde_json::json!({"name":"echo","input_schema":false,"type":null,"description":null}),
             serde_json::json!({"type":"web_search_20250305","name":"web_search","max_uses":2}),
             serde_json::json!({"type":"web_fetch_20250910","name":"web_fetch","allowed_domains":["example.com"]}),
@@ -550,6 +559,9 @@ mod tests {
         }
         for value in [
             serde_json::json!({"type":"web_search_20250305"}),
+            serde_json::json!({"type":"mcp_toolset"}),
+            serde_json::json!({"type":"mcp_toolset", "name":"not_a_function"}),
+            serde_json::json!({"type":"mcp_toolset","mcp_server_name":42}),
             serde_json::json!({"name":null}),
             serde_json::json!({"name":"echo","type":42}),
             serde_json::json!({"name":"echo","description":false}),
