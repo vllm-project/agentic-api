@@ -1,0 +1,3497 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Use the tiktoken documentation tool to find which encoding gpt-4o uses.
+        Answer in one sentence.
+      max_output_tokens: 4096
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - allowed_tools:
+        - search_tiktoken_documentation
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792051778
+      created_at: 1792051772
+      error: null
+      frequency_penalty: 0.0
+      id: resp_02ad2638f262b1d8006ad08a3c60c887d09362f45d04bcc27c
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_02ad2638f262b1d8006ad08a3cf75887d096d602123a47116e
+        server_label: gitmcp_tiktoken
+        tools:
+        - annotations:
+            read_only: false
+          description: 'Semantically search within the fetched documentation from
+            GitHub repository: openai/tiktoken. Useful for specific queries.'
+          input_schema:
+            $schema: http://json-schema.org/draft-07/schema#
+            additionalProperties: false
+            properties:
+              query:
+                description: The search query to find relevant documentation
+                type: string
+            required:
+            - query
+            type: object
+          name: search_tiktoken_documentation
+        type: mcp_list_tools
+      - content: []
+        encrypted_content: gAAAAABq0IpCJRMUwO02U6wMkp51PtPVLwNQJ_dn0giAMI-nGo2VSOK6Qo6CVa3_ygnk3fr8gFuA0OJgEFSyArKkG_oV-DWaHtbjJLhG-Lu3Ux9_tXxHuIKHaDVmvSM5Scf2AmgE1VcQNnEiQ_xKsClSvw2d-LC4aDokWt1f7E4NrxmsuyTBvINy9P8iXz7huuLNE0PV8PIXKgg5ybJ6FpEv8rimLfBPWqV7hD8u4EWGDoLMIRVM328H_ysTDtdabzu_5TVc1-jueF4lcmxCwLGxcUAQ0siDx0iVDh8m3GbbKvblMZnS4jEahWNKPRk82PClIzhTdzSZT_czsCvi212C3UTz0QFVvjciZ9rQZvmWd3pALI29Bz5Im2PlK6M-fAsiMUu_FxA1q93Q0dIGdGrUEsDHACS-g18chz3J-AqkQH9_B3Az9UdvT-c8a-NI2RhmAZOo_2dYMPWZFS3VD3zMWiUhXf6Z55se6u52H5Ou1fBLH1iuLY6RwjtlCYV_Kgx59IweuyTMobOutcl9YGbuUWxQe_mQWIBUfeHWYgSbQVecvSFKoYcFwzGohhxKtvuUcMhEVzMybQI8sPERAI2iJj73YDzy0sUozURpGN3gJftayJeG6mGULmGzYg6MGrRBLVEIou-XqH4Oe3PKnexQmomY26Om4d1dO5B--Oy4EPkbRU_ZCHKrtVh_L2Uy-0ePyx79gYgfvyBnN7zRXRvXkd-euH-b1JvIwXZLW_ymfCI9k5HLPsgX_xhmxSv1UHz14Q_AH0Lw_MKk4HPDzWbeHfbcKZ_4-nfpcmkr8EVpZzcR_u_LCOvgSaEy_ZdsRprFhZ3NyARejGvS_xZ6rKpjppsGpfxkocN4Rc7uAlDMIwsj4GzSVEXI1YdrwZinTGm4pHW_HhJq89qcW1EixZjHE00gkvDmY-q2Yw4bygl-JzEsCtA2Zgd7ytB1JZJI4D-jiMISs1L1w5IH05r0XnrVEkvQm3t2wH9hOqMJ1gh4mYZkDpoZ0YsGQh02DLDPOzbyDgn1LLbrfaRjV4vMlM81W_25ZAkCND3ZAPZ5Clb22-Eztx8R5F_wUbJVVJHXr6MlCNxW-0d9bJ0qjdBmdZb9Zo9TzGV2YXtslartZtwXyrrZjUg-cwDCJNyOTcSI7VS2rc4i9LOMrFE8OZVZlueM4XU_l1JbnJvErWINgw7uqz3SgKRXazPfqyJKA4k5MBTXKQEcQKdqAqylL9COm3XPOUJL35gkAPHpVQ-sxxZkOMYiIe6G65WZlzjgLhZrB1DdqBPs95guYK42tESF_sWbdgfLAnFmmltgHgWrHr5JBoqqG-JzjWlP-IBK_zNePoJRkMrlk083VxYUduKZq2n-1E5QX-CiPyb0aelwBE2x8fcYgpdLRPVuVZFOHV_T8Xzz-JJXCa0_Z6JOaUEeODO2oQ-Gt3vC0AZ3XVm3RQc-5g3mPu5amh6EaHbYeBWe3hD9TCMfCmAvApF88MXBv5EBas7VY55FO3RZa6HrxLQz2GnbXY9LeujrGepLNDGvaqzBkkSCEb3bPDn1LyUTi_wHgYiuKW7i5A==
+        id: rs_02ad2638f262b1d8006ad08a3e98b487d0907ac4ed187d447b
+        summary: []
+        type: reasoning
+      - arguments:
+          paths:
+          - mcp_gitmcp_tiktoken
+        call_id: null
+        execution: server
+        id: tsc_02ad2638f262b1d8006ad08a3ed19087d0bb58e340bd2032b5
+        status: completed
+        type: tool_search_call
+      - call_id: null
+        execution: server
+        id: tso_02ad2638f262b1d8006ad08a3f068c87d0b213373724c3f0ee
+        status: completed
+        tools:
+        - description: Documentation and code search for the openai/tiktoken tokenizer
+            repository.
+          name: mcp_gitmcp_tiktoken
+          tools:
+          - defer_loading: true
+            description: 'Semantically search within the fetched documentation from
+              GitHub repository: openai/tiktoken. Useful for specific queries.'
+            name: search_tiktoken_documentation
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                query:
+                  description: The search query to find relevant documentation
+                  type: string
+              required:
+              - query
+              type: object
+            strict: null
+            type: function
+          type: namespace
+        type: tool_search_output
+      - approval_request_id: null
+        arguments: '{"query":"Which encoding does gpt-4o use? Find the model-to-encoding
+          mapping for gpt-4o."}'
+        error: null
+        id: mcp_02ad2638f262b1d8006ad08a3fc32887d08ca7dff98e2a9eeb
+        name: search_tiktoken_documentation
+        output: "### Search Results for: \"Which encoding does gpt-4o use? Find the\
+          \ model-to-encoding mapping for gpt-4o.\"\n\nNo relevant documentation found\
+          \ for your query. It's either being indexed or the search query did not\
+          \ match any documentation.\n\nAs a fallback, this is the documentation for\
+          \ openai/tiktoken:\n\n# ⏳ tiktoken\n\ntiktoken is a fast [BPE](https://en.wikipedia.org/wiki/Byte_pair_encoding)\
+          \ tokeniser for use with\nOpenAI's models.\n\n```python\nimport tiktoken\n\
+          enc = tiktoken.get_encoding(\"o200k_base\")\nassert enc.decode(enc.encode(\"\
+          hello world\")) == \"hello world\"\n\n# To get the tokeniser corresponding\
+          \ to a specific model in the OpenAI API:\nenc = tiktoken.encoding_for_model(\"\
+          gpt-4o\")\n```\n\nThe open source version of `tiktoken` can be installed\
+          \ from [PyPI](https://pypi.org/project/tiktoken):\n```\npip install tiktoken\n\
+          ```\n\nThe tokeniser API is documented in `tiktoken/core.py`.\n\nExample\
+          \ code using `tiktoken` can be found in the\n[OpenAI Cookbook](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb).\n\
+          \n\n## Performance\n\n`tiktoken` is between 3-6x faster than a comparable\
+          \ open source tokeniser:\n\n![image](https://raw.githubusercontent.com/openai/tiktoken/main/perf.svg)\n\
+          \nPerformance measured on 1GB of text using the GPT-2 tokeniser, using `GPT2TokenizerFast`\
+          \ from\n`tokenizers==0.13.2`, `transformers==4.24.0` and `tiktoken==0.2.0`.\n\
+          \n\n## Getting help\n\nPlease post questions in the [issue tracker](https://github.com/openai/tiktoken/issues).\n\
+          \nIf you work at OpenAI, make sure to check the internal documentation or\
+          \ feel free to contact\n@shantanu.\n\n## What is BPE anyway?\n\nLanguage\
+          \ models don't see text like you and I, instead they see a sequence of numbers\
+          \ (known as tokens).\nByte pair encoding (BPE) is a way of converting text\
+          \ into tokens. It has a couple desirable\nproperties:\n1) It's reversible\
+          \ and lossless, so you can convert tokens back into the original text\n\
+          2) It works on arbitrary text, even text that is not in the tokeniser's\
+          \ training data\n3) It compresses the text: the token sequence is shorter\
+          \ than the bytes corresponding to the\n   original text. On average, in\
+          \ practice, each token corresponds to about 4 bytes.\n4) It attempts to\
+          \ let the model see common subwords. For instance, \"ing\" is a common subword\
+          \ in\n   English, so BPE encodings will often split \"encoding\" into tokens\
+          \ like \"encod\" and \"ing\"\n   (instead of e.g. \"enc\" and \"oding\"\
+          ). Because the model will then see the \"ing\" token again and\n   again\
+          \ in different contexts, it helps models generalise and better understand\
+          \ grammar.\n\n`tiktoken` contains an educational submodule that is friendlier\
+          \ if you want to learn more about\nthe details of BPE, including code that\
+          \ helps visualise the BPE procedure:\n```python\nfrom tiktoken._educational\
+          \ import *\n\n# Train a BPE tokeniser on a small amount of text\nenc = train_simple_encoding()\n\
+          \n# Visualise how the GPT-4 encoder encodes text\nenc = SimpleBytePairEncoding.from_tiktoken(\"\
+          cl100k_base\")\nenc.encode(\"hello world aaaaaaaaaaaa\")\n```\n\n\n## Extending\
+          \ tiktoken\n\nYou may wish to extend `tiktoken` to support new encodings.\
+          \ There are two ways to do this.\n\n\n**Create your `Encoding` object exactly\
+          \ the way you want and simply pass it around.**\n\n```python\ncl100k_base\
+          \ = tiktoken.get_encoding(\"cl100k_base\")\n\n# In production, load the\
+          \ arguments directly instead of accessing private attributes\n# See openai_public.py\
+          \ for examples of arguments for specific encodings\nenc = tiktoken.Encoding(\n\
+          \    # If you're changing the set of special tokens, make sure to use a\
+          \ different name\n    # It should be clear from the name what behaviour\
+          \ to expect.\n    name=\"cl100k_im\",\n    pat_str=cl100k_base._pat_str,\n\
+          \    mergeable_ranks=cl100k_base._mergeable_ranks,\n    special_tokens={\n\
+          \        **cl100k_base._special_tokens,\n        \"<|im_start|>\": 100264,\n\
+          \        \"<|im_end|>\": 100265,\n    }\n)\n```\n\n**Use the `tiktoken_ext`\
+          \ plugin mechanism to register your `Encoding` objects with `tiktoken`.**\n\
+          \nThis is only useful if you need `tiktoken.get_encoding` to find your encoding,\
+          \ otherwise prefer\noption 1.\n\nTo do this, you'll need to create a namespace\
+          \ package under `tiktoken_ext`.\n\nLayout your project like this, making\
+          \ sure to omit the `tiktoken_ext/__init__.py` file:\n```\nmy_tiktoken_extension\n\
+          ├── tiktoken_ext\n│   └── my_encodings.py\n└── setup.py\n```\n\n`my_encodings.py`\
+          \ should be a module that contains a variable named `ENCODING_CONSTRUCTORS`.\n\
+          This is a dictionary from an encoding name to a function that takes no arguments\
+          \ and returns\narguments that can be passed to `tiktoken.Encoding` to construct\
+          \ that encoding. For an example, see\n`tiktoken_ext/openai_public.py`. For\
+          \ precise details, see `tiktoken/registry.py`.\n\nYour `setup.py` should\
+          \ look something like this:\n```python\nfrom setuptools import setup, find_namespace_packages\n\
+          \nsetup(\n    name=\"my_tiktoken_extension\",\n    packages=find_namespace_packages(include=['tiktoken_ext*']),\n\
+          \    install_requires=[\"tiktoken\"],\n    ...\n)\n```\n\nThen simply `pip\
+          \ install ./my_tiktoken_extension` and you should be able to use your\n\
+          custom encodings! Make sure **not** to use an editable install.\n\n\n\n\
+          If you'd like to retry the search, try changing the query to increase the\
+          \ likelihood of a match."
+        server_label: gitmcp_tiktoken
+        status: completed
+        type: mcp_call
+      - content: []
+        encrypted_content: gAAAAABq0IpCTTG6ed-CXMUXfjcHXFbt7wpvwN9HxGBWjGK27rdvVGIZpmmfQokPL7soPu0egMqabbL0zGc98ECrg5d5Xyi-6dgFxZnUSCw0gogHpYJHNKk6ImNIfLFK__wB2jKa0Rtde5VJmgbVDt2LtbN-YOKl47KfkITDxpTzUomFTgSo5d2Nau31u0ioqN6_DVgiLjwLmA0A9S3L6hko5b-7DtzqJkzWiqEF4xFBiULXNW9wqaSJRwMaeRIT8rQ_QGeqDDbHLLaHPy5J22zBvJ9afHNTZjTNV-qboVg3RCk0Gv0lqZIbzJOFN2XCzOVBm9cdqGgu_4bO1pUReWoOQ2KU6WuYZV1EvUrr0KhQXMFU2Be_--1Er19EMIPFMW1ElvoSh53VWVTeb-igTl3leJZtUv4XZZdHgyaJjGD0Jy0FbalzfmYiWdBGxMD4lhS240VO68H6z6IEVTlsJjbz7VrENY_nhSLbmIeEl0AZ0zPN_fva6ifFzW-JjlAUUZvhWGjTWWnX6RKHLntQI8vAB5Q2zA8qCwUJQiFEyYaf9eeN6U9Gcdf-WZRObHaaccSMjGronuuO5FH51C7y9TInTOB47ZjPJJxurWEOd8GHQH8CUM1J2TsxcD4ucqFbCQLiGTKC-wJUz_3ke4jfg6CwP8k4YJFExXPIePP5Za35mntDZ6yvsXTYBd_rdWUYS1dcBZcyC4aV6MkHrcgI-VR2aBQGKZgn7SHbW7pFtQLvmuYeI11aEZDR0tcDI_1b6QuI4tRivArYMYkapgZPSzJdywmfe5a1mxPASQ5OCLsoDXi00WZmK9WfhLw_Dna2DI-8AtQnvYWX8vJr4q9NU7cVnZi766t_RcG6CFJMlJ62DanKvkoBnLRXhzOn4jlWulZqdzaRPXZ9yjV-JJIAiP-5tTbvwDtB28SvM-6fo9MmxmjM-7zGAshwPGF52jLj4U3-mr7wN5LPqetVKZE1az_nN3XnsdyyUXoOOxJ19XP7bB-S5ff9_dtCL_mQk8qWw9GxjKwE-9IPJ3oJYWczV7XVPPdXWV4_TAPfREt95-w-nK_cP13SR3HQGzoXD4XC_DhjyHBOSjeq_SAyjkpXNlvj-rWYg1aQw5uPN1uhsu6H6XZKKPI__dierJhfikElAqTUo1t3ZsG75RkcMtrJ-RAAYmaiteI0ZdMwTYME7v-PN0Qh7Dur0ksq3huQI6TO4DS5UcxH4eL49NNUkpGrpIuI69K6u3LIsSGgPEb6FPOj460GiatF5FX8ZhTdnBpap4kh2a1qAdJw0KHiFBtNjN1fDRFqrPw2zRYacaZZao6deocnKRy0jTuW83nofg6Q07q9HEoKt7uJqUOrJVEVYY27mgWICO8SlcWuO0L97R6jdMhgnIaAJ6fNpUXuSRwzqW5W4bRHGZN5mkt0IudpXPG1tfByhK3cv0y4F3p7ikTYGP7tRDjYrRrLJhVH9ZV6sn6jtWkqzJVypmBrasKKXIwRoiX8yaFZoCqeUwxphqnjWAcND1KZVozj-kCIkETUFvALmFeZ6a4JpvCCjUS9AnjEsVOJsu8Ep1hiajFBHrmN-XA9YrO-ZzE=
+        id: rs_02ad2638f262b1d8006ad08a40c0d887d0bd040db4630b1046
+        summary: []
+        type: reasoning
+      - approval_request_id: null
+        arguments: '{"query":"gpt-4o o200k_base MODEL_PREFIX_TO_ENCODING model.py"}'
+        error: null
+        id: mcp_02ad2638f262b1d8006ad08a413a2487d0b5bdd0a630cd62c0
+        name: search_tiktoken_documentation
+        output: "### Search Results for: \"gpt-4o o200k_base MODEL_PREFIX_TO_ENCODING\
+          \ model.py\"\n\nNo relevant documentation found for your query. It's either\
+          \ being indexed or the search query did not match any documentation.\n\n\
+          As a fallback, this is the documentation for openai/tiktoken:\n\n# ⏳ tiktoken\n\
+          \ntiktoken is a fast [BPE](https://en.wikipedia.org/wiki/Byte_pair_encoding)\
+          \ tokeniser for use with\nOpenAI's models.\n\n```python\nimport tiktoken\n\
+          enc = tiktoken.get_encoding(\"o200k_base\")\nassert enc.decode(enc.encode(\"\
+          hello world\")) == \"hello world\"\n\n# To get the tokeniser corresponding\
+          \ to a specific model in the OpenAI API:\nenc = tiktoken.encoding_for_model(\"\
+          gpt-4o\")\n```\n\nThe open source version of `tiktoken` can be installed\
+          \ from [PyPI](https://pypi.org/project/tiktoken):\n```\npip install tiktoken\n\
+          ```\n\nThe tokeniser API is documented in `tiktoken/core.py`.\n\nExample\
+          \ code using `tiktoken` can be found in the\n[OpenAI Cookbook](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb).\n\
+          \n\n## Performance\n\n`tiktoken` is between 3-6x faster than a comparable\
+          \ open source tokeniser:\n\n![image](https://raw.githubusercontent.com/openai/tiktoken/main/perf.svg)\n\
+          \nPerformance measured on 1GB of text using the GPT-2 tokeniser, using `GPT2TokenizerFast`\
+          \ from\n`tokenizers==0.13.2`, `transformers==4.24.0` and `tiktoken==0.2.0`.\n\
+          \n\n## Getting help\n\nPlease post questions in the [issue tracker](https://github.com/openai/tiktoken/issues).\n\
+          \nIf you work at OpenAI, make sure to check the internal documentation or\
+          \ feel free to contact\n@shantanu.\n\n## What is BPE anyway?\n\nLanguage\
+          \ models don't see text like you and I, instead they see a sequence of numbers\
+          \ (known as tokens).\nByte pair encoding (BPE) is a way of converting text\
+          \ into tokens. It has a couple desirable\nproperties:\n1) It's reversible\
+          \ and lossless, so you can convert tokens back into the original text\n\
+          2) It works on arbitrary text, even text that is not in the tokeniser's\
+          \ training data\n3) It compresses the text: the token sequence is shorter\
+          \ than the bytes corresponding to the\n   original text. On average, in\
+          \ practice, each token corresponds to about 4 bytes.\n4) It attempts to\
+          \ let the model see common subwords. For instance, \"ing\" is a common subword\
+          \ in\n   English, so BPE encodings will often split \"encoding\" into tokens\
+          \ like \"encod\" and \"ing\"\n   (instead of e.g. \"enc\" and \"oding\"\
+          ). Because the model will then see the \"ing\" token again and\n   again\
+          \ in different contexts, it helps models generalise and better understand\
+          \ grammar.\n\n`tiktoken` contains an educational submodule that is friendlier\
+          \ if you want to learn more about\nthe details of BPE, including code that\
+          \ helps visualise the BPE procedure:\n```python\nfrom tiktoken._educational\
+          \ import *\n\n# Train a BPE tokeniser on a small amount of text\nenc = train_simple_encoding()\n\
+          \n# Visualise how the GPT-4 encoder encodes text\nenc = SimpleBytePairEncoding.from_tiktoken(\"\
+          cl100k_base\")\nenc.encode(\"hello world aaaaaaaaaaaa\")\n```\n\n\n## Extending\
+          \ tiktoken\n\nYou may wish to extend `tiktoken` to support new encodings.\
+          \ There are two ways to do this.\n\n\n**Create your `Encoding` object exactly\
+          \ the way you want and simply pass it around.**\n\n```python\ncl100k_base\
+          \ = tiktoken.get_encoding(\"cl100k_base\")\n\n# In production, load the\
+          \ arguments directly instead of accessing private attributes\n# See openai_public.py\
+          \ for examples of arguments for specific encodings\nenc = tiktoken.Encoding(\n\
+          \    # If you're changing the set of special tokens, make sure to use a\
+          \ different name\n    # It should be clear from the name what behaviour\
+          \ to expect.\n    name=\"cl100k_im\",\n    pat_str=cl100k_base._pat_str,\n\
+          \    mergeable_ranks=cl100k_base._mergeable_ranks,\n    special_tokens={\n\
+          \        **cl100k_base._special_tokens,\n        \"<|im_start|>\": 100264,\n\
+          \        \"<|im_end|>\": 100265,\n    }\n)\n```\n\n**Use the `tiktoken_ext`\
+          \ plugin mechanism to register your `Encoding` objects with `tiktoken`.**\n\
+          \nThis is only useful if you need `tiktoken.get_encoding` to find your encoding,\
+          \ otherwise prefer\noption 1.\n\nTo do this, you'll need to create a namespace\
+          \ package under `tiktoken_ext`.\n\nLayout your project like this, making\
+          \ sure to omit the `tiktoken_ext/__init__.py` file:\n```\nmy_tiktoken_extension\n\
+          ├── tiktoken_ext\n│   └── my_encodings.py\n└── setup.py\n```\n\n`my_encodings.py`\
+          \ should be a module that contains a variable named `ENCODING_CONSTRUCTORS`.\n\
+          This is a dictionary from an encoding name to a function that takes no arguments\
+          \ and returns\narguments that can be passed to `tiktoken.Encoding` to construct\
+          \ that encoding. For an example, see\n`tiktoken_ext/openai_public.py`. For\
+          \ precise details, see `tiktoken/registry.py`.\n\nYour `setup.py` should\
+          \ look something like this:\n```python\nfrom setuptools import setup, find_namespace_packages\n\
+          \nsetup(\n    name=\"my_tiktoken_extension\",\n    packages=find_namespace_packages(include=['tiktoken_ext*']),\n\
+          \    install_requires=[\"tiktoken\"],\n    ...\n)\n```\n\nThen simply `pip\
+          \ install ./my_tiktoken_extension` and you should be able to use your\n\
+          custom encodings! Make sure **not** to use an editable install.\n\n\n\n\
+          If you'd like to retry the search, try changing the query to increase the\
+          \ likelihood of a match."
+        server_label: gitmcp_tiktoken
+        status: completed
+        type: mcp_call
+      - content:
+        - annotations: []
+          logprobs: []
+          text: GPT-4o uses the `o200k_base` encoding.
+          type: output_text
+        id: msg_02ad2638f262b1d8006ad08a41fd6487d0be744a6d2f0b6c9a
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - allowed_tools:
+        - search_tiktoken_documentation
+        defer_loading: true
+        headers: null
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      - description: null
+        parameters: null
+        type: tool_search
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 3427
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 166
+        output_tokens_details:
+          reasoning_tokens: 53
+        total_tokens: 3593
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input: Use the tiktoken documentation tool to find which encoding gpt-4o uses.
+        Answer in one sentence.
+      max_output_tokens: 4096
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - allowed_tools:
+        - search_tiktoken_documentation
+        defer_loading: true
+        require_approval: never
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792051785
+      created_at: 1792051780
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0944d321504abce8006ad08a44871487d0a68bac0cfb498a78
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_0944d321504abce8006ad08a44a1b087d097b4bcdeb460bc28
+        server_label: gitmcp_tiktoken
+        tools:
+        - annotations:
+            read_only: false
+          description: 'Semantically search within the fetched documentation from
+            GitHub repository: openai/tiktoken. Useful for specific queries.'
+          input_schema:
+            $schema: http://json-schema.org/draft-07/schema#
+            additionalProperties: false
+            properties:
+              query:
+                description: The search query to find relevant documentation
+                type: string
+            required:
+            - query
+            type: object
+          name: search_tiktoken_documentation
+        type: mcp_list_tools
+      - content: []
+        encrypted_content: gAAAAABq0IpJk2oBgBAeW8651Aetpr_Dd5jWH5CPxJPxr1curjx78Nv245AxyXz68uY9M0Km87YXCuQ_tDgecJofoEvszxVIFONbeA2jM5LvWJP_8_RCE20tckhHZfjDpEjSvWqY5e2D2IGy6z81rV54A-6FV-p8YqPPBRVZrCtKAn-wYfGyCnSr23E5xAYiBfZcYUXNHYtfehgjKFym0TK4wKrJh_CI8uyUw7wL8rrPcsU3fvHNA0utV6Mm7T7ytRLnH9uMOhL8um4HDSRTfNUJv7G3n2CUOrNeeVygeeFNAyEsXZu3jFd8bVkrEPE5aRsdrxNwXqjitUFbmdYXnBf4HDGv35aHKb0AFkG8vOtrcyA6PNaduZPvGAh2dR_ikXZUdsFO8JVwUP3fksa9fl58f1-bOBz_QJeruI4e_wXGseBCxjF62nerq5PLKYmZFxumhEp1YQCuELZmHNHNNfaQg9AeFeCfWGUWn67rlhn6KKp1TbFR5wXSGwJvksqeM5b9VrbSyABTrY6qmG-0osHsfNh0TTBxwJuF4JqCFMuBxxT3ybMRGYwjfD2gBubhtpPwXrCKvmDTSvt1OVey014_sDCejXi_ngvJvzYjVDTmSb1g2gPovWd0l9ZmIzW0Vo1I_meUxffFenjwlPWL7ss_8qkOusqbtPhW75OBKt4jlHiWCi0kmqVpFDNfLMiviA-INlbH5LyqHdbpyVEl-ypdZRIaTH9MZ0bZ42fFwTjSlXLYk5FPDEpy1-qe97uSTnvcaqZ4mbaJbI4vGnAL12bRVu8fGMz1SnwWDVDh-fVSOR15uuDp6wLtjwYKKltc-wGNjose6cvwZj54fXOLK1Viwl6YcNeQm8XOjOPDXsynCs7GokQoT9q_Bpo34z7XlB-FJM-mJs8UaDbH7C00GGzlq5vmns7B5QvW4oAr4TIevmHVxMC_Jjx_2n9gffZAMwpfl5iwjg_qeP-eKKRD5ZmxDJsOvU9G2Fgwq4oBd06wFcYYiBywqjDvA9Pr4PBDQjG-IUC5S96pCQuLWC1dgfKhnSDjqRUTr2BCocpm8WdrqfZ5bXyfQ4T959dOWoZcoWCtmibxVLNPHiypfCZQcuBkIUDFa8wQKCjDhcDjqMlltED2GjOetc8GJFgL6e4h7y7fJDsK3IFY_7eUSLhhDBX3tqKKQW-xCLjXVEET1z-5lLbw1v4f6BFe5RE_LuOU7DVakLftT1KPfqPPhmuNUb3v4nva0j5POw0SL85WQjapCovZ76B0rrQbyp64oRCKIuFS5Fg5Y0HIVV3fjeoxMzRGA5ZFboC4pXBOzEzp0w8K2FOuixS4h6Wo0EI85qpxI3JLeLb8xurbuYwYycBue9xFTscuWIk0-sU6n47G83wBzMKslaAovfe-3VWFNt2QWfhe6et-iXOsVAdkNfMdYwXp-H__sgQOeX6rNyueb99z8b0WqKKpQiLzo9ZgmiysoVQtRjSfyPAO74WNa5c_5rNHb-m8C1SISlAeYRs07kTm6wtEekcqQIdLFHZRFmxR3xnleeH2rTV6apKj78sGWm2bv6YMh75mLg==
+        id: rs_0944d321504abce8006ad08a46246c87d0a98e0d692aa24fab
+        summary: []
+        type: reasoning
+      - arguments:
+          paths:
+          - mcp_gitmcp_tiktoken
+        call_id: null
+        execution: server
+        id: tsc_0944d321504abce8006ad08a46558087d0a8c6625b0ef81d23
+        status: completed
+        type: tool_search_call
+      - call_id: null
+        execution: server
+        id: tso_0944d321504abce8006ad08a467bac87d08c96ddacc90e21b6
+        status: completed
+        tools:
+        - description: ''
+          name: mcp_gitmcp_tiktoken
+          tools:
+          - defer_loading: true
+            description: 'Semantically search within the fetched documentation from
+              GitHub repository: openai/tiktoken. Useful for specific queries.'
+            name: search_tiktoken_documentation
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                query:
+                  description: The search query to find relevant documentation
+                  type: string
+              required:
+              - query
+              type: object
+            strict: null
+            type: function
+          type: namespace
+        type: tool_search_output
+      - approval_request_id: null
+        arguments: '{"query":"Which encoding does gpt-4o use? Find the model-to-encoding
+          mapping for gpt-4o."}'
+        error: null
+        id: mcp_0944d321504abce8006ad08a473a2487d0bb4e13860f14dff1
+        name: search_tiktoken_documentation
+        output: "### Search Results for: \"Which encoding does gpt-4o use? Find the\
+          \ model-to-encoding mapping for gpt-4o.\"\n\nNo relevant documentation found\
+          \ for your query. It's either being indexed or the search query did not\
+          \ match any documentation.\n\nAs a fallback, this is the documentation for\
+          \ openai/tiktoken:\n\n# ⏳ tiktoken\n\ntiktoken is a fast [BPE](https://en.wikipedia.org/wiki/Byte_pair_encoding)\
+          \ tokeniser for use with\nOpenAI's models.\n\n```python\nimport tiktoken\n\
+          enc = tiktoken.get_encoding(\"o200k_base\")\nassert enc.decode(enc.encode(\"\
+          hello world\")) == \"hello world\"\n\n# To get the tokeniser corresponding\
+          \ to a specific model in the OpenAI API:\nenc = tiktoken.encoding_for_model(\"\
+          gpt-4o\")\n```\n\nThe open source version of `tiktoken` can be installed\
+          \ from [PyPI](https://pypi.org/project/tiktoken):\n```\npip install tiktoken\n\
+          ```\n\nThe tokeniser API is documented in `tiktoken/core.py`.\n\nExample\
+          \ code using `tiktoken` can be found in the\n[OpenAI Cookbook](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb).\n\
+          \n\n## Performance\n\n`tiktoken` is between 3-6x faster than a comparable\
+          \ open source tokeniser:\n\n![image](https://raw.githubusercontent.com/openai/tiktoken/main/perf.svg)\n\
+          \nPerformance measured on 1GB of text using the GPT-2 tokeniser, using `GPT2TokenizerFast`\
+          \ from\n`tokenizers==0.13.2`, `transformers==4.24.0` and `tiktoken==0.2.0`.\n\
+          \n\n## Getting help\n\nPlease post questions in the [issue tracker](https://github.com/openai/tiktoken/issues).\n\
+          \nIf you work at OpenAI, make sure to check the internal documentation or\
+          \ feel free to contact\n@shantanu.\n\n## What is BPE anyway?\n\nLanguage\
+          \ models don't see text like you and I, instead they see a sequence of numbers\
+          \ (known as tokens).\nByte pair encoding (BPE) is a way of converting text\
+          \ into tokens. It has a couple desirable\nproperties:\n1) It's reversible\
+          \ and lossless, so you can convert tokens back into the original text\n\
+          2) It works on arbitrary text, even text that is not in the tokeniser's\
+          \ training data\n3) It compresses the text: the token sequence is shorter\
+          \ than the bytes corresponding to the\n   original text. On average, in\
+          \ practice, each token corresponds to about 4 bytes.\n4) It attempts to\
+          \ let the model see common subwords. For instance, \"ing\" is a common subword\
+          \ in\n   English, so BPE encodings will often split \"encoding\" into tokens\
+          \ like \"encod\" and \"ing\"\n   (instead of e.g. \"enc\" and \"oding\"\
+          ). Because the model will then see the \"ing\" token again and\n   again\
+          \ in different contexts, it helps models generalise and better understand\
+          \ grammar.\n\n`tiktoken` contains an educational submodule that is friendlier\
+          \ if you want to learn more about\nthe details of BPE, including code that\
+          \ helps visualise the BPE procedure:\n```python\nfrom tiktoken._educational\
+          \ import *\n\n# Train a BPE tokeniser on a small amount of text\nenc = train_simple_encoding()\n\
+          \n# Visualise how the GPT-4 encoder encodes text\nenc = SimpleBytePairEncoding.from_tiktoken(\"\
+          cl100k_base\")\nenc.encode(\"hello world aaaaaaaaaaaa\")\n```\n\n\n## Extending\
+          \ tiktoken\n\nYou may wish to extend `tiktoken` to support new encodings.\
+          \ There are two ways to do this.\n\n\n**Create your `Encoding` object exactly\
+          \ the way you want and simply pass it around.**\n\n```python\ncl100k_base\
+          \ = tiktoken.get_encoding(\"cl100k_base\")\n\n# In production, load the\
+          \ arguments directly instead of accessing private attributes\n# See openai_public.py\
+          \ for examples of arguments for specific encodings\nenc = tiktoken.Encoding(\n\
+          \    # If you're changing the set of special tokens, make sure to use a\
+          \ different name\n    # It should be clear from the name what behaviour\
+          \ to expect.\n    name=\"cl100k_im\",\n    pat_str=cl100k_base._pat_str,\n\
+          \    mergeable_ranks=cl100k_base._mergeable_ranks,\n    special_tokens={\n\
+          \        **cl100k_base._special_tokens,\n        \"<|im_start|>\": 100264,\n\
+          \        \"<|im_end|>\": 100265,\n    }\n)\n```\n\n**Use the `tiktoken_ext`\
+          \ plugin mechanism to register your `Encoding` objects with `tiktoken`.**\n\
+          \nThis is only useful if you need `tiktoken.get_encoding` to find your encoding,\
+          \ otherwise prefer\noption 1.\n\nTo do this, you'll need to create a namespace\
+          \ package under `tiktoken_ext`.\n\nLayout your project like this, making\
+          \ sure to omit the `tiktoken_ext/__init__.py` file:\n```\nmy_tiktoken_extension\n\
+          ├── tiktoken_ext\n│   └── my_encodings.py\n└── setup.py\n```\n\n`my_encodings.py`\
+          \ should be a module that contains a variable named `ENCODING_CONSTRUCTORS`.\n\
+          This is a dictionary from an encoding name to a function that takes no arguments\
+          \ and returns\narguments that can be passed to `tiktoken.Encoding` to construct\
+          \ that encoding. For an example, see\n`tiktoken_ext/openai_public.py`. For\
+          \ precise details, see `tiktoken/registry.py`.\n\nYour `setup.py` should\
+          \ look something like this:\n```python\nfrom setuptools import setup, find_namespace_packages\n\
+          \nsetup(\n    name=\"my_tiktoken_extension\",\n    packages=find_namespace_packages(include=['tiktoken_ext*']),\n\
+          \    install_requires=[\"tiktoken\"],\n    ...\n)\n```\n\nThen simply `pip\
+          \ install ./my_tiktoken_extension` and you should be able to use your\n\
+          custom encodings! Make sure **not** to use an editable install.\n\n\n\n\
+          If you'd like to retry the search, try changing the query to increase the\
+          \ likelihood of a match."
+        server_label: gitmcp_tiktoken
+        status: completed
+        type: mcp_call
+      - content: []
+        encrypted_content: gAAAAABq0IpJRuwsQ39eSvZyppWOH83Sg3QPUcd_J7FHAd9P60UGON_AiwvhNbbXBf-bLEwN5yZoYq0NJrY14XnDMnKFz0RVoSBWDlmtDZxbDcJVQPIgHkNs3H6e3ZF3f2eagD6NVOQQR4yI_ZIWc41KfwQOa5Dck6Uwd4Ftchcn6hxjep27NWJW82UCxb3jWPyog6OdY35PLSHvV-JNK7ZGjzVfO9oTP7U-FbxhAigjfOeoiiWJ89LMvaZ4aP49n2XSHTd3o-QZ0IBfn3V6TAbGSHDPcX6B0zKntNWdQAvMeL8oejoSJAVIOm5VnZ1wj1uEAO0Kt8TzQ4KFsqOYr9JiIhdJtgbWtxCJqsHMYxDotvTFbWyAXTck6_3CfgajDWvn75hpbkCRFTzyVKkpV6YXH8LGk-W14iyEGki5H80yDGju3efvdbsjzE6F-7IO3FG0DmJ46rlywV8J6RLIrU8FQD4eNQijo_0Mp3HENVXa_oG6Chiy9pRud741dpTpQQCxgMi_i-F2xVX_M37uVjVqxuRdgIzHuEQ44NiNa8HPgYs8c6DeRDPFhEVYaUotLuVS9QwJ41o4Kp-o4k5XVOof63N0RVc3dCE42IDB5gcJuTcoOVnyqH0UDrpgZjtOxzkseIG1RDIktJsduRumHcy3IVXLbpZceNiZ9Eo2GkIwFGDzUMxiDMctdGqFgNtdrIoyX6TKYfWxZpvPrfLkLmNWji8kYIdbhVYWm-ZYk6_B6mx_gvRRAYnWriRVqyHJ1mG_o2ccyf4IsCKHxUQfW4JRz16-8VMETcwZxGL9Ay_JeE-lFaN-CwAfv2mfDSjwWFfGFtThtKU2s230glfKtErCsmv3JLtWjDKzUtQAvgWzAdpgGkOopp_nfXF5T052XGJNsCz7Ndn9YzVOJ9Xsy4Q7wHeatabu8M0wOU9TiZ0NOhy479PWBnVH8lg5TTb2q8HhmzFLuIaIk2GNjLcVVGqOWIaguQ_Db1v5ucgnKInH7oS0SCIqMNF0hvZJipeW01GSlwsJMWHhOc2B47z1aiokIPNT6P12HGtFDXv4s1AdJAZWyRH6ZcEG70iflkZWHrXru3OR37A0CqWdZEgSUZJEPgUMpUYaVd7JaCtkvuMGPDBd2Y_eRtLbAWjakOxrKSCfyRjKej8QzzArdH4p46PaxwqQB8lt7xw28ydhCpD3GWNFurj5i-0uuwLQyS570CUQmbf2lT7V2nMl5UezH1w1B8VGyYviv5Uv7IUL1Apdr36-EnGNFuSSrBzGlSUczBSVwKWbyXZFR9HRTLcMVf46PiIE_COR7NJzzuqLjiBMb3knqx1Bx8LdbgFyYy7AY3qFshzulfqLLfzRi-BOBUbfNu9rT5-IQn125mHn30fF7i95LFP2qe_tBdl6J7UtACKGSvl5sfRoeI3WnZJl-bebXJM5xGLAR3EAWPxI8lOs255zAaWORMgiM8hqX4qkkGWyBETdlwAPNTFbTCI_xq16ssoaTTK9CKYz4EnXQ8QE_9zKDLN4wtONKDgakVsXjp7oMzB54_kPKnOxtEq7dUjVWlrhUDxbyw7y9ST-2speldnKVkBNu3UQLFWvrBb4kn5a672L3GHA483hkqH4X19-TQGPJYnXUg==
+        id: rs_0944d321504abce8006ad08a481d8487d0b8bd5766542dfed1
+        summary: []
+        type: reasoning
+      - approval_request_id: null
+        arguments: '{"query":"gpt-4o o200k_base"}'
+        error: null
+        id: mcp_0944d321504abce8006ad08a48783c87d0bc300ba705c2b9e7
+        name: search_tiktoken_documentation
+        output: "### Search Results for: \"gpt-4o o200k_base\"\n\nNo relevant documentation\
+          \ found for your query. It's either being indexed or the search query did\
+          \ not match any documentation.\n\nAs a fallback, this is the documentation\
+          \ for openai/tiktoken:\n\n# ⏳ tiktoken\n\ntiktoken is a fast [BPE](https://en.wikipedia.org/wiki/Byte_pair_encoding)\
+          \ tokeniser for use with\nOpenAI's models.\n\n```python\nimport tiktoken\n\
+          enc = tiktoken.get_encoding(\"o200k_base\")\nassert enc.decode(enc.encode(\"\
+          hello world\")) == \"hello world\"\n\n# To get the tokeniser corresponding\
+          \ to a specific model in the OpenAI API:\nenc = tiktoken.encoding_for_model(\"\
+          gpt-4o\")\n```\n\nThe open source version of `tiktoken` can be installed\
+          \ from [PyPI](https://pypi.org/project/tiktoken):\n```\npip install tiktoken\n\
+          ```\n\nThe tokeniser API is documented in `tiktoken/core.py`.\n\nExample\
+          \ code using `tiktoken` can be found in the\n[OpenAI Cookbook](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb).\n\
+          \n\n## Performance\n\n`tiktoken` is between 3-6x faster than a comparable\
+          \ open source tokeniser:\n\n![image](https://raw.githubusercontent.com/openai/tiktoken/main/perf.svg)\n\
+          \nPerformance measured on 1GB of text using the GPT-2 tokeniser, using `GPT2TokenizerFast`\
+          \ from\n`tokenizers==0.13.2`, `transformers==4.24.0` and `tiktoken==0.2.0`.\n\
+          \n\n## Getting help\n\nPlease post questions in the [issue tracker](https://github.com/openai/tiktoken/issues).\n\
+          \nIf you work at OpenAI, make sure to check the internal documentation or\
+          \ feel free to contact\n@shantanu.\n\n## What is BPE anyway?\n\nLanguage\
+          \ models don't see text like you and I, instead they see a sequence of numbers\
+          \ (known as tokens).\nByte pair encoding (BPE) is a way of converting text\
+          \ into tokens. It has a couple desirable\nproperties:\n1) It's reversible\
+          \ and lossless, so you can convert tokens back into the original text\n\
+          2) It works on arbitrary text, even text that is not in the tokeniser's\
+          \ training data\n3) It compresses the text: the token sequence is shorter\
+          \ than the bytes corresponding to the\n   original text. On average, in\
+          \ practice, each token corresponds to about 4 bytes.\n4) It attempts to\
+          \ let the model see common subwords. For instance, \"ing\" is a common subword\
+          \ in\n   English, so BPE encodings will often split \"encoding\" into tokens\
+          \ like \"encod\" and \"ing\"\n   (instead of e.g. \"enc\" and \"oding\"\
+          ). Because the model will then see the \"ing\" token again and\n   again\
+          \ in different contexts, it helps models generalise and better understand\
+          \ grammar.\n\n`tiktoken` contains an educational submodule that is friendlier\
+          \ if you want to learn more about\nthe details of BPE, including code that\
+          \ helps visualise the BPE procedure:\n```python\nfrom tiktoken._educational\
+          \ import *\n\n# Train a BPE tokeniser on a small amount of text\nenc = train_simple_encoding()\n\
+          \n# Visualise how the GPT-4 encoder encodes text\nenc = SimpleBytePairEncoding.from_tiktoken(\"\
+          cl100k_base\")\nenc.encode(\"hello world aaaaaaaaaaaa\")\n```\n\n\n## Extending\
+          \ tiktoken\n\nYou may wish to extend `tiktoken` to support new encodings.\
+          \ There are two ways to do this.\n\n\n**Create your `Encoding` object exactly\
+          \ the way you want and simply pass it around.**\n\n```python\ncl100k_base\
+          \ = tiktoken.get_encoding(\"cl100k_base\")\n\n# In production, load the\
+          \ arguments directly instead of accessing private attributes\n# See openai_public.py\
+          \ for examples of arguments for specific encodings\nenc = tiktoken.Encoding(\n\
+          \    # If you're changing the set of special tokens, make sure to use a\
+          \ different name\n    # It should be clear from the name what behaviour\
+          \ to expect.\n    name=\"cl100k_im\",\n    pat_str=cl100k_base._pat_str,\n\
+          \    mergeable_ranks=cl100k_base._mergeable_ranks,\n    special_tokens={\n\
+          \        **cl100k_base._special_tokens,\n        \"<|im_start|>\": 100264,\n\
+          \        \"<|im_end|>\": 100265,\n    }\n)\n```\n\n**Use the `tiktoken_ext`\
+          \ plugin mechanism to register your `Encoding` objects with `tiktoken`.**\n\
+          \nThis is only useful if you need `tiktoken.get_encoding` to find your encoding,\
+          \ otherwise prefer\noption 1.\n\nTo do this, you'll need to create a namespace\
+          \ package under `tiktoken_ext`.\n\nLayout your project like this, making\
+          \ sure to omit the `tiktoken_ext/__init__.py` file:\n```\nmy_tiktoken_extension\n\
+          ├── tiktoken_ext\n│   └── my_encodings.py\n└── setup.py\n```\n\n`my_encodings.py`\
+          \ should be a module that contains a variable named `ENCODING_CONSTRUCTORS`.\n\
+          This is a dictionary from an encoding name to a function that takes no arguments\
+          \ and returns\narguments that can be passed to `tiktoken.Encoding` to construct\
+          \ that encoding. For an example, see\n`tiktoken_ext/openai_public.py`. For\
+          \ precise details, see `tiktoken/registry.py`.\n\nYour `setup.py` should\
+          \ look something like this:\n```python\nfrom setuptools import setup, find_namespace_packages\n\
+          \nsetup(\n    name=\"my_tiktoken_extension\",\n    packages=find_namespace_packages(include=['tiktoken_ext*']),\n\
+          \    install_requires=[\"tiktoken\"],\n    ...\n)\n```\n\nThen simply `pip\
+          \ install ./my_tiktoken_extension` and you should be able to use your\n\
+          custom encodings! Make sure **not** to use an editable install.\n\n\n\n\
+          If you'd like to retry the search, try changing the query to increase the\
+          \ likelihood of a match."
+        server_label: gitmcp_tiktoken
+        status: completed
+        type: mcp_call
+      - content:
+        - annotations: []
+          logprobs: []
+          text: GPT-4o uses the `o200k_base` encoding.
+          type: output_text
+        id: msg_0944d321504abce8006ad08a49563c87d089f629d3ce3c5ed9
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - search_tiktoken_documentation
+        defer_loading: true
+        headers: null
+        require_approval: never
+        server_description: null
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      - description: null
+        parameters: null
+        type: tool_search
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 3360
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 164
+        output_tokens_details:
+          reasoning_tokens: 57
+        total_tokens: 3524
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input: Find the current weather in Paris with get_weather and the IANA time
+        zone of Paris with the travel namespace tool get_timezone. Load both tools,
+        then call both; do not answer from memory.
+      max_output_tokens: 4096
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - allowed_tools:
+        - search_tiktoken_documentation
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792051792
+      created_at: 1792051788
+      error: null
+      frequency_penalty: 0.0
+      id: resp_06a422c250a439fd006ad08a4c080c87d0b0b5fbe71355e423
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_06a422c250a439fd006ad08a4c1cfc87d0a9a2241f20512ba7
+        server_label: gitmcp_tiktoken
+        tools:
+        - annotations:
+            read_only: false
+          description: 'Semantically search within the fetched documentation from
+            GitHub repository: openai/tiktoken. Useful for specific queries.'
+          input_schema:
+            $schema: http://json-schema.org/draft-07/schema#
+            additionalProperties: false
+            properties:
+              query:
+                description: The search query to find relevant documentation
+                type: string
+            required:
+            - query
+            type: object
+          name: search_tiktoken_documentation
+        type: mcp_list_tools
+      - content: []
+        encrypted_content: gAAAAABq0IpQJsjZvBp7orthjuL57OKrw8IT8PT-xEZrE7nZLUtLBPpjNCuKOzg2RrlqwbBzDnTUnKVQTjqmGrUhuE_mfT32otD6in1bmEwMhTV5speiUNH_NSmj47ts86mB8DmLN6BIrQJ7nwP_eyHPQQeMtljvxcYFEgVx9FzLbIuxozuZLBr4aPBPlkNIjo1uewScYkax0H7y7uMTcOZ6EAU9BH2-Ddkvah68phj3yS8D7u-lvJoql0IFAbehSHbiDdwW1DOCqKCPyEOQDymXMJzSEaS91-qScZz6w_cH61KgUQIc_HBmBOe_4mDHqmBuXTZfsRVYmDqEQNM9zawux9ot6WuelvI1Z8JrAPmW2GBrCLJZ8HB3jIEa-Pt8wxJnRRMhyf-2AWeZx4l1yjRz03SQTTx80WNvQFIBFTZuRDF2PtjOUohc_WN8DX7nz1sAKBvhcy-Qi-Zeku9k_Rld3VGITrxoBMmdxGsLkjiR4yBxyIUJfVq2dsKEcWPNsamGiUIstz0PIQuhiKUnArM5ZOjjYGREJU3Bmy-fKP8jcRP7uxiVxHyF--Ud3gJ44S81tsSYUdMAsKUFW0tPDTy8bCaU_lN0q-BBGAkq83P8V4by-2BgS8HLYtLx1Z9vQuq-iNi_hv0N_oZf2LoM_ceTt95idcsksw-vb-DOQthrnxi_nx3D2lOJxwBt3hjCs9OlhCiCwhOAoVrmDLliuoRgSTSMIWX2q-jnLCaRrk9jFN4rBNfVrmTjNGuMFy0nDmAJUNoyltk-3YF_S1dgNNl5CEgTAOsvoMg_DjHhGeapKglxfk3g-u2oETWJDH9zvZn6mgAPB_pSoVZBZQVPZLO5G4GuoYe0ix2yCezqpeNaCxP6WNJSAHwaXEpvH_R-ykuqwDaRzZHvIuLkwZDGATwFUj9xQo_aa4GtslFLhug7i2-ACgAtVhbw15qB_H35lIOq2gcwFErIRI9QjgnEu0u2Aa-a5pnCLEd3IXigsGX8lYaB20J1nB1Y8Mpe2GNV98Op5v2gB00NIPrX6bZIH03oZlPFa_GadKyXUqnik5WxhtbSKaVaGC9nWhiRGtdVbjtbup6s07FZa4_jlOpv5Vt425sNrBFSWFXJ8BJau-3bhhv5Ru5ZefZGlMDhfTbTBNNn6IpRfshse1tHh8tJw0TnnHRtIiabFcQm90ofhGl_nOZ2txOQ34e4X0zEebmHvFRvHmGQaThcFGsNavfHw5boNS0-erCOA0Hpz1W7Msaf7QqX74Nz8PfAMlSSfW9XJ374jYcMIRGbqWay1swSVpG4fBs-sBjywsW93eo4vFYaUq5MfH2_6mOgYu0d9rrbGbwxsqHAUpX2Z3hIP-k7UaMl4BolQ0ZC0feJz43YUQzwkebt9S3YHnKv0zZVRu9hp84_X0m_hB9yum7AUhjNGWDpJJZWvKYjbaNTX1_n7cL0YUdLKHnJlIA6OVQwF1_xOYszxGocbHejbinD31NXqV55DwCH3AClZI7nUHGe6mDEKv2bjdphlxIP5kVhUX-kv-p3bwXkyzesYJ_4mcXK8RLvv6dEwwTR9RmBa1fIK4xnRIvIlaMTGWYEa-w3ACioD1-mXyQzBSFcOwHtvCfmwtg2nR6PYpekKx9LsjwVSb0Fn_1_QptKnxxx3-n17DPe25HDEIX8lca7qZePD4iKfY7ieNFMzwvLyIb-KHiehoWEnnUBMjJ1V9lzWxSH0_FVWz6yhE4CF_9Fgq7pjOOAJS1LvJ3AKPLI4TuvLZx1DngXW3Sw2h33dHrt5nBFegkd6DPOILSNGoDo1VatJ9kSBNWsW2yl7Xm7eQQjG-UFXoMOrO1Os7PXbpZVJkvPlhDoTXh1CrRECktIKFgIPjCN0rC8op58AgKCnB8gOserJj1Nhe7WBIjioyhMJZS4SP5q2zn5J2j7EzaU9hVez8oQc9SWsQmSn4fQ1GL0CnHVdbqzy8ZhwhdN4KvAoL7dZegjCOnHWzYsD1FT2x8453W1noA34x_vTJF68vzzLJelPJvwE_Nehw0_jDnVdDrLG19wl73XaRyf-IIgQVdiATWAV0nwqxvCVOjajWEChrenpGQ-FEuV_A7X-6U=
+        id: rs_06a422c250a439fd006ad08a4d808087d08fbe7d85ea8891ad
+        summary: []
+        type: reasoning
+      - arguments:
+          paths:
+          - get_weather
+          - travel
+          query: get_timezone
+        call_id: null
+        execution: server
+        id: tsc_06a422c250a439fd006ad08a4e3e7c87d092fab400c9812490
+        status: completed
+        type: tool_search_call
+      - call_id: null
+        execution: server
+        id: tso_06a422c250a439fd006ad08a4e6f6487d0813dfa01d9ecad3f
+        status: completed
+        tools:
+        - description: Travel location tools
+          name: travel
+          tools:
+          - defer_loading: true
+            description: Get the IANA time zone for a city
+            name: get_timezone
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                city:
+                  type: string
+              required:
+              - city
+              type: object
+            strict: true
+            type: function
+          type: namespace
+        type: tool_search_output
+      - content: []
+        encrypted_content: gAAAAABq0IpQM6WH6ANQGeqCqmX1V4FTQkB8l50c2V0EDJ4ds1y-0IHbMaDjwEe6vPws0PZ_0UyuT-bdyr-DJPFh1CUIiB5eKFclD-40QmrPziv7qpQLZvWjaguWUMUYEIRSN5pOpiZSsinutoT1B7ViUukz7CX4pRd4tv8GCYP_dpSTJqWwCvufHb4oTADxNa8tN6v4cuqbiANf9D0vHUu_Pz7mc7pttQkpDZgY6bx7M8_ULNZoa6z3fgkiaX8bWTboqI0bqYqJ7fb8SoBhzqLlwahLxpcjj_62fcBBkQ5f6C3NYoTlu-PAWtJ9irtg64jd-V-capNH1x6FUmaQ2_ehxCuZTwqyzhzxijwDC9BV38SqxWSjyJRdFua2cXYFwXs6KO-b5UgksXT4pzRfvJ52rnJrD53rvYAVMOhLGhAdXCjvi4QZfgIDlPmfSL9znKy3xM21Yn3GgAcKnowRVP4qbMlT26cnmNzx01EuLKOs_MGpSNFtVhQu-VpLfoeJfgSJDhJJHb5ZqkWMDLFLX9m5SD8xJAsXwvbxsig9FyiOihmt_Xj59Nx1TnfV5xPwfLZMwbJym5o8C8PKY7LpJxWyLNvBHhht7lRcLzK8lT_yGIf1cOz9fgoOUcVcej8oGkqbYi1Z0sTjw5zXmYs1r5dqc2oMv2BLN66Rkokxuq7Dxlrd7aZ2xyhzLG1X_8DnveEDsC0uFQ7pI1rIpAyt98zW-Vwod03-GJcoIio3K2eXCmmlRjmbhT-0orP0izY7LirQ-59Y34htS65PHP4X1l4x-CJsB3Ia-EGTywgJ1F1fVjGX9RetJ5EUv1Q8kUMZ-ruVuL4y9rH9ILD5LvRN4ZJ07kBXyjj4iRmILHNmn859GavYWsHPpqd54CBQh795B6lSNwn54--N8JbEm2-ocAOU7QdeKn0D7aWaEtLzowBiQvViQT0yh_9FKF-jb4dNPc4iPammZjlGEDA8SAlr7aFbTldTj6woIxxEmnDOyZj_fQKIJFbESQ2RhHje0Dxbr2kvd8gT-QiyPZWv6T2tXG1Lfl0jyfo6lWZF_Uikx_pKKNCyxiPdit6dE1WZ3NpqscRkyfg8XU7PzFpl8qdFhXFXvl7knlbkMjeB57C56VQ4u2-_mKEyLHGK7i0GEukwF7qV4n1tBebVx-v_V5bup_ODgz-WU4YSQXOf-5Iat00NBA6AmJ9AuahTWFKFqGflx6p4EM9n2oniLfJ1-4aRaXXYyUN9putzkh0vug0DSC1ldhg8TWZa7GX4uCVDDh9wKauwTsxTT2qYfqk5t1qDhWEblpxo5q8A2h_GCHQuyr7YBXjIZISoVCrhjdlQURI9vYhWv3ivrZgJUUIrzY01wPMvHEMWhPOIGtBCg5_O8ZgQ9sufWpOsOhW0Ny1S4GgjErDdLdA89a0K2rzqZ_9BVTsdKy0cbpzyrHe_ysb_Oh8SSoW7WUOkKm0BdskOf-61lPzsRudSO1WC27MpDeKvPlkrEKipZNLlpnUiS-SVCSZTKpHWxdUicasSm90VedbLFIqcCuJcoab1yedC9iYkV-CG3asZjzWz7CNiLQf18pSsvegJK0c-aOXEjw3CwaPGJD2DqBYh2FKAozd5zlybM_kasFsK5CiL4g==
+        id: rs_06a422c250a439fd006ad08a4ecad087d08c8615a064fbf6a3
+        summary: []
+        type: reasoning
+      - arguments:
+          paths:
+          - get_weather
+        call_id: null
+        execution: server
+        id: tsc_06a422c250a439fd006ad08a4f05bc87d0855977cb9767d8a6
+        status: completed
+        type: tool_search_call
+      - call_id: null
+        execution: server
+        id: tso_06a422c250a439fd006ad08a4f270087d09e26af8098af1fca
+        status: completed
+        tools:
+        - defer_loading: true
+          description: Get the current weather for a city
+          name: get_weather
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        type: tool_search_output
+      - content: []
+        encrypted_content: gAAAAABq0IpQFjdnAnkThKwYhMY5ofGiUWMUI665CrZD_5wkCRLiAmXuamcKSlmgKYlVBAAMHMlmsofbmh3TUgFSPfRGTTo_rJkzehqy2zC8B-wIvWfZzuQk3mMLBQTkmfTRh_Uja5qGcHpjIyII1OJgI4rh2ok8FjtiWQtzPZpwHuR8rOodBB7NCvPV-TUs_0fJ8DMhg_V5Q9guVZ_w5oR6LVspq3mhFUGBbKEw3gmzaIruiaxVk72FoDD_Vc17tN4asrDN-TK0A7l4dokIzXLblpk0IDke-r_x-0pr9Ma24zHRQuXbJMhenHj80maqQr2LcTS-L1AS3PqlSDe5kq74zNjUtSZbJUuKLsR8MkgaQ6C5Os_yVRM2y_tsCigWgmZFUxXOB_ZMQDrto61CEjDSCXuwnWLBQyshb_4TvKB-G2f5vfVnPlmK8s79sfBzHeiF9OLAwOQBSB7kWOu6YM1fg5UdgdN12ua3xgGrNrTYoYgquYWPzXAHm9piBzDyMZqzEPpSn73DcjUmEySBywNnoHt76gzN9NZJrWbEnOqSYf-CupmSVWpxUWrAsppk1M7SY2ZcUT6o_0xNc_XibGRD5aHCSif-NGF7_ESdiZJ9v5Qm5szUqJWfeps6isAz0zvH9eDrYbqIAqYNp8mAUGJrL05gD7s1G1CLiZDDb5sgEI5vcy7OYf5kf_IWgjhDt0FAK4ARR0VUgsZRAUsqKVvzuyxi99EnmXvZXgxOh8KwY1GLAUH7RYfILGkjDo_pbS4w0-PjmrvLQsZX0tEdWWGDO5bygdH_ZW-LQmaZoIjt44c5e55VMwU0d64glMnRMU9bhhNcLDfsPl0EHWA0DtPKkp40w7Xj5A3bnbkglcqW-4tydPLAWuVtyPv9RcCFKpmeL194Llw-jgXqL1z3cqZIrihog5LK21z0LrZX0FsjZR2jz2DD_ngLv-1S6jAtC7V49xU_NFmW7iPV0lml35nOP8QHWfxnKTeUScNZxNUaztspXnoK5Cahc_8i_5DxMotIeIIpQbvvzYnCRIoxyiYyXo1ms1PoFjUPSI08vmzURHlGcPdj6aFLvaL60WLhnptBddIzdUfYGoHY8rB2zdgdl_BGrfLY-GvWJotmbv6ov9fLV_d2L5RroxHOLzgjiysVM3v2eklh0_bJa4mFRyR_X8sf10B4ZEKDF-gYlUlA6voND-Y6wG4meHyDyJoeRHNPwBEA-hOANr1pJgLJJck2ZxykaAEA2un9wSv5DA0rATrS8-WjjKIsHIuEERBXBqLfPxqwsm6fCHBojbTyaE5xF8VIIkWf0R_hH4nIOhoEUEANtdHFqSrY2TcvO4uu_yDrBahpAivBIqlxo8EiZXsGVDTgKpPR5tPJT3UkYF9MF8LjF4XEEuSQvEfLR9fHyqsY-1MFDVe4WPzgQ1KwZn4uSzAbJbI2vGpozsLiEP2CX8MMkriH79XIMcduV--DvDdncGw3Si6NXMJiqJfqWvdFIGR9mfXL1_yRhG6cS5QpuEb7iUXSN3i53X5wJbiYiYOC3x-ldd2f5DqYUz8aiKe_Y5aA4BIu4lzhptqPMn2McVJIM59V_0gZCwwyheft64l-MVq10WaVkgKLLhU7yi-yR4DdYVhWc8XjHwvO5IPkJZimJhB0p8BbqhluwUz7WpuvoVbAk1LD9TF2w_KOVhZ6SsWVS7df-v8Od-kcpFwJ-4kokTgCPVH08vy_g30Njnm_d-_dh73KWbnsyh3XBPiiBpcgZxX-Pt9yvG2Np5ak3jS2jZKqxR387LcS3YPFznO0HTgLD2pB2Lj_Ug2SRm426dT2UgrP3fDDFmCiEO4s2btyaBdAvEs8AK8yoQOXbnYxxhMQzKDiazGIXMViVlrtHHhDUc3IOH2mAc5btUd78oMGJD9kloxNjBEwEoj0XGpaaMbmrZ2eE1FRCQ-lxem6lpRk25CjxJL4nSrudmGcD5yi_BW9YwZc-e3LaV_bPeZx_1diA35srfw3Upclbzgn2053QoeioHi6Pizl7FKaWuqZlRk5dI5HJFyz2_660zvuQUrF7LYDjo0JQ2vpKF8-cemr9eX1TDoJvYoVIccyzmBtCZ0dWfctHPl7MZCSKj6YdzTZQ5nX1A4LRSMAGfUMOZqMr1ZCoU64P9iIgkSre6SoV_Y6d__S7FB0tgBojlacxzI2SyffWwjj7KYJk9gfjm_l85fJeJPeNC0oQ2jixYfj3NnVd3Wh4ErGgTQzs9Ey8Ssri-q-ZfpXW5LpoeuOHTGVhorByLJhiGMPhNPD0yd2OGz1hCIDxvdRqXE_5puYlB6-9L4a
+        id: rs_06a422c250a439fd006ad08a4f87c887d09f3f9ad51791f993
+        summary: []
+        type: reasoning
+      - arguments: '{"city":"Paris"}'
+        call_id: call_wvISLwFCGY1i4LgQv2cLHUXZ
+        id: fc_06a422c250a439fd006ad08a502a2087d0a010edfbbf008679
+        name: get_weather
+        namespace: get_weather
+        status: completed
+        type: function_call
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - allowed_tools:
+        - search_tiktoken_documentation
+        defer_loading: true
+        headers: null
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      - description: null
+        parameters: null
+        type: tool_search
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 925
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 198
+        output_tokens_details:
+          reasoning_tokens: 178
+        total_tokens: 1123
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body:
+      input:
+      - call_id: call_wvISLwFCGY1i4LgQv2cLHUXZ
+        output: '{"city": "Paris", "temperature_c": 18, "condition": "Cloudy"}'
+        type: function_call_output
+      - content: If either get_weather or travel get_timezone has not been called
+          yet, call it now; otherwise answer in one sentence.
+        role: user
+        type: message
+      max_output_tokens: 4096
+      model: gpt-5.6
+      previous_response_id: resp_06a422c250a439fd006ad08a4c080c87d0b0b5fbe71355e423
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - allowed_tools:
+        - search_tiktoken_documentation
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792051794
+      created_at: 1792051793
+      error: null
+      frequency_penalty: 0.0
+      id: resp_06a422c250a439fd006ad08a51024087d0b55be498261bb347
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - content: []
+        encrypted_content: gAAAAABq0IpSYDR8mdCLL2jONeWuXdoLocn83o7SzyvhNRZZq1X3Iai_ZXJ91g_8pL32VINWsL-98QuupSKe7fVoYu5_a1iAnXz4ZsdykOwAxs3YPs8AXf6JlM-zporqGSOgjA1wq_qUbTiT8TOq-D1Eie9YjcLgrn_ULXKUxJUpaCIlkgG1l9_1Y7ysqlodugqbNEixDHDQxZAV4RKi9vKmbf74cCamsewsX4n0WNSdANPR0de4jNjtYHR3BFVyh4rxm4-V54WIyIZ3mhNJhP5FIWj5urWATXhvInI-24Fcfp4HBfvFPVfaDisjFUDEmyM1ZaNeVmNHSXTh3iLN_F4X3UZatWsX_Yt3CzAW6v7ujhbLPv4H-pDY81NbBB8qvEAnPrJ5uH76uL-7caRBafEXypvO6cjFgKhHCscYn7u10ItZLRLaDzgw31hi9-An8A2yuQSuljWya6_WDJJBCQeBelOD-izcE4OcBTaVJq6qlnz6giLflTb_vH-3hZh1cwP60PkicxCQC8V9MCnfk0TrxP_rH52QFrp5tWU602TOyQY6NQxeepxoHBS0aJL3APR0e2PURXoNNcerYEQzm86OTSklDlwOuPxuAV0b2KGxzJoAuDfmo8XEHPC5V-8m5xOOuezWEkblr6GAHqtGy8e1fpNOuYbylgF-iJUe01jH0146y4o7iUyTZ8HtCFSWLz4TZvw8G5B-NaLp5S1pNSypyaYcDv_8apFNo2PRr_vERKQwcsPlhahm896zhQMRUbva4Jdq2vSUrVy1R6r8S_RY6BbsMjjDu23Egzm8HdBm0nwre2GXD4zTybyGUQhDg_NrTWuQL9cpipxk5C32c-LjrCii79ONEyuTAInpMyU1NVQ7OQr0SCXfvz42di4DwW7Ds4LfujIy-aRZSJxsy7HwjSXv597IihL6mU8pxOUXXxFODRWhEfKJTuYi_PzlfvxnSWjEkiPqX9YOuGz7mtDXVTqxyclsBneu1QkppDJwclTSfuNUooBV1XzHGsMwYu-DEUY4rUvMhKtNBrdvc1O53uKk3rIwtckJk8kYosLloGb4xb33RBagDFEEDsOdfGMEB1WFZ48NWc8i6e0_bHi7QYycFfs2dfX9XnC5_U5FN4MvYrHJ2sQYrHoE8YaUXfMFPN4E7OPYmuHANZTNP4u09P5p6LrwOd4Hyu7TPF269kLddNF1YoAzrlL7pL1h5uTDr9mSMcNdk0jARCndc_TuPsjmNZ3Ccs8-CzDqMLSKGOcVv3kClbUc9v1ODYVu-JA332kbFhtn8LWazzFARBk5rOrl4T8WNn27kN2V_8Pvbra20c2E5T7OxVrIXDnOPAGYKCRDCOGt2tq-sejpjVGuflMo2MqxpkNwblQYILoRiLzlINexY9Mv0WIVNn2cbGtWuSGlmjl79N1xh0Cw5nqoFqDc0A4eoLgSyXKH9_McD-XtqjBXHQNvHw0UC0RR24cRCaEFyNwbxyyuuPA47kJHBWZyUcgr5v4mL88E2okbrdTyilsREj2FMtdgAU2jCtNT_PlJ2BK3v9dCy2ELkrCms1xVUMjBSEgkVwv8fd1XqHAn5aRgkwfeFgkmLGA67_1jw35pXm-x1YuX1MEpFGFuJiH3Hn4rtkWOOp6Lqx44ZYomuTh3ZmZA2O6s7Gk9rzmkYE4V7l30fDRqEocVasrFNhj9V2HyHA==
+        id: rs_06a422c250a439fd006ad08a523d3487d09b575e15df75a49e
+        summary: []
+        type: reasoning
+      - arguments: '{"city":"Paris"}'
+        call_id: call_gyNQ9xhbYsTKV9SNaQ1n9Ru0
+        id: fc_06a422c250a439fd006ad08a5274cc87d0b5494159d6c3da42
+        name: get_timezone
+        namespace: travel
+        status: completed
+        type: function_call
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_06a422c250a439fd006ad08a4c080c87d0b0b5fbe71355e423
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - allowed_tools:
+        - search_tiktoken_documentation
+        defer_loading: true
+        headers: null
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      - description: null
+        parameters: null
+        type: tool_search
+      - description: Travel location tools
+        name: travel
+        tools:
+        - description: Get the IANA time zone for a city
+          name: get_timezone
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - description: Get the current weather for a city
+        name: get_weather
+        tools:
+        - description: Get the current weather for a city
+          name: get_weather
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 1067
+        input_tokens_details:
+          cache_write_tokens: 1064
+          cached_tokens: 0
+        output_tokens: 39
+        output_tokens_details:
+          reasoning_tokens: 19
+        total_tokens: 1106
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      input:
+      - call_id: call_gyNQ9xhbYsTKV9SNaQ1n9Ru0
+        output: '{"city": "Paris", "time_zone": "Europe/Paris"}'
+        type: function_call_output
+      - content: Use the tool outputs above and answer in one sentence. Call no more
+          tools.
+        role: user
+        type: message
+      max_output_tokens: 4096
+      model: gpt-5.6
+      previous_response_id: resp_06a422c250a439fd006ad08a51024087d0b55be498261bb347
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - allowed_tools:
+        - search_tiktoken_documentation
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792051797
+      created_at: 1792051796
+      error: null
+      frequency_penalty: 0.0
+      id: resp_06a422c250a439fd006ad08a53d75887d09d31ef0bf64e2c34
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: Paris is currently 18°C and cloudy, and its IANA time zone is Europe/Paris.
+          type: output_text
+        id: msg_06a422c250a439fd006ad08a55568c87d095ea9b8f16f5da63
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_06a422c250a439fd006ad08a51024087d0b55be498261bb347
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - allowed_tools:
+        - search_tiktoken_documentation
+        defer_loading: true
+        headers: null
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      - description: null
+        parameters: null
+        type: tool_search
+      - description: Travel location tools
+        name: travel
+        tools:
+        - description: Get the IANA time zone for a city
+          name: get_timezone
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - description: Get the current weather for a city
+        name: get_weather
+        tools:
+        - description: Get the current weather for a city
+          name: get_weather
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 1152
+        input_tokens_details:
+          cache_write_tokens: 85
+          cached_tokens: 1064
+        output_tokens: 24
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 1176
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body:
+      input: Find the current weather in Paris with get_weather and the IANA time
+        zone of Paris with the travel namespace tool get_timezone. Load both tools,
+        then call both; do not answer from memory.
+      max_output_tokens: 4096
+      model: gpt-5.6
+      parallel_tool_calls: false
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - allowed_tools:
+        - search_tiktoken_documentation
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792051803
+      created_at: 1792051800
+      error: null
+      frequency_penalty: 0.0
+      id: resp_05bcbbf5e957568b006ad08a58d6d887d08edd8ced41c3fe05
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_05bcbbf5e957568b006ad08a58f90487d0a79bd28a69891a8f
+        server_label: gitmcp_tiktoken
+        tools:
+        - annotations:
+            read_only: false
+          description: 'Semantically search within the fetched documentation from
+            GitHub repository: openai/tiktoken. Useful for specific queries.'
+          input_schema:
+            $schema: http://json-schema.org/draft-07/schema#
+            additionalProperties: false
+            properties:
+              query:
+                description: The search query to find relevant documentation
+                type: string
+            required:
+            - query
+            type: object
+          name: search_tiktoken_documentation
+        type: mcp_list_tools
+      - content: []
+        encrypted_content: gAAAAABq0Ipbt0CujGooLCHC8MGczETrn-B18XLEJHXK01kCl9e2nkhjmYRKXNf1y7EATa46BMLsiVHENBumEq0b4bkRmohjTO1I2GZ9fLazvvtqOQ3AT3LTkgpP0HB1GyuRbctkMGrmALs2Q4sM9GTnZakwzk_JRs6n4ytQ9UcXNkUNoXSTLJDwBFzF7LzemHDUriM-vmp4BaeYv97WJlqQ-2y739I-haipaGWFNt-ETmLAnghL-jYw3peA31nWLXEmObVpSWaa5FQIzgla2DJHqSYyrBrQCDWBFXqfP-42XfED6Bek9mrt7-w-zDV-gwp1siooOT55g12fP773mYQJVKwBCQrKlqJHxl81jOb8udzbPNXUF7yl-MnOeyfXroO6RZJBISzsoR_gzwlASqh8eXFRz6HL8haDXBHkXH8VRLehAjt_cgEWYIQr-TCMZSgM8lYJhw_KckKyT06sT6lAYVkGuegCwkVnrqCbJ-tYBCBqTogEY3JjmuVB-Vkhkqv7nmAj_AlTmfN8oANJ8LtefjEPET9tVRp7A1TxK4a-cWrSXvAtXgPtT6DHglm5bdPZ3CuDJlFjH51x-C65QvHb--n7FzukYGh6XKOq7VmkLEud-NuH4O9fs_o-ycxKJRviLEagRSerB-sEu0bTyxbXQYSwZXtwBWMHE9iBX3mHcRzdBhIqG9I2WHPGfpy3X90wWsglDYh3-BB8uMvd46NHFgosb_sBRnse-leU8KKULQavEg4IuBuFpUalDW5C5IYq1QGeLxNBipchCtdenuu5OInzkw3rLSnzUBpeIUkUTEb9M5ZhHKOgOo9By2x3GAH5gOG0NwvkSZ9GWMahsn-Pb30HQmOwMatlWCt-N3KNJ3SF-0mqcJqlGZ810ZKzTc4SwtjKvHg33W2S_GZPKle7IMem-soBVamW6mjt5Kkm_odkZUugPLd0sjV42CbZaq1X1ts5jShb3c7bq70LPK75MFUETqYnp5ppTLQazKCxviVopk2u2DEFAZS6mPbtn4C2sHbafQtSEE9CEiSdpRPKaQpwOyQuNKvXKB0xbKax9vDsLn-asvudaH3yz0JQeSbSmHfdqY3Bv81yNOJJABaIPuV420Zj3d5EK2Ll5KaEm3-WQS8c5gKwc9lqPEatrKOB8EOjYfMD6dwFoYD3JikZROwIrwHqoIvbvVBZnEENEJd9lJEq6YplJ0adbgm9Gpc4GWzfb2JJ3GGs8OdIXHSK4BdVKU69WAga1rfttuzyabkzaOkN4yrZmXXO8y4LWypaYRN7k3MBGCTTp3KJyIMCsJeEHL5pAv2KbiPh7tIFiZ2vTte1iepHLcOJ-J9AFB7Di2t9TkzzssDiH9X-bZXeVoiAMTXJyefPxAGmaMoUQijMsBcxHpOIomQMJ_6ZAZNJNz9sshuSug6EyjOxEzoUmN_Q79V_S2aCr-cOWE17qsYkSOpuISNF6qpkqIbjatKHSMA8q_AdY9CUkdbWuc_4jVy7oPUFwyhIIEO1DyIq1YEPQZtA7vgXr81rnHGIiNDkD5CoPZ0Xk14Iml48s3nLkzLpaWBTnw==
+        id: rs_05bcbbf5e957568b006ad08a5a8ee087d0a6b11bb1cd5b3185
+        summary: []
+        type: reasoning
+      - arguments:
+          paths:
+          - get_weather
+          - travel
+        call_id: null
+        execution: server
+        id: tsc_05bcbbf5e957568b006ad08a5ac02087d0871a60a1850f35f0
+        status: completed
+        type: tool_search_call
+      - call_id: null
+        execution: server
+        id: tso_05bcbbf5e957568b006ad08a5ae06887d08a64e6df1e3849ff
+        status: completed
+        tools:
+        - defer_loading: true
+          description: Get the current weather for a city
+          name: get_weather
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - description: Travel location tools
+          name: travel
+          tools:
+          - defer_loading: true
+            description: Get the IANA time zone for a city
+            name: get_timezone
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                city:
+                  type: string
+              required:
+              - city
+              type: object
+            strict: true
+            type: function
+          - defer_loading: true
+            description: Get latitude and longitude for a city
+            name: get_coordinates
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                city:
+                  type: string
+              required:
+              - city
+              type: object
+            strict: true
+            type: function
+          - defer_loading: true
+            description: Calculate the distance between two cities
+            name: calculate_distance
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                destination:
+                  type: string
+                origin:
+                  type: string
+              required:
+              - origin
+              - destination
+              type: object
+            strict: true
+            type: function
+          type: namespace
+        type: tool_search_output
+      - content: []
+        encrypted_content: gAAAAABq0IpbICdkTsYA7TznWDqfXhL1XA7ro1XvA-dFRRxhkpd-2HXrdLPjY9HmXOOJasJh8vVexkWL47Srk1xyrL6jqi39Stae9ylh1adDi3Cf7FxVeBO6sO6SAUm7fYxpJnTkMEQm_4qYVnHnUr_686KEtm7vOKxESS5fIaM0nrFIezMBp1dZm4RXpPDM6wfIzhnQ3gHqhzvwO23GtPXDefCZeZUCo4kkIUL1RYEit8iZHcVTBrjQEI_aaVKF2_jhFKjjaBABOpOuPSzC5Kjcn8IvkRg_FpyX0-5vVWH8h6Wl3fh7VV0hBG5ptCxTNDBCMW1fYaA7DztTb2dBSfd1MlujoSZmp9WDaAn-PK3IOEmbpBEzZ3sCKqOQ1Z972WGuRyt7oyMyGUnAwbUi9LPqxMenVlmT0i2RT0w9rpEyvTHVWCHBlXbo5QzWIxaOXRBfChU2cLoOUdQB2weOQo6G0HR_GsrcbLlypFok6biIJhBrmS2PJUd4fJr8cqBdClVSJEmeGybS2cR2VQMHPq2EliyPDz2k1_oQGIOr29uR2FA0oXEyld9ZEqWqSU1-plF3TloAqwg-D6AOtMnUGsoXUFPHAXPpBDPYNrcJrYcMGRekct5BRbXgSb6DUhiwBRjNv7tnZy2q_Ss7KS33wvtnPR3Y5FENfSEYMzlzehEmYHdRYyK3rkHJO7WYpQgizjU6qurxHM93CEZt6MadkJ3mCX1oaNwSfKlaSF55Xo3QwRuQ_d59TFsM9ZiXrjlJI84GgSIq_bRdFIorXhcVHYxd2IWyH_CBmCdBwHVNESDy31AJBMdBqaotUQAMdYIEJOYCM85zkjE_fvVhlljuen7CgCFQTJgoPoWldv-MMdivaBzd0kvdHMHrXlJjksMv3MvAg9YpuB1dF0W6czroRlfUfZln6KfGdoK68l2i_gyB-iLp811mH3ZcSqG9m54FEn3YdqELAmEZ_RJ1TUVCF1ow05vMDa986MMkemFu0vqHF-29qEfCOBQzlXGDsB3OES-MMSCVUW05qiMGdNtk1x2pL_m7qZxVVGCtkSA4H1TbHoVP4BxwPcf01FFQqvuwcmxvz8cnTQ9Wv4cOZp43qnB2qNyPUjKCDuQ53HQ2lHNyk7jfGbfVsRX-qaWSXxIFjSYChJv6htyCnYLbKkbV5iJ0_04rjoP7X_q2iP7JhLs_wJUCNWyQOzShVrBSBaeJ6xw8rcqmReXJaAYgBhYAgk4I-u4Sc604Pw4uzj2oBCR7Sl1iUVU8xj9YyUvuqtJlb4crGw-N2AXsCS_DQs4Vpnija7I3yi-1UR18nyBpKc2tQB6VhrhIMg1TN79j1mTMOjZZyuRj1t1MQCqWD5mUUmMO0-gsFYFnq9I2G_IHBocd3FFFtp2ZsfYNaqPyl6gjzNIgmTE-fTmoxaqRkD5u-V8LQQvs1aFp8CpAU5Nt2ReNUMATh5GnsErlkyO-nmu-IYnS5QGj0S79cGddUQpiXnIp2kjVlSkqLj48MBdcRKKGqGFpkpHKPTo2yJFnjvAlIE7ZBhnfV03-
+        id: rs_05bcbbf5e957568b006ad08a5b39c887d09b8c3416953bd886
+        summary: []
+        type: reasoning
+      - arguments: '{"city":"Paris"}'
+        call_id: call_gABtdedIDlEtpjhtgfjVggZT
+        id: fc_05bcbbf5e957568b006ad08a5b606087d0aa93d443ddbeeb25
+        name: get_weather
+        namespace: get_weather
+        status: completed
+        type: function_call
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - allowed_tools:
+        - search_tiktoken_documentation
+        defer_loading: true
+        headers: null
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      - description: null
+        parameters: null
+        type: tool_search
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 788
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 67
+        output_tokens_details:
+          reasoning_tokens: 47
+        total_tokens: 855
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body:
+      input:
+      - call_id: call_gABtdedIDlEtpjhtgfjVggZT
+        output: '{"city": "Paris", "temperature_c": 18, "condition": "Cloudy"}'
+        type: function_call_output
+      - content: If either get_weather or travel get_timezone has not been called
+          yet, call it now; otherwise answer in one sentence.
+        role: user
+        type: message
+      max_output_tokens: 4096
+      model: gpt-5.6
+      parallel_tool_calls: false
+      previous_response_id: resp_05bcbbf5e957568b006ad08a58d6d887d08edd8ced41c3fe05
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - allowed_tools:
+        - search_tiktoken_documentation
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792051805
+      created_at: 1792051804
+      error: null
+      frequency_penalty: 0.0
+      id: resp_05bcbbf5e957568b006ad08a5cbb1487d09e8a70ac21a67e79
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - content: []
+        encrypted_content: gAAAAABq0IpdlPRTg0xVqMenV-yBUoRXQ7XTxKTeHjud0LwCKinXoUC7FpWrKFdmIolAASMulNsIL7Pzw6CvCdmb-1gI2BEdIgXvlCrnkID6O5FS4-YZ7wr72al-cTizDKSJhbpeLftnvn9PiX74I8AauAfKtXwcCPu4FZkmqap5a7hHTnwVMbFAo3sw_doyjPHJtZKfjQq8e6_9WSf_oVEAsyRtHZd5syR64UhsAw4lcaN1lROGs25WWcPpGPSQt2mjOxZ86j5njYyNdHRhIHt5XilnujpVzr7ojYaDiUwdICtA5xDal1TTwDg9YxaQE60K8EfJs8R9_noKCBOhwfJf20lx4m4gd9VaHBMFnw91ncD16FmewKFIwpNh6KZTyZZ3D0uEnm6I0XV79zlCV6lKuoHHwCq33IVqIyrUCw03VdVm20hKo-5c-lnVWQaz1X3TWqiuL7jk2S-hm8yrm64MGjH-RraGgOOIol_pmlE0aVXzRP_d-x1kH6jyDsU2peoYTy5sR9wNBfCkIwrJpWLp_jzGDAenizbf02JpI1_q29QwQONxImnPpqpNFqJnKotUmVfthrke_e9SKuWRtjHe9DRMl-C1Ksy6VcYHG6LgBtX4KV4zAX5pMBWlQJE5kdL2muHbJnlMj61kBQ2ECu0GemSVZa41E6RF8xddsSnoY4fykDy82tqia4KIwPI-wQbCB3EzUu1L6Hw-03ozk105xttL4iy8Xr3OAil_GE9tOWMkM-xYakpB7h-Uqjboayy7teQP65gn9Gf8gPjqbwtRK-4FG1KDfXMbiGpIRwECted75vDOJBRAjEMLJJIStZx4XYx7OOkdS6fzZGpIpVDL7y_6Lc6XPZjf2nwQODTKasmW8O0F-N94oabA3EbcCqXig6nPyLgz5Uc7wqOqgEUBUoHJ0DoNp7lKoQ2OCrxQQQQe78ULTw532E9-WnBXtXRx4hKJ0zrNTOfVHqrBVGIpqdLqNc3xOX1US3JuVCU_Uvm7G3Q5YMwJnLO8kwNXXMW4KcrD0VvlR__Dxks_RK_Lgckbgo76y3iEIm7XRKNoZGJcMcYrJ0qRx2ci5MtDXFSV5PSxX6Pw773KfioD5u7A7hyml0xf9G4iQTB8keKu8Kv4JcVNnCVcx4_WTTf_2uI0s_TQVErcWmNp4-KvSe0bzQntzmwMdRKfAk252n840XmC-0GqV9la-zBJhCidVqbYhSqOJMaxwM2nADZl02wWEv7g5ip_r5FHu0FfMHWNOHtpbFrrosXoQppxpS98d8P5pclZJ6EhH-R_QL1oV7VRsUI4FllpdBcDPwg7qDFujJMzSXp1IERnlFtNSQHa4xvFVy1l8CzryF6Rgaf-neBKwwviI-5kH1T5wzw4g2ofyTuDjKPMGhwI_vbsI0VTaVlncb9pbMh5_STKuygOAGr_KBgHEraKyCm6bdwejEuUC67bByHFvY1dYa87rEWw8_-SoJknAATtTMwmZ7z4DbKQFey3eriZDLlkWZjTp1dwDjp4qoA5M_5NR5H0SrLrYODrq0AesHb9jtF5hX8f2NfmDXT8g2lDqfAQGW_ek3UbjA0Q3ZWiTneNxdcXW0Ycce9HoIDPJAIM_FEhC3-0YtRggjHLx69epgkrE_CCtZ1rFng3ok85kls=
+        id: rs_05bcbbf5e957568b006ad08a5d786487d086be8bc58a8824f2
+        summary: []
+        type: reasoning
+      - arguments: '{"city":"Paris"}'
+        call_id: call_bpfYIpoE1DpnHIt4JMytRGFW
+        id: fc_05bcbbf5e957568b006ad08a5db34887d083491aea648a0fb6
+        name: get_timezone
+        namespace: travel
+        status: completed
+        type: function_call
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_05bcbbf5e957568b006ad08a58d6d887d08edd8ced41c3fe05
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - allowed_tools:
+        - search_tiktoken_documentation
+        defer_loading: true
+        headers: null
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      - description: null
+        parameters: null
+        type: tool_search
+      - description: Travel location tools
+        name: travel
+        tools:
+        - description: Get the IANA time zone for a city
+          name: get_timezone
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - description: Get latitude and longitude for a city
+          name: get_coordinates
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - description: Calculate the distance between two cities
+          name: calculate_distance
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - description: Get the current weather for a city
+        name: get_weather
+        tools:
+        - description: Get the current weather for a city
+          name: get_weather
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 879
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 37
+        output_tokens_details:
+          reasoning_tokens: 17
+        total_tokens: 916
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body:
+      input:
+      - call_id: call_bpfYIpoE1DpnHIt4JMytRGFW
+        output: '{"city": "Paris", "time_zone": "Europe/Paris"}'
+        type: function_call_output
+      - content: Use the tool outputs above and answer in one sentence. Call no more
+          tools.
+        role: user
+        type: message
+      max_output_tokens: 4096
+      model: gpt-5.6
+      parallel_tool_calls: false
+      previous_response_id: resp_05bcbbf5e957568b006ad08a5cbb1487d09e8a70ac21a67e79
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - allowed_tools:
+        - search_tiktoken_documentation
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792051807
+      created_at: 1792051807
+      error: null
+      frequency_penalty: 0.0
+      id: resp_05bcbbf5e957568b006ad08a5eded887d093ae5d88f1684bdb
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: Paris is currently 18°C and cloudy, and its IANA time zone is Europe/Paris.
+          type: output_text
+        id: msg_05bcbbf5e957568b006ad08a5f958c87d0806a156b7dc50707
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_05bcbbf5e957568b006ad08a5cbb1487d09e8a70ac21a67e79
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - allowed_tools:
+        - search_tiktoken_documentation
+        defer_loading: true
+        headers: null
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      - description: null
+        parameters: null
+        type: tool_search
+      - description: Travel location tools
+        name: travel
+        tools:
+        - description: Get the IANA time zone for a city
+          name: get_timezone
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - description: Get latitude and longitude for a city
+          name: get_coordinates
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - description: Calculate the distance between two cities
+          name: calculate_distance
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - description: Get the current weather for a city
+        name: get_weather
+        tools:
+        - description: Get the current weather for a city
+          name: get_weather
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 962
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 24
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 986
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body:
+      input: 'Search the tiktoken documentation twice, as two separate calls one after
+        another: first for the exact query "encoding_for_model", then for "o200k_base".
+        Then report what each call returned.'
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      model: gpt-5.6
+      parallel_tool_calls: false
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - allowed_tools:
+        - search_tiktoken_documentation
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792051817
+      created_at: 1792051810
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0dab6c3a6f5f1c1f006ad08a62998887d0bbd8b8e64c456428
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_0dab6c3a6f5f1c1f006ad08a62c11887d08a45fbf25c9d0dc4
+        server_label: gitmcp_tiktoken
+        tools:
+        - annotations:
+            read_only: false
+          description: 'Semantically search within the fetched documentation from
+            GitHub repository: openai/tiktoken. Useful for specific queries.'
+          input_schema:
+            $schema: http://json-schema.org/draft-07/schema#
+            additionalProperties: false
+            properties:
+              query:
+                description: The search query to find relevant documentation
+                type: string
+            required:
+            - query
+            type: object
+          name: search_tiktoken_documentation
+        type: mcp_list_tools
+      - content: []
+        encrypted_content: gAAAAABq0IppbnfNMnnQ-QCPplE0NkQpPCiG011ysXv8Kgq1_IYN8JcBKkdhW_rfflBTleZ_-FULa7T3RVG2plAU3nOlo0LvGC8LxEIP0HzWSfa9QfPEKhFbkThygt2xzT6EqDukDbYsS68vnJo3ARKSWcyu1y48W6Ggoks1VXVfkCaUkcreu2mwEusYsvmbl8pachLRyENIZCAbOyhislqgRw4CxwQhtioaFNzEezk75My4OX9oEyAUlO-tjDZiWv-2gZ00-z-2YDU-ZMsV96bcAy16J2mYWkM6xS1G_VL_cbHdquH7RgN5SLZz5wHxo3qvTEJ8D_6QwloIloyxp0gDBmRVTfrV7LCZgy1z-B8zybKVCwo75DtNQX-K04wlIIuTzze_CKZGJahT-zQf4IZYoQSD0bpKbUGPkU0A68H8kwCqidla5wvYWTnyzmUO3oadZb1jIx-q7auho3FMo4mgQMx7A9lUaAhuEX66SCp3enGsDH7WH2hvU-mXmyLSAZYEsjpCQr1ZpIEdaoxgkJ3DjoFOPIlQTN8TMFdL9GGJ_pxbYoy7WU26w0kGQI5of5U7dsA5EEzCLa6WAUaXL4JfQkrHrybz5Pn1PJN0_4b7mmvfrXgH1lknR-CBa98vX1w4rWX7Av581EgIH979S1gGs3QLPO2mp2nrRjpRv78alCOgTF5vHC5jxAO8kBvynOosTZAjU0VEmfweqoGBq-FMuDHBdKowNlBdw_kh8ot68rpO-ze4n-G_q3QHgg-kKsN9rRgxVNE00qnYgi7p1JSeMTM3hRlp-9BCFWMI43ctSf_RSeykNcKMzYa0EX6qzWJaK_nNLKM5Ttt4TzIa9Rkk1Kx0m-aeKRFIczngEjgk4GsaqSkVEcP38d3TpFrlNxjuK76zWXmBNQdxhREAJ7mylTrMOCFBOj0uWQ7PU-KWSiDvw424INQI_iW1ms_1WT8gM_NY-t6r9GPrKs79vgaacqacXNMSqSs7DPeJeb9VdZcOH1u_hn7sUW5QzKUaS4mgcVMO-gRNu6AHC4HiP0WJ6ttmcEJolbwfzBqW4ZFmwd7aTX4nYjt9KFF_FLFKtYn-Ch973IrgLX7njVIufyxekylS1bQyJ4pjIjk0x23X-YxIp14k3-RYFo0O8hmRonooclZ4SR0bkYGWpsN77B-FJ6wvjQXmAsafBa4TF11SS1ZD8zbUwHedC1T-3jkpEZx5ZQkIxCeewIOd0muK4-wvHhmp5G-RiCxPS2BfQ10hDZiBs1uVA9Y8pR8VZX_iO2XZrGiyMtwHsfzO_8rsFkB3H-tmNTcifeIvzCnDUE4dHjE6kjw8pLrzMasfxzyYn57Kxr7M9JrMuyW3iKpK_KGKp545fO9yXCIA2sSQiDCnrsoGhCpMEO_nksyGN3UF_CA451lb5PJhGage_h3WMkteaKCxMxdlGPD_5QQvOYKXfp944FqEXMR0nsfEfndHB5_HNtcYwnX9EgXHUCWB6Duz-icF6FgCL5dOZv1tKqCOmI1DxPFMTqDoa5DKvlxHzMlcn7ssIQWkJ5aX61rk8ChN8os_Xjz5LTeNy_xqotnhTET8PLLghOxK307SVTkVqgscPoIwP6BMPxdb7Tl0gRYd5UldH48clnnyfq47s4xIyZ54740-zBY=
+        id: rs_0dab6c3a6f5f1c1f006ad08a6421ec87d0aa8ca987527eea4b
+        summary: []
+        type: reasoning
+      - arguments:
+          paths:
+          - mcp_gitmcp_tiktoken
+        call_id: null
+        execution: server
+        id: tsc_0dab6c3a6f5f1c1f006ad08a64567087d0bc914ad91286c31c
+        status: completed
+        type: tool_search_call
+      - call_id: null
+        execution: server
+        id: tso_0dab6c3a6f5f1c1f006ad08a647f6087d0bfa3943ef522c789
+        status: completed
+        tools:
+        - description: Documentation and code search for the openai/tiktoken tokenizer
+            repository.
+          name: mcp_gitmcp_tiktoken
+          tools:
+          - defer_loading: true
+            description: 'Semantically search within the fetched documentation from
+              GitHub repository: openai/tiktoken. Useful for specific queries.'
+            name: search_tiktoken_documentation
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                query:
+                  description: The search query to find relevant documentation
+                  type: string
+              required:
+              - query
+              type: object
+            strict: null
+            type: function
+          type: namespace
+        type: tool_search_output
+      - approval_request_id: null
+        arguments: '{"query":"encoding_for_model"}'
+        error: null
+        id: mcp_0dab6c3a6f5f1c1f006ad08a651d4087d0bc2b9357d26504fe
+        name: search_tiktoken_documentation
+        output: "### Search Results for: \"encoding_for_model\"\n\nNo relevant documentation\
+          \ found for your query. It's either being indexed or the search query did\
+          \ not match any documentation.\n\nAs a fallback, this is the documentation\
+          \ for openai/tiktoken:\n\n# ⏳ tiktoken\n\ntiktoken is a fast [BPE](https://en.wikipedia.org/wiki/Byte_pair_encoding)\
+          \ tokeniser for use with\nOpenAI's models.\n\n```python\nimport tiktoken\n\
+          enc = tiktoken.get_encoding(\"o200k_base\")\nassert enc.decode(enc.encode(\"\
+          hello world\")) == \"hello world\"\n\n# To get the tokeniser corresponding\
+          \ to a specific model in the OpenAI API:\nenc = tiktoken.encoding_for_model(\"\
+          gpt-4o\")\n```\n\nThe open source version of `tiktoken` can be installed\
+          \ from [PyPI](https://pypi.org/project/tiktoken):\n```\npip install tiktoken\n\
+          ```\n\nThe tokeniser API is documented in `tiktoken/core.py`.\n\nExample\
+          \ code using `tiktoken` can be found in the\n[OpenAI Cookbook](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb).\n\
+          \n\n## Performance\n\n`tiktoken` is between 3-6x faster than a comparable\
+          \ open source tokeniser:\n\n![image](https://raw.githubusercontent.com/openai/tiktoken/main/perf.svg)\n\
+          \nPerformance measured on 1GB of text using the GPT-2 tokeniser, using `GPT2TokenizerFast`\
+          \ from\n`tokenizers==0.13.2`, `transformers==4.24.0` and `tiktoken==0.2.0`.\n\
+          \n\n## Getting help\n\nPlease post questions in the [issue tracker](https://github.com/openai/tiktoken/issues).\n\
+          \nIf you work at OpenAI, make sure to check the internal documentation or\
+          \ feel free to contact\n@shantanu.\n\n## What is BPE anyway?\n\nLanguage\
+          \ models don't see text like you and I, instead they see a sequence of numbers\
+          \ (known as tokens).\nByte pair encoding (BPE) is a way of converting text\
+          \ into tokens. It has a couple desirable\nproperties:\n1) It's reversible\
+          \ and lossless, so you can convert tokens back into the original text\n\
+          2) It works on arbitrary text, even text that is not in the tokeniser's\
+          \ training data\n3) It compresses the text: the token sequence is shorter\
+          \ than the bytes corresponding to the\n   original text. On average, in\
+          \ practice, each token corresponds to about 4 bytes.\n4) It attempts to\
+          \ let the model see common subwords. For instance, \"ing\" is a common subword\
+          \ in\n   English, so BPE encodings will often split \"encoding\" into tokens\
+          \ like \"encod\" and \"ing\"\n   (instead of e.g. \"enc\" and \"oding\"\
+          ). Because the model will then see the \"ing\" token again and\n   again\
+          \ in different contexts, it helps models generalise and better understand\
+          \ grammar.\n\n`tiktoken` contains an educational submodule that is friendlier\
+          \ if you want to learn more about\nthe details of BPE, including code that\
+          \ helps visualise the BPE procedure:\n```python\nfrom tiktoken._educational\
+          \ import *\n\n# Train a BPE tokeniser on a small amount of text\nenc = train_simple_encoding()\n\
+          \n# Visualise how the GPT-4 encoder encodes text\nenc = SimpleBytePairEncoding.from_tiktoken(\"\
+          cl100k_base\")\nenc.encode(\"hello world aaaaaaaaaaaa\")\n```\n\n\n## Extending\
+          \ tiktoken\n\nYou may wish to extend `tiktoken` to support new encodings.\
+          \ There are two ways to do this.\n\n\n**Create your `Encoding` object exactly\
+          \ the way you want and simply pass it around.**\n\n```python\ncl100k_base\
+          \ = tiktoken.get_encoding(\"cl100k_base\")\n\n# In production, load the\
+          \ arguments directly instead of accessing private attributes\n# See openai_public.py\
+          \ for examples of arguments for specific encodings\nenc = tiktoken.Encoding(\n\
+          \    # If you're changing the set of special tokens, make sure to use a\
+          \ different name\n    # It should be clear from the name what behaviour\
+          \ to expect.\n    name=\"cl100k_im\",\n    pat_str=cl100k_base._pat_str,\n\
+          \    mergeable_ranks=cl100k_base._mergeable_ranks,\n    special_tokens={\n\
+          \        **cl100k_base._special_tokens,\n        \"<|im_start|>\": 100264,\n\
+          \        \"<|im_end|>\": 100265,\n    }\n)\n```\n\n**Use the `tiktoken_ext`\
+          \ plugin mechanism to register your `Encoding` objects with `tiktoken`.**\n\
+          \nThis is only useful if you need `tiktoken.get_encoding` to find your encoding,\
+          \ otherwise prefer\noption 1.\n\nTo do this, you'll need to create a namespace\
+          \ package under `tiktoken_ext`.\n\nLayout your project like this, making\
+          \ sure to omit the `tiktoken_ext/__init__.py` file:\n```\nmy_tiktoken_extension\n\
+          ├── tiktoken_ext\n│   └── my_encodings.py\n└── setup.py\n```\n\n`my_encodings.py`\
+          \ should be a module that contains a variable named `ENCODING_CONSTRUCTORS`.\n\
+          This is a dictionary from an encoding name to a function that takes no arguments\
+          \ and returns\narguments that can be passed to `tiktoken.Encoding` to construct\
+          \ that encoding. For an example, see\n`tiktoken_ext/openai_public.py`. For\
+          \ precise details, see `tiktoken/registry.py`.\n\nYour `setup.py` should\
+          \ look something like this:\n```python\nfrom setuptools import setup, find_namespace_packages\n\
+          \nsetup(\n    name=\"my_tiktoken_extension\",\n    packages=find_namespace_packages(include=['tiktoken_ext*']),\n\
+          \    install_requires=[\"tiktoken\"],\n    ...\n)\n```\n\nThen simply `pip\
+          \ install ./my_tiktoken_extension` and you should be able to use your\n\
+          custom encodings! Make sure **not** to use an editable install.\n\n\n\n\
+          If you'd like to retry the search, try changing the query to increase the\
+          \ likelihood of a match."
+        server_label: gitmcp_tiktoken
+        status: completed
+        type: mcp_call
+      - content: []
+        encrypted_content: gAAAAABq0IppTHtKKWrsv5AYAIXKdyPvh_taBIhQtxGBflqfxZIDRsJHocwFrXF3MyjPn31U1ub9yTEK7a5_urr40j1YDbG0euzQftpQs9IwqKgxWjBStr-gkRW_WfXEPYxozguhGHinqTBxGhCvRe-GzqNUI6_FqqOHRSPVdqKRh81wuYmpL0rD5xmaFEJE87viXWO2ZzeOlNnlbP_6zCkI3O-_QlgMJqKQiDHk0aKZKQ6HqzjONqD2u-reqi41q-RqdRCix9bDmF-0sNex0HzULFGl0ZNarel-X8lEVC0q0wg0-OxIoGjlbp2nFHMH0i5FOQ2LSz8H3iUm5_bxwQ9w30VWChtcsiuDJPjgj8_YsSrPgxuR-Qe7LRKmLeCmNyzlOnuNnfD210gcBcPOtUSu7toRLwpDsBhLgYW2rLlu9UjF43rZlLc05dikwaAlMvxAF9oU3tzIlbVtneasE3GtwW5WnYoMdUgrfVPuax1A0UspwdWFGcNiG907KOk80nNHL5Mo8SuJdsk1XUi7fLHnRpRQpwzWU74EGatvUpCxA868h5FgWZO7aZrcpM-RN5nUiogEy-FrbCkcoPMSiOyGA4lB_nvIZzV3rrqpF5QgKMZ65J79WalpTAhcZYNPBnpIaB4jG1L50Yi3SzY5vsYdYurVJFafKuTnXoaMIGQtMFBZ7yWrhePUsb9hAWUPWk6rJARQjbSmVOtmFVJ4LkFqB9Ug6Vmv9vEXwG-CIPstpTxYPMpWRWQDds25ipqrKfS62iGh4L4waY1EGNd2-RniJ7XP3Ay2xTNSwYdj5sJaYbYM4rQ_TFe_TmD4JcV8t4U1hI2kFAPyN2B0ZRw6djWvTRBP2phSN6-zmgmifvyob4UP7sI_sgvGf9XnOosJjktxGLH5QgO8MgVzDBOWXKrTIfjWqctj82ONvkGyUrxDPMO2MTyP4UBXA9C3fIo0uUt5E1IzT1bVKwzwMUMO03cDDDmP-c1SStXcAV-HImVS6u87zXJWFH7RGICPNph9-ujWIbRGXrPyJwI1p-Qs0diOgnB3tT73tMbw7LGo_4LJvpiDXU03FQzDEwc5gUg1H2GLgNebxtR25IWEdB_pqr6Q6e2ybLADhh9hGKEmuBqKDxMN03qpuy0NKmk7YOGELTfnxF6r-Tgv09wptoLpGOSgsagD8_S88-wvitMq1rZfnmldlh7uESlkpP6fQbt4bRNZzpOnjTCIxP2jdxdKt3RHn7n85Vxm0Pm_NbDi2PLQTBHmcQsuaFetv87jcyHT0hFrs4SBfQ0kmVuNOliaerIbZaqVC1Ji72GMaKv2ih1srpoLDSMapw50zTdZanU5F0F4uss_0VTipWtu4YT7u5C4dQuw4JZ59iAT2QXpG2CSLzMpTUciOCksUX5ZF7MxQX0PPyf2DOCqi7bW9VyDCNW1Ew0oCaJxj_woj1dPCPZ85yiBz81SgnvXPjz4hSQL5Gjr3pKdPfPLRwa7NEq35yJr_hIvxyVpVDnZB_aZtwG5KWxaT6ykCbiKJ3uMjl8JDeAo53soPDmVQ3EVlisBGaJ3qruHYEI_fnabQ36y-dyTdycZ02zNrzmt6qc9EThr_yx4bd1JP9asjlwdF0ZjuJbgvmEfmOB3bX3SGAe6lSZZ969kSiSu-YoIsYF1QTPNAJao8Lo8Km5Xr8PHbAxH_kX3PE3rVcwM2yj_a7jwUJI0Fmim1AYtk_VgxjG9ZBuYii-v_3oGCg8-BpwQRQZKRoydkYDzL8nsGl2PawOsXZjV3west3PbITuyWy0A9Ah7lP1XMqI7A076hKPxRqF9S4gYtgh2Svfcv0Tt9tly2m_8wQOTjFTOpSzB7Uom_yq28z8mmN8shZyyU0VUdt69ozpN7AG7ucBOiQvouodvQv88vHgdn2hZGeKoX6BpyZ53vY3c15O7uVvQhe0e7cMUh5oDGSE_HS5QFYNWbZ1f-fzIzNyO0L_52VxTiVWt0gVXSP5iyPWvhZkv941RxdOQINZxO8kqpJlLT1AZOMwFUkpenbe46u3hKlbVDHKeP6LW1b2Tn4u2gPMkc7N_vleD_CkF5CuLjUqqOuJ7NJlPw6PGt8GV4AipK_eBleOsvuMabS267C1QAQn1
+        id: rs_0dab6c3a6f5f1c1f006ad08a674b0087d0a3042b9b67eaa1be
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: "1. **Query:** `encoding_for_model`  \n   **Result:** No directly\
+            \ relevant documentation was found. The fallback tiktoken README included\
+            \ this example:\n   ```python\n   enc = tiktoken.encoding_for_model(\"\
+            gpt-4o\")\n   ```\n   It explains that this retrieves the tokenizer corresponding\
+            \ to a specific OpenAI API model.\n\n2. **Query:** `o200k_base`  \n  \
+            \ **Result:** The separate second call failed with:\n   > `UserError:\
+            \ Reached tool call limit of 1.`\n\n   Therefore, no search results were\
+            \ returned for the second query."
+          type: output_text
+        id: msg_0dab6c3a6f5f1c1f006ad08a67d8c087d0a8ba1144e9c9b519
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - allowed_tools:
+        - search_tiktoken_documentation
+        defer_loading: true
+        headers: null
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      - description: null
+        parameters: null
+        type: tool_search
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 2133
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 258
+        output_tokens_details:
+          reasoning_tokens: 99
+        total_tokens: 2391
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t10
+  request:
+    body:
+      input: Use the tiktoken documentation tool to find which encoding gpt-4o uses.
+        Answer in one sentence.
+      max_output_tokens: 4096
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - allowed_tools:
+        - search_tiktoken_documentation
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792051825
+      created_at: 1792051820
+      error: null
+      frequency_penalty: 0.0
+      id: resp_05fca7b04b651d3c006ad08a6c663487d09a89f9aa6344bb97
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_05fca7b04b651d3c006ad08a6c850887d0a018a657fbdd8bfd
+        server_label: gitmcp_tiktoken
+        tools:
+        - annotations:
+            read_only: false
+          description: 'Semantically search within the fetched documentation from
+            GitHub repository: openai/tiktoken. Useful for specific queries.'
+          input_schema:
+            $schema: http://json-schema.org/draft-07/schema#
+            additionalProperties: false
+            properties:
+              query:
+                description: The search query to find relevant documentation
+                type: string
+            required:
+            - query
+            type: object
+          name: search_tiktoken_documentation
+        type: mcp_list_tools
+      - content: []
+        encrypted_content: gAAAAABq0IpyMP_724UndTw-samETt3s-SDComjkS9cd6uCGPircmp6ZHAlntsQj-Zu45JQaoUmzrygbOuDyBzDzPS2K3y6FUIulMpEkhqGN-kbN6Ew-J8Ngto19gpYUTepFh4S60yaCuQD1IQU9OEN1HjkXAf9QfYb9atolVeJf_s2pYmQkmPLf4qgZVXItwXcsLM-kxYt-xuTq_aiNH4_Fhul2ZbVA_FdHKLJ5CC0j9mizYkGJRNlQx3t89RLN8ODnTk_IJyxV3bMpsaH8cWLsMiKMrKaJDaxeqrNYLMMeFia2yCFz7WU2YfO2XEfXDqiTW3m3AKNfSK4sHdQ-4_Hmz2FYMFrQwOwdZvjto8Wm-SvapCJkKlzeB_XbxziIvwmxHxPVlAGAKP-gUd4A6mLySPc742p1ohDu-ru1ilBnV5iHkWlbUjiWSca5s_W8rR5LbFccpvabzebFkUNiM2bsxumOrn_AlObYmrZoJHMI676HUQgwqPhCIHDgwpWYmJWGNX-gLJOqF776OzQ-3Zf1QKbYVWo7fFo0jN30JWGI_Bbq62kChyepJ7c_PnlPlfbgBsiEn51JoVvcYd2xUc4sDSqy2f_3OXNGa0K4OvkYLa56p6nEa5-rBiij8wkzVfOM8iNNYdalDMz6388HxE2z6KaZU4lhz5HeqQbpA-A-VucuxmC-ClFM3GQF8BXPS9xwvnIjw6h7D-TKViAQLe6YX5XraPUWk2s4LhURZVXW7kizSpHE3VWCiA-qjw89f5I1XAVlo4JGzw3HLDo2wQvwPV6YZLLOk7oWD-cEcwdPbbd7GewUsFk8Gu7f4r0fl5WUOt8oKiTmyKvf0ZqQ-6AhNEl2M0MG6KLGOtgKfE3kTOrK9G8_q_wD9BVi7kN5-q3KhxdkUG8as59hRNaTtfcs5aZVj_4qLaYv7VZJYtk36R7nAnDKcO4w2b167Md5nfIOhSSPJV1f0UzgQJReUPSxxk3X39WfMYxwrOG3W2vfHZLU6y8IS2wmhQ4XHdaL8a5hbCdv6JVesMZMFICUp9WRkcu6B2hvcMPINSb2QH4mWiXYH8T5GgRoQNnHWc9ILSAjmJTigQBgPcn5weZjMHHj0ZbScGWfFEdBRxrhmDa5Z5YqwsNmd2sLNpaGbiZjf3Y0dnOvb5gZe-CskuLJpS59st2McZnq97ZEDueSQ6_nMz9gNi3BfkXbdF_kwesJwMdJDc7-L5jq_d_qaOVKR1cLZqXCAYQWpDVMHW8Tf75MwPNiK0ResVD79qca_Hgiwj-csm2WH5fDm15nlCXi37nXVR3PTZEnJhKpm8LKSpSdWaOfIvKx1lYpg4IL2K1UR7qD824rD85ii6JnLg7MmM82IwtOpd2_mNdZIzqCac7RnSMuJAC2LMQd-iSAjmUBLCCZu3Wz47sxroGHKIBIX0Kxp6GyazTGrPeKRXEls12gQOz-9srsNitaxt7ECHWTy2VXcNmxnq09o2mcvhlOCuBYi-tRVgw7OC9sw8scG2cXxk654-lyVM4CltzEIZX0LcJpqE8VGBOqtGPaB8AQ4cMJbrCp8e5BAkFrHOadCyTD9bjgxLvH2b0=
+        id: rs_05fca7b04b651d3c006ad08a6e354487d0845f9ea1283a2375
+        summary: []
+        type: reasoning
+      - arguments:
+          paths:
+          - mcp_gitmcp_tiktoken
+        call_id: null
+        execution: server
+        id: tsc_05fca7b04b651d3c006ad08a6e66bc87d09297a802db22be5f
+        status: completed
+        type: tool_search_call
+      - call_id: null
+        execution: server
+        id: tso_05fca7b04b651d3c006ad08a6e8a9487d08c8601dbbdd440aa
+        status: completed
+        tools:
+        - description: Documentation and code search for the openai/tiktoken tokenizer
+            repository.
+          name: mcp_gitmcp_tiktoken
+          tools:
+          - defer_loading: true
+            description: 'Semantically search within the fetched documentation from
+              GitHub repository: openai/tiktoken. Useful for specific queries.'
+            name: search_tiktoken_documentation
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                query:
+                  description: The search query to find relevant documentation
+                  type: string
+              required:
+              - query
+              type: object
+            strict: null
+            type: function
+          type: namespace
+        type: tool_search_output
+      - approval_request_id: null
+        arguments: '{"query":"Which encoding does gpt-4o use? Find the model-to-encoding
+          mapping for gpt-4o."}'
+        error: null
+        id: mcp_05fca7b04b651d3c006ad08a6f685887d0ae61dcc1686ac07a
+        name: search_tiktoken_documentation
+        output: "### Search Results for: \"Which encoding does gpt-4o use? Find the\
+          \ model-to-encoding mapping for gpt-4o.\"\n\nNo relevant documentation found\
+          \ for your query. It's either being indexed or the search query did not\
+          \ match any documentation.\n\nAs a fallback, this is the documentation for\
+          \ openai/tiktoken:\n\n# ⏳ tiktoken\n\ntiktoken is a fast [BPE](https://en.wikipedia.org/wiki/Byte_pair_encoding)\
+          \ tokeniser for use with\nOpenAI's models.\n\n```python\nimport tiktoken\n\
+          enc = tiktoken.get_encoding(\"o200k_base\")\nassert enc.decode(enc.encode(\"\
+          hello world\")) == \"hello world\"\n\n# To get the tokeniser corresponding\
+          \ to a specific model in the OpenAI API:\nenc = tiktoken.encoding_for_model(\"\
+          gpt-4o\")\n```\n\nThe open source version of `tiktoken` can be installed\
+          \ from [PyPI](https://pypi.org/project/tiktoken):\n```\npip install tiktoken\n\
+          ```\n\nThe tokeniser API is documented in `tiktoken/core.py`.\n\nExample\
+          \ code using `tiktoken` can be found in the\n[OpenAI Cookbook](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb).\n\
+          \n\n## Performance\n\n`tiktoken` is between 3-6x faster than a comparable\
+          \ open source tokeniser:\n\n![image](https://raw.githubusercontent.com/openai/tiktoken/main/perf.svg)\n\
+          \nPerformance measured on 1GB of text using the GPT-2 tokeniser, using `GPT2TokenizerFast`\
+          \ from\n`tokenizers==0.13.2`, `transformers==4.24.0` and `tiktoken==0.2.0`.\n\
+          \n\n## Getting help\n\nPlease post questions in the [issue tracker](https://github.com/openai/tiktoken/issues).\n\
+          \nIf you work at OpenAI, make sure to check the internal documentation or\
+          \ feel free to contact\n@shantanu.\n\n## What is BPE anyway?\n\nLanguage\
+          \ models don't see text like you and I, instead they see a sequence of numbers\
+          \ (known as tokens).\nByte pair encoding (BPE) is a way of converting text\
+          \ into tokens. It has a couple desirable\nproperties:\n1) It's reversible\
+          \ and lossless, so you can convert tokens back into the original text\n\
+          2) It works on arbitrary text, even text that is not in the tokeniser's\
+          \ training data\n3) It compresses the text: the token sequence is shorter\
+          \ than the bytes corresponding to the\n   original text. On average, in\
+          \ practice, each token corresponds to about 4 bytes.\n4) It attempts to\
+          \ let the model see common subwords. For instance, \"ing\" is a common subword\
+          \ in\n   English, so BPE encodings will often split \"encoding\" into tokens\
+          \ like \"encod\" and \"ing\"\n   (instead of e.g. \"enc\" and \"oding\"\
+          ). Because the model will then see the \"ing\" token again and\n   again\
+          \ in different contexts, it helps models generalise and better understand\
+          \ grammar.\n\n`tiktoken` contains an educational submodule that is friendlier\
+          \ if you want to learn more about\nthe details of BPE, including code that\
+          \ helps visualise the BPE procedure:\n```python\nfrom tiktoken._educational\
+          \ import *\n\n# Train a BPE tokeniser on a small amount of text\nenc = train_simple_encoding()\n\
+          \n# Visualise how the GPT-4 encoder encodes text\nenc = SimpleBytePairEncoding.from_tiktoken(\"\
+          cl100k_base\")\nenc.encode(\"hello world aaaaaaaaaaaa\")\n```\n\n\n## Extending\
+          \ tiktoken\n\nYou may wish to extend `tiktoken` to support new encodings.\
+          \ There are two ways to do this.\n\n\n**Create your `Encoding` object exactly\
+          \ the way you want and simply pass it around.**\n\n```python\ncl100k_base\
+          \ = tiktoken.get_encoding(\"cl100k_base\")\n\n# In production, load the\
+          \ arguments directly instead of accessing private attributes\n# See openai_public.py\
+          \ for examples of arguments for specific encodings\nenc = tiktoken.Encoding(\n\
+          \    # If you're changing the set of special tokens, make sure to use a\
+          \ different name\n    # It should be clear from the name what behaviour\
+          \ to expect.\n    name=\"cl100k_im\",\n    pat_str=cl100k_base._pat_str,\n\
+          \    mergeable_ranks=cl100k_base._mergeable_ranks,\n    special_tokens={\n\
+          \        **cl100k_base._special_tokens,\n        \"<|im_start|>\": 100264,\n\
+          \        \"<|im_end|>\": 100265,\n    }\n)\n```\n\n**Use the `tiktoken_ext`\
+          \ plugin mechanism to register your `Encoding` objects with `tiktoken`.**\n\
+          \nThis is only useful if you need `tiktoken.get_encoding` to find your encoding,\
+          \ otherwise prefer\noption 1.\n\nTo do this, you'll need to create a namespace\
+          \ package under `tiktoken_ext`.\n\nLayout your project like this, making\
+          \ sure to omit the `tiktoken_ext/__init__.py` file:\n```\nmy_tiktoken_extension\n\
+          ├── tiktoken_ext\n│   └── my_encodings.py\n└── setup.py\n```\n\n`my_encodings.py`\
+          \ should be a module that contains a variable named `ENCODING_CONSTRUCTORS`.\n\
+          This is a dictionary from an encoding name to a function that takes no arguments\
+          \ and returns\narguments that can be passed to `tiktoken.Encoding` to construct\
+          \ that encoding. For an example, see\n`tiktoken_ext/openai_public.py`. For\
+          \ precise details, see `tiktoken/registry.py`.\n\nYour `setup.py` should\
+          \ look something like this:\n```python\nfrom setuptools import setup, find_namespace_packages\n\
+          \nsetup(\n    name=\"my_tiktoken_extension\",\n    packages=find_namespace_packages(include=['tiktoken_ext*']),\n\
+          \    install_requires=[\"tiktoken\"],\n    ...\n)\n```\n\nThen simply `pip\
+          \ install ./my_tiktoken_extension` and you should be able to use your\n\
+          custom encodings! Make sure **not** to use an editable install.\n\n\n\n\
+          If you'd like to retry the search, try changing the query to increase the\
+          \ likelihood of a match."
+        server_label: gitmcp_tiktoken
+        status: completed
+        type: mcp_call
+      - content: []
+        encrypted_content: gAAAAABq0Ipy9GvsDmoYnn4HwQpOnXp5rYRK76B8Invnu61reFKVwXyl8hB9IHdRlcApqx5M5PvuX9Cqtdpa_qc5RfTuQh6dQDNVEZsvoWwmp_LMMVGH9gQtwBa7VaCATFQcKVTIdMp4E043gmh5pZ2Z4puD55Yy2ERme7fkMZryBYvsmEq6YZpCP4Qre7BYv9n8ChBrIBP62aJ59fdHNnpMI4z5H_KIQHZfXOYPutEKLrvedDj4_q2teNvl3kqt_rrTo47VLMKIc_tMG0lRKFb79a9K1t7Xvxi6swyl9h3RIkD2Jm6jW-xseXI8lV8ClnR6SldJAOQo74gyDaRKcgzUtOeXNzgVynmMFcGOrO3ZBHMUW-qwOwGv2DWkMIw1P5_BXUCc_VyHWjtEkTsm1Obn8emwnsGIUlp8sKHlM101oyHtst63eUB6zxuU4Zh9xGlkA9NFQeR8IEuT1QPC8eb9jj6-1yPWOKHHpx_Ky86hB1guWQXFBqKEaiapREqgCMjMEmNxe1z5TiRtvTCYAIMU7ONvpyI8q4oBU-anY6HkxMvFfppuO_dbrjU6Kjr6NG51xMDuYTrcSIVuA2h0-W0VX3ZRdPK4T5MTOjByn5g40evU7sExExkTzDAP8laUDcjwWviaYOjsoI_kRAN5cfmIx9xJXlcplT975DB-XvUnEEKNFH4gIucLX2B1jqCbOReiVuX0Ah3pvHTgoZWVIv7VCb6vXeIwkz6AzcY64mCIx8hnAhB6id7DFcKjfcdw50dsngIuCk8c1wXL0Re8F5U6zGmhSAXLd9D-CyIqyx_rExAlG2Gic1Ry_FxSBKmj3vmG55PalY6vUh6khiHTwRFbDfZef1aIkFiKVCwMgsCE2Cp8Y2jikN8HgrR6O2GeA721ZtXIm25K9dfbK1JpF29Rgp5zrjzEHY1EqbsKC3EWpJzqoMM-tGYizO_ZS-lqJCBGV3c5hayX-HRLu6Iv48PyEdaFMpR1Z2Px5Ul_h40Riz-DteH3fAEoc-S_LmhI3ZmWRHqFRNLIqUAZuLfyGPsQbz6PFQFQ5gJQeSt8rX4G30NdxmHjS1ADK_Tmmz7DGCOLRxaZvlPOD-IZMpggifjfMdQPstVo6BKAGcxz4xjb2ga24YZIO_rR3k-kTNOVj3vMPAilDt2GUy1RBKVCwQGjPkOewnQ4w1z989UjNUS1B8MxHkAdW2UqqqOWFDMWOSswGvGLK_BXP8xa3uwI4wHq4xzkQmR0rclkEODS7Db_RSplIwIsisijASI7rcFB5o6PgPP90dkjlX_nv8_zZpywTEzIEZdKsOPQD7Fk7BPtancNz0VVNZyGdZCcnTDTLUJOliJK10ISuFdcmOJSaQ2n-iGWlAMyOjW79_VSp4XlAn4eeBFdY5QcDlophtMJ3_Of33hOKOtNGPs_zDsRV1q4k3AAZDMTqsXaUJmQ087G1NMw64HIxgmqEluey-Ol68d3BM4QxE-XHrY7JTOC__52BkwQt8wYI8JzkGHkJLNDrjBL2_Ydn6ANpkSbxFoH7fc6eX1lWmSigdMaEau5Fme4r54nKmoXOg==
+        id: rs_05fca7b04b651d3c006ad08a709f7887d0b25c3c9fe1ed6755
+        summary: []
+        type: reasoning
+      - approval_request_id: null
+        arguments: '{"query":"gpt-4o o200k_base MODEL_PREFIX_TO_ENCODING model.py"}'
+        error: null
+        id: mcp_05fca7b04b651d3c006ad08a710df087d0b22d16ac0c88439e
+        name: search_tiktoken_documentation
+        output: "### Search Results for: \"gpt-4o o200k_base MODEL_PREFIX_TO_ENCODING\
+          \ model.py\"\n\nNo relevant documentation found for your query. It's either\
+          \ being indexed or the search query did not match any documentation.\n\n\
+          As a fallback, this is the documentation for openai/tiktoken:\n\n# ⏳ tiktoken\n\
+          \ntiktoken is a fast [BPE](https://en.wikipedia.org/wiki/Byte_pair_encoding)\
+          \ tokeniser for use with\nOpenAI's models.\n\n```python\nimport tiktoken\n\
+          enc = tiktoken.get_encoding(\"o200k_base\")\nassert enc.decode(enc.encode(\"\
+          hello world\")) == \"hello world\"\n\n# To get the tokeniser corresponding\
+          \ to a specific model in the OpenAI API:\nenc = tiktoken.encoding_for_model(\"\
+          gpt-4o\")\n```\n\nThe open source version of `tiktoken` can be installed\
+          \ from [PyPI](https://pypi.org/project/tiktoken):\n```\npip install tiktoken\n\
+          ```\n\nThe tokeniser API is documented in `tiktoken/core.py`.\n\nExample\
+          \ code using `tiktoken` can be found in the\n[OpenAI Cookbook](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb).\n\
+          \n\n## Performance\n\n`tiktoken` is between 3-6x faster than a comparable\
+          \ open source tokeniser:\n\n![image](https://raw.githubusercontent.com/openai/tiktoken/main/perf.svg)\n\
+          \nPerformance measured on 1GB of text using the GPT-2 tokeniser, using `GPT2TokenizerFast`\
+          \ from\n`tokenizers==0.13.2`, `transformers==4.24.0` and `tiktoken==0.2.0`.\n\
+          \n\n## Getting help\n\nPlease post questions in the [issue tracker](https://github.com/openai/tiktoken/issues).\n\
+          \nIf you work at OpenAI, make sure to check the internal documentation or\
+          \ feel free to contact\n@shantanu.\n\n## What is BPE anyway?\n\nLanguage\
+          \ models don't see text like you and I, instead they see a sequence of numbers\
+          \ (known as tokens).\nByte pair encoding (BPE) is a way of converting text\
+          \ into tokens. It has a couple desirable\nproperties:\n1) It's reversible\
+          \ and lossless, so you can convert tokens back into the original text\n\
+          2) It works on arbitrary text, even text that is not in the tokeniser's\
+          \ training data\n3) It compresses the text: the token sequence is shorter\
+          \ than the bytes corresponding to the\n   original text. On average, in\
+          \ practice, each token corresponds to about 4 bytes.\n4) It attempts to\
+          \ let the model see common subwords. For instance, \"ing\" is a common subword\
+          \ in\n   English, so BPE encodings will often split \"encoding\" into tokens\
+          \ like \"encod\" and \"ing\"\n   (instead of e.g. \"enc\" and \"oding\"\
+          ). Because the model will then see the \"ing\" token again and\n   again\
+          \ in different contexts, it helps models generalise and better understand\
+          \ grammar.\n\n`tiktoken` contains an educational submodule that is friendlier\
+          \ if you want to learn more about\nthe details of BPE, including code that\
+          \ helps visualise the BPE procedure:\n```python\nfrom tiktoken._educational\
+          \ import *\n\n# Train a BPE tokeniser on a small amount of text\nenc = train_simple_encoding()\n\
+          \n# Visualise how the GPT-4 encoder encodes text\nenc = SimpleBytePairEncoding.from_tiktoken(\"\
+          cl100k_base\")\nenc.encode(\"hello world aaaaaaaaaaaa\")\n```\n\n\n## Extending\
+          \ tiktoken\n\nYou may wish to extend `tiktoken` to support new encodings.\
+          \ There are two ways to do this.\n\n\n**Create your `Encoding` object exactly\
+          \ the way you want and simply pass it around.**\n\n```python\ncl100k_base\
+          \ = tiktoken.get_encoding(\"cl100k_base\")\n\n# In production, load the\
+          \ arguments directly instead of accessing private attributes\n# See openai_public.py\
+          \ for examples of arguments for specific encodings\nenc = tiktoken.Encoding(\n\
+          \    # If you're changing the set of special tokens, make sure to use a\
+          \ different name\n    # It should be clear from the name what behaviour\
+          \ to expect.\n    name=\"cl100k_im\",\n    pat_str=cl100k_base._pat_str,\n\
+          \    mergeable_ranks=cl100k_base._mergeable_ranks,\n    special_tokens={\n\
+          \        **cl100k_base._special_tokens,\n        \"<|im_start|>\": 100264,\n\
+          \        \"<|im_end|>\": 100265,\n    }\n)\n```\n\n**Use the `tiktoken_ext`\
+          \ plugin mechanism to register your `Encoding` objects with `tiktoken`.**\n\
+          \nThis is only useful if you need `tiktoken.get_encoding` to find your encoding,\
+          \ otherwise prefer\noption 1.\n\nTo do this, you'll need to create a namespace\
+          \ package under `tiktoken_ext`.\n\nLayout your project like this, making\
+          \ sure to omit the `tiktoken_ext/__init__.py` file:\n```\nmy_tiktoken_extension\n\
+          ├── tiktoken_ext\n│   └── my_encodings.py\n└── setup.py\n```\n\n`my_encodings.py`\
+          \ should be a module that contains a variable named `ENCODING_CONSTRUCTORS`.\n\
+          This is a dictionary from an encoding name to a function that takes no arguments\
+          \ and returns\narguments that can be passed to `tiktoken.Encoding` to construct\
+          \ that encoding. For an example, see\n`tiktoken_ext/openai_public.py`. For\
+          \ precise details, see `tiktoken/registry.py`.\n\nYour `setup.py` should\
+          \ look something like this:\n```python\nfrom setuptools import setup, find_namespace_packages\n\
+          \nsetup(\n    name=\"my_tiktoken_extension\",\n    packages=find_namespace_packages(include=['tiktoken_ext*']),\n\
+          \    install_requires=[\"tiktoken\"],\n    ...\n)\n```\n\nThen simply `pip\
+          \ install ./my_tiktoken_extension` and you should be able to use your\n\
+          custom encodings! Make sure **not** to use an editable install.\n\n\n\n\
+          If you'd like to retry the search, try changing the query to increase the\
+          \ likelihood of a match."
+        server_label: gitmcp_tiktoken
+        status: completed
+        type: mcp_call
+      - content:
+        - annotations: []
+          logprobs: []
+          text: GPT-4o uses the `o200k_base` encoding.
+          type: output_text
+        id: msg_05fca7b04b651d3c006ad08a71cb4487d099d061d80db2a6f6
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - allowed_tools:
+        - search_tiktoken_documentation
+        defer_loading: true
+        headers: null
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      - description: null
+        parameters: null
+        type: tool_search
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 3426
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 165
+        output_tokens_details:
+          reasoning_tokens: 52
+        total_tokens: 3591
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t11
+  request:
+    body:
+      input: Now search the tiktoken documentation once more, for the exact query
+        "how to install tiktoken", and answer in one sentence.
+      max_output_tokens: 4096
+      model: gpt-5.6
+      previous_response_id: resp_05fca7b04b651d3c006ad08a6c663487d09a89f9aa6344bb97
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - allowed_tools:
+        - search_tiktoken_documentation
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792051830
+      created_at: 1792051827
+      error: null
+      frequency_penalty: 0.0
+      id: resp_05fca7b04b651d3c006ad08a73a01487d0a4464f0338668221
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - approval_request_id: null
+        arguments: '{"query":"how to install tiktoken"}'
+        error: null
+        id: mcp_05fca7b04b651d3c006ad08a74db4887d08014e48529c556a8
+        name: search_tiktoken_documentation
+        output: "### Search Results for: \"how to install tiktoken\"\n\nNo relevant\
+          \ documentation found for your query. It's either being indexed or the search\
+          \ query did not match any documentation.\n\nAs a fallback, this is the documentation\
+          \ for openai/tiktoken:\n\n# ⏳ tiktoken\n\ntiktoken is a fast [BPE](https://en.wikipedia.org/wiki/Byte_pair_encoding)\
+          \ tokeniser for use with\nOpenAI's models.\n\n```python\nimport tiktoken\n\
+          enc = tiktoken.get_encoding(\"o200k_base\")\nassert enc.decode(enc.encode(\"\
+          hello world\")) == \"hello world\"\n\n# To get the tokeniser corresponding\
+          \ to a specific model in the OpenAI API:\nenc = tiktoken.encoding_for_model(\"\
+          gpt-4o\")\n```\n\nThe open source version of `tiktoken` can be installed\
+          \ from [PyPI](https://pypi.org/project/tiktoken):\n```\npip install tiktoken\n\
+          ```\n\nThe tokeniser API is documented in `tiktoken/core.py`.\n\nExample\
+          \ code using `tiktoken` can be found in the\n[OpenAI Cookbook](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb).\n\
+          \n\n## Performance\n\n`tiktoken` is between 3-6x faster than a comparable\
+          \ open source tokeniser:\n\n![image](https://raw.githubusercontent.com/openai/tiktoken/main/perf.svg)\n\
+          \nPerformance measured on 1GB of text using the GPT-2 tokeniser, using `GPT2TokenizerFast`\
+          \ from\n`tokenizers==0.13.2`, `transformers==4.24.0` and `tiktoken==0.2.0`.\n\
+          \n\n## Getting help\n\nPlease post questions in the [issue tracker](https://github.com/openai/tiktoken/issues).\n\
+          \nIf you work at OpenAI, make sure to check the internal documentation or\
+          \ feel free to contact\n@shantanu.\n\n## What is BPE anyway?\n\nLanguage\
+          \ models don't see text like you and I, instead they see a sequence of numbers\
+          \ (known as tokens).\nByte pair encoding (BPE) is a way of converting text\
+          \ into tokens. It has a couple desirable\nproperties:\n1) It's reversible\
+          \ and lossless, so you can convert tokens back into the original text\n\
+          2) It works on arbitrary text, even text that is not in the tokeniser's\
+          \ training data\n3) It compresses the text: the token sequence is shorter\
+          \ than the bytes corresponding to the\n   original text. On average, in\
+          \ practice, each token corresponds to about 4 bytes.\n4) It attempts to\
+          \ let the model see common subwords. For instance, \"ing\" is a common subword\
+          \ in\n   English, so BPE encodings will often split \"encoding\" into tokens\
+          \ like \"encod\" and \"ing\"\n   (instead of e.g. \"enc\" and \"oding\"\
+          ). Because the model will then see the \"ing\" token again and\n   again\
+          \ in different contexts, it helps models generalise and better understand\
+          \ grammar.\n\n`tiktoken` contains an educational submodule that is friendlier\
+          \ if you want to learn more about\nthe details of BPE, including code that\
+          \ helps visualise the BPE procedure:\n```python\nfrom tiktoken._educational\
+          \ import *\n\n# Train a BPE tokeniser on a small amount of text\nenc = train_simple_encoding()\n\
+          \n# Visualise how the GPT-4 encoder encodes text\nenc = SimpleBytePairEncoding.from_tiktoken(\"\
+          cl100k_base\")\nenc.encode(\"hello world aaaaaaaaaaaa\")\n```\n\n\n## Extending\
+          \ tiktoken\n\nYou may wish to extend `tiktoken` to support new encodings.\
+          \ There are two ways to do this.\n\n\n**Create your `Encoding` object exactly\
+          \ the way you want and simply pass it around.**\n\n```python\ncl100k_base\
+          \ = tiktoken.get_encoding(\"cl100k_base\")\n\n# In production, load the\
+          \ arguments directly instead of accessing private attributes\n# See openai_public.py\
+          \ for examples of arguments for specific encodings\nenc = tiktoken.Encoding(\n\
+          \    # If you're changing the set of special tokens, make sure to use a\
+          \ different name\n    # It should be clear from the name what behaviour\
+          \ to expect.\n    name=\"cl100k_im\",\n    pat_str=cl100k_base._pat_str,\n\
+          \    mergeable_ranks=cl100k_base._mergeable_ranks,\n    special_tokens={\n\
+          \        **cl100k_base._special_tokens,\n        \"<|im_start|>\": 100264,\n\
+          \        \"<|im_end|>\": 100265,\n    }\n)\n```\n\n**Use the `tiktoken_ext`\
+          \ plugin mechanism to register your `Encoding` objects with `tiktoken`.**\n\
+          \nThis is only useful if you need `tiktoken.get_encoding` to find your encoding,\
+          \ otherwise prefer\noption 1.\n\nTo do this, you'll need to create a namespace\
+          \ package under `tiktoken_ext`.\n\nLayout your project like this, making\
+          \ sure to omit the `tiktoken_ext/__init__.py` file:\n```\nmy_tiktoken_extension\n\
+          ├── tiktoken_ext\n│   └── my_encodings.py\n└── setup.py\n```\n\n`my_encodings.py`\
+          \ should be a module that contains a variable named `ENCODING_CONSTRUCTORS`.\n\
+          This is a dictionary from an encoding name to a function that takes no arguments\
+          \ and returns\narguments that can be passed to `tiktoken.Encoding` to construct\
+          \ that encoding. For an example, see\n`tiktoken_ext/openai_public.py`. For\
+          \ precise details, see `tiktoken/registry.py`.\n\nYour `setup.py` should\
+          \ look something like this:\n```python\nfrom setuptools import setup, find_namespace_packages\n\
+          \nsetup(\n    name=\"my_tiktoken_extension\",\n    packages=find_namespace_packages(include=['tiktoken_ext*']),\n\
+          \    install_requires=[\"tiktoken\"],\n    ...\n)\n```\n\nThen simply `pip\
+          \ install ./my_tiktoken_extension` and you should be able to use your\n\
+          custom encodings! Make sure **not** to use an editable install.\n\n\n\n\
+          If you'd like to retry the search, try changing the query to increase the\
+          \ likelihood of a match."
+        server_label: gitmcp_tiktoken
+        status: completed
+        type: mcp_call
+      - content:
+        - annotations: []
+          logprobs: []
+          text: Install tiktoken from PyPI by running `pip install tiktoken`.
+          type: output_text
+        id: msg_05fca7b04b651d3c006ad08a767d6087d0b821fb05b91776a6
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_05fca7b04b651d3c006ad08a6c663487d09a89f9aa6344bb97
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - allowed_tools:
+        - search_tiktoken_documentation
+        headers: null
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      - description: null
+        parameters: null
+        type: tool_search
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 4751
+        input_tokens_details:
+          cache_write_tokens: 3409
+          cached_tokens: 0
+        output_tokens: 53
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 4804
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200

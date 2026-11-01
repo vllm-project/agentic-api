@@ -1,0 +1,2162 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: 'This is a test of the tool loader. Call tool_search exactly once with
+        exactly these arguments, unchanged: {"paths":["get_weather"],"query":"CURRENT"}.
+        Do not call any other tool and do not search again. Then reply with only the
+        names of the tools that the search loaded, or "none".'
+      max_output_tokens: 16384
+      model: Qwen/Qwen3.6-35B-A3B-FP8
+      parallel_tool_calls: false
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Reserve an airline seat between two airports
+          name: book_flight
+          parameters:
+            additionalProperties: false
+            properties:
+              destination_airport:
+                type: string
+              origin_airport:
+                type: string
+            required:
+            - origin_airport
+            - destination_airport
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - allowed_tools:
+        - fetch_tiktoken_documentation
+        - search_tiktoken_documentation
+        - search_tiktoken_code
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792494471
+      created_at: 1792494471
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a158fe-fc6b-7010-a98b-4fd14dd2c99c
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 16384
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.6-35B-A3B-FP8
+      object: response
+      output:
+      - id: mcpl_01a158ff-0441-7f33-8172-58c7cb809306
+        server_label: gitmcp_tiktoken
+        tools:
+        - annotations:
+            read_only: false
+          description: 'Fetch entire documentation file from GitHub repository: openai/tiktoken.
+            Useful for general questions. Always call this tool first if asked about
+            openai/tiktoken.'
+          input_schema:
+            type: object
+          name: fetch_tiktoken_documentation
+        - annotations:
+            read_only: false
+          description: 'Semantically search within the fetched documentation from
+            GitHub repository: openai/tiktoken. Useful for specific queries.'
+          input_schema:
+            $schema: http://json-schema.org/draft-07/schema#
+            additionalProperties: false
+            properties:
+              query:
+                description: The search query to find relevant documentation
+                type: string
+            required:
+            - query
+            type: object
+          name: search_tiktoken_documentation
+        - annotations:
+            read_only: false
+          description: 'Search for code within the GitHub repository: "openai/tiktoken"
+            using the GitHub Search API (exact match). Returns matching files for
+            you to query further if relevant.'
+          input_schema:
+            $schema: http://json-schema.org/draft-07/schema#
+            additionalProperties: false
+            properties:
+              page:
+                description: Page number to retrieve (starting from 1). Each page
+                  contains 30 results.
+                type: number
+              query:
+                description: The search query to find relevant code files
+                type: string
+            required:
+            - query
+            type: object
+          name: search_tiktoken_code
+        type: mcp_list_tools
+      - content:
+        - text: 'The user wants me to call `tool_search` with specific arguments:
+            `{"paths":["get_weather"],"query":"CURRENT"}`.
+
+            I must call it exactly once and then reply with the names of the tools
+            loaded or "none".
+
+
+            Arguments:
+
+            paths: ["get_weather"]
+
+            query: "CURRENT"
+
+
+            I will construct the tool call.
+
+            I need to ensure I follow the strict JSON format for the tool call.
+
+            I will not call any other tool.
+
+            I will not search again.
+
+            Finally, I will output the names of the tools. Since the description of
+            `get_weather` says "Get the current weather...", the query "CURRENT" should
+            match it.
+
+
+            Let''s make the tool call.
+
+            '
+          type: reasoning_text
+        id: rs_9142204af2c44eec
+        summary: []
+        type: reasoning
+      - arguments:
+          paths:
+          - get_weather
+          query: CURRENT
+        call_id: null
+        execution: server
+        id: tsc_aca93a8626644bcc
+        status: completed
+        type: tool_search_call
+      - call_id: null
+        execution: server
+        id: tso_aca93a8626644bcc
+        status: completed
+        tools:
+        - defer_loading: true
+          description: Get the current weather for a city
+          name: get_weather
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        type: tool_search_output
+      - content:
+        - text: 'The tool_search returned a list containing one tool: "get_weather".
+
+            The user requested to reply with only the names of the tools that the
+            search loaded, or "none".
+
+            Since "get_weather" was loaded, I will reply with that name.
+
+            '
+          type: reasoning_text
+        id: rs_a8ea01576424fbed
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            get_weather'
+          type: output_text
+        id: msg_b7236cada1114d96
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools:
+      - description: null
+        parameters: null
+        type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Reserve an airline seat between two airports
+          name: book_flight
+          parameters:
+            additionalProperties: false
+            properties:
+              destination_airport:
+                type: string
+              origin_airport:
+                type: string
+            required:
+            - origin_airport
+            - destination_airport
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - allowed_tools:
+        - fetch_tiktoken_documentation
+        - search_tiktoken_documentation
+        - search_tiktoken_code
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 1492
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 250
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 1742
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input: 'This is a test of the tool loader. Call tool_search four times, one
+        call after another, with exactly these arguments in this order, unchanged:
+        {"paths":["get_weather"]}, then {"paths":["get_weather"]}, then {"paths":["travel"],"query":"timezone"},
+        then {"paths":["travel"]}. Do not call any other tool. Then reply with only
+        the names of the tools that each search loaded, or "none" for a search that
+        loaded nothing.'
+      max_output_tokens: 16384
+      model: Qwen/Qwen3.6-35B-A3B-FP8
+      parallel_tool_calls: false
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Reserve an airline seat between two airports
+          name: book_flight
+          parameters:
+            additionalProperties: false
+            properties:
+              destination_airport:
+                type: string
+              origin_airport:
+                type: string
+            required:
+            - origin_airport
+            - destination_airport
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - allowed_tools:
+        - fetch_tiktoken_documentation
+        - search_tiktoken_documentation
+        - search_tiktoken_code
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792494480
+      created_at: 1792494480
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a158ff-108d-7400-bc8c-774054d88b23
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 16384
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.6-35B-A3B-FP8
+      object: response
+      output:
+      - id: mcpl_01a158ff-1563-7ef3-acd9-986f42375712
+        server_label: gitmcp_tiktoken
+        tools:
+        - annotations:
+            read_only: false
+          description: 'Fetch entire documentation file from GitHub repository: openai/tiktoken.
+            Useful for general questions. Always call this tool first if asked about
+            openai/tiktoken.'
+          input_schema:
+            type: object
+          name: fetch_tiktoken_documentation
+        - annotations:
+            read_only: false
+          description: 'Semantically search within the fetched documentation from
+            GitHub repository: openai/tiktoken. Useful for specific queries.'
+          input_schema:
+            $schema: http://json-schema.org/draft-07/schema#
+            additionalProperties: false
+            properties:
+              query:
+                description: The search query to find relevant documentation
+                type: string
+            required:
+            - query
+            type: object
+          name: search_tiktoken_documentation
+        - annotations:
+            read_only: false
+          description: 'Search for code within the GitHub repository: "openai/tiktoken"
+            using the GitHub Search API (exact match). Returns matching files for
+            you to query further if relevant.'
+          input_schema:
+            $schema: http://json-schema.org/draft-07/schema#
+            additionalProperties: false
+            properties:
+              page:
+                description: Page number to retrieve (starting from 1). Each page
+                  contains 30 results.
+                type: number
+              query:
+                description: The search query to find relevant code files
+                type: string
+            required:
+            - query
+            type: object
+          name: search_tiktoken_code
+        type: mcp_list_tools
+      - content:
+        - text: 'The user wants me to call `tool_search` four times with specific
+            arguments.
+
+            Arguments in order:
+
+            1. `{"paths":["get_weather"]}`
+
+            2. `{"paths":["get_weather"]}`
+
+            3. `{"paths":["travel"],"query":"timezone"}`
+
+            4. `{"paths":["travel"]}`
+
+
+            Then I need to reply with the names of the tools loaded by each search,
+            or "none" if nothing was loaded.
+
+
+            Let''s prepare the tool calls.
+
+            1. `tool_search(paths=["get_weather"])`
+
+            2. `tool_search(paths=["get_weather"])`
+
+            3. `tool_search(paths=["travel"], query="timezone")`
+
+            4. `tool_search(paths=["travel"])`
+
+
+            I will execute these calls sequentially.
+
+            Then I will compile the results.
+
+            Wait, `travel` is a namespace, so it should load the tools inside it.
+
+            `get_weather` is a tool.
+
+            I will make the calls now.
+
+            '
+          type: reasoning_text
+        id: rs_a3fcb3b87412c382
+        summary: []
+        type: reasoning
+      - arguments:
+          paths:
+          - get_weather
+        call_id: null
+        execution: server
+        id: tsc_be7c4362ef6db702
+        status: completed
+        type: tool_search_call
+      - call_id: null
+        execution: server
+        id: tso_be7c4362ef6db702
+        status: completed
+        tools:
+        - defer_loading: true
+          description: Get the current weather for a city
+          name: get_weather
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        type: tool_search_output
+      - content:
+        - text: 'First call loaded `get_weather`.
+
+            Second call is `{"paths":["get_weather"]}`.
+
+            '
+          type: reasoning_text
+        id: rs_9e43eca714986db7
+        summary: []
+        type: reasoning
+      - arguments:
+          paths:
+          - get_weather
+        call_id: null
+        execution: server
+        id: tsc_bdd46c7c3424b187
+        status: completed
+        type: tool_search_call
+      - call_id: null
+        execution: server
+        id: tso_bdd46c7c3424b187
+        status: completed
+        tools:
+        - defer_loading: true
+          description: Get the current weather for a city
+          name: get_weather
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        type: tool_search_output
+      - content:
+        - text: 'Second call loaded `get_weather`.
+
+            Third call is `{"paths":["travel"],"query":"timezone"}`.
+
+            '
+          type: reasoning_text
+        id: rs_87fe7e0355898551
+        summary: []
+        type: reasoning
+      - arguments:
+          paths:
+          - travel
+          query: timezone
+        call_id: null
+        execution: server
+        id: tsc_813241f1afe47961
+        status: completed
+        type: tool_search_call
+      - call_id: null
+        execution: server
+        id: tso_813241f1afe47961
+        status: completed
+        tools:
+        - description: Travel location tools
+          name: travel
+          tools:
+          - defer_loading: true
+            description: Get the IANA time zone for a city
+            name: get_timezone
+            parameters:
+              additionalProperties: false
+              properties:
+                city:
+                  type: string
+              required:
+              - city
+              type: object
+            strict: true
+            type: function
+          type: namespace
+        type: tool_search_output
+      - content:
+        - text: 'Third call loaded the namespace `travel` (which matches the query).
+            Wait, the query matches the namespace name/description? The description
+            is "Travel location tools". "timezone" is not in it. But it returns the
+            namespace itself. Let''s see the fourth call.
+
+            Fourth call is `{"paths":["travel"]}`.
+
+            '
+          type: reasoning_text
+        id: rs_b40a7cc6bb9207b0
+        summary: []
+        type: reasoning
+      - arguments:
+          paths:
+          - travel
+        call_id: null
+        execution: server
+        id: tsc_8c62ec22f3224f14
+        status: completed
+        type: tool_search_call
+      - call_id: null
+        execution: server
+        id: tso_8c62ec22f3224f14
+        status: completed
+        tools:
+        - description: Travel location tools
+          name: travel
+          tools:
+          - defer_loading: true
+            description: Get the IANA time zone for a city
+            name: get_timezone
+            parameters:
+              additionalProperties: false
+              properties:
+                city:
+                  type: string
+              required:
+              - city
+              type: object
+            strict: true
+            type: function
+          - defer_loading: true
+            description: Get latitude and longitude for a city
+            name: get_coordinates
+            parameters:
+              additionalProperties: false
+              properties:
+                city:
+                  type: string
+              required:
+              - city
+              type: object
+            strict: true
+            type: function
+          - defer_loading: true
+            description: Calculate the distance between two cities
+            name: calculate_distance
+            parameters:
+              additionalProperties: false
+              properties:
+                destination:
+                  type: string
+                origin:
+                  type: string
+              required:
+              - origin
+              - destination
+              type: object
+            strict: true
+            type: function
+          - defer_loading: true
+            description: Reserve an airline seat between two airports
+            name: book_flight
+            parameters:
+              additionalProperties: false
+              properties:
+                destination_airport:
+                  type: string
+                origin_airport:
+                  type: string
+              required:
+              - origin_airport
+              - destination_airport
+              type: object
+            strict: true
+            type: function
+          type: namespace
+        type: tool_search_output
+      - content:
+        - text: "Wait, the fourth call also returned the namespace `travel`. But the\
+            \ user asked for \"the names of the tools that each search loaded\".\n\
+            Let's list them:\n1. get_weather\n2. get_weather\n3. travel\n4. travel\n\
+            \nWait, the tool `agentic_ns__travel__get_timezone` exists. Does the third\
+            \ search load it? The output says `{\"tools\":[{\"type\":\"namespace\"\
+            ,\"name\":\"travel\",\"description\":\"Travel location tools\"}]}`. So\
+            \ it loaded the namespace, not the individual tool.\nI will just report\
+            \ the names returned by each search.\n1. get_weather\n2. get_weather\n\
+            3. travel\n4. travel\n\nLet's double check the exact output format requested:\
+            \ \"reply with only the names of the tools that each search loaded, or\
+            \ \"none\" for a search that loaded nothing.\"\n\nI will list them clearly.\n\
+            1. get_weather\n2. get_weather\n3. travel\n4. travel\n\nActually, the\
+            \ prompt says \"Do not call any other tool. Then reply with only the names\
+            \ of the tools that each search loaded, or \"none\" for a search that\
+            \ loaded nothing.\"\n\nI will format it as:\n1. get_weather\n2. get_weather\n\
+            3. travel\n4. travel\n\nWait, is there any chance the query \"timezone\"\
+            \ matches something else? The description of `travel` is \"Travel location\
+            \ tools\". It doesn't contain \"timezone\". But the search returned the\
+            \ namespace itself. Maybe the tool loader matches the query against the\
+            \ namespace or its tools? In any case, the output clearly says the tool\
+            \ loaded is `travel`.\n\nI will just output the names sequentially.\n\"\
+            get_weather, get_weather, travel, travel\" or list them.\nI'll write:\n\
+            1. get_weather\n2. get_weather\n3. travel\n4. travel\nDone. \nLet's verify\
+            \ the exact wording: \"reply with only the names of the tools that each\
+            \ search loaded, or \"none\" for a search that loaded nothing.\"\n\nI\
+            \ will provide exactly that.\nReady. \nProceeding. \nOutput matches. \n\
+            All steps complete. \nFinal answer generation. \n(Self-Correction/Refinement\
+            \ during thought)\nWait, should I include the full name `agentic_ns__travel__get_timezone`?\
+            \ The search result explicitly returns `{\"type\":\"namespace\",\"name\"\
+            :\"travel\"}`. So `travel` is correct.\nI will just list them as requested.\n\
+            1. get_weather\n2. get_weather\n3. travel\n4. travel\nDone. \nOutput matches\
+            \ request.\nProceeds. \n[Final Check]\nCalls made: 4.\nArguments: exactly\
+            \ as specified.\nOutput format: names of tools loaded.\nAll good. \nResponse\
+            \ generation. \n\"1. get_weather\n2. get_weather\n3. travel\n4. travel\"\
+            \nOr just a list. I'll keep it simple.\nDone. \n[Output Generation] ->\
+            \ *Proceeds*\n"
+          type: reasoning_text
+        id: rs_97b19dfff5f93146
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            1. get_weather
+
+            2. get_weather
+
+            3. travel
+
+            4. travel'
+          type: output_text
+        id: msg_bdb92a1504b4e247
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools:
+      - description: null
+        parameters: null
+        type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Reserve an airline seat between two airports
+          name: book_flight
+          parameters:
+            additionalProperties: false
+            properties:
+              destination_airport:
+                type: string
+              origin_airport:
+                type: string
+            required:
+            - origin_airport
+            - destination_airport
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - allowed_tools:
+        - fetch_tiktoken_documentation
+        - search_tiktoken_documentation
+        - search_tiktoken_code
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 5833
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 1100
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 6933
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input: 'This is a test of the tool loader. Call tool_search exactly once with
+        exactly these arguments, unchanged: {"paths":["travel"],"query":"timezone"}.
+        Do not call any other tool and do not search again. Then reply with only the
+        names of the tools that the search loaded, or "none".'
+      max_output_tokens: 16384
+      model: Qwen/Qwen3.6-35B-A3B-FP8
+      parallel_tool_calls: false
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Reserve an airline seat between two airports
+          name: book_flight
+          parameters:
+            additionalProperties: false
+            properties:
+              destination_airport:
+                type: string
+              origin_airport:
+                type: string
+            required:
+            - origin_airport
+            - destination_airport
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - allowed_tools:
+        - fetch_tiktoken_documentation
+        - search_tiktoken_documentation
+        - search_tiktoken_code
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792494488
+      created_at: 1792494488
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a158ff-340a-78d0-a62e-0dae10855a02
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 16384
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.6-35B-A3B-FP8
+      object: response
+      output:
+      - id: mcpl_01a158ff-3b70-7bf0-bfed-f3adb5e70782
+        server_label: gitmcp_tiktoken
+        tools:
+        - annotations:
+            read_only: false
+          description: 'Fetch entire documentation file from GitHub repository: openai/tiktoken.
+            Useful for general questions. Always call this tool first if asked about
+            openai/tiktoken.'
+          input_schema:
+            type: object
+          name: fetch_tiktoken_documentation
+        - annotations:
+            read_only: false
+          description: 'Semantically search within the fetched documentation from
+            GitHub repository: openai/tiktoken. Useful for specific queries.'
+          input_schema:
+            $schema: http://json-schema.org/draft-07/schema#
+            additionalProperties: false
+            properties:
+              query:
+                description: The search query to find relevant documentation
+                type: string
+            required:
+            - query
+            type: object
+          name: search_tiktoken_documentation
+        - annotations:
+            read_only: false
+          description: 'Search for code within the GitHub repository: "openai/tiktoken"
+            using the GitHub Search API (exact match). Returns matching files for
+            you to query further if relevant.'
+          input_schema:
+            $schema: http://json-schema.org/draft-07/schema#
+            additionalProperties: false
+            properties:
+              page:
+                description: Page number to retrieve (starting from 1). Each page
+                  contains 30 results.
+                type: number
+              query:
+                description: The search query to find relevant code files
+                type: string
+            required:
+            - query
+            type: object
+          name: search_tiktoken_code
+        type: mcp_list_tools
+      - content:
+        - text: 'The user wants me to call `tool_search` with specific arguments:
+            `paths=["travel"]` and `query="timezone"`.
+
+            I must call `tool_search` exactly once with these arguments.
+
+            After calling it, I need to report the names of the tools that were loaded.
+
+
+            Let''s check the function definition.
+
+            `tool_search` takes `paths` (required, array of strings) and `query` (optional,
+            string).
+
+            The user specified `paths=["travel"]` and `query="timezone"`.
+
+
+            I will call `tool_search` with these parameters.
+
+            Then I will parse the response to see which tools were loaded and list
+            their names.
+
+            The user instruction says: "Then reply with only the names of the tools
+            that the search loaded, or ''none''."
+
+
+            Calling `tool_search` now.
+
+            '
+          type: reasoning_text
+        id: rs_9c28f8c47af93c46
+        summary: []
+        type: reasoning
+      - arguments:
+          paths:
+          - travel
+          query: timezone
+        call_id: null
+        execution: server
+        id: tsc_874d6843d1df2bf3
+        status: completed
+        type: tool_search_call
+      - call_id: null
+        execution: server
+        id: tso_874d6843d1df2bf3
+        status: completed
+        tools:
+        - description: Travel location tools
+          name: travel
+          tools:
+          - defer_loading: true
+            description: Get the IANA time zone for a city
+            name: get_timezone
+            parameters:
+              additionalProperties: false
+              properties:
+                city:
+                  type: string
+              required:
+              - city
+              type: object
+            strict: true
+            type: function
+          type: namespace
+        type: tool_search_output
+      - content:
+        - text: 'The tool search returned a result indicating that a namespace named
+            "travel" was loaded, which matches the description "Travel location tools".
+            However, the user specifically asked for "the names of the tools that
+            the search loaded". The result shows a namespace entry, not a specific
+            tool instance like `get_timezone`. Let''s re-read the result carefully.
+
+
+            The result is: `{"tools":[{"type":"namespace","name":"travel","description":"Travel
+            location tools"}]}`.
+
+
+            Wait, looking at the system prompt''s description of `tool_search`: "A
+            namespace or MCP server path loads all of its tools." But the query narrows
+            it down to tools whose name or description contains the query.
+
+
+            The result only shows the namespace itself? Or does it mean the search
+            matched the namespace description? The namespace description is "Travel
+            location tools". The query was "timezone". "Travel location tools" does
+            not contain "timezone". Why was it returned?
+
+
+            Perhaps `tool_search` returned the namespace because the path requested
+            was "travel" (which is a namespace) and it matched the query? Or maybe
+            the tool `get_timezone` exists inside the `travel` namespace, but the
+            response format shows the matched entity.
+
+
+            Let''s look at the available tools listed in the system prompt:
+
+            `travel — Travel location tools;`
+
+
+            Ah, the system prompt says: `travel — Travel location tools;` is a catalog
+            entry. It seems `travel` is treated as a namespace or tool group here.
+
+
+            The user wants "only the names of the tools that the search loaded".
+
+            The search returned `{"type":"namespace","name":"travel",...}`.
+
+            So the name of the loaded entity is "travel".
+
+
+            However, usually, users might expect `get_timezone` if it exists. But
+            I must strictly follow the result of the tool search. The tool search
+            returned a list of tools (or namespaces). The list contains one item with
+            name "travel".
+
+
+            I will reply with "travel".
+
+            '
+          type: reasoning_text
+        id: rs_bf34a5f0815d3e74
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            travel'
+          type: output_text
+        id: msg_a065f92c87dc9623
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools:
+      - description: null
+        parameters: null
+        type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Reserve an airline seat between two airports
+          name: book_flight
+          parameters:
+            additionalProperties: false
+            properties:
+              destination_airport:
+                type: string
+              origin_airport:
+                type: string
+            required:
+            - origin_airport
+            - destination_airport
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - allowed_tools:
+        - fetch_tiktoken_documentation
+        - search_tiktoken_documentation
+        - search_tiktoken_code
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 1484
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 628
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 2112
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body:
+      input: 'This is a test of the tool loader. Call tool_search twice, one call
+        after another, with exactly these arguments in this order, unchanged: {"paths":["travel"],"query":"timezone"},
+        then {"paths":["travel"]}. Do not call any other tool. Then reply with only
+        the names of the tools that each search loaded, or "none" for a search that
+        loaded nothing.'
+      max_output_tokens: 16384
+      model: Qwen/Qwen3.6-35B-A3B-FP8
+      parallel_tool_calls: false
+      previous_response_id: resp_01a158ff-340a-78d0-a62e-0dae10855a02
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Reserve an airline seat between two airports
+          name: book_flight
+          parameters:
+            additionalProperties: false
+            properties:
+              destination_airport:
+                type: string
+              origin_airport:
+                type: string
+            required:
+            - origin_airport
+            - destination_airport
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - allowed_tools:
+        - fetch_tiktoken_documentation
+        - search_tiktoken_documentation
+        - search_tiktoken_code
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792494493
+      created_at: 1792494493
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a158ff-4b0d-7b72-9f76-66dfcb5f8eed
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 16384
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.6-35B-A3B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to call `tool_search` twice with specific arguments.
+
+            First call: `{"paths":["travel"],"query":"timezone"}`
+
+            Second call: `{"paths":["travel"]}`
+
+            I should output the names of the tools loaded by each search, or "none".
+
+
+            Let''s make the first call.
+
+            `tool_search(paths=["travel"], query="timezone")`
+
+            Then the second call.
+
+            `tool_search(paths=["travel"])`
+
+
+            I need to be careful about the order and the arguments.
+
+            The user specified "exactly these arguments in this order, unchanged".
+
+
+            I will call the tool function `tool_search`.
+
+
+            Wait, the tool definition for `tool_search` takes `paths` and `query`
+            as parameters.
+
+            The second argument `query` is optional.
+
+
+            Let''s execute the calls.
+
+            First call: `tool_search(paths=["travel"], query="timezone")`
+
+            Second call: `tool_search(paths=["travel"])`
+
+
+            The response from the first call (in previous turns or hypothetical) would
+            contain loaded tools.
+
+            The response from the second call would contain loaded tools.
+
+
+            The user wants the output format: "names of the tools that each search
+            loaded".
+
+
+            Let''s do this.
+
+            '
+          type: reasoning_text
+        id: rs_b02cc51667dd15cc
+        summary: []
+        type: reasoning
+      - arguments:
+          paths:
+          - travel
+          query: timezone
+        call_id: null
+        execution: server
+        id: tsc_a2b85dc1b28b6166
+        status: completed
+        type: tool_search_call
+      - call_id: null
+        execution: server
+        id: tso_a2b85dc1b28b6166
+        status: completed
+        tools: []
+        type: tool_search_output
+      - arguments:
+          paths:
+          - travel
+        call_id: null
+        execution: server
+        id: tsc_9750b0750feccb92
+        status: completed
+        type: tool_search_call
+      - call_id: null
+        execution: server
+        id: tso_9750b0750feccb92
+        status: completed
+        tools:
+        - description: Travel location tools
+          name: travel
+          tools:
+          - defer_loading: true
+            description: Get latitude and longitude for a city
+            name: get_coordinates
+            parameters:
+              additionalProperties: false
+              properties:
+                city:
+                  type: string
+              required:
+              - city
+              type: object
+            strict: true
+            type: function
+          - defer_loading: true
+            description: Calculate the distance between two cities
+            name: calculate_distance
+            parameters:
+              additionalProperties: false
+              properties:
+                destination:
+                  type: string
+                origin:
+                  type: string
+              required:
+              - origin
+              - destination
+              type: object
+            strict: true
+            type: function
+          - defer_loading: true
+            description: Reserve an airline seat between two airports
+            name: book_flight
+            parameters:
+              additionalProperties: false
+              properties:
+                destination_airport:
+                  type: string
+                origin_airport:
+                  type: string
+              required:
+              - origin_airport
+              - destination_airport
+              type: object
+            strict: true
+            type: function
+          type: namespace
+        type: tool_search_output
+      - content:
+        - text: 'The user wants me to report the names of the tools loaded by each
+            search.
+
+
+            First search: `tool_search` with paths=["travel"], query="timezone".
+
+            Result: `{"tools":[], ...}`. The tools list is empty. So no tools were
+            loaded.
+
+            The note says "No tools were loaded".
+
+            So for the first search, the result is "none".
+
+
+            Second search: `tool_search` with paths=["travel"].
+
+            Result: `{"tools":[{"type":"namespace","name":"travel",...}]}`.
+
+            The tool loaded is "travel".
+
+
+            Wait, the previous turn was also a test. I need to make sure I''m answering
+            the *current* user''s request properly based on the history.
+
+            The user asked to call `tool_search` twice.
+
+            I have called it twice.
+
+            First call returned empty tools list.
+
+            Second call returned the "travel" namespace.
+
+
+            So the answer should be "none" for the first and "travel" for the second.
+
+
+            Let''s format the response. "reply with only the names of the tools that
+            each search loaded, or "none" for a search that loaded nothing."
+
+
+            First search: none
+
+            Second search: travel
+
+
+            I will format this as:
+
+            none
+
+            travel
+
+            '
+          type: reasoning_text
+        id: rs_87f98587f685538e
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            none
+
+            travel'
+          type: output_text
+        id: msg_9ee732f5963a0c89
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_01a158ff-340a-78d0-a62e-0dae10855a02
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools:
+      - description: null
+        parameters: null
+        type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Reserve an airline seat between two airports
+          name: book_flight
+          parameters:
+            additionalProperties: false
+            properties:
+              destination_airport:
+                type: string
+              origin_airport:
+                type: string
+            required:
+            - origin_airport
+            - destination_airport
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - allowed_tools:
+        - fetch_tiktoken_documentation
+        - search_tiktoken_documentation
+        - search_tiktoken_code
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 2425
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 596
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 3021
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      input: What is the current weather in Paris? Use a tool.
+      max_output_tokens: 16384
+      model: Qwen/Qwen3.6-35B-A3B-FP8
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        require_approval: never
+        server_description: Documentation search for the example project.
+        server_label: broken_docs
+        server_url: https://mcp.invalid/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: http_error
+        message: 'Error retrieving tool list from MCP server: ''broken_docs''. Http
+          status code: 424 (Failed Dependency)'
+        param: tools
+        type: external_connector_error
+    headers:
+      content-type: application/json
+    status_code: 424
+- filename: t6
+  request:
+    body:
+      input: Use the broken_docs documentation tools to find how to configure the
+        example project. Answer in one sentence.
+      max_output_tokens: 16384
+      model: Qwen/Qwen3.6-35B-A3B-FP8
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        require_approval: never
+        server_description: Documentation search for the example project.
+        server_label: broken_docs
+        server_url: https://mcp.invalid/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: http_error
+        message: 'Error retrieving tool list from MCP server: ''broken_docs''. Http
+          status code: 424 (Failed Dependency)'
+        param: tools
+        type: external_connector_error
+    headers:
+      content-type: application/json
+    status_code: 424
+- filename: t7
+  request:
+    body:
+      input: What is the current weather in Paris? Use a tool.
+      max_output_tokens: 16384
+      model: Qwen/Qwen3.6-35B-A3B-FP8
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - require_approval: never
+        server_description: Documentation search for the example project.
+        server_label: broken_docs
+        server_url: https://mcp.invalid/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: http_error
+        message: 'Error retrieving tool list from MCP server: ''broken_docs''. Http
+          status code: 424 (Failed Dependency)'
+        param: tools
+        type: external_connector_error
+    headers:
+      content-type: application/json
+    status_code: 424

@@ -79,6 +79,9 @@ pub struct TurnResponse {
     pub body: Option<serde_json::Value>,
     /// Streaming: list of raw SSE strings from the recording.
     pub sse: Option<Vec<String>>,
+    /// Recorded HTTP status, when the recorder captured one.
+    #[serde(default)]
+    pub status_code: Option<u16>,
 }
 
 /// Load and parse a cassette YAML file (all turns preserved).
@@ -717,6 +720,7 @@ pub fn output_text(payload: &ResponsePayload) -> String {
             OutputItem::FunctionCall(_)
             | OutputItem::CodeInterpreterCall(_)
             | OutputItem::ToolSearchCall(_)
+            | OutputItem::ToolSearchOutput(_)
             | OutputItem::CustomToolCall(_)
             | OutputItem::ShellCall(_)
             | OutputItem::WebSearchCall(_)

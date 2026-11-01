@@ -216,3 +216,77 @@ fn recorded_terminal_output(capture: &Value) -> Value {
         .map(|event| event["response"]["output"].clone())
         .expect("recorded capture completes with output")
 }
+
+/// The content blocks of a Messages response as a client assembles them: the
+/// message's `content` for JSON, or every block rebuilt from its stream events.
+#[allow(dead_code)]
+pub fn assembled_messages_content(body: &str, stream: bool) -> Value {
+    if !stream {
+        let message: Value = serde_json::from_str(body).expect("JSON message");
+        return message["content"].clone();
+    }
+    let mut blocks: Vec<Value> = Vec::new();
+    let mut inputs: std::collections::BTreeMap<usize, String> = std::collections::BTreeMap::new();
+    let events = body
+        .lines()
+        .filter_map(|line| line.strip_prefix("data: "))
+        .filter_map(|data| serde_json::from_str::<Value>(data).ok());
+    for event in events {
+        let Some(index) = event["index"].as_u64().map(|index| usize::try_from(index).unwrap()) else {
+            continue;
+        };
+        match event["type"].as_str() {
+            Some("content_block_start") => {
+                assert_eq!(index, blocks.len(), "contiguous block indices: {body}");
+                blocks.push(event["content_block"].clone());
+            }
+            Some("content_block_delta") if event["delta"]["type"] == "text_delta" => {
+                let text = format!(
+                    "{}{}",
+                    blocks[index]["text"].as_str().unwrap_or_default(),
+                    event["delta"]["text"].as_str().unwrap_or_default()
+                );
+                blocks[index]["text"] = Value::String(text);
+            }
+            Some("content_block_delta") if event["delta"]["type"] == "input_json_delta" => inputs
+                .entry(index)
+                .or_default()
+                .push_str(event["delta"]["partial_json"].as_str().unwrap_or_default()),
+            _ => {}
+        }
+    }
+    for (index, input) in inputs {
+        blocks[index]["input"] = serde_json::from_str(&input).expect("complete input JSON");
+    }
+    Value::Array(blocks)
+}
+
+/// Each block's type with the call id it carries, and for a server tool result
+/// its error code or result count: a compact view of the turn a client sees.
+#[allow(dead_code)]
+pub fn shown_blocks(content: &Value) -> Vec<String> {
+    content
+        .as_array()
+        .expect("content array")
+        .iter()
+        .map(|block| {
+            let kind = block["type"].as_str().unwrap_or_default();
+            match kind {
+                "server_tool_use" => format!("{kind} {}", block["id"].as_str().unwrap_or_default()),
+                "web_search_tool_result" | "web_fetch_tool_result" => {
+                    let outcome = block["content"]["error_code"].as_str().map_or_else(
+                        || {
+                            block["content"]
+                                .as_array()
+                                .map_or_else(|| "page".to_owned(), |results| format!("{} results", results.len()))
+                        },
+                        str::to_owned,
+                    );
+                    format!("{kind} {} {outcome}", block["tool_use_id"].as_str().unwrap_or_default())
+                }
+                "text" => format!("text {}", block["text"].as_str().unwrap_or_default()),
+                other => other.to_owned(),
+            }
+        })
+        .collect()
+}

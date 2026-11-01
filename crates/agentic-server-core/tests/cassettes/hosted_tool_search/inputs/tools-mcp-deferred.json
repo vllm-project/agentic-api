@@ -1,0 +1,35 @@
+[
+  {
+    "type": "tool_search"
+  },
+  {
+    "type": "mcp",
+    "server_label": "gitmcp_tiktoken",
+    "server_url": "https://gitmcp.io/openai/tiktoken",
+    "server_description": "Documentation and code search for the openai/tiktoken tokenizer repository.",
+    "allowed_tools": [
+      "search_tiktoken_documentation"
+    ],
+    "require_approval": "never",
+    "defer_loading": true
+  },
+  {
+    "type": "function",
+    "name": "get_weather",
+    "description": "Get the current weather for a city",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "city": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "city"
+      ],
+      "additionalProperties": false
+    },
+    "strict": true,
+    "defer_loading": true
+  }
+]

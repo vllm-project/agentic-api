@@ -229,7 +229,7 @@ impl ExecuteRequest {
 
     /// Allow a streaming multi-agent run to receive live client tool outputs. The
     /// coordinator consumes this endpoint; adapters retain the paired handle.
-    /// Admission still requires effective multi-agent configuration and storage.
+    /// Admission requires effective multi-agent configuration and streaming inference.
     /// Use with [`Self::run`]; [`Self::run_retained`] creates its own control pair.
     #[must_use]
     pub fn with_run_control(mut self, control: RunControlReceiver) -> Self {

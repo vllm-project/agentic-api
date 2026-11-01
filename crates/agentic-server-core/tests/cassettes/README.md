@@ -441,7 +441,8 @@ printf 'Fetch http://127.0.0.1:18080/page/release-notes.html with web_fetch and 
 The streaming cassette is the same command with `--stream`. The replay binds an ephemeral port, serves the recorded
 responses with the origin re-based onto it (the streaming `tool_use` input is re-emitted as one `input_json_delta`,
 since the recorded chunks split the URL), and compares the loop's complete upstream requests with the recording,
-normalizing only the origin and `retrieved_at`.
+normalizing only the origin and `retrieved_at`. It then sends the `server_tool_use` and `web_fetch_tool_result`
+blocks the client received back in a follow-up request and checks that the gateway restores the live rounds exactly.
 
 ## Modes
 
@@ -479,7 +480,8 @@ normalizing only the origin and `retrieved_at`.
                        JSON array returned for a client tool-search call
 --tools-after-search FILE
                        Effective tools after normalized direct-vLLM search
---manual-item-replay   Replay accumulated items with store=false for direct-vLLM or gateway tool search
+--manual-item-replay   Replay accumulated items with store=false (HTTP --mode responses with --no-store and no
+                       branches; direct-vLLM or gateway tool search, or any such recording)
 --reasoning JSON       JSON object containing Responses reasoning settings
 --input-file FILE       JSON string or item array for turn 1 of an HTTP Responses recording; later turns are prompted
 --max-output-tokens N  max_output_tokens for Responses requests (default 1024; use 0 to omit)
@@ -602,7 +604,7 @@ These files use `sessions`, not the HTTP `turns` schema or synthesized SSE.
 |--------|-----------|---------|
 | `record_multi_agent_cassettes.sh` | Five delegated scenarios over HTTP JSON/SSE or persistent duplex WebSocket | OpenAI and gateway |
 | `record_text_only_cassettes.sh` | 10 text-only cassettes (responses + conv modes, streaming + non-streaming) | OpenAI (`OPENAI_API_KEY`) |
-| `record_store_false_cassettes.sh` | Two HTTP `store:false` cassettes per provider (JSON/SSE), each containing six named scenarios | OpenAI and gateway |
+| `record_store_false_cassettes.sh` | Six HTTP scenarios per provider in JSON/SSE; `STORE_FALSE_SUITE=multi-agent` replays mixed tools against the selected provider | OpenAI and gateway |
 | `record_conversations_api_cassettes.sh` | 18 Conversation Items API cassettes: four history scenarios in both transports and one non-streaming edge-case sequence, each for both providers | OpenAI and gateway |
 | `record_reasoning_cassettes.sh` | Matching explicit-reasoning cassettes (streaming + non-streaming) | gateway and OpenAI reference; optional direct vLLM |
 | `record_tool_call_cassettes.sh` | 8 tool-call cassettes (4 tool_choice modes x streaming + non-streaming) | vLLM |
@@ -621,6 +623,7 @@ These files use `sessions`, not the HTTP `turns` schema or synthesized SSE.
 | `record_dynamo_messages_cassettes.sh` | Two-round Messages web-search cassettes (streaming + non-streaming), validated before replacement | Existing NVIDIA Dynamo frontend |
 | `record_sglang_cassettes.sh` | Same shared executor scenarios as Dynamo, staged validation and sanitized provenance | SGLang |
 | `record_tool_search_cassettes.sh` | Four-turn mixed function/namespace client tool-search characterization; gateway blocking, HTTP/SSE, and WebSocket acceptance | gateway and OpenAI reference |
+| `record_hosted_tool_search_cassettes.sh` | Hosted (`execution: "server"`) tool search over deferred functions, namespaces, and MCP servers: validation, output items and streaming events, `query` filtering, `max_tool_calls`, continuation, `store: false` replay (OpenAI reference only), and WebSocket | gateway and OpenAI reference |
 
 ### Messages forced tool choice (vLLM)
 
@@ -743,6 +746,20 @@ Missing-response GETs check the recorded HTTP 404 error envelope as well as the
 absence of stored rows. Both providers' captures replay through the gateway;
 model text and reasoning differ, while state controls and function arguments
 are compared across providers.
+
+The same `store_false/` directory contains the multi-agent mixed-tools captures.
+Record them with `STORE_FALSE_SUITE=multi-agent` using
+`record_store_false_cassettes.sh`; see the [multi-agent workflow](multi_agent/README.md).
+`MULTI_AGENT_SUITE=all` also selects tool search, code interpreter, and the
+client-agent-message probe. The `tool-search` case includes client discovery
+followed by hosted search over deferred MCP in the same full-history session;
+there is one JSON and one SSE cassette for that combined case.
+Both provider selections use `replay_old_cassettes.py` and the shared recorder to
+continue with live response history and matching client outputs. Gateway mode connects to `GATEWAY_URL`; model and hosted-tool
+configuration belongs to the running gateway. This refreshes client-facing
+captures; model, search, and MCP dependency captures remain separate.
+The Rust multi-agent contract test compares full-history continuation, delegated
+agents, web/MCP activity, and client shell outputs across both providers in JSON and SSE.
 
 ### Reasoning (gateway and OpenAI)
 
@@ -931,6 +948,63 @@ bash crates/agentic-server-core/tests/cassettes/record_max_tool_calls_cassettes.
 `MAX_TOOL_CALLS_RECORD_SET` selects `openai` (default), `gateway`, or `all`; `MAX_TOOL_CALLS_GROUPS` selects
 groups; `MAX_TOOL_CALLS_SKIP_LEGS` omits legs a provider cannot run. The gateway `code-interpreter` legs need the
 embedded-code-interpreter gateway described above.
+
+### Hosted tool search (OpenAI reference and gateway)
+
+The recorder captures hosted tool search (`{"type": "tool_search"}`), run by OpenAI and by the gateway, for
+[#448](https://github.com/vllm-project/agentic-api/issues/448). `hosted_tool_search/` holds one recording per group
+(the gateway has no `replay` group), provider, and mode, named `hosted-tool-search-<group>-<provider>[-<mode>].yaml`,
+where the provider is `openai-reference-gpt-5.6` or `gateway-Qwen-Qwen3.6-35B-A3B-FP8`. The recorder's inputs live in
+`hosted_tool_search/inputs/`: the tool catalogs and the fake function outputs. The MCP failure legs share
+`tools-mcp-unreachable.json`; the recorder derives each variant (URL, eager, or an `allowed_tools` filter that matches
+nothing) at record time. Each recording keeps its full request bodies.
+
+| Group | Modes | Legs | What it proves | Checked by (`hosted_tool_search_characterization_test.rs`) |
+|---|---|---|---|---|
+| `validation` | JSON | 6 | Which declarations and `tool_choice` values are refused | `validation_errors_match_openai`, `gateway_validation_matches_openai_except_the_intended_mcp_choice` |
+| `contract` | JSON, SSE | 6 | Item shapes, an MCP server searched as `mcp_<label>`, streaming events, `max_tool_calls`, continuation | `deferred_mcp_server_loads_as_a_namespace`, `streaming_has_no_dedicated_tool_search_events`, `search_does_not_count_toward_max_tool_calls`, `gateway_search_items_have_the_reference_shape_and_pairing` |
+| `query` | JSON | 21 | How the `query` argument filters the loaded tools | `query_is_a_case_insensitive_substring_filter_within_paths`, `gateway_loads_the_same_tools_as_openai_for_the_same_arguments` |
+| `edges` | JSON | 6 | Repeat searches in one response and across responses; an unreachable MCP server | `edge_cases_match_openai`, `gateway_restores_loads_on_continuation` |
+| `mcp-failures` | JSON, SSE | 7 | A failing MCP listing fails the request (424); a filter that matches nothing completes | `openai_fails_the_request_when_any_mcp_listing_fails`, `gateway_handles_mcp_listing_failures_exactly_like_openai` |
+| `replay` | JSON | 1 | A `store: false` transcript replayed as input loads without searching again (OpenAI reference only: the transcript holds `mcp_call` items, which the gateway does not convert for vLLM yet) | `loaded_tools_persist_without_a_new_search` |
+| `websocket` | WebSocket | 1 | The streaming events over a WebSocket | `streaming_has_no_dedicated_tool_search_events`, `gateway_streams_searches_with_only_added_and_done_events` |
+
+Each leg is an independent conversation appended with `--append`; the script header lists the legs and what each
+isolates. Hosted `tool_search_call` items have `call_id: null` and are not client work, so the recorder does not
+answer them.
+
+```bash
+OPENAI_API_KEY=sk-... \
+bash crates/agentic-server-core/tests/cassettes/record_hosted_tool_search_cassettes.sh
+```
+
+The gateway recordings use Qwen/Qwen3.6-35B-A3B-FP8 on vLLM. Start the gateway with a fresh database and let it reach
+the recorded MCP hosts (`gitmcp.io`, the unresolvable `mcp.invalid`, and the failing `httpbin.org`, `example.com`,
+and `api.githubcopilot.com`), then record:
+
+```bash
+AGENTIC_API_HOME=/tmp/agentic-hosted-search DATABASE_URL=sqlite:///tmp/agentic-hosted-search/hosted.db \
+AGENTIC_MCP_ALLOWED_HOSTS=gitmcp.io,mcp.invalid,httpbin.org,example.com,api.githubcopilot.com \
+cargo run -p agentic-server -- --gateway-port 3097 --llm-api-base http://127.0.0.1:8000/v1 --skip-llm-ready-check
+
+HOSTED_TOOL_SEARCH_RECORD_SET=gateway GATEWAY_URL=http://127.0.0.1:3097 \
+GATEWAY_MODEL=Qwen/Qwen3.6-35B-A3B-FP8 MAX_OUTPUT_TOKENS=16384 \
+bash crates/agentic-server-core/tests/cassettes/record_hosted_tool_search_cassettes.sh
+```
+
+`HOSTED_TOOL_SEARCH_RECORD_SET` selects `openai` (default), `gateway`, or `all`; `HOSTED_TOOL_SEARCH_GROUPS` selects
+groups; `HOSTED_TOOL_SEARCH_SKIP_LEGS` omits legs. Provider errors (including the 400s the validation group expects)
+are kept as evidence. The two models choose different searches, so
+`hosted_tool_search_characterization_test.rs` compares the gateway's item shapes, streaming lifecycle, and the tools
+it loads for arguments identical to the reference's.
+
+`hosted_tool_search_test.rs` also executes two-turn `store: false` continuations through `ExecuteRequest` for
+single-agent and multi-agent requests, in JSON and SSE. The client returns the gateway's actual full history;
+assertions cover deferred MCP discovery, loaded subsets, callable tools, and matching canonical model call/result
+pairs. A spawned-child case suspends on a client function and restores the child's hosted-search catalog from
+that history, while checking that the root does not inherit the child's loads. Both cases require one MCP listing
+across the session and use disabled storage. These are deterministic integration regressions against the existing
+recorded contract, not additional live provider recordings.
 
 ### Image input (gateway → vLLM vision model, and OpenAI)
 

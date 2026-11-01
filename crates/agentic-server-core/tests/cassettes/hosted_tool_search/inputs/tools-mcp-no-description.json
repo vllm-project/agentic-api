@@ -1,0 +1,15 @@
+[
+  {
+    "type": "tool_search"
+  },
+  {
+    "type": "mcp",
+    "server_label": "gitmcp_tiktoken",
+    "server_url": "https://gitmcp.io/openai/tiktoken",
+    "allowed_tools": [
+      "search_tiktoken_documentation"
+    ],
+    "require_approval": "never",
+    "defer_loading": true
+  }
+]

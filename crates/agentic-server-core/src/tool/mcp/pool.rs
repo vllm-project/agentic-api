@@ -23,6 +23,12 @@ pub enum McpServerEntry {
         allowed_tools: Option<Vec<String>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         require_approval: Option<String>,
+        /// Catalog text for hosted tool search when a request omits `server_description`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        description: Option<String>,
+        /// Defers this server's tools behind hosted tool search unless a request sets `defer_loading`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        defer_loading: Option<bool>,
     },
     Stdio {
         command: String,
@@ -36,6 +42,10 @@ pub enum McpServerEntry {
         allowed_tools: Option<Vec<String>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         require_approval: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        description: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        defer_loading: Option<bool>,
     },
 }
 
@@ -51,6 +61,20 @@ impl McpServerEntry {
     pub fn require_approval(&self) -> Option<&str> {
         match self {
             Self::Http { require_approval, .. } | Self::Stdio { require_approval, .. } => require_approval.as_deref(),
+        }
+    }
+
+    #[must_use]
+    pub fn description(&self) -> Option<&str> {
+        match self {
+            Self::Http { description, .. } | Self::Stdio { description, .. } => description.as_deref(),
+        }
+    }
+
+    #[must_use]
+    pub const fn defer_loading(&self) -> Option<bool> {
+        match self {
+            Self::Http { defer_loading, .. } | Self::Stdio { defer_loading, .. } => *defer_loading,
         }
     }
 }
@@ -71,7 +95,11 @@ impl McpClientPool {
             .iter()
             .filter_map(|param| server_entry_from_param(param, allowed_hosts))
             .collect();
-        // Request-declared servers are third parties: no trace context or baggage.
+        Self::from_request_entries(servers).await
+    }
+
+    /// Connect validated request-declared servers without trace context or baggage.
+    pub(crate) async fn from_request_entries(servers: HashMap<String, McpServerEntry>) -> Self {
         Self::connect_all(servers, false).await
     }
 
@@ -137,7 +165,10 @@ impl McpClientPool {
     }
 }
 
-fn server_entry_from_param(param: &McpToolParam, allowed_hosts: &[String]) -> Option<(String, McpServerEntry)> {
+pub(crate) fn server_entry_from_param(
+    param: &McpToolParam,
+    allowed_hosts: &[String],
+) -> Option<(String, McpServerEntry)> {
     let Some(server_label) = clean_string(Some(&param.server_label)) else {
         tracing::debug!("MCP tool param has no server_label");
         return None;
@@ -159,6 +190,8 @@ fn server_entry_from_param(param: &McpToolParam, allowed_hosts: &[String]) -> Op
                 headers: request_headers(param),
                 allowed_tools: None,
                 require_approval: None,
+                description: None,
+                defer_loading: None,
             },
         ));
     }
@@ -253,6 +286,7 @@ mod tests {
                 headers,
                 allowed_tools,
                 require_approval,
+                ..
             } => {
                 assert_eq!(url, "http://localhost:9000");
                 assert_eq!(headers.unwrap()["Authorization"], "Bearer token");
@@ -281,6 +315,7 @@ mod tests {
                 cwd,
                 allowed_tools,
                 require_approval,
+                ..
             } => {
                 assert_eq!(command, "python3");
                 assert_eq!(args, vec!["/tmp/server.py".to_owned()]);

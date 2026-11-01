@@ -37,8 +37,8 @@ pub(super) fn item_has_meaningful_context(item: &InputItem) -> bool {
             !call.code.trim().is_empty() || call.outputs.as_ref().is_some_and(|outputs| !outputs.is_empty())
         }
         InputItem::FunctionCallOutput(output) => output.output.has_content(),
-        InputItem::ToolSearchCall(call) => !call.call_id.trim().is_empty() || value_has_content(&call.arguments),
-        InputItem::ToolSearchOutput(output) => !output.call_id.trim().is_empty() || !output.tools.is_empty(),
+        InputItem::ToolSearchCall(call) => call.call_id.is_some() || value_has_content(&call.arguments),
+        InputItem::ToolSearchOutput(output) => output.call_id.is_some() || !output.tools.is_empty(),
         InputItem::CustomToolCall(call) => !call.name.trim().is_empty() || !call.input.trim().is_empty(),
         InputItem::CustomToolCallOutput(output) => output.output.has_content(),
         InputItem::ShellCall(call) => !call.action.commands.is_empty(),

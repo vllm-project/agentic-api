@@ -1,0 +1,33 @@
+[
+  {
+    "type": "message",
+    "role": "user",
+    "content": "weather?"
+  },
+  {
+    "type": "function_call",
+    "id": "tsc_s1",
+    "call_id": "tsc_s1",
+    "name": "tool_search",
+    "arguments": "{\"paths\":[\"get_weather\"]}",
+    "status": "completed"
+  },
+  {
+    "type": "function_call_output",
+    "call_id": "tsc_s1",
+    "output": "{\"tools\":[{\"type\":\"function\",\"name\":\"get_weather\",\"description\":\"Get weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":true,\"defer_loading\":true}]}"
+  },
+  {
+    "type": "message",
+    "id": "msg_done",
+    "role": "assistant",
+    "status": "completed",
+    "content": [
+      {
+        "type": "output_text",
+        "text": "done",
+        "annotations": []
+      }
+    ]
+  }
+]

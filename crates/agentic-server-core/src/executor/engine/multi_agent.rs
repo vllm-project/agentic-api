@@ -7,6 +7,7 @@ mod context;
 mod control;
 mod delivery;
 mod guidance;
+mod history;
 mod rounds;
 use crate::executor::inference::UpstreamHeaders;
 pub(super) use context::prepare_without_inference;
@@ -135,7 +136,7 @@ impl MultiAgentRun {
         }
         let mut contexts = IndexMap::new();
         for stored in agents {
-            let context = prepare_agent(stored, &pipeline.request, exec, &budget).await?;
+            let context = prepare_agent(stored, &mut pipeline.request, exec, &budget).await?;
             contexts.insert(context.stored.identity.clone(), context);
         }
         let payload = ResponsePayload {
@@ -218,21 +219,22 @@ impl MultiAgentRun {
         }
         result?;
         let mut agents = Vec::with_capacity(self.contexts.len());
-        for (_, mut context) in self.contexts {
+        for (_, mut context) in std::mem::take(&mut self.contexts) {
             self.registry
                 .checkpoint_agent(&mut context.stored)
                 .map_err(registry_error)?;
             agents.push(context.stored);
         }
-        pipeline.request.multi_agent_tree = Some(ValidatedTreeCheckpoint::from_stored(
+        let tree = ValidatedTreeCheckpoint::from_stored(
             StoredTreeSnapshot {
                 version: 1,
-                config: self.config,
+                config: self.config.clone(),
                 agents,
                 client_calls: self.pending.checkpoint(),
             },
             &CheckpointLimits::for_response(self.max_retained_bytes),
-        )?);
+        )?;
+        pipeline.request.multi_agent_tree = Some(tree);
         self.payload.output = self.completed_items.into_values().collect();
         self.payload.standard_fields.completed_at = (self.payload.status == "completed").then(utcnow_str);
         Ok(self.payload)
@@ -376,4 +378,4 @@ fn call_error(error: ClientCallError) -> ExecutorError {
 
 #[cfg(test)]
 #[path = "multi_agent_tests.rs"]
-mod tests;
+pub(super) mod tests;

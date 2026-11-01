@@ -6,6 +6,9 @@ use super::{BufferedBlock, MessagesStreamAccumulator, RoundState, error_sse, sse
 use crate::events::{ClassifiedSseLine, SseLine};
 use crate::utils::common::deserialize_from_str;
 
+/// One client SSE frame and whether it carries output text.
+pub(super) type Frame = (String, bool);
+
 impl MessagesStreamAccumulator {
     /// Translate one upstream SSE line into zero or more client SSE lines.
     pub(super) fn push(&mut self, line: &str) -> Vec<String> {
@@ -135,21 +138,24 @@ impl MessagesStreamAccumulator {
         if block_type == "tool_use" {
             if is_gateway_tool {
                 // Suppress gateway-owned tool_use from the client; it stays in the
-                // buffered history only and drives the loop.
+                // buffered history only and drives the loop. A native call is
+                // shown if its round runs it, so it and the rest of the round
+                // wait for the round's end in its place.
                 self.suppressed_indices.insert(up_index);
+                if self.native.tool(name).is_some() {
+                    self.held.push(std::mem::take(event));
+                }
                 return Vec::new();
             }
             // A client-owned tool_use: the client must execute it, so this round
             // is terminal (E7). Forward it (below) and stop the loop.
             self.has_client_tool_use = true;
         }
-
-        // Forward with a rebased contiguous client index.
-        let client_index = self.next_index;
-        self.next_index += 1;
-        self.index_map.insert(up_index, client_index);
-        event["index"] = Value::from(client_index);
-        vec![sse("content_block_start", event)]
+        if !self.held.is_empty() {
+            self.held.push(std::mem::take(event));
+            return Vec::new();
+        }
+        self.forward_live(event)
     }
 
     fn on_block_delta(&mut self, event: &mut Value) -> Vec<String> {
@@ -186,12 +192,7 @@ impl MessagesStreamAccumulator {
         if self.suppressed_indices.contains(&up_index) {
             return Vec::new();
         }
-        let Some(&client_index) = self.index_map.get(&up_index) else {
-            return Vec::new();
-        };
-        event["index"] = Value::from(client_index);
-        self.pushed_text = event["delta"]["type"] == "text_delta";
-        vec![sse("content_block_delta", event)]
+        self.forward_or_hold(event)
     }
 
     fn on_block_stop(&mut self, event: &mut Value) -> Vec<String> {
@@ -205,11 +206,52 @@ impl MessagesStreamAccumulator {
         if self.suppressed_indices.contains(&up_index) {
             return Vec::new();
         }
-        let Some(&client_index) = self.index_map.get(&up_index) else {
+        self.forward_or_hold(event)
+    }
+
+    /// Forward a delta or stop of a block the client sees, or hold it with its
+    /// block, which started after the round's first native call and has no
+    /// client index until the round ends.
+    fn forward_or_hold(&mut self, event: &mut Value) -> Vec<String> {
+        let up_index = event.get("index").and_then(Value::as_u64).unwrap_or(0);
+        if self.index_map.contains_key(&up_index) {
+            return self.forward_live(event);
+        }
+        if !self.held.is_empty() {
+            self.held.push(std::mem::take(event));
+        }
+        Vec::new()
+    }
+
+    fn forward_live(&mut self, event: &mut Value) -> Vec<String> {
+        let Some((frame, text)) = self.forward(std::mem::take(event)) else {
             return Vec::new();
         };
-        event["index"] = Value::from(client_index);
-        vec![sse("content_block_stop", event)]
+        self.pushed_text = text;
+        vec![frame]
+    }
+
+    /// Give one upstream block event its client index and frame it: a block's
+    /// start takes the next contiguous client index, its deltas and stop reuse
+    /// it. Live events and the events a round releases at its end both reach
+    /// the client through here.
+    pub(super) fn forward(&mut self, mut event: Value) -> Option<Frame> {
+        let up_index = event.get("index").and_then(Value::as_u64).unwrap_or(0);
+        if event["type"] == "content_block_start" {
+            let index = self.next_client_index();
+            self.index_map.insert(up_index, index);
+        }
+        let index = *self.index_map.get(&up_index)?;
+        event["index"] = Value::from(index);
+        let text = event["delta"]["type"] == "text_delta";
+        let name = event["type"].as_str()?;
+        Some((sse(name, &event), text))
+    }
+
+    pub(super) fn next_client_index(&mut self) -> u32 {
+        let index = self.next_index;
+        self.next_index += 1;
+        index
     }
 }
 

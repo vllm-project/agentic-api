@@ -1,3 +1,6 @@
+#[path = "tests/multi_agent.rs"]
+mod multi_agent;
+
 use super::*;
 use crate::types::io::InOutItem;
 
@@ -17,7 +20,7 @@ impl CodeInterpreterProvider for FakeProvider {
     }
 
     fn max_concurrency(&self) -> std::num::NonZeroUsize {
-        std::num::NonZeroUsize::new(1).expect("nonzero")
+        std::num::NonZeroUsize::new(2).expect("nonzero")
     }
 
     fn execute(

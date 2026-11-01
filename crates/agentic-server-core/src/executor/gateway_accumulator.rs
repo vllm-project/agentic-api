@@ -87,6 +87,18 @@ impl GatewayStreamAccumulator {
         rebase_output_index(&mut frame.wire, output_offset);
     }
 
+    /// Stamps and serializes gateway-built frames in order. Response lifecycle
+    /// events already presented by this stream are skipped.
+    pub(crate) fn frames_chunk(&mut self, frames: Vec<EventFrame>) -> ExecutorResult<String> {
+        let mut chunk = String::new();
+        for mut frame in frames {
+            if self.process_event(&mut frame, 0) {
+                chunk.push_str(&checked_stream_event_limited(&frame, self.max_stream_event_bytes)?);
+            }
+        }
+        Ok(chunk)
+    }
+
     pub(crate) fn terminal_response_chunk(&mut self, payload: &ResponsePayload) -> ExecutorResult<String> {
         let mut frame = terminal_response_frame(payload)?;
         self.stamp_event(&mut frame, 0);

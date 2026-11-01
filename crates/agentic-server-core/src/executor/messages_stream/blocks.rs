@@ -1,9 +1,9 @@
 //! Assistant content blocks buffered across a streamed Messages round, the
 //! gateway calls reconstructed from them, and their dispatch.
 
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
-use crate::types::messages::tool_call::{MessagesToolCall, parse_input};
+use crate::types::messages::tool_call::{MessagesToolCall, MessagesToolInputError, parse_input};
 
 /// One assistant content block buffered across a round, so the full turn
 /// (`thinking`/`text`/`signature`/`tool_use`, in order) can be reconstructed for
@@ -35,6 +35,16 @@ impl BufferedBlock {
         }
     }
 
+    /// The block with its streamed `tool_use` input, as history records it: an
+    /// input that does not parse as an object is recorded as `{}`.
+    pub(super) fn completed_block(&self) -> Value {
+        let mut block = self.block.clone();
+        if block["type"] == "tool_use" {
+            block["input"] = history_input(&parse_input(&self.input_json));
+        }
+        block
+    }
+
     /// Finish the buffered block once. Dispatch and history share the parsed
     /// input; an invalid input remains an error on the call, never a dispatchable
     /// empty object. The legacy history fallback is preserved separately.
@@ -44,9 +54,7 @@ impl BufferedBlock {
             return (block, None);
         }
         let input = parse_input(&self.input_json);
-        block["input"] = input
-            .as_ref()
-            .map_or_else(|_| json!({}), |object| Value::Object(object.clone()));
+        block["input"] = history_input(&input);
         let call = self.is_gateway_tool.then(|| MessagesToolCall {
             id: block["id"].as_str().unwrap_or_default().to_owned(),
             name: block["name"].as_str().unwrap_or_default().to_owned(),
@@ -54,6 +62,13 @@ impl BufferedBlock {
         });
         (block, call)
     }
+}
+
+/// The input history records for a streamed call.
+fn history_input(input: &Result<Map<String, Value>, MessagesToolInputError>) -> Value {
+    input
+        .as_ref()
+        .map_or_else(|_| json!({}), |object| Value::Object(object.clone()))
 }
 
 /// Append a streamed string fragment onto a string field of `block`, creating it

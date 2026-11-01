@@ -95,6 +95,7 @@ pub(super) fn refused_output(started: &OutputItem) -> Option<OutputItem> {
         | OutputItem::Message(_)
         | OutputItem::FunctionCall(_)
         | OutputItem::ToolSearchCall(_)
+        | OutputItem::ToolSearchOutput(_)
         | OutputItem::CustomToolCall(_)
         | OutputItem::ShellCall(_)
         | OutputItem::Reasoning(_)

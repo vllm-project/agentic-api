@@ -1,11 +1,10 @@
 use std::borrow::Borrow;
 
-use crate::types::io::input::model_items;
+use crate::types::io::input::{SearchHistory, is_search_item, model_items};
 use crate::types::io::{
     CodeInterpreterCallOutput, InputContent, InputFileContent, InputItem, InputMessageContent, ReasoningOutput,
     ReasoningStatus, ResponsesInput, ToolCallOutput, ToolOutputContent,
 };
-use crate::types::tools::ResponsesTool;
 use crate::utils::common::serialize_to_value;
 
 const ESTIMATED_BYTES_PER_TOKEN: u64 = 4;
@@ -103,15 +102,6 @@ impl InputTokenEstimate {
         self.add_optional_text(file.detail.as_deref());
     }
 
-    fn add_tool_definition(&mut self, tool: &ResponsesTool) {
-        // Serialize only declarations, preserving nested schemas and extra fields without
-        // copying image-bearing input. An unrepresentable declaration must not undercount.
-        match serialize_to_value(tool) {
-            Ok(value) => self.add_json_value(&value),
-            Err(_) => self.add_tokens(u64::MAX),
-        }
-    }
-
     fn add_tool_call_output(&mut self, output: &ToolCallOutput) {
         match output {
             ToolCallOutput::Text(text) => self.add_text(text),
@@ -166,17 +156,6 @@ impl InputTokenEstimate {
                     }
                 }
             }
-            InputItem::ToolSearchCall(call) => {
-                self.add_text(&call.id);
-                self.add_text(&call.call_id);
-                self.add_json_value(&call.arguments);
-            }
-            InputItem::ToolSearchOutput(output) => {
-                self.add_text(&output.call_id);
-                for tool in &output.tools {
-                    self.add_tool_definition(tool);
-                }
-            }
             InputItem::CustomToolCall(call) => {
                 self.add_text(&call.id);
                 self.add_text(&call.call_id);
@@ -215,7 +194,10 @@ impl InputTokenEstimate {
                 self.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
                 self.add_text(&compaction.encrypted_content);
             }
-            InputItem::MultiAgentCall(_)
+            // `from_items` counts a search item as the function call or output the model reads.
+            InputItem::ToolSearchCall(_)
+            | InputItem::ToolSearchOutput(_)
+            | InputItem::MultiAgentCall(_)
             | InputItem::MultiAgentCallOutput(_)
             | InputItem::AgentMessage(_)
             | InputItem::McpListTools(_)
@@ -269,11 +251,21 @@ pub(crate) fn estimate_history_tokens(items: &[InputItem]) -> u64 {
 }
 
 impl InputTokenEstimate {
+    /// Estimates what the model reads: a search item counts as the function call or output it is lowered to.
     fn from_items<T: Borrow<InputItem>>(items: Vec<T>) -> Self {
         let mut estimate = Self::default();
         estimate.add_tokens(ESTIMATED_INPUT_OVERHEAD_TOKENS);
-        for item in model_items(items) {
-            estimate.add_item(item.borrow());
+        let items: Vec<T> = model_items(items).collect();
+        let search_history = SearchHistory::scan(&items);
+        for (position, item) in items.iter().enumerate() {
+            let item = item.borrow();
+            if is_search_item(item) {
+                if let Some(lowered) = search_history.lowered(position, item) {
+                    estimate.add_item(&lowered);
+                }
+            } else {
+                estimate.add_item(item);
+            }
         }
         estimate
     }

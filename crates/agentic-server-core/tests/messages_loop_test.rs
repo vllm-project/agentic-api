@@ -545,7 +545,8 @@ async fn native_search_outcomes(
     let message = run_test_messages_loop(request, &registry, &exec_ctx)
         .await
         .expect("loop runs");
-    assert_eq!(message["content"][0]["text"], "Done.");
+    let content = message["content"].as_array().expect("content");
+    assert_eq!(content.last().expect("final answer")["text"], "Done.");
 
     let mut searched = Vec::new();
     while let Ok(search) = captured.try_recv() {
@@ -580,6 +581,8 @@ async fn native_search_outcomes(
 }
 
 const MAX_USES_EXCEEDED: &str = "web_search max_uses exceeded; search was not run";
+/// A native search whose arguments do not parse is answered without running.
+const INVALID_SEARCH_INPUT: &str = "web_search input was invalid; search was not run";
 
 /// `max_uses` limits the searches performed, so a batched call is charged for
 /// every query. A call the remaining budget cannot cover is refused whole and
@@ -627,17 +630,8 @@ async fn native_web_search_malformed_calls_do_not_use_the_budget() {
     .await;
 
     assert_eq!(searched, ["kept"]);
-    assert_eq!(
-        outcomes,
-        [vec![
-            Some(
-                "tool execution failed: invalid tool config: web_search requires a non-empty query or queries"
-                    .to_owned()
-            ),
-            Some("invalid tool arguments (not a JSON object); tool was not run".to_owned()),
-            None
-        ]]
-    );
+    let invalid = Some(INVALID_SEARCH_INPUT.to_owned());
+    assert_eq!(outcomes, [vec![invalid.clone(), invalid, None]]);
 }
 
 /// Controls: a batch the budget covers runs in full, and a request without

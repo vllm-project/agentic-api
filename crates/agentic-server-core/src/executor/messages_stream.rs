@@ -6,7 +6,9 @@
 //!   * surfaced `content_block_*` forwarded with client-visible indices rebased
 //!     contiguously across rounds;
 //!   * gateway-owned `tool_use` blocks suppressed (and their `input_json_delta`
-//!     buffered to reconstruct the call for dispatch);
+//!     buffered to reconstruct the call for dispatch); a call to a native
+//!     server tool is shown as its `server_tool_use` and result blocks once its
+//!     round runs it;
 //!   * intermediate `message_delta`/`message_stop` (the per-round terminals)
 //!     suppressed; the final terminal is forwarded once, carrying every round's summed `usage`.
 //!
@@ -18,8 +20,10 @@
 
 mod blocks;
 mod ingestion;
+mod server_tools;
 mod wire;
 use blocks::BufferedBlock;
+use ingestion::Frame;
 use wire::{error_sse, executor_error_sse, sse};
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -34,6 +38,7 @@ use crate::executor::error::ExecutorResult;
 use crate::executor::inference::{BoxStream, response_lines, send_request};
 use crate::executor::messages_context::MessagesRequestContext;
 use crate::executor::messages_round::{MessagesRoundDecision, decide_round};
+use crate::executor::messages_server_tools::{NativeServerTools, ServerToolView};
 use crate::executor::messages_tools::{execute_gateway_calls, request_gateway_map};
 use crate::executor::messages_usage::MessagesUsageTotals;
 use crate::executor::request::ExecutionContext;
@@ -63,6 +68,16 @@ pub async fn run_messages_stream(
     ctx.force_stream(true);
     let mut execution = ExecutionSpan::start(Api::Messages, Route::Executor, true, &exec_ctx.metrics);
     let span = execution.span().clone();
+    // Earlier turns' server tool blocks are restored before anything is sent,
+    // so an invalid one is refused with its own status.
+    if let Err(error) = exec_ctx
+        .messages_result_key()
+        .and_then(|key| ctx.replay_server_tool_blocks(key))
+    {
+        execution.failed(&error);
+        execution.not_delivered();
+        return Err(error);
+    }
     // Send the first upstream request before the handler commits an HTTP 200,
     // so initial vLLM errors retain their original status and body.
     let opened = open_round(&ctx, &exec_ctx, &upstream, 0).instrument(span.clone()).await;
@@ -138,8 +153,12 @@ fn messages_stream_body(
     mut execution: ExecutionSpan,
 ) -> BoxStream {
     Box::pin(stream! {
+        // The key was resolved before the stream opened; this cannot fail.
+        let Ok(key) = exec_ctx.messages_result_key() else { return };
+        let view = ServerToolView { native: ctx.native_server_tools(), key };
         let mut acc = MessagesStreamAccumulator {
             gateway_map: request_gateway_map(&exec_ctx.messages_gateway_tools, &registry),
+            native: view.native,
             ..Default::default()
         };
         let mut prepared_response = Some(first_round);
@@ -210,32 +229,31 @@ fn messages_stream_body(
                 MessagesRoundDecision::ContinueGateway => {}
                 MessagesRoundDecision::ReturnClient | MessagesRoundDecision::Finish => {
                     execution.completed_with_stop_reason(acc.stop_reason());
-                    let terminal = acc.finish(decision);
+                    let terminal = acc.terminal_frames(decision);
                     execution.delivered();
-                    for out in terminal {
+                    for (out, text) in terminal {
+                        clock.client_event(text);
                         yield out;
                     }
                     return;
                 }
             }
-            // Reconstruct the FULL assistant turn (thinking/text/signature +
-            // gateway tool_use, in order) for the next round's history — not just
-            // the gateway tool_use (F3, streaming half). The gateway calls are
-            // derived from the same buffered blocks for dispatch.
-            let (assistant_content, calls) = acc.take_round();
-            let tool_results = execute_gateway_calls(
-                calls,
-                &mut ctx,
-                &registry,
-                &acc.gateway_map,
-                &exec_ctx.gateway_scheduler_policy,
-                &exec_ctx.metrics,
-            ).await;
-            if let Err(e) = ctx.append_round(&assistant_content, tool_results) {
-                execution.failed(&e);
-                execution.delivered();
-                yield executor_error_sse(&e);
-                return;
+            // The round runs its calls: show them before they execute.
+            for (out, text) in acc.release_held(true) {
+                clock.client_event(text);
+                yield out;
+            }
+            match execute_round(&mut acc, &mut ctx, &registry, &exec_ctx, view).await {
+                Ok(results) => for (out, text) in results {
+                    clock.client_event(text);
+                    yield out;
+                },
+                Err(e) => {
+                    execution.failed(&e);
+                    execution.delivered();
+                    yield executor_error_sse(&e);
+                    return;
+                }
             }
         }
 
@@ -244,6 +262,35 @@ fn messages_stream_body(
         execution.delivered();
         yield error_sse(&format!("gateway tool loop exceeded {MAX_GATEWAY_TOOL_ROUNDS} rounds"));
     })
+}
+
+/// Execute a completed round's gateway calls and append the round for the next
+/// inference; returns the result blocks the client is shown.
+async fn execute_round(
+    acc: &mut MessagesStreamAccumulator,
+    ctx: &mut MessagesRequestContext,
+    registry: &ToolRegistry,
+    exec_ctx: &ExecutionContext,
+    view: ServerToolView<'_>,
+) -> ExecutorResult<Vec<Frame>> {
+    // Reconstruct the FULL assistant turn (thinking/text/signature + gateway
+    // tool_use, in order) for the next round's history — not just the gateway
+    // tool_use (F3, streaming half). The gateway calls are derived from the
+    // same buffered blocks for dispatch.
+    let (assistant_content, calls) = acc.take_round();
+    let executed = execute_gateway_calls(
+        calls,
+        ctx,
+        registry,
+        &acc.gateway_map,
+        view,
+        &exec_ctx.gateway_scheduler_policy,
+        &exec_ctx.metrics,
+    )
+    .await;
+    let (results, tool_results) = acc.record_executed(executed);
+    ctx.append_round(&assistant_content, tool_results)?;
+    Ok(results)
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -293,6 +340,10 @@ struct MessagesStreamAccumulator {
     /// tool like Claude Code's `WebSearch` is classified gateway-owned (and
     /// suppressed) the same way the built-in `web_search` is.
     gateway_map: tool_seam::GatewayToolMap,
+    /// The native server tools the client declared, whose calls it is shown.
+    native: NativeServerTools,
+    /// Events held since this round's first native call, in arrival order.
+    held: Vec<Value>,
 }
 
 impl MessagesStreamAccumulator {
@@ -302,6 +353,7 @@ impl MessagesStreamAccumulator {
         self.tool_ids.clear();
         self.blocks.clear();
         self.has_client_tool_use = false;
+        self.held.clear();
         self.round_state = RoundState::Active;
         self.round_started = false;
         // F6: clear the previous round's terminal so a clean-EOF round can't
@@ -394,6 +446,7 @@ mod tests {
 
     use super::*;
     use crate::executor::gateway::GatewaySchedulerPolicy;
+    use crate::executor::messages_server_tools::sealing::process_result_key;
     use crate::executor::telemetry::metrics::ExecutorMetrics;
 
     fn line(v: &Value) -> String {
@@ -859,16 +912,22 @@ mod tests {
         // After the fix, execute_gateway_calls must NOT coerce invalid input to
         // {} and dispatch — it must produce an error tool_result. Assert the
         // reconstructed call is flagged invalid rather than silently dispatchable.
+        let mut request = context();
+        let view = ServerToolView {
+            native: request.native_server_tools(),
+            key: process_result_key().unwrap(),
+        };
         let resolved = execute_gateway_calls(
             calls,
-            &mut context(),
+            &mut request,
             &no_op_registry().await,
             &tool_seam::GatewayToolMap::default(),
+            view,
             &GatewaySchedulerPolicy::default(),
             &ExecutorMetrics::from_global(),
         )
         .await;
-        let content = &resolved[0].content;
+        let content = &resolved[0].tool_result.content;
         assert!(
             content.contains("invalid") || content.contains("malformed") || content.contains("could not"),
             "malformed args must yield an error tool_result, not an empty-arg dispatch: {content:?}"

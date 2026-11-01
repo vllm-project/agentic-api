@@ -1,3 +1,4 @@
+use super::GatewayCallResult;
 use crate::executor::request::RequestContext;
 use crate::tool::ToolRegistry;
 use crate::types::io::{InputItem, OutputItem, ResponsesInput};
@@ -8,10 +9,13 @@ pub(in crate::executor) fn append_output_items_to_input(input: &mut ResponsesInp
     }
 }
 
-pub(in crate::executor) fn append_tool_outputs(ctx: &mut RequestContext, tool_outputs: Vec<InputItem>) {
-    for output in tool_outputs {
-        ctx.new_input_items.push(output.clone().into());
-        ctx.enriched_request.input.push(output);
+/// Records each gateway call's history and gives the model its input for the next round.
+pub(in crate::executor) fn append_gateway_results(ctx: &mut RequestContext, results: Vec<GatewayCallResult>) {
+    for result in results {
+        ctx.new_input_items.extend(result.input.iter().cloned().map(Into::into));
+        for item in result.input {
+            ctx.enriched_request.input.push(item);
+        }
     }
 }
 
@@ -24,8 +28,7 @@ pub(in crate::executor) fn append_gateway_calls_to_new_input(
         let OutputItem::FunctionCall(call) = item else {
             return None;
         };
-        registry
-            .is_gateway_owned_name(&call.name)
+        (registry.is_gateway_owned_name(&call.name) && registry.records_output_item(item))
             .then(|| InputItem::FunctionCall(call.clone().into()).into())
     }));
 }

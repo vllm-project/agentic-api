@@ -4,6 +4,7 @@
 //! This module owns the behavioral layer: routing, handler interface, and normalization.
 
 pub mod async_execution;
+pub(crate) mod catalog;
 pub mod code_interpreter;
 pub mod codex;
 pub mod custom;

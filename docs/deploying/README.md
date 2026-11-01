@@ -401,13 +401,21 @@ to the Deployment’s container environment. The default provider is You.com:
             # Opt Claude Code's WebSearch function into gateway execution.
             - name: MESSAGES_GATEWAY_TOOL_ALIASES
               value: WebSearch=web_search
+            # The same secret (at least 32 random bytes) on every replica keeps
+            # returned web search results readable across restarts and replicas.
+            - name: AGENTIC_MESSAGES_RESULT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentic-api-secrets
+                  key: messages-result-key
 ```
 
 Create the secret before applying the Deployment:
 
 ```console
 kubectl create secret generic agentic-api-secrets \
-  --from-literal=you-api-key="$YOU_API_KEY"
+  --from-literal=you-api-key="$YOU_API_KEY" \
+  --from-literal=messages-result-key="$(openssl rand -base64 48)"
 ```
 
 To use Brave Search instead, select the provider and supply its key; the endpoint

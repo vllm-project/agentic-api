@@ -867,6 +867,8 @@ async fn streamed_search_outcomes(
 }
 
 const MAX_USES_EXCEEDED: &str = "web_search max_uses exceeded; search was not run";
+/// A native search whose arguments do not parse is answered without running.
+const INVALID_SEARCH_INPUT: &str = "web_search input was invalid; search was not run";
 
 /// `max_uses` limits the searches performed on the streaming path too: a
 /// batched call is charged for every query and refused whole when the budget
@@ -929,17 +931,8 @@ async fn messages_stream_malformed_calls_do_not_use_the_budget() {
     )
     .await;
     assert_eq!(searched, ["kept"]);
-    assert_eq!(
-        outcomes,
-        [vec![
-            Some(
-                "tool execution failed: invalid tool config: web_search requires a non-empty query or queries"
-                    .to_owned()
-            ),
-            Some("tool arguments must be a JSON object; tool was not run".to_owned()),
-            None
-        ]]
-    );
+    let invalid = Some(INVALID_SEARCH_INPUT.to_owned());
+    assert_eq!(outcomes, [vec![invalid.clone(), invalid, None]]);
 }
 
 /// Controls: a batch the budget covers runs in full, and a request without

@@ -9,7 +9,8 @@ use tracing::debug;
 use agentic_core::executor::telemetry::Api;
 use agentic_core::executor::{
     ExecutorError, MessagesRequestContext, MessagesUpstream, ParsedMessagesRequest, declares_native_web_fetch,
-    normalize_native_server_tools_for_upstream, run_messages_loop, run_messages_stream,
+    may_carry_gateway_server_tool_blocks, normalize_native_server_tools_for_upstream, replay_server_tool_blocks,
+    run_messages_loop, run_messages_stream,
 };
 use agentic_core::proxy::{ProxyAuth, ProxyRequest, error_response_for_auth, upstream_request_headers};
 use agentic_core::tool::{ToolRegistry, registry_tools};
@@ -143,7 +144,44 @@ pub async fn messages(State(state): State<AppState>, request: Request) -> Respon
         Ok(None) => debug!(route = "proxy", "routing HTTP messages request"),
     }
 
+    // Server tool blocks the gateway returned earlier go upstream as the rounds
+    // the upstream saw, even when this request declares no gateway tool.
+    let bytes = if may_carry_gateway_server_tool_blocks(&bytes)
+        && let Ok(mut request) = serde_json::from_slice::<serde_json::Value>(&bytes)
+    {
+        match replayed_body(&state, &mut request) {
+            ReplayedBody::Changed(body) => body,
+            ReplayedBody::Unchanged => bytes,
+            ReplayedBody::Refused(response) => return response,
+        }
+    } else {
+        bytes
+    };
     proxy_messages(&state, parts, bytes, "/v1/messages").await
+}
+
+/// A request body after its gateway-made server tool blocks were replayed.
+enum ReplayedBody {
+    Changed(Bytes),
+    Unchanged,
+    Refused(Response),
+}
+
+/// Turn the gateway-made server tool blocks of `request` back into the rounds
+/// the upstream saw.
+fn replayed_body(state: &AppState, request: &mut serde_json::Value) -> ReplayedBody {
+    let replayed = match state.exec_ctx.messages_result_key() {
+        Ok(key) => replay_server_tool_blocks(request, key),
+        Err(error) => Err(error),
+    };
+    match replayed {
+        Ok(true) => match serde_json::to_vec(request) {
+            Ok(body) => ReplayedBody::Changed(Bytes::from(body)),
+            Err(error) => ReplayedBody::Refused(messages_error_response(ExecutorError::from(error))),
+        },
+        Ok(false) => ReplayedBody::Unchanged,
+        Err(error) => ReplayedBody::Refused(messages_error_response(error)),
+    }
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(
@@ -173,13 +211,20 @@ pub async fn count_tokens(State(state): State<AppState>, request: Request) -> Re
         {
             return messages_error_response(ExecutorError::from(error));
         }
-        match normalize_native_server_tools_for_upstream(&mut request_json) {
-            Ok(true) => match serde_json::to_vec(&request_json) {
+        // Count what the upstream would receive: rewritten native declarations
+        // and the rounds behind earlier gateway server tool blocks.
+        let normalized = match normalize_native_server_tools_for_upstream(&mut request_json) {
+            Ok(normalized) => normalized,
+            Err(error) => return messages_error_response(error),
+        };
+        match replayed_body(&state, &mut request_json) {
+            ReplayedBody::Changed(body) => bytes = body,
+            ReplayedBody::Unchanged if normalized => match serde_json::to_vec(&request_json) {
                 Ok(body) => bytes = Bytes::from(body),
                 Err(error) => return messages_error_response(ExecutorError::from(error)),
             },
-            Ok(false) => {}
-            Err(error) => return messages_error_response(error),
+            ReplayedBody::Unchanged => {}
+            ReplayedBody::Refused(response) => return response,
         }
     }
     proxy_messages(&state, parts, bytes, "/v1/messages/count_tokens").await

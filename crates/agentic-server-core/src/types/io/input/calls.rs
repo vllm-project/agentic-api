@@ -9,7 +9,7 @@ impl InputItem {
     pub(crate) fn call_id(&self) -> Option<&str> {
         match self {
             Self::FunctionCall(call) => Some(&call.call_id),
-            Self::ToolSearchCall(call) => Some(&call.call_id),
+            Self::ToolSearchCall(call) => call.call_id.as_deref(),
             Self::CustomToolCall(call) => Some(&call.call_id),
             Self::ShellCall(call) => Some(&call.call_id),
             Self::MultiAgentCall(_)
@@ -36,7 +36,7 @@ impl InputItem {
     pub(crate) fn output_call_id(&self) -> Option<&str> {
         match self {
             Self::FunctionCallOutput(output) => Some(&output.call_id),
-            Self::ToolSearchOutput(output) => Some(&output.call_id),
+            Self::ToolSearchOutput(output) => output.call_id.as_deref(),
             Self::CustomToolCallOutput(output) => Some(&output.call_id),
             Self::ShellCallOutput(output) => Some(&output.call_id),
             // Multi-agent outputs belong to the coordinator, not to a client call.

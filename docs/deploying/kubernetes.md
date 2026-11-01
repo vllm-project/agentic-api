@@ -432,7 +432,7 @@ default; raise `AGENTIC_WEB_SEARCH_MAX_CONCURRENT_QUERIES` only on a paid plan. 
 `https://api.tavily.com` and batched queries inherit the gateway concurrency limit. Serply works the same way with
 `AGENTIC_WEB_SEARCH_PROVIDER=serply`, `SERPLY_API_KEY`, and the default endpoint `https://api.serply.io`. For a deployment that reaches no
 search vendor, set `AGENTIC_WEB_SEARCH_PROVIDER=searxng` and `AGENTIC_WEB_SEARCH_BASE_URL` to the in-cluster URL of a
-self-hosted SearXNG instance; no Secret is needed, and the server refuses to start if the base URL is missing. The
+self-hosted SearXNG instance; no provider key is needed, and the server refuses to start if the base URL is missing. The
 SearXNG instance must enable the JSON format (`search.formats: [html, json]` in `settings.yml`), and if its
 `server.limiter` is on, the source address SearXNG observes for the gateway (normally the gateway Pod CIDR) must be
 listed in `botdetection.ip_lists.pass_ip` in `limiter.toml`, because the gateway never sends `Accept-Encoding: gzip`
@@ -450,10 +450,13 @@ kubectl --namespace agentic-api create secret generic agentic-api-web-search \
   kubectl apply --server-side --field-manager=agentic-api-operator --filename=-
 ```
 
-The file contains one line, `YOU_API_KEY=...` (or `BRAVE_API_KEY=...` for Brave Search, `TAVILY_API_KEY=...` for
-Tavily, `SERPLY_API_KEY=...` for Serply). Remove it securely after creating the Secret. Patch the environment in the
+The file contains `YOU_API_KEY=...` (or `BRAVE_API_KEY=...` for Brave Search, `TAVILY_API_KEY=...` for Tavily,
+`SERPLY_API_KEY=...` for Serply) and `AGENTIC_MESSAGES_RESULT_KEY=` followed by the output of
+`openssl rand -base64 48`. Every replica then seals the search results it returns to Messages clients under the same
+key, so a returned result stays readable after a restart and on any replica; without it, each Pod generates its own
+key. Remove the file securely after creating the Secret. Patch the environment in the
 production overlay (for Brave, Tavily, or Serply, replace the `YOU_API_BASE_URL` operation with
-`path: /data/AGENTIC_WEB_SEARCH_PROVIDER` and `value: brave`, `value: tavily`, or `value: serply`; for SearXNG, skip the Secret entirely and set `AGENTIC_WEB_SEARCH_PROVIDER` to `searxng` plus
+`path: /data/AGENTIC_WEB_SEARCH_PROVIDER` and `value: brave`, `value: tavily`, or `value: serply`; for SearXNG, keep only the `AGENTIC_MESSAGES_RESULT_KEY` line in the Secret and set `AGENTIC_WEB_SEARCH_PROVIDER` to `searxng` plus
 `AGENTIC_WEB_SEARCH_BASE_URL` to the instance URL):
 
 ```yaml

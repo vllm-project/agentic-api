@@ -1,12 +1,57 @@
 use crate::types::event::MessageStatus;
-use crate::types::io::{InOutItem, OutputMessage, OutputMessageContent, ShellCallOutputMessage, ShellCallStatus};
+use crate::types::io::{
+    InOutItem, McpCall, OutputItem, OutputMessage, OutputMessageContent, ShellCallOutputMessage, ShellCallStatus,
+};
+use crate::types::tools::ResponsesTool;
+use crate::utils::common::stable_name_hash;
 use serde_json::Value;
 
 use super::{
-    CustomToolCallOutputMessage, FunctionToolResultMessage, InputContent, InputItem, InputMessage, InputMessageContent,
-    InputMessageType, InputTextContent, InputValidationError, ResponsesInput,
+    CustomToolCallOutputMessage, FunctionToolResultMessage, InputContent, InputFunctionToolCall, InputItem,
+    InputMessage, InputMessageContent, InputMessageType, InputTextContent, InputValidationError, ResponsesInput,
 };
 use std::borrow::Cow;
+use std::collections::HashMap;
+
+/// The existing discovery naming rule, also used when projecting returned MCP history.
+pub(crate) fn internal_mcp_tool_name(
+    server_label: &str,
+    tool_name: &str,
+    used: &mut HashMap<String, (String, String)>,
+) -> String {
+    const MAX_NAME_BYTES: usize = 64;
+    let identity = (server_label.to_owned(), tool_name.to_owned());
+    let base: String = format!("mcp__{server_label}__{tool_name}")
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-') {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    if base.len() <= MAX_NAME_BYTES && used.get(&base).is_none_or(|existing| existing == &identity) {
+        used.insert(base.clone(), identity);
+        return base;
+    }
+    let mut attempt = 0_u32;
+    loop {
+        let source = if attempt == 0 {
+            format!("{server_label}:{tool_name}")
+        } else {
+            format!("{server_label}:{tool_name}:{attempt}")
+        };
+        let suffix = format!("__{:010x}", stable_name_hash(&source) & 0xff_ffff_ffff);
+        let prefix_len = MAX_NAME_BYTES.saturating_sub(suffix.len());
+        let candidate = format!("{}{}", &base[..base.len().min(prefix_len)], suffix);
+        if used.get(&candidate).is_none_or(|existing| existing == &identity) {
+            used.insert(candidate.clone(), identity);
+            return candidate;
+        }
+        attempt = attempt.saturating_add(1);
+    }
+}
 
 impl From<ShellCallOutputMessage> for FunctionToolResultMessage {
     fn from(output: ShellCallOutputMessage) -> Self {
@@ -46,13 +91,11 @@ impl From<OutputMessageContent> for InputContent {
                 if let Some(annotations) = part.annotations {
                     text.extra.insert("annotations".into(), Value::Array(annotations));
                 }
-                if let Some(logprobs) = part.logprobs {
-                    // These fixed structs contain only JSON-compatible values and string keys.
-                    text.extra.insert(
-                        "logprobs".into(),
-                        serde_json::to_value(logprobs).expect("text log probabilities serialize to JSON"),
-                    );
-                }
+                // These fixed structs contain only JSON-compatible values and string keys.
+                text.extra.insert(
+                    "logprobs".into(),
+                    serde_json::to_value(part.logprobs).expect("text log probabilities serialize to JSON"),
+                );
                 Self::OutputText(text)
             }
         }
@@ -75,6 +118,65 @@ impl From<OutputMessage> for InputMessage {
 }
 
 impl ResponsesInput {
+    /// Project a returned MCP result using its current binding, or retained discovery name.
+    fn mcp_call_input(&self, call: McpCall, tools: &[ResponsesTool]) -> [InputItem; 2] {
+        let mut used = HashMap::new();
+        let mut resolved = tools.iter().find_map(|tool| match tool {
+            ResponsesTool::Mcp(param) if param.server_label == call.server_label => param
+                .discovered_tools
+                .iter()
+                .find(|tool| tool.tool_name == call.name)
+                .map(|tool| tool.internal_name.clone()),
+            _ => None,
+        });
+        if resolved.is_none() {
+            let listing = match self {
+                Self::Items(items) => items.iter().rev().find_map(|item| match item {
+                    InOutItem::Input(InputItem::McpListTools(listing))
+                    | InOutItem::Output(OutputItem::McpListTools(listing))
+                        if listing.server_label == call.server_label && listing.error.is_none() =>
+                    {
+                        Some(listing)
+                    }
+                    _ => None,
+                }),
+                Self::Text(_) => None,
+            };
+            if let Some(listing) = listing {
+                for tool in &listing.tools {
+                    let name = internal_mcp_tool_name(&call.server_label, &tool.name, &mut used);
+                    if tool.name == call.name {
+                        resolved = Some(name);
+                        break;
+                    }
+                }
+            }
+        }
+        let name = resolved.unwrap_or_else(|| internal_mcp_tool_name(&call.server_label, &call.name, &mut used));
+        let output = call.output.unwrap_or_else(|| match &call.error {
+            // The typed error contains only JSON-compatible data.
+            Some(error) => serde_json::json!({"error": error}).to_string(),
+            None => String::new(),
+        });
+        [
+            InputItem::FunctionCall(InputFunctionToolCall {
+                id: None,
+                agent: call.agent,
+                call_id: call.id.clone(),
+                name,
+                namespace: None,
+                arguments: call.arguments,
+                status: Some(MessageStatus::Completed),
+                async_execution: false,
+            }),
+            InputItem::FunctionCallOutput(FunctionToolResultMessage {
+                id: None,
+                status: Some(MessageStatus::Completed),
+                call_id: call.id,
+                output: output.into(),
+            }),
+        ]
+    }
     /// Append a history item, preserving shorthand text as the first user message.
     pub(crate) fn push(&mut self, item: impl Into<InOutItem>) {
         match self {
@@ -119,7 +221,9 @@ impl ResponsesInput {
         }
     }
 
-    /// Normalize client tool items only in the model-facing copy of canonical history.
+    /// Normalize tool items only in the model-facing copy of canonical history.
+    /// Returned MCP records become function-call/result pairs using the same
+    /// discovery naming rule, while their public history remains unchanged.
     ///
     /// Message files become `input_text` parts in place through
     /// `InputTextContent::try_from(&InputFileContent)`; the canonical history
@@ -129,22 +233,33 @@ impl ResponsesInput {
     /// Returns a file that cannot be converted to text. Positions refer to the
     /// model-facing copy; [`Self::validate`] reports the same failure with the
     /// request's positions and runs first on typed paths.
-    pub(crate) fn normalized_model_input(&self) -> Result<Cow<'_, Self>, InputValidationError> {
+    pub(crate) fn normalized_model_input(
+        &self,
+        tools: &[ResponsesTool],
+    ) -> Result<Cow<'_, Self>, InputValidationError> {
         let input = self.model_input();
-        let has_client_tools = matches!(&*input, Self::Items(items) if items.iter().any(|item| matches!(item,
+        let has_tools_to_normalize = matches!(&*input, Self::Items(items) if items.iter().any(|item| matches!(item,
             InOutItem::Input(InputItem::ShellCall(_) | InputItem::ShellCallOutput(_)
-                | InputItem::CustomToolCall(_) | InputItem::CustomToolCallOutput(_))
+                | InputItem::CustomToolCall(_) | InputItem::CustomToolCallOutput(_) | InputItem::McpCall(_))
         )));
         let has_parts_to_normalize = matches!(&*input, Self::Items(items) if items.iter().any(|item| matches!(item,
             InOutItem::Input(InputItem::Message(message)) if matches!(&message.content,
                 InputMessageContent::Parts(parts) if parts.iter().any(|part| matches!(part,
                     InputContent::InputImage(image) if image.detail.is_none())
                     || matches!(part, InputContent::InputFile(_)))))));
-        if !has_client_tools && !has_parts_to_normalize {
+        if !has_tools_to_normalize && !has_parts_to_normalize {
             return Ok(input);
         }
-        let mut model = if has_client_tools {
-            Self::from(Vec::<InputItem>::from(input.into_owned()))
+        let mut model = if has_tools_to_normalize {
+            let items = Vec::<InputItem>::from(input.into_owned());
+            let mut normalized = Vec::with_capacity(items.len());
+            for item in items {
+                match item {
+                    InputItem::McpCall(call) => normalized.extend(self.mcp_call_input(call, tools)),
+                    other => normalized.push(other),
+                }
+            }
+            Self::from(normalized)
         } else {
             input.into_owned()
         };
@@ -292,7 +407,7 @@ mod tests {
         };
         assert!(matches!(&parts[0], InputContent::InputImage(image) if image.detail.is_none()));
 
-        let model = input.normalized_model_input().unwrap();
+        let model = input.normalized_model_input(&[]).unwrap();
         let ResponsesInput::Items(model_items) = &*model else {
             panic!("model items")
         };
@@ -321,7 +436,7 @@ mod tests {
                 {"type":"input_text", "text":"after"}]}
         ]))
         .unwrap();
-        let model = input.normalized_model_input().unwrap();
+        let model = input.normalized_model_input(&[]).unwrap();
         assert!(matches!(model, Cow::Owned(_)));
         assert_eq!(
             serialize_to_value(&*model).unwrap()[0]["content"],
@@ -335,7 +450,7 @@ mod tests {
             {"role":"user", "content":[{"type":"input_text", "text":"hello"}]}
         ]))
         .unwrap();
-        assert!(matches!(plain.normalized_model_input().unwrap(), Cow::Borrowed(_)));
+        assert!(matches!(plain.normalized_model_input(&[]).unwrap(), Cow::Borrowed(_)));
     }
 
     #[test]
@@ -345,7 +460,7 @@ mod tests {
                 {"type":"input_file", "file_data":"data:application/pdf;base64,JVBERi0=", "filename":"a.pdf"}]}
         ]))
         .unwrap();
-        let error = input.normalized_model_input().unwrap_err();
+        let error = input.normalized_model_input(&[]).unwrap_err();
         assert!(
             error
                 .to_string()

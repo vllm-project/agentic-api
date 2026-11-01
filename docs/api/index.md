@@ -162,10 +162,52 @@ for vLLM, and rejects encrypted-only reasoning that vLLM cannot replay. Reasonin
 context and compatible opaque state support are tracked in
 [#444](https://github.com/vllm-project/agentic-api/issues/444).
 
+Multi-agent HTTP requests also support `store:false`. Send the complete history:
+append returned output items unchanged to your input, followed by new messages or
+matching client tool outputs. Re-declare `multi_agent` and the desired tools on each
+request. Without `previous_response_id` or `conversation`, the gateway uses this
+submitted input without loading stored history, and `store:false` skips persistence.
+There is no separate checkpoint request or mandatory response-boundary compaction.
+The coordinator routes public history and client tool outputs to their agent owners;
+public collaboration items are not forwarded directly to the inference engine.
+Encrypted `agent_message` contents remain opaque to clients. For returning these
+messages across gateway restarts or replicas, configure the same
+`AGENTIC_MULTI_AGENT_TRANSCRIPT_KEY` everywhere (a base64-encoded 32-byte secret);
+the default key lasts for the current process. Automatic per-agent compaction remains
+enabled; the explicit `compaction_trigger` extension is unsupported in this mode.
+
 Executor-backed requests accept at most 64 MCP server declarations and 128
 discovered MCP tools. MCP discovery metadata shares the request's retained
 response budget (`[responses] max_retained_bytes`, default 8 MiB) with upstream
 rounds and gateway tool output.
+
+A client that replays a response's items (`store: false`) may send back its `tool_search_call` and
+`tool_search_output` items. They are checked as a continuation's history is, so a malformed client search history gets
+the same error with `store: false` as after a `previous_response_id`, and the model sees each pair as the function call
+and output it saw live. Replayed `mcp_call` and `web_search_call` items are not converted yet. Sent inline, they reach
+vLLM as public records, which it does not accept; sent by `id`, the stored record is left out of the model's input.
+Continue such a response with `previous_response_id`.
+
+#### Hosted tool search
+
+`{"type": "tool_search"}` without `execution`, or with `execution: "server"`, makes the gateway run tool search
+itself. Mark functions, namespace members, or whole `type: "mcp"` servers with `defer_loading: true`; the model sees
+only their names and descriptions (an MCP server as `mcp_<server_label>`, described by `server_description`) until it
+loads them. The model passes `{"paths": [...], "query"?: "..."}`: each path loads a deferred function, the deferred
+members of a namespace, or an MCP server's tools, and a `query` keeps only the tools whose name or description contains
+it, ignoring case. Unknown paths load nothing. Each search returns a `tool_search_call` and a `tool_search_output` with
+`execution: "server"` and `call_id: null`, then the round continues with the loaded tools; tools loaded by an earlier
+response are not offered again. Searches do not count toward `max_tool_calls`, and `parallel_tool_calls` may be true.
+A deferred MCP server is listed at the start of a response as usual. As in the Responses API, if any declared MCP
+server cannot list its tools (unreachable, an HTTP error, not an MCP server, or unauthorized), deferred or not, the
+request fails: HTTP 424 with `type: "external_connector_error"`, `code: "http_error"`, and `param: "tools"` for JSON;
+for a stream, the failed `mcp_list_tools` lifecycle, an `error` event, and `response.failed`. A continuation whose
+history already holds a successful listing for that server keeps going, since the Responses API does not list it
+again. An `allowed_tools` filter that matches none of the server's tools is not a failure: the listing is empty.
+A `tool_choice` of type `mcp` is not supported (see [Unsupported request parameters](#unsupported-request-parameters)).
+`execution: "client"` keeps client-executed search unchanged. Operator-configured `[mcp_servers]` entries may set
+`defer_loading` and `description` as defaults; with `defer_loading = true`, a request that uses the server must declare
+hosted tool search or set `defer_loading: false`, and the defaults appear in the response's `tools` echo.
 
 #### Multi-agent
 
@@ -173,9 +215,10 @@ rounds and gateway tool output.
 gateway orchestrate subagents for one response and return attributed
 `multi_agent_call`, `multi_agent_call_output`, and `agent_message` items.
 `max_concurrent_subagents` defaults to 3 and must be positive. Multi-agent
-requests require `store: true`, reject `max_tool_calls` and reasoning summaries,
+requests reject `max_tool_calls` and reasoning summaries,
 and run over HTTP JSON and SSE only; the WebSocket transport rejects them.
-Continue the agent tree with `previous_response_id`. See
+Continue a stored agent tree with `previous_response_id`, or replay the complete
+item history with `store:false` as described above. See
 [HTTP multi-agent execution](https://github.com/vllm-project/agentic-api/blob/main/ARCHITECTURE.md#http-multi-agent-execution).
 
 #### Async client tools
@@ -241,7 +284,7 @@ Differences from OpenAI:
   round, the stream delivers the async call after that tool completes, keeping output
   indexes in order. Async calls before or without gateway calls stream immediately.
 
-`prompt_cache_key` is forwarded unchanged on direct and executor-backed HTTP
+`prompt_cache_key` is forwarded unchanged on HTTP
 requests, WebSocket requests, gateway tool rounds, automatic compaction,
 standalone `/v1/responses/compact` requests, and summary inference requested by
 a `compaction_trigger` input item.
@@ -308,7 +351,9 @@ metadata, not proof of upstream acceptance or a cache hit. Standalone compaction
 
 This matrix contributes to [#314](https://github.com/vllm-project/agentic-api/issues/314)
 and [#330](https://github.com/vllm-project/agentic-api/issues/330).
-Model-specific capability profiles and upstream-reported cache diagnostics remain follow-ups.
+Gateway-local per-model capability validation remains an open item in
+[#330](https://github.com/vllm-project/agentic-api/issues/330). Upstream-reported
+cache diagnostics are not implemented.
 
 `prompt_cache_retention` accepts the legacy `"in_memory"` and `"24h"` values.
 An explicit value is forwarded through HTTP JSON/SSE, WebSocket execution,
@@ -327,11 +372,11 @@ retention into `cache_salt` or `prompt_cache_options.ttl`. See the
 Forwarding is not a capability guarantee: the
 [vLLM Responses request contract](https://github.com/vllm-project/vllm/blob/840c7c2f4bc72c7c55edb2dea6d23f9a9c9734e0/vllm/entrypoints/openai/responses/protocol.py)
 checked on October 1, 2026 does not define `prompt_cache_retention`, so this field should not be
-used to configure vLLM cache lifetime. Model-specific backend capability enforcement
-remains a follow-up in
+used to configure vLLM cache lifetime. Gateway-local per-model capability validation
+remains an open item in
 [#330](https://github.com/vllm-project/agentic-api/issues/330).
 
-`service_tier` is also request-scoped. Direct and executor-backed HTTP requests,
+`service_tier` is also request-scoped. HTTP requests,
 WebSocket requests, gateway tool rounds, automatic compaction, standalone
 `/v1/responses/compact` requests, and `compaction_trigger` summary inference
 forward an explicit value unchanged. An absent or `null` value is not inherited
@@ -388,7 +433,7 @@ OpenAI reference recordings under `crates/agentic-server-core/tests/cassettes/ma
 
 - The value must be an integer from 1 to 9223372036854775807. Other values return
   `400` with `param: "max_tool_calls"` and code `integer_below_min_value`,
-  `integer_above_max_value`, or `invalid_type`, on direct and executor-backed HTTP
+  `integer_above_max_value`, or `invalid_type`, on HTTP
   requests and on WebSocket requests.
 - A call over the limit is not executed. The model receives
   `{"error":"UserError: Reached tool call limit of N"}` as its tool call output, and later
@@ -410,9 +455,9 @@ reference, so it rejects them with `400` and `type: "invalid_request_error"`
 instead of silently dropping them. The check runs before history lookup, tool
 discovery, storage, or inference for both `store` values.
 
-| Path | `background` | `prompt` |
-| --- | --- | --- |
-| Typed HTTP JSON/SSE, WebSocket, and split-execution hydration | Absent, `null`, or `false` accepted and not forwarded; `true` returns `code: "unsupported_value"`, and any other value returns `code: "invalid_type"`, both with `param: "background"` | Absent or `null` accepted; any other value returns `code: "unsupported_parameter"`, `param: "prompt"` |
+| Path | `background` | `prompt` | `tool_choice` of type `mcp` |
+| --- | --- | --- | --- |
+| Typed HTTP JSON/SSE, WebSocket, and split-execution hydration | Absent, `null`, or `false` accepted and not forwarded; `true` returns `code: "unsupported_value"`, and any other value returns `code: "invalid_type"`, both with `param: "background"` | Absent or `null` accepted; any other value returns `code: "unsupported_parameter"`, `param: "prompt"` | `code: "unsupported_value"`, `param: "tool_choice"` |
 
 Background mode is tracked in
 [#357](https://github.com/vllm-project/agentic-api/issues/357). This matrix
@@ -457,7 +502,7 @@ This matrix covers usage preservation under
 [#314](https://github.com/vllm-project/agentic-api/issues/314).
 The mode/TTL forwarding matrix above covers request preservation with an operator
 capability assertion. The breakpoint matrix above covers content preservation and compaction behavior;
-model-specific backend capability enforcement remains a separate acceptance item.
+gateway-local per-model capability validation remains an open item in #330.
 
 ### `GET /v1/responses/{response_id}`
 
@@ -513,6 +558,12 @@ Compacts direct input or a stored previous-response chain into a canonical
 window of retained user messages plus one `compaction` item. See
 [Responses compaction](../guides/responses-compaction.md) for request examples,
 automatic threshold management, and the local plaintext limitation.
+
+Multi-agent trees are unsupported on this endpoint, including those restored from
+client-carried checkpoints or `previous_response_id`; these requests return HTTP 400
+before inference. Multi-agent execution uses automatic per-agent compaction through
+`/v1/responses`, matching OpenAI's
+[multi-agent limitations](https://developers.openai.com/api/docs/guides/responses-multi-agent#limitations).
 
 ### `WS /v1/responses`
 
@@ -672,14 +723,37 @@ owns, such as Claude's native web search and web fetch server tools (the
 basic `web_search_20250305` and `web_fetch_20250910`, and their later versions
 when `allowed_callers` includes `"direct"`), the gateway runs
 the tool loop itself: it executes each gateway call, appends the result, and
-streams only the client-visible content. Every upstream round must be a
+returns the content of every round. Every upstream round must be a
 complete, well-formed Messages stream; a truncated or malformed round ends the
 response with an Anthropic `api_error` event before any gateway tool runs.
 Messages requests are not persisted. See
 [Claude Code integration](../design/claude-code-integration.md).
 
+Each native web search or web fetch call the gateway runs reaches the client as
+Anthropic returns it: a `server_tool_use` block, whose id is `srvtoolu_gw_`
+followed by the upstream `tool_use` id, then the matching
+`web_search_tool_result` or `web_fetch_tool_result` after the round's other
+blocks. The `server_tool_use` input is the call as the model made it, in the
+gateway's search schema (`query`, or `queries` for a batch). `usage.server_tool_use`
+counts the searches (one per query) and fetches that ran. A call through an
+operator alias, a plain function named `web_search`, or a call in a round the
+gateway does not run, such as one beside a client tool call, stays hidden.
 
-### Responses capability contract (#330)
+Send these blocks back unchanged. The gateway turns them into the
+`tool_use` / `tool_result` rounds the upstream saw, with the same ids and the
+same result text, on `/v1/messages` (with or without a gateway tool) and on
+`/v1/messages/count_tokens`. A search result's page text is sealed in its
+`encrypted_content`; search content that was altered or not sealed by the
+gateway, and a gateway block that is unpaired or repeated, are refused with
+HTTP 400 `invalid_request_error`. A fetched page is not sealed and replays as
+sent. A round that also ran a hidden call replays without it, since the client
+never saw that call. Search results sealed under
+another key, such as by a process without `AGENTIC_MESSAGES_RESULT_KEY` before
+a restart, reach the model as a note that they are no longer available. A
+`web_fetch_tool_result` also carries the page's `content_type` and `truncated`
+flag, and a refusal its `message`, so the model reads the same text again.
+
+### Responses capability contract and remaining work (#330)
 
 Both stateless and stored HTTP requests use the executor; the regressions compare
 these storage modes rather than claiming a current raw Responses proxy route.
@@ -711,13 +785,15 @@ A rejected WebSocket request does not make the connection unusable.
 | Typed mode/TTL and response echo | #436; omitted/null/invalid and transport cases in `prompt_cache_options` tests |
 | Content breakpoints and file normalization | #467; original file history and converted text keep the cache boundary |
 | Requested versus returned tier | #389; final root inference determines actual tier, retained in stored snapshots |
-| Model/region rejection without global restrictions | `responses/capability_contract.rs`: paired upstream policies, HTTP JSON/SSE, WebSocket, sampling/logprobs/effort/tier errors |
+| Upstream model/region error forwarding without global restrictions | `responses/capability_contract.rs`: paired upstream policies, HTTP JSON/SSE, WebSocket, sampling/logprobs/effort/tier errors |
+| Gateway-local per-model capability validation | Not implemented; remains open in #330 |
 | Reported cache usage | #421; preserve reads and optional writes, including zero; never infer writes or billing |
 | Supported/transformed/rejected paths | The mode/TTL, breakpoint and usage matrices above contribute to #314 |
 
 The capability tests use synthetic upstream policies to verify gateway forwarding
 and error delivery, not to certify live Astra parameter acceptance or a region's
 current tier availability. No new provider recordings or cache-effectiveness
-benchmarks are claimed. Gateway-local per-model capability profiles remain an
-optional follow-up; review of #330 closure must explicitly accept the upstream-owned
-validation boundary described here.
+benchmarks are claimed. Gateway-local per-model capability validation is not
+implemented and remains an open item in #330. This PR does not close the issue.
+Moving that requirement out of #330 would require explicit maintainer agreement;
+the current upstream-owned validation behavior alone does not establish completion.

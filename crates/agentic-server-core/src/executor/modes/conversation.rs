@@ -327,6 +327,10 @@ impl ConversationHandler {
             .ok_or_else(|| ExecutorError::InvalidRequest("conversation version is required for execute_turn".into()))?;
 
         let mut new_items = Vec::with_capacity(ctx.new_input_items.len() + output_items.len());
+        let output_items: Vec<_> = output_items
+            .into_iter()
+            .filter(|item| !item.is_already_in_history(&ctx.new_input_items))
+            .collect();
         new_items.extend(ctx.new_input_items);
         new_items.extend(output_items.into_iter().map(InOutItem::Output));
 

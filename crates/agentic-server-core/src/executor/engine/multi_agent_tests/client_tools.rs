@@ -365,7 +365,7 @@ async fn root_discovery_is_inherited_by_children_without_repeating_execution() {
                         assert_eq!(call.agent.as_ref().unwrap().agent_name, "/root");
                         Some(json!({"type":"tool_search_output", "call_id":call.call_id,
                         "execution":"client", "status":"completed",
-                        "tools":[if call.call_id == "search_weather" { weather() } else { travel() }]}))
+                        "tools":[if call.call_id.as_deref() == Some("search_weather") { weather() } else { travel() }]}))
                     }
                     _ => None,
                 })
