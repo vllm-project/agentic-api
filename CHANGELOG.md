@@ -6,6 +6,12 @@ All notable changes to Agentic API are documented here.
 
 ### Added
 
+- Accepted `configuration_update` input items on `POST /v1/responses` (part of #331). A request carrying
+  `{"type": "configuration_update", "reasoning": {"effort": "high"}}` was rejected with HTTP 400; the item now keeps
+  its position in the stored input items, in history loaded through `previous_response_id` or `conversation`, and in
+  the input sent upstream, while the request-level `reasoning.effort` stays as sent. An update must carry a non-empty
+  `reasoning.effort` and nothing else; a `text` update is still rejected. The gateway does not yet check upstream
+  support; the rules for WebSocket continuation, compaction, and multi-agent mode come later.
 - Returned the native web search and web fetch calls the gateway runs on `/v1/messages` to the client, as Anthropic
   returns them (part of #409): each executed call is a `server_tool_use` block (id `srvtoolu_gw_<upstream id>`)
   followed by its `web_search_tool_result` or `web_fetch_tool_result`, over JSON and SSE, and

@@ -15,9 +15,10 @@ pub use code_interpreter::{
     CodeInterpreterCall, CodeInterpreterCallOutput, CodeInterpreterCallStatus, CodeInterpreterCallStreamEvent,
 };
 pub use input::{
-    CompactionItem, CustomToolCallOutputMessage, FunctionToolResultMessage, InputContent, InputFileContent,
-    InputFunctionToolCall, InputImageContent, InputItem, InputMessage, InputMessageContent, InputTextContent,
-    InputToolSearchCall, RefusalContent, ResponsesInput, ToolCallOutput, ToolOutputContent, ToolSearchOutputMessage,
+    CompactionItem, ConfigurationUpdateItem, ConfigurationUpdateReasoning, CustomToolCallOutputMessage,
+    FunctionToolResultMessage, InputContent, InputFileContent, InputFunctionToolCall, InputImageContent, InputItem,
+    InputMessage, InputMessageContent, InputTextContent, InputToolSearchCall, RefusalContent, ResponsesInput,
+    ToolCallOutput, ToolOutputContent, ToolSearchOutputMessage,
 };
 pub use multi_agent::{
     AgentAttribution, AgentMessage, AgentMessageContent, InputAgentMessage, InputMultiAgentCall,

@@ -194,6 +194,10 @@ impl InputTokenEstimate {
                 self.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
                 self.add_text(&compaction.encrypted_content);
             }
+            InputItem::ConfigurationUpdate(update) => {
+                self.add_optional_text(update.id.as_deref());
+                self.add_text(&update.reasoning.effort);
+            }
             // `from_items` counts a search item as the function call or output the model reads.
             InputItem::ToolSearchCall(_)
             | InputItem::ToolSearchOutput(_)

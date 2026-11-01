@@ -66,6 +66,16 @@ impl RequestPayload {
         names
     }
 
+    /// The reasoning effort in effect for the next response: the last `configuration_update` in the input, which can
+    /// come from stored or replayed history, or else the request-level `reasoning.effort`. Neither value is rewritten;
+    /// both reach the upstream as the client sent them.
+    #[must_use]
+    pub fn effective_reasoning_effort(&self) -> Option<&str> {
+        self.input
+            .reasoning_effort_update()
+            .or_else(|| self.reasoning.as_deref()?.effort.as_deref())
+    }
+
     /// The input as the model reads it, using the namespace map and naming context built from this request.
     ///
     /// # Errors

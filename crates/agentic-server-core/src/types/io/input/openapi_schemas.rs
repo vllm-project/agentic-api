@@ -1,5 +1,5 @@
 use super::{InputContent, InputItem, InputMessageContent, ResponsesInput, ToolCallOutput};
-use utoipa::openapi::schema::{ArrayBuilder, OneOfBuilder, Schema, SchemaType, Type};
+use utoipa::openapi::schema::{AdditionalProperties, ArrayBuilder, OneOfBuilder, Schema, SchemaType, Type};
 use utoipa::openapi::{ObjectBuilder, Ref, RefOr};
 
 fn string_schema() -> RefOr<Schema> {
@@ -119,6 +119,26 @@ fn tagged_ref(type_value: &str, schema_name: &str) -> RefOr<Schema> {
         .into()
 }
 
+/// One closed object, so the schema rejects the fields the item's decoder rejects.
+fn configuration_update_variant() -> RefOr<Schema> {
+    ObjectBuilder::new()
+        .property(
+            "type",
+            ObjectBuilder::new()
+                .schema_type(SchemaType::new(Type::String))
+                .enum_values(Some(["configuration_update"])),
+        )
+        .required("type")
+        .property(
+            "id",
+            ObjectBuilder::new().schema_type(SchemaType::from_iter([Type::String, Type::Null])),
+        )
+        .property("reasoning", Ref::from_schema_name("ConfigurationUpdateReasoning"))
+        .required("reasoning")
+        .additional_properties(Some(AdditionalProperties::FreeForm(false)))
+        .into()
+}
+
 impl utoipa::PartialSchema for InputItem {
     fn schema() -> RefOr<Schema> {
         use utoipa::openapi::schema::AllOfBuilder;
@@ -163,6 +183,7 @@ impl utoipa::PartialSchema for InputItem {
             )
             .item(tagged_ref("web_search_call", "WebSearchCall"))
             .item(tagged_ref("mcp_call", "McpCall"))
+            .item(configuration_update_variant())
             .into()
     }
 }
