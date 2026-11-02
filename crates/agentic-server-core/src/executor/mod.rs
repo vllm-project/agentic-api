@@ -1,6 +1,7 @@
 //! Agentic executor.
 
 pub mod accumulator;
+pub mod background;
 pub mod compaction;
 pub mod engine;
 pub mod error;
@@ -32,6 +33,7 @@ mod relay;
 mod response_budget;
 mod upstream;
 
+pub use background::{BackgroundError, BackgroundJobs};
 pub use compaction::compact_response;
 pub use engine::{BoxStream, ExecuteRequest, create_conversation, execute, prepare_non_generating_turn};
 pub use error::{ExecutorError, ExecutorResult, ResourceLimit};

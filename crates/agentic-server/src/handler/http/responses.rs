@@ -6,7 +6,7 @@ use tracing::debug;
 
 use std::sync::Arc;
 
-use agentic_core::executor::{ExecuteRequest, compact_response as execute_compaction};
+use agentic_core::executor::{BackgroundError, ExecuteRequest, compact_response as execute_compaction};
 use agentic_core::proxy::{ProxyAuth, upstream_request_headers};
 use agentic_core::types::io::DeletedResponse;
 use agentic_core::types::request_response::{CompactRequest, RequestPayload};
@@ -92,13 +92,34 @@ pub async fn compact_response(State(state): State<AppState>, req: Request) -> Re
     }
 }
 
+/// Streaming retrieval and resume are not served yet: reject them rather than answer with JSON.
+fn reject_streaming_retrieval(query: Option<&str>) -> Result<(), BackgroundError> {
+    for (key, value) in url::form_urlencoded::parse(query.unwrap_or_default().as_bytes()) {
+        match key.as_ref() {
+            "stream" if !matches!(value.as_ref(), "false" | "0") => {
+                return Err(BackgroundError::StreamingRetrieval { param: "stream" });
+            }
+            "starting_after" => {
+                return Err(BackgroundError::StreamingRetrieval {
+                    param: "starting_after",
+                });
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
 /// Return a locally persisted Responses payload without invoking inference.
+///
+/// A background response reports its current status, including `queued` and `in_progress`.
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/v1/responses/{response_id}",
     params(("response_id" = String, Path, description = "Stored response ID")),
     responses(
         (status = 200, description = "Stored response", body = agentic_core::types::request_response::ResponsePayload),
+        (status = 400, description = "Streaming retrieval (`stream=true` or `starting_after`) is not supported", body = crate::openapi::ApiErrorResponse),
         (status = 401, description = "Missing or invalid bearer token", body = crate::openapi::ApiErrorResponse),
         (status = 404, description = "Response not found", body = crate::openapi::ApiErrorResponse),
         (status = 409, description = "Legacy response has no retrievable payload", body = crate::openapi::ApiErrorResponse),
@@ -106,8 +127,38 @@ pub async fn compact_response(State(state): State<AppState>, req: Request) -> Re
     security(("bearer_auth" = [])),
     tag = "responses",
 ))]
-pub async fn retrieve_response(State(state): State<AppState>, Path(response_id): Path<String>) -> Response {
+pub async fn retrieve_response(
+    State(state): State<AppState>,
+    Path(response_id): Path<String>,
+    RawQuery(query): RawQuery,
+) -> Response {
+    if let Err(error) = reject_streaming_retrieval(query.as_deref()) {
+        return executor_error_response(error.into());
+    }
     match state.exec_ctx.resp_handler.retrieve(&response_id).await {
+        Ok(payload) => axum::Json(payload).into_response(),
+        Err(error) => executor_error_response(error),
+    }
+}
+
+/// Cancel a background response, on whichever gateway instance runs it.
+///
+/// Cancelling a cancelled response returns it again.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/v1/responses/{response_id}/cancel",
+    params(("response_id" = String, Path, description = "Background response ID")),
+    responses(
+        (status = 200, description = "Cancelled response", body = agentic_core::types::request_response::ResponsePayload),
+        (status = 400, description = "Not a background response, or already completed, incomplete, or failed", body = crate::openapi::ApiErrorResponse),
+        (status = 401, description = "Missing or invalid bearer token", body = crate::openapi::ApiErrorResponse),
+        (status = 404, description = "Response not found", body = crate::openapi::ApiErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+    tag = "responses",
+))]
+pub async fn cancel_response(State(state): State<AppState>, Path(response_id): Path<String>) -> Response {
+    match state.exec_ctx.background_jobs().cancel(&response_id).await {
         Ok(payload) => axum::Json(payload).into_response(),
         Err(error) => executor_error_response(error),
     }
@@ -131,7 +182,11 @@ pub async fn retrieve_response(State(state): State<AppState>, Path(response_id):
 ))]
 pub async fn delete_response(State(state): State<AppState>, Path(response_id): Path<String>) -> Response {
     match state.exec_ctx.resp_handler.delete(&response_id).await {
-        Ok(()) => axum::Json(DeletedResponse::response(response_id)).into_response(),
+        Ok(()) => {
+            // A job running here stops now; one on another instance stops at its next lease renewal.
+            state.exec_ctx.background_jobs().stop_local(&response_id);
+            axum::Json(DeletedResponse::response(response_id)).into_response()
+        }
         Err(error) => executor_error_response(error),
     }
 }

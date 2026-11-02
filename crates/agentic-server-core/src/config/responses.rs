@@ -1,5 +1,6 @@
 //! Responses resource limits and operator-asserted upstream cache support.
 
+use super::BackgroundConfig;
 use crate::error::Error;
 
 pub const DEFAULT_MAX_RETAINED_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
@@ -23,6 +24,7 @@ pub struct ResponsesConfig {
     pub max_upstream_json_bytes: usize,
     pub max_upstream_sse_line_bytes: usize,
     pub max_stream_event_bytes: usize,
+    pub background: BackgroundConfig,
 }
 
 impl Default for ResponsesConfig {
@@ -33,6 +35,7 @@ impl Default for ResponsesConfig {
             max_upstream_json_bytes: DEFAULT_MAX_UPSTREAM_JSON_BYTES,
             max_upstream_sse_line_bytes: DEFAULT_MAX_UPSTREAM_SSE_LINE_BYTES,
             max_stream_event_bytes: DEFAULT_MAX_STREAM_EVENT_BYTES,
+            background: BackgroundConfig::default(),
         }
     }
 }
@@ -47,7 +50,7 @@ impl ResponsesConfig {
     ///
     /// # Errors
     /// Returns [`Error::Config`] when streaming delivery, upstream line, or JSON limits
-    /// cannot admit the retained response plus wire headroom.
+    /// cannot admit the retained response plus wire headroom, or the background limits are invalid.
     pub fn validate(&self) -> Result<(), Error> {
         let headroom = MIN_WIRE_HEADROOM_BYTES.max(self.max_retained_bytes / 4);
         let required = self.max_retained_bytes.saturating_add(headroom);
@@ -69,6 +72,6 @@ impl ResponsesConfig {
                 self.max_upstream_json_bytes, self.max_retained_bytes, required
             )));
         }
-        Ok(())
+        self.background.validate()
     }
 }

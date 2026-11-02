@@ -51,6 +51,11 @@ pub enum StorageError {
     #[error("conversation changed while the response was being generated")]
     ConversationConflict { conversation_id: String },
 
+    /// A background job no longer owns its active row: it was cancelled,
+    /// deleted, or failed by another gateway instance after its lease expired.
+    #[error("background response '{response_id}' is no longer owned by this job")]
+    BackgroundClaimLost { response_id: String },
+
     /// Database operation failed.
     ///
     /// Wraps `sqlx::Error` and automatically converts from it via `#[from]`.

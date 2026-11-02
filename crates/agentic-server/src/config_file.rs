@@ -223,6 +223,12 @@ pub(crate) struct ResponsesFileConfig {
     pub max_upstream_sse_line_bytes: Option<NonZeroUsize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_stream_event_bytes: Option<NonZeroUsize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub background_max_concurrent: Option<NonZeroUsize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub background_max_queued: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub background_timeout_seconds: Option<NonZeroU64>,
 }
 
 impl ResponsesFileConfig {
@@ -232,6 +238,9 @@ impl ResponsesFileConfig {
             && self.max_upstream_json_bytes.is_none()
             && self.max_upstream_sse_line_bytes.is_none()
             && self.max_stream_event_bytes.is_none()
+            && self.background_max_concurrent.is_none()
+            && self.background_max_queued.is_none()
+            && self.background_timeout_seconds.is_none()
     }
 }
 

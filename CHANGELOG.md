@@ -21,6 +21,19 @@ All notable changes to Agentic API are documented here.
   provider's `metadata`, and a failed native search as its documented error code. Calls through
   `MESSAGES_GATEWAY_TOOL_ALIASES`, a plain function named `web_search`, and a call in a round the gateway does not
   run stay hidden. The JSON response now carries the content of every round, as the stream did.
+- Added background mode for HTTP `POST /v1/responses` (#357). `background: true` validates and prepares the request
+  as a foreground request would, stores it as `queued`, and returns at once; a supervised job runs it on the same
+  engine path and stores the `completed`, `incomplete`, or `failed` result. `GET /v1/responses/{response_id}` reports
+  the current status, and the new `POST /v1/responses/{response_id}/cancel` cancels a queued or running response
+  (cancelling twice returns the same response; cancelling a finished one returns `400`). Admission is bounded per
+  instance by `[responses] background_max_concurrent` (default 16) and `background_max_queued` (default 64), with
+  `503 background_capacity_exceeded` beyond both, and each job by `background_timeout_seconds` (default 1800); each
+  has an `AGENTIC_BACKGROUND_*` environment override. Instances that share a database own their jobs through a
+  renewable lease, so cancellation and deletion work from any instance and a stopped instance's rows become `failed`.
+  Graceful shutdown records running and queued jobs `failed`. Migration `0008_background_responses.sql` adds three
+  nullable columns to `responses`. `background` with `store: false`, `stream: true`, or `multi_agent`, and `GET` with
+  `stream=true` or `starting_after`, return `400` for now; WebSocket and split-execution hydration still reject
+  `background: true`.
 - Made the reasoning effort levels of the Codex model catalog configurable per model
   (`[models."<served-model-id>"] supported_reasoning_levels = ["low", "high", "max"]`), instead of
   hard-coding `low`/`medium`/`high` for every model (#358). The configured order is preserved,

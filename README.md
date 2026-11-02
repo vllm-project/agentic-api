@@ -58,6 +58,7 @@ flowchart LR
 - 🤝 **Multi-agent orchestration**: a stored Responses request can spawn and coordinate subagents server-side over HTTP, returning their attributed work in one response ([details](#-multi-agent-responses)).
 - 📡 **Every transport**: non-streaming HTTP, server-sent events for token streaming, and full **WebSocket** support for interactive clients, with `stream_id` multiplexing.
 - 🧰 **Codex and Claude Code ready**: accepts Codex-shaped Responses traffic and Anthropic Messages traffic, preserving the tool declarations and item shapes each client depends on.
+- ⏳ **Background responses**: `background: true` returns a queued response at once and runs it on the server, to poll or cancel later ([details](docs/api/index.md#background-mode)).
 - 🗜️ **Compaction**: automatic and explicit context compaction through `/v1/responses/compact` ([guide](docs/guides/responses-compaction.md)).
 - 🔭 **Observability**: opt-in OpenTelemetry traces and metrics over OTLP ([guide](docs/deploying/observability.md)).
 - ✅ **Compatibility tested**: validated against the [Open Responses](https://www.openresponses.org/) compatibility suite, with replay-cassette tests for real OpenAI, vLLM, SGLang, and NVIDIA Dynamo traffic.
@@ -66,8 +67,9 @@ flowchart LR
 
 | Endpoint | Description | Status |
 | --- | --- | --- |
-| `POST /v1/responses` | OpenAI-compatible Responses API with state, tools, and streaming | ✅ |
-| `GET /v1/responses/{response_id}` | Retrieve a locally stored response | ✅ |
+| `POST /v1/responses` | OpenAI-compatible Responses API with state, tools, streaming, and background mode | ✅ |
+| `GET /v1/responses/{response_id}` | Retrieve a locally stored response, or poll a background response | ✅ |
+| `POST /v1/responses/{response_id}/cancel` | Cancel a background response | ✅ |
 | `DELETE /v1/responses/{response_id}` | Delete a locally stored response | ✅ |
 | `GET /v1/responses/{response_id}/input_items` | List the input items of a stored response | ✅ |
 | `GET /v1/responses` | WebSocket transport for the Responses API | ✅ |

@@ -288,6 +288,18 @@ sequence values while an upgraded replica is serving. During a maintenance windo
 Ordinary rolling updates are appropriate only after every migration in the target release has been verified as
 expand/contract compatible with the previously deployed gateway.
 
+The background-response migration (`0008_background_responses.sql`) only adds three nullable columns and a partial
+index to `responses`, so a rolling update from the previous release is safe. Until every pod runs the new release,
+the older pods reject `background: true`, answer `POST /v1/responses/{response_id}/cancel` as an unknown route, and
+continue from a running background response as if it had no history; finish the rollout before clients rely on
+background mode.
+
+Background jobs run in the pod that admitted them. Stopping a pod stops its jobs: the bounded drain records each
+running or queued background response `failed`, so a rolling update or scale-down fails in-flight background
+responses and clients must retry them. A pod that exits without draining leaves rows that another pod fails once their
+30-second ownership lease expires, at its startup or when the response is retrieved or cancelled. The replicas' clocks
+must agree to within a few seconds. See [background mode](../api/index.md#background-mode).
+
 For a supervisor-managed schema:
 
 1. apply the repository migrations in a release job before updating the Deployment;

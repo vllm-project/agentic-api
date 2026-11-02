@@ -176,6 +176,11 @@ CREATE UNIQUE INDEX idx_items_conversation_id ON items (conversation_id, seq);
 COMMIT;
 ```
 
+Background responses also require the `responses.background_status`, `background_owner`, and
+`background_lease_expires_at` columns, so the compatibility check fails until migration
+`0008_background_responses.sql` is applied. The migration only adds nullable columns and a partial index; apply it
+with the migration role before rolling out this release.
+
 Enable automated backups and point-in-time recovery in the managed database service according to the deployment's recovery-point and recovery-time requirements. Test restores separately; gateway replicas do not create database backups.
 
 ## Smoke test

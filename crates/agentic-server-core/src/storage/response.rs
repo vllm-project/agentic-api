@@ -4,6 +4,11 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
 
+mod background;
+
+pub(crate) use background::{ResponseWrite, write_turn_in_tx};
+
+use super::models::background::TurnRow;
 use super::models::{item, response};
 use super::pool::DbPool;
 use super::types::{ResponseData, ResponseMetadata, StorageError, StoreResult};
@@ -157,8 +162,15 @@ impl ResponseStore {
         new_items: Vec<InOutItem>,
         metadata: &ResponseMetadata,
     ) -> StoreResult<()> {
-        self.persist_with_conversation_id(response_id, None, previous_response_id, new_items, metadata)
-            .await
+        self.persist_with_conversation_id(
+            response_id,
+            None,
+            previous_response_id,
+            new_items,
+            metadata,
+            ResponseWrite::Insert,
+        )
+        .await
     }
 
     /// Persists a response with its optional conversation association.
@@ -173,6 +185,7 @@ impl ResponseStore {
         previous_response_id: Option<&str>,
         new_items: Vec<InOutItem>,
         metadata: &ResponseMetadata,
+        write: ResponseWrite<'_>,
     ) -> StoreResult<()> {
         let pool = self.pool()?;
 
@@ -207,15 +220,14 @@ impl ResponseStore {
         item_ids.extend(created.into_iter().map(|item| item.id));
         let history_item_ids_json = serialize_to_string(&item_ids)?;
 
-        response::create_in_tx(
-            &mut tx,
-            response_id,
+        let row = TurnRow {
+            id: response_id,
             conversation_id,
             previous_response_id,
-            Some(&history_item_ids_json),
-            Some(&metadata_json),
-        )
-        .await?;
+            history_item_ids: &history_item_ids_json,
+            metadata: &metadata_json,
+        };
+        write_turn_in_tx(&mut tx, write, row).await?;
         tx.commit().await?;
 
         Ok(())

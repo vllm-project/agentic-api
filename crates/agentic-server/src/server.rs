@@ -95,6 +95,7 @@ async fn serve_gateway(
     };
     let shutdown_token = state.shutdown_token.clone();
     let websocket_tracker = state.websocket_tracker.clone();
+    let background_jobs = state.exec_ctx.background_jobs().clone();
     let router = build_router_with_auth(state, &server_config, authenticator);
     let listener = TcpListener::bind(&addr).await?;
     let addr = listener.local_addr()?;
@@ -104,11 +105,18 @@ async fn serve_gateway(
         gateway_listener(listener),
         router.into_make_service_with_connect_info::<SocketAddr>(),
     )
-    .with_graceful_shutdown(async move {
-        shutdown_token.cancelled().await;
+    .with_graceful_shutdown({
+        let background_jobs = background_jobs.clone();
+        async move {
+            shutdown_token.cancelled().await;
+            // Stop admitting and stop running jobs while connections drain.
+            background_jobs.begin_shutdown();
+        }
     })
     .await?;
     websocket_tracker.wait_until_idle().await;
+    // Each stopped job records its row `failed` within the drain timeout.
+    background_jobs.shutdown().await;
     Ok(())
 }
 

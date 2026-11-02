@@ -4,7 +4,7 @@ pub mod websocket;
 
 pub use common::{convert_response, executor_error_response};
 pub use http::{
-    chat_completions, compact_response, completions, count_tokens, create_conversation, create_item,
+    cancel_response, chat_completions, compact_response, completions, count_tokens, create_conversation, create_item,
     delete_conversation, delete_item, delete_response, embeddings, health, list_input_items, list_items, messages,
     models, ready, responses, retrieve_conversation, retrieve_item, retrieve_model, retrieve_response, transcriptions,
     translations, update_conversation,

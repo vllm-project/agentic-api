@@ -1747,7 +1747,7 @@ async fn websocket_rejects_unsupported_parameters_and_keeps_the_connection() {
             "background",
             json!(true),
             "unsupported_value",
-            "background mode is not supported; omit `background` or set it to false",
+            "background mode is only supported by HTTP POST /v1/responses; omit `background` or set it to false",
         ),
         (
             "prompt",

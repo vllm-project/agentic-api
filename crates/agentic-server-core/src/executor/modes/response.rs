@@ -1,6 +1,7 @@
 //! Response storage handler — owns all response store operations.
 
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use crate::storage::{ResponseData, ResponseMetadata, ResponseStore, StorageError};
 use crate::types::io::OutputItem;
@@ -8,7 +9,10 @@ use crate::types::io::{InOutItem, InputItem};
 use crate::types::io::{ItemOrder, ItemPage, ListItemsResponse};
 use crate::types::request_response::ResponsePayload;
 
+mod lifecycle;
+
 use super::CommittedResponse;
+use crate::executor::background;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::multi_agent::ValidatedTreeCheckpoint;
 use crate::executor::request::RequestContext;
@@ -17,6 +21,8 @@ use crate::executor::request::RequestContext;
 #[derive(Clone, Debug)]
 pub struct ResponseHandler {
     store: ResponseStore,
+    /// Set for a background job's turn: its write completes the row this owner holds.
+    background_owner: Option<Arc<str>>,
 }
 
 impl ResponseHandler {
@@ -34,17 +40,31 @@ impl ResponseHandler {
     }
     #[must_use]
     pub fn new(store: ResponseStore) -> Self {
-        Self { store }
+        Self {
+            store,
+            background_owner: None,
+        }
     }
 
-    /// Retrieves the terminal payload of a response created with `store=true`.
+    /// This handler for a background job: its turn completes the `in_progress`
+    /// row `owner` holds instead of inserting a new row.
+    pub(crate) fn finalizing_background(&self, owner: &Arc<str>) -> Self {
+        Self {
+            store: self.store.clone(),
+            background_owner: Some(Arc::clone(owner)),
+        }
+    }
+
+    /// Retrieves the stored payload of a response created with `store=true`. A
+    /// background response reports its current status; one whose owner stopped
+    /// renewing its lease is failed first.
     ///
     /// # Errors
     /// Returns `ResponseNotFound` for missing IDs, a storage error for unavailable storage, and a conflict
     /// for older records that contain continuation history but no response snapshot.
     pub async fn retrieve(&self, response_id: &str) -> ExecutorResult<ResponsePayload> {
         let stored = self.store.get(response_id).await?;
-        stored
+        let snapshot = stored
             .metadata
             .response_snapshot
             .map(|snapshot| *snapshot)
@@ -52,7 +72,9 @@ impl ResponseHandler {
                 ExecutorError::Conflict(
                     "stored response has no retrievable payload; create a new response with store=true".into(),
                 )
-            })
+            })?;
+        let expired = background::expire_if_stale(self, response_id, &snapshot, background::now_millis()).await?;
+        Ok(expired.unwrap_or(snapshot))
     }
 
     /// Deletes a stored response.
@@ -100,6 +122,7 @@ impl ResponseHandler {
     /// without a retrievable snapshot.
     pub async fn list_input_items(&self, response_id: &str, page: ItemPage<'_>) -> ExecutorResult<ListItemsResponse> {
         let snapshot = self.retrieve(response_id).await?;
+        background::ensure_listable(&snapshot)?;
         let rows = self.store.get_items(response_id).await?;
         let mut items = rows
             .into_iter()
@@ -160,8 +183,10 @@ impl ResponseHandler {
                 ExecutorError::Storage(error)
             }
         })?;
+        if let Some(snapshot) = stored.metadata.response_snapshot.take() {
+            background::ensure_continuable(prev_id, &snapshot)?;
+        }
         // Continuation checkpoints retain history and settings, not a duplicate payload.
-        stored.metadata.response_snapshot = None;
         Ok(stored)
     }
 
@@ -283,6 +308,7 @@ impl ResponseHandler {
             metadata.previous_response_id.as_deref()
         };
 
+        let write = background::turn_write(self.background_owner.as_deref(), &metadata);
         let result = if write_durable {
             self.store
                 .persist_with_conversation_id(
@@ -291,6 +317,7 @@ impl ResponseHandler {
                     previous_durable_id,
                     new_items,
                     &metadata,
+                    write,
                 )
                 .await
         } else {

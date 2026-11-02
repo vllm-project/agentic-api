@@ -1,5 +1,8 @@
 //! Conversation storage handler — owns all conversation store operations.
 
+use std::sync::Arc;
+
+use crate::storage::conversation::ConversationTurn;
 use crate::storage::{
     ConversationData, ConversationSnapshot, ConversationStore, ConversationVersion, ResponseMetadata, StorageError,
 };
@@ -9,6 +12,7 @@ use crate::types::io::OutputItem;
 use crate::types::io::{ItemPage, ListItemsResponse};
 
 use super::CommittedResponse;
+use crate::executor::background;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::multi_agent::ValidatedTreeCheckpoint;
 use crate::executor::request::RequestContext;
@@ -17,6 +21,8 @@ use crate::executor::request::RequestContext;
 #[derive(Clone, Debug)]
 pub struct ConversationHandler {
     store: ConversationStore,
+    /// Set for a background job's turn: its write completes the row this owner holds.
+    background_owner: Option<Arc<str>>,
 }
 
 impl ConversationHandler {
@@ -34,7 +40,19 @@ impl ConversationHandler {
     }
     #[must_use]
     pub fn new(store: ConversationStore) -> Self {
-        Self { store }
+        Self {
+            store,
+            background_owner: None,
+        }
+    }
+
+    /// This handler for a background job: its turn completes the `in_progress`
+    /// row `owner` holds instead of inserting a new row.
+    pub(crate) fn finalizing_background(&self, owner: &Arc<str>) -> Self {
+        Self {
+            store: self.store.clone(),
+            background_owner: Some(Arc::clone(owner)),
+        }
     }
 
     /// Gets an existing conversation or creates one.
@@ -334,15 +352,13 @@ impl ConversationHandler {
         new_items.extend(ctx.new_input_items);
         new_items.extend(output_items.into_iter().map(InOutItem::Output));
 
+        let turn = ConversationTurn {
+            response_id: &ctx.response_id,
+            previous_response_id: metadata.previous_response_id.as_deref(),
+            write: background::turn_write(self.background_owner.as_deref(), &metadata),
+        };
         self.store
-            .persist_if_version(
-                &conversation_id,
-                conversation_version,
-                &ctx.response_id,
-                metadata.previous_response_id.as_deref(),
-                new_items,
-                &metadata,
-            )
+            .persist_turn_if_version(&conversation_id, conversation_version, turn, new_items, &metadata)
             .await
             .map_err(|error| match error {
                 source @ StorageError::ConversationConflict { .. } => ExecutorError::ConversationLocked { source },

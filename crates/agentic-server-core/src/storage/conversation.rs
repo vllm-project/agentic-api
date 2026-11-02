@@ -3,8 +3,10 @@
 use std::convert::TryFrom;
 use std::sync::Arc;
 
+use super::models::background::TurnRow;
 use super::models::{conversation, item, response};
 use super::pool::DbPool;
+use super::response::{ResponseWrite, write_turn_in_tx};
 use super::types::response::decode_metadata;
 use super::types::{
     ConversationData, ConversationSnapshot, ConversationVersion, ResponseMetadata, StorageError, StoreResult,
@@ -14,6 +16,14 @@ use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 use crate::types::io::ItemOrder;
 use crate::utils::common::{serialize_to_string, uuid7_str};
+
+/// The response row one persisted conversation turn writes.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ConversationTurn<'a> {
+    pub response_id: &'a str,
+    pub previous_response_id: Option<&'a str>,
+    pub write: ResponseWrite<'a>,
+}
 
 /// Conversation storage operations.
 #[derive(Clone, Debug)]
@@ -159,15 +169,13 @@ impl ConversationStore {
         new_items: Vec<InOutItem>,
         metadata: &ResponseMetadata,
     ) -> StoreResult<()> {
-        self.persist_impl(
-            conversation_id,
-            None,
+        let turn = ConversationTurn {
             response_id,
             previous_response_id,
-            new_items,
-            metadata,
-        )
-        .await
+            write: ResponseWrite::Insert,
+        };
+        self.persist_impl(conversation_id, None, turn, new_items, metadata)
+            .await
     }
 
     /// Persists a conversation turn only if its stored version still matches.
@@ -184,23 +192,33 @@ impl ConversationStore {
         new_items: Vec<InOutItem>,
         metadata: &ResponseMetadata,
     ) -> StoreResult<()> {
-        self.persist_impl(
-            conversation_id,
-            Some(expected_version),
+        let turn = ConversationTurn {
             response_id,
             previous_response_id,
-            new_items,
-            metadata,
-        )
-        .await
+            write: ResponseWrite::Insert,
+        };
+        self.persist_turn_if_version(conversation_id, expected_version, turn, new_items, metadata)
+            .await
+    }
+
+    /// Persists a conversation turn with its row write only if its stored version still matches.
+    pub(crate) async fn persist_turn_if_version(
+        &self,
+        conversation_id: &str,
+        expected_version: ConversationVersion,
+        turn: ConversationTurn<'_>,
+        new_items: Vec<InOutItem>,
+        metadata: &ResponseMetadata,
+    ) -> StoreResult<()> {
+        self.persist_impl(conversation_id, Some(expected_version), turn, new_items, metadata)
+            .await
     }
 
     async fn persist_impl(
         &self,
         conversation_id: &str,
         expected_version: Option<ConversationVersion>,
-        response_id: &str,
-        previous_response_id: Option<&str>,
+        turn: ConversationTurn<'_>,
         new_items: Vec<InOutItem>,
         metadata: &ResponseMetadata,
     ) -> StoreResult<()> {
@@ -253,16 +271,15 @@ impl ConversationStore {
         let history_item_ids = item::ids_for_conversation_in_tx(&mut tx, conversation_id).await?;
         let history_item_ids_json = serialize_to_string(&history_item_ids)?;
 
-        response::create_in_tx(
-            &mut tx,
-            response_id,
-            Some(conversation_id),
-            previous_response_id,
-            Some(&history_item_ids_json),
-            Some(&metadata_json),
-        )
-        .await?;
-        conversation::set_latest_response_in_tx(&mut tx, conversation_id, response_id).await?;
+        let row = TurnRow {
+            id: turn.response_id,
+            conversation_id: Some(conversation_id),
+            previous_response_id: turn.previous_response_id,
+            history_item_ids: &history_item_ids_json,
+            metadata: &metadata_json,
+        };
+        write_turn_in_tx(&mut tx, turn.write, row).await?;
+        conversation::set_latest_response_in_tx(&mut tx, conversation_id, turn.response_id).await?;
         conversation::bump_revision_in_tx(&mut tx, conversation_id).await?;
         tx.commit().await?;
 

@@ -2,6 +2,7 @@ use http::StatusCode;
 use thiserror::Error;
 
 use crate::StorageError;
+use crate::executor::background::BackgroundError;
 use crate::tool::ToolError;
 use crate::types::io::input::InputValidationError;
 use crate::types::io::output::McpListTools;
@@ -154,6 +155,9 @@ pub enum ExecutorError {
         .0.server_label
     )]
     McpListToolsFailed(Box<McpListTools>),
+
+    #[error(transparent)]
+    Background(#[from] BackgroundError),
 }
 
 impl From<UpstreamRequestError> for ExecutorError {
@@ -192,6 +196,7 @@ impl ExecutorError {
     #[must_use]
     pub fn http_status(&self) -> StatusCode {
         match self.client_visible_error() {
+            Self::Background(error) => error.http_status(),
             Self::Storage(StorageError::PreviousResponseNotFound { .. })
             | Self::ConversationLocked { .. }
             | Self::Tool(
@@ -232,6 +237,7 @@ impl ExecutorError {
     #[must_use]
     pub fn error_type(&self) -> &'static str {
         match self.client_visible_error() {
+            Self::Background(error) => error.error_type(),
             Self::ConversationLocked { .. }
             | Self::Tool(
                 ToolError::Config(_)
@@ -275,6 +281,7 @@ impl ExecutorError {
     #[must_use]
     pub fn error_code(&self) -> &'static str {
         match self.client_visible_error() {
+            Self::Background(error) => error.code(),
             Self::ConversationLocked { .. } => "conversation_locked",
             Self::Storage(StorageError::PreviousResponseNotFound { .. }) => "previous_response_not_found",
             Self::Conflict(_) => "response_already_stored",
@@ -296,6 +303,7 @@ impl ExecutorError {
     #[must_use]
     pub fn error_param(&self) -> Option<&str> {
         match self.client_visible_error() {
+            Self::Background(error) => error.param(),
             Self::Storage(StorageError::InvalidItemId { param, .. })
             | Self::Tool(ToolError::UnknownParameter { param })
             | Self::UnsupportedValue { param, .. } => Some(param),
@@ -358,6 +366,19 @@ impl ExecutorError {
             error.insert("param".to_owned(), serde_json::Value::Null);
         }
         serde_json::Value::Object(error)
+    }
+
+    /// The `error` object of a `failed` response: its message, type, code, and parameter when it has one.
+    pub(crate) fn failed_response_error(&self) -> serde_json::Value {
+        let mut details = serde_json::json!({
+            "message": self.error_message(),
+            "type": self.error_type(),
+            "code": self.error_code(),
+        });
+        if let Some(param) = self.error_param() {
+            details["param"] = serde_json::json!(param);
+        }
+        details
     }
 
     /// Serialise the error into the HTTP response body bytes.
@@ -613,7 +634,7 @@ mod tests {
         assert_eq!(
             envelope(background),
             serde_json::json!({"error": {
-                "message": "background mode is not supported; omit `background` or set it to false",
+                "message": "background mode is only supported by HTTP POST /v1/responses; omit `background` or set it to false",
                 "type": "invalid_request_error",
                 "code": "unsupported_value",
                 "param": "background"
