@@ -268,3 +268,108 @@ async fn malformed_update_is_rejected_before_upstream() {
 
     harness.stop().await;
 }
+
+#[tokio::test]
+async fn an_update_is_rejected_where_compaction_would_drop_it() {
+    let harness = Harness::start().await;
+    let stored = harness
+        .create(json!({"model": "test-model", "store": true, "input": [update("high"), user("first")]}))
+        .await;
+    let stored_id = stored["id"].as_str().unwrap();
+    let calls = harness.upstream.lock().await.len();
+    let compaction = json!([{"type": "compaction", "compact_threshold": 1}]);
+    let own_input = json!([user("first"), update("high"), user("second")]);
+    for (path, body) in [
+        (
+            "/v1/responses",
+            json!({"model": "test-model", "store": true, "context_management": compaction, "input": own_input}),
+        ),
+        (
+            "/v1/responses",
+            json!({"model": "test-model", "store": true, "context_management": compaction,
+            "previous_response_id": stored_id, "input": "next turn"}),
+        ),
+        (
+            "/v1/responses",
+            json!({"model": "test-model", "store": true, "previous_response_id": stored_id,
+            "input": [{"type": "compaction_trigger"}]}),
+        ),
+        (
+            "/v1/responses",
+            json!({"model": "test-model", "store": true, "multi_agent": {"enabled": true}, "input": own_input}),
+        ),
+        (
+            "/v1/responses/compact",
+            json!({"model": "test-model", "input": own_input}),
+        ),
+        (
+            "/v1/responses/compact",
+            json!({"model": "test-model", "previous_response_id": stored_id}),
+        ),
+    ] {
+        let response = harness
+            .client
+            .post(format!("{}{path}", harness.url))
+            .header("OpenAI-Beta", "responses_multi_agent=v1")
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{path} {body}");
+        let error: Value = response.json().await.unwrap();
+        assert_eq!(error["error"]["type"], "invalid_request_error");
+        assert!(
+            error["error"]["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("configuration_update")),
+            "{error}"
+        );
+    }
+    assert_eq!(
+        harness.upstream.lock().await.len(),
+        calls,
+        "no summary or answer request reaches the upstream"
+    );
+
+    harness.stop().await;
+}
+
+#[tokio::test]
+async fn an_update_sent_after_compaction_reaches_the_next_turn() {
+    let harness = Harness::start().await;
+    let first = harness
+        .create(json!({"model": "test-model", "store": true, "input": "first"}))
+        .await;
+    let compacted = harness
+        .create(
+            json!({"model": "test-model", "store": true, "previous_response_id": first["id"],
+            "input": [{"type": "compaction_trigger"}]}),
+        )
+        .await;
+    assert_eq!(kinds(&compacted["output"]), ["compaction"]);
+    let updated = harness
+        .create(
+            json!({"model": "test-model", "store": true, "reasoning": {"effort": "low"},
+            "previous_response_id": compacted["id"], "input": [update("high"), user("second")]}),
+        )
+        .await;
+    harness
+        .create(
+            json!({"model": "test-model", "store": true, "reasoning": {"effort": "low"},
+            "previous_response_id": updated["id"], "input": "third"}),
+        )
+        .await;
+
+    let upstream = harness.last_upstream_body().await;
+    assert_eq!(upstream["reasoning"], json!({"effort": "low"}));
+    let input = upstream["input"].as_array().unwrap();
+    let at = input
+        .iter()
+        .position(|item| item["type"] == "configuration_update")
+        .expect("the update reaches the turn after it");
+    assert_eq!(input[at], update("high"));
+    assert_eq!(input[at + 1], user("second"));
+    assert_eq!(input.last().unwrap()["content"], "third");
+
+    harness.stop().await;
+}

@@ -341,6 +341,12 @@ pub async fn compact_response(
             "/responses/compact is not supported with multi_agent".into(),
         ));
     }
+    // The compacted window keeps no `configuration_update`, so the client would lose the effective reasoning effort.
+    if ctx.enriched_request.input.reasoning_effort_update().is_some() {
+        return Err(ExecutorError::InvalidRequest(
+            "/responses/compact is not supported with configuration_update".into(),
+        ));
+    }
     let (mut ctx, tool_search_state) =
         prepare_request_tools(ctx, &exec_ctx.conv_handler, &exec_ctx.resp_handler).await?;
     let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);

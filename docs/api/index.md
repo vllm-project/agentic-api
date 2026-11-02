@@ -193,8 +193,11 @@ the reasoning effort from its position on. The gateway keeps it where the client
 history loaded through `previous_response_id` or `conversation`, and in the input sent upstream. The request-level
 `reasoning.effort`, which the response reports, stays as sent, so the request before the update is unchanged.
 Only the reasoning part of an update is supported: `reasoning.effort` must be a non-empty string, and an update with
-any other field, such as `text`, is rejected. The gateway does not yet check that the upstream supports the item, and
-the rules for WebSocket continuation, compaction, and multi-agent mode are still open
+any other field, such as `text`, is rejected. Compaction keeps user messages and its summary but not the update, so a
+request that can compact rejects an update in its input or history with HTTP 400: one with a `compaction` entry in
+`context_management`, one with a `compaction_trigger` item, a multi-agent request (each agent compacts automatically),
+and `POST /v1/responses/compact`. An update sent after a compaction is kept as above. The gateway does not yet check
+that the upstream supports the item, and the rules for WebSocket continuation are still open
 ([#331](https://github.com/vllm-project/agentic-api/issues/331)).
 
 #### Hosted tool search

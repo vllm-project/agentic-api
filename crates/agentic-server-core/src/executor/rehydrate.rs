@@ -206,6 +206,7 @@ async fn rehydrate_request(
         .validate_declarations(ctx.enriched_request.tool_declarations().as_deref())?;
     ctx.enriched_request.input.validate()?;
     validate_multi_agent_request(&ctx.enriched_request)?;
+    validate_configuration_update(&ctx.enriched_request)?;
     Ok(ctx)
 }
 
@@ -263,6 +264,34 @@ fn validate_multi_agent_request(request: &RequestPayload) -> ExecutorResult<()> 
         ));
     }
     Ok(())
+}
+
+/// Compaction keeps user messages and its summary but not `configuration_update` items, so the input after it, and
+/// every later turn, would lose the effective reasoning effort. Until it keeps them, a request that can compact rejects
+/// an update in its input or history: automatic compaction, a `compaction_trigger`, or multi-agent mode, which compacts
+/// each agent automatically. `/responses/compact` has its own check.
+fn validate_configuration_update(request: &RequestPayload) -> ExecutorResult<()> {
+    if request.input.reasoning_effort_update().is_none() {
+        return Ok(());
+    }
+    let mode = if request.multi_agent.as_ref().is_some_and(|config| config.enabled) {
+        "multi_agent"
+    } else if request.input.has_compaction_trigger() {
+        "compaction_trigger"
+    } else if request
+        .context_management
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .any(|entry| entry.type_ == "compaction")
+    {
+        "context_management compaction"
+    } else {
+        return Ok(());
+    };
+    Err(ExecutorError::InvalidRequest(format!(
+        "configuration_update is not supported with {mode}"
+    )))
 }
 
 /// Hydrates `ctx` from the previous response chain.
