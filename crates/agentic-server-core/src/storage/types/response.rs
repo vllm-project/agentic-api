@@ -3,14 +3,12 @@
 use std::convert::TryFrom;
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use super::super::models::Response as StorageDbResponse;
 use super::super::models::conversation::LatestTurn;
 use super::errors::StorageError;
 use crate::types::agent_tree::StoredTreeSnapshot;
 use crate::types::io::ToolChoice;
-use crate::types::io::reasoning::upgrade_legacy_reasoning;
 use crate::types::request_response::ResponsePayload;
 use crate::types::tools::ResponsesTool;
 use crate::utils::common::serialize_to_string;
@@ -20,9 +18,6 @@ use crate::utils::common::serialize_to_string;
 pub struct ResponseMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub multi_agent_tree: Option<StoredTreeSnapshot>,
-    /// Exact terminal Responses payload, absent for legacy and non-Responses records.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub response_snapshot: Option<Box<ResponsePayload>>,
     pub model: String,
     pub previous_response_id: Option<String>,
     pub effective_tools: Option<Vec<ResponsesTool>>,
@@ -100,37 +95,12 @@ pub(in crate::storage) fn decode_turn_metadata(
         .map_err(|_| invalid_metadata())
 }
 
-/// Decode the `responses.metadata` column; every reader of stored [`ResponseMetadata`] goes through here.
-///
-/// Snapshots and agent trees stored before typed reasoning can hold reasoning items
-/// in the earlier shape; project those and decode again. Anything the projection
-/// can't read still fails closed.
+/// Decode the `responses.metadata` column.
 impl TryFrom<&str> for ResponseMetadata {
     type Error = StorageError;
 
     fn try_from(json: &str) -> Result<Self, Self::Error> {
-        serde_json::from_str::<Self>(json).or_else(|error| {
-            let Ok(mut metadata) = serde_json::from_str::<Value>(json) else {
-                return Err(StorageError::Serialization(error));
-            };
-            if let Some(output) = metadata
-                .pointer_mut("/response_snapshot/output")
-                .and_then(Value::as_array_mut)
-            {
-                upgrade_legacy_reasoning(output);
-            }
-            if let Some(agents) = metadata
-                .pointer_mut("/multi_agent_tree/agents")
-                .and_then(Value::as_array_mut)
-            {
-                for agent in agents {
-                    if let Some(history) = agent.get_mut("history").and_then(Value::as_array_mut) {
-                        upgrade_legacy_reasoning(history);
-                    }
-                }
-            }
-            Self::deserialize(metadata).map_err(StorageError::Serialization)
-        })
+        Ok(serde_json::from_str(json)?)
     }
 }
 
@@ -149,14 +119,41 @@ impl TryFrom<&ResponseMetadata> for String {
                 tool.sanitize_for_persistence();
             }
         }
-        if let Some(snapshot) = persisted.response_snapshot.as_mut()
-            && let Some(tools) = snapshot.tools.as_mut()
-        {
+        serialize_to_string(&persisted).map_err(StorageError::Serialization)
+    }
+}
+
+/// Encode the `responses.snapshot` column: the response exactly as returned, without request-scoped MCP secrets.
+impl TryFrom<&ResponsePayload> for String {
+    type Error = StorageError;
+
+    fn try_from(snapshot: &ResponsePayload) -> Result<Self, Self::Error> {
+        let mut persisted = snapshot.clone();
+        if let Some(tools) = persisted.tools.as_mut() {
             for tool in tools {
                 tool.sanitize_for_persistence();
             }
         }
         serialize_to_string(&persisted).map_err(StorageError::Serialization)
+    }
+}
+
+/// The number of output items in a `responses.snapshot` column, counted without decoding them.
+pub(in crate::storage) fn snapshot_output_count(json: &str) -> Result<usize, StorageError> {
+    #[derive(Deserialize)]
+    struct SnapshotOutput {
+        #[serde(default)]
+        output: Vec<serde::de::IgnoredAny>,
+    }
+    Ok(serde_json::from_str::<SnapshotOutput>(json)?.output.len())
+}
+
+/// Decode the `responses.snapshot` column.
+impl TryFrom<&str> for ResponsePayload {
+    type Error = StorageError;
+
+    fn try_from(json: &str) -> Result<Self, Self::Error> {
+        Ok(serde_json::from_str(json)?)
     }
 }
 
@@ -171,6 +168,7 @@ mod tests {
             conversation_id: Some("conv_456".to_string()),
             previous_response_id: None,
             history_item_ids: Some(r#"["item_1"]"#.to_string()),
+            snapshot: None,
             metadata: Some(
                 r#"{"model":"gpt-4","previous_response_id":null,"effective_tools":null,"effective_tool_choice":"auto","effective_instructions":null}"#
                     .to_string(),
@@ -193,6 +191,7 @@ mod tests {
             conversation_id: None,
             previous_response_id: None,
             history_item_ids: None,
+            snapshot: None,
             metadata: None,
             created_at: 1_704_067_200,
         };
@@ -205,39 +204,6 @@ mod tests {
     }
 
     #[test]
-    fn legacy_conversation_id_snapshot_serializes_with_canonical_conversation() {
-        let metadata = serde_json::json!({
-            "model": "test-model",
-            "effective_tool_choice": "auto",
-            "response_snapshot": {
-                "id": "resp_legacy",
-                "object": "response",
-                "created_at": 1_704_067_200,
-                "model": "test-model",
-                "status": "completed",
-                "output": [],
-                "conversation_id": "conv_legacy"
-            }
-        });
-        let row = StorageDbResponse {
-            id: "resp_legacy".to_owned(),
-            conversation_id: Some("conv_legacy".to_owned()),
-            previous_response_id: None,
-            history_item_ids: Some("[]".to_owned()),
-            metadata: Some(metadata.to_string()),
-            created_at: 1_704_067_200,
-        };
-
-        let stored = ResponseData::try_from(row).expect("decode pre-rename stored metadata");
-        let snapshot = stored.metadata.response_snapshot.expect("stored response snapshot");
-        assert_eq!(snapshot.conversation.as_deref(), Some("conv_legacy"));
-        assert!(snapshot.standard_fields.store, "legacy response snapshots were stored");
-        let public = serde_json::to_value(snapshot).expect("serialize retrieved response");
-        assert_eq!(public["conversation"], serde_json::json!({"id": "conv_legacy"}));
-        assert!(public.get("conversation_id").is_none());
-    }
-
-    #[test]
     fn test_response_metadata_serialization() {
         let metadata = ResponseMetadata {
             multi_agent_tree: None,
@@ -245,7 +211,6 @@ mod tests {
             previous_response_id: Some("resp_1".to_string()),
             effective_tools: None,
             tool_search_loaded_tools: None,
-            response_snapshot: None,
             effective_tool_choice: ToolChoice::Auto,
             effective_instructions: Some("be helpful".to_string()),
         };
@@ -322,9 +287,16 @@ mod tests {
             multi_agent_tree: None,
             effective_tools: Some(vec![tool]),
             tool_search_loaded_tools: None,
-            response_snapshot: Some(Box::new(snapshot)),
             ..ResponseMetadata::default()
         };
+        let stored_snapshot = String::try_from(&snapshot).expect("snapshot serialization failed");
+        assert!(!stored_snapshot.contains("secret"));
+        let stored_snapshot = ResponsePayload::try_from(stored_snapshot.as_str()).expect("stored snapshot");
+        let Some([ResponsesTool::Mcp(snapshot_tool)]) = stored_snapshot.tools.as_deref() else {
+            panic!("expected stored MCP tool");
+        };
+        assert!(snapshot_tool.headers.is_none());
+        assert!(snapshot_tool.authorization.is_none());
 
         let serialized = String::try_from(&metadata).expect("serialization failed");
         assert!(!serialized.contains("secret"));
@@ -363,6 +335,7 @@ mod tests {
             conversation_id: Some("conv_1".to_string()),
             previous_response_id: Some("resp_prev".to_string()),
             history_item_ids: Some(r#"["item_1","item_2","item_3"]"#.to_string()),
+            snapshot: None,
             metadata: Some(r#"{"model":"gpt-3.5","effective_tool_choice":"auto"}"#.to_string()),
             created_at: 1_704_067_200,
         };
@@ -372,69 +345,5 @@ mod tests {
         assert_eq!(response.history_item_ids[0], "item_1");
         assert_eq!(response.history_item_ids[2], "item_3");
         assert_eq!(response.previous_response_id, Some("resp_prev".to_string()));
-    }
-
-    /// Agent histories in a stored tree get the same projection as snapshots and rows.
-    #[test]
-    fn legacy_reasoning_in_stored_agent_history_is_projected_or_fails_closed() {
-        use crate::types::agent::{AgentIdentity, AgentTurnId};
-        use crate::types::agent_tree::{AgentState, StoredAgent};
-        use crate::types::io::{InputItem, MultiAgentConfig, ReasoningOutput};
-
-        let metadata = ResponseMetadata {
-            multi_agent_tree: Some(StoredTreeSnapshot {
-                version: 1,
-                config: MultiAgentConfig {
-                    enabled: true,
-                    max_concurrent_subagents: None,
-                },
-                agents: vec![StoredAgent {
-                    identity: AgentIdentity::root(),
-                    parent: None,
-                    turn: AgentTurnId::new(),
-                    state: AgentState::Idle,
-                    mailbox: Vec::new(),
-                    history: vec![InputItem::Reasoning(ReasoningOutput::new("rs_tree"))],
-                    loaded_tools: Vec::new(),
-                    last_task: String::new(),
-                    final_answer: None,
-                    rounds: 0,
-                    wait: None,
-                }],
-                client_calls: Vec::new(),
-            }),
-            ..ResponseMetadata::default()
-        };
-        let stored = |legacy: Value| {
-            let mut metadata: Value = serde_json::from_str(&String::try_from(&metadata).unwrap()).unwrap();
-            metadata["multi_agent_tree"]["agents"][0]["history"][0]
-                .as_object_mut()
-                .unwrap()
-                .extend(legacy.as_object().unwrap().clone());
-            ResponseData::try_from(StorageDbResponse {
-                id: "resp_tree".into(),
-                conversation_id: None,
-                previous_response_id: None,
-                history_item_ids: None,
-                metadata: Some(metadata.to_string()),
-                created_at: 0,
-            })
-        };
-
-        let projected = stored(serde_json::json!({
-            "content": [{"type": "unexpected_provider_type", "text": "tree plaintext"}],
-            "encrypted_content": {"ciphertext": "untyped state"},
-            "status": "failed"
-        }))
-        .unwrap();
-        let tree = projected.metadata.multi_agent_tree.unwrap();
-        let InputItem::Reasoning(reasoning) = &tree.agents[0].history[0] else {
-            panic!("expected reasoning history");
-        };
-        assert_eq!(reasoning.content[0].text, "tree plaintext");
-        assert!(reasoning.encrypted_content.is_none() && reasoning.status.is_none());
-
-        let error = stored(serde_json::json!({"content": [{"text": "part without a type"}]})).unwrap_err();
-        assert!(matches!(error, StorageError::InvalidResponseMetadata { .. }));
     }
 }

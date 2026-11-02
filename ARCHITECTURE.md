@@ -950,8 +950,8 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   executor and the storage stores** — nothing above this layer touches
   `storage::conversation`/`storage::response` directly. Today they only cover what the
   pipeline and retrieval need. Each handler has one `rehydrate` and one `persist`; `persist` takes the turn's
-  output items and the `ResponseMetadata` that `persist.rs` builds, including any multi-agent tree. Lookups and
-  retrieval are separate methods (`get`, `get_or_create`, `create`, `get_snapshot`, `validate_exists`);
+  output items, its snapshot, and the `ResponseMetadata` that `persist.rs` builds, including any multi-agent tree.
+  Lookups and retrieval are separate methods (`get`, `get_or_create`, `create`, `retrieve`, `validate_exists`);
   **any new CRUD operation
   beyond persist/rehydrate belongs here**, added as a new method that delegates to the corresponding store.
 - **`error.rs`** — `ExecutorError`, with the mapping methods (`http_status()`,
@@ -990,7 +990,7 @@ all persisted data comes from the enriched copy. Use the field-specific rules be
 | Store items/history | `new_input_items`, finalized output items, and the existing session/conversation persistence helpers | Neither request's entire `input` is a generic list of new rows to insert. Persisting enriched history wholesale would repeat prior items. |
 | Store the selector for later continuation | Move `original_request.tool_choice`, falling back to `enriched_request.tool_choice`, in every response/conversation metadata writer | Use the same precedence as `RequestContext::public_tool_choice()`, taking ownership because execution is complete. Never save the temporary `auto` introduced by internal tool execution as the next request's default. |
 | Store other effective settings for later continuation | `enriched_request.model`, `.tools`, and `.instructions` in `persist_prepared_turn` | Tool-search metadata supplies its own effective tools and loaded definitions. Persisting the original request wholesale would lose inherited settings and prepared tools. |
-| Retrieve an already stored public response | The stored `response_snapshot` when present | Preserve the public payload that was returned. Do not rebuild its selector from a later-round inference setting. |
+| Retrieve an already stored public response | The stored `responses.snapshot` when present | Preserve the public payload that was returned. Do not rebuild its selector from a later-round inference setting. |
 
 ##### Mutation and conversion boundaries
 
@@ -1173,10 +1173,9 @@ histories, phases, mailboxes, loaded tools and pending client calls.
 `ValidatedTreeCheckpoint` checks its limits, identities and references before live
 state is constructed or committed. `persist.rs` puts the tree in the turn's `ResponseMetadata` and calls the mode
 handler's `persist`; transport handlers do not write storage directly, and tree persistence uses the existing
-response/conversation stores.
-`ResponseMetadata.multi_agent_tree` restores execution state, while
-`response_snapshot` retains the exact terminal public response for GET retrieval.
-Continuation restoration discards the latter duplicate but retains the tree.
+response/conversation stores. `ResponseMetadata.multi_agent_tree` restores execution state, while
+`responses.snapshot` retains the exact terminal public response for GET retrieval; continuation reads only the
+former.
 
 With `store:false`, HTTP execution writes no response, item, conversation, or tree rows.
 Without stored IDs, `rehydrate::from_responses` normalizes the complete client-supplied
@@ -1813,11 +1812,12 @@ the upstream reported.
 - **`schema.rs`** — migrations and readiness (`PoolWithSchema::ensure_schema_ready`),
   including a path for a supervisor-managed schema that skips running migrations
   itself and just verifies compatibility. Readiness probes live in `schema/readiness.rs`.
+  See [Schema, migrations, and where data goes](#schema-migrations-and-where-data-goes).
 - **`conversation.rs` (tenant-scoped API)** — conversation and item CRUD. Item ownership is checked through
   the conversation so Responses-persisted items are visible too. Item writes share `lock_in_tx` with
   turn persistence; a monotonic conversation revision makes deletions invalidate active snapshots.
   Removal detaches items rather than destroying history referenced by stored responses.
-- **`models/`** — raw `sqlx::FromRow` row structs per table (`Conversation`, `Item`,
+- **`models/`** — one `sqlx::FromRow` row struct per table (`Conversation`, `Item`,
   `Response`) plus one SQL function per table operation (`create_in_tx`, `get`,
   `lock_in_tx`, ...). This is the literal DB row shape: JSON columns are still strings
   here. Query SQL is portable across SQLite and PostgreSQL; `lock_in_tx` is the one
@@ -1825,25 +1825,28 @@ the upstream reported.
   a conversation's `revision`, `latest_response_id`, the latest turn's metadata, and its items in
   one `UNION ALL` statement and orders the items in Rust, so the database does not sort item data.
 - **`types/`** — the only place stored JSON is read or written. Each column has one
-  conversion pair: `TryFrom<&Item> for InOutItem` and `TryFrom<&InOutItem> for String` for
-  `items.data`, `TryFrom<&str> for ResponseMetadata` and `TryFrom<&ResponseMetadata> for String`
-  for `responses.metadata` (effective settings, an optional terminal `ResponsePayload` snapshot
-  for GET retrieval, and a versioned multi-agent tree checkpoint), and typed conversation
-  metadata on `ConversationData`. Item rows are parsed once and keep input/output identity and
-  the private code-interpreter origin. `ConversationSnapshot` carries a conversation's items,
-  its version, and the `turn_metadata` of the turn at that version. Store rehydration uses this conversion and fails
-  if a row cannot be decoded; response rehydration also rejects missing referenced rows.
-  It must not silently omit malformed reasoning from a continuation.
-  `TryFrom<Response>` rejects malformed history references and effective metadata;
-  only SQL NULL keeps the legacy empty/default behavior. Conversation
-  rehydration also rejects a latest turn whose response is missing or belongs to another conversation. Storage
-  errors omit parser diagnostics that could echo sensitive persisted fields.
+  conversion pair:
+  - `items.data` and `items.metadata`: `encode(&InOutItem) -> Item` writes the item's plain serde JSON and its
+    typed `ItemMetadata { kind }` (input or output); `TryFrom<&Item> for InOutItem` reads them back. `data`
+    never carries storage-only keys.
+  - `responses.metadata`: `TryFrom<&ResponseMetadata> for String` and `TryFrom<&str> for ResponseMetadata`
+    (effective settings, tool-search loaded tools, and a versioned multi-agent tree checkpoint).
+  - `responses.snapshot`: `TryFrom<&ResponsePayload> for String` and `TryFrom<&str> for ResponsePayload`, the
+    terminal response exactly as returned, for `GET /v1/responses/{id}`.
+  - typed conversation metadata on `ConversationData`.
+
+  `ConversationSnapshot` carries a conversation's items, its version, and the `turn_metadata` of the turn at
+  that version. Store rehydration fails if a row cannot be decoded; response rehydration also rejects missing
+  referenced rows. It must not silently omit malformed reasoning from a continuation. `TryFrom<Response>`
+  rejects malformed history references and effective metadata. Conversation rehydration also rejects a latest
+  turn whose response is missing or belongs to another conversation. Storage errors omit parser diagnostics that
+  could echo sensitive persisted fields.
   `InOutItem::into_input_items` turns a full
   history into the `Vec<InputItem>` used for continuation processing: stored
   `InputItem`s pass through, while stored `OutputItem`s go through
   `OutputItem::to_input_item()`. Messages, reasoning, function/custom calls,
   compaction checkpoints, and MCP list-tools records are retained. Public
-  `web_search_call` and `mcp_call` outputs are deliberately omitted because their
+  `web_search_call`, `mcp_call`, and `code_interpreter_call` outputs are deliberately omitted because their
   model-facing function calls and results are already persisted as input items;
   reconstructing them here would duplicate and lose information from that canonical
   pair.
@@ -1869,11 +1872,61 @@ the upstream reported.
   them directly for fixtures — that's expected and fine; production code paths should
   not.)
 
-Stored Responses snapshots are written in the same transaction as response history. Retrieval goes through
-`ResponseHandler::get_snapshot`, independently of upstream availability. Continuation checkpoints omit the
-snapshot to avoid retaining a duplicate response; they continue to use canonical history and effective
-settings. Legacy history-only records remain usable for continuation, but GET retrieval reports a conflict
-rather than fabricating status, usage, or output.
+Stored Responses snapshots are written in the same transaction as response history, into `responses.snapshot`.
+Retrieval goes through `ResponseHandler::get_snapshot`, independently of upstream availability, and `input_items`
+lists the history without the snapshot's output. Only the retrieval reads decode it (`ResponseStore::get_snapshot`, and
+`get_input_items`, which counts its outputs), so a continuation, and a session checkpoint built from it, never
+carries the parent's full response. A response stored without a snapshot, such as a `store: false` session checkpoint, remains
+usable for continuation, but GET retrieval reports a conflict rather than fabricating status, usage, or output.
+
+#### Schema, migrations, and where data goes
+
+**One connection layer, portable queries.** The backend is chosen once, from the database URL: the default is a
+SQLite file under `AGENTIC_API_HOME`; `DATABASE_URL` or the configured URL may select PostgreSQL. `pool.rs` owns
+backend-specific connection tuning, and `schema.rs` owns backend-specific migration and verification steps.
+Everything in `models/` is portable SQL over `sqlx::Any`: no backend checks, and no dialect functions such as
+`json_each` or `json_array_elements_text`. `lock_in_tx` is the only exception. When a query seems to need
+backend-specific SQL, restructure it (for example, two portable queries, or ordering in Rust) instead of branching.
+
+**Migrations.** Schema changes are SQL files in `crates/agentic-server-core/migrations/`, embedded with
+`sqlx::migrate!` and applied in order to both backends, so the DDL itself must be portable. Every database
+migrates to the latest version on startup; supervisor mode (`AGENTIC_API_SCHEMA_READY`) instead verifies the
+schema that an operator migrated.
+
+- Never edit a migration that has been released. Add the next numbered file.
+- Prefer `ALTER TABLE ... ADD COLUMN` / `DROP COLUMN` over rebuilding a table. Drop the indexes that use a column
+  before dropping it.
+- A column added to a table that may hold rows must be nullable or have a default. `NOT NULL` without a default is
+  valid only in a migration that runs on an empty table (see below).
+- After migrations, `apply_postgres_compatibility` widens the existing integer columns on PostgreSQL. Declare new
+  integer columns as `BIGINT`.
+- With each column change, update the row struct and its `models/` SQL, the conversion pair in `types/`, the
+  supervisor-mode verification in `schema.rs` (the column list in `postgres_required_schema_column_count` and
+  `REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT`), and the readiness probe in `schema/readiness.rs` if it writes that
+  table.
+
+**Incompatible data.** When a release changes how existing rows must be read, raise `MINIMUM_SUPPORTED_MIGRATION`
+in `storage/schema/outdated.rs` to the migration that introduces the new format, instead of keeping decoders for the old format.
+On startup, a database whose latest applied migration is older than that and whose persistence tables hold rows is
+handled before migrating: the default SQLite database under `AGENTIC_API_HOME` is dropped and recreated, and any
+other database (PostgreSQL, or an explicit `DATABASE_URL`) is rejected with an error telling the operator to reset
+it, including in supervisor mode. A database an earlier release migrated but never wrote to migrates normally. A
+migration at that version therefore always runs on empty tables.
+
+**Column or metadata.** Each table has a typed JSON `metadata` column next to its ordinary columns. Decide where a
+new piece of data goes by who reads it:
+
+- `responses.metadata` holds what continuing a response needs: the model, effective tools, tool choice and
+  instructions, tool-search loaded tools, and the multi-agent tree. Every continuation decodes it, and session
+  checkpoints retain it, so keep it small.
+- `items.metadata` holds storage facts about an item (its input/output kind), never item content. `data` is the
+  item's plain serde JSON, with no hidden keys.
+- Add a dedicated column when the data is read by a different path than continuation (for example,
+  `responses.snapshot`, which only retrieval reads), is large, is filtered, joined, ordered, or indexed in SQL,
+  needs a constraint (`NOT NULL`, a foreign key), or is updated on its own (for example, `history_item_ids`, which
+  response deletion rewrites).
+- Do not store a second copy of data another column already holds. For example, a response's output item IDs are
+  not stored, because `snapshot` already contains the output.
 
 ### `tool/` — the tool framework
 

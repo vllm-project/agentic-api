@@ -87,23 +87,23 @@ pub struct LatestTurn {
 /// Get what rehydration needs from a conversation in one statement.
 ///
 /// Reading the header and the items in one statement keeps the conversation version consistent with
-/// the items. Items are ordered here rather than in SQL so the database does not sort item data.
+/// the items. The header row carries the latest turn's `responses.metadata` in the `metadata` column that item
+/// rows use for their own. Items are ordered here rather than in SQL so the database does not sort item data.
 ///
 /// # Errors
 /// Returns `DbResult::Err` if the database query fails.
 pub async fn get_with_items(pool: &DbPool, id: &str) -> DbResult<Option<ConversationHistory>> {
     let rows = sqlx::query(
-        "SELECT conversations.revision, conversations.latest_response_id, \
-                responses.id AS turn_id, responses.metadata, \
-                NULL AS id, NULL AS reference_id, NULL AS public_id, NULL AS data, \
+        "SELECT conversations.revision, conversations.latest_response_id, responses.id AS turn_id, \
+                NULL AS id, NULL AS public_id, responses.metadata AS metadata, NULL AS data, \
                 NULL AS created_at, NULL AS conversation_id, NULL AS seq, NULL AS tenant_id \
          FROM conversations \
          LEFT JOIN responses ON responses.id = conversations.latest_response_id \
              AND responses.conversation_id = conversations.id \
          WHERE conversations.id = $1 \
          UNION ALL \
-         SELECT NULL, NULL, NULL, NULL, \
-                items.id, items.reference_id, items.public_id, items.data, \
+         SELECT NULL, NULL, NULL, \
+                items.id, items.public_id, items.metadata, items.data, \
                 items.created_at, items.conversation_id, items.seq, items.tenant_id \
          FROM items WHERE items.conversation_id = $1",
     )

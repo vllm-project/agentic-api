@@ -1450,15 +1450,12 @@ async fn assert_conflicting_websocket_turn_not_persisted(
     conversation_id: &str,
     stale_response_id: &str,
 ) {
-    let conversation_store = ConversationStore::new(Arc::clone(pool));
-    assert_eq!(
-        conversation_store
-            .rehydrate(conversation_id)
-            .await
-            .expect("conversation history")
-            .items,
-        competing_turn_items()
-    );
+    let conversation = ConversationStore::new(Arc::clone(pool))
+        .rehydrate(conversation_id)
+        .await
+        .expect("conversation history");
+    assert_eq!(conversation.items, competing_turn_items());
+    assert_eq!(conversation.version.response_id.as_deref(), Some(COMPETING_RESPONSE_ID));
     let response_store = ResponseStore::new(Arc::clone(pool));
     let competing = response_store
         .get(COMPETING_RESPONSE_ID)
@@ -3783,7 +3780,7 @@ async fn websocket_generate_false_rejects_rehydrated_code_interpreter_before_per
         ..ResponseMetadata::default()
     };
     ResponseStore::new(Arc::clone(&fixture.pool))
-        .persist("resp_parent", None, Vec::new(), &parent_metadata)
+        .persist("resp_parent", None, Vec::new(), None, &parent_metadata)
         .await
         .expect("persist legacy parent response");
 

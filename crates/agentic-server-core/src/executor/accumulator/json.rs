@@ -6,7 +6,7 @@ use crate::events::ensure_supported_output_item_type;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::response_budget::{RetainedAccount, RetainedSize, retained_response_parts_bytes};
 use crate::types::event::ResponseStatus;
-use crate::types::io::{OutputItem, ReasoningOutput, ResponseUsage};
+use crate::types::io::{OutputItem, ResponseUsage};
 use crate::types::request_response::IncompleteDetails;
 use crate::utils::common::{deserialize_from_str, deserialize_from_value_opt};
 use serde::Deserialize;
@@ -73,18 +73,23 @@ pub(super) fn ensure_strict_response(json: &Value) -> ExecutorResult<()> {
     Ok(())
 }
 
-/// Decodes one upstream output item under lenient ingestion, dropping unreadable items.
-///
-/// Earlier releases relayed reasoning with untyped fields. Keep such an item with
-/// the fields the typed schema accepts instead of dropping it; strict ingestion
-/// rejects it in [`ensure_strict_response`].
-pub(super) fn lenient_output_item(item: Value) -> Option<OutputItem> {
-    if item.get("type").and_then(Value::as_str) != Some("reasoning") {
-        return deserialize_from_value_opt(item);
+/// Decode one upstream output item under lenient ingestion, logging an item the typed schema rejects by its type
+/// only, never its content.
+fn lenient_output_item(item: Value) -> Option<OutputItem> {
+    let item_type = item
+        .get("type")
+        .and_then(Value::as_str)
+        .filter(|item_type| item_type.len() <= 64)
+        .unwrap_or("unknown")
+        .to_owned();
+    let decoded = deserialize_from_value_opt::<OutputItem>(item);
+    if decoded.is_none() {
+        tracing::warn!(
+            item_type,
+            "dropped an upstream output item that the typed schema rejects"
+        );
     }
-    OutputItem::deserialize(&item)
-        .ok()
-        .or_else(|| ReasoningOutput::from_legacy_value(&item).map(OutputItem::Reasoning))
+    decoded
 }
 
 impl ResponseAccumulator {
@@ -122,11 +127,8 @@ impl ResponseAccumulator {
             .to_string();
 
         let output = deserialize_from_value_opt::<Vec<serde_json::Value>>(json["output"].take())
-            .map(|items| {
-                let mut out = Vec::with_capacity(items.len());
-                out.extend(items.into_iter().filter_map(lenient_output_item));
-                out
-            })
+            // Lenient ingestion drops output items the typed schema rejects; strict ingestion rejected them above.
+            .map(|items| items.into_iter().filter_map(lenient_output_item).collect())
             .unwrap_or_default();
 
         let status = json["status"]

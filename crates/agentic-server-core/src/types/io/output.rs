@@ -843,13 +843,7 @@ impl TryFrom<&EventPayload> for ReasoningOutput {
                 Ok(Self::new(id))
             }
             EventPayload::OutputItemDone { item, .. } => {
-                // Strict ingestion validates the typed item first; lenient ingestion
-                // keeps what earlier releases accepted, as for JSON responses.
-                let item = match deserialize_from_value_opt::<OutputItem>(item.clone()) {
-                    Some(OutputItem::Reasoning(item)) => Some(item),
-                    _ => Self::from_legacy_value(item),
-                };
-                let Some(item) = item else {
+                let Some(OutputItem::Reasoning(item)) = deserialize_from_value_opt::<OutputItem>(item.clone()) else {
                     return Err(ExecutorError::ParseError(
                         "expected a complete reasoning output item".into(),
                     ));
@@ -1099,15 +1093,11 @@ impl OutputItem {
             Self::ShellCall(call) => Some(InputItem::FunctionCall(call.clone().into())),
             Self::McpListTools(list_tools) => Some(InputItem::McpListTools(list_tools.clone())),
             Self::Compaction(item) => Some(InputItem::Compaction(item.clone())),
-            Self::CodeInterpreterCall(call)
-                if call.origin == super::code_interpreter::CodeInterpreterCallOrigin::Upstream =>
-            {
-                Some(InputItem::CodeInterpreterCall(call.clone()))
-            }
             Self::MultiAgentCall(item) => Some(InputItem::MultiAgentCall(item.clone().into())),
             Self::MultiAgentCallOutput(item) => Some(InputItem::MultiAgentCallOutput(item.clone().into())),
             Self::AgentMessage(item) => Some(InputItem::AgentMessage(item.clone().into())),
-            // Hosted search items are recorded as history by the executor.
+            // Gateway-executed tools reach the model as function calls; these are the public types the gateway
+            // translates them back to. The model-facing call/output pairs are stored as input history instead.
             Self::ToolSearchCall(_)
             | Self::ToolSearchOutput(_)
             | Self::CodeInterpreterCall(_)

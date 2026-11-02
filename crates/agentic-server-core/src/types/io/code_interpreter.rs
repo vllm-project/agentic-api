@@ -5,7 +5,10 @@ use serde::{Deserialize, Serialize};
 use super::multi_agent::AgentAttribution;
 
 /// One code-interpreter call exposed in a response.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// The gateway executes code interpreter itself: the model sees a `code_interpreter` function call, and this item is
+/// the public projection of that execution. It is never replayed upstream.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct CodeInterpreterCall {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -17,40 +20,10 @@ pub struct CodeInterpreterCall {
     /// Execution outputs. `OpenAI` emits `null` while a call is in progress;
     /// gateway completion uses `Some`, including an empty output list.
     pub outputs: Option<Vec<CodeInterpreterCallOutput>>,
-    /// Internal provenance for continuation. This is stored separately from
-    /// the public item and cannot be selected through the Responses wire.
-    #[serde(skip)]
-    pub(crate) origin: CodeInterpreterCallOrigin,
-}
-
-impl PartialEq for CodeInterpreterCall {
-    fn eq(&self, other: &Self) -> bool {
-        self.agent == other.agent
-            && self.id == other.id
-            && self.container_id == other.container_id
-            && self.code == other.code
-            && self.status == other.status
-            && self.outputs == other.outputs
-    }
-}
-
-impl Eq for CodeInterpreterCall {}
-
-/// Where a code-interpreter call ran. Not part of the public wire; storage records a gateway origin
-/// beside the item so a gateway projection is never replayed upstream.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum CodeInterpreterCallOrigin {
-    #[default]
-    Upstream,
-    Gateway,
 }
 
 impl CodeInterpreterCall {
-    /// Construct a code-interpreter call received from an upstream provider.
-    ///
-    /// The public wire does not carry execution origin. Gateway projections
-    /// set their internal origin when they are created by the tool handler.
+    /// Construct a code-interpreter call.
     #[must_use]
     pub fn new(
         id: String,
@@ -66,7 +39,6 @@ impl CodeInterpreterCall {
             code,
             status,
             outputs,
-            origin: CodeInterpreterCallOrigin::Upstream,
         }
     }
 }
@@ -159,7 +131,6 @@ mod tests {
                     url: "https://example.test/plot.png".to_owned(),
                 },
             ]),
-            origin: CodeInterpreterCallOrigin::Upstream,
         };
         let wire = serde_json::to_value(&call).expect("serialize call");
         assert_eq!(wire["outputs"][0]["type"], "logs");
@@ -179,14 +150,6 @@ mod tests {
         assert_eq!(
             serde_json::from_value::<CodeInterpreterCall>(attributed_wire).expect("deserialize attributed call"),
             attributed
-        );
-        let mut gateway = call.clone();
-        gateway.origin = CodeInterpreterCallOrigin::Gateway;
-        let public = serde_json::to_value(&gateway).expect("serialize gateway call");
-        assert_eq!(
-            serde_json::from_value::<CodeInterpreterCall>(public).expect("deserialize public call"),
-            gateway,
-            "internal origin must not affect public item equality"
         );
     }
 

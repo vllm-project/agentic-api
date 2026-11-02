@@ -49,6 +49,7 @@ async fn turn(store: &ResponseStore, id: &str, previous: Option<&str>) {
             id,
             previous,
             vec![message(id), answer(&format!("msg_{id}"))],
+            None,
             &ResponseMetadata::default(),
         )
         .await
@@ -65,7 +66,7 @@ async fn deleting_a_response_removes_the_resource_and_keeps_history_rows() {
     store.delete("resp_only").await.unwrap();
     assert_eq!(item_count(&pool).await, 2);
     assert!(store.get("resp_only").await.unwrap_err().is_not_found());
-    assert!(store.get_items("resp_only").await.unwrap_err().is_not_found());
+    assert!(store.rehydrate("resp_only").await.unwrap_err().is_not_found());
     assert!(store.delete("resp_only").await.unwrap_err().is_not_found());
 }
 
@@ -108,7 +109,7 @@ async fn deleting_a_parent_removes_its_context_and_preserves_child_history_order
     store.delete("resp_a").await.unwrap();
     assert_eq!(item_count(&pool).await, 6);
     // The child keeps only its own entries, in order: the deleted parent's inherited rows are removed.
-    let (response, listed) = store.get_items("resp_b").await.unwrap();
+    let (response, listed) = store.rehydrate("resp_b").await.unwrap();
     assert_eq!(response.history_item_ids.len(), 2);
     assert_eq!(listed.len(), 2);
     assert_eq!(listed[1].id(), Some("msg_resp_b"));
@@ -169,17 +170,17 @@ async fn deleting_a_conversation_latest_response_clears_its_pointer_and_keeps_it
 async fn item_lookup_distinguishes_missing_empty_and_invalid_history() {
     let pool = pool().await;
     let store = ResponseStore::new(Arc::clone(&pool));
-    assert!(store.get_items("resp_missing").await.unwrap_err().is_not_found());
+    assert!(store.rehydrate("resp_missing").await.unwrap_err().is_not_found());
     store
-        .persist("resp_empty", None, vec![], &ResponseMetadata::default())
+        .persist("resp_empty", None, vec![], None, &ResponseMetadata::default())
         .await
         .unwrap();
-    assert!(store.get_items("resp_empty").await.unwrap().1.is_empty());
+    assert!(store.rehydrate("resp_empty").await.unwrap().1.is_empty());
     sqlx::query("UPDATE responses SET history_item_ids = NULL WHERE id = 'resp_empty'")
         .execute(pool.as_ref())
         .await
         .unwrap();
-    assert!(store.get_items("resp_empty").await.unwrap().1.is_empty());
+    assert!(store.rehydrate("resp_empty").await.unwrap().1.is_empty());
     for invalid in ["not-json", "null", "{}"] {
         sqlx::query("UPDATE responses SET history_item_ids = $1 WHERE id = 'resp_empty'")
             .bind(invalid)
@@ -187,7 +188,7 @@ async fn item_lookup_distinguishes_missing_empty_and_invalid_history() {
             .await
             .unwrap();
         assert!(matches!(
-            store.get_items("resp_empty").await,
+            store.rehydrate("resp_empty").await,
             Err(StorageError::InvalidResponseHistory { .. })
         ));
     }
@@ -196,7 +197,7 @@ async fn item_lookup_distinguishes_missing_empty_and_invalid_history() {
         .await
         .unwrap();
     assert!(matches!(
-        store.get_items("resp_empty").await,
+        store.rehydrate("resp_empty").await,
         Err(StorageError::InvalidHistoryItem { .. })
     ));
 }

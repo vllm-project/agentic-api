@@ -285,6 +285,7 @@ async fn postgres_item_crud_uses_turn_locking_and_preserves_history() {
             snapshot.version,
             &agentic_core::utils::common::uuid7_str("resp_"),
             vec![],
+            None,
             &ResponseMetadata::default(),
         )
         .await;

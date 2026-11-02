@@ -326,6 +326,7 @@ fn sqlite_config_from_env() -> Result<SqliteConfig, Error> {
         )?,
         temp_store: parse_env_temp_store()?,
         mmap_size_bytes: parse_env_u64("SQLITE_MMAP_SIZE_BYTES", DEFAULT_SQLITE_MMAP_SIZE_BYTES)?,
+        recreate_outdated_schema: false,
     })
 }
 

@@ -1,6 +1,8 @@
 //! Database schema management and migrations.
 
+mod outdated;
 mod readiness;
+use outdated::{drop_outdated_sqlite_tables, has_outdated_data, outdated_schema_error};
 pub(crate) use readiness::{verify_persistence_ready, verify_persistence_writable};
 
 use std::env;
@@ -13,12 +15,12 @@ use tracing::{debug, info};
 
 use super::backend::{DatabaseBackend, configure_postgres_timeouts};
 use super::pool::DbPool;
-use crate::config::DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS;
+use crate::config::{DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS, PostgresConfig, SqliteConfig};
 
 type DbResult<T> = Result<T, sqlx::Error>;
 
 const POSTGRES_SCHEMA_ADVISORY_LOCK: i64 = 7_194_963_546_799_751;
-const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 22;
+const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 24;
 const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 7;
 const REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT: i64 = 5;
 const POSTGRES_INTEGER_WIDENING_SQL: &str = "
@@ -78,7 +80,8 @@ where
                  ('conversations', 'revision', 'integer', 'NO'), \
                  ('items', 'id', 'text', 'NO'), \
                  ('items', 'data', 'text', 'NO'), \
-                 ('items', 'public_id', 'text', 'YES'), \
+                 ('items', 'public_id', 'text', 'NO'), \
+                 ('items', 'metadata', 'text', 'NO'), \
                  ('items', 'created_at', 'integer', 'NO'), \
                  ('items', 'conversation_id', 'text', 'YES'), \
                  ('items', 'seq', 'integer', 'YES'), \
@@ -88,6 +91,7 @@ where
                  ('responses', 'conversation_id', 'text', 'YES'), \
                  ('responses', 'previous_response_id', 'text', 'YES'), \
                  ('responses', 'history_item_ids', 'text', 'YES'), \
+                 ('responses', 'snapshot', 'text', 'YES'), \
                  ('responses', 'metadata', 'text', 'YES'), \
                  ('responses', 'created_at', 'integer', 'NO'), \
                  ('responses', 'tenant_id', 'text', 'YES'), \
@@ -314,13 +318,33 @@ pub(crate) async fn pin_postgres_persistence_schema(connection: &mut sqlx::AnyCo
     Ok(())
 }
 
-async fn run_embedded_migrations(pool: &DbPool, postgres_migration_timeout: Duration) -> DbResult<()> {
+async fn run_embedded_migrations(
+    pool: &DbPool,
+    postgres_migration_timeout: Duration,
+    recreate_outdated_sqlite: bool,
+) -> DbResult<()> {
     let mut connection = pool.acquire().await?;
-    let is_postgres = DatabaseBackend::from_connection(&connection) == DatabaseBackend::Postgres;
+    let backend = DatabaseBackend::from_connection(&connection);
+    let is_postgres = backend == DatabaseBackend::Postgres;
     if is_postgres
         && let Err(error) = configure_postgres_migration_timeout(&mut connection, postgres_migration_timeout).await
     {
         let _ = connection.close().await;
+        return Err(error);
+    }
+
+    let outdated_result = match has_outdated_data(&mut connection).await {
+        Ok(true) if backend == DatabaseBackend::Sqlite && recreate_outdated_sqlite => {
+            drop_outdated_sqlite_tables(&mut connection).await
+        }
+        Ok(true) => Err(outdated_schema_error()),
+        Ok(false) => Ok(()),
+        Err(error) => Err(error),
+    };
+    if let Err(error) = outdated_result {
+        if is_postgres {
+            let _ = connection.close().await;
+        }
         return Err(error);
     }
 
@@ -361,22 +385,25 @@ pub struct PoolWithSchema {
     pool: Arc<DbPool>,
     schema_ready: AtomicBool,
     postgres_migration_timeout: Duration,
+    recreate_outdated_sqlite: bool,
 }
 
 impl PoolWithSchema {
-    /// Creates a new pool with schema tracking.
+    /// Creates a new pool with schema tracking and default database settings.
     #[must_use]
     pub fn new(pool: Arc<DbPool>) -> Self {
-        Self::with_postgres_migration_timeout(pool, Duration::from_secs(DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS))
+        Self::configured(pool, &PostgresConfig::default(), &SqliteConfig::default())
     }
 
-    /// Creates a new pool with schema tracking and a `PostgreSQL` migration timeout.
+    /// Creates a new pool with schema tracking: the `PostgreSQL` migration timeout and whether an outdated default
+    /// `SQLite` database is recreated come from the database settings.
     #[must_use]
-    pub fn with_postgres_migration_timeout(pool: Arc<DbPool>, postgres_migration_timeout: Duration) -> Self {
+    pub fn configured(pool: Arc<DbPool>, postgres: &PostgresConfig, sqlite: &SqliteConfig) -> Self {
         Self {
             pool,
             schema_ready: AtomicBool::new(false),
-            postgres_migration_timeout,
+            postgres_migration_timeout: postgres.migration_timeout,
+            recreate_outdated_sqlite: sqlite.recreate_outdated_schema,
         }
     }
 
@@ -408,13 +435,24 @@ impl PoolWithSchema {
 
         if supervisor_managed {
             debug!("[schema] Migrations skipped — marked ready by supervisor.");
+            let mut connection = self.pool.acquire().await?;
+            let outdated = has_outdated_data(&mut connection).await?;
+            drop(connection);
+            if outdated {
+                return Err(outdated_schema_error());
+            }
             verify_supervisor_managed_postgres_schema(self.pool.as_ref(), self.postgres_migration_timeout).await?;
             self.schema_ready.store(true, Ordering::SeqCst);
             return Ok(());
         }
 
         debug!("[schema] Running migrations...");
-        run_embedded_migrations(self.pool.as_ref(), self.postgres_migration_timeout).await?;
+        run_embedded_migrations(
+            self.pool.as_ref(),
+            self.postgres_migration_timeout,
+            self.recreate_outdated_sqlite,
+        )
+        .await?;
         info!("[schema] DB schema ready.");
         self.schema_ready.store(true, Ordering::SeqCst);
         Ok(())
@@ -446,6 +484,7 @@ impl<'a> SchemaManager<'a> {
         run_embedded_migrations(
             self.pool,
             Duration::from_secs(DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS),
+            false,
         )
         .await?;
         info!("[schema] DB schema ready.");
@@ -456,6 +495,14 @@ impl<'a> SchemaManager<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn supervisor_pool_with_schema(pool: Arc<DbPool>) -> PoolWithSchema {
+        let postgres = PostgresConfig {
+            migration_timeout: Duration::from_secs(5),
+            ..PostgresConfig::default()
+        };
+        PoolWithSchema::configured(pool, &postgres, &SqliteConfig::default())
+    }
 
     #[test]
     fn migration_errors_preserve_their_type_and_source() {
@@ -603,6 +650,7 @@ mod tests {
             include_str!("../../migrations/0005_conversation_revision.sql"),
             include_str!("../../migrations/0006_item_references.sql"),
             include_str!("../../migrations/0007_response_item_public_ids.sql"),
+            include_str!("../../migrations/0008_typed_item_metadata.sql"),
         ] {
             sqlx::raw_sql(migration)
                 .execute(&mut *connection)
@@ -616,27 +664,33 @@ mod tests {
             .execute(&mut *connection)
             .await
             .expect("seed conversation");
-        sqlx::query("INSERT INTO items (id, data, created_at, conversation_id, seq) VALUES ($1, $2, $3, $4, $5)")
-            .bind("item_upgrade")
-            .bind("{}")
-            .bind(1_704_067_200_i64)
-            .bind("conv_upgrade")
-            .bind(0_i64)
-            .execute(&mut *connection)
-            .await
-            .expect("seed item");
         sqlx::query(
-            "INSERT INTO responses \
-             (id, conversation_id, history_item_ids, metadata, created_at) VALUES ($1, $2, $3, $4, $5)",
+            "INSERT INTO items (id, public_id, metadata, data, created_at, conversation_id, seq) \
+             VALUES ($1, $1, $2, $3, $4, $5, $6)",
         )
-        .bind("resp_upgrade")
-        .bind("conv_upgrade")
-        .bind("[\"item_upgrade\"]")
-        .bind("{\"source\":\"upgrade\"}")
+        .bind("item_upgrade")
+        .bind(r#"{"kind":"input"}"#)
+        .bind("{}")
         .bind(1_704_067_200_i64)
+        .bind("conv_upgrade")
+        .bind(0_i64)
         .execute(&mut *connection)
         .await
-        .expect("seed response");
+        .expect("seed item");
+        sqlx::query("INSERT INTO responses (id, history_item_ids, metadata, created_at) VALUES ($1, $2, $3, $4)")
+            .bind("resp_upgrade")
+            .bind("[\"item_upgrade\"]")
+            .bind("{\"source\":\"upgrade\"}")
+            .bind(1_704_067_200_i64)
+            .execute(&mut *connection)
+            .await
+            .expect("seed response");
+        sqlx::query("UPDATE conversations SET latest_response_id = $1 WHERE id = $2")
+            .bind("resp_upgrade")
+            .bind("conv_upgrade")
+            .execute(&mut *connection)
+            .await
+            .expect("link the conversation's latest response");
 
         let schema_column_count = postgres_required_schema_column_count(&mut *connection)
             .await
@@ -682,8 +736,7 @@ mod tests {
             .connect(&database_url)
             .await
             .expect("create supervisor-managed PostgreSQL pool");
-        let supervisor_schema =
-            PoolWithSchema::with_postgres_migration_timeout(Arc::new(supervisor_pool), Duration::from_secs(5));
+        let supervisor_schema = supervisor_pool_with_schema(Arc::new(supervisor_pool));
         let supervisor_error = supervisor_schema
             .ensure_schema_ready_with_marker(true)
             .await
@@ -711,7 +764,7 @@ mod tests {
             "SELECT conversations.created_at, items.id, responses.id \
              FROM conversations \
              JOIN items ON items.conversation_id = conversations.id \
-             JOIN responses ON responses.conversation_id = conversations.id \
+             JOIN responses ON responses.id = conversations.latest_response_id \
              WHERE conversations.id = $1",
         )
         .bind("conv_upgrade")
@@ -744,26 +797,28 @@ mod tests {
             )
             .is_ok()
         );
-        let foreign_key_error =
-            sqlx::query("INSERT INTO items (id, data, created_at, conversation_id) VALUES ($1, $2, $3, $4)")
-                .bind("item_invalid")
-                .bind("{}")
-                .bind(future_timestamp)
-                .bind("conv_missing")
-                .execute(&mut *connection)
-                .await;
+        let foreign_key_error = sqlx::query(
+            "INSERT INTO items (id, public_id, metadata, data, created_at, conversation_id) \
+                 VALUES ($1, $1, $2, $3, $4, $5)",
+        )
+        .bind("item_invalid")
+        .bind(r#"{"kind":"input"}"#)
+        .bind("{}")
+        .bind(future_timestamp)
+        .bind("conv_missing")
+        .execute(&mut *connection)
+        .await;
         assert!(foreign_key_error.is_err());
 
         sqlx::raw_sql(
             "ALTER TABLE items DROP CONSTRAINT items_conversation_id_fkey; \
-             ALTER TABLE responses ADD CONSTRAINT responses_conversation_id_duplicate_fkey \
-             FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE SET NULL;",
+             ALTER TABLE responses ADD CONSTRAINT responses_previous_response_id_duplicate_fkey \
+             FOREIGN KEY (previous_response_id) REFERENCES responses(id) ON DELETE SET NULL;",
         )
         .execute(&mut *connection)
         .await
         .expect("replace one required foreign key with a duplicate");
-        let invalid_constraint_schema =
-            PoolWithSchema::with_postgres_migration_timeout(supervisor_schema.pool.clone(), Duration::from_secs(5));
+        let invalid_constraint_schema = supervisor_pool_with_schema(supervisor_schema.pool.clone());
         let constraint_error = invalid_constraint_schema
             .ensure_schema_ready_with_marker(true)
             .await
@@ -946,8 +1001,7 @@ mod tests {
             .connect(&database_url)
             .await
             .expect("create supervisor-managed PostgreSQL pool");
-        let supervisor_schema =
-            PoolWithSchema::with_postgres_migration_timeout(Arc::new(supervisor_pool), Duration::from_secs(5));
+        let supervisor_schema = supervisor_pool_with_schema(Arc::new(supervisor_pool));
 
         let validation_result = supervisor_schema.ensure_schema_ready_with_marker(true).await;
         supervisor_schema.pool.close().await;

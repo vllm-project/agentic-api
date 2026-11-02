@@ -272,7 +272,7 @@ async fn input_items_reject_what_retrieval_rejects() {
     // A record without a response snapshot cannot tell its output from its input.
     let store = ResponseStore::new(Arc::new(harness.exec.storage_pool().unwrap().clone()));
     store
-        .persist("resp_legacy", None, Vec::new(), &ResponseMetadata::default())
+        .persist("resp_legacy", None, Vec::new(), None, &ResponseMetadata::default())
         .await
         .unwrap();
     assert_eq!(

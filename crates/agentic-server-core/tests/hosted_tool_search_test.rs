@@ -2143,8 +2143,7 @@ async fn multi_agent_stores_the_hosted_pair_once() {
         .items
         .iter()
         .map(|item| {
-            let stored = String::try_from(item).expect("stored item JSON");
-            serde_json::from_str::<Value>(&stored).expect("item")["type"]
+            serde_json::to_value(item).expect("item")["type"]
                 .as_str()
                 .unwrap_or_default()
                 .to_owned()

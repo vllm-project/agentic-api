@@ -157,25 +157,22 @@ pub(crate) async fn persist_prepared_turn(
     mut ctx: RequestContext,
     tool_search_metadata: Option<ToolSearchMetadata>,
     output_items: Vec<OutputItem>,
-    response_snapshot: Option<Box<ResponsePayload>>,
+    snapshot: Option<Box<ResponsePayload>>,
     conv_handler: &ConversationHandler,
     resp_handler: &ResponseHandler,
 ) -> ExecutorResult<()> {
-    let metadata = prepare_metadata(&mut ctx, tool_search_metadata, response_snapshot);
+    let metadata = prepare_metadata(&mut ctx, tool_search_metadata);
+    let snapshot = snapshot.as_deref();
     if ctx.original_request.conversation.is_some() {
-        Box::pin(conv_handler.persist(ctx, output_items, metadata)).await
+        Box::pin(conv_handler.persist(ctx, output_items, snapshot, metadata)).await
     } else {
-        Box::pin(resp_handler.persist(ctx, output_items, metadata)).await
+        Box::pin(resp_handler.persist(ctx, output_items, snapshot, metadata)).await
     }
 }
 
-/// The metadata this turn stores: the effective settings, the tool-search state, and the multi-agent tree, moved
-/// out of the request context, with the response snapshot for retrieval.
-fn prepare_metadata(
-    ctx: &mut RequestContext,
-    tool_search_metadata: Option<ToolSearchMetadata>,
-    response_snapshot: Option<Box<ResponsePayload>>,
-) -> ResponseMetadata {
+/// The metadata this turn stores for its continuation: the effective settings, the tool-search state, and the
+/// multi-agent tree, moved out of the request context.
+fn prepare_metadata(ctx: &mut RequestContext, tool_search_metadata: Option<ToolSearchMetadata>) -> ResponseMetadata {
     let (effective_tools, tool_search_loaded_tools) = match tool_search_metadata {
         Some(tool_search) => (tool_search.effective_tools, Some(tool_search.loaded_tools)),
         None => (ctx.enriched_request.tools.take(), None),
@@ -186,7 +183,6 @@ fn prepare_metadata(
         previous_response_id: ctx.original_request.previous_response_id.take(),
         effective_tools,
         tool_search_loaded_tools,
-        response_snapshot,
         effective_tool_choice: ctx
             .original_request
             .tool_choice

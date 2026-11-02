@@ -205,7 +205,7 @@ impl Fixture {
             json!({"conversation_id":data.conversation_id})
         } else {
             response_store
-                .persist(response_id, None, vec![placeholder], &metadata)
+                .persist(response_id, None, vec![placeholder], None, &metadata)
                 .await
                 .expect("persist response fixture");
             json!({"previous_response_id":response_id})

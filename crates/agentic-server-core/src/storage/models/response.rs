@@ -26,6 +26,9 @@ pub struct Response {
     /// Response metadata as JSON object string.
     pub metadata: Option<String>,
 
+    /// The response exactly as returned, as JSON text; absent for responses that cannot be retrieved.
+    pub snapshot: Option<String>,
+
     /// Creation timestamp as Unix timestamp in seconds.
     pub created_at: i64,
 }
@@ -40,18 +43,20 @@ pub async fn create_in_tx(
     conversation_id: Option<&str>,
     previous_response_id: Option<&str>,
     history_item_ids: Option<&str>,
+    snapshot: Option<&str>,
     metadata: Option<&str>,
 ) -> DbResult<Response> {
     let now = utcnow_str();
     sqlx::query_as::<_, Response>(
         "INSERT INTO responses \
-         (id, conversation_id, previous_response_id, history_item_ids, metadata, created_at) \
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+         (id, conversation_id, previous_response_id, history_item_ids, snapshot, metadata, created_at) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
     )
     .bind(id)
     .bind(conversation_id)
     .bind(previous_response_id)
     .bind(history_item_ids)
+    .bind(snapshot)
     .bind(metadata)
     .bind(now)
     .fetch_one(&mut **tx)
@@ -141,6 +146,7 @@ mod tests {
             conversation_id: None,
             previous_response_id: None,
             history_item_ids: None,
+            snapshot: None,
             metadata: None,
             created_at: 1_704_067_200,
         };
@@ -156,6 +162,7 @@ mod tests {
             conversation_id: None,
             previous_response_id: None,
             history_item_ids: Some(r#"["item_1", "item_2"]"#.to_string()),
+            snapshot: None,
             metadata: None,
             created_at: 1_704_067_200,
         };

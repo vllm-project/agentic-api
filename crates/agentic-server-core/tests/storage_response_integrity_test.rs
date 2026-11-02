@@ -23,7 +23,7 @@ async fn invalid_history_references_block_read_and_child_persistence() -> Result
     let pool = setup_pool().await;
     let store = ResponseStore::new(Arc::clone(&pool));
     let metadata = ResponseMetadata::default();
-    store.persist("resp_parent", None, Vec::new(), &metadata).await?;
+    store.persist("resp_parent", None, Vec::new(), None, &metadata).await?;
 
     for invalid in ["not JSON", "null", "{}", "[1]", "[null]", "[\"truncated\""] {
         sqlx::query("UPDATE responses SET history_item_ids = $1 WHERE id = $2")
@@ -36,7 +36,7 @@ async fn invalid_history_references_block_read_and_child_persistence() -> Result
             store.get("resp_parent").await.unwrap_err(),
             store.rehydrate("resp_parent").await.unwrap_err(),
             store
-                .persist("resp_child", Some("resp_parent"), Vec::new(), &metadata)
+                .persist("resp_child", Some("resp_parent"), Vec::new(), None, &metadata)
                 .await
                 .unwrap_err(),
         ] {
@@ -87,6 +87,7 @@ async fn invalid_metadata_blocks_both_stores_without_echoing_secrets() -> Result
                     "resp_child",
                     Some("resp_parent"),
                     Vec::new(),
+                    None,
                     &ResponseMetadata::default(),
                 )
                 .await

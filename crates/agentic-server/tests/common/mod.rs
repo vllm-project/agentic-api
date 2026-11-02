@@ -304,6 +304,6 @@ pub async fn persist_turn(
 ) -> StoreResult<()> {
     let version = store.rehydrate(conversation_id).await?.version;
     store
-        .persist(conversation_id, version, response_id, items, metadata)
+        .persist(conversation_id, version, response_id, items, None, metadata)
         .await
 }

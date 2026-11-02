@@ -2061,9 +2061,10 @@ fn strict_ingestion_rejects_malformed_typed_reasoning_on_both_paths() {
     }
 }
 
-/// Lenient ingestion keeps what earlier releases relayed; strict still rejects it.
+/// Reasoning the typed schema rejects is dropped by lenient JSON ingestion, keeps only the opened item in a
+/// stream, and fails strict ingestion without echoing opaque state.
 #[test]
-fn lenient_ingestion_projects_reasoning_earlier_releases_accepted() {
+fn ingestion_rejects_reasoning_outside_the_typed_schema() {
     let stream = |item: &serde_json::Value| {
         [
             serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"id":"rs_1","type":"reasoning"}}),
@@ -2077,28 +2078,9 @@ fn lenient_ingestion_projects_reasoning_earlier_releases_accepted() {
         let body = serde_json::json!({"id":"resp_1","status":"completed","output":[item]});
         acc.load_json_body(&body.to_string()).map(|()| acc.output)
     };
-    let pre_typed = serde_json::json!({
-        "id": "rs_1", "type": "reasoning",
-        "content": [{"type": "provider_text", "text": "kept plaintext"}],
-        "summary": [{"type": "summary_text", "text": "kept summary"}, {"type": "reasoning_text", "text": "dropped"}],
-        "encrypted_content": {"ciphertext": "sensitive-state"},
-        "status": "failed",
-    });
-    let projected = serde_json::json!([{
-        "type": "reasoning", "id": "rs_1",
-        "content": [{"type": "reasoning_text", "text": "kept plaintext"}],
-        "summary": [{"type": "summary_text", "text": "kept summary"}],
-    }]);
-    let streamed = from_sse_lines(stream(&pre_typed), None);
-    assert_eq!(serde_json::to_value(&streamed.output).unwrap(), projected);
-    let parsed = json(&pre_typed, Validation::Lenient).unwrap();
-    assert_eq!(serde_json::to_value(&parsed).unwrap(), projected);
-    let error = json(&pre_typed, Validation::Strict).unwrap_err();
-    assert!(!error.to_string().contains("sensitive-state"));
-
-    // Earlier releases rejected these too: JSON drops the item, and a stream keeps
-    // the opened item without the completion's fields.
     for fields in [
+        serde_json::json!({"content": [{"type": "provider_text", "text": "untyped part"}]}),
+        serde_json::json!({"encrypted_content": {"ciphertext": "sensitive-state"}}),
         serde_json::json!({"content": "not an array"}),
         serde_json::json!({"content": [{"text": "part without a type"}]}),
         serde_json::json!({"status": 5}),
@@ -2111,6 +2093,8 @@ fn lenient_ingestion_projects_reasoning_earlier_releases_accepted() {
             .unwrap()
             .extend(fields.as_object().unwrap().clone());
         assert!(json(&item, Validation::Lenient).unwrap().is_empty(), "{fields}");
+        let error = json(&item, Validation::Strict).unwrap_err();
+        assert!(!error.to_string().contains("sensitive-state"), "{fields}");
         let streamed = from_sse_lines(stream(&item), None);
         assert_eq!(
             serde_json::to_value(&streamed.output).unwrap(),
@@ -2120,14 +2104,6 @@ fn lenient_ingestion_projects_reasoning_earlier_releases_accepted() {
             "{fields}"
         );
     }
-
-    // Without plaintext, opaque state the typed schema drops leaves nothing vLLM can
-    // replay, so JSON drops the item instead of relaying an emptied one.
-    let opaque_only = serde_json::json!({
-        "id": "rs_1", "type": "reasoning", "content": [], "encrypted_content": {"ciphertext": "sensitive-state"}
-    });
-    assert!(json(&opaque_only, Validation::Lenient).unwrap().is_empty());
-    assert!(json(&opaque_only, Validation::Strict).is_err());
 }
 
 #[test]

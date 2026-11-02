@@ -302,6 +302,9 @@ pub struct SqliteConfig {
     pub journal_size_limit_bytes: u64,
     pub temp_store: SqliteTempStore,
     pub mmap_size_bytes: u64,
+    /// Recreate a database holding data from before the minimum supported migration instead of rejecting it.
+    /// `ExecutionContext::from_config` sets it for the default database in the Agentic API home only.
+    pub recreate_outdated_schema: bool,
 }
 
 impl Default for SqliteConfig {
@@ -311,6 +314,7 @@ impl Default for SqliteConfig {
             journal_size_limit_bytes: DEFAULT_SQLITE_JOURNAL_SIZE_LIMIT_BYTES,
             temp_store: SqliteTempStore::default(),
             mmap_size_bytes: DEFAULT_SQLITE_MMAP_SIZE_BYTES,
+            recreate_outdated_schema: false,
         }
     }
 }

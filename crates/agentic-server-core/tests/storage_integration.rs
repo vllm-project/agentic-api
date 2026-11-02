@@ -119,14 +119,18 @@ async fn conversation_snapshot_rejects_an_undecodable_final_row() -> Result<(), 
         &ResponseMetadata::default(),
     )
     .await?;
-    sqlx::query("INSERT INTO items (id, data, created_at, conversation_id, seq) VALUES ($1, $2, $3, $4, $5)")
-        .bind("item_undecodable")
-        .bind("not valid JSON")
-        .bind(0_i64)
-        .bind(&conversation.conversation_id)
-        .bind(1_i64)
-        .execute(pool.as_ref())
-        .await?;
+    sqlx::query(
+        "INSERT INTO items (id, public_id, metadata, data, created_at, conversation_id, seq) \
+         VALUES ($1, $1, $2, $3, $4, $5, $6)",
+    )
+    .bind("item_undecodable")
+    .bind(r#"{"kind":"input"}"#)
+    .bind("not valid JSON")
+    .bind(0_i64)
+    .bind(&conversation.conversation_id)
+    .bind(1_i64)
+    .execute(pool.as_ref())
+    .await?;
 
     let error = store.rehydrate(&conversation.conversation_id).await.unwrap_err();
     assert!(matches!(error, StorageError::InvalidHistoryItem { ref item_id } if item_id == "item_undecodable"));
@@ -175,44 +179,45 @@ async fn conversation_snapshot_rejects_items_without_a_sequence() -> Result<(), 
 }
 
 #[tokio::test]
-async fn legacy_item_only_version_upgrades_on_the_next_persist() -> Result<(), Box<dyn std::error::Error>> {
+async fn item_only_version_records_a_turn_on_the_next_persist() -> Result<(), Box<dyn std::error::Error>> {
     let pool = setup_pool().await;
     let store = ConversationStore::new(Arc::clone(&pool));
     let conversation = create_conversation(&store).await?;
-    let legacy_item = create_input_item("legacy");
-    sqlx::query("INSERT INTO items (id, data, created_at, conversation_id, seq) VALUES ($1, $2, $3, $4, $5)")
-        .bind("item_legacy")
-        .bind(String::try_from(&legacy_item)?)
-        .bind(0_i64)
-        .bind(&conversation.conversation_id)
-        .bind(0_i64)
-        .execute(pool.as_ref())
+    store
+        .create_items(
+            "default_tenant",
+            &conversation.conversation_id,
+            vec![create_input_item("item")],
+        )
         .await?;
 
-    let legacy = store.rehydrate(&conversation.conversation_id).await?;
+    let item_only = store.rehydrate(&conversation.conversation_id).await?;
+    // Adding items advances the revision but records no turn.
     assert_eq!(
-        legacy.version,
+        item_only.version,
         ConversationVersion {
             last_sequence: Some(0),
-            ..ConversationVersion::default()
+            response_id: None,
+            revision: 1,
         }
     );
 
     store
         .persist(
             &conversation.conversation_id,
-            legacy.version,
-            "resp_after_legacy",
+            item_only.version,
+            "resp_after_items",
             Vec::new(),
+            None,
             &ResponseMetadata::default(),
         )
         .await?;
-    let upgraded = store.rehydrate(&conversation.conversation_id).await?;
+    let recorded = store.rehydrate(&conversation.conversation_id).await?;
     assert_eq!(
-        upgraded.version,
+        recorded.version,
         ConversationVersion {
-            response_id: Some("resp_after_legacy".to_owned()),
-            revision: 1,
+            response_id: Some("resp_after_items".to_owned()),
+            revision: 2,
             last_sequence: Some(0),
         }
     );
@@ -233,6 +238,7 @@ async fn conversation_version_empty_checked_persist_succeeds() -> Result<(), Box
             ConversationVersion::default(),
             "resp_first",
             items.clone(),
+            None,
             &ResponseMetadata::default(),
         )
         .await?;
@@ -270,6 +276,7 @@ async fn zero_item_turn_advances_version_and_retains_exact_metadata() -> Result<
             empty.version,
             "resp_zero_items_first",
             Vec::new(),
+            None,
             &first_metadata,
         )
         .await?;
@@ -295,6 +302,7 @@ async fn zero_item_turn_advances_version_and_retains_exact_metadata() -> Result<
             first.version.clone(),
             "resp_zero_items_second",
             Vec::new(),
+            None,
             &ResponseMetadata {
                 multi_agent_tree: None,
                 model: "second-zero-item-turn".to_owned(),
@@ -321,6 +329,7 @@ async fn zero_item_turn_advances_version_and_retains_exact_metadata() -> Result<
             first.version,
             "resp_zero_items_stale",
             Vec::new(),
+            None,
             &ResponseMetadata::default(),
         )
         .await
@@ -359,6 +368,7 @@ async fn conversation_version_stale_checked_persist_rolls_back_items_and_respons
             snapshot.version,
             "resp_stale",
             rejected_items,
+            None,
             &ResponseMetadata::default(),
         )
         .await
@@ -406,6 +416,7 @@ async fn conversation_version_racing_checked_persists_allow_exactly_one_winner()
                     version,
                     "resp_writer_one",
                     items.clone(),
+                    None,
                     &ResponseMetadata::default(),
                 )
                 .await;
@@ -424,6 +435,7 @@ async fn conversation_version_racing_checked_persists_allow_exactly_one_winner()
                     version,
                     "resp_writer_two",
                     items.clone(),
+                    None,
                     &ResponseMetadata::default(),
                 )
                 .await;
@@ -486,6 +498,7 @@ async fn conversation_version_is_scoped_per_conversation() -> Result<(), Box<dyn
             ConversationVersion::default(),
             "resp_second_conversation",
             vec![create_input_item("second conversation")],
+            None,
             &ResponseMetadata::default(),
         )
         .await?;
@@ -532,7 +545,7 @@ async fn test_response_store_persist_and_rehydrate() {
     let metadata = ResponseMetadata::default();
 
     store
-        .persist("resp_1", None, items, &metadata)
+        .persist("resp_1", None, items, None, &metadata)
         .await
         .expect("persist failed");
 
@@ -550,7 +563,7 @@ async fn test_response_store_get() {
     let metadata = ResponseMetadata::default();
 
     store
-        .persist("resp_get_test", None, items, &metadata)
+        .persist("resp_get_test", None, items, None, &metadata)
         .await
         .expect("persist failed");
 
@@ -569,6 +582,7 @@ async fn response_rehydration_rejects_invalid_or_missing_history() -> Result<(),
             "resp_corrupt",
             None,
             vec![create_input_item("query")],
+            None,
             &ResponseMetadata::default(),
         )
         .await?;
@@ -634,12 +648,18 @@ async fn test_response_store_with_previous_response() {
     let metadata = ResponseMetadata::default();
 
     store
-        .persist("resp_1", None, vec![create_input_item("first")], &metadata)
+        .persist("resp_1", None, vec![create_input_item("first")], None, &metadata)
         .await
         .expect("persist first failed");
 
     store
-        .persist("resp_2", Some("resp_1"), vec![create_output_item("out_2")], &metadata)
+        .persist(
+            "resp_2",
+            Some("resp_1"),
+            vec![create_output_item("out_2")],
+            None,
+            &metadata,
+        )
         .await
         .expect("persist second failed");
 
@@ -729,14 +749,20 @@ async fn test_response_store_chaining_respects_foreign_key() {
 
     // Create resp_1
     store
-        .persist("resp_1", None, vec![create_input_item("first")], &metadata)
+        .persist("resp_1", None, vec![create_input_item("first")], None, &metadata)
         .await
         .expect("resp_1 persist failed");
 
     // Try to create resp_3 with resp_2 as previous (resp_2 doesn't exist)
     // This should fail due to foreign key constraint
     let result = store
-        .persist("resp_3", Some("resp_2"), vec![create_output_item("out3")], &metadata)
+        .persist(
+            "resp_3",
+            Some("resp_2"),
+            vec![create_output_item("out3")],
+            None,
+            &metadata,
+        )
         .await;
 
     assert!(
@@ -766,6 +792,7 @@ async fn test_conversation_concurrent_turns() {
                     version,
                     response_id,
                     vec![create_input_item(text)],
+                    None,
                     &ResponseMetadata::default(),
                 )
                 .await
@@ -1010,7 +1037,7 @@ async fn test_response_store_disabled() {
 
     let metadata = ResponseMetadata::default();
     let result = store
-        .persist("resp_1", None, vec![create_input_item("test")], &metadata)
+        .persist("resp_1", None, vec![create_input_item("test")], None, &metadata)
         .await;
 
     assert!(result.is_err(), "expected error from disabled store");
@@ -1042,7 +1069,7 @@ async fn test_response_store_get_after_persist() {
     let metadata = ResponseMetadata::default();
 
     store
-        .persist("resp_stored", None, items.clone(), &metadata)
+        .persist("resp_stored", None, items.clone(), None, &metadata)
         .await
         .expect("persist failed");
 
@@ -1199,6 +1226,7 @@ async fn test_tool_search_conversation_conflict_does_not_persist_stale_loaded_st
             snapshot.version.clone(),
             "resp_tool_search_winner",
             vec![create_input_item("winner")],
+            None,
             &winning,
         )
         .await
@@ -1209,6 +1237,7 @@ async fn test_tool_search_conversation_conflict_does_not_persist_stale_loaded_st
             snapshot.version,
             "resp_tool_search_stale",
             vec![create_input_item("stale")],
+            None,
             &stale,
         )
         .await

@@ -637,7 +637,6 @@ mod tests {
                     url: "https://example.test/plot.png".to_owned(),
                 },
             ]),
-            origin: crate::types::io::code_interpreter::CodeInterpreterCallOrigin::default(),
         });
 
         assert_eq!(

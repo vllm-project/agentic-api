@@ -5,6 +5,7 @@ use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 use crate::types::io::OutputItem;
 use crate::types::io::{ItemPage, ListItemsResponse};
+use crate::types::request_response::ResponsePayload;
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::request::RequestContext;
@@ -202,7 +203,7 @@ impl ConversationHandler {
             .map_err(ExecutorError::Storage)
     }
 
-    /// Persists one conversation turn: only the new items from this turn, with its metadata.
+    /// Persists one conversation turn: only the new items from this turn, with its snapshot and metadata.
     ///
     /// The store tracks sequence numbers and appends, so prior history must not be re-inserted.
     ///
@@ -213,6 +214,7 @@ impl ConversationHandler {
         &self,
         ctx: RequestContext,
         output_items: Vec<OutputItem>,
+        snapshot: Option<&ResponsePayload>,
         metadata: ResponseMetadata,
     ) -> ExecutorResult<()> {
         let conversation_id = ctx
@@ -236,6 +238,7 @@ impl ConversationHandler {
                 conversation_version,
                 &ctx.response_id,
                 new_items,
+                snapshot,
                 &metadata,
             )
             .await
@@ -311,7 +314,7 @@ mod tests {
     #[tokio::test]
     async fn test_persist_missing_conv_id_returns_error() {
         let result = disabled_handler()
-            .persist(make_ctx(None), vec![], ResponseMetadata::default())
+            .persist(make_ctx(None), vec![], None, ResponseMetadata::default())
             .await;
         assert!(result.is_err());
     }
@@ -328,7 +331,7 @@ mod tests {
         ctx.new_input_items = ctx.original_request.input.clone().into_canonical_items();
 
         let error = handler
-            .persist(ctx, vec![], ResponseMetadata::default())
+            .persist(ctx, vec![], None, ResponseMetadata::default())
             .await
             .expect_err("missing captured version must reject the turn");
 
@@ -398,12 +401,13 @@ mod tests {
                 ConversationVersion::default(),
                 "resp_competing",
                 competing_items,
+                None,
                 &ResponseMetadata::default(),
             )
             .await?;
 
         let error = handler
-            .persist(ctx, vec![], ResponseMetadata::default())
+            .persist(ctx, vec![], None, ResponseMetadata::default())
             .await
             .expect_err("stale captured version must reject the turn");
 

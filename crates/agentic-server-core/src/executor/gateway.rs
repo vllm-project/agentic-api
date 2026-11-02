@@ -599,7 +599,6 @@ mod tests {
         MAX_CONCURRENT_MATERIALIZATIONS, PlannedResult,
     };
     use crate::executor::response_budget::ExecutorResponseBudget;
-    use crate::storage::{ResponseMetadata, ResponseStore, create_pool_with_schema};
     use crate::tool::ToolDeclaration;
     use crate::tool::{
         GatewayBinding, GatewayExecutor, GatewayExecutors, GatewayToolEventPlan, ToolError, ToolHandler, ToolOutput,
@@ -1752,7 +1751,6 @@ mod tests {
                 code: "print(6 * 7)".to_owned(),
                 status: CodeInterpreterCallStatus::InProgress,
                 outputs: None,
-                origin: crate::types::io::code_interpreter::CodeInterpreterCallOrigin::Gateway,
             })),
             completed_output: None,
             arguments: None,
@@ -1764,7 +1762,6 @@ mod tests {
             code: "print(6 * 7)".to_owned(),
             status: CodeInterpreterCallStatus::Completed,
             outputs: Some(vec![CodeInterpreterCallOutput::logs("42\n".to_owned())]),
-            origin: crate::types::io::code_interpreter::CodeInterpreterCallOrigin::Gateway,
         });
         let (sender, mut receiver) = mpsc::channel(16);
         let mut relay = StreamRelay::client(sender, RelayLimits::default());
@@ -1814,25 +1811,8 @@ mod tests {
         assert_eq!(events[6]["item"]["code"], "print(6 * 7)");
         assert_eq!(events[6]["item"]["outputs"][0]["logs"], "42\n");
 
-        // Emitting SSE frames must not turn the typed gateway projection into
-        // an upstream-native call when the response is stored for continuation.
-        let store = ResponseStore::new(create_pool_with_schema(Some("sqlite://?mode=memory")).await.unwrap());
-        store
-            .persist(
-                "resp_projection",
-                None,
-                vec![InOutItem::Output(final_item)],
-                &ResponseMetadata::default(),
-            )
-            .await
-            .expect("store streamed gateway projection");
-        let (_, history) = store
-            .rehydrate("resp_projection")
-            .await
-            .expect("rehydrate streamed projection");
-        let public = serde_json::to_value(&history[0]).expect("serialize public item");
-        assert!(InOutItem::into_input_items(history).is_empty());
-        assert!(public.get("_agentic_code_interpreter_origin").is_none());
+        // The streamed public projection is never replayed upstream.
+        assert!(InOutItem::into_input_items(vec![InOutItem::Output(final_item)]).is_empty());
     }
 
     #[tokio::test]
