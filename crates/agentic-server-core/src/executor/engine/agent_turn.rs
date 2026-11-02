@@ -12,24 +12,23 @@ use super::accumulate_usage;
 use round_policy::{AsyncContinuations, ClientCalls, classify_round};
 use std::{collections::HashMap, num::NonZeroUsize};
 
-use tracing::{Instrument as _, debug};
+use tracing::Instrument as _;
 
 use crate::executor::compaction::maybe_compact_context;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway::{
-    BuiltInToolCallBudget, GatewayCallResult, GatewayScheduler, append_gateway_calls_to_new_input,
-    append_gateway_results, append_output_items_to_input, emit_gateway_start_events, execute_and_emit_output_calls,
-    public_output_items, relay_round_events,
+    BuiltInToolCallBudget, GatewayCallResult, GatewayScheduler, emit_gateway_start_events,
+    execute_and_emit_output_calls, public_output_items, relay_round_events,
 };
 use crate::executor::pipeline::AgentPipeline;
 use crate::executor::rehydrate::prepare_reasoning_for_vllm;
-use crate::executor::request::{ExecutionContext, RequestContext};
+use crate::executor::request::ExecutionContext;
 use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::telemetry::metrics::Stage;
 use crate::executor::upstream::{fetch_blocking_payload, fetch_stream_payload};
 use crate::executor::{inference::UpstreamHeaders, relay::Release};
 use crate::tool::{ToolRegistry, mcp, record_discovered_mcp_tools, responses_declarations};
-use crate::types::io::{InputItem, OutputItem, ResponsesInput};
+use crate::types::io::{OutputItem, ResponsesInput};
 use crate::types::request_response::ResponsePayload;
 
 /// Outcome of inspecting one inference round's output, deciding whether the
@@ -98,35 +97,6 @@ fn prepare_initial_reasoning_for_vllm(input: &mut ResponsesInput, round: usize, 
         return prepare_reasoning_for_vllm(input);
     }
     Ok(())
-}
-
-fn record_round_history(
-    ctx: &mut RequestContext,
-    output_items: &[OutputItem],
-    registry: &ToolRegistry,
-    public_output_count: usize,
-) {
-    // Explicit conversations append public output through their durable handler;
-    // the session lease still serializes execution but must not record it twice.
-    if let Some(continuation) = ctx
-        .continuation
-        .as_mut()
-        .filter(|_| ctx.original_request.conversation.is_none())
-    {
-        // The canonical sequence includes reasoning and intermediate messages in
-        // their original positions, followed by this round's tool call outputs.
-        // Discovery records are appended separately from the public response.
-        ctx.new_input_items.extend(
-            output_items
-                .iter()
-                .filter(|item| !matches!(item, OutputItem::McpListTools(_)) && registry.records_output_item(item))
-                .filter_map(OutputItem::to_input_item)
-                .map(Into::into),
-        );
-        continuation.mark_outputs_recorded(public_output_count);
-    } else {
-        append_gateway_calls_to_new_input(ctx, output_items, registry);
-    }
 }
 
 /// One agent's tool registry and execution state, retained across its rounds.
@@ -272,6 +242,11 @@ impl<'a> AgentTurn<'a> {
         } else {
             maybe_compact_context(&mut self.pipeline.request, self.exec_ctx, auth).await?
         };
+        if compaction_usage.is_some()
+            && let Some(continuation) = &mut self.pipeline.request.continuation
+        {
+            continuation.mark_outputs_compacted(output_offset);
+        }
         prepare_initial_reasoning_for_vllm(
             &mut self.pipeline.request.enriched_request.input,
             round,
@@ -324,7 +299,6 @@ impl<'a> AgentTurn<'a> {
         }
 
         let current_output = std::mem::take(&mut payload.output);
-        log_custom_tool_calls(&current_output, &self.pipeline.request.response_id);
         self.registry.ensure_loaded_calls(&current_output)?;
         let client_calls = ClientCalls::of(&current_output, &self.registry);
         let gateway_results = self
@@ -334,12 +308,6 @@ impl<'a> AgentTurn<'a> {
         if self.tool_call_budget.has_refused() {
             self.pipeline.withhold_builtin_tools();
         }
-        record_round_history(
-            &mut self.pipeline.request,
-            &current_output,
-            &self.registry,
-            output_offset + payload.output.len(),
-        );
 
         let decision = self.round_decision(&mut payload, client_calls, &gateway_results, round);
         if matches!(decision, RoundDecision::Continue) || multi_agent {
@@ -411,27 +379,26 @@ impl<'a> AgentTurn<'a> {
                     OutputItem::FunctionCall(call) => client_calls.get(call.call_id.as_str()).copied().unwrap_or(item),
                     item => item,
                 };
-                let input = match item {
-                    OutputItem::ShellCall(call) => Some(InputItem::ShellCall(call.clone())),
-                    OutputItem::CustomToolCall(call) => Some(InputItem::CustomToolCall(call.clone())),
-                    item => item.to_input_item(),
-                };
-                if let Some(input) = input {
-                    self.pipeline.request.enriched_request.input.push(input);
-                }
+                self.pipeline
+                    .request
+                    .enriched_request
+                    .input
+                    .extend(item.to_input_item());
             }
         } else {
-            let recorded: Vec<_> = output
+            let recorded = output
                 .iter()
                 .filter(|item| self.registry.records_output_item(item))
-                .cloned()
-                .collect();
-            append_output_items_to_input(&mut self.pipeline.request.enriched_request.input, &recorded);
+                .filter_map(OutputItem::to_input_item);
+            self.pipeline.request.enriched_request.input.extend(recorded);
         }
     }
 
+    /// Gives the model each gateway call's result for the next round. History takes the response's public output
+    /// instead, which is what the client receives.
     fn record_gateway_results(&mut self, results: Vec<GatewayCallResult>) {
-        append_gateway_results(&mut self.pipeline.request, results);
+        let model_input = results.into_iter().flat_map(|result| result.input);
+        self.pipeline.request.enriched_request.input.extend(model_input);
     }
 
     async fn execute_round_output(
@@ -476,19 +443,5 @@ impl<'a> AgentTurn<'a> {
         )
         .await?;
         Ok(gateway_results)
-    }
-}
-
-fn log_custom_tool_calls(output: &[OutputItem], response_id: &str) {
-    for item in output {
-        if let OutputItem::CustomToolCall(call) = item {
-            debug!(
-                response_id,
-                call_id = %call.call_id,
-                name = %call.name,
-                input_bytes = call.input.len(),
-                "custom tool call requires client execution"
-            );
-        }
     }
 }

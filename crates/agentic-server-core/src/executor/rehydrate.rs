@@ -268,10 +268,8 @@ fn validate_multi_agent_request(request: &RequestPayload) -> ExecutorResult<()> 
 
 /// Hydrates `ctx` from the previous response chain.
 ///
-/// Loads the stored response, rehydrates its history items, resolves effective
-/// tools and tool choice from the stored metadata, and prepends the history to
-/// the enriched request input. The new response is independent of any conversation
-/// associated with its parent.
+/// Loads the stored response and its history, inherits its effective settings, and continues its history with this
+/// request's items. The new response is independent of any conversation associated with its parent.
 async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) -> ExecutorResult<()> {
     if ctx.continuation.is_some() {
         return from_session_response(ctx, exec_ctx).await;
@@ -281,23 +279,16 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
         .rehydrate(ctx)
         .await?
         .ok_or_else(missing_previous_response_id)?;
-    if restore_agent_tree(ctx, &stored.metadata, exec_ctx.responses_config.max_retained_bytes)? {
-        ctx.rehydrated_metadata = Some(stored.metadata);
-        return Ok(());
+    if !restore_agent_tree(ctx, &stored.metadata, exec_ctx.responses_config.max_retained_bytes)? {
+        let items = with_request_items(ctx, InOutItem::into_input_items(history));
+        set_model_input(ctx, items)?;
+        apply_effective_settings(ctx, &stored.metadata);
     }
-
-    let mut items = InOutItem::into_input_items(history);
-    items.reserve(ctx.new_input_items.len());
-    items.extend(InOutItem::into_input_items(ctx.new_input_items.clone()));
-    reject_unanswered_sync_call(&items)?;
-
-    ctx.enriched_request.previous_response_id = None;
-    ctx.enriched_request.input = ResponsesInput::from(items);
-    apply_effective_settings(ctx, &stored.metadata);
     ctx.rehydrated_metadata = Some(stored.metadata);
     Ok(())
 }
 
+/// Hydrates `ctx` from the session's retained parent, loading and retaining a stored parent on first use.
 async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) -> ExecutorResult<()> {
     let cached = ctx
         .continuation
@@ -329,30 +320,11 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
         })?;
         std::sync::Arc::new(continuation.retain_parent(checkpoint)?)
     };
-    if restore_agent_tree(ctx, &parent.metadata, exec_ctx.responses_config.max_retained_bytes)? {
-        if let Some(continuation) = ctx.continuation.as_mut() {
-            continuation.parent = Some(parent);
-        }
-        return Ok(());
+    if !restore_agent_tree(ctx, &parent.metadata, exec_ctx.responses_config.max_retained_bytes)? {
+        let items = canonical_session_history(with_request_items(ctx, parent.history.clone()));
+        set_model_input(ctx, items)?;
+        apply_effective_settings(ctx, &parent.metadata);
     }
-    let mut items = parent.history.clone();
-    // Match durable rehydration: lower custom/shell call outputs only in the
-    // inference copy. new_input_items retains their public wire types.
-    items.extend(InOutItem::into_input_items(ctx.new_input_items.clone()));
-    let items = canonical_session_history(items);
-    reject_unanswered_sync_call(&items)?;
-    ctx.enriched_request.previous_response_id = None;
-    ctx.enriched_request.input = ResponsesInput::from(items);
-    ctx.enriched_request.tools = resolve_tools(
-        ctx.original_request.tools.as_deref(),
-        parent.metadata.effective_tools.as_deref(),
-        ctx.original_request.tools.is_some(),
-    );
-    ctx.enriched_request.tool_choice = Some(resolve_tool_choice(
-        ctx.original_request.tool_choice.as_ref(),
-        &parent.metadata.effective_tool_choice,
-        ctx.original_request.tool_choice.is_some() || ctx.original_request.tools.is_some(),
-    ));
     if let Some(continuation) = ctx.continuation.as_mut() {
         continuation.parent = Some(parent);
     }
@@ -366,8 +338,8 @@ fn missing_previous_response_id() -> ExecutorError {
 
 /// Hydrates `ctx` from the conversation store.
 ///
-/// Gets or creates the conversation (depending on `store`) and rehydrates its
-/// history in parallel, then prepends the history items to the enriched request input.
+/// Gets or creates the conversation (depending on `store`) and rehydrates its history in parallel, then continues
+/// that history with this request's items. A conversation turn does not inherit the stored settings.
 async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) -> ExecutorResult<()> {
     let (conv_data, snapshot) = tokio::try_join!(
         async {
@@ -379,25 +351,31 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
         },
         exec_ctx.conv_handler.rehydrate(ctx),
     )?;
-
-    if let Some(metadata) = &snapshot.turn_metadata
-        && restore_agent_tree(ctx, metadata, exec_ctx.responses_config.max_retained_bytes)?
-    {
-        ctx.conversation_id = Some(conv_data.conversation_id);
-        ctx.conversation_version = Some(snapshot.version);
-        ctx.rehydrated_metadata = snapshot.turn_metadata;
-        return Ok(());
-    }
-
-    let mut items = InOutItem::into_input_items(snapshot.items);
-    items.reserve(ctx.new_input_items.len());
-    items.extend(InOutItem::into_input_items(ctx.new_input_items.clone()));
-    reject_unanswered_sync_call(&items)?;
-
-    ctx.enriched_request.input = ResponsesInput::from(items);
     ctx.conversation_id = Some(conv_data.conversation_id);
     ctx.conversation_version = Some(snapshot.version);
+    let restored = match &snapshot.turn_metadata {
+        Some(metadata) => restore_agent_tree(ctx, metadata, exec_ctx.responses_config.max_retained_bytes)?,
+        None => false,
+    };
+    if !restored {
+        let items = with_request_items(ctx, InOutItem::into_input_items(snapshot.items));
+        set_model_input(ctx, items)?;
+    }
     ctx.rehydrated_metadata = snapshot.turn_metadata;
+    Ok(())
+}
+
+/// The continued `history` followed by this request's own items.
+fn with_request_items(ctx: &RequestContext, mut history: Vec<InputItem>) -> Vec<InputItem> {
+    history.extend(InOutItem::into_input_items(ctx.new_input_items.clone()));
+    history
+}
+
+/// Makes `items` the turn's model input, once no synchronous call in them is left unanswered.
+fn set_model_input(ctx: &mut RequestContext, items: Vec<InputItem>) -> ExecutorResult<()> {
+    reject_unanswered_sync_call(&items)?;
+    ctx.enriched_request.previous_response_id = None;
+    ctx.enriched_request.input = ResponsesInput::from(items);
     Ok(())
 }
 
@@ -1190,7 +1168,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn stored_code_interpreter_call_is_not_replayed_for_previous_response_or_conversation()
+    async fn stored_code_interpreter_call_reaches_the_model_as_its_function_call()
     -> Result<(), Box<dyn std::error::Error>> {
         let projection: OutputItem = serde_json::from_value(serde_json::json!({
             "type": "code_interpreter_call",
@@ -1233,10 +1211,14 @@ mod tests {
             request(Some(&conversation.conversation_id), None),
         ] {
             let ctx = rehydrate_conversation(request, &exec_ctx).await?;
-            // The model saw the gateway's function call, not this public projection.
-            let model_input = serde_json::to_value(ctx.enriched_request.input.model_input())?;
-            assert_eq!(model_input.as_array().map(Vec::len), Some(1));
-            assert_eq!(model_input[0]["role"], "user");
+            // History keeps the public item; the upstream projection lowers it to the call the model made.
+            let model_input = serde_json::to_value(ctx.enriched_request.input.normalized_model_input(&[])?)?;
+            assert_eq!(model_input.as_array().map(Vec::len), Some(3));
+            assert_eq!(model_input[0]["type"], "function_call");
+            assert_eq!(model_input[0]["name"], "code_interpreter");
+            assert_eq!(model_input[0]["call_id"], "ci_projection");
+            assert_eq!(model_input[1]["type"], "function_call_output");
+            assert_eq!(model_input[2]["role"], "user");
         }
         Ok(())
     }

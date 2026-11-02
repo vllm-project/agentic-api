@@ -634,7 +634,7 @@ mod tests {
                         let histories = if output_type == "tool_search_output" {
                             vec![&input]
                         } else {
-                            vec![&input, normalized.as_ref()]
+                            vec![&input, &normalized]
                         };
                         for history in histories {
                             let required =

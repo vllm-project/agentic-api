@@ -17,7 +17,6 @@ use crate::types::tools::{ToolSearchExecution, ToolSearchStatus};
 use crate::utils::common::{deserialize_from_value_opt, deserialize_nullable_vec};
 use crate::utils::uuid7_str;
 
-use super::InOutItem;
 use super::code_interpreter::CodeInterpreterCall;
 use super::input::{
     CompactionItem, InputFunctionToolCall, InputItem, InputTextContent, InputToolSearchCall, ToolSearchOutputMessage,
@@ -1041,69 +1040,29 @@ impl OutputItem {
         }
     }
 
-    /// Whether this public item is one the executor records as the turn's
-    /// history in round order (a hosted tool-search item), rather than as output.
-    #[must_use]
-    pub(crate) fn is_recorded_as_history(&self) -> bool {
-        match self {
-            Self::ToolSearchCall(call) => call.execution == ToolSearchExecution::Server,
-            Self::ToolSearchOutput(_) => true,
-            Self::Message(_)
-            | Self::FunctionCall(_)
-            | Self::CustomToolCall(_)
-            | Self::ShellCall(_)
-            | Self::CodeInterpreterCall(_)
-            | Self::WebSearchCall(_)
-            | Self::McpCall(_)
-            | Self::McpListTools(_)
-            | Self::Reasoning(_)
-            | Self::Compaction(_)
-            | Self::MultiAgentCall(_)
-            | Self::MultiAgentCallOutput(_)
-            | Self::AgentMessage(_)
-            | Self::Unknown { .. } => false,
-        }
-    }
-
-    /// Whether persistence must leave this output out because the turn's
-    /// history items already hold it under the same id. A turn that did not
-    /// record it (multi-agent rounds keep their own history) stores it as output.
-    #[must_use]
-    pub(crate) fn is_already_in_history(&self, history: &[InOutItem]) -> bool {
-        self.is_recorded_as_history()
-            && self
-                .id()
-                .is_some_and(|id| history.iter().any(|item| item.id() == Some(id)))
-    }
-
     /// Shapes a stored output item as continuation input.
-    /// Public output for gateway-executed built-in tools is omitted because the model-facing
-    /// function call and output are persisted separately as input items. MCP
-    /// list metadata is retained here and removed by `ResponsesInput::model_input`.
+    /// Tool items keep their public types; `ResponsesInput::normalized_model_input` lowers them
+    /// to function calls for the model. MCP list metadata is retained here and removed by
+    /// `ResponsesInput::model_input`.
     #[must_use]
     pub fn to_input_item(&self) -> Option<InputItem> {
         match self {
             Self::Message(message) => Some(InputItem::Message(message.clone().into())),
             Self::Reasoning(reasoning) => Some(InputItem::Reasoning(reasoning.clone())),
             Self::FunctionCall(call) => Some(InputItem::FunctionCall(InputFunctionToolCall::from(call.clone()))),
-            Self::ToolSearchCall(call) if call.execution == ToolSearchExecution::Client => {
-                InputToolSearchCall::try_from(call).ok().map(InputItem::ToolSearchCall)
-            }
-            Self::CustomToolCall(call) => Some(InputItem::FunctionCall(call.clone().into())),
-            Self::ShellCall(call) => Some(InputItem::FunctionCall(call.clone().into())),
+            Self::ToolSearchCall(call) => InputToolSearchCall::try_from(call).ok().map(InputItem::ToolSearchCall),
+            Self::ToolSearchOutput(output) => Some(InputItem::ToolSearchOutput(output.clone())),
+            Self::CustomToolCall(call) => Some(InputItem::CustomToolCall(call.clone())),
+            Self::ShellCall(call) => Some(InputItem::ShellCall(call.clone())),
+            Self::WebSearchCall(call) => Some(InputItem::WebSearchCall(call.clone())),
+            Self::McpCall(call) => Some(InputItem::McpCall(call.clone())),
+            Self::CodeInterpreterCall(call) => Some(InputItem::CodeInterpreterCall(call.clone())),
             Self::McpListTools(list_tools) => Some(InputItem::McpListTools(list_tools.clone())),
             Self::Compaction(item) => Some(InputItem::Compaction(item.clone())),
             Self::MultiAgentCall(item) => Some(InputItem::MultiAgentCall(item.clone().into())),
             Self::MultiAgentCallOutput(item) => Some(InputItem::MultiAgentCallOutput(item.clone().into())),
             Self::AgentMessage(item) => Some(InputItem::AgentMessage(item.clone().into())),
-            // Gateway-executed tools reach the model as function calls; these are the public types the gateway
-            // translates them back to. The model-facing call/output pairs are stored as input history instead.
-            Self::ToolSearchCall(_)
-            | Self::ToolSearchOutput(_)
-            | Self::CodeInterpreterCall(_)
-            | Self::WebSearchCall(_)
-            | Self::McpCall(_)
-            | Self::Unknown { .. } => None,
+            Self::Unknown { .. } => None,
         }
     }
 }
@@ -1456,15 +1415,16 @@ mod tests {
         };
         assert_eq!(call.status, Some(MessageStatus::Completed));
 
-        let Some(InputItem::FunctionCall(call)) = item.to_input_item() else {
-            panic!("custom call should rehydrate as a function call");
+        let Some(InputItem::CustomToolCall(replayed)) = item.to_input_item() else {
+            panic!("custom call should rehydrate as itself");
         };
+        let call = InputFunctionToolCall::from(replayed);
         assert_eq!(call.name, "apply_patch");
         assert_eq!(call.arguments, r#"{"input":"*** Begin Patch\n*** End Patch"}"#);
     }
 
     #[test]
-    fn shell_call_round_trips_and_rehydrates_as_function_input() {
+    fn shell_call_round_trips_and_lowers_to_function_input() {
         let item: OutputItem = serde_json::from_value(serde_json::json!({
             "type": "shell_call",
             "id": "sh_1",
@@ -1479,9 +1439,10 @@ mod tests {
         .unwrap();
 
         assert!(item.requires_client_action(&ToolRegistry::default()));
-        let Some(InputItem::FunctionCall(call)) = item.to_input_item() else {
-            panic!("shell call should rehydrate as a function call input item");
+        let Some(InputItem::ShellCall(replayed)) = item.to_input_item() else {
+            panic!("shell call should rehydrate as itself");
         };
+        let call = InputFunctionToolCall::from(replayed);
         assert_eq!(call.call_id, "call_1");
         assert_eq!(call.name, "shell");
         assert_eq!(call.id.as_deref(), Some("fc_1"));
@@ -1524,16 +1485,15 @@ mod tests {
     }
 
     #[test]
-    fn gateway_public_tool_outputs_are_not_replayed_as_model_input() {
-        let web_search = OutputItem::WebSearchCall(
-            WebSearchCall::try_new(
-                "ws_1",
-                WebSearchCallStatus::Completed,
-                vec!["rust async".to_owned()],
-                Vec::new(),
-            )
-            .unwrap(),
-        );
+    fn gateway_public_tool_outputs_replay_as_public_input_and_lower_to_function_calls() {
+        let search = WebSearchCall::try_new(
+            "ws_1",
+            WebSearchCallStatus::Completed,
+            vec!["rust async".to_owned()],
+            Vec::new(),
+        )
+        .unwrap();
+        let web_search = OutputItem::WebSearchCall(search.clone());
         let mcp = OutputItem::McpCall(McpCall::new(
             "mcp_1",
             "counter",
@@ -1544,8 +1504,13 @@ mod tests {
             None,
         ));
 
-        assert!(web_search.to_input_item().is_none());
-        assert!(mcp.to_input_item().is_none());
+        assert!(matches!(web_search.to_input_item(), Some(InputItem::WebSearchCall(_))));
+        assert!(matches!(mcp.to_input_item(), Some(InputItem::McpCall(_))));
+        let call = InputFunctionToolCall::from(&search);
+        let output = crate::types::io::FunctionToolResultMessage::from(&search);
+        assert_eq!((call.name.as_str(), call.call_id.as_str()), ("web_search", "ws_1"));
+        assert_eq!(call.arguments, r#"{"queries":["rust async"]}"#);
+        assert_eq!(output.call_id, "ws_1");
     }
 
     #[test]

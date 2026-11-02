@@ -41,13 +41,7 @@ pub(super) async fn complete_without_inference(
 
     #[cfg(debug_assertions)]
     state.websocket_tracker.pause_local_completion_after_rehydration().await;
-    persist_turn(
-        ctx,
-        Vec::new(),
-        &state.exec_ctx.conv_handler,
-        &state.exec_ctx.resp_handler,
-    )
-    .await?;
+    persist_turn(ctx, &state.exec_ctx).await?;
 
     outbound_tx.send(created_event).await.map_err(|_| WsError::SendFailed)?;
     outbound_tx.send(completed_event).await.map_err(|_| WsError::SendFailed)

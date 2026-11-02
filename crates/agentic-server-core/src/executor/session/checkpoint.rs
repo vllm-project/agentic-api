@@ -79,7 +79,7 @@ pub struct ResponseContinuation {
     pub(crate) parent: Option<Arc<RetainedCheckpoint>>,
     pub(super) budget: Option<Arc<CheckpointBudget>>,
     pub(super) history_replaced: bool,
-    pub(super) recorded_output_count: usize,
+    pub(super) compacted_output_count: usize,
     pub(super) finished: bool,
 }
 
@@ -132,15 +132,16 @@ impl ResponseContinuation {
         self.history_replaced = true;
     }
 
-    /// The loop has recorded these outputs in canonical inference-round order.
-    /// Public output remains complete, but persistence must not append it again.
-    pub(crate) fn mark_outputs_recorded(&mut self, output_count: usize) {
-        self.recorded_output_count = output_count;
+    /// An in-turn compaction summarized the turn's first `output_count` outputs; persistence must not store them.
+    pub(crate) fn mark_outputs_compacted(&mut self, output_count: usize) {
+        self.compacted_output_count = output_count;
     }
 
+    /// Whether persistence stores this output. A compaction's summary stands for the outputs it absorbed, except MCP
+    /// discovery, which later turns need to know which servers were listed, and async calls, whose outputs arrive
+    /// in a later request.
     pub(crate) fn retains_output(&self, index: usize, item: &OutputItem) -> bool {
-        (index >= self.recorded_output_count && !item.is_recorded_as_history())
-            || matches!(item, OutputItem::McpListTools(_))
+        index >= self.compacted_output_count || matches!(item, OutputItem::McpListTools(_)) || item.is_async_call()
     }
 
     /// Retain orchestration records across compaction without restoring the old

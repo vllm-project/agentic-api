@@ -2,11 +2,10 @@
 //! and the request's own items that storage needs again.
 
 use std::borrow::Borrow;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
-use crate::types::io::InOutItem;
+use crate::types::io::InputItem;
 use crate::types::io::input::{async_records, open_async_call_ids, retained_async_call};
-use crate::types::io::{InputItem, OutputItem};
 
 /// What a compaction must keep from the items it summarizes, selected once from borrowed histories.
 ///
@@ -104,30 +103,10 @@ impl StoredCarryOver {
     }
 }
 
-/// The public form of the calls in `call_ids` from a stored history, by `call_id`. Continuation
-/// lowers custom calls for the model; the stored items keep the form the client saw.
-pub(super) fn public_calls(history: Vec<InOutItem>, call_ids: &HashSet<&str>) -> HashMap<String, InputItem> {
-    history
-        .into_iter()
-        .filter_map(|item| {
-            let public = match item {
-                InOutItem::Input(item) => item,
-                InOutItem::Output(OutputItem::CustomToolCall(call)) => InputItem::CustomToolCall(call),
-                InOutItem::Output(output) => output.to_input_item()?,
-            };
-            let call_id = public
-                .call_id()
-                .filter(|call_id| call_ids.contains(call_id))?
-                .to_owned();
-            Some((call_id, public))
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::io::{InputMessage, InputMessageContent};
+    use crate::types::io::{InOutItem, InputMessage, InputMessageContent};
 
     fn user_message() -> InputItem {
         InputItem::Message(InputMessage {

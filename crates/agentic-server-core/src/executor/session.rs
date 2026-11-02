@@ -25,7 +25,7 @@ use crate::storage::ResponseMetadata;
 #[cfg(test)]
 use crate::types::io::InOutItem;
 #[cfg(test)]
-use crate::types::io::{InputItem, OutputItem};
+use crate::types::io::InputItem;
 #[cfg(test)]
 use crate::types::websocket::SteeringRequiredInput;
 #[cfg(test)]
@@ -291,7 +291,7 @@ impl ResponseSession {
             parent,
             budget: self.budget.clone(),
             history_replaced: false,
-            recorded_output_count: 0,
+            compacted_output_count: 0,
             finished: false,
         };
         drop(state);

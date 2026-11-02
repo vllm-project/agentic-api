@@ -6,9 +6,7 @@
 mod support;
 
 use agentic_core::executor::request::RequestContext;
-use agentic_core::executor::{
-    ExecutionContext, ExecutorError, execute, persist_response, persist_turn, rehydrate_conversation,
-};
+use agentic_core::executor::{ExecutionContext, ExecutorError, commit, execute, persist_turn, rehydrate_conversation};
 use agentic_core::storage::StorageError;
 use agentic_core::types::io::InOutItem;
 use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
@@ -705,27 +703,14 @@ async fn test_public_persist_steps_honor_the_storage_policy() {
                 "status": "completed", "content": [{"type": "output_text", "text": "public answer"}]}]
         }))
         .expect("completed payload");
-        Box::pin(persist_response(
-            payload,
-            ctx,
-            exec_ctx.conv_handler.clone(),
-            exec_ctx.resp_handler.clone(),
-        ))
-        .await
-        .expect("persist_response");
-        assert_eq!(
-            is_continuable(&exec_ctx, &id).await,
-            store,
-            "persist_response with store={store}"
-        );
+        Box::pin(commit(ctx, payload, &exec_ctx)).await.expect("commit");
+        assert_eq!(is_continuable(&exec_ctx, &id).await, store, "commit with store={store}");
 
         let ctx = rehydrate_conversation(follow_up(), &exec_ctx)
             .await
             .expect("hydrates from the stored parent");
         let id = ctx.response_id.clone();
-        persist_turn(ctx, Vec::new(), &exec_ctx.conv_handler, &exec_ctx.resp_handler)
-            .await
-            .expect("persist_turn");
+        persist_turn(ctx, &exec_ctx).await.expect("persist_turn");
         assert_eq!(
             is_continuable(&exec_ctx, &id).await,
             store,

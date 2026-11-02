@@ -3,7 +3,6 @@
 use crate::storage::{ConversationData, ConversationSnapshot, ConversationStore, ResponseMetadata, StorageError};
 use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
-use crate::types::io::OutputItem;
 use crate::types::io::{ItemPage, ListItemsResponse};
 use crate::types::request_response::ResponsePayload;
 
@@ -203,43 +202,36 @@ impl ConversationHandler {
             .map_err(ExecutorError::Storage)
     }
 
-    /// Persists one conversation turn: only the new items from this turn, with its snapshot and metadata.
-    ///
-    /// The store tracks sequence numbers and appends, so prior history must not be re-inserted.
+    /// Stores one conversation turn: only its own items, with its snapshot and metadata, at the conversation version
+    /// captured at rehydration. The store tracks sequence numbers and appends, so prior history is never re-inserted.
     ///
     /// # Errors
     /// Returns `ExecutorError` if `conversation` is absent on the context,
     /// the store is disabled, or the database operation fails.
     pub async fn persist(
         &self,
-        ctx: RequestContext,
-        output_items: Vec<OutputItem>,
+        ctx: &RequestContext,
+        items: Vec<InOutItem>,
         snapshot: Option<&ResponsePayload>,
-        metadata: ResponseMetadata,
+        metadata: &ResponseMetadata,
     ) -> ExecutorResult<()> {
         let conversation_id = ctx
             .conversation_id
+            .as_deref()
             .ok_or_else(|| ExecutorError::InvalidRequest("conversation is required for persist".into()))?;
         let conversation_version = ctx
             .conversation_version
+            .clone()
             .ok_or_else(|| ExecutorError::InvalidRequest("conversation version is required for persist".into()))?;
-
-        let mut new_items = Vec::with_capacity(ctx.new_input_items.len() + output_items.len());
-        let output_items: Vec<_> = output_items
-            .into_iter()
-            .filter(|item| !item.is_already_in_history(&ctx.new_input_items))
-            .collect();
-        new_items.extend(ctx.new_input_items);
-        new_items.extend(output_items.into_iter().map(InOutItem::Output));
 
         self.store
             .persist(
-                &conversation_id,
+                conversation_id,
                 conversation_version,
                 &ctx.response_id,
-                new_items,
+                items,
                 snapshot,
-                &metadata,
+                metadata,
             )
             .await
             .map_err(|error| match error {
@@ -314,7 +306,7 @@ mod tests {
     #[tokio::test]
     async fn test_persist_missing_conv_id_returns_error() {
         let result = disabled_handler()
-            .persist(make_ctx(None), vec![], None, ResponseMetadata::default())
+            .persist(&make_ctx(None), vec![], None, &ResponseMetadata::default())
             .await;
         assert!(result.is_err());
     }
@@ -331,7 +323,7 @@ mod tests {
         ctx.new_input_items = ctx.original_request.input.clone().into_canonical_items();
 
         let error = handler
-            .persist(ctx, vec![], None, ResponseMetadata::default())
+            .persist(&ctx, ctx.new_input_items.clone(), None, &ResponseMetadata::default())
             .await
             .expect_err("missing captured version must reject the turn");
 
@@ -361,7 +353,9 @@ mod tests {
         ctx.relax_tool_choice();
 
         let responses = crate::executor::ResponseHandler::new(crate::storage::ResponseStore::disabled());
-        crate::executor::persist::persist_prepared_turn(ctx, None, vec![], None, &handler, &responses).await?;
+        let exec = crate::executor::ExecutionContext::new(handler, responses, std::sync::Arc::default(), String::new());
+        let input_only = crate::executor::persist::TurnOutput::Empty;
+        crate::executor::persist::persist(ctx, input_only, None, &exec).await?;
 
         let snapshot = store.rehydrate(&conversation.conversation_id).await?;
         let metadata = snapshot.turn_metadata.clone().expect("persisted turn metadata");
@@ -407,7 +401,7 @@ mod tests {
             .await?;
 
         let error = handler
-            .persist(ctx, vec![], None, ResponseMetadata::default())
+            .persist(&ctx, ctx.new_input_items.clone(), None, &ResponseMetadata::default())
             .await
             .expect_err("stale captured version must reject the turn");
 

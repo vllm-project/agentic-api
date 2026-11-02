@@ -112,8 +112,8 @@ impl InOutItem {
         }
     }
 
-    /// Converts stored history into input items for continuation processing.
-    /// Internal items are removed later by `ResponsesInput::model_input`.
+    /// Converts stored history into input items for continuation processing. Tool items keep their public types;
+    /// the upstream projection lowers them, and `ResponsesInput::model_input` removes internal items.
     #[must_use]
     pub fn into_input_items(history: Vec<InOutItem>) -> Vec<InputItem> {
         history
@@ -121,13 +121,6 @@ impl InOutItem {
             .filter_map(|item| match item {
                 Self::Input(item) => Some(item),
                 Self::Output(output) => output.to_input_item(),
-            })
-            .map(|item| match item {
-                InputItem::ShellCall(call) => InputItem::FunctionCall(call.into()),
-                InputItem::ShellCallOutput(output) => InputItem::FunctionCallOutput(output.into()),
-                InputItem::CustomToolCall(call) => InputItem::FunctionCall(call.into()),
-                InputItem::CustomToolCallOutput(output) => InputItem::FunctionCallOutput(output.into()),
-                item => item,
             })
             .collect()
     }

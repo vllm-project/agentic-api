@@ -1357,19 +1357,18 @@ async fn session_tool_round_preserves_reasoning_message_call_output_order() {
                 json!("message"),
                 json!("reasoning"),
                 json!("message"),
-                json!("function_call"),
-                json!("function_call_output"),
+                json!("web_search_call"),
                 json!("message"),
                 json!("message")
             ],
             "canonical continuation must preserve inference-round order: {history}"
         );
         assert!(history[2].to_string().contains("intermediate answer"));
-        assert!(history[5].to_string().contains("final answer"));
+        assert!(history[4].to_string().contains("final answer"));
         if store_durable {
             let durable = InOutItem::into_input_items(store.rehydrate(&result.id).await.unwrap().1);
             let durable = serde_json::to_value(durable).unwrap();
-            assert_eq!(durable, Value::Array(history.as_array().unwrap()[..6].to_vec()));
+            assert_eq!(durable, Value::Array(history.as_array().unwrap()[..5].to_vec()));
         }
         model.close().await;
     }
@@ -1406,13 +1405,12 @@ async fn session_mixed_tool_round_records_calls_once_before_client_continuation(
     .await
     .expect("the client call is retained exactly once despite the mixed round");
     let history = serde_json::to_value(&next.enriched_request.input).unwrap();
-    assert_eq!(history.as_array().unwrap().len(), 6);
+    assert_eq!(history.as_array().unwrap().len(), 5);
     assert!(history[1].to_string().contains("before the calls"));
-    assert_eq!(history[2]["call_id"], "call_search");
+    assert_eq!(history[2]["type"], "web_search_call");
     assert_eq!(history[3]["call_id"], "client");
     assert_eq!(history[4]["type"], "function_call_output");
-    assert_eq!(history[4]["call_id"], "call_search");
-    assert_eq!(history[5]["call_id"], "client");
+    assert_eq!(history[4]["call_id"], "client");
     model.close().await;
 }
 
@@ -1434,13 +1432,11 @@ async fn session_round_limit_retains_the_final_call_output_in_order() {
         .expect("round exhaustion must not leave an unanswered built-in call");
     let history = serde_json::to_value(&next.enriched_request.input).unwrap();
     let items = history.as_array().unwrap();
-    assert_eq!(items.len(), 32);
-    for (round, items) in items[1..31].as_chunks::<3>().0.iter().enumerate() {
+    assert_eq!(items.len(), 22);
+    for (round, items) in items[1..21].as_chunks::<2>().0.iter().enumerate() {
         assert_eq!(items[0]["type"], "message");
-        assert_eq!(items[1]["type"], "function_call");
-        assert_eq!(items[2]["type"], "function_call_output");
-        assert_eq!(items[1]["call_id"], format!("call_round_{round}"));
-        assert_eq!(items[2]["call_id"], items[1]["call_id"]);
+        assert_eq!(items[1]["type"], "web_search_call");
+        assert_eq!(items[1]["id"], format!("ws_round_{round}"));
     }
     model.close().await;
 }
