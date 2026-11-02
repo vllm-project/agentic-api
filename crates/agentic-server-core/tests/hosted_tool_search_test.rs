@@ -8,7 +8,9 @@ mod support;
 
 use std::collections::{HashMap, VecDeque};
 use std::fmt::Write as _;
+use std::fs;
 use std::num::NonZeroUsize;
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
@@ -28,10 +30,11 @@ use futures::StreamExt;
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use tokio::sync::{Mutex, Notify};
+use tokio::task::JoinHandle;
 
 type Requests = Arc<Mutex<Vec<Value>>>;
 
-/// A mock upstream that answers each request with the next prepared JSON body.
+/// A mock upstream that emits each prepared response as JSON or SSE according to the request.
 async fn spawn_llm(responses: Vec<Value>) -> (String, Requests) {
     let responses = Arc::new(Mutex::new(VecDeque::from(responses)));
     let requests = Arc::new(Mutex::new(Vec::new()));
@@ -41,15 +44,22 @@ async fn spawn_llm(responses: Vec<Value>) -> (String, Requests) {
         post(move |body: Bytes| {
             let (responses, requests) = (Arc::clone(&route_responses), Arc::clone(&route_requests));
             async move {
-                requests
-                    .lock()
-                    .await
-                    .push(serde_json::from_slice(&body).expect("request JSON"));
+                let request: Value = serde_json::from_slice(&body).expect("request JSON");
+                let stream = request["stream"] == true;
+                requests.lock().await.push(request);
                 let response = responses.lock().await.pop_front().expect("one response per request");
+                let (content_type, body) = if stream {
+                    (
+                        "text/event-stream",
+                        sse(response["id"].as_str().unwrap(), response["output"].as_array().unwrap()),
+                    )
+                } else {
+                    ("application/json", response.to_string())
+                };
                 axum::response::Response::builder()
                     .status(200)
-                    .header("Content-Type", "application/json")
-                    .body(axum::body::Body::from(response.to_string()))
+                    .header("Content-Type", content_type)
+                    .body(axum::body::Body::from(body))
                     .expect("mock response")
                     .into_response()
             }
@@ -107,6 +117,14 @@ fn request(input: &Value, tools: &Value) -> RequestPayload {
 }
 
 async fn run(request: RequestPayload, context: Arc<ExecutionContext>) -> ResponsePayload {
+    if request.stream {
+        let events = run_streaming(request, context).await;
+        let terminal = events
+            .iter()
+            .find(|event| event["type"] == "response.completed")
+            .unwrap_or_else(|| panic!("completed response: {events:?}"));
+        return serde_json::from_value(terminal["response"].clone()).unwrap();
+    }
     match Box::pin(ExecuteRequest::new(request, context).run())
         .await
         .expect("blocking execution")
@@ -359,13 +377,16 @@ async fn parallel_tool_calls_is_allowed_for_hosted_search() {
 }
 
 /// A minimal streamable-HTTP MCP server with two tools; counts `tools/call`.
-async fn spawn_mcp() -> (String, Arc<AtomicUsize>) {
+async fn spawn_mcp() -> (String, Arc<AtomicUsize>, Arc<AtomicUsize>) {
     let calls = Arc::new(AtomicUsize::new(0));
+    let listings = Arc::new(AtomicUsize::new(0));
     let counter = Arc::clone(&calls);
+    let listing_counter = Arc::clone(&listings);
     let app = Router::new().route(
         "/mcp",
         post(move |axum::Json(request): axum::Json<Value>| {
             let counter = Arc::clone(&counter);
+            let listing_counter = Arc::clone(&listing_counter);
             async move {
                 let id = request["id"].clone();
                 if id.is_null() {
@@ -376,12 +397,15 @@ async fn spawn_mcp() -> (String, Arc<AtomicUsize>) {
                         "protocolVersion": "2025-06-18", "capabilities": {"tools": {}},
                         "serverInfo": {"name": "stub", "version": "0"}
                     }}),
-                    Some("tools/list") => json!({"result": {"tools": [
-                        {"name": "echo", "description": "Echo the input.",
-                            "inputSchema": {"type": "object", "properties": {}}},
-                        {"name": "reverse", "description": "Reverse a string.",
-                            "inputSchema": {"type": "object", "properties": {"text": {"type": "string"}}}}
-                    ]}}),
+                    Some("tools/list") => {
+                        listing_counter.fetch_add(1, Ordering::SeqCst);
+                        json!({"result": {"tools": [
+                            {"name": "echo", "description": "Echo the input.",
+                                "inputSchema": {"type": "object", "properties": {}}},
+                            {"name": "reverse", "description": "Reverse a string.",
+                                "inputSchema": {"type": "object", "properties": {"text": {"type": "string"}}}}
+                        ]}})
+                    }
                     Some("tools/call") => {
                         counter.fetch_add(1, Ordering::SeqCst);
                         json!({"result": {"content": [{"type": "text", "text": "echoed"}], "isError": false}})
@@ -399,7 +423,7 @@ async fn spawn_mcp() -> (String, Arc<AtomicUsize>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind MCP");
     let address = listener.local_addr().expect("MCP address");
     tokio::spawn(async move { axum::serve(listener, app).await.expect("MCP server") });
-    (format!("http://{address}/mcp"), calls)
+    (format!("http://{address}/mcp"), calls, listings)
 }
 
 fn deferred_mcp(url: &str, description: Option<&str>) -> Value {
@@ -413,7 +437,7 @@ fn deferred_mcp(url: &str, description: Option<&str>) -> Value {
 
 #[tokio::test]
 async fn deferred_mcp_server_is_listed_searched_as_a_namespace_and_called() {
-    let (mcp_url, mcp_calls) = spawn_mcp().await;
+    let (mcp_url, mcp_calls, _) = spawn_mcp().await;
     let (llm_url, requests) = spawn_llm(vec![
         upstream(
             "up_1",
@@ -472,9 +496,112 @@ async fn deferred_mcp_server_is_listed_searched_as_a_namespace_and_called() {
     assert_eq!(tool_names(&requests[2]), ["tool_search", "mcp__stub__echo"]);
 }
 
+/// Return the gateway's actual public output as full history, including the hosted search pairs and MCP calls.
+/// Catalog loads and retained discovery must survive both stateless execution paths without a new tools/list.
+#[tokio::test]
+async fn stateless_hosted_mcp_search_preserves_loads_and_discovery_across_turns() {
+    for multi_agent in [false, true] {
+        for stream in [false, true] {
+            let case = format!("multi_agent={multi_agent}, stream={stream}");
+            let (mcp_url, calls, listings) = spawn_mcp().await;
+            let rounds = vec![
+                vec![function_call(
+                    "s1",
+                    "tool_search",
+                    &json!({"paths":["mcp_stub"], "query":"echo"}),
+                )],
+                vec![function_call("m1", "mcp__stub__echo", &json!({}))],
+                vec![message("first")],
+                vec![function_call("s2", "tool_search", &json!({"paths":["mcp_stub"]}))],
+                vec![function_call("m2", "mcp__stub__reverse", &json!({"text":"hello"}))],
+                vec![message("second")],
+            ];
+            let (llm_url, requests) = spawn_llm(
+                rounds
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, items)| upstream(&format!("up_{i}"), json!(items)))
+                    .collect(),
+            )
+            .await;
+            // Disabled stores also ensure neither request can depend on durable history or agent-tree state.
+            let context = context(llm_url);
+            let mut server = deferred_mcp(&mcp_url, Some("Echo and reverse tools."));
+            server["allowed_tools"] = json!(["echo", "reverse"]);
+            let tools = json!([{"type":"tool_search"}, server]);
+            let mut history = vec![json!({"role":"user", "content":"Echo something."})];
+            for turn in 0..2 {
+                let mut payload = request(&json!(history), &tools);
+                payload.stream = stream;
+                if multi_agent {
+                    payload.multi_agent = Some(serde_json::from_value(json!({"enabled":true})).unwrap());
+                }
+                let response = run(payload, Arc::clone(&context)).await;
+                assert!(!response.standard_fields.store, "{case}, turn={turn}");
+                assert_eq!(response.status, "completed", "{case}, turn={turn}");
+                let items = output(&response);
+                let count = |kind: &str| items.iter().filter(|item| item["type"] == kind).count();
+                assert_eq!(
+                    count("mcp_list_tools"),
+                    usize::from(turn == 0),
+                    "{case}, turn={turn}: {items:?}"
+                );
+                assert_eq!(count("tool_search_call"), 1, "{case}, turn={turn}: {items:?}");
+                assert_eq!(count("tool_search_output"), 1, "{case}, turn={turn}: {items:?}");
+                assert_eq!(count("mcp_call"), 1, "{case}, turn={turn}: {items:?}");
+                let loaded = items.iter().find(|item| item["type"] == "tool_search_output").unwrap();
+                let members = loaded["tools"][0]["tools"].as_array().unwrap();
+                assert_eq!(members.len(), 1, "{case}, turn={turn}");
+                assert_eq!(members[0]["name"], if turn == 0 { "echo" } else { "reverse" }, "{case}");
+                assert!(
+                    items
+                        .iter()
+                        .filter(|item| item["type"] == "mcp_call")
+                        .all(|item| item["status"] == "completed"),
+                    "{case}: {items:?}"
+                );
+                history.extend(items);
+                history.push(json!({"role":"user", "content":"Now reverse hello."}));
+            }
+            assert_eq!(listings.load(Ordering::SeqCst), 1, "{case}: discovery must be reused");
+            assert_eq!(calls.load(Ordering::SeqCst), 2, "{case}: both loaded tools execute");
+            let requests = requests.lock().await;
+            assert_eq!(requests.len(), 6, "{case}");
+            for (round, request) in requests.iter().enumerate() {
+                let names = tool_names(request);
+                assert_eq!(
+                    names.contains(&"mcp__stub__echo".to_owned()),
+                    round > 0,
+                    "{case}, round={round}: {names:?}"
+                );
+                assert_eq!(
+                    names.contains(&"mcp__stub__reverse".to_owned()),
+                    round > 3,
+                    "{case}, round={round}: {names:?}"
+                );
+                let input = request["input"].as_array().unwrap();
+                for call in input.iter().filter(|item| item["type"] == "function_call") {
+                    let results = input
+                        .iter()
+                        .filter(|item| item["type"] == "function_call_output" && item["call_id"] == call["call_id"])
+                        .count();
+                    assert_eq!(results, 1, "{case}, round={round}: {call:?}");
+                }
+                assert!(
+                    input.iter().all(|item| !matches!(
+                        item["type"].as_str(),
+                        Some("mcp_call" | "mcp_list_tools" | "tool_search_call" | "tool_search_output")
+                    )),
+                    "{case}: public orchestration items must be handled before inference"
+                );
+            }
+        }
+    }
+}
+
 #[tokio::test]
 async fn deferred_mcp_without_description_gets_an_empty_namespace_description() {
-    let (mcp_url, _) = spawn_mcp().await;
+    let (mcp_url, _, _) = spawn_mcp().await;
     let (llm_url, requests) = spawn_llm(vec![
         upstream(
             "up_1",
@@ -501,9 +628,380 @@ async fn deferred_mcp_without_description_gets_an_empty_namespace_description() 
     );
 }
 
+/// Scripted root/child inference decisions; gateway orchestration and tool execution run normally.
+fn child_hosted_search_output(body: &Value) -> Vec<Value> {
+    let input = body["input"].as_array().unwrap();
+    let result = |id: &str| {
+        input
+            .iter()
+            .any(|item| item["type"] == "function_call_output" && item["call_id"] == id)
+    };
+    let guidance = input.last().unwrap()["content"].as_str().unwrap();
+    if guidance.contains("You are `/root/seed_") {
+        return vec![message(&format!(
+            "Seed task complete: {}",
+            guidance.split('`').nth(1).unwrap()
+        ))];
+    }
+    if input.iter().any(|item| item["content"] == "Complete three seed tasks.")
+        && !input.iter().any(|item| item["content"] == "Delegate the MCP job.")
+    {
+        if !tool_names(body).contains(&"approve".to_owned()) {
+            return vec![function_call("seed_search", "tool_search", &json!({"query":"approve"}))];
+        }
+        if input
+            .iter()
+            .filter(|item| {
+                item["content"]
+                    .as_str()
+                    .is_some_and(|text| text.starts_with("Message Type: FINAL_ANSWER"))
+            })
+            .count()
+            == 3
+        {
+            return vec![message("SEED_TASKS_DONE")];
+        }
+        if result("call_seed_one") {
+            return vec![function_call(
+                &format!("seed_wait_{}", input.len()),
+                "wait_agent",
+                &json!({"timeout_ms":10000}),
+            )];
+        }
+        return ["one", "two", "three"]
+            .into_iter()
+            .map(|name| {
+                function_call(
+                    &format!("seed_{name}"),
+                    "spawn_agent",
+                    &json!({
+                        "task_name":format!("seed_{name}"), "message":"Complete the seed task.", "fork_turns":"none"
+                    }),
+                )
+            })
+            .collect();
+    }
+    let child = guidance.contains("You are `/root/worker`");
+    if child {
+        if result("call_approve") {
+            vec![message("CHILD_HOSTED_DONE")]
+        } else if result("call_echo") {
+            vec![function_call("approve", "approve", &json!({}))]
+        } else if tool_names(body).contains(&"mcp__stub__echo".to_owned()) {
+            vec![function_call("echo", "mcp__stub__echo", &json!({}))]
+        } else {
+            vec![function_call(
+                "search",
+                "tool_search",
+                &json!({"paths":["mcp_stub"], "query":"echo"}),
+            )]
+        }
+    } else if input.iter().any(|item| {
+        item["content"]
+            .as_str()
+            .is_some_and(|text| text.contains("Message Type: FINAL_ANSWER") && text.contains("CHILD_HOSTED_DONE"))
+    }) {
+        vec![message("ROOT_HOSTED_DONE")]
+    } else if result("call_spawn") {
+        vec![function_call(
+            &format!("wait_{}", input.len()),
+            "wait_agent",
+            &json!({"timeout_ms":10000}),
+        )]
+    } else {
+        vec![function_call(
+            "spawn",
+            "spawn_agent",
+            &json!({"task_name":"worker", "message":"Echo with MCP, then request approval.", "fork_turns":"none"}),
+        )]
+    }
+}
+
+#[tokio::test]
+async fn stateless_client_search_exposes_a_partially_loaded_namespace_to_the_model() {
+    let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cassettes");
+    let capture: Value = serde_yaml::from_str(
+        &fs::read_to_string(
+            directory.join("multi_agent/multi-agent-openai-reference-client-owned-tools-gpt-5.6-sol-nonstreaming.yaml"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let tools = capture["turns"][0]["request"]["body"]["tools"].clone();
+    let returned: Value =
+        serde_json::from_str(&fs::read_to_string(directory.join("tool_search/returned_tools.json")).unwrap()).unwrap();
+    for multi_agent in [false, true] {
+        for stream in [false, true] {
+            let (llm_url, requests) = spawn_llm(vec![
+                upstream(
+                    "up_search",
+                    json!([function_call("search", "tool_search", &json!({"query":"time zone"}))]),
+                ),
+                upstream(
+                    "up_timezone",
+                    json!([function_call(
+                        "timezone",
+                        "agentic_ns__travel__get_timezone",
+                        &json!({"city":"Paris"})
+                    )]),
+                ),
+                upstream("up_done", json!([message("Europe/Paris")])),
+            ])
+            .await;
+            let context = context(llm_url);
+            let mut payload = request(&json!("Find the time zone for Paris."), &tools);
+            payload.stream = stream;
+            payload.multi_agent = multi_agent.then(|| serde_json::from_value(json!({"enabled":true})).unwrap());
+            let mut history = vec![json!({"role":"user", "content":"Find the time zone for Paris."})];
+            let first = run(payload.clone(), Arc::clone(&context)).await;
+            let search = output(&first)
+                .into_iter()
+                .find(|item| item["type"] == "tool_search_call")
+                .unwrap();
+            history.extend(output(&first));
+            history.push(json!({"type":"tool_search_output", "call_id":search["call_id"], "execution":"client", "status":"completed", "tools":returned}));
+            payload.input = serde_json::from_value(json!(history)).unwrap();
+            let second = run(payload.clone(), Arc::clone(&context)).await;
+            let call = output(&second)
+                .into_iter()
+                .find(|item| item["type"] == "function_call")
+                .unwrap();
+            assert_eq!(call["name"], "get_timezone");
+            assert_eq!(call["namespace"], "travel");
+            history.extend(output(&second));
+            history.push(json!({"type":"function_call_output", "call_id":call["call_id"], "output":"Europe/Paris"}));
+            payload.input = serde_json::from_value(json!(history)).unwrap();
+            run(payload, Arc::clone(&context)).await;
+            let requests = requests.lock().await;
+            for upstream in &requests[1..] {
+                let timezone = upstream["tools"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|tool| tool["name"] == "agentic_ns__travel__get_timezone")
+                    .expect("the loaded namespace member must be offered to inference");
+                assert_eq!(timezone["parameters"]["properties"]["city"]["type"], "string");
+                assert!(!tool_names(upstream).contains(&"agentic_ns__travel__get_coordinates".to_owned()));
+            }
+        }
+    }
+}
+
+async fn spawn_child_hosted_search_llm() -> (Arc<ExecutionContext>, Requests, JoinHandle<()>) {
+    let requests: Requests = Arc::default();
+    let captured = Arc::clone(&requests);
+    let app = Router::new().route(
+        "/v1/responses",
+        post(move |axum::Json(body): axum::Json<Value>| {
+            let captured = Arc::clone(&captured);
+            async move {
+                captured.lock().await.push(body.clone());
+                let items = child_hosted_search_output(&body);
+                if body["stream"] == true {
+                    ([("Content-Type", "text/event-stream")], sse("up_child", &items)).into_response()
+                } else {
+                    axum::Json(upstream("up_child", json!(items))).into_response()
+                }
+            }
+        }),
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let context = context(format!("http://{}", listener.local_addr().unwrap()));
+    let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (context, requests, task)
+}
+
+#[tokio::test]
+async fn stateless_child_hosted_search_survives_a_client_tool_continuation() {
+    for stream in [false, true] {
+        let (mcp_url, calls, listings) = spawn_mcp().await;
+        let (context, requests, task) = spawn_child_hosted_search_llm().await;
+        let mut server = deferred_mcp(&mcp_url, None);
+        server["allowed_tools"] = json!(["echo", "reverse"]);
+        let approve = json!({"type":"function", "name":"approve", "defer_loading":true,
+            "parameters":{"type":"object", "properties":{}}});
+        let tools = json!([{"type":"tool_search"}, server, approve]);
+        let mut seed = request(
+            &json!("Complete three seed tasks."),
+            &json!([
+                {"type":"tool_search", "execution":"client"}, approve
+            ]),
+        );
+        seed.stream = stream;
+        seed.multi_agent = Some(serde_json::from_value(json!({"enabled":true, "max_concurrent_subagents":3})).unwrap());
+        let first = run(seed.clone(), Arc::clone(&context)).await;
+        let mut history = vec![json!({"role":"user", "content":"Complete three seed tasks."})];
+        let search = output(&first)
+            .into_iter()
+            .find(|item| item["type"] == "tool_search_call")
+            .unwrap();
+        history.extend(output(&first));
+        history.push(json!({"type":"tool_search_output", "call_id":search["call_id"],
+            "execution":"client", "status":"completed", "tools":[approve]}));
+        seed.input = serde_json::from_value(json!(history)).unwrap();
+        let seed_items = output(&run(seed, Arc::clone(&context)).await);
+        assert_eq!(
+            seed_items
+                .iter()
+                .filter(|item| item["type"] == "message" && item["phase"] == "final_answer")
+                .count(),
+            4
+        );
+        history.extend(seed_items);
+        history.push(json!({"role":"user", "content":"Delegate the MCP job."}));
+        for turn in 0..2 {
+            let mut payload = request(&json!(history), &tools);
+            payload.stream = stream;
+            payload.multi_agent = Some(serde_json::from_value(json!({"enabled":true})).unwrap());
+            let response = run(payload, Arc::clone(&context)).await;
+            let items = output(&response);
+            if turn == 0 {
+                for kind in ["tool_search_call", "tool_search_output", "mcp_call", "function_call"] {
+                    let item = items.iter().find(|item| item["type"] == kind).unwrap();
+                    assert_eq!(item["agent"]["agent_name"], "/root/worker", "{items:?}");
+                }
+                assert!(
+                    items
+                        .iter()
+                        .any(|item| item["type"] == "function_call" && item["call_id"] == "call_approve")
+                );
+            } else {
+                assert!(
+                    items.iter().any(|item| item["type"] == "message"
+                        && item["agent"]["agent_name"] == "/root"
+                        && item["content"][0]["text"] == "ROOT_HOSTED_DONE"),
+                    "{items:?}"
+                );
+                assert!(
+                    items.iter().all(|item| !matches!(
+                        item["type"].as_str(),
+                        Some("tool_search_call" | "mcp_call" | "mcp_list_tools")
+                    )),
+                    "{items:?}"
+                );
+            }
+            history.extend(items);
+            history.push(json!({"type":"function_call_output", "call_id":"call_approve", "output":"approved"}));
+        }
+        assert_eq!(listings.load(Ordering::SeqCst), 1, "stream={stream}");
+        assert_eq!(calls.load(Ordering::SeqCst), 1, "stream={stream}");
+        let requests = requests.lock().await;
+        let mut resumed_child = false;
+        for body in requests.iter() {
+            let input = body["input"].as_array().unwrap();
+            let child = input.last().unwrap()["content"]
+                .as_str()
+                .unwrap()
+                .contains("You are `/root/worker`");
+            let loaded = tool_names(body).contains(&"mcp__stub__echo".to_owned());
+            if !child {
+                assert!(!loaded, "a child's search must not load tools for the root");
+            } else if input
+                .iter()
+                .any(|item| item["call_id"] == "call_approve" && item["type"] == "function_call_output")
+            {
+                assert!(loaded, "the resumed child retains its loaded MCP tool");
+                resumed_child = true;
+            }
+        }
+        assert!(resumed_child, "the client result resumes the child");
+        task.abort();
+    }
+}
+
+#[tokio::test]
+async fn stateless_tool_search_switches_from_client_to_hosted_mcp_with_full_history() {
+    for stream in [false, true] {
+        let (mcp_url, calls, listings) = spawn_mcp().await;
+        let (llm_url, requests) = spawn_llm(vec![
+            upstream(
+                "up_client_search",
+                json!([function_call(
+                    "client_search",
+                    "tool_search",
+                    &json!({"query":"weather"})
+                )]),
+            ),
+            upstream("up_client_done", json!([message("Client discovery complete.")])),
+            upstream(
+                "up_hosted_search",
+                json!([function_call(
+                    "hosted_search",
+                    "tool_search",
+                    &json!({"paths":["mcp_stub"], "query":"echo"})
+                )]),
+            ),
+            upstream("up_mcp", json!([function_call("echo", "mcp__stub__echo", &json!({}))])),
+            upstream("up_hosted_done", json!([message("Hosted MCP complete.")])),
+        ])
+        .await;
+        let context = context(llm_url);
+        let mut payload = request(
+            &json!("Discover weather."),
+            &json!([
+                {"type":"tool_search", "execution":"client"}, deferred_weather()
+            ]),
+        );
+        payload.stream = stream;
+        payload.multi_agent = Some(serde_json::from_value(json!({"enabled":true})).unwrap());
+        let mut history = vec![json!({"role":"user", "content":"Discover weather."})];
+        let first = run(payload.clone(), Arc::clone(&context)).await;
+        let search = output(&first)
+            .into_iter()
+            .find(|item| item["type"] == "tool_search_call")
+            .unwrap();
+        assert_eq!(search["execution"], "client");
+        history.extend(output(&first));
+        history.push(json!({"type":"tool_search_output", "call_id":search["call_id"],
+            "execution":"client", "status":"completed", "tools":[deferred_weather()]}));
+        payload.input = serde_json::from_value(json!(history)).unwrap();
+        let completed = run(payload.clone(), Arc::clone(&context)).await;
+        history.extend(output(&completed));
+        history.push(json!({"role":"user", "content":"Continue with hosted MCP search."}));
+        let mut server = deferred_mcp(&mcp_url, None);
+        server["allowed_tools"] = json!(["echo", "reverse"]);
+        payload.tools = Some(
+            serde_json::from_value(json!([
+                {"type":"tool_search"}, deferred_weather(), server
+            ]))
+            .unwrap(),
+        );
+        payload.input = serde_json::from_value(json!(history)).unwrap();
+        let completed = run(payload, Arc::clone(&context)).await;
+        let items = output(&completed);
+        let hosted = items.iter().find(|item| item["type"] == "tool_search_call").unwrap();
+        assert_eq!(hosted["execution"], "server");
+        assert!(hosted["call_id"].is_null());
+        assert!(
+            items
+                .iter()
+                .any(|item| item["type"] == "mcp_call" && item["status"] == "completed")
+        );
+        assert_eq!(listings.load(Ordering::SeqCst), 1);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        let requests = requests.lock().await;
+        assert_eq!(requests.len(), 5);
+        for request in &requests[2..] {
+            assert!(
+                tool_names(request).contains(&"get_weather".to_owned()),
+                "client loads must survive the switch"
+            );
+            assert!(
+                request["input"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|item| item["type"] == "function_call" && item["call_id"] == search["call_id"])
+            );
+        }
+        assert!(!tool_names(&requests[2]).contains(&"mcp__stub__echo".to_owned()));
+        assert!(tool_names(&requests[3]).contains(&"mcp__stub__echo".to_owned()));
+    }
+}
+
 #[tokio::test]
 async fn search_does_not_count_toward_max_tool_calls() {
-    let (mcp_url, mcp_calls) = spawn_mcp().await;
+    let (mcp_url, mcp_calls, _) = spawn_mcp().await;
     let (llm_url, requests) = spawn_llm(vec![
         upstream(
             "up_1",
@@ -576,7 +1074,7 @@ async fn unreachable_mcp_server_fails_the_request_like_openai() {
 /// listing is empty and the request completes.
 #[tokio::test]
 async fn allowed_tools_matching_nothing_lists_no_tools_and_completes() {
-    let (mcp_url, _) = spawn_mcp().await;
+    let (mcp_url, _, _) = spawn_mcp().await;
     let (llm_url, requests) = spawn_llm(vec![
         upstream("up_1", json!([message("first")])),
         upstream("up_2", json!([message("second")])),
@@ -612,7 +1110,7 @@ async fn allowed_tools_matching_nothing_lists_no_tools_and_completes() {
 /// server has since become unreachable is not failed by the gateway's fresh listing.
 #[tokio::test]
 async fn continuation_keeps_going_when_a_server_listed_earlier_fails() {
-    let (mcp_url, _) = spawn_mcp().await;
+    let (mcp_url, _, _) = spawn_mcp().await;
     let (llm_url, requests) = spawn_llm(vec![
         upstream("up_1", json!([message("first")])),
         upstream("up_2", json!([message("second")])),
@@ -1021,7 +1519,7 @@ async fn durable_context_with_conversations(llm_url: String) -> (Arc<ExecutionCo
 
 #[tokio::test]
 async fn stored_search_continues_by_previous_response_id_without_offering_loaded_tools_again() {
-    let (mcp_url, _) = spawn_mcp().await;
+    let (mcp_url, _, _) = spawn_mcp().await;
     let (llm_url, requests) = spawn_llm(vec![
         upstream(
             "up_1",
@@ -1263,7 +1761,7 @@ async fn streaming_two_searches_in_one_round_announce_items_in_output_order() {
 
 #[tokio::test]
 async fn streaming_search_with_an_eager_mcp_call_in_one_round_keeps_output_order() {
-    let (mcp_url, calls) = spawn_mcp().await;
+    let (mcp_url, calls, _) = spawn_mcp().await;
     let search = function_call("s1", "tool_search", &json!({"paths": ["get_weather"]}));
     let echo = function_call("e1", "mcp__stub__echo", &json!({}));
     let (llm_url, _) = spawn_streaming_llm(vec![sse("up_1", &[search, echo]), sse("up_2", &[message("done")])]).await;
@@ -1480,7 +1978,7 @@ async fn async_continuation_after_a_search_keeps_the_call_unqualified_for_the_mo
 
 #[tokio::test]
 async fn streaming_mcp_search_then_call_numbers_every_item() {
-    let (mcp_url, _) = spawn_mcp().await;
+    let (mcp_url, _, _) = spawn_mcp().await;
     let (llm_url, _) = spawn_streaming_llm(vec![
         sse(
             "up_1",
@@ -1515,7 +2013,7 @@ async fn streaming_mcp_search_then_call_numbers_every_item() {
 
 #[tokio::test]
 async fn operator_configured_server_can_default_to_deferred_with_a_catalog_description() {
-    let (mcp_url, _) = spawn_mcp().await;
+    let (mcp_url, _, _) = spawn_mcp().await;
     let (llm_url, requests) = spawn_llm(vec![
         upstream(
             "up_1",
@@ -1656,7 +2154,7 @@ async fn multi_agent_stores_the_hosted_pair_once() {
 
 #[tokio::test]
 async fn tool_choice_cannot_force_an_unloaded_mcp_tool() {
-    let (mcp_url, _) = spawn_mcp().await;
+    let (mcp_url, _, _) = spawn_mcp().await;
     let (llm_url, requests) = spawn_llm(vec![upstream("up_1", json!([message("x")]))]).await;
     let payload: RequestPayload = serde_json::from_value(json!({
         "model": "test", "input": "x", "store": false,
@@ -1674,7 +2172,7 @@ async fn tool_choice_cannot_force_an_unloaded_mcp_tool() {
 
 #[tokio::test]
 async fn continuation_offers_only_the_mcp_tools_not_loaded_yet() {
-    let (mcp_url, _) = spawn_mcp().await;
+    let (mcp_url, _, _) = spawn_mcp().await;
     let (llm_url, requests) = spawn_llm(vec![
         upstream(
             "up_1",
@@ -1775,7 +2273,7 @@ async fn replayed_hosted_history_allows_parallel_tool_calls_without_a_declaratio
 #[tokio::test]
 async fn an_unloaded_deferred_mcp_tool_is_never_called() {
     let echo = function_call("e1", "mcp__stub__echo", &json!({}));
-    let (mcp_url, calls) = spawn_mcp().await;
+    let (mcp_url, calls, _) = spawn_mcp().await;
     let tools = json!([{"type": "tool_search"}, deferred_mcp(&mcp_url, None)]);
 
     let (llm_url, _) = spawn_llm(vec![upstream("up_1", json!([echo.clone()]))]).await;

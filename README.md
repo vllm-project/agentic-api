@@ -718,10 +718,23 @@ version defines, or `response_inclusion` on a version before `web_search_2026031
 several queries into one call, and every query counts as one search. A call that the remaining budget cannot cover is
 not run, and the model is told the limit was reached; a later call that fits still runs.
 
+Each search the gateway runs is returned the way Anthropic returns it: a `server_tool_use` block with the model's
+query, then a `web_search_tool_result` listing each result's URL, title, and page age, and
+`usage.server_tool_use.web_search_requests` counts the searches that ran. Claude Code builds its result list and search
+count from these blocks. The page text travels in each result's `encrypted_content`, which the gateway seals; send the
+blocks back unchanged, and the next turn gives the model the same results it read before without searching again.
+Altered `encrypted_content` is refused with HTTP 400, as Anthropic refuses it. A failed search shows its documented
+error code. The `server_tool_use` input is the call as the model made it, in the gateway's search schema (`query`, or
+`queries` for a batch).
+Results stay readable across restarts and on every replica that shares `AGENTIC_MESSAGES_RESULT_KEY`, a secret of at
+least 32 random bytes; without it, each process generates its own key, and results sealed by another process reach
+the model as a note that they are no longer available.
+
 Older clients that declare a function tool named `WebSearch` can still opt in with
 `MESSAGES_GATEWAY_TOOL_ALIASES="WebSearch=web_search"`. This variable maps a client tool name to a gateway executor
 (`name=executor`, comma-separated) and remains empty by default. The gateway adapts the older `WebSearch` function's
-`allowed_domains`/`blocked_domains` arguments to the executor's schema automatically.
+`allowed_domains`/`blocked_domains` arguments to the executor's schema automatically. A call through an alias is the
+client's own function, so it stays hidden from the client, as does a plain function named `web_search`.
 
 > Note: allow and block domain lists are mutually exclusive, matching Anthropic's native tool contract.
 
@@ -730,9 +743,10 @@ Older clients that declare a function tool named `WebSearch` can still opt in wi
 Applications that call the Messages API through the Anthropic SDK can declare Claude's native
 [`web_fetch`](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-fetch-tool) server tool, in its basic
 version `web_fetch_20250910` or a later one. Agentic API rewrites that declaration into an ordinary function tool for
-the upstream model, fetches the page itself when the model calls it, hands the page text back to the model, and keeps
-the call out of the client-visible response: the same hide-the-call contract as web search. `/v1/messages/count_tokens`
-accepts the declaration too. No search provider or API key is involved; the built-in fetcher is on by default and can be
+the upstream model, fetches the page itself when the model calls it, hands the page text back to the model, and
+returns the call to the client as a `server_tool_use` block and a `web_fetch_tool_result` with the page text, as
+Anthropic does, counted in `usage.server_tool_use.web_fetch_requests`. `/v1/messages/count_tokens` accepts the
+declaration too. No search provider or API key is involved; the built-in fetcher is on by default and can be
 switched off with `[web_fetch] enabled = false` or `AGENTIC_WEB_FETCH_ENABLED=false`, after which such a declaration is
 rejected with HTTP 400 instead of being forwarded in a shape the upstream cannot execute.
 
@@ -762,7 +776,9 @@ budget of four bytes per token, and the text is always cut below the gateway's 1
 cannot be served answers the model with the documented
 [error codes](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-fetch-tool#errors) in an error
 `tool_result` (`url_not_accessible`, `url_not_allowed`, `too_many_requests`, `unsupported_content_type`, `url_too_long`,
-`invalid_tool_input`, `max_uses_exceeded`, `url_not_in_prior_context`, `unavailable`), so the turn continues.
+`invalid_tool_input`, `max_uses_exceeded`, `url_not_in_prior_context`, `unavailable`), so the turn continues. The
+`web_fetch_tool_result` carries what the model read: beyond Anthropic's fields, the content type and truncation flag
+of a page, and the message of a refusal. Sent back in a later turn, it gives the model the same text again.
 
 Fetches are bounded and never reach internal networks:
 
@@ -792,8 +808,7 @@ Fetches are bounded and never reach internal networks:
 | Time ceiling | `AGENTIC_WEB_FETCH_TIMEOUT_SECS` | `[web_fetch] timeout_secs` | `20` |
 
 Claude Code is unaffected: its `WebFetch` is a client tool with its own schema that Claude Code runs locally, and a
-client function named `web_fetch` without the native `type` stays client-owned. Page content reaches the client only
-through the model's answer; returning `server_tool_use` blocks to the client (#409) and PDF text are follow-ups.
+client function named `web_fetch` without the native `type` stays client-owned. PDF text is a follow-up.
 
 ## 🧩 Tool Ownership Model
 
@@ -809,7 +824,7 @@ Unknown or ambiguous tool shapes are **never executed by default**. They are pre
 
 ## 🤝 Multi-agent Responses
 
-Set `multi_agent.enabled` on a stored Responses request and the gateway runs the [Responses multi-agent](https://developers.openai.com/api/docs/guides/responses-multi-agent) collaboration loop itself: the root agent spawns subagents, each with its own history and tool registry, and the response returns their attributed `multi_agent_call`, `multi_agent_call_output`, and `agent_message` items. Continue the whole agent tree with `previous_response_id`.
+Set `multi_agent.enabled` on an HTTP Responses request and the gateway runs the [Responses multi-agent](https://developers.openai.com/api/docs/guides/responses-multi-agent) collaboration loop itself: the root agent spawns subagents, each with its own history and tool registry, and the response returns their attributed `multi_agent_call`, `multi_agent_call_output`, and `agent_message` items. Continue a stored agent tree with `previous_response_id`. With `store:false`, each request must include the complete item history: previous input, returned output items, and new input or client tool outputs. The gateway reconstructs the agents without database persistence; there is no mandatory final compaction item. Automatic per-agent compaction does not replace the complete public transcript or permit pruning it.
 
 ```bash
 curl http://localhost:9000/v1/responses \
@@ -822,7 +837,7 @@ curl http://localhost:9000/v1/responses \
   }'
 ```
 
-- `store: true` is required; the gateway does not yet support stateless multi-agent requests.
+- HTTP supports both `store:true` and `store:false`. Stateless continuation requires the complete item history; see the [API guide](docs/api/index.md#responses) for continuation and transcript-encryption key configuration.
 - `max_concurrent_subagents` limits active descendant turns (default `3`); it is not a total agent count.
 - Multi-agent execution is HTTP and SSE only. WebSocket requests with multi-agent enabled are rejected.
 - `max_tool_calls` and reasoning summaries are rejected while multi-agent is enabled.
@@ -868,7 +883,7 @@ Design and migration decisions are tracked as ADRs in [docs/adr/](docs/adr/), wi
 - [x] **Server-side tool execution**: explicit ownership, web search, web fetch, MCP, and code interpreter built in
 - [x] **Messages API**: Claude Code support with a server-side gateway tool loop
 - [x] **Conversations API**: OpenAI-compatible conversation and item management
-- [ ] **Multi-agent Responses**: HTTP execution ships today; WebSocket injection and stateless requests are next
+- [ ] **Multi-agent Responses**: stateful and stateless HTTP execution ship today; WebSocket injection is next
 - [ ] **File search**: Files and Vector Stores APIs with a gateway-executed `file_search` tool
 - [ ] **Stateful Messages**: Messages continuation on the same persistence and execution primitives
 - [ ] **Interactions API**: durable, higher-level agentic workflows

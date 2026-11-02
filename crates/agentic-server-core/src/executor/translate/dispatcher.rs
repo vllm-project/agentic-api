@@ -7,6 +7,7 @@ use crate::events::{EventFrame, EventPayload, SSEEventType, SSEItemType};
 use crate::executor::accumulator::AccumulatedFunctionCall;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::tool::{CodexNamespaceHandler, CustomHandler, FunctionHandler, ToolSearchHandler, ToolType, tool_search};
+use crate::types::io::OutputMessage;
 use crate::utils::common::serialize_to_string;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -63,6 +64,7 @@ impl TranslationDispatcher {
         &mut self,
         frame: EventFrame,
         call: Option<AccumulatedFunctionCall<'_>>,
+        item_type: Option<SSEItemType>,
     ) -> ExecutorResult<Translation> {
         ToolSearchStreamState::validate_frame(&self.context, &frame)?;
         self.tool_search.track_native_tool_search(&frame)?;
@@ -131,6 +133,11 @@ impl TranslationDispatcher {
             }),
         }?;
         for frame in &mut translated.frames {
+            if item_type == Some(SSEItemType::Message)
+                && let Some(Value::String(id)) = frame.wire.rest.get_mut("item_id")
+            {
+                OutputMessage::normalize_public_id(id);
+            }
             self.context.restore_stream_event_wire(&mut frame.wire)?;
         }
         translated.defer_from_output_index = self.defer_from_output_index();

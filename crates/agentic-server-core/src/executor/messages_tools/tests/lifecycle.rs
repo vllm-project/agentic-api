@@ -6,6 +6,7 @@ use futures::poll;
 use tokio::sync::Semaphore;
 
 use super::*;
+use crate::executor::messages_server_tools::sealing::process_result_key;
 use crate::executor::messages_tools::{Admission, GATEWAY_TOOL_TIMEOUT, run};
 use crate::executor::telemetry::metrics::ExecutorMetrics;
 use crate::tool::{GatewayExecutors, ToolDeclaration, ToolOwnership};
@@ -36,6 +37,7 @@ fn admission(name: &str) -> Admission {
     Admission::Run {
         call: tool_seam::tool_use_to_call("call", name, &json!({"query":"test"}), &GatewayToolMap::default()),
         name: name.to_owned(),
+        native: None,
     }
 }
 
@@ -76,7 +78,14 @@ async fn messages_scheduling_timeout_excludes_each_permit_wait_and_releases_capa
                 None
             }
         };
-        let mut call = Box::pin(run(admission("web_search"), &registry, &policy, &slots, &metrics));
+        let mut call = Box::pin(run(
+            admission("web_search"),
+            &registry,
+            process_result_key().unwrap(),
+            &policy,
+            &slots,
+            &metrics,
+        ));
         assert!(
             poll!(call.as_mut()).is_pending(),
             "{stage:?}: the call waits for its permit"
@@ -103,7 +112,7 @@ async fn messages_scheduling_timeout_excludes_each_permit_wait_and_releases_capa
             "{stage:?}: the handler gets its full execution timeout"
         );
         tokio::time::advance(Duration::from_secs(2)).await;
-        let result = serde_json::to_value(call.await).unwrap();
+        let result = serde_json::to_value(call.await.tool_result).unwrap();
         assert_eq!(result["tool_use_id"], "call", "{stage:?}");
         assert_eq!(result["is_error"], true, "{stage:?}");
         assert_eq!(
@@ -123,11 +132,18 @@ async fn messages_scheduling_timeout_excludes_each_permit_wait_and_releases_capa
         );
 
         // A following call must be able to use all three permit layers.
-        let mut next = Box::pin(run(admission("web_search"), &registry, &policy, &slots, &metrics));
+        let mut next = Box::pin(run(
+            admission("web_search"),
+            &registry,
+            process_result_key().unwrap(),
+            &policy,
+            &slots,
+            &metrics,
+        ));
         assert!(poll!(next.as_mut()).is_pending(), "{stage:?}");
         started.try_recv().unwrap().complete();
         assert!(
-            !next.await.is_error,
+            !next.await.tool_result.is_error,
             "{stage:?}: a later call runs on the released permits"
         );
     }
@@ -148,10 +164,17 @@ async fn messages_scheduling_errors_release_permits_and_preserve_tool_failure_st
             Err(error) => (format!("tool execution failed: {error}"), true),
             Ok(output) => (output.output.clone(), output.is_failure()),
         };
-        let mut call = Box::pin(run(admission("web_search"), &registry, &policy, &slots, &metrics));
+        let mut call = Box::pin(run(
+            admission("web_search"),
+            &registry,
+            process_result_key().unwrap(),
+            &policy,
+            &slots,
+            &metrics,
+        ));
         assert!(poll!(call.as_mut()).is_pending());
         started.try_recv().unwrap().finish.send(outcome).unwrap();
-        let result = call.await;
+        let result = call.await.tool_result;
         assert_eq!(result.content, expected.0);
         assert_eq!(result.is_error, expected.1);
         assert_eq!(active.load(Ordering::SeqCst), 0);
@@ -167,13 +190,20 @@ async fn messages_scheduling_unexecuted_results_do_not_wait_for_capacity() {
     let metrics = ExecutorMetrics::from_global();
     let slots = policy.new_round_execution_slots();
     let _busy = slots.acquire().await.unwrap();
-    let refused = Admission::Refused(tool_seam::tool_result_block("refused", "budget exceeded".into(), true));
+    let refused = Admission::Answered(tool_seam::tool_result_block("refused", "budget exceeded".into(), true));
     for admission in [refused, admission("missing")] {
-        let mut call = Box::pin(run(admission, &registry, &policy, &slots, &metrics));
+        let mut call = Box::pin(run(
+            admission,
+            &registry,
+            process_result_key().unwrap(),
+            &policy,
+            &slots,
+            &metrics,
+        ));
         let Poll::Ready(result) = poll!(call.as_mut()) else {
             panic!("a call with no executable work must not wait for an execution permit");
         };
-        assert!(result.is_error);
+        assert!(result.tool_result.is_error);
     }
     assert_eq!(active.load(Ordering::SeqCst), 0);
 }
@@ -188,7 +218,14 @@ async fn messages_scheduling_dropping_permit_wait_releases_partial_acquisition()
     for _ in 0..MAX_CONCURRENT_MATERIALIZATIONS {
         held.push(policy.acquire_materialization_permit().await);
     }
-    let mut call = Box::pin(run(admission("web_search"), &registry, &policy, &slots, &metrics));
+    let mut call = Box::pin(run(
+        admission("web_search"),
+        &registry,
+        process_result_key().unwrap(),
+        &policy,
+        &slots,
+        &metrics,
+    ));
     assert!(poll!(call.as_mut()).is_pending());
     assert_eq!(slots.available_permits(), 0);
     assert_eq!(exclusion(&registry).available_permits(), 0);

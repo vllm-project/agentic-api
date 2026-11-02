@@ -350,16 +350,6 @@ impl RequestPayload {
     /// member, or when a custom tool declares a format whose constrained
     /// decoding cannot be preserved upstream.
     pub fn to_upstream_request(&self, stream: bool) -> Result<UpstreamRequest<'_>, UpstreamRequestError> {
-        self.to_upstream_request_with(stream, &HistoryNaming::default())
-    }
-
-    /// [`Self::to_upstream_request`] for a request whose history knows tools beyond those it declares or its input
-    /// shows (`history`), such as a compaction summary of a request that loaded or discovered them.
-    pub(crate) fn to_upstream_request_with(
-        &self,
-        stream: bool,
-        history: &HistoryNaming,
-    ) -> Result<UpstreamRequest<'_>, UpstreamRequestError> {
         self.input.validate()?;
         // This is only the upstream model-generation preference: it controls
         // whether the model may emit parallel calls, not how the gateway
@@ -372,7 +362,10 @@ impl RequestPayload {
         let declarations = self.tool_declarations();
         let tools = Self::upstream_tools(declarations.as_deref())?;
         let namespace_map = CodexNamespaceHandler.build_namespace_map(declarations.as_deref())?;
-        let input = self.upstream_input(declarations.as_deref(), namespace_map.as_ref(), history)?;
+        let history = HistoryNaming {
+            functions: self.top_level_function_names(),
+        };
+        let input = self.upstream_input(namespace_map.as_ref(), &history)?;
         let tool_choice = CodexNamespaceHandler.resolve_tool_choice(namespace_map.as_ref(), self.tool_choice.as_ref());
         CustomHandler::validate_tool_choice(declarations.as_deref(), &tool_choice)?;
         Ok(UpstreamRequest {

@@ -9,6 +9,13 @@
 #     GATEWAY_MODEL=Qwen/Qwen3.8-27B-FP8 \
 #     bash crates/agentic-server-core/tests/cassettes/record_store_false_cassettes.sh
 #
+# STORE_FALSE_SUITE=responses (default) records the cases below.
+# STORE_FALSE_SUITE=multi-agent replays existing multi-agent cassettes through
+# the selected OpenAI endpoint or running gateway, using full-history continuation.
+# MULTI_AGENT_SUITE=all includes mixed-tools, tool-search, code-interpreter,
+# and client-agent-message. The tool-search case also exercises hosted MCP search.
+# MULTI_AGENT_MAX_CONTINUATIONS bounds client-tool follow-ups (default: 10, range: 1..100).
+#
 # Records JSON and SSE: full-history replay, stored/unstored parent references,
 # explicit conversations, item-listing persistence probes, and a client-executed
 # function with full-history replay.
@@ -24,7 +31,61 @@ if (( $# > 0 )); then
   exit 1
 fi
 
+record_multi_agent() {
+  local model provider mode output model_slug scenario
+  local -a scenarios modes
+  local -a backend
+  case "$STORE_FALSE_RECORD_SET" in
+    openai)
+      : "${OPENAI_API_KEY:?OPENAI_API_KEY must be set}"
+      model="${OPENAI_MODEL:-gpt-5.6-sol}"
+      provider=openai-reference
+      backend=(--openai https://api.openai.com)
+      ;;
+    gateway)
+      model="${GATEWAY_MODEL:-${MODEL:-}}"
+      : "${model:?Set GATEWAY_MODEL to the served model}"
+      provider=gateway
+      backend=(--gateway "${GATEWAY_URL:-http://127.0.0.1:9000}")
+      ;;
+    *) echo 'ERROR: STORE_FALSE_RECORD_SET must be openai or gateway' >&2; exit 1 ;;
+  esac
+  model_slug="$(printf '%s' "$model" | tr '/: ' '---')"
+  mkdir -p "${MULTI_AGENT_OUTPUT_DIR:-$BASE_DIR}"
+  case "${MULTI_AGENT_SUITE:-mixed-tools}" in
+    all) scenarios=(mixed-tools tool-search code-interpreter client-agent-message) ;;
+    mixed-tools|tool-search|code-interpreter|client-agent-message)
+      scenarios=("${MULTI_AGENT_SUITE:-mixed-tools}") ;;
+    *) echo 'ERROR: unknown MULTI_AGENT_SUITE' >&2; exit 1 ;;
+  esac
+  case "${MULTI_AGENT_STREAM_MODE:-both}" in
+    both) modes=(nonstreaming streaming) ;;
+    nonstreaming|streaming) modes=("$MULTI_AGENT_STREAM_MODE") ;;
+    *) echo 'ERROR: MULTI_AGENT_STREAM_MODE must be both, nonstreaming, or streaming' >&2; exit 1 ;;
+  esac
+  for scenario in "${scenarios[@]}"; do
+    for mode in "${modes[@]}"; do
+      local stream_flag=--no-stream
+      [[ "$mode" == streaming ]] && stream_flag=--stream
+      output="${MULTI_AGENT_OUTPUT_DIR:-$BASE_DIR}/multi-agent-store-false-$provider-$scenario-$model_slug-$mode.yaml"
+      MULTI_AGENT_SUITE="$scenario" "$PYTHON" "$SCRIPTS_DIR/record_cassette.py" "${backend[@]}" \
+        --mode items --items-scenario multi-agent-store-false --turns 1 \
+        --model "$model" "$stream_flag" --no-store \
+        --http-read-timeout "${HTTP_READ_TIMEOUT:-900}" \
+        --max-output-tokens "${MAX_OUTPUT_TOKENS:-8192}" \
+        --proxy-port "${PROXY_PORT:-7070}" --output "$output"
+    done
+  done
+}
+
 STORE_FALSE_RECORD_SET="${STORE_FALSE_RECORD_SET:-openai}"
+export PYTHON="${PYTHON:-python}"
+case "${STORE_FALSE_SUITE:-responses}" in
+  responses) ;;
+  multi-agent) record_multi_agent; exit 0 ;;
+  *) echo 'ERROR: STORE_FALSE_SUITE must be responses or multi-agent' >&2; exit 1 ;;
+esac
+
 case "$STORE_FALSE_RECORD_SET" in
   openai)
     : "${OPENAI_API_KEY:?OPENAI_API_KEY must be set}"
@@ -49,14 +110,14 @@ TOOL_OUTPUTS="$SCRIPTS_DIR/tool_calls/multi_turn/pipeline_tool_outputs.json"
 mkdir -p "$BASE_DIR"
 INPUT_DIR="$(mktemp -d)"
 trap 'rm -rf -- "$INPUT_DIR"' EXIT
-RECORDER=(python "$SCRIPTS_DIR/record_cassette.py" "${BACKEND[@]}" --model "$MODEL" --max-output-tokens "$MAX_OUTPUT_TOKENS")
+RECORDER=("$PYTHON" "$SCRIPTS_DIR/record_cassette.py" "${BACKEND[@]}" --model "$MODEL" --max-output-tokens "$MAX_OUTPUT_TOKENS")
 FIRST_PROMPT='Remember the word ORCHID. Reply with exactly OK.'
 SECOND_PROMPT='What word did I ask you to remember? Reply with that word only.'
 
 # Read a recorded response ID, or construct the next request's replayable input.
 # This helper does not contact a provider or write a cassette.
 captured_input() {
-  python - "$1" "$2" "$TOOL_OUTPUTS" "$SECOND_PROMPT" <<'PY'
+  "$PYTHON" - "$1" "$2" "$TOOL_OUTPUTS" "$SECOND_PROMPT" <<'PY'
 import json, sys, yaml
 turns = yaml.safe_load(open(sys.argv[1]))['turns']
 if sys.argv[2] == 'conversation-id':
@@ -98,7 +159,7 @@ missing_parent() {
     echo 'ERROR: expected a rejected continuation of an unstored response' >&2
     return 1
   fi
-  python - "$output" <<'PY'
+  "$PYTHON" - "$output" <<'PY'
 import sys, yaml
 response = yaml.safe_load(open(sys.argv[1]))['turns'][-1]['response']
 assert response['status_code'] == 400, response

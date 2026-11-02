@@ -5,6 +5,7 @@ use std::{collections::HashSet, num::NonZeroUsize};
 use super::super::agent_turn::AgentTurn;
 use crate::executor::{
     error::{ExecutorError, ExecutorResult},
+    gateway::append_output_items_to_input,
     multi_agent::{
         AgentPhase, AgentRegistry, AgentState, CheckpointLimits, ClientCallError, PendingClientCalls, RegistryLimits,
         ValidatedTreeCheckpoint,
@@ -184,6 +185,8 @@ pub(super) struct RestoredAgents {
     pub(super) pending: PendingClientCalls,
     pub(super) agents: Vec<StoredAgent>,
     pub(super) continuing_tree: bool,
+    /// Historical interruptions settle after their in-flight output has been retained.
+    pub(super) interrupted: HashSet<AgentTurnKey>,
 }
 
 pub(super) fn restore_agents(
@@ -200,6 +203,7 @@ pub(super) fn restore_agents(
         .take()
         .map(ValidatedTreeCheckpoint::into_snapshot);
     let continuing_tree = tree.is_some();
+    let supplied_agents = !continuing_tree && request.original_request.input.has_multi_agent_history();
     if let Some(tree) = &tree {
         let bytes = serialized_size_up_to(tree, exec.responses_config.max_retained_bytes)
             .map_err(ExecutorError::JsonError)?
@@ -229,12 +233,16 @@ pub(super) fn restore_agents(
             turn: root.turn,
             state: AgentState::Active(AgentPhase::Runnable),
             mailbox: Vec::new(),
-            history: request
-                .enriched_request
-                .input
-                .input_items()
-                .map(Cow::into_owned)
-                .collect(),
+            history: if supplied_agents {
+                Vec::new()
+            } else {
+                request
+                    .enriched_request
+                    .input
+                    .input_items()
+                    .map(Cow::into_owned)
+                    .collect()
+            },
             loaded_tools: Vec::new(),
             last_task: String::new(),
             final_answer: None,
@@ -242,22 +250,28 @@ pub(super) fn restore_agents(
             wait: None,
         }]
     };
-    Ok(RestoredAgents {
+    let mut restored = RestoredAgents {
         registry,
         pending,
         agents,
         continuing_tree,
-    })
+        interrupted: HashSet::new(),
+    };
+    if supplied_agents {
+        restored.apply_responses(request, budget, exec.responses_config.max_retained_bytes)?;
+    }
+    Ok(restored)
 }
 
 pub(super) async fn prepare_agent(
     mut stored: StoredAgent,
-    parent: &RequestContext,
+    parent: &mut RequestContext,
     exec: &ExecutionContext,
     budget: &ExecutorResponseBudget,
 ) -> ExecutorResult<AgentContext> {
     let mut request = parent.enriched_request.clone();
     request.input = ResponsesInput::from(stored.history.clone());
+    request.input.validate()?;
     request.previous_response_id = None;
     request.conversation = None;
     let management = request.context_management.get_or_insert_with(Vec::new);
@@ -287,9 +301,18 @@ pub(super) async fn prepare_agent(
         continuation: None,
     };
     let mut pipeline = AgentPipeline::new(ctx, tool_search, StreamRelay::detached());
-    let turn = AgentTurn::new(&mut pipeline, exec, budget, MAX_ROUNDS).await?;
+    let turn = AgentTurn::new(
+        &mut pipeline,
+        exec,
+        budget,
+        MAX_ROUNDS,
+        Some(&parent.enriched_request.input),
+    )
+    .await?;
     let mut execution = turn.execution_state();
-    let discovery = execution.take_discovery_output();
+    let discovery = execution.take_discovery_output(&parent.enriched_request.input);
+    // Later agents reuse this response's discovery without inheriting another agent's conversation.
+    append_output_items_to_input(&mut parent.enriched_request.input, &discovery);
     stored
         .history
         .extend(discovery.iter().filter_map(OutputItem::to_input_item));

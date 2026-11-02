@@ -7,15 +7,19 @@
 //! output carries its status, so the Messages loop marks a refusal `is_error`
 //! without reading the output. A backend failure becomes a documented code in
 //! one place, [`Refusal::from_failure`], with its source chain kept in the
-//! message.
+//! message. The Messages adapter reads both shapes back with the same types
+//! when it shows a native call to the client.
+
+use std::borrow::Cow;
 
 use chrono::{SecondsFormat, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 use super::backend::{FetchFailure, FetchedDocument};
 use super::extract::{self, truncate_to_char_boundary};
 use crate::tool::handler::{MAX_GATEWAY_TOOL_OUTPUT_BYTES, ToolError, ToolOutput};
+pub(crate) use crate::types::messages::WebFetchErrorCode;
 use crate::types::tools::WebFetchToolParam;
 
 /// Bytes of UTF-8 per token assumed when applying `max_content_tokens`. The
@@ -25,23 +29,17 @@ const BYTES_PER_CONTENT_TOKEN: usize = 4;
 /// envelope under the gateway tool output cap.
 const MAX_CONTENT_BYTES: usize = MAX_GATEWAY_TOOL_OUTPUT_BYTES - 16 * 1024;
 /// The `type` of a model-facing result that carries a page.
-const RESULT_TYPE: &str = "web_fetch_result";
-/// The `type` of a model-facing result that reports a documented failure.
-const FAILURE_TYPE: &str = "web_fetch_tool_result_error";
-
-/// The documented `web_fetch_tool_result_error` codes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum WebFetchErrorCode {
-    InvalidToolInput,
-    UrlTooLong,
-    UrlNotAllowed,
-    UrlNotInPriorContext,
-    UrlNotAccessible,
-    TooManyRequests,
-    UnsupportedContentType,
-    MaxUsesExceeded,
-    Unavailable,
+enum ResultKind {
+    WebFetchResult,
+}
+
+/// The `type` of a model-facing result that reports a documented failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum FailureKind {
+    WebFetchToolResultError,
 }
 
 /// A fetch the handler refused or could not complete: the documented code and
@@ -103,40 +101,69 @@ fn describe(error: &(dyn std::error::Error + 'static)) -> String {
     text
 }
 
-#[derive(Serialize)]
-struct FailureOutput<'a> {
+/// The model-facing output of a fetch that produced no document: the
+/// documented error shape plus a `message` the model can act on.
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct FailureOutput<'a> {
     #[serde(rename = "type")]
-    kind: &'static str,
-    error_code: WebFetchErrorCode,
-    message: &'a str,
+    kind: FailureKind,
+    pub(crate) error_code: WebFetchErrorCode,
+    pub(crate) message: Cow<'a, str>,
 }
 
-/// The model-facing output for a fetch that produced no document: the
-/// documented error shape plus a `message` the model can act on.
+/// The model-facing output for a fetch that produced no document.
 #[must_use]
 pub(crate) fn failure_output(error_code: WebFetchErrorCode, message: &str) -> String {
     serde_json::to_string(&FailureOutput {
-        kind: FAILURE_TYPE,
+        kind: FailureKind::WebFetchToolResultError,
         error_code,
-        message,
+        message: Cow::Borrowed(message),
     })
     .unwrap_or_else(|_| {
         r#"{"type":"web_fetch_tool_result_error","error_code":"unavailable","message":"internal error"}"#.to_owned()
     })
 }
 
-/// Model-facing `web_fetch` output; field order is the wire contract.
-#[derive(Serialize)]
-struct WebFetchToolOutput<'a> {
+/// Model-facing `web_fetch` output for a page; field order is the wire
+/// contract. The fetcher sets every field; a page the Messages adapter
+/// rebuilds from a returned result block may lack the optional ones.
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct WebFetchToolOutput<'a> {
     #[serde(rename = "type")]
-    kind: &'static str,
-    url: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    title: Option<&'a str>,
-    content_type: &'a str,
-    retrieved_at: &'a str,
-    truncated: bool,
-    content: &'a str,
+    kind: ResultKind,
+    pub(crate) url: Cow<'a, str>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) title: Option<Cow<'a, str>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) content_type: Option<Cow<'a, str>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) retrieved_at: Option<Cow<'a, str>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) truncated: Option<bool>,
+    pub(crate) content: Cow<'a, str>,
+}
+
+impl<'a> WebFetchToolOutput<'a> {
+    /// A page as the model reads it.
+    #[must_use]
+    pub(crate) fn page(
+        url: &'a str,
+        title: Option<&'a str>,
+        content_type: Option<&'a str>,
+        retrieved_at: Option<&'a str>,
+        truncated: Option<bool>,
+        content: &'a str,
+    ) -> Self {
+        Self {
+            kind: ResultKind::WebFetchResult,
+            url: Cow::Borrowed(url),
+            title: title.map(Cow::Borrowed),
+            content_type: content_type.map(Cow::Borrowed),
+            retrieved_at: retrieved_at.map(Cow::Borrowed),
+            truncated,
+            content: Cow::Borrowed(content),
+        }
+    }
 }
 
 /// A page after extraction, ready to serialize for the model.
@@ -200,15 +227,14 @@ fn serialize_document(document: &RenderedDocument) -> Result<String, ToolError> 
     let mut limit = document.content_limit;
     loop {
         let content = truncate_to_char_boundary(&document.text, limit);
-        let output = serde_json::to_string(&WebFetchToolOutput {
-            kind: RESULT_TYPE,
-            url: document.url.as_str(),
-            title: document.title.as_deref(),
-            content_type: &document.media_type,
-            retrieved_at: &document.retrieved_at,
-            truncated: document.truncated || content.len() < document.text.len(),
+        let output = serde_json::to_string(&WebFetchToolOutput::page(
+            document.url.as_str(),
+            document.title.as_deref(),
+            Some(&document.media_type),
+            Some(&document.retrieved_at),
+            Some(document.truncated || content.len() < document.text.len()),
             content,
-        })
+        ))
         .map_err(|error| ToolError::Execution(format!("failed to serialize web_fetch output: {error}")))?;
         if output.len() <= MAX_GATEWAY_TOOL_OUTPUT_BYTES || content.is_empty() {
             return Ok(output);
@@ -246,6 +272,35 @@ mod tests {
             failure_output(WebFetchErrorCode::UrlNotInPriorContext, "not seen"),
             r#"{"type":"web_fetch_tool_result_error","error_code":"url_not_in_prior_context","message":"not seen"}"#
         );
+    }
+
+    #[test]
+    fn both_outputs_read_back_into_the_types_that_wrote_them() {
+        let page = serde_json::to_string(&WebFetchToolOutput::page(
+            "https://example.com/doc",
+            Some("Doc"),
+            Some("text/html"),
+            Some("2026-10-30T12:00:00Z"),
+            Some(false),
+            "body \"text\"",
+        ))
+        .unwrap();
+        assert_eq!(
+            page,
+            r#"{"type":"web_fetch_result","url":"https://example.com/doc","title":"Doc","content_type":"text/html","retrieved_at":"2026-10-30T12:00:00Z","truncated":false,"content":"body \"text\""}"#
+        );
+        let read: WebFetchToolOutput<'_> = serde_json::from_str(&page).unwrap();
+        assert_eq!(serde_json::to_string(&read).unwrap(), page);
+
+        let failure = failure_output(WebFetchErrorCode::UrlNotAccessible, "HTTP 404");
+        let read: FailureOutput<'_> = serde_json::from_str(&failure).unwrap();
+        assert_eq!(read.error_code, WebFetchErrorCode::UrlNotAccessible);
+        assert_eq!(read.message, "HTTP 404");
+        assert!(
+            serde_json::from_str::<FailureOutput<'_>>(&page).is_err(),
+            "the kinds do not mix"
+        );
+        assert!(serde_json::from_str::<WebFetchToolOutput<'_>>(&failure).is_err());
     }
 
     #[test]

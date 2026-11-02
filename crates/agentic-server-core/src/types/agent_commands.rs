@@ -102,6 +102,18 @@ pub struct AgentListing {
 
 impl MultiAgentAction {
     #[must_use]
+    pub(crate) fn tool_name(self) -> &'static str {
+        match self {
+            Self::SpawnAgent => "spawn_agent",
+            Self::SendMessage => "send_message",
+            Self::FollowupTask => "followup_task",
+            Self::WaitAgent => "wait_agent",
+            Self::InterruptAgent => "interrupt_agent",
+            Self::ListAgents => "list_agents",
+        }
+    }
+
+    #[must_use]
     pub fn from_tool_name(name: &str) -> Option<Self> {
         match name {
             "spawn_agent" => Some(Self::SpawnAgent),

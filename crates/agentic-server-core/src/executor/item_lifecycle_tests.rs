@@ -50,7 +50,7 @@ fn a_message_streams_each_part_and_only_output_text_has_text_events() {
     );
     assert_eq!(
         frames[1]["part"],
-        json!({"type": "output_text", "text": "", "annotations": [{"type": "note"}]})
+        json!({"type": "output_text", "text": "", "annotations": [{"type": "note"}], "logprobs": []})
     );
     assert_eq!(frames[2]["delta"], "hello");
     assert_eq!(frames[3]["text"], "hello");

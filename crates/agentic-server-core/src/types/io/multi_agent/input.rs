@@ -2,6 +2,8 @@
 //! Agent messages also preserve the broader output content union for lossless replay.
 use serde::{Deserialize, Serialize};
 
+use crate::types::io::InputItem;
+
 use super::{
     AgentAttribution, AgentMessage, AgentMessageContent, MultiAgentAction, MultiAgentCall, MultiAgentCallOutput,
     MultiAgentCallOutputContent,
@@ -78,6 +80,58 @@ impl From<AgentMessage> for InputAgentMessage {
             recipient: item.recipient,
             content: item.content,
             agent: item.agent,
+        }
+    }
+}
+
+impl InputItem {
+    /// Public ownership retained in a client-supplied history item.
+    pub(crate) fn agent(&self) -> Option<&AgentAttribution> {
+        match self {
+            Self::MultiAgentCall(item) => item.agent.as_ref(),
+            Self::MultiAgentCallOutput(item) => item.agent.as_ref(),
+            Self::AgentMessage(item) => item.agent.as_ref(),
+            Self::Message(item) => item.agent.as_ref(),
+            Self::FunctionCall(item) => item.agent.as_ref(),
+            Self::CodeInterpreterCall(item) => item.agent.as_ref(),
+            Self::ToolSearchCall(item) => item.agent.as_ref(),
+            Self::ToolSearchOutput(item) => item.agent.as_ref(),
+            Self::CustomToolCall(item) => item.agent.as_ref(),
+            Self::ShellCall(item) => item.agent.as_ref(),
+            Self::WebSearchCall(item) => item.agent.as_ref(),
+            Self::McpCall(item) => item.agent.as_ref(),
+            Self::McpListTools(item) => item.agent.as_ref(),
+            Self::Reasoning(item) => item.agent.as_ref(),
+            Self::Compaction(item) => item.agent.as_ref(),
+            Self::FunctionCallOutput(_)
+            | Self::CustomToolCallOutput(_)
+            | Self::ShellCallOutput(_)
+            | Self::CompactionTrigger => None,
+        }
+    }
+
+    /// Remove public attribution when an item is routed into its agent's model context.
+    pub(crate) fn take_agent(&mut self) -> Option<AgentAttribution> {
+        match self {
+            Self::MultiAgentCall(item) => item.agent.take(),
+            Self::MultiAgentCallOutput(item) => item.agent.take(),
+            Self::AgentMessage(item) => item.agent.take(),
+            Self::Message(item) => item.agent.take(),
+            Self::FunctionCall(item) => item.agent.take(),
+            Self::CodeInterpreterCall(item) => item.agent.take(),
+            Self::ToolSearchCall(item) => item.agent.take(),
+            Self::ToolSearchOutput(item) => item.agent.take(),
+            Self::CustomToolCall(item) => item.agent.take(),
+            Self::ShellCall(item) => item.agent.take(),
+            Self::WebSearchCall(item) => item.agent.take(),
+            Self::McpCall(item) => item.agent.take(),
+            Self::McpListTools(item) => item.agent.take(),
+            Self::Reasoning(item) => item.agent.take(),
+            Self::Compaction(item) => item.agent.take(),
+            Self::FunctionCallOutput(_)
+            | Self::CustomToolCallOutput(_)
+            | Self::ShellCallOutput(_)
+            | Self::CompactionTrigger => None,
         }
     }
 }

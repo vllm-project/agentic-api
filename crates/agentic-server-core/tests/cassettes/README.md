@@ -441,7 +441,8 @@ printf 'Fetch http://127.0.0.1:18080/page/release-notes.html with web_fetch and 
 The streaming cassette is the same command with `--stream`. The replay binds an ephemeral port, serves the recorded
 responses with the origin re-based onto it (the streaming `tool_use` input is re-emitted as one `input_json_delta`,
 since the recorded chunks split the URL), and compares the loop's complete upstream requests with the recording,
-normalizing only the origin and `retrieved_at`.
+normalizing only the origin and `retrieved_at`. It then sends the `server_tool_use` and `web_fetch_tool_result`
+blocks the client received back in a follow-up request and checks that the gateway restores the live rounds exactly.
 
 ## Modes
 
@@ -603,7 +604,7 @@ These files use `sessions`, not the HTTP `turns` schema or synthesized SSE.
 |--------|-----------|---------|
 | `record_multi_agent_cassettes.sh` | Five delegated scenarios over HTTP JSON/SSE or persistent duplex WebSocket | OpenAI and gateway |
 | `record_text_only_cassettes.sh` | 10 text-only cassettes (responses + conv modes, streaming + non-streaming) | OpenAI (`OPENAI_API_KEY`) |
-| `record_store_false_cassettes.sh` | Two HTTP `store:false` cassettes per provider (JSON/SSE), each containing six named scenarios | OpenAI and gateway |
+| `record_store_false_cassettes.sh` | Six HTTP scenarios per provider in JSON/SSE; `STORE_FALSE_SUITE=multi-agent` replays mixed tools against the selected provider | OpenAI and gateway |
 | `record_conversations_api_cassettes.sh` | 18 Conversation Items API cassettes: four history scenarios in both transports and one non-streaming edge-case sequence, each for both providers | OpenAI and gateway |
 | `record_reasoning_cassettes.sh` | Matching explicit-reasoning cassettes (streaming + non-streaming) | gateway and OpenAI reference; optional direct vLLM |
 | `record_tool_call_cassettes.sh` | 8 tool-call cassettes (4 tool_choice modes x streaming + non-streaming) | vLLM |
@@ -745,6 +746,20 @@ Missing-response GETs check the recorded HTTP 404 error envelope as well as the
 absence of stored rows. Both providers' captures replay through the gateway;
 model text and reasoning differ, while state controls and function arguments
 are compared across providers.
+
+The same `store_false/` directory contains the multi-agent mixed-tools captures.
+Record them with `STORE_FALSE_SUITE=multi-agent` using
+`record_store_false_cassettes.sh`; see the [multi-agent workflow](multi_agent/README.md).
+`MULTI_AGENT_SUITE=all` also selects tool search, code interpreter, and the
+client-agent-message probe. The `tool-search` case includes client discovery
+followed by hosted search over deferred MCP in the same full-history session;
+there is one JSON and one SSE cassette for that combined case.
+Both provider selections use `replay_old_cassettes.py` and the shared recorder to
+continue with live response history and matching client outputs. Gateway mode connects to `GATEWAY_URL`; model and hosted-tool
+configuration belongs to the running gateway. This refreshes client-facing
+captures; model, search, and MCP dependency captures remain separate.
+The Rust multi-agent contract test compares full-history continuation, delegated
+agents, web/MCP activity, and client shell outputs across both providers in JSON and SSE.
 
 ### Reasoning (gateway and OpenAI)
 
@@ -982,6 +997,14 @@ groups; `HOSTED_TOOL_SEARCH_SKIP_LEGS` omits legs. Provider errors (including th
 are kept as evidence. The two models choose different searches, so
 `hosted_tool_search_characterization_test.rs` compares the gateway's item shapes, streaming lifecycle, and the tools
 it loads for arguments identical to the reference's.
+
+`hosted_tool_search_test.rs` also executes two-turn `store: false` continuations through `ExecuteRequest` for
+single-agent and multi-agent requests, in JSON and SSE. The client returns the gateway's actual full history;
+assertions cover deferred MCP discovery, loaded subsets, callable tools, and matching canonical model call/result
+pairs. A spawned-child case suspends on a client function and restores the child's hosted-search catalog from
+that history, while checking that the root does not inherit the child's loads. Both cases require one MCP listing
+across the session and use disabled storage. These are deterministic integration regressions against the existing
+recorded contract, not additional live provider recordings.
 
 ### Image input (gateway → vLLM vision model, and OpenAI)
 

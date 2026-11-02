@@ -91,8 +91,10 @@ async fn infer(State(state): State<Upstream>, Json(request): Json<Value>) -> Res
         assert_eq!(result["tool_use_id"], history[history.len() - 2]["content"][0]["id"]);
         assert_eq!(result["is_error"], state.search_fails);
         let output = result["content"].as_str().unwrap();
+        // A failed native search reaches the model as its documented code's
+        // text, the same text a later turn replays.
         assert!(output.contains(if state.search_fails {
-            "tool execution failed"
+            "web_search is unavailable"
         } else {
             "SEARCH_PROOF_雪"
         }));
@@ -139,10 +141,22 @@ async fn infer(State(state): State<Upstream>, Json(request): Json<Value>) -> Res
 }
 
 fn assert_client_message(body: &str, stream: bool, client_owned: bool, expected_answer: &str, tool_stop_reason: &str) {
+    // The upstream's calls stay internal; the client sees each executed search
+    // as a server_tool_use block paired with its result.
+    let content = common::assembled_messages_content(body, stream);
+    let blocks = content.as_array().unwrap();
     assert!(
-        !body.contains("\"name\":\"web_search\""),
-        "gateway calls must remain hidden: {body}"
+        !blocks
+            .iter()
+            .any(|block| block["type"] == "tool_use" && block["name"] == "web_search"),
+        "gateway calls must not reach the client as tool_use: {body}"
     );
+    let calls = blocks.iter().filter(|block| block["type"] == "server_tool_use").count();
+    let results = blocks
+        .iter()
+        .filter(|block| block["type"] == "web_search_tool_result")
+        .count();
+    assert_eq!(calls, results, "every shown call has its result: {body}");
     let stop = if client_owned && tool_stop_reason == "end_turn" {
         "tool_use"
     } else if client_owned {
@@ -180,12 +194,13 @@ fn assert_client_message(body: &str, stream: bool, client_owned: bool, expected_
     } else {
         let message: Value = serde_json::from_str(body).unwrap();
         assert_eq!(message["stop_reason"], stop, "{body}");
+        let last = blocks.last().unwrap();
         if client_owned {
-            assert_eq!(message["content"].as_array().unwrap().len(), 1);
-            assert_eq!(message["content"][0]["name"], "client_echo");
-            assert_eq!(message["content"][0]["input"], json!({"query":"proof"}));
+            assert_eq!(blocks.len(), 2 * calls + 1, "{body}");
+            assert_eq!(last["name"], "client_echo");
+            assert_eq!(last["input"], json!({"query":"proof"}));
         } else {
-            assert_eq!(message["content"][0]["text"], expected_answer);
+            assert_eq!(last["text"], expected_answer);
         }
     }
 }

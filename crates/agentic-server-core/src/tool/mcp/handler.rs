@@ -1,22 +1,27 @@
+mod connection;
+
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
+use rmcp::model::{Tool, ToolAnnotations};
 use serde_json::Value;
 
 use crate::tool::declaration::ToolDeclaration;
 use crate::tool::handler::MAX_GATEWAY_TOOL_OUTPUT_BYTES;
 use crate::tool::{GatewayExecutor, GatewayToolEventPlan, ToolError, ToolHandler, ToolOutput, ToolType};
-use crate::types::io::FunctionTool;
+use crate::types::io::input::internal_mcp_tool_name;
 use crate::types::io::output::{
     FunctionToolCall, GatewayCallStatus, McpCall, McpCallError, McpCallStatus, McpListTool, McpListTools, OutputItem,
 };
+use crate::types::io::{FunctionTool, InOutItem, InputItem, ResponsesInput};
 use crate::types::tools::{McpDiscoveredToolParam, McpToolParam};
 use crate::utils::common::{deserialize_from_str, deserialize_from_str_opt, serialize_to_string, stable_name_hash};
 use crate::utils::uuid7_str;
 
 use super::{McpClient, McpError};
+use connection::McpConnection;
 
 #[must_use]
 pub(crate) fn output_item(
@@ -72,7 +77,7 @@ pub(crate) fn started_list_tools_output_item(item: &McpListTools) -> OutputItem 
 /// A handler with no client is used only while normalizing the discovered tool
 /// metadata stored on `McpToolParam` into model-visible function tools.
 pub struct McpHandler {
-    client: Option<Arc<McpClient>>,
+    connection: McpConnection,
 }
 
 #[derive(Clone)]
@@ -88,12 +93,33 @@ pub(crate) struct McpServerToolSet {
 }
 
 impl McpHandler {
+    /// Reuse a successful listing that covers an explicit allowed set.
+    /// Without a restriction, public history cannot prove catalog completeness.
+    pub(crate) fn reusable_listing(history: &ResponsesInput, param: &McpToolParam) -> Option<McpListTools> {
+        let ResponsesInput::Items(items) = history else {
+            return None;
+        };
+        let allowed = param.allowed_tools.as_ref()?;
+        items.iter().rev().find_map(|item| {
+            let (InOutItem::Input(InputItem::McpListTools(listing))
+            | InOutItem::Output(OutputItem::McpListTools(listing))) = item
+            else {
+                return None;
+            };
+            (listing.server_label == param.server_label.trim()
+                && listing.error.is_none()
+                && allowed
+                    .iter()
+                    .all(|name| listing.tools.iter().any(|tool| &tool.name == name)))
+            .then(|| listing.clone())
+        })
+    }
+
     /// Validates request-level MCP server identities before any discovery I/O.
     ///
     /// # Errors
     ///
-    /// Returns [`ToolError::Config`] when multiple MCP declarations use the
-    /// same `server_label`.
+    /// Returns [`ToolError::Config`] for duplicate `server_label` declarations.
     pub(crate) fn validate_server_labels(tools: &[ToolDeclaration]) -> Result<(), ToolError> {
         let mut server_labels = HashSet::new();
         for param in tools.iter().filter_map(|tool| match tool {
@@ -108,16 +134,6 @@ impl McpHandler {
             }
         }
         Ok(())
-    }
-
-    #[must_use]
-    pub const fn discovered_tool_spec_only() -> Self {
-        Self { client: None }
-    }
-
-    #[must_use]
-    pub fn tool_call(client: Arc<McpClient>) -> Self {
-        Self { client: Some(client) }
     }
 
     /// Discovers and normalizes the tools exposed by one MCP server.
@@ -135,16 +151,25 @@ impl McpHandler {
             .list_tools()
             .await
             .map_err(|error| mcp_discovery_error(server_label, &error))?;
+        let handler = Arc::new(Self::tool_call(client));
+        Ok(Self::handlers_from_tools(server_label, &handler, tools, allowed_tools))
+    }
 
+    fn handlers_from_tools(
+        server_label: &str,
+        handler: &Arc<Self>,
+        tools: Vec<Tool>,
+        allowed_tools: Option<&[String]>,
+    ) -> Vec<McpDiscoveredHandler> {
         let mut discovered_handlers = Vec::new();
         let mut internal_names = HashMap::new();
         for tool in tools {
             let tool_name = tool.name.to_string();
+            // Authorization must not change aliases assigned by the original discovery order.
+            let internal_name = internal_mcp_tool_name(server_label, &tool_name, &mut internal_names);
             if allowed_tools.is_some_and(|allowed| !allowed.iter().any(|name| name == &tool_name)) {
                 continue;
             }
-            let internal_name = internal_mcp_tool_name(server_label, &tool_name, &mut internal_names);
-            let handler = Arc::new(Self::tool_call(Arc::clone(&client)));
             discovered_handlers.push(McpDiscoveredHandler {
                 param: McpDiscoveredToolParam {
                     server_label: server_label.to_owned(),
@@ -152,20 +177,67 @@ impl McpHandler {
                     internal_name,
                     tool,
                 },
-                handler,
+                handler: Arc::clone(handler),
             });
         }
 
-        Ok(discovered_handlers)
+        discovered_handlers
     }
 
     pub(crate) async fn discover_tools(
-        server_label: &str,
-        client: Arc<McpClient>,
+        param: &McpToolParam,
+        handler: &Arc<Self>,
         allowed_tools: Option<&[String]>,
+        listing: Option<McpListTools>,
     ) -> Result<McpServerToolSet, ToolError> {
-        let handlers = Self::discovered_tool_handlers(server_label, client, allowed_tools).await?;
-        Ok(Self::server_tool_set_from_handlers(server_label, handlers))
+        let server_label = param.server_label.trim();
+        if !param.discovered_tools.is_empty() {
+            let handlers = param
+                .discovered_tools
+                .iter()
+                .filter(|tool| allowed_tools.is_none_or(|allowed| allowed.contains(&tool.tool_name)))
+                .map(|tool| McpDiscoveredHandler {
+                    param: tool.clone(),
+                    handler: Arc::clone(handler),
+                })
+                .collect();
+            return Ok(match listing {
+                Some(listing) => McpServerToolSet {
+                    discovered_handlers: handlers,
+                    list_tools_item: listing,
+                },
+                None => Self::server_tool_set_from_handlers(server_label, handlers),
+            });
+        }
+        let Some(listing) = listing else {
+            let client = Arc::clone(handler.connection.client(server_label).await?);
+            let handlers = Self::discovered_tool_handlers(server_label, client, allowed_tools).await?;
+            return Ok(Self::server_tool_set_from_handlers(server_label, handlers));
+        };
+        let tools = listing
+            .tools
+            .iter()
+            .map(|tool| {
+                let schema = tool.input_schema.as_object().ok_or_else(|| {
+                    ToolError::Config(format!("MCP tool '{}' has a non-object input schema", tool.name))
+                })?;
+                let mut restored = Tool::new_with_raw(
+                    tool.name.clone(),
+                    tool.description.clone().map(Into::into),
+                    schema.clone(),
+                );
+                if let Some(read_only) = tool.annotations.as_ref().and_then(|value| value["read_only"].as_bool()) {
+                    restored = restored.with_annotations(ToolAnnotations::new().read_only(read_only));
+                }
+                Ok(restored)
+            })
+            .collect::<Result<Vec<_>, ToolError>>()?;
+        let handlers = Self::handlers_from_tools(server_label, handler, tools, allowed_tools);
+        // Retain discovery provenance; only the callable handlers use current authorization.
+        Ok(McpServerToolSet {
+            discovered_handlers: handlers,
+            list_tools_item: listing,
+        })
     }
 
     #[must_use]
@@ -274,16 +346,11 @@ impl GatewayExecutor for McpHandler {
     ) -> Pin<Box<dyn Future<Output = Result<ToolOutput, ToolError>> + Send + '_>> {
         let call_id = call_id.to_owned();
         let arguments = arguments.to_owned();
-        let client = self.client.clone();
         let server_label = params.server_label.clone();
         let tool_name = params.tool_name.clone();
 
         Box::pin(async move {
-            let Some(client) = &client else {
-                return Err(ToolError::Config(
-                    "MCP tool spec-only handler cannot execute tools".to_owned(),
-                ));
-            };
+            let client = self.connection.client(&server_label).await?;
             let output = execute_tool_call(client, &server_label, &tool_name, &arguments).await?;
 
             Ok(ToolOutput::success(call_id, output))
@@ -388,48 +455,6 @@ fn ensure_mcp_output_size(bytes: usize) -> Result<(), ToolError> {
 
 pub(crate) fn discovered_mcp_function_tool(param: &McpDiscoveredToolParam) -> FunctionTool {
     mcp_tool_to_function_tool(&param.internal_name, &param.tool)
-}
-
-const INTERNAL_MCP_PREFIX: &str = "mcp__";
-const MAX_INTERNAL_TOOL_NAME_LEN: usize = 64;
-
-fn internal_mcp_tool_name(server_label: &str, tool_name: &str, used: &mut HashMap<String, (String, String)>) -> String {
-    let identity = (server_label.to_owned(), tool_name.to_owned());
-    let base = sanitize_internal_tool_name(&format!("{INTERNAL_MCP_PREFIX}{server_label}__{tool_name}"));
-    if base.len() <= MAX_INTERNAL_TOOL_NAME_LEN && used.get(&base).is_none_or(|existing| existing == &identity) {
-        used.insert(base.clone(), identity);
-        return base;
-    }
-
-    let mut attempt = 0_u32;
-    loop {
-        let hash_input = if attempt == 0 {
-            format!("{server_label}:{tool_name}")
-        } else {
-            format!("{server_label}:{tool_name}:{attempt}")
-        };
-        let suffix = format!("__{:010x}", stable_name_hash(&hash_input) & 0xff_ffff_ffff);
-        let prefix_len = MAX_INTERNAL_TOOL_NAME_LEN.saturating_sub(suffix.len());
-        let candidate = format!("{}{}", &base[..base.len().min(prefix_len)], suffix);
-        if used.get(&candidate).is_none_or(|existing| existing == &identity) {
-            used.insert(candidate.clone(), identity);
-            return candidate;
-        }
-        attempt = attempt.saturating_add(1);
-    }
-}
-
-fn sanitize_internal_tool_name(value: &str) -> String {
-    value
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-') {
-                ch
-            } else {
-                '_'
-            }
-        })
-        .collect()
 }
 
 fn mcp_tool_to_function_tool(name: &str, tool: &rmcp::model::Tool) -> FunctionTool {

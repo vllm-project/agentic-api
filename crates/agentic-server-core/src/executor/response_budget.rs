@@ -191,7 +191,7 @@ impl RetainedSize for OutputTextContent {
             + "output_text".len()
             + self.text.len()
             + self.annotations.as_ref().map_or(0, sum_retained)
-            + self.logprobs.as_ref().map_or(0, sum_retained)
+            + sum_retained(&self.logprobs)
     }
 }
 
@@ -699,7 +699,7 @@ mod tests {
         );
         let mut part = OutputTextContent::new("OK");
         let base = part.retained_bytes();
-        part.logprobs = Some(vec![OutputTextLogprob {
+        part.logprobs = vec![OutputTextLogprob {
             token: "OK".into(),
             bytes: vec![79, 75],
             logprob: -0.5,
@@ -708,7 +708,7 @@ mod tests {
                 bytes: vec![78, 79],
                 logprob: -1.5,
             }],
-        }]);
+        }];
         assert_eq!(part.retained_bytes() - base, 2 * RETAINED_CONTAINER_OVERHEAD_BYTES + 8);
         let opaque = "x".repeat(1024);
         for wire in [

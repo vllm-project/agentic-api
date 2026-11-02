@@ -1,6 +1,8 @@
 //! Integration-only comparison of independently recorded provider exchanges.
 #[path = "multi_agent_code_interpreter.rs"]
 mod code_interpreter;
+use agentic_core::utils::common::deserialize_from_value;
+use either::Either;
 use flate2::read::GzDecoder;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Read;
@@ -13,10 +15,10 @@ use agentic_core::types::io::{
     InputItem, MessagePhase, MultiAgentAction, MultiAgentCallOutput, MultiAgentCallOutputContent, OutputItem,
 };
 use agentic_core::types::request_response::ResponsePayload;
-use agentic_core::types::tools::{CodexNamespaceMember, ResponsesTool, ToolSearchStatus};
+use agentic_core::types::tools::{CodexNamespaceMember, ResponsesTool, ToolSearchExecution, ToolSearchStatus};
 use serde_json::Value;
 
-use crate::support::{Cassette, Turn, responses_turns};
+use crate::support::{Cassette, Turn, recorded_named_sse_events, responses_turns};
 
 pub struct RecordedSession {
     exchanges: Vec<RecordedExchange>,
@@ -35,6 +37,7 @@ impl RecordedSession {
 
 struct RecordedExchange {
     response: ResponsePayload,
+    store: bool,
     previous_response_id: Option<String>,
     input: Vec<InputItem>,
     stream: bool,
@@ -60,6 +63,8 @@ fn mismatch(message: impl Into<String>) -> ContractMismatch {
 }
 
 impl RecordedSession {
+    /// # Errors
+    /// The cassette cannot be read or violates the multi-agent contract.
     pub fn load(path: &Path) -> Result<Self, ContractMismatch> {
         let content = if path.extension().is_some_and(|extension| extension == "gz") {
             let file = std::fs::File::open(path).map_err(|error| mismatch(error.to_string()))?;
@@ -72,19 +77,76 @@ impl RecordedSession {
             std::fs::read_to_string(path).map_err(|error| mismatch(error.to_string()))?
         };
         let cassette: Cassette = serde_yaml::from_str(&content).map_err(|error| mismatch(error.to_string()))?;
+        Self::from_cassette(&cassette)
+    }
+
+    /// Apply the same recorded contract to exchanges produced by a live gateway test.
+    /// # Errors
+    /// An exchange violates the multi-agent contract.
+    pub fn from_cassette(cassette: &Cassette) -> Result<Self, ContractMismatch> {
+        Self::from_cassette_with(cassette, read_recorded_response)
+    }
+
+    /// Compare terminal response semantics independently of SSE wire validity.
+    /// Use only alongside an explicit test of the recording's wire incompatibility.
+    /// # Errors
+    /// A terminal response or its session history violates the multi-agent contract.
+    pub fn from_terminal_responses(cassette: &Cassette) -> Result<Self, ContractMismatch> {
+        Self::from_cassette_with(cassette, read_terminal_response)
+    }
+
+    fn from_cassette_with(
+        cassette: &Cassette,
+        read_response: fn(&Turn) -> Result<(Value, ResponsePayload), ContractMismatch>,
+    ) -> Result<Self, ContractMismatch> {
         let mut exchanges = Vec::new();
-        for turn in responses_turns(&cassette) {
-            if !turn.request.body.store || turn.request.body.extra["multi_agent"]["enabled"] != true {
+        let mut replay_history = Vec::new();
+        for turn in responses_turns(cassette) {
+            if turn.request.body.extra["multi_agent"]["enabled"] != true {
                 // Continuations may inherit configuration from stored state.
                 if !turn.request.body.store || turn.request.body.previous_response_id.is_none() {
-                    return Err(mismatch("recording must use stored multi-agent requests"));
+                    return Err(mismatch("recording must enable multi-agent or inherit a stored tree"));
                 }
             }
-            let (terminal, response) = read_recorded_response(turn)?;
+            let (terminal, response) = read_response(turn)?;
             let input = match &turn.request.body.input {
                 Value::Array(items) => {
-                    serde_json::from_value(Value::Array(items.clone())).map_err(|error| mismatch(error.to_string()))?
+                    let new_items = if turn.request.body.store {
+                        replay_history.clear();
+                        items.clone()
+                    } else {
+                        if turn.request.body.previous_response_id.is_some() || terminal["store"] != false {
+                            return Err(mismatch("stateless replay must not reference or store a response"));
+                        }
+                        let retained = if items.starts_with(&replay_history) {
+                            replay_history.as_slice()
+                        } else if let Some(index) = replay_history.iter().rposition(|item| item["type"] == "compaction")
+                        {
+                            // The public compaction contract permits dropping its
+                            // entire prefix without losing pending client calls.
+                            &replay_history[index..]
+                        } else {
+                            return Err(mismatch("stateless continuation changed or omitted public history"));
+                        };
+                        if !items.starts_with(retained) {
+                            return Err(mismatch(
+                                "stateless continuation changed or omitted its compacted history",
+                            ));
+                        }
+                        let new_items = items[retained.len()..].to_vec();
+                        replay_history.clone_from(items);
+                        replay_history.extend(
+                            terminal["output"]
+                                .as_array()
+                                .ok_or_else(|| mismatch("missing output array"))?
+                                .iter()
+                                .cloned(),
+                        );
+                        new_items
+                    };
+                    deserialize_from_value(Value::Array(new_items)).map_err(|error| mismatch(error.to_string()))?
                 }
+                _ if !turn.request.body.store => return Err(mismatch("stateless replay requires an input item array")),
                 _ => Vec::new(),
             };
             let kinds = terminal["output"]
@@ -95,6 +157,7 @@ impl RecordedSession {
                 .collect();
             exchanges.push(RecordedExchange {
                 response,
+                store: turn.request.body.store,
                 previous_response_id: turn.request.body.previous_response_id.clone(),
                 input,
                 stream: turn.request.body.stream,
@@ -106,6 +169,49 @@ impl RecordedSession {
         let session = Self { exchanges };
         session.validate()?;
         Ok(session)
+    }
+
+    /// The successful stateless scenarios keep public identities
+    /// and one equivalent successful MCP discovery throughout their complete history.
+    /// Failed discovery remains observable and does not erase a previous successful listing.
+    /// # Errors
+    /// A stateless response is stored or has invalid public item/discovery semantics.
+    pub fn assert_stateless(&self) -> Result<(), ContractMismatch> {
+        let mut listings = HashMap::<&str, Vec<_>>::new();
+        for exchange in &self.exchanges {
+            if exchange.store || exchange.previous_response_id.is_some() {
+                return Err(mismatch("stateless session must not store or reference a response"));
+            }
+            for item in &exchange.response.output {
+                let prefix = match item {
+                    OutputItem::Message(_) => Some("msg_"),
+                    OutputItem::FunctionCall(_) => Some("fc_"),
+                    OutputItem::ShellCall(_) => Some("sh_"),
+                    OutputItem::CustomToolCall(_) => Some("ctc_"),
+                    OutputItem::ToolSearchCall(_) => Some("tsc_"),
+                    OutputItem::WebSearchCall(_) => Some("ws_"),
+                    OutputItem::McpCall(_) => Some("mcp_"),
+                    OutputItem::CodeInterpreterCall(_) => Some("ci_"),
+                    OutputItem::Compaction(_) => return Err(mismatch("scenario unexpectedly compacted history")),
+                    _ => None,
+                };
+                if item.id().is_none_or(str::is_empty)
+                    || prefix.is_some_and(|prefix| item.id().is_none_or(|id| !id.starts_with(prefix)))
+                {
+                    return Err(mismatch("public item ID cannot be reused in client history"));
+                }
+                if let OutputItem::McpListTools(listing) = item
+                    && listing.error.is_none()
+                {
+                    let previous = listings.entry(&listing.server_label).or_default();
+                    if previous.contains(&&listing.tools) {
+                        return Err(mismatch("equivalent successful MCP discovery was emitted again"));
+                    }
+                    previous.push(&listing.tools);
+                }
+            }
+        }
+        Ok(())
     }
 
     fn validate(&self) -> Result<(), ContractMismatch> {
@@ -178,7 +284,7 @@ impl RecordedSession {
             if !collaboration.is_empty() {
                 return Err(mismatch("collaboration call has no output"));
             }
-            previous = Some(exchange.response.id.as_str());
+            previous = exchange.store.then_some(exchange.response.id.as_str());
         }
         if self.exchanges.is_empty() {
             return Err(mismatch("no Responses exchanges"));
@@ -312,6 +418,24 @@ fn read_recorded_response(turn: &Turn) -> Result<(Value, ResponsePayload), Contr
     Ok((terminal, response))
 }
 
+fn read_terminal_response(turn: &Turn) -> Result<(Value, ResponsePayload), ContractMismatch> {
+    let terminal = match &turn.response.body {
+        Some(body) => body.clone(),
+        None => recorded_named_sse_events(turn)
+            .into_iter()
+            .find(|event| {
+                matches!(
+                    event["type"].as_str(),
+                    Some("response.completed" | "response.incomplete" | "response.failed")
+                )
+            })
+            .and_then(|event| event.get("response").cloned())
+            .ok_or_else(|| mismatch("missing terminal response"))?,
+    };
+    let response = serde_json::from_value(terminal.clone()).map_err(|error| mismatch(error.to_string()))?;
+    Ok((terminal, response))
+}
+
 fn opaque_content(value: &mut Value) {
     match value {
         Value::Object(fields) => {
@@ -332,6 +456,8 @@ fn opaque_content(value: &mut Value) {
     }
 }
 
+/// # Errors
+/// The observed session differs from the required reference contract.
 pub fn assert_multi_agent_contract(
     reference: &RecordedSession,
     gateway: &RecordedSession,
@@ -397,11 +523,18 @@ pub fn assert_multi_agent_contract(
     if last.output.iter().any(|item| client_call(item).is_some()) {
         return Err(mismatch("gateway session ends with pending client calls"));
     }
-    if !last.output.iter().any(|item| {
-        matches!(item, OutputItem::Message(message)
+    // A completed root answer can precede a later child-only cleanup turn.
+    // The stateless tool-search OpenAI recording demonstrates this ordering.
+    if !gateway
+        .exchanges
+        .iter()
+        .flat_map(|exchange| &exchange.response.output)
+        .any(|item| {
+            matches!(item, OutputItem::Message(message)
         if message.agent.as_ref().is_some_and(|agent| agent.agent_name == "/root")
             && message.phase == Some(MessagePhase::FinalAnswer))
-    }) {
+        })
+    {
         return Err(mismatch("gateway session has no root final answer"));
     }
     Ok(())
@@ -421,42 +554,116 @@ fn client_call(item: &OutputItem) -> Option<(&str, ClientCallKind)> {
 }
 
 impl RecordedSession {
+    /// Require hosted discovery and MCP execution on both sides of a callback within the same agent branch.
+    /// # Errors
+    /// The combined scenario did not exercise hosted search or lost a child's continuation.
+    pub fn assert_hosted_tool_search_continuation(&self) -> Result<(), ContractMismatch> {
+        let mut searched = false;
+        let mut mcp_owners = HashSet::new();
+        let mut weather_calls = HashMap::new();
+        let mut resumed = HashSet::new();
+        let mut completed = false;
+        for exchange in &self.exchanges {
+            for input in &exchange.input {
+                if let InputItem::FunctionCallOutput(output) = input
+                    && let Some(owner) = weather_calls.remove(output.call_id.as_str())
+                {
+                    resumed.insert(owner);
+                }
+            }
+            for item in &exchange.response.output {
+                match item {
+                    OutputItem::ToolSearchCall(call) if call.execution == ToolSearchExecution::Server => {
+                        searched = true;
+                    }
+                    OutputItem::McpCall(call) => {
+                        let owner = call
+                            .agent
+                            .as_ref()
+                            .ok_or_else(|| mismatch("MCP call has no agent"))?
+                            .agent_name
+                            .as_str();
+                        completed |= resumed.contains(owner);
+                        mcp_owners.insert(owner);
+                    }
+                    OutputItem::FunctionCall(call) if call.name == "get_weather" => {
+                        let owner = call
+                            .agent
+                            .as_ref()
+                            .ok_or_else(|| mismatch("client call has no agent"))?
+                            .agent_name
+                            .as_str();
+                        if owner != "/root"
+                            && let Some(branch) = mcp_owners
+                                .iter()
+                                .copied()
+                                .filter(|branch| {
+                                    owner == *branch
+                                        || owner.strip_prefix(branch).is_some_and(|suffix| suffix.starts_with('/'))
+                                })
+                                .max_by_key(|branch| branch.len())
+                        {
+                            weather_calls.insert(call.call_id.as_str(), branch);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        if !searched || !completed {
+            return Err(mismatch(
+                "hosted search must execute MCP before and after a client result within the same agent branch",
+            ));
+        }
+        Ok(())
+    }
+
     /// Check the scenario's public names and discovery results, allowing different
     /// agents, call counts and model text between providers.
+    /// # Errors
+    /// Client-owned tool discovery or continuation is inconsistent.
     pub fn assert_client_owned_tools(&self) -> Result<(), ContractMismatch> {
         let mut discovered = HashSet::new();
         let mut called = HashSet::new();
         let mut custom = false;
         for exchange in &self.exchanges {
-            for input in &exchange.input {
-                if let InputItem::ToolSearchOutput(output) = input {
-                    for tool in &output.tools {
-                        match tool {
-                            ResponsesTool::Function(function) => {
-                                discovered.insert((None, function.name.as_str()));
-                            }
-                            ResponsesTool::Namespace(namespace) => {
-                                for member in &namespace.tools {
-                                    if let CodexNamespaceMember::Function(function) = member {
-                                        discovered.insert((Some(namespace.name.as_str()), function.name.as_str()));
+            let items = exchange
+                .input
+                .iter()
+                .map(Either::Left)
+                .chain(exchange.response.output.iter().map(Either::Right));
+            for item in items {
+                match item {
+                    Either::Left(InputItem::ToolSearchOutput(output))
+                    | Either::Right(OutputItem::ToolSearchOutput(output)) => {
+                        for tool in &output.tools {
+                            match tool {
+                                ResponsesTool::Function(function) => {
+                                    discovered.insert((None, function.name.as_str()));
+                                }
+                                ResponsesTool::Namespace(namespace) => {
+                                    for member in &namespace.tools {
+                                        if let CodexNamespaceMember::Function(function) = member {
+                                            discovered.insert((Some(namespace.name.as_str()), function.name.as_str()));
+                                        }
                                     }
                                 }
+                                _ => {}
                             }
-                            _ => {}
                         }
                     }
-                }
-            }
-            for item in &exchange.response.output {
-                match item {
-                    OutputItem::FunctionCall(call) => {
-                        let identity = (call.namespace.as_deref(), call.name.as_str());
+                    Either::Right(OutputItem::FunctionCall(call)) => {
+                        // A searched top-level function may report its own name as namespace.
+                        let namespace = call.namespace.as_deref().filter(|namespace| {
+                            *namespace != call.name || !discovered.contains(&(None, call.name.as_str()))
+                        });
+                        let identity = (namespace, call.name.as_str());
                         if !discovered.contains(&identity) {
                             return Err(mismatch("function was not returned by earlier tool discovery"));
                         }
                         called.insert(identity);
                     }
-                    OutputItem::CustomToolCall(call) if call.name == "agentic_raw_echo" => custom = true,
+                    Either::Right(OutputItem::CustomToolCall(call)) if call.name == "agentic_raw_echo" => custom = true,
                     _ => {}
                 }
             }

@@ -63,7 +63,7 @@ from httpx import AsyncClient
 from yaml import dump as yaml_dump
 from yaml import safe_load as yaml_load
 
-from replay_old_cassettes import run_tool_items
+from replay_old_cassettes import run_multi_agent_store_false, run_tool_items
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger("cassette_proxy")
@@ -426,9 +426,17 @@ def _record_duplicate_items(
 
 
 def run_items(
-    client: httpx.Client, proxy_url: str, model: str, scenario: str, stream: bool
+    client: httpx.Client, proxy_url: str, model: str, scenario: str, stream: bool,
+    *, max_output_tokens: int | None = None,
 ) -> None:
     """Record each fixed Conversation Items or Responses API request as a numbered step."""
+    if scenario == "multi-agent-store-false":
+        run_multi_agent_store_false(
+            client, proxy_url, model, stream,
+            run_responses=run_responses, load_tool_outputs=_load_tool_outputs_file,
+            max_output_tokens=max_output_tokens,
+        )
+        return
     if scenario == "store-false":
         conv_id = _create_conversation(client, proxy_url)
         items_path = f"/v1/conversations/{conv_id}/items"
@@ -1682,7 +1690,7 @@ def run_responses(
     request_overrides: dict | None = None,
     auto_tool_continuations: int = 0,
     max_tool_calls: list[int | None] | int | None = None,
-) -> None:
+) -> list[dict] | None:
     if transport == "websocket" and multi_agent is not None:
         from websocket_recorder import RecordedSession, exchange
 
@@ -1911,6 +1919,9 @@ def run_responses(
             output_file,
         )
 
+    # Let a scenario continue the same stateless conversation with different declarations.
+    return manual_history if manual_item_replay else None
+
 
 # ── main ──────────────────────────────────────────────────────────────────────
 
@@ -1937,7 +1948,7 @@ def run_responses(
 )
 @click.option(
     "--items-scenario",
-    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "store-false", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items"]),
+    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "store-false", "multi-agent-store-false", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items"]),
     default="continuation",
     help="Fixed Conversation Items or Responses API scenario (for --mode items).",
 )
@@ -2172,15 +2183,15 @@ def main(
     """Interactive multi-turn cassette recorder (proxy embedded)."""
     global HTTP_READ_TIMEOUT
     if auto_tool_continuations and (
-        mode != "responses" or no_store or not tool_outputs_file
+        mode != "responses" or (no_store and not manual_item_replay) or not tool_outputs_file
         or branch_from or branch_turn_number or tool_choice_sequence_file or request_overrides_raw
     ):
         raise click.UsageError(
-            "--auto-tool-continuations requires stored Responses with --tool-outputs, "
+            "--auto-tool-continuations requires Responses with --tool-outputs and either storage or --manual-item-replay, "
             "without branches, tool-choice sequences, or request overrides."
         )
-    if http_read_timeout != TIMEOUT and mode != "responses":
-        raise click.UsageError("--http-read-timeout requires --mode responses.")
+    if http_read_timeout != TIMEOUT and mode not in {"responses", "items"}:
+        raise click.UsageError("--http-read-timeout requires --mode responses or items.")
     HTTP_READ_TIMEOUT = http_read_timeout
     if (multi_agent_raw is not None or openai_beta) and mode != "responses":
         raise click.UsageError("--multi-agent and --openai-beta require --mode responses.")
@@ -2205,7 +2216,8 @@ def main(
         raise click.UsageError("--max-tool-calls requires linear --mode responses without branches.")
 
     if mode == "items":
-        expected_turns = (11 if items_scenario == "store-false" else
+        expected_turns = (1 if items_scenario == "multi-agent-store-false" else
+                          11 if items_scenario == "store-false" else
                           19 if items_scenario == "response-lifecycle" else
                           16 if items_scenario == "response-pagination" else
                           23 if items_scenario == "response-edge-cases" else
@@ -2452,7 +2464,8 @@ def main(
         try:
             with httpx.Client(headers=headers) as client:
                 if mode == "items":
-                    run_items(client, proxy_url, model, items_scenario, stream)
+                    run_items(client, proxy_url, model, items_scenario, stream,
+                              max_output_tokens=response_max_output_tokens)
                 elif mode == "conv":
                     run_conv(client, turns, model, stream, store, branches, proxy_url)
                 elif mode == "isolation":

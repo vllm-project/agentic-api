@@ -8,6 +8,7 @@ mod tool_search;
 mod validation;
 mod window;
 
+pub(crate) use conversions::internal_mcp_tool_name;
 pub use file_text::InputFileError;
 pub(crate) use history_naming::HistoryNaming;
 pub(crate) use search_history::{
@@ -358,6 +359,16 @@ impl Default for ResponsesInput {
 }
 
 impl ResponsesInput {
+    pub(crate) fn has_multi_agent_history(&self) -> bool {
+        self.input_items().any(|item| {
+            item.agent().is_some()
+                || matches!(
+                    item.as_ref(),
+                    InputItem::MultiAgentCall(_) | InputItem::MultiAgentCallOutput(_) | InputItem::AgentMessage(_)
+                )
+        })
+    }
+
     /// Borrow input records and project outputs through the continuation conversion.
     pub(crate) fn input_items(&self) -> impl Iterator<Item = Cow<'_, InputItem>> {
         match self {

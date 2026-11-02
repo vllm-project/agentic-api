@@ -9,6 +9,7 @@ pub mod messages_context;
 pub mod messages_loop;
 mod messages_request;
 mod messages_round;
+mod messages_server_tools;
 pub mod messages_stream;
 mod messages_tools;
 mod messages_usage;
@@ -40,6 +41,9 @@ pub use messages_loop::{MessagesResponse, MessagesUpstream, run_messages_loop};
 pub use messages_request::{
     declares_native_web_fetch, normalize_native_server_tools_for_upstream, normalize_native_web_search_for_upstream,
 };
+pub use messages_server_tools::may_carry_gateway_server_tool_blocks;
+pub use messages_server_tools::replay::replay_server_tool_blocks;
+pub use messages_server_tools::sealing::{MESSAGES_RESULT_KEY_ENV, MessagesResultKey, MessagesResultKeyError};
 pub use messages_stream::run_messages_stream;
 pub use modes::{ConversationHandler, ResponseHandler};
 pub use persist::{commit, persist_response, persist_turn};

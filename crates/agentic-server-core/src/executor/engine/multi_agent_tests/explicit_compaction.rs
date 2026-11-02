@@ -1,7 +1,8 @@
-//! Explicit compaction preserves the durable tree and outstanding client calls.
+//! Automatic and explicit compaction preserve agent state and client-call ownership.
 use super::*;
 use crate::executor::{pending_calls::resolved_prefix_len, rehydrate::rehydrate_conversation};
 use crate::types::agent_tree::StoredTreeSnapshot;
+use crate::utils::common::deserialize_from_value;
 
 fn trigger(previous: Option<&str>, stream: bool) -> RequestPayload {
     RequestPayload {
@@ -98,5 +99,44 @@ async fn explicit_compaction_rejects_empty_root_context() {
         ExecuteRequest::new(request, exec).run().await,
         Err(ExecutorError::InvalidRequest(_))
     ));
+    server.abort();
+}
+
+#[tokio::test]
+async fn automatic_compaction_is_attributed_and_usage_is_counted_once() {
+    let (exec, server) = setup().await;
+    for (store, stream) in [(true, false), (true, true), (false, false), (false, true)] {
+        let request = RequestPayload {
+            model: "test".into(),
+            store,
+            stream,
+            input: ResponsesInput::Text("simple compaction test".into()),
+            multi_agent: Some(MultiAgentConfig {
+                enabled: true,
+                max_concurrent_subagents: Some(3),
+            }),
+            context_management: Some(vec![ContextManagement {
+                type_: "compaction".into(),
+                compact_threshold: Some(1),
+            }]),
+            ..Default::default()
+        };
+        let result = tokio::time::timeout(Duration::from_secs(10), response(request.clone(), exec.clone())).await;
+        let result = result.unwrap();
+        assert_eq!(result.usage.unwrap().total_tokens, 6);
+        assert!(matches!(result.output.first(), Some(OutputItem::Compaction(item))
+        if item.agent.as_ref().is_some_and(|agent| agent.agent_name == "/root")));
+        assert_eq!(result.output.len(), 2);
+        if !store {
+            let mut history = request.input.clone().into_canonical_items();
+            history.extend(result.output.into_iter().map(Into::into));
+            let mut continuation = request;
+            continuation.input = deserialize_from_value(serde_json::to_value(history).unwrap()).unwrap();
+            let ctx = rehydrate_conversation(continuation, &exec).await.unwrap();
+            assert!(ctx.multi_agent_tree.is_none());
+            assert!(ctx.enriched_request.input.contains_compaction());
+            assert!(exec.resp_handler.retrieve(&result.id).await.is_err());
+        }
+    }
     server.abort();
 }

@@ -56,6 +56,12 @@ def get_timezone(city: str) -> str:
     return _paris_result("get_timezone", city)
 
 
+def get_coordinates(city: str) -> str:
+    """Return the fixed Paris coordinates fixture for optional hosted catalog loads."""
+    return _paris_result("get_coordinates", city)
+
+
+agentic_ns__travel__get_coordinates = get_coordinates
 agentic_ns__travel__get_timezone = get_timezone
 
 

@@ -7,6 +7,7 @@
 //! the handler, the loop, and the tool seam.
 
 pub mod request;
+pub mod server_tools;
 pub(crate) mod tool_call;
 pub mod tool_choice;
 pub mod tool_seam;
@@ -15,6 +16,11 @@ pub mod tools;
 pub use request::{
     ContentBlock, GatewayToolResult, MessageContent, MessageParam, MessagesRequest, OutputConfig, ReasoningEffort,
     ReasoningEffortLevel, SystemBlock, SystemPrompt, ToolParam, ToolResultBlock, ToolResultContent,
+};
+pub use server_tools::{
+    PlainTextSource, ServerToolResultBlock, ServerToolUseBlock, WebFetchDocument, WebFetchErrorCode, WebFetchResult,
+    WebFetchToolResultContent, WebSearchErrorCode, WebSearchResultBlock, WebSearchToolResultContent,
+    WebSearchToolResultError,
 };
 pub use tool_choice::{MessagesToolChoice, MessagesToolChoiceOptions};
 pub use tool_seam::{

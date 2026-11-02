@@ -8,12 +8,14 @@
 
 pub(crate) mod args;
 pub(crate) mod brave;
-mod provider;
+pub(crate) mod output;
+pub(crate) mod provider;
 pub(crate) mod searxng;
 pub(crate) mod serply;
 pub(crate) mod tavily;
 pub(crate) mod you;
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::future::Future;
 use std::io::{self, Write};
@@ -22,12 +24,12 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use futures::{StreamExt, TryStreamExt};
-use serde::Serialize;
 use serde_json::Value;
 use tokio::sync::Semaphore;
 
 use self::args::{MAX_WEB_SEARCH_QUERIES, WebSearchArguments};
 use self::brave::BraveSearchProvider;
+use self::output::{WebSearchResultSections, WebSearchToolOutput};
 use self::provider::{
     ApiKey, WebSearchProvider, WebSearchProviderMetadata, WebSearchProviderResponse, WebSearchResult, clean_base_url,
     null_as_default, read_response_limited,
@@ -354,10 +356,10 @@ impl WebSearchHandler {
             metadata.push(response.metadata);
         }
         let output = serde_json::to_string(&WebSearchToolOutput {
-            query: &queries[0],
-            queries,
+            query: Cow::Borrowed(&queries[0]),
+            queries: Cow::Borrowed(queries),
             results,
-            metadata,
+            metadata: Some(metadata),
         })
         .map_err(|e| ToolError::Execution(format!("failed to serialize web_search output: {e}")))?;
         if output.len() > MAX_GATEWAY_TOOL_OUTPUT_BYTES {
@@ -375,21 +377,6 @@ fn effective_query_concurrency(provider: &dyn WebSearchProvider, requested: NonZ
     provider
         .max_concurrent_requests()
         .map_or(requested, |ceiling| requested.min(ceiling))
-}
-
-#[derive(Debug, Default, Serialize)]
-struct WebSearchResultSections {
-    web: Vec<WebSearchResult>,
-    news: Vec<WebSearchResult>,
-}
-
-/// Model-facing `web_search` tool output; field order is the wire contract.
-#[derive(Debug, Serialize)]
-struct WebSearchToolOutput<'a> {
-    query: &'a str,
-    queries: &'a [String],
-    results: WebSearchResultSections,
-    metadata: Vec<WebSearchProviderMetadata>,
 }
 
 impl ToolHandler for WebSearchHandler {
@@ -728,40 +715,6 @@ mod tests {
         first.expect("first batched call");
         second.expect("second batched call");
         assert_eq!(provider.max_active.load(Ordering::SeqCst), 2);
-    }
-
-    #[test]
-    fn web_search_output_serializes_in_wire_order() {
-        let output = WebSearchToolOutput {
-            query: "potato",
-            queries: &["potato".to_owned()],
-            results: WebSearchResultSections {
-                web: vec![WebSearchResult {
-                    url: "https://example.com/potato".to_owned(),
-                    title: Some("Potato".to_owned()),
-                    description: Some("A tuber".to_owned()),
-                    snippets: vec!["Starchy.".to_owned()],
-                    page_age: None,
-                    contents: None,
-                }],
-                news: vec![WebSearchResult::default()],
-            },
-            metadata: vec![WebSearchProviderMetadata {
-                provider: WebSearchProviderKind::You,
-                query: "potato".to_owned(),
-                search_uuid: Some("s1".to_owned()),
-                latency: Some(0.12),
-            }],
-        };
-        assert_eq!(
-            serde_json::to_string(&output).unwrap(),
-            concat!(
-                r#"{"query":"potato","queries":["potato"],"#,
-                r#""results":{"web":[{"url":"https://example.com/potato","title":"Potato","#,
-                r#""description":"A tuber","snippets":["Starchy."]}],"news":[{}]},"#,
-                r#""metadata":[{"query":"potato","search_uuid":"s1","latency":0.12}]}"#
-            )
-        );
     }
 
     #[test]

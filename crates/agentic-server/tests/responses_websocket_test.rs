@@ -6312,7 +6312,16 @@ mod duplex_replay {
                 assert_eq!(actual["item"]["type"], expected["item"]["type"]);
                 assert_eq!(actual["item"]["call_id"], expected["item"]["call_id"]);
                 assert_eq!(actual["item"]["arguments"], expected["item"]["arguments"]);
-                assert_eq!(actual["item"]["content"], expected["item"]["content"]);
+                if expected["item"]["type"] == "message" {
+                    // Typed parts apply the same defaults to older recorded messages.
+                    let expected: Vec<OutputMessageContent> =
+                        deserialize_from_value(expected["item"]["content"].clone()).unwrap();
+                    let actual: Vec<OutputMessageContent> =
+                        deserialize_from_value(actual["item"]["content"].clone()).unwrap();
+                    assert_eq!(actual, expected);
+                } else {
+                    assert_eq!(actual["item"]["content"], expected["item"]["content"]);
+                }
             }
             "response.completed" => {
                 assert_eq!(actual["response"]["status"], "completed");
@@ -7452,7 +7461,6 @@ mod duplex_replay {
                     for content in &mut message.content {
                         if let OutputMessageContent::OutputText(part) = content {
                             part.annotations.get_or_insert_default();
-                            part.logprobs.get_or_insert_default();
                         }
                     }
                 }

@@ -1,8 +1,16 @@
 use super::*;
 use crate::events::{EventPayload, SSEEventType, SseLine};
-use crate::executor::accumulator::ResponseAccumulator;
+use crate::executor::accumulator::{ResponseAccumulator, Validation};
+use crate::executor::engine::upstream_events;
+use crate::executor::modes::ResponseHandler;
 use crate::executor::pipeline::RoundIngestion;
-use crate::tool::ToolType;
+use crate::storage::ResponseStore;
+use crate::tool::{
+    ToolType, custom::public_item_id as custom_item_id, shell::public_item_id as shell_item_id,
+    tool_search::public_item_id as search_item_id,
+};
+use crate::types::io::InOutItem;
+use crate::types::request_response::RequestPayload;
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -23,6 +31,235 @@ fn translate(
     RoundIngestion::translate_line(accumulator, SseLine::parse(&sse(value)), translator)
         .expect("translation succeeds")
         .expect("SSE event")
+}
+
+#[tokio::test]
+async fn bare_provider_message_ids_remain_replayable_across_json_and_sse() {
+    for raw in ["aa50fd35914b7610", "msg-123", "msg123"] {
+        let public = format!("msg_{raw}");
+        let payload = serde_json::json!({
+            "id":"upstream", "object":"response", "model":"test", "status":"completed", "created_at":0,
+            "output":[
+                {"id":raw,"type":"message","role":"assistant","status":"completed",
+                    "content":[{"type":"output_text","text":"finished","annotations":[],"logprobs":[]}]},
+                {"id":"msg_existing","type":"message","role":"assistant","status":"completed",
+                    "content":[{"type":"output_text","text":"existing","annotations":[],"logprobs":[]}]},
+                {"id":"fc_existing","type":"function_call","call_id":raw,"name":"client_tool",
+                    "arguments":"{}","status":"completed"}
+            ]
+        });
+        let handler = ResponseHandler::new(ResponseStore::disabled());
+        let mut invalid: Vec<InOutItem> = serde_json::from_value(payload["output"].clone()).unwrap();
+        assert!(
+            handler.resolve_input_items(&mut invalid).await.is_err(),
+            "client validation stays strict"
+        );
+        for stream in [false, true] {
+            let context = TranslationContext::default().with_request_fields(&RequestPayload {
+                store: false,
+                ..RequestPayload::default()
+            });
+            let mut round = RoundIngestion::new("resp_test".into(), None, Validation::Strict, context, None);
+            let mut frames = Vec::new();
+            if stream {
+                let mut events = Vec::<Value>::new();
+                for line in upstream_events(&payload).lines() {
+                    if let Some(data) = line.strip_prefix("data: ") {
+                        events.push(serde_json::from_str(data).unwrap());
+                    }
+                }
+                events.insert(
+                    1,
+                    serde_json::json!({"type":"response.in_progress",
+                "response":{"id":"upstream","status":"in_progress","output":[]}}),
+                );
+                for (sequence, mut event) in events.into_iter().enumerate() {
+                    event["sequence_number"] = serde_json::json!(sequence);
+                    frames.extend(round.push(SseLine::parse(&sse(&event))).unwrap().frames);
+                }
+                for frame in frames {
+                    let wire = serde_json::to_value(frame.wire).unwrap();
+                    let index = wire["output_index"].as_u64();
+                    if index == Some(0) {
+                        if let Some(id) = wire.get("item_id") {
+                            assert_eq!(id, &public);
+                        }
+                        if let Some(item) = wire.get("item") {
+                            assert_eq!(item["id"], public);
+                        }
+                    }
+                    if wire["type"] == "response.completed" {
+                        assert_eq!(wire["response"]["output"][0]["id"], public);
+                    }
+                }
+            } else {
+                round.load_json_body(&payload.to_string()).unwrap();
+            }
+            let response = round.finish("test", None, None).unwrap();
+            assert_eq!(response.output[0].id(), Some(public.as_str()));
+            assert_eq!(response.output[1].id(), Some("msg_existing"));
+            assert_eq!(response.output[2].id(), Some("fc_existing"));
+            let OutputItem::FunctionCall(call) = &response.output[2] else {
+                panic!("function call")
+            };
+            assert_eq!(call.call_id, raw);
+            let mut history: Vec<InOutItem> =
+                serde_json::from_value(serde_json::to_value(response.output).unwrap()).unwrap();
+            handler
+                .resolve_input_items(&mut history)
+                .await
+                .expect("returned history is accepted unchanged");
+        }
+    }
+}
+
+#[tokio::test]
+async fn bare_provider_function_ids_are_public_without_changing_call_identity() {
+    for (raw, kind, asynchronous, unnamed) in [
+        ("843504fdc3165785", ToolType::Function, false, false),
+        ("8d00640e121d1da0", ToolType::Function, true, false),
+        ("9b19cfe961b24eba", ToolType::CodexNamespace, false, false),
+        ("843504fdc3165785", ToolType::Function, false, true),
+    ] {
+        let public = format!("fc_{raw}");
+        let call_id = format!("call_{raw}");
+        let payload = serde_json::json!({
+            "id":"upstream", "object":"response", "model":"test", "status":"completed", "created_at":0,
+            "output":[
+                {"id":raw,"type":"function_call","call_id":call_id,"name":"lookup",
+                    "arguments":"{\"city\":\"Paris\"}","status":"completed"},
+                {"id":"fc_existing","type":"function_call","call_id":"call_existing","name":"lookup",
+                    "arguments":"{}","status":"completed"}
+            ]
+        });
+        for stream in [false, true] {
+            let context =
+                test_context(HashMap::from([("lookup".into(), kind)])).with_async_tool_names(if asynchronous {
+                    HashSet::from(["lookup".into()])
+                } else {
+                    HashSet::new()
+                });
+            let mut round = RoundIngestion::new("resp_test".into(), None, Validation::Strict, context, None);
+            let mut deltas = 0;
+            if stream {
+                let mut events: Vec<Value> = upstream_events(&payload)
+                    .lines()
+                    .filter_map(|line| line.strip_prefix("data: "))
+                    .map(|data| serde_json::from_str(data).unwrap())
+                    .collect();
+                events.insert(
+                    1,
+                    serde_json::json!({"type":"response.in_progress",
+                    "response":{"id":"upstream","status":"in_progress","output":[]}}),
+                );
+                for (sequence, mut event) in events.into_iter().enumerate() {
+                    event["sequence_number"] = serde_json::json!(sequence);
+                    if unnamed && event["type"] == "response.output_item.added" && event["output_index"] == 0 {
+                        event["item"].as_object_mut().unwrap().remove("name");
+                    }
+                    for frame in round.push(SseLine::parse(&sse(&event))).unwrap().frames {
+                        let wire = serde_json::to_value(frame.wire).unwrap();
+                        if wire["output_index"] == 0 {
+                            if let Some(id) = wire.get("item_id") {
+                                assert_eq!(id, &public);
+                            }
+                            if let Some(item) = wire.get("item") {
+                                assert_eq!(item["id"], public);
+                                assert_eq!(item["call_id"], call_id);
+                            }
+                            if wire["type"] == "response.function_call_arguments.delta" {
+                                deltas += 1;
+                            }
+                        }
+                        if wire["type"] == "response.completed" {
+                            assert_eq!(wire["response"]["output"][0]["id"], public);
+                            assert_eq!(wire["response"]["output"][1]["id"], "fc_existing");
+                        }
+                    }
+                }
+                assert_eq!(deltas, 1);
+            } else {
+                round.load_json_body(&payload.to_string()).unwrap();
+            }
+            let response = round.finish("test", None, None).unwrap();
+            assert_eq!(response.output[0].id(), Some(public.as_str()));
+            assert_eq!(response.output[1].id(), Some("fc_existing"));
+            let OutputItem::FunctionCall(call) = &response.output[0] else {
+                panic!("function call")
+            };
+            assert_eq!(call.call_id, call_id);
+            assert_eq!(call.arguments, "{\"city\":\"Paris\"}");
+            assert_eq!(call.async_execution, asynchronous);
+            let mut history: Vec<InOutItem> =
+                serde_json::from_value(serde_json::to_value(response.output).unwrap()).unwrap();
+            for (index, item) in history.iter().enumerate() {
+                item.validate_client_id(format!("input[{index}].id")).unwrap();
+            }
+            ResponseHandler::new(ResponseStore::disabled())
+                .resolve_input_items(&mut history)
+                .await
+                .unwrap();
+        }
+    }
+}
+
+#[test]
+fn public_function_id_normalization_keeps_other_tool_projection_ids() {
+    let raw = "843504fdc3165785";
+    for (name, kind, arguments, expected) in [
+        (
+            "raw_echo",
+            ToolType::Custom,
+            r#"{"input":"hello"}"#,
+            custom_item_id(raw),
+        ),
+        ("shell", ToolType::Shell, r#"{"commands":["pwd"]}"#, shell_item_id(raw)),
+        (
+            "tool_search",
+            ToolType::ToolSearch,
+            r#"{"query":"weather"}"#,
+            search_item_id(raw),
+        ),
+    ] {
+        let mut accumulator = ResponseAccumulator::new("resp_1".into(), None);
+        let context = test_context(HashMap::from([(name.into(), kind)]));
+        let mut translator = TranslationDispatcher::new(context);
+        for mut event in function_call_events(0, name, arguments) {
+            if let Some(item) = event.get_mut("item") {
+                item["id"] = serde_json::json!(raw);
+            }
+            if let Some(id) = event.get_mut("item_id") {
+                *id = serde_json::json!(raw);
+            }
+            for frame in translate(&mut accumulator, &mut translator, &event).frames {
+                if let Some(id) = frame.wire.rest.get("item_id") {
+                    assert_eq!(id, &expected);
+                }
+                if let Some(item) = frame.wire.rest.get("item") {
+                    assert_eq!(item["id"], expected);
+                }
+            }
+        }
+        translator.finish().unwrap();
+    }
+    for kind in [
+        ToolType::Mcp,
+        ToolType::WebSearch,
+        ToolType::CodeInterpreter,
+        ToolType::Custom,
+        ToolType::Shell,
+    ] {
+        let context = test_context(HashMap::from([("private_tool".into(), kind)]));
+        let mut output = vec![
+            serde_json::from_value(serde_json::json!({"type":"function_call", "id":raw,
+            "call_id":"call_original", "name":"private_tool", "arguments":"{}", "status":"completed"}))
+            .unwrap(),
+        ];
+        context
+            .normalize_response_output(&mut output, ResponseStatus::Completed, &HashSet::new())
+            .unwrap();
+        assert_eq!(output[0].id(), Some(raw), "private identity for {kind:?}");
+    }
 }
 
 #[test]
@@ -1536,7 +1773,7 @@ fn withheld_names_are_rejected_at_every_translation_entry_and_final_projection()
         let mut dispatcher = TranslationDispatcher::new(context);
         let frame = crate::events::normalize_sse_line(&sse(&event)).expect("normalized event");
         let error = dispatcher
-            .translate(frame, None)
+            .translate(frame, None, None)
             .expect_err("withheld name must be rejected before dispatch");
         assert!(matches!(error, ExecutorError::Tool(_)));
     }

@@ -87,7 +87,12 @@ impl RoundIngestion {
             return Ok(None);
         };
         let call = function_event_index(&frame.payload).and_then(|index| accumulator.accumulated_function_call(index));
-        translator.translate(frame, call).map(Some)
+        let item_type = frame
+            .wire
+            .output_index
+            .and_then(|index| u32::try_from(index).ok())
+            .and_then(|index| accumulator.accumulated_item_type(index));
+        translator.translate(frame, call, item_type).map(Some)
     }
 
     /// Consumes the round, applying terminal policy and public tool-search projection once.

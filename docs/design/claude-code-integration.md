@@ -188,6 +188,7 @@ Recommendation: ship A.
 | `tools: [{name, description, input_schema}]` | normalized to registry tool entries (as Responses `function` tools) |
 | `tool_use` content block | a tool call the loop classifies gateway-owned vs. client-owned |
 | gateway-owned `tool_use` (web_search, MCP) | gateway executes, appends a `tool_result`, loops |
+| executed call to a native `web_search` / `web_fetch` declaration | also shown to the client as `server_tool_use` (`srvtoolu_gw_<upstream id>`) and `web_search_tool_result` / `web_fetch_tool_result`, turned back into the round when a later turn sends them |
 | client-owned `tool_use` | returned to the client, which executes and resends `tool_result` |
 | `tool_result` content block (may carry `is_error: true`) | fed into the next upstream turn |
 | `tool_choice` (`auto`/`any`/`tool`/`none`, `disable_parallel_tool_use`) | forwarded on the first round; a fulfilled forced choice becomes `auto` after gateway tool results are appended; parallel-use settings remain unchanged |

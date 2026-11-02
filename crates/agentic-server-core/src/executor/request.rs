@@ -4,7 +4,9 @@ use std::time::Duration;
 
 use crate::config::{Config, ResponsesConfig, default_database_url};
 use crate::error::Error;
+use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway::GatewaySchedulerPolicy;
+use crate::executor::messages_server_tools::sealing::{MessagesResultKey, process_result_key};
 use crate::executor::modes::{ConversationHandler, ResponseHandler};
 use crate::executor::multi_agent::ValidatedTreeCheckpoint;
 use crate::executor::telemetry::ExecutorMetrics;
@@ -25,7 +27,7 @@ const GATEWAY_TOOL_ALIASES_ENV: &str = "MESSAGES_GATEWAY_TOOL_ALIASES";
 /// Context built by `rehydrate_conversation`, threaded through the execute pipeline.
 #[derive(Debug)]
 pub struct RequestContext {
-    /// Private canonical tree; committed atomically with response metadata.
+    /// Private canonical tree for stored or connection-local continuation.
     pub multi_agent_tree: Option<ValidatedTreeCheckpoint>,
     /// Client request. Before relaxing the inference selector, an omitted `tool_choice`
     /// is filled with its resolved value so public response metadata stays consistent.
@@ -102,6 +104,9 @@ pub struct ExecutionContext {
     /// Client-tool → gateway-executor aliases for the `/v1/messages` loop
     /// (e.g. Claude Code's `WebSearch` → `web_search`). Empty unless configured.
     pub messages_gateway_tools: GatewayToolMap,
+    /// The operator's key for search results returned to Messages clients;
+    /// without one, a key generated once per process is used.
+    messages_result_key: Option<Arc<MessagesResultKey>>,
     /// Base URL for the LLM backend, e.g. `"http://localhost:8000"`.
     pub llm_base_url: String,
     /// Maximum wait for the next body chunk in a streaming request, including HTTP error bodies.
@@ -145,6 +150,7 @@ impl ExecutionContext {
             client,
             gateway_executors,
             messages_gateway_tools: messages_gateway_tools_from_env(),
+            messages_result_key: None,
             llm_base_url,
             streaming_timeout: streaming_timeout_from_env(),
             gateway_scheduler_policy: GatewaySchedulerPolicy::default(),
@@ -172,6 +178,26 @@ impl ExecutionContext {
     pub fn with_gateway_executor(mut self, executor: impl Into<GatewayExecutorRegistration>) -> Self {
         self.gateway_executors.insert(executor);
         self
+    }
+
+    /// Seal the search results returned to Messages clients with `key`, so they
+    /// stay readable across restarts and by every replica holding the same key.
+    #[must_use]
+    pub fn with_messages_result_key(mut self, key: MessagesResultKey) -> Self {
+        self.messages_result_key = Some(Arc::new(key));
+        self
+    }
+
+    /// The key that seals and opens search results returned to Messages clients.
+    ///
+    /// # Errors
+    /// Returns an error when no key is configured and the system random number
+    /// generator cannot provide one.
+    pub fn messages_result_key(&self) -> ExecutorResult<&MessagesResultKey> {
+        match &self.messages_result_key {
+            Some(key) => Ok(key),
+            None => process_result_key().map_err(|error| ExecutorError::StreamError(error.to_string())),
+        }
     }
 
     /// Checks whether configured persistence can execute a bounded query.
@@ -232,6 +258,9 @@ impl ExecutionContext {
                 .or(cfg.tools.messages_gateway_tool_aliases.as_deref())
                 .map(GatewayToolMap::from_env_str)
                 .unwrap_or_default(),
+            messages_result_key: MessagesResultKey::from_env()
+                .map_err(|error| Error::Config(error.to_string()))?
+                .map(Arc::new),
             llm_base_url: cfg.llm_api_base.clone(),
             streaming_timeout: streaming_timeout_from_env(),
             gateway_scheduler_policy: GatewaySchedulerPolicy::new(cfg.tools.max_concurrent_gateway_calls),

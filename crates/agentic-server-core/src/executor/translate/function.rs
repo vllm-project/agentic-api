@@ -5,10 +5,12 @@ use crate::events::{EventFrame, SSEEventType};
 use crate::executor::accumulator::AccumulatedFunctionCall;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::types::event::MessageStatus;
-use crate::types::io::OutputItem;
+use crate::types::io::{FunctionToolCall, OutputItem};
+use serde_json::Value;
 
-/// Function calls keep their upstream events. An async call's item events are built from the
-/// typed accumulated call with the shared async marker instead, so the streamed item carries
+/// Function calls keep their upstream events with public item identities.
+/// An async call's item events are built from the typed accumulated call with the shared async marker,
+/// so the streamed item carries
 /// `async: true` in the same form as the final output.
 #[derive(Debug)]
 pub(super) struct FunctionTranslator {
@@ -28,12 +30,23 @@ impl ToolTranslator for FunctionTranslator {
         call: Option<AccumulatedFunctionCall<'_>>,
     ) -> ExecutorResult<Vec<EventFrame>> {
         let is_async = self.execution == CallExecution::Async;
-        Ok(match event {
+        let mut frames = match event {
             ToolEvent::Added { .. } if is_async => vec![async_item_frame(SSEEventType::OutputItemAdded, call)?],
             ToolEvent::Done(_) if is_async => vec![async_item_frame(SSEEventType::OutputItemDone, call)?],
             ToolEvent::Added { original, .. } => original.into_iter().collect(),
             ToolEvent::Delta(frame) | ToolEvent::ArgumentsDone(frame) | ToolEvent::Done(frame) => vec![frame],
-        })
+        };
+        // This translator emits only public function calls (including namespace
+        // members). Other tool translators own their projected item identities.
+        for frame in &mut frames {
+            if let Some(Value::String(id)) = frame.wire.rest.get_mut("item_id") {
+                FunctionToolCall::normalize_public_id(id);
+            }
+            if let Some(Value::String(id)) = frame.wire.rest.get_mut("item").and_then(|item| item.get_mut("id")) {
+                FunctionToolCall::normalize_public_id(id);
+            }
+        }
+        Ok(frames)
     }
 }
 

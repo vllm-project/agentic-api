@@ -345,7 +345,7 @@ including after terminal delivery. Routes with accepted input remain retained;
 unapplied input is disposed with the connection. Other lanes cannot consume it.
 Superseded targets reject further steering rather than redirecting input.
 
-WebSocket session admission allows multi-agent configuration with `store: true`,
+WebSocket session admission allows multi-agent configuration with either `store` value,
 including configuration inherited from a stored agent tree. The common multi-agent
 validation still runs before and after restoring effective settings. Generating responses
 register connection-local routes before their first event is relayed. Injection bypasses
@@ -704,7 +704,7 @@ goes through it, so it lowers the public records the model never read (search it
   content. Its `input` module defines replay forms with optional IDs; output IDs remain
   required. Agent-message content includes text, images, files, refusals and encrypted
   parts, preserving response content during replay. These wire types do not impose a
-  storage policy; stored-only execution is a gateway admission constraint.
+  storage policy; stored IDs restore metadata, while stateless requests supply the complete history.
 - **`types/tools/params.rs`** — the tool **declaration** shapes a client sends:
   `ResponsesTool` (tagged enum: `Function`, `ToolSearch`, `Mcp`, `WebSearch`, `FileSearch`,
   `CodeInterpreter`, `Namespace`, `Custom`, `Unknown`) and each variant's param struct.
@@ -904,7 +904,7 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   single-history rehydration validator; neither public error mapping nor
   transport-specific batch policy is defined by it.
   `multi_agent/control.rs` provides opt-in live input through `RunControl::channel`
-  and `ExecuteRequest::with_run_control`. It requires a stored, streaming multi-agent
+  and `ExecuteRequest::with_run_control`. It requires a streaming multi-agent
   inference request. Nonblocking admission bounds each batch's logical retained bytes
   and at most 32 outstanding commands, including unread decisions. Adapters must keep
   draining response events while awaiting decisions. The coordinator validates the
@@ -926,7 +926,7 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   unknown acceptance, never permission to retry silently. This core seam does not yet
   own WebSocket routing, wire acknowledgements, or completed-response retention;
   those belong to the connection adapter and retained event sink described above.
-  `engine/multi_agent.rs` coordinates these components for stored HTTP responses.
+  `engine/multi_agent.rs` coordinates these components for HTTP responses with either `store` value.
   Canonical histories and pending calls remain owned by the coordinator; the pipeline never
   spawns subagents. Its `context`, `actions`, `rounds`, `delivery`, and `compaction`
   modules separate restoration, collaboration commands, scheduling, public output and
@@ -1053,7 +1053,7 @@ exposing those declarations.
 #### HTTP multi-agent execution
 
 `multi_agent.enabled` selects gateway orchestration; it is not forwarded to the
-upstream model. Enabled requests require `store: true`; the current validator also
+upstream model. Enabled requests accept either `store` value; the current validator
 rejects `max_tool_calls`, `reasoning.summary`, and `reasoning.generate_summary`. These are gateway
 validation rules, not a claim that every upstream provider has the same restrictions.
 New requests without multi-agent configuration use single-agent execution;
@@ -1130,6 +1130,15 @@ listing MCP servers again; `ToolSearchState` keeps only the public snapshot pers
 needs. A deferred MCP server stays declared with `loaded_tool_names`, which limits the
 tools normalization sends upstream.
 
+Stateless continuations rebuild each agent's catalog from the complete client-returned public history. Hosted
+search outputs retain their `agent` attribution, so a child's call and output load tools only for that child;
+only client-executed searches enter the pending-client-call ledger. MCP discovery records remain response-scoped,
+including for children created with `fork_turns: "none"`, and are reused independently of a child's loaded subset.
+`RequestPayload::to_upstream_request` builds its naming context directly from the request. Compaction uses that
+existing namespace resolver with the source's known top-level functions before summarization. The summary offers
+no tools and retains actual namespace members. Repeated compaction therefore preserves names without a separate
+pipeline naming context or conversion API.
+
 Code interpreter uses the same canonical function/tool loop in every agent. Agents
 share the ready executor and its process-wide guest permits through `ExecutionContext`;
 `max_concurrent_subagents` does not increase interpreter capacity. Its public
@@ -1163,6 +1172,29 @@ uses the existing response/conversation stores.
 `ResponseMetadata.multi_agent_tree` restores execution state, while
 `response_snapshot` retains the exact terminal public response for GET retrieval.
 Continuation restoration discards the latter duplicate but retains the tree.
+
+With `store:false`, HTTP execution writes no response, item, conversation, or tree rows.
+Without stored IDs, `rehydrate::from_responses` normalizes the complete client-supplied
+input without loading stored state or decoding a tree snapshot. The coordinator's
+`history.rs` processes standard collaboration items, agent attribution and client tool
+outputs using the existing registry, mailbox and pending-call types. It constructs
+request-local agent contexts and resolves each client output by call ID and kind.
+Historical interruptions settle after the interrupted round's public output has
+been retained, before applying the next client input. That output remains in the
+agent's history without restarting the interrupted turn; an explicit follow-up
+can start a new turn.
+When enabling multi-agent on a stored single-agent response or conversation,
+attributed input is processed together with the complete resolved history, so
+earlier user and assistant items remain available.
+There is no private replay envelope or mandatory compaction at the response boundary.
+Actual automatic per-agent compaction remains separate. Explicit stored parent IDs and
+conversations can still restore an internal tree; `store:false` leaves the new turn unstored.
+
+`collaboration::TranscriptSealer` protects inter-agent message text, using the same key
+across requests so clients can return the gateway's encrypted messages in their input.
+`AGENTIC_MULTI_AGENT_TRANSCRIPT_KEY` accepts a base64-encoded 32-byte deployment secret;
+use the same key across replicas and restarts. The default key lasts for the current process.
+Only the key survives stateless requests, not their histories, trees or pending calls.
 
 The public transcript contains attributed `multi_agent_call` (`mac_`),
 `multi_agent_call_output` (`maco_`) and `agent_message` (`amsg_`) items alongside each
@@ -1264,8 +1296,8 @@ The boundary contract is one owner and one path per concern:
 - Output-item lifecycle state is scoped to one inference round and keyed by validated
   `output_index`. Item ID and kind must match on later events; active and completed
   slots remain distinct so index reuse and duplicate completion are rejected.
-- Translation consumes validated `EventFrame`s plus the accumulator's typed function
-  call view and produces the public wire lifecycle for client-owned tools.
+- Translation consumes validated `EventFrame`s, the accumulator's resolved item kind,
+  and its typed function call view, and produces the public wire lifecycle for client-owned tools.
 - Delivery consumes translated frames and provides ordered, awaited client emission
   across inference rounds.
 
@@ -1376,6 +1408,14 @@ depend on SSE or executor types. `TranslationContext` is an owned snapshot of th
 registry facts and request metadata needed for classification and restoration. It
 provides each round's tool classification and owns final restoration of public tool
 declarations, custom/namespace shapes, tool choice, and tool-search metadata.
+Nonempty provider message IDs without the public `msg` prefix receive `msg_` during
+translation. Message events and final JSON/SSE snapshots use the same public ID;
+ingestion retains the provider's original identity for lifecycle validation. Client
+message-ID validation remains strict, so returned history can be submitted unchanged.
+Output-text `logprobs` use the existing nullable-vector deserializer: missing and
+null values become an empty vector and serialize as `[]`. Wire normalization uses
+the same default so content parts agree with item and terminal snapshots;
+populated log probabilities are preserved through continuation and storage.
 
 Async client tools are marked from the same snapshot: the registry's async tool names
 (`ToolRegistry::async_tool_names`) are copied into the context. The dispatcher creates each
@@ -1650,8 +1690,8 @@ which only a native declaration does, so a client function that happens to be na
 counted in fetches; every admitted call is charged whatever its outcome, and a call whose
 arguments carry no URL is not. Two rules live in the loop rather than the handler because
 only the loop holds the conversation: the budget, and the Anthropic rule that a URL must
-already appear in a user message or a `tool_result` (including hidden `web_search`
-results) before it can be fetched. The handler owns everything else — URL admission, the
+already appear in a user message or a `tool_result` (including gateway `web_search`
+and `web_fetch` results) before it can be fetched. The handler owns everything else — URL admission, the
 address policy and DNS pinning applied to every redirect hop, domain filtering,
 HTML-to-text extraction, the content limit, and the `max_concurrent_gateway_calls`
 ceiling on fetches in flight — and answers documented failures in the
@@ -1716,13 +1756,47 @@ call is never executed. `messages_loop.rs`'s `deliver` strips gateway-owned `too
 blocks from the returned message, matching the streaming accumulator, which suppresses them
 on every round. The assistant turn fed back to the model still carries the call.
 
+A call to a native server tool is shown rather than hidden (`messages_server_tools.rs`,
+#409). When the client declared Anthropic's native `web_search` or `web_fetch`, each
+call the gateway executes reaches the client as a `server_tool_use` block (id
+`srvtoolu_gw_` plus the upstream `tool_use` id) and, after the round's other blocks, its
+`web_search_tool_result` or `web_fetch_tool_result`. A call through an operator alias, a
+plain function named `web_search`, and any call in a round the gateway does not run stay
+hidden. `execute_gateway_calls` builds each native call's typed result block with its
+`tool_result`, so JSON and SSE serialize one projection: the JSON loop returns the content
+of every round, and the streaming accumulator holds the rest of a round once a native call
+starts, releasing it in order at the round's end — the native calls as `server_tool_use`
+blocks before they execute, or hidden when the round does not run them — then streams the
+result blocks after execution.
+
+The result block is the record of a call: the model's `tool_result` text is projected from
+it on the live round and again on replay, so a returned turn reproduces the original rounds
+exactly. `replay::replay_server_tool_blocks` runs at the start of both loops, in
+`count_tokens`, and on the proxy path when a body carries a gateway id; it splits each
+assistant message at the end of every run of result blocks into the round's `tool_use`
+blocks and a user message of `tool_result`s, and refuses with HTTP 400 a gateway block that
+is unpaired or repeated, or search content that does not open under the key. Replay is exact
+for every round whose gateway calls were all shown. A hidden call leaves no block, so a round
+that also ran one replays without it, and a round whose calls were all hidden leaves only its
+other blocks, which join the next round; a fetch result carries its page text in the clear and
+replays as sent. A search result carries the executor's result data sealed in
+`encrypted_content` (`sealing.rs`: AES-256-GCM under a content key drawn per envelope by
+HKDF from `AGENTIC_MESSAGES_RESULT_KEY`, or from a secret generated once per process; the
+associated data binds the upstream id, the call's queries, and the result's position).
+Results sealed under another key replay as a fixed note rather than failing the
+conversation. A failed search shows its documented code, with the executor's detail
+logged; a fetch result also carries the content type, truncation flag, and refusal message
+the model read.
+
 Each round's `usage` is folded into `messages_usage.rs`'s `MessagesUsageTotals`, so when
 hidden gateway rounds ran, the returned message (JSON) and the terminal `message_delta` (SSE)
 report the saturating sum of the Anthropic token counters across every round rather than the
 final round alone. A streamed round counts its `message_start.usage` overlaid by its
 `message_delta.usage`. Counters no round reported stay absent, the remaining `usage` fields
 pass through from the final round, a single-round turn is returned unchanged, and a final
-round that omits `usage` still reports the hidden rounds' counters.
+round that omits `usage` still reports the hidden rounds' counters. `usage.server_tool_use`
+adds the gateway's successful native searches (one per query) and fetches to the counters
+the upstream reported.
 
 ### `storage/` — persistence
 
@@ -1966,19 +2040,44 @@ the operator enables it, and Eryx runtime readiness succeeds.
   when restoring client-owned tool calls.
 
   MCP discovery history is also request-scoped registry state:
-  `mcp_list_tools_items: HashMap<String, Vec<McpListTools>>` groups records by
-  `server_label`. Registry construction puts the current discovery item first;
-  rehydration appends prior `InputItem::McpListTools` records only for labels already
-  present in that map. `mcp_list_tool_items()` exposes entries whose vector still has
-  exactly one element—the current item with no history—to both blocking output
-  assembly and streaming lifecycle emission. Streaming clears the map after the first
-  inference round. Consequently a server's list lifecycle is emitted only when no
-  prior list record exists and never repeats across rounds.
+  `mcp_list_tools_items: IndexMap<String, Vec<McpListTools>>` groups records by
+  `server_label`. Registry construction accepts the response's discovery history
+  before materialization, so restored children can reuse the root's successful
+  listing even when their forked message context omits it. Current declarations
+  and allowlists still validate the tools exposed for execution. Reusable
+  retained listings must cover an explicit `allowed_tools` set. Removing that
+  restriction cannot prove a public listing is complete, so request-declared
+  servers rediscover their catalog; configured servers can use their authoritative
+  discovery cache. Expanding a restriction beyond the listing also rediscovers.
+  Preparation appends newly discovered listings to the parent request's enriched input,
+  so subsequent restored agents reuse them without a separate discovery history. Each
+  agent's model context still comes from its own stored history. This also applies when
+  an MCP declaration is first added on a later turn. Discovery metadata
+  does not activate an idle agent when the client returns its full history.
+  Stateless agent restoration reconstructs the parent's loaded tool definitions at
+  each spawn through `ToolSearchState`, so `fork_turns: none` removes messages without
+  discarding inherited tool availability on a later client-tool continuation.
+  Equivalent successful listings are suppressed in JSON and SSE; failed or changed discovery
+  remains visible. Streaming clears the lifecycle records after their first emission.
+  Returned public `mcp_call` history uses the common model-input conversion to
+  recover its function-call/result pair using the current discovered binding,
+  with retained listing names as a fallback. Alias assignment precedes request
+  allowlist filtering so name collisions stay stable across continuations.
+  Public records do not retain private inference call IDs; their public item ID
+  identifies the reconstructed pair without changing client-owned call IDs.
 - **`executors.rs`** — `GatewayExecutors`, a shared registry built once at startup and
   reused across requests. Configured MCP servers are the only lazily connected slot:
   clients and discovered handlers are created on demand and cached by `server_label`
-  across requests; request-declared servers connect afresh for each request, and
-  their discovered handlers are reused only within that request. The shared
+  across requests; request-declared handlers are reused only within a request.
+  With a retained successful listing, their connection is established only when
+  a tool is invoked, so a passive continuation neither reconnects nor lists tools.
+  `McpHandler` distinguishes spec-only, connected, and lazy connection states;
+  members of a restored server share its initialization cell. Lazy connection and
+  fresh discovery select the same trace-propagation policy: request-declared
+  entries use `McpClientPool::from_request_entries` without propagated trace
+  context or baggage; operator-configured entries use `from_config` with propagation.
+  Fresh discovery remains eager. Client-returned schemas stay request-scoped; only actual remote
+  discovery populates the configured-server discovery cache. The shared
   `WebSearchHandler` and the opt-in `CodeInterpreterExecutor` are built once at
   startup; the code interpreter is backed by an embedded Eryx sandbox, enabled
   by configuration, and the default config is disabled. These executors bind

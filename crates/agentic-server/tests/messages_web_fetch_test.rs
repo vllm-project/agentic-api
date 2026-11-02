@@ -192,7 +192,6 @@ async fn assert_fetch_runs_over_http(tool: &Value, stream: bool) {
     let body = response.text().await.unwrap();
 
     assert!(body.contains("Done."), "the answer reaches the client: {body}");
-    assert!(!body.contains("web_fetch"), "the gateway call stays hidden: {body}");
     if stream {
         assert_eq!(body.matches("event: message_start").count(), 1, "{body}");
         assert!(body.contains("event: message_stop"), "{body}");
@@ -200,8 +199,21 @@ async fn assert_fetch_runs_over_http(tool: &Value, stream: bool) {
     } else {
         let message: Value = serde_json::from_str(&body).unwrap();
         assert_eq!(message["stop_reason"], "end_turn", "{body}");
-        assert_eq!(message["content"], json!([{"type": "text", "text": "Done."}]));
+        assert_eq!(message["usage"]["server_tool_use"], json!({"web_fetch_requests": 1}));
     }
+    let content = common::assembled_messages_content(&body, stream);
+    assert_eq!(
+        common::shown_blocks(&content),
+        [
+            "server_tool_use srvtoolu_gw_t1",
+            "web_fetch_tool_result srvtoolu_gw_t1 page",
+            "text Done."
+        ],
+        "{body}"
+    );
+    assert_eq!(content[0]["input"], json!({"url": page_url}));
+    assert_eq!(content[1]["content"]["content"]["source"]["data"], "The page body.");
+    assert_eq!(content[1]["content"]["content"]["title"], "Doc");
     assert_eq!(*gateway.backend.pages.lock().unwrap(), vec!["doc.html"]);
     let inferences = gateway.backend.inferences.lock().unwrap().clone();
     assert_eq!(inferences.len(), 2, "one fetch round, then the answer");

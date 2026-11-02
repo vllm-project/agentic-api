@@ -12,6 +12,9 @@ pub(crate) mod retained;
 mod streaming;
 mod usage;
 
+#[cfg(test)]
+pub(crate) use multi_agent::tests::upstream_events;
+
 use crate::executor::inference::UpstreamHeaders;
 pub use execute::{ExecuteRequest, execute, prepare_non_generating_turn};
 pub use retained::PreparedRetainedResponse;
@@ -137,7 +140,7 @@ struct SingleAgentRun<'a> {
 impl<'a> SingleAgentRun<'a> {
     async fn new(agent: &'a mut AgentPipeline, exec_ctx: &'a ExecutionContext) -> ExecutorResult<Self> {
         let response_budget = ExecutorResponseBudget::with_limit(exec_ctx.responses_config.max_retained_bytes);
-        let root = AgentTurn::new(agent, exec_ctx, &response_budget, MAX_GATEWAY_TOOL_ROUNDS).await?;
+        let root = AgentTurn::new(agent, exec_ctx, &response_budget, MAX_GATEWAY_TOOL_ROUNDS, None).await?;
         let output = root.discovery_output();
         Ok(Self {
             root,
@@ -206,9 +209,7 @@ async fn run_compaction_trigger(
         )
         .stored
         .into_inputs();
-        let history = ctx.enriched_request.history_naming();
-        let (mut compacted, usage, service_tier) =
-            compact_items(&ctx.enriched_request, history, input, exec_ctx, auth).await?;
+        let (mut compacted, usage, service_tier) = compact_items(&ctx.enriched_request, input, exec_ctx, auth).await?;
         let Some(InputItem::Compaction(compaction)) = compacted.pop() else {
             unreachable!("compact_items always appends a compaction item");
         };
@@ -484,7 +485,7 @@ mod tests {
             .expect("reserve most of the response budget");
 
         let mut request = AgentPipeline::new(request, None, StreamRelay::detached());
-        let error = build_tool_registry(&mut request, &exec_ctx, &response_budget)
+        let error = build_tool_registry(&mut request, &exec_ctx, &response_budget, None)
             .await
             .expect_err("MCP discovery must share the request-wide response budget");
 
@@ -580,7 +581,7 @@ mod tests {
 
         let plain_budget = ExecutorResponseBudget::new();
         let mut plain_request = AgentPipeline::new(plain_request, None, StreamRelay::detached());
-        let mut plain_build = Box::pin(build_tool_registry(&mut plain_request, &exec_ctx, &plain_budget));
+        let mut plain_build = Box::pin(build_tool_registry(&mut plain_request, &exec_ctx, &plain_budget, None));
         assert!(matches!(
             futures::poll!(plain_build.as_mut()),
             std::task::Poll::Ready(Ok(_))
@@ -589,7 +590,7 @@ mod tests {
 
         let mcp_budget = ExecutorResponseBudget::new();
         let mut mcp_request = AgentPipeline::new(mcp_request, None, StreamRelay::detached());
-        let mut mcp_build = Box::pin(build_tool_registry(&mut mcp_request, &exec_ctx, &mcp_budget));
+        let mut mcp_build = Box::pin(build_tool_registry(&mut mcp_request, &exec_ctx, &mcp_budget, None));
         assert!(futures::poll!(mcp_build.as_mut()).is_pending());
 
         drop(held_permits.pop());
@@ -647,7 +648,7 @@ mod tests {
         });
 
         let mut agent = AgentPipeline::new(request, None, StreamRelay::detached());
-        let registry = build_tool_registry(&mut agent, &exec_ctx, &ExecutorResponseBudget::new())
+        let registry = build_tool_registry(&mut agent, &exec_ctx, &ExecutorResponseBudget::new(), None)
             .await
             .expect("registry with a discovered MCP tool");
         assert!(registry.lookup("mcp__counter__read").is_some());

@@ -9,12 +9,16 @@ use std::sync::{Arc, Mutex};
 
 use std::collections::HashMap;
 
+use agentic_core::config::ToolRuntimeConfig;
+use agentic_core::executor::ExecuteRequest;
+use agentic_core::tool::GatewayExecutors;
 use agentic_core::tool::{McpClientPool, McpServerEntry};
 use agentic_core::types::tools::McpToolParam;
 use axum::Router;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::post;
+use either::Either;
 use opentelemetry::propagation::TextMapCompositePropagator;
 use opentelemetry::trace::{TraceContextExt as _, TracerProvider as _};
 use opentelemetry_sdk::propagation::{BaggagePropagator, TraceContextPropagator};
@@ -23,6 +27,8 @@ use serde_json::{Value, json};
 use tracing::Instrument as _;
 use tracing_opentelemetry::OpenTelemetrySpanExt as _;
 use tracing_subscriber::layer::SubscriberExt as _;
+
+mod support;
 
 #[derive(Debug, Default)]
 struct Seen {
@@ -46,6 +52,9 @@ async fn spawn_recording_mcp() -> (String, Arc<Mutex<Seen>>) {
                 let result = match request["method"].as_str() {
                     Some("initialize") => json!({"protocolVersion": "2025-06-18", "capabilities": {"tools": {}},
                         "serverInfo": {"name": "stub", "version": "0"}}),
+                    Some("tools/list") => {
+                        json!({"tools":[{"name":"echo", "inputSchema":{"type":"object", "properties":{}}}]})
+                    }
                     Some("tools/call") => {
                         let mut seen = recorder.lock().unwrap();
                         seen.headers = Some(headers);
@@ -83,6 +92,94 @@ async fn call_under_root(pool: &McpClientPool, inbound_baggage: &str) -> String 
         .await
         .expect("tools/call");
     trace_id
+}
+
+async fn assert_gateway_trace_policy(configured: bool, retained: bool) {
+    let (url, seen) = spawn_recording_mcp().await;
+    let mut responses = vec![
+        support::function_call_response("fc_echo", "call_echo", "mcp__tools__echo", "{}"),
+        support::text_response("Finished."),
+    ];
+    if retained {
+        responses.insert(0, support::text_response("Ready."));
+    }
+    let mut fixture = support::TestFixture::new_with_responses(responses).await;
+    let mut body = json!({"model":"test", "store":false, "input":"Use echo.", "tools":[{
+        "type":"mcp", "server_label":"tools", "server_url":url, "allowed_tools":["echo"], "require_approval":"never"
+    }]});
+    if configured {
+        let config = ToolRuntimeConfig {
+            mcp_servers: HashMap::from([(
+                "tools".to_owned(),
+                McpServerEntry::Http {
+                    url,
+                    headers: None,
+                    allowed_tools: None,
+                    require_approval: Some("never".to_owned()),
+                    description: None,
+                    defer_loading: None,
+                },
+            )]),
+            ..Default::default()
+        };
+        Arc::get_mut(&mut fixture.exec_ctx).unwrap().gateway_executors =
+            GatewayExecutors::from_config(Arc::new(reqwest::Client::new()), &config).unwrap();
+        body["tools"][0].as_object_mut().unwrap().remove("server_url");
+    }
+    if retained {
+        let Either::Left(first) =
+            ExecuteRequest::new(serde_json::from_value(body.clone()).unwrap(), fixture.exec_ctx.clone())
+                .run()
+                .await
+                .unwrap()
+        else {
+            panic!("JSON response")
+        };
+        let output = serde_json::to_value(first.output).unwrap();
+        assert!(
+            output
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|item| item["type"] == "mcp_list_tools")
+        );
+        let mut history = vec![json!({"role":"user", "content":"Use echo."})];
+        history.extend(output.as_array().unwrap().iter().cloned());
+        history.push(json!({"role":"user", "content":"Use echo now."}));
+        body["input"] = json!(history);
+    }
+    let root = tracing::info_span!("test.gateway");
+    let inbound = HashMap::from([("baggage".to_owned(), "tenant=acme".to_owned())]);
+    let parent = opentelemetry::global::get_text_map_propagator(|propagator| propagator.extract(&inbound));
+    let _ = root.set_parent(parent);
+    let Either::Left(response) = ExecuteRequest::new(serde_json::from_value(body).unwrap(), fixture.exec_ctx.clone())
+        .run()
+        .instrument(root)
+        .await
+        .unwrap()
+    else {
+        panic!("JSON response")
+    };
+    assert_eq!(response.status, "completed");
+    let seen = seen.lock().unwrap();
+    let headers = seen.headers.as_ref().expect("gateway executed MCP call");
+    let meta = seen.meta.as_ref().unwrap();
+    for field in ["traceparent", "baggage"] {
+        assert_eq!(
+            headers.contains_key(field),
+            configured,
+            "{field}: configured={configured}, retained={retained}"
+        );
+        assert_eq!(
+            meta.get(field).is_some(),
+            configured,
+            "{field} metadata: configured={configured}, retained={retained}"
+        );
+    }
+    if configured {
+        assert_eq!(headers["baggage"], "tenant=acme");
+        assert_eq!(meta["baggage"], "tenant=acme");
+    }
 }
 
 #[tokio::test]
@@ -168,21 +265,28 @@ async fn only_configured_mcp_servers_receive_the_calling_trace_and_baggage() {
     let param: McpToolParam = serde_json::from_value(json!({"server_label": "tools", "server_url": url})).unwrap();
     let declared = McpClientPool::from_params_with_allowed_hosts(&[param], &[]).await;
     call_under_root(&declared, "tenant=acme").await;
-    let seen = seen.lock().unwrap();
-    let headers = seen.headers.as_ref().expect("tools/call reached the server");
-    assert!(
-        headers.get("traceparent").is_none(),
-        "no trace context for a request-declared server"
-    );
-    assert!(
-        headers.get("baggage").is_none(),
-        "no baggage for a request-declared server"
-    );
-    let meta = seen.meta.as_ref().unwrap();
-    for field in ["traceparent", "tracestate", "baggage"] {
+    {
+        let seen = seen.lock().unwrap();
+        let headers = seen.headers.as_ref().expect("tools/call reached the server");
         assert!(
-            meta.get(field).is_none(),
-            "no {field} in _meta for a request-declared server: {meta}"
+            headers.get("traceparent").is_none(),
+            "no trace context for a request-declared server"
         );
+        assert!(
+            headers.get("baggage").is_none(),
+            "no baggage for a request-declared server"
+        );
+        let meta = seen.meta.as_ref().unwrap();
+        for field in ["traceparent", "tracestate", "baggage"] {
+            assert!(
+                meta.get(field).is_none(),
+                "no {field} in _meta for a request-declared server: {meta}"
+            );
+        }
+    }
+    for configured in [false, true] {
+        for retained in [false, true] {
+            assert_gateway_trace_policy(configured, retained).await;
+        }
     }
 }

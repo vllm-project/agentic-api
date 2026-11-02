@@ -9,7 +9,9 @@
 //! upstream, serves the page from a loopback origin, and runs the real loop:
 //! the real fetch, the real extraction, the real continuation. It then checks
 //! the loop's complete upstream requests against the recorded ones, the
-//! call/result pairing, and that the client sees the answer and never the call.
+//! call/result pairing, the `server_tool_use` and `web_fetch_tool_result`
+//! blocks the client sees with the answer, and that sending the returned turn
+//! back gives the upstream exactly the rounds it saw.
 //!
 //! The recording named its origin `127.0.0.1:18080`; the replay binds an
 //! ephemeral port, so the origin is re-based in both directions: the served
@@ -25,7 +27,7 @@ use std::sync::{Arc, Mutex};
 use agentic_core::config::{DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS, WebFetchConfig};
 use agentic_core::executor::{
     ConversationHandler, ExecutionContext, MessagesRequestContext, MessagesUpstream, ResponseHandler,
-    run_messages_loop, run_messages_stream,
+    replay_server_tool_blocks, run_messages_loop, run_messages_stream,
 };
 use agentic_core::storage::{ConversationStore, ResponseStore};
 use agentic_core::tool::registry_tools;
@@ -269,6 +271,43 @@ impl Harness {
         assert_eq!(*self.backend.pages.lock().unwrap(), vec!["release-notes.html"]);
     }
 
+    /// The client sees the call and its result before the answer, and sending
+    /// that turn back gives the upstream the recorded rounds exactly: the same
+    /// ids and the same `tool_result` text the live round sent.
+    fn assert_returned_turn_replays_the_recorded_rounds(&self, content: &Value) {
+        let recorded_call = self.recorded_tool_use();
+        let client_id = format!("srvtoolu_gw_{}", recorded_call["id"].as_str().unwrap());
+        let blocks = content.as_array().expect("content");
+        assert_eq!(blocks.len(), 3, "call, result, answer: {content}");
+        assert_eq!(blocks[0]["type"], "server_tool_use");
+        assert_eq!(blocks[0]["id"], client_id.as_str());
+        let live = self.upstream_requests()[1]["messages"].clone();
+        assert_eq!(
+            blocks[0]["input"], live[1]["content"][0]["input"],
+            "the call the model made"
+        );
+        assert_eq!(blocks[1]["type"], "web_fetch_tool_result");
+        assert_eq!(blocks[1]["tool_use_id"], client_id.as_str());
+        assert_eq!(blocks[1]["content"]["content"]["source"]["data"], PAGE_TEXT);
+        assert_eq!(blocks[1]["content"]["content"]["title"], "Release notes");
+        assert_eq!(blocks[2]["text"], TOKEN);
+
+        let mut follow_up = self.client_request(false);
+        let messages = follow_up["messages"].as_array_mut().unwrap();
+        messages.push(json!({"role": "assistant", "content": content}));
+        messages.push(json!({"role": "user", "content": "Thanks."}));
+        let key = self.exec_ctx.messages_result_key().unwrap();
+        assert!(replay_server_tool_blocks(&mut follow_up, key).unwrap());
+        let replayed = follow_up["messages"].as_array().unwrap();
+        assert_eq!(
+            Value::Array(replayed[..3].to_vec()),
+            live,
+            "the follow-up carries the rounds the upstream saw"
+        );
+        assert_eq!(replayed[3], json!({"role": "assistant", "content": [blocks[2]]}));
+        assert_eq!(replayed[4], json!({"role": "user", "content": "Thanks."}));
+    }
+
     fn recorded_tool_use(&self) -> Value {
         match &self.turns[0].response {
             Recorded::Json(body) => body["content"][0].clone(),
@@ -339,15 +378,11 @@ async fn recorded_nonstreaming_web_fetch_turn_replays_through_the_json_loop() {
         panic!("nonstreaming cassette")
     };
     assert_eq!(
-        message["content"], final_turn["content"],
+        message["content"][2], final_turn["content"][0],
         "the client sees the recorded answer"
     );
-    assert_eq!(message["content"][0]["text"], TOKEN);
     assert_eq!(message["stop_reason"], "end_turn");
-    assert!(
-        !message.to_string().contains("web_fetch"),
-        "the gateway call never reaches the client: {message}"
-    );
+    harness.assert_returned_turn_replays_the_recorded_rounds(&message["content"]);
     let Recorded::Json(first_turn) = &harness.turns[0].response else {
         panic!("nonstreaming cassette")
     };
@@ -398,8 +433,43 @@ async fn recorded_streaming_web_fetch_turn_replays_through_the_sse_loop() {
         !events
             .iter()
             .any(|event| event["type"] == "content_block_start" && event["content_block"]["type"] == "tool_use"),
-        "the gateway call never reaches the client: {frames}"
+        "the upstream call stays internal: {frames}"
     );
-    assert!(!frames.contains("web_fetch"), "{frames}");
     assert!(!frames.contains("event: error"), "{frames}");
+    harness.assert_returned_turn_replays_the_recorded_rounds(&assembled_content(&events));
+}
+
+/// The content blocks a client assembles from the stream's events.
+fn assembled_content(events: &[Value]) -> Value {
+    let mut blocks: Vec<Value> = Vec::new();
+    let mut inputs: BTreeMap<usize, String> = BTreeMap::new();
+    for event in events {
+        let index = event["index"].as_u64().map(|index| usize::try_from(index).unwrap());
+        match (event["type"].as_str(), index) {
+            (Some("content_block_start"), Some(index)) => {
+                assert_eq!(index, blocks.len(), "contiguous indices");
+                blocks.push(event["content_block"].clone());
+            }
+            (Some("content_block_delta"), Some(index)) => match event["delta"]["type"].as_str() {
+                Some("text_delta") => {
+                    let text = format!(
+                        "{}{}",
+                        blocks[index]["text"].as_str().unwrap(),
+                        event["delta"]["text"].as_str().unwrap()
+                    );
+                    blocks[index]["text"] = json!(text);
+                }
+                Some("input_json_delta") => inputs
+                    .entry(index)
+                    .or_default()
+                    .push_str(event["delta"]["partial_json"].as_str().unwrap()),
+                _ => {}
+            },
+            _ => {}
+        }
+    }
+    for (index, input) in inputs {
+        blocks[index]["input"] = serde_json::from_str(&input).unwrap();
+    }
+    Value::Array(blocks)
 }

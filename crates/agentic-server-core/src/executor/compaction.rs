@@ -29,9 +29,9 @@ use crate::executor::rehydrate::rehydrate_conversation;
 use crate::executor::relay::StreamRelay;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::upstream::fetch_blocking_payload;
-use crate::tool::ToolSearchState;
+use crate::tool::{CodexNamespaceHandler, ToolSearchState};
 use crate::types::event::MessageStatus;
-use crate::types::io::input::{HistoryNaming, InputTextContent, latest_compaction_window};
+use crate::types::io::input::{InputTextContent, latest_compaction_window};
 use crate::types::io::{
     CompactionItem, InOutItem, InputContent, InputItem, InputMessage, InputMessageContent, ResponseUsage,
     ResponsesInput,
@@ -117,8 +117,7 @@ fn request_payload(model: String, input: ResponsesInput, instructions: Option<St
 }
 
 /// Summarize an already-resolved item history and return its canonical compacted window.
-/// `history` is how the source request knew its tools ([`RequestPayload::history_naming`]), naming context
-/// for a summary that declares no tools.
+/// Normalize history against the source declarations before removing tools from the summary request.
 ///
 /// # Errors
 ///
@@ -126,12 +125,11 @@ fn request_payload(model: String, input: ResponsesInput, instructions: Option<St
 /// summary, and propagates inference and serialization failures.
 pub(crate) async fn compact_items(
     request: &RequestPayload,
-    history: HistoryNaming,
     input: ResponsesInput,
     exec_ctx: &ExecutionContext,
     auth: Option<&UpstreamHeaders>,
 ) -> ExecutorResult<(Vec<InputItem>, ResponseUsage, Option<String>)> {
-    compact_items_with_trigger(request, history, input, exec_ctx, auth, CompactionTrigger::InputItem).await
+    compact_items_with_trigger(request, input, exec_ctx, auth, CompactionTrigger::InputItem).await
 }
 
 #[tracing::instrument(name = "agentic.compaction", skip_all, fields(
@@ -139,21 +137,19 @@ pub(crate) async fn compact_items(
 ))]
 async fn compact_items_with_trigger(
     request: &RequestPayload,
-    history: HistoryNaming,
     input: ResponsesInput,
     exec_ctx: &ExecutionContext,
     auth: Option<&UpstreamHeaders>,
     trigger: CompactionTrigger,
 ) -> ExecutorResult<(Vec<InputItem>, ResponseUsage, Option<String>)> {
     let timer = exec_ctx.metrics.stage(Stage::Compaction);
-    let summarized = summarize_items(request, history, input, exec_ctx, auth).await;
+    let summarized = summarize_items(request, input, exec_ctx, auth).await;
     timer.finish_result(&summarized);
     summarized
 }
 
 async fn summarize_items(
     request: &RequestPayload,
-    history: HistoryNaming,
     input: ResponsesInput,
     exec_ctx: &ExecutionContext,
     auth: Option<&UpstreamHeaders>,
@@ -184,6 +180,13 @@ async fn summarize_items(
     );
     let mut enriched_request =
         request_payload(request.model.clone(), ResponsesInput::from(summary_items), instructions);
+    // The summary offers no tools. Resolve searched top-level function names from the source before discarding
+    // its declarations, while preserving actual namespace members in the summary's public history.
+    let names = request.top_level_function_names();
+    let functions = names.iter().map(String::as_str).collect();
+    enriched_request.input = CodexNamespaceHandler
+        .resolve_input(None, &functions, Cow::Owned(enriched_request.input))
+        .into_owned();
     enriched_request.prompt_cache_key.clone_from(&request.prompt_cache_key);
     enriched_request.prompt_cache_retention = request.prompt_cache_retention;
     enriched_request.prompt_cache_options = request.prompt_cache_options;
@@ -199,9 +202,6 @@ async fn summarize_items(
         continuation: None,
     };
     let mut agent = AgentPipeline::new(ctx, None, StreamRelay::detached());
-    // The summary declares no tools; the source request's naming still says how the model knew each call, after an
-    // earlier compaction removed the search that loaded a function.
-    agent.set_history_naming(history);
     let response =
         fetch_blocking_payload(&mut agent, exec_ctx, auth, &crate::tool::ToolRegistry::default(), None).await?;
     exec_ctx.metrics.record_response_usage(response.usage.as_ref());
@@ -278,7 +278,6 @@ pub(crate) async fn maybe_compact_context(
     let input = ResponsesInput::from(items[..prefix].to_vec());
     let (mut compacted, usage, _) = compact_items_with_trigger(
         &ctx.enriched_request,
-        ctx.enriched_request.history_naming(),
         input,
         exec_ctx,
         auth,
@@ -335,6 +334,13 @@ pub async fn compact_response(
     payload.prompt_cache_options = request.prompt_cache_options;
     payload.prompt_cache_key = request.prompt_cache_key;
     let ctx = rehydrate_conversation(payload, exec_ctx).await?;
+    // OpenAI excludes multi-agent execution from the standalone compact endpoint,
+    // including stored trees and public history attributed to a multi-agent run.
+    if ctx.multi_agent_tree.is_some() || ctx.enriched_request.input.has_multi_agent_history() {
+        return Err(ExecutorError::InvalidRequest(
+            "/responses/compact is not supported with multi_agent".into(),
+        ));
+    }
     let (mut ctx, tool_search_state) =
         prepare_request_tools(ctx, &exec_ctx.conv_handler, &exec_ctx.resp_handler).await?;
     let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);
@@ -364,7 +370,6 @@ pub async fn compact_response(
     };
     let (compacted, usage, service_tier) = compact_items_with_trigger(
         &ctx.enriched_request,
-        ctx.enriched_request.history_naming(),
         input,
         exec_ctx,
         auth.as_ref(),

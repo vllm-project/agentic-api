@@ -162,6 +162,20 @@ for vLLM, and rejects encrypted-only reasoning that vLLM cannot replay. Reasonin
 context and compatible opaque state support are tracked in
 [#444](https://github.com/vllm-project/agentic-api/issues/444).
 
+Multi-agent HTTP requests also support `store:false`. Send the complete history:
+append returned output items unchanged to your input, followed by new messages or
+matching client tool outputs. Re-declare `multi_agent` and the desired tools on each
+request. Without `previous_response_id` or `conversation`, the gateway uses this
+submitted input without loading stored history, and `store:false` skips persistence.
+There is no separate checkpoint request or mandatory response-boundary compaction.
+The coordinator routes public history and client tool outputs to their agent owners;
+public collaboration items are not forwarded directly to the inference engine.
+Encrypted `agent_message` contents remain opaque to clients. For returning these
+messages across gateway restarts or replicas, configure the same
+`AGENTIC_MULTI_AGENT_TRANSCRIPT_KEY` everywhere (a base64-encoded 32-byte secret);
+the default key lasts for the current process. Automatic per-agent compaction remains
+enabled; the explicit `compaction_trigger` extension is unsupported in this mode.
+
 Executor-backed requests accept at most 64 MCP server declarations and 128
 discovered MCP tools. MCP discovery metadata shares the request's retained
 response budget (`[responses] max_retained_bytes`, default 8 MiB) with upstream
@@ -201,9 +215,10 @@ hosted tool search or set `defer_loading: false`, and the defaults appear in the
 gateway orchestrate subagents for one response and return attributed
 `multi_agent_call`, `multi_agent_call_output`, and `agent_message` items.
 `max_concurrent_subagents` defaults to 3 and must be positive. Multi-agent
-requests require `store: true`, reject `max_tool_calls` and reasoning summaries,
+requests reject `max_tool_calls` and reasoning summaries,
 and run over HTTP JSON and SSE only; the WebSocket transport rejects them.
-Continue the agent tree with `previous_response_id`. See
+Continue a stored agent tree with `previous_response_id`, or replay the complete
+item history with `store:false` as described above. See
 [HTTP multi-agent execution](https://github.com/vllm-project/agentic-api/blob/main/ARCHITECTURE.md#http-multi-agent-execution).
 
 #### Async client tools
@@ -555,6 +570,12 @@ window of retained user messages plus one `compaction` item. See
 [Responses compaction](../guides/responses-compaction.md) for request examples,
 automatic threshold management, and the local plaintext limitation.
 
+Multi-agent trees are unsupported on this endpoint, including those restored from
+client-carried checkpoints or `previous_response_id`; these requests return HTTP 400
+before inference. Multi-agent execution uses automatic per-agent compaction through
+`/v1/responses`, matching OpenAI's
+[multi-agent limitations](https://developers.openai.com/api/docs/guides/responses-multi-agent#limitations).
+
 ### `WS /v1/responses`
 
 The same path accepts WebSocket upgrades for Codex-style Responses
@@ -713,8 +734,32 @@ owns, such as Claude's native web search and web fetch server tools (the
 basic `web_search_20250305` and `web_fetch_20250910`, and their later versions
 when `allowed_callers` includes `"direct"`), the gateway runs
 the tool loop itself: it executes each gateway call, appends the result, and
-streams only the client-visible content. Every upstream round must be a
+returns the content of every round. Every upstream round must be a
 complete, well-formed Messages stream; a truncated or malformed round ends the
 response with an Anthropic `api_error` event before any gateway tool runs.
 Messages requests are not persisted. See
 [Claude Code integration](../design/claude-code-integration.md).
+
+Each native web search or web fetch call the gateway runs reaches the client as
+Anthropic returns it: a `server_tool_use` block, whose id is `srvtoolu_gw_`
+followed by the upstream `tool_use` id, then the matching
+`web_search_tool_result` or `web_fetch_tool_result` after the round's other
+blocks. The `server_tool_use` input is the call as the model made it, in the
+gateway's search schema (`query`, or `queries` for a batch). `usage.server_tool_use`
+counts the searches (one per query) and fetches that ran. A call through an
+operator alias, a plain function named `web_search`, or a call in a round the
+gateway does not run, such as one beside a client tool call, stays hidden.
+
+Send these blocks back unchanged. The gateway turns them into the
+`tool_use` / `tool_result` rounds the upstream saw, with the same ids and the
+same result text, on `/v1/messages` (with or without a gateway tool) and on
+`/v1/messages/count_tokens`. A search result's page text is sealed in its
+`encrypted_content`; search content that was altered or not sealed by the
+gateway, and a gateway block that is unpaired or repeated, are refused with
+HTTP 400 `invalid_request_error`. A fetched page is not sealed and replays as
+sent. A round that also ran a hidden call replays without it, since the client
+never saw that call. Search results sealed under
+another key, such as by a process without `AGENTIC_MESSAGES_RESULT_KEY` before
+a restart, reach the model as a note that they are no longer available. A
+`web_fetch_tool_result` also carries the page's `content_type` and `truncated`
+flag, and a refusal its `message`, so the model reads the same text again.

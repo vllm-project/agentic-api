@@ -95,7 +95,11 @@ impl McpClientPool {
             .iter()
             .filter_map(|param| server_entry_from_param(param, allowed_hosts))
             .collect();
-        // Request-declared servers are third parties: no trace context or baggage.
+        Self::from_request_entries(servers).await
+    }
+
+    /// Connect validated request-declared servers without trace context or baggage.
+    pub(crate) async fn from_request_entries(servers: HashMap<String, McpServerEntry>) -> Self {
         Self::connect_all(servers, false).await
     }
 
@@ -161,7 +165,10 @@ impl McpClientPool {
     }
 }
 
-fn server_entry_from_param(param: &McpToolParam, allowed_hosts: &[String]) -> Option<(String, McpServerEntry)> {
+pub(crate) fn server_entry_from_param(
+    param: &McpToolParam,
+    allowed_hosts: &[String],
+) -> Option<(String, McpServerEntry)> {
     let Some(server_label) = clean_string(Some(&param.server_label)) else {
         tracing::debug!("MCP tool param has no server_label");
         return None;
