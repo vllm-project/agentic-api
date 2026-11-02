@@ -306,7 +306,7 @@ async fn legacy_snapshots_remain_retrievable_and_continuable() {
         let retrieved = stored
             .exec_ctx
             .resp_handler
-            .retrieve(&stored.response_id)
+            .get_snapshot(&stored.response_id)
             .await
             .unwrap();
         let Some(OutputItem::Reasoning(reasoning)) = retrieved
@@ -344,7 +344,7 @@ async fn snapshots_earlier_releases_could_not_store_fail_closed() {
         let retrieved = stored
             .exec_ctx
             .resp_handler
-            .retrieve(&stored.response_id)
+            .get_snapshot(&stored.response_id)
             .await
             .unwrap_err();
         let Err(continued) = ExecuteRequest::new(stored.followup, stored.exec_ctx).run().await else {

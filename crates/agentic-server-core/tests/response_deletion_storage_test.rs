@@ -133,7 +133,6 @@ async fn deleting_a_conversation_latest_response_clears_its_pointer_and_keeps_it
             &conversations,
             id,
             response,
-            None,
             vec![message(text), answer(&format!("msg_{response}"))],
             &ResponseMetadata::default(),
         )

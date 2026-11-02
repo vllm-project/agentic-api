@@ -459,10 +459,11 @@ mod tests {
             .await
             .expect("insert conversation item batches");
         transaction.commit().await.expect("commit item batches");
-        let (_, _, _, stored) = conversation::get_with_items(&pool, conversation_id)
+        let stored = conversation::get_with_items(&pool, conversation_id)
             .await
             .expect("load conversation item batches")
-            .expect("conversation exists");
+            .expect("conversation exists")
+            .items;
         let expected_sequences = (0..i64::try_from(item_count).expect("item count fits in i64")).collect::<Vec<_>>();
 
         assert_eq!(

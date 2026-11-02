@@ -628,7 +628,7 @@ async fn mcp_declarations_stay_public_in_json_and_stored_responses() {
     let stored = fixture
         .exec_ctx
         .resp_handler
-        .retrieve(&response.id)
+        .get_snapshot(&response.id)
         .await
         .expect("stored response");
     assert_public_forecast_metadata(
@@ -762,7 +762,7 @@ async fn assert_mcp_tool_choice_after_execution(stream: bool, city: &str, inheri
     let stored = fixture
         .exec_ctx
         .resp_handler
-        .retrieve(response["id"].as_str().unwrap())
+        .get_snapshot(response["id"].as_str().unwrap())
         .await
         .unwrap();
     let stored = serde_json::to_value(stored).unwrap();

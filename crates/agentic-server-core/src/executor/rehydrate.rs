@@ -167,6 +167,7 @@ async fn rehydrate_request(
         response_id,
         conversation_id: None,
         conversation_version: None,
+        rehydrated_metadata: None,
         continuation,
     };
 
@@ -281,6 +282,7 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
         .await?
         .ok_or_else(missing_previous_response_id)?;
     if restore_agent_tree(ctx, &stored.metadata, exec_ctx.responses_config.max_retained_bytes)? {
+        ctx.rehydrated_metadata = Some(stored.metadata);
         return Ok(());
     }
 
@@ -292,6 +294,7 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
     ctx.enriched_request.previous_response_id = None;
     ctx.enriched_request.input = ResponsesInput::from(items);
     apply_effective_settings(ctx, &stored.metadata);
+    ctx.rehydrated_metadata = Some(stored.metadata);
     Ok(())
 }
 
@@ -317,7 +320,6 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
             .ok_or_else(missing_previous_response_id)?;
         let checkpoint = ResponseCheckpoint {
             response_id: stored.response_id,
-            conversation_id: stored.conversation_id,
             history: canonical_session_history(InOutItem::into_input_items(history)),
             metadata: stored.metadata,
             durable: true,
@@ -378,11 +380,12 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
         exec_ctx.conv_handler.rehydrate(ctx),
     )?;
 
-    if let Some(metadata) = &snapshot.metadata
+    if let Some(metadata) = &snapshot.turn_metadata
         && restore_agent_tree(ctx, metadata, exec_ctx.responses_config.max_retained_bytes)?
     {
         ctx.conversation_id = Some(conv_data.conversation_id);
         ctx.conversation_version = Some(snapshot.version);
+        ctx.rehydrated_metadata = snapshot.turn_metadata;
         return Ok(());
     }
 
@@ -394,6 +397,7 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
     ctx.enriched_request.input = ResponsesInput::from(items);
     ctx.conversation_id = Some(conv_data.conversation_id);
     ctx.conversation_version = Some(snapshot.version);
+    ctx.rehydrated_metadata = snapshot.turn_metadata;
     Ok(())
 }
 
@@ -837,7 +841,6 @@ mod tests {
                 &conversation.conversation_id,
                 ConversationVersion::default(),
                 "resp_conversation_tree",
-                None,
                 Vec::new(),
                 &metadata,
             )
@@ -952,7 +955,6 @@ mod tests {
                 &conversation.conversation_id,
                 ConversationVersion::default(),
                 "resp_prior",
-                None,
                 prior_items,
                 &ResponseMetadata::default(),
             )
@@ -984,7 +986,6 @@ mod tests {
                 &conversation.conversation_id,
                 ConversationVersion::default(),
                 "resp_prior",
-                None,
                 vec![InOutItem::Output(OutputItem::McpListTools(McpListTools::new(
                     "mcpl_prior",
                     "counter",
@@ -1050,10 +1051,8 @@ mod tests {
                 if search.execution == crate::types::tools::ToolSearchExecution::Client
         ));
 
-        let (ctx, tool_search_state) =
-            crate::executor::prepare::prepare_request_tools(ctx, &exec_ctx.conv_handler, &exec_ctx.resp_handler)
-                .await
-                .expect("explicit handler preparation accepts the rehydrated request");
+        let (ctx, tool_search_state) = crate::executor::prepare::prepare_request_tools(ctx)
+            .expect("explicit handler preparation accepts the rehydrated request");
 
         assert!(
             tool_search_state
@@ -1167,10 +1166,8 @@ mod tests {
         let ctx = rehydrate_conversation(continuation, &exec_ctx)
             .await
             .expect("stored public call rehydrates before new output");
-        let (ctx, tool_search_state) =
-            crate::executor::prepare::prepare_request_tools(ctx, &exec_ctx.conv_handler, &exec_ctx.resp_handler)
-                .await
-                .expect("stored continuation derives valid tool-search state");
+        let (ctx, tool_search_state) = crate::executor::prepare::prepare_request_tools(ctx)
+            .expect("stored continuation derives valid tool-search state");
 
         let state = tool_search_state
             .as_ref()
@@ -1218,7 +1215,6 @@ mod tests {
                 &conversation.conversation_id,
                 ConversationVersion::default(),
                 "resp_conversation_native",
-                None,
                 vec![InOutItem::Output(native_call)],
                 &ResponseMetadata::default(),
             )

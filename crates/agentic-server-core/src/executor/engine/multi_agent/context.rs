@@ -298,6 +298,7 @@ pub(super) async fn prepare_agent(
         response_id: parent.response_id.clone(),
         conversation_id: None,
         conversation_version: None,
+        rehydrated_metadata: None,
         continuation: None,
     };
     let mut pipeline = AgentPipeline::new(ctx, tool_search, StreamRelay::detached());

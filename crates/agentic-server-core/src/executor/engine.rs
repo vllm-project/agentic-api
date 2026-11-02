@@ -442,6 +442,7 @@ mod tests {
             response_id: "resp_test".to_owned(),
             conversation_id: None,
             conversation_version: None,
+            rehydrated_metadata: None,
             continuation: None,
         };
         let mut exec_ctx = ExecutionContext::new(
@@ -506,6 +507,7 @@ mod tests {
             response_id: "resp_mcp".to_owned(),
             conversation_id: None,
             conversation_version: None,
+            rehydrated_metadata: None,
             continuation: None,
         };
         let plain_payload: RequestPayload = serde_json::from_value(serde_json::json!({
@@ -522,6 +524,7 @@ mod tests {
             response_id: "resp_plain".to_owned(),
             conversation_id: None,
             conversation_version: None,
+            rehydrated_metadata: None,
             continuation: None,
         };
         let mut exec_ctx = ExecutionContext::new(
@@ -610,6 +613,7 @@ mod tests {
             response_id: "resp_discovery".to_owned(),
             conversation_id: None,
             conversation_version: None,
+            rehydrated_metadata: None,
             continuation: None,
         };
         let mut exec_ctx = ExecutionContext::new(

@@ -3,11 +3,12 @@
 use std::convert::TryFrom;
 use std::sync::Arc;
 
-use super::models::conversation::LatestTurn;
+use super::models::conversation::ConversationHistory;
 use super::models::{conversation, item, response};
 use super::pool::{DbPool, DbTransaction};
 use super::types::conversation::encode_metadata;
 use super::types::item::{decode_public, encode};
+use super::types::response::decode_turn_metadata;
 use super::types::{
     ConversationData, ConversationSnapshot, ConversationVersion, ResponseMetadata, StorageError, StoreResult,
 };
@@ -101,13 +102,17 @@ impl ConversationStore {
     /// is missing or invalid, or the database query fails.
     pub async fn rehydrate(&self, conversation_id: &str) -> StoreResult<ConversationSnapshot> {
         let pool = self.pool()?;
-        let Some((revision, latest_response_id, latest_turn, rows)) =
-            conversation::get_with_items(pool, conversation_id).await?
+        let Some(ConversationHistory {
+            revision,
+            latest_response_id,
+            latest_turn,
+            items: rows,
+        }) = conversation::get_with_items(pool, conversation_id).await?
         else {
             return Ok(ConversationSnapshot {
                 items: Vec::new(),
                 version: ConversationVersion::default(),
-                metadata: None,
+                turn_metadata: None,
             });
         };
 
@@ -119,9 +124,9 @@ impl ConversationStore {
             })?);
         }
         let items = rows.iter().map(InOutItem::try_from).collect::<StoreResult<_>>()?;
-        let metadata = match &latest_response_id {
+        let turn_metadata = match &latest_response_id {
             None => None,
-            Some(response_id) => turn_metadata(response_id, latest_turn)?,
+            Some(response_id) => decode_turn_metadata(response_id, latest_turn.as_ref())?,
         };
 
         Ok(ConversationSnapshot {
@@ -131,24 +136,8 @@ impl ConversationStore {
                 response_id: latest_response_id,
                 revision,
             },
-            metadata,
+            turn_metadata,
         })
-    }
-
-    /// Loads the metadata of the turn at a captured version; legacy versions without a response return `None`.
-    ///
-    /// # Errors
-    /// Returns an error if the captured response is missing, its metadata is invalid, or the lookup fails.
-    pub async fn response_metadata_at_version(
-        &self,
-        conversation_id: &str,
-        version: &ConversationVersion,
-    ) -> StoreResult<Option<ResponseMetadata>> {
-        let Some(response_id) = &version.response_id else {
-            return Ok(None);
-        };
-        let turn = response::get_conversation_turn(self.pool()?, conversation_id, response_id).await?;
-        turn_metadata(response_id, turn.map(|turn| (turn.id, turn.metadata)))
     }
 
     /// Persists a conversation turn with its new items and response metadata, only if the conversation
@@ -162,7 +151,6 @@ impl ConversationStore {
         conversation_id: &str,
         expected_version: ConversationVersion,
         response_id: &str,
-        previous_response_id: Option<&str>,
         new_items: Vec<InOutItem>,
         metadata: &ResponseMetadata,
     ) -> StoreResult<()> {
@@ -199,7 +187,8 @@ impl ConversationStore {
             &mut tx,
             response_id,
             Some(conversation_id),
-            previous_response_id,
+            // A conversation turn never continues a previous response.
+            None,
             Some(&history_item_ids_json),
             Some(&metadata_json),
         )
@@ -284,16 +273,22 @@ impl ConversationStore {
         after: Option<&str>,
         order: ItemOrder,
     ) -> StoreResult<Vec<InOutItem>> {
-        self.retrieve(tenant_id, id).await?;
-        item::list_for_conversation(self.pool()?, tenant_id, id, limit, after, order)
-            .await
-            .map_err(|error| match (error, after) {
-                (sqlx::Error::RowNotFound, Some(cursor)) => StorageError::ItemCursorNotFound { id: cursor.to_owned() },
-                (other, _) => other.into(),
-            })?
-            .iter()
-            .map(decode_public)
-            .collect()
+        let rows = match item::list_for_conversation(self.pool()?, tenant_id, id, limit, after, order).await {
+            Ok(rows) => rows,
+            Err(sqlx::Error::RowNotFound) => {
+                // A cursor outside the page's conversation; a missing conversation is reported first.
+                self.retrieve(tenant_id, id).await?;
+                return Err(StorageError::ItemCursorNotFound {
+                    id: after.unwrap_or_default().to_owned(),
+                });
+            }
+            Err(error) => return Err(error.into()),
+        };
+        // An empty page comes from an empty conversation or a missing one; only then is the conversation looked up.
+        if rows.is_empty() {
+            self.retrieve(tenant_id, id).await?;
+        }
+        rows.iter().map(decode_public).collect()
     }
 
     /// Retrieve one item belonging to the authorized conversation.
@@ -321,20 +316,6 @@ impl ConversationStore {
         tx.commit().await?;
         row.try_into()
     }
-}
-
-/// Decode the `metadata` column of the response that committed a conversation turn. `turn` is
-/// `None` when that response is missing or belongs to another conversation, which is invalid.
-fn turn_metadata(response_id: &str, turn: Option<LatestTurn>) -> StoreResult<Option<ResponseMetadata>> {
-    let invalid_metadata = || StorageError::InvalidResponseMetadata {
-        response_id: response_id.to_owned(),
-    };
-    let (_, metadata) = turn.ok_or_else(invalid_metadata)?;
-    metadata
-        .as_deref()
-        .map(ResponseMetadata::try_from)
-        .transpose()
-        .map_err(|_| invalid_metadata())
 }
 
 async fn lock_owned(tx: &mut DbTransaction<'_>, tenant_id: &str, id: &str) -> StoreResult<conversation::Conversation> {

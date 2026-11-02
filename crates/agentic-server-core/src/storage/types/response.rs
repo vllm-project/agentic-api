@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::super::models::Response as StorageDbResponse;
+use super::super::models::conversation::LatestTurn;
 use super::errors::StorageError;
 use crate::types::agent_tree::StoredTreeSnapshot;
 use crate::types::io::ToolChoice;
@@ -80,6 +81,23 @@ impl TryFrom<StorageDbResponse> for ResponseData {
             metadata,
         })
     }
+}
+
+/// Decode the `responses.metadata` column of the response that committed a conversation's latest turn. `turn` is
+/// `None` when that response is missing or belongs to another conversation, which is invalid.
+pub(in crate::storage) fn decode_turn_metadata(
+    response_id: &str,
+    turn: Option<&LatestTurn>,
+) -> Result<Option<ResponseMetadata>, StorageError> {
+    let invalid_metadata = || StorageError::InvalidResponseMetadata {
+        response_id: response_id.to_owned(),
+    };
+    turn.ok_or_else(invalid_metadata)?
+        .metadata
+        .as_deref()
+        .map(ResponseMetadata::try_from)
+        .transpose()
+        .map_err(|_| invalid_metadata())
 }
 
 /// Decode the `responses.metadata` column; every reader of stored [`ResponseMetadata`] goes through here.

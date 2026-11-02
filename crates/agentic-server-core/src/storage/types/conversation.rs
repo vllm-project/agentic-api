@@ -24,8 +24,8 @@ pub struct ConversationSnapshot {
     pub items: Vec<InOutItem>,
     /// Version derived from the final item sequence and latest response identity.
     pub version: ConversationVersion,
-    /// Metadata of the turn that produced `version`; `None` before the first turn and for legacy versions.
-    pub metadata: Option<ResponseMetadata>,
+    /// `responses.metadata` of the turn that produced `version`; `None` before the first turn.
+    pub turn_metadata: Option<ResponseMetadata>,
 }
 
 /// Domain entity for a stored conversation.

@@ -199,6 +199,7 @@ async fn summarize_items(
         response_id: uuid7_str("resp_"),
         conversation_id: None,
         conversation_version: None,
+        rehydrated_metadata: None,
         continuation: None,
     };
     let mut agent = AgentPipeline::new(ctx, None, StreamRelay::detached());
@@ -341,8 +342,7 @@ pub async fn compact_response(
             "/responses/compact is not supported with multi_agent".into(),
         ));
     }
-    let (mut ctx, tool_search_state) =
-        prepare_request_tools(ctx, &exec_ctx.conv_handler, &exec_ctx.resp_handler).await?;
+    let (mut ctx, tool_search_state) = prepare_request_tools(ctx)?;
     let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);
     let input = std::mem::replace(&mut ctx.enriched_request.input, ResponsesInput::Items(Vec::new()));
     // The returned window keeps every open async call, in its public form, so a client replaying it
@@ -506,6 +506,7 @@ mod tests {
             response_id: "resp_test".to_owned(),
             conversation_id: None,
             conversation_version: None,
+            rehydrated_metadata: None,
             continuation: None,
         }
     }

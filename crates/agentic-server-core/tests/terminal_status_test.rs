@@ -13,6 +13,7 @@ fn context() -> RequestContext {
         response_id: "resp_local".to_owned(),
         conversation_id: None,
         conversation_version: None,
+        rehydrated_metadata: None,
         continuation: None,
     }
 }

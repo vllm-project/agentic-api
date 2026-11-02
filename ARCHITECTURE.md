@@ -825,7 +825,10 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   for the two request copies' responsibilities.
 - **`rehydrate.rs`** — `rehydrate_conversation()` loads prior history from either the
   conversation store or the response store depending on which ID the request carries,
-  and builds the enriched `RequestContext`. Rehydration retains internal
+  and builds the enriched `RequestContext`. It keeps the continued response's or conversation turn's
+  `ResponseMetadata` on the context (`rehydrated_metadata`), so `prepare.rs` restores tool-search state after
+  compaction without another storage read, and `persist.rs` builds the new turn's metadata (`prepare_metadata`)
+  from the same context. Rehydration retains internal
   `InputItem::McpListTools` records so `ToolRegistry` can suppress repeated MCP
   discovery lifecycle output. After stored history and the new request input are
   combined, `pending_calls.rs` validates the complete continuation's function/custom
@@ -946,8 +949,10 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   `StorageError` into `ExecutorError`. **This is the sanctioned boundary between the
   executor and the storage stores** — nothing above this layer touches
   `storage::conversation`/`storage::response` directly. Today they only cover what the
-  pipeline and retrieval need (`get`, `get_or_create`, `create`, `rehydrate[_snapshot]`,
-  `execute_turn`, `commit_tree`, `retrieve`, `validate_exists`); **any new CRUD operation
+  pipeline and retrieval need. Each handler has one `rehydrate` and one `persist`; `persist` takes the turn's
+  output items and the `ResponseMetadata` that `persist.rs` builds, including any multi-agent tree. Lookups and
+  retrieval are separate methods (`get`, `get_or_create`, `create`, `get_snapshot`, `validate_exists`);
+  **any new CRUD operation
   beyond persist/rehydrate belongs here**, added as a new method that delegates to the corresponding store.
 - **`error.rs`** — `ExecutorError`, with the mapping methods (`http_status()`,
   `error_type()`, `into_response_body()`, ...) handlers use to render errors.
@@ -1166,9 +1171,9 @@ This is distinct from the standalone `/v1/responses/compact` endpoint.
 **Persistence and public output.** A versioned `StoredTreeSnapshot` contains agent
 histories, phases, mailboxes, loaded tools and pending client calls.
 `ValidatedTreeCheckpoint` checks its limits, identities and references before live
-state is constructed or committed. `persist.rs` calls the existing mode handler's
-`commit_tree`; transport handlers do not write storage directly, and tree persistence
-uses the existing response/conversation stores.
+state is constructed or committed. `persist.rs` puts the tree in the turn's `ResponseMetadata` and calls the mode
+handler's `persist`; transport handlers do not write storage directly, and tree persistence uses the existing
+response/conversation stores.
 `ResponseMetadata.multi_agent_tree` restores execution state, while
 `response_snapshot` retains the exact terminal public response for GET retrieval.
 Continuation restoration discards the latter duplicate but retains the tree.
@@ -1826,12 +1831,12 @@ the upstream reported.
   for GET retrieval, and a versioned multi-agent tree checkpoint), and typed conversation
   metadata on `ConversationData`. Item rows are parsed once and keep input/output identity and
   the private code-interpreter origin. `ConversationSnapshot` carries a conversation's items,
-  its version, and the metadata of the turn at that version. Store rehydration uses this conversion and fails
+  its version, and the `turn_metadata` of the turn at that version. Store rehydration uses this conversion and fails
   if a row cannot be decoded; response rehydration also rejects missing referenced rows.
   It must not silently omit malformed reasoning from a continuation.
   `TryFrom<Response>` rejects malformed history references and effective metadata;
-  only SQL NULL keeps the legacy empty/default behavior. Versioned conversation
-  metadata lookup also rejects a missing or foreign captured response. Storage
+  only SQL NULL keeps the legacy empty/default behavior. Conversation
+  rehydration also rejects a latest turn whose response is missing or belongs to another conversation. Storage
   errors omit parser diagnostics that could echo sensitive persisted fields.
   `InOutItem::into_input_items` turns a full
   history into the `Vec<InputItem>` used for continuation processing: stored
@@ -1865,7 +1870,7 @@ the upstream reported.
   not.)
 
 Stored Responses snapshots are written in the same transaction as response history. Retrieval goes through
-`ResponseHandler::retrieve`, independently of upstream availability. Continuation checkpoints omit the
+`ResponseHandler::get_snapshot`, independently of upstream availability. Continuation checkpoints omit the
 snapshot to avoid retaining a duplicate response; they continue to use canonical history and effective
 settings. Legacy history-only records remain usable for continuation, but GET retrieval reports a conflict
 rather than fabricating status, usage, or output.

@@ -51,7 +51,7 @@ fn capture(lease: &ResponseContinuation, id: &str) -> ExecutorResult<RetainedChe
         .into_iter()
         .map(InOutItem::Input)
         .collect::<Vec<_>>();
-    lease.checkpoint(id.to_owned(), None, &ResponseMetadata::default(), &items, false)
+    lease.checkpoint(id.to_owned(), &ResponseMetadata::default(), &items, false)
 }
 
 fn size(checkpoint: &RetainedCheckpoint) -> usize {
@@ -260,7 +260,6 @@ fn aggregate_budget_charges_canonical_durable_fallback_before_inference() {
     let lease = session.begin(None).unwrap();
     let checkpoint = ResponseCheckpoint {
         response_id: "durable".to_owned(),
-        conversation_id: None,
         history: Vec::from(&ResponsesInput::Text("durable history".to_owned())),
         metadata: ResponseMetadata {
             multi_agent_tree: None,

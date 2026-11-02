@@ -26,11 +26,11 @@ async fn test_store() -> ConversationStore {
 
 /// Stored rows of a conversation in sequence order, for checks below the public item API.
 async fn conversation_rows(store: &ConversationStore, conversation_id: &str) -> Vec<Item> {
-    let (_, _, _, rows) = conversation_model::get_with_items(store.pool().unwrap(), conversation_id)
+    conversation_model::get_with_items(store.pool().unwrap(), conversation_id)
         .await
         .unwrap()
-        .expect("conversation exists");
-    rows
+        .expect("conversation exists")
+        .items
 }
 
 /// Stored history rows of a response in order, for checks below the public item API.
@@ -75,7 +75,6 @@ async fn regression_response_items_are_visible() {
         &store,
         &conv.conversation_id,
         "resp_review",
-        None,
         vec![regression_message("from response persistence")],
         &ResponseMetadata::default(),
     )
@@ -168,7 +167,6 @@ async fn regression_delete_invalidates_version() {
             &conv.conversation_id,
             snapshot.version,
             "resp_stale",
-            None,
             vec![regression_message("based on deleted history")],
             &ResponseMetadata::default(),
         )
@@ -233,7 +231,6 @@ async fn deletion_preserves_stored_response_history_and_invalidates_empty_snapsh
         &store,
         &conv.conversation_id,
         "resp_kept",
-        None,
         inputs.clone(),
         &ResponseMetadata::default(),
     )
@@ -252,7 +249,6 @@ async fn deletion_preserves_stored_response_history_and_invalidates_empty_snapsh
             &conv.conversation_id,
             empty.version,
             "resp_stale_empty",
-            None,
             vec![],
             &ResponseMetadata::default(),
         )
@@ -267,7 +263,6 @@ async fn deletion_preserves_stored_response_history_and_invalidates_empty_snapsh
         &store,
         &conv.conversation_id,
         "resp_kept_two",
-        None,
         inputs.clone(),
         &ResponseMetadata::default(),
     )
@@ -291,7 +286,6 @@ async fn response_checkpoint_preserves_manual_items_after_conversation_deletion(
         &store,
         &conv.conversation_id,
         "resp_before_manual",
-        None,
         vec![first.clone()],
         &ResponseMetadata::default(),
     )
@@ -305,7 +299,6 @@ async fn response_checkpoint_preserves_manual_items_after_conversation_deletion(
         &store,
         &conv.conversation_id,
         "resp_after_manual",
-        None,
         vec![second.clone()],
         &ResponseMetadata::default(),
     )

@@ -58,7 +58,7 @@ async fn test_conversation_store_persist_and_rehydrate() {
 
     let metadata = ResponseMetadata::default();
 
-    persist_turn(&store, conv_id, "resp_1", None, items, &metadata)
+    persist_turn(&store, conv_id, "resp_1", items, &metadata)
         .await
         .expect("persist failed");
 
@@ -81,7 +81,6 @@ async fn conversation_snapshot_reports_empty_and_last_response() -> Result<(), B
         &store,
         &conversation.conversation_id,
         "resp_1",
-        None,
         vec![create_input_item("hello"), create_output_item("msg_1")],
         &ResponseMetadata::default(),
     )
@@ -116,7 +115,6 @@ async fn conversation_snapshot_rejects_an_undecodable_final_row() -> Result<(), 
         &store,
         &conversation.conversation_id,
         "resp_1",
-        None,
         vec![stored_item.clone()],
         &ResponseMetadata::default(),
     )
@@ -147,7 +145,6 @@ async fn conversation_snapshot_rejects_items_without_a_sequence() -> Result<(), 
         &store,
         &conversation.conversation_id,
         "resp_1",
-        None,
         vec![create_input_item("hello")],
         &ResponseMetadata::default(),
     )
@@ -206,7 +203,6 @@ async fn legacy_item_only_version_upgrades_on_the_next_persist() -> Result<(), B
             &conversation.conversation_id,
             legacy.version,
             "resp_after_legacy",
-            None,
             Vec::new(),
             &ResponseMetadata::default(),
         )
@@ -236,7 +232,6 @@ async fn conversation_version_empty_checked_persist_succeeds() -> Result<(), Box
             &conversation.conversation_id,
             ConversationVersion::default(),
             "resp_first",
-            None,
             items.clone(),
             &ResponseMetadata::default(),
         )
@@ -274,7 +269,6 @@ async fn zero_item_turn_advances_version_and_retains_exact_metadata() -> Result<
             &conversation.conversation_id,
             empty.version,
             "resp_zero_items_first",
-            None,
             Vec::new(),
             &first_metadata,
         )
@@ -291,11 +285,7 @@ async fn zero_item_turn_advances_version_and_retains_exact_metadata() -> Result<
         }
     );
     assert_eq!(
-        store
-            .response_metadata_at_version(&conversation.conversation_id, &first.version)
-            .await?
-            .map(|metadata| metadata.model)
-            .as_deref(),
+        first.turn_metadata.as_ref().map(|metadata| metadata.model.as_str()),
         Some("first-zero-item-turn")
     );
 
@@ -304,7 +294,6 @@ async fn zero_item_turn_advances_version_and_retains_exact_metadata() -> Result<
             &conversation.conversation_id,
             first.version.clone(),
             "resp_zero_items_second",
-            None,
             Vec::new(),
             &ResponseMetadata {
                 multi_agent_tree: None,
@@ -318,19 +307,11 @@ async fn zero_item_turn_advances_version_and_retains_exact_metadata() -> Result<
     assert!(second.items.is_empty());
     assert_ne!(second.version, first.version);
     assert_eq!(
-        store
-            .response_metadata_at_version(&conversation.conversation_id, &first.version)
-            .await?
-            .map(|metadata| metadata.model)
-            .as_deref(),
+        first.turn_metadata.as_ref().map(|metadata| metadata.model.as_str()),
         Some("first-zero-item-turn")
     );
     assert_eq!(
-        store
-            .response_metadata_at_version(&conversation.conversation_id, &second.version)
-            .await?
-            .map(|metadata| metadata.model)
-            .as_deref(),
+        second.turn_metadata.as_ref().map(|metadata| metadata.model.as_str()),
         Some("second-zero-item-turn")
     );
 
@@ -339,7 +320,6 @@ async fn zero_item_turn_advances_version_and_retains_exact_metadata() -> Result<
             &conversation.conversation_id,
             first.version,
             "resp_zero_items_stale",
-            None,
             Vec::new(),
             &ResponseMetadata::default(),
         )
@@ -367,7 +347,6 @@ async fn conversation_version_stale_checked_persist_rolls_back_items_and_respons
         &store,
         &conversation.conversation_id,
         "resp_competing",
-        None,
         competing_items.clone(),
         &ResponseMetadata::default(),
     )
@@ -379,7 +358,6 @@ async fn conversation_version_stale_checked_persist_rolls_back_items_and_respons
             &conversation.conversation_id,
             snapshot.version,
             "resp_stale",
-            None,
             rejected_items,
             &ResponseMetadata::default(),
         )
@@ -427,7 +405,6 @@ async fn conversation_version_racing_checked_persists_allow_exactly_one_winner()
                     &conversation_id,
                     version,
                     "resp_writer_one",
-                    None,
                     items.clone(),
                     &ResponseMetadata::default(),
                 )
@@ -446,7 +423,6 @@ async fn conversation_version_racing_checked_persists_allow_exactly_one_winner()
                     &conversation_id,
                     version,
                     "resp_writer_two",
-                    None,
                     items.clone(),
                     &ResponseMetadata::default(),
                 )
@@ -498,7 +474,6 @@ async fn conversation_version_is_scoped_per_conversation() -> Result<(), Box<dyn
         &store,
         &first.conversation_id,
         "resp_first_conversation",
-        None,
         first_items.clone(),
         &ResponseMetadata::default(),
     )
@@ -510,7 +485,6 @@ async fn conversation_version_is_scoped_per_conversation() -> Result<(), Box<dyn
             &second.conversation_id,
             ConversationVersion::default(),
             "resp_second_conversation",
-            None,
             vec![create_input_item("second conversation")],
             &ResponseMetadata::default(),
         )
@@ -534,28 +508,14 @@ async fn test_conversation_store_multiple_turns() {
     let metadata = ResponseMetadata::default();
 
     // First turn
-    persist_turn(
-        &store,
-        conv_id,
-        "resp_1",
-        None,
-        vec![create_input_item("turn 1")],
-        &metadata,
-    )
-    .await
-    .expect("first persist failed");
+    persist_turn(&store, conv_id, "resp_1", vec![create_input_item("turn 1")], &metadata)
+        .await
+        .expect("first persist failed");
 
     // Second turn
-    persist_turn(
-        &store,
-        conv_id,
-        "resp_2",
-        Some("resp_1"),
-        vec![create_input_item("turn 2")],
-        &metadata,
-    )
-    .await
-    .expect("second persist failed");
+    persist_turn(&store, conv_id, "resp_2", vec![create_input_item("turn 2")], &metadata)
+        .await
+        .expect("second persist failed");
 
     let rehydrated = store.rehydrate(conv_id).await.expect("rehydrate failed");
 
@@ -647,7 +607,6 @@ async fn conversation_rehydration_rejects_invalid_reasoning() -> Result<(), Box<
         &store,
         &conversation.conversation_id,
         "resp_corrupt",
-        None,
         vec![create_input_item("query")],
         &ResponseMetadata::default(),
     )
@@ -706,7 +665,7 @@ async fn test_conversation_persist_empty_items() {
     let metadata = ResponseMetadata::default();
 
     // Persist with empty item list
-    persist_turn(&store, conv_id, "resp_empty", None, vec![], &metadata)
+    persist_turn(&store, conv_id, "resp_empty", vec![], &metadata)
         .await
         .expect("persist empty items failed");
 
@@ -726,23 +685,15 @@ async fn test_conversation_rehydrate_after_multiple_varying_turns() {
     let metadata = ResponseMetadata::default();
 
     // Turn 1: 1 item
-    persist_turn(
-        &store,
-        conv_id,
-        "resp_1",
-        None,
-        vec![create_input_item("turn1")],
-        &metadata,
-    )
-    .await
-    .expect("turn 1 failed");
+    persist_turn(&store, conv_id, "resp_1", vec![create_input_item("turn1")], &metadata)
+        .await
+        .expect("turn 1 failed");
 
     // Turn 2: 3 items
     persist_turn(
         &store,
         conv_id,
         "resp_2",
-        Some("resp_1"),
         vec![
             create_input_item("turn2a"),
             create_output_item("out2"),
@@ -758,7 +709,6 @@ async fn test_conversation_rehydrate_after_multiple_varying_turns() {
         &store,
         conv_id,
         "resp_3",
-        Some("resp_2"),
         vec![create_input_item("turn3"), create_output_item("out3")],
         &metadata,
     )
@@ -815,7 +765,6 @@ async fn test_conversation_concurrent_turns() {
                     &conv_id,
                     version,
                     response_id,
-                    None,
                     vec![create_input_item(text)],
                     &ResponseMetadata::default(),
                 )
@@ -1026,7 +975,6 @@ async fn test_conversation_store_persist_nonexistent_conversation() {
         &store,
         "nonexistent_conv",
         "resp_1",
-        None,
         vec![create_input_item("test")],
         &metadata,
     )
@@ -1113,7 +1061,6 @@ async fn test_tool_search_conversation_metadata_matches_snapshot_version() {
         &store,
         &conversation.conversation_id,
         "resp_tool_search_initial",
-        None,
         vec![create_input_item("initial")],
         &ResponseMetadata {
             model: "initial-model".to_owned(),
@@ -1141,7 +1088,6 @@ async fn test_tool_search_conversation_metadata_matches_snapshot_version() {
         &store,
         &conversation.conversation_id,
         "resp_tool_search_latest",
-        None,
         vec![create_input_item("latest")],
         &latest,
     )
@@ -1173,19 +1119,17 @@ async fn test_tool_search_conversation_metadata_matches_snapshot_version() {
         ..ResponseMetadata::default()
     };
     sqlx::query(
-        "INSERT INTO responses \
-         (id, conversation_id, previous_response_id, history_item_ids, metadata, created_at) \
-         VALUES ($1, $2, $3, $4, $5, $6)",
+        "INSERT INTO responses (id, previous_response_id, history_item_ids, metadata, created_at) \
+         VALUES ($1, $2, $3, $4, $5)",
     )
     .bind("resp_tool_search_branch")
-    .bind(&conversation.conversation_id)
     .bind("resp_tool_search_latest")
     .bind(serde_json::to_string(&vec![latest_item_id]).expect("branch history JSON"))
     .bind(String::try_from(&branch).expect("branch metadata JSON"))
     .bind(20_000_i64)
     .execute(pool.as_ref())
     .await
-    .expect("seed conversation-tagged response branch");
+    .expect("seed a newer response branched from the latest turn");
 
     let snapshot = store
         .rehydrate(&conversation.conversation_id)
@@ -1195,7 +1139,6 @@ async fn test_tool_search_conversation_metadata_matches_snapshot_version() {
         &store,
         &conversation.conversation_id,
         "resp_after_snapshot",
-        None,
         vec![create_input_item("after snapshot")],
         &ResponseMetadata {
             model: "after-snapshot-model".to_owned(),
@@ -1204,10 +1147,9 @@ async fn test_tool_search_conversation_metadata_matches_snapshot_version() {
     )
     .await
     .expect("persist a newer conversation turn");
-    let metadata = store
-        .response_metadata_at_version(&conversation.conversation_id, &snapshot.version)
-        .await
-        .expect("load response metadata at snapshot version")
+    // The snapshot keeps the metadata of the turn it was rehydrated at.
+    let metadata = snapshot
+        .turn_metadata
         .expect("response metadata accompanies conversation items");
     assert_eq!(metadata.model, "latest-model");
     assert_eq!(metadata.tool_search_loaded_tools.as_deref().map(<[_]>::len), Some(1));
@@ -1256,7 +1198,6 @@ async fn test_tool_search_conversation_conflict_does_not_persist_stale_loaded_st
             &conversation.conversation_id,
             snapshot.version.clone(),
             "resp_tool_search_winner",
-            None,
             vec![create_input_item("winner")],
             &winning,
         )
@@ -1267,7 +1208,6 @@ async fn test_tool_search_conversation_conflict_does_not_persist_stale_loaded_st
             &conversation.conversation_id,
             snapshot.version,
             "resp_tool_search_stale",
-            None,
             vec![create_input_item("stale")],
             &stale,
         )
@@ -1279,11 +1219,7 @@ async fn test_tool_search_conversation_conflict_does_not_persist_stale_loaded_st
         .rehydrate(&conversation.conversation_id)
         .await
         .expect("rehydrate winning state");
-    let latest = store
-        .response_metadata_at_version(&conversation.conversation_id, &snapshot.version)
-        .await
-        .expect("load winning metadata")
-        .expect("winning metadata");
+    let latest = snapshot.turn_metadata.expect("winning metadata");
     assert_eq!(latest.model, "winner");
     let serialized = serde_json::to_value(latest.tool_search_loaded_tools).unwrap();
     assert_eq!(serialized[0]["name"], "winning_tool");

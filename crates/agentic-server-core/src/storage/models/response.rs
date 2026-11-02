@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use super::super::pool::{DbPool, DbResult, DbTransaction};
+use super::super::pool::{DbResult, DbTransaction};
 use crate::utils::common::{serialize_to_string, utcnow_str};
 
 /// LLM API response stored in the database.
@@ -94,19 +94,18 @@ pub async fn delete_in_tx(tx: &mut DbTransaction<'_>, id: &str) -> DbResult<bool
                 .bind(parent)
                 .fetch_all(&mut **tx)
                 .await?;
+        // Children continue by `previous_response_id`, so none is a conversation turn.
         for child in children {
-            if child.conversation_id.is_none() {
-                let mut ids = child
-                    .history_item_ids_vec()
-                    .map_err(|error| sqlx::Error::Decode(Box::new(error)))?;
-                ids.retain(|id| !inherited.contains(id));
-                let json = serialize_to_string(&ids).map_err(|error| sqlx::Error::Encode(Box::new(error)))?;
-                sqlx::query("UPDATE responses SET history_item_ids = $1 WHERE id = $2")
-                    .bind(json)
-                    .bind(&child.id)
-                    .execute(&mut **tx)
-                    .await?;
-            }
+            let mut ids = child
+                .history_item_ids_vec()
+                .map_err(|error| sqlx::Error::Decode(Box::new(error)))?;
+            ids.retain(|id| !inherited.contains(id));
+            let json = serialize_to_string(&ids).map_err(|error| sqlx::Error::Encode(Box::new(error)))?;
+            sqlx::query("UPDATE responses SET history_item_ids = $1 WHERE id = $2")
+                .bind(json)
+                .bind(&child.id)
+                .execute(&mut **tx)
+                .await?;
             parents.push(child.id);
         }
     }
@@ -115,25 +114,6 @@ pub async fn delete_in_tx(tx: &mut DbTransaction<'_>, id: &str) -> DbResult<bool
         .execute(&mut **tx)
         .await?;
     Ok(true)
-}
-
-/// Get the response that committed a conversation turn.
-///
-/// # Errors
-/// Returns `DbResult::Err` if the database query fails.
-pub async fn get_conversation_turn(
-    pool: &DbPool,
-    conversation_id: &str,
-    response_id: &str,
-) -> DbResult<Option<Response>> {
-    sqlx::query_as::<_, Response>(
-        "SELECT * FROM responses \
-         WHERE id = $1 AND conversation_id = $2",
-    )
-    .bind(response_id)
-    .bind(conversation_id)
-    .fetch_optional(pool)
-    .await
 }
 
 impl Response {

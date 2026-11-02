@@ -86,7 +86,6 @@ pub struct ResponseContinuation {
 #[derive(Serialize)]
 pub(crate) struct ResponseCheckpoint {
     pub response_id: String,
-    pub conversation_id: Option<String>,
     pub history: Vec<InputItem>,
     pub metadata: ResponseMetadata,
     pub durable: bool,
@@ -163,7 +162,6 @@ impl ResponseContinuation {
     pub(crate) fn checkpoint(
         &self,
         response_id: String,
-        conversation_id: Option<String>,
         metadata: &ResponseMetadata,
         new_items: &[InOutItem],
         durable: bool,
@@ -178,7 +176,6 @@ impl ResponseContinuation {
         }
         let checkpoint = ResponseCheckpoint {
             response_id,
-            conversation_id,
             history: canonical_session_history(history),
             metadata,
             durable,

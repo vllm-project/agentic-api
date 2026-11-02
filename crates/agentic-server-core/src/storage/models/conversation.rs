@@ -63,22 +63,35 @@ pub async fn get(pool: &DbPool, id: &str) -> DbResult<Option<Conversation>> {
         .await
 }
 
-/// The latest turn of a conversation: the committing response's ID and its `metadata` column.
-pub type LatestTurn = (String, Option<String>);
+/// What rehydration reads from a conversation in one statement.
+#[derive(Debug)]
+pub struct ConversationHistory {
+    /// The conversation's revision.
+    pub revision: i64,
+    /// The response that committed the latest turn, if any.
+    pub latest_response_id: Option<String>,
+    /// The latest turn's response row; `None` when there is no turn, or the response is missing or belongs to
+    /// another conversation.
+    pub latest_turn: Option<LatestTurn>,
+    /// The conversation's items in sequence order.
+    pub items: Vec<Item>,
+}
 
-/// Get what rehydration needs from a conversation in one statement: its `revision`, its
-/// `latest_response_id`, the latest turn when that response belongs to this conversation, and its
-/// items in sequence order.
+/// The `responses` row that committed a conversation's latest turn, as far as rehydration reads it.
+#[derive(Debug)]
+pub struct LatestTurn {
+    /// Its `metadata` column.
+    pub metadata: Option<String>,
+}
+
+/// Get what rehydration needs from a conversation in one statement.
 ///
 /// Reading the header and the items in one statement keeps the conversation version consistent with
 /// the items. Items are ordered here rather than in SQL so the database does not sort item data.
 ///
 /// # Errors
 /// Returns `DbResult::Err` if the database query fails.
-pub async fn get_with_items(
-    pool: &DbPool,
-    id: &str,
-) -> DbResult<Option<(i64, Option<String>, Option<LatestTurn>, Vec<Item>)>> {
+pub async fn get_with_items(pool: &DbPool, id: &str) -> DbResult<Option<ConversationHistory>> {
     let rows = sqlx::query(
         "SELECT conversations.revision, conversations.latest_response_id, \
                 responses.id AS turn_id, responses.metadata, \
@@ -103,20 +116,29 @@ pub async fn get_with_items(
         // Only the conversation row has a revision.
         match row.try_get::<Option<i64>, _>("revision")? {
             Some(revision) => {
-                let turn = row
+                let latest_turn = row
                     .try_get::<Option<String>, _>("turn_id")?
-                    .map(|turn_id| Ok::<_, sqlx::Error>((turn_id, row.try_get("metadata")?)))
+                    .map(|_| {
+                        Ok::<_, sqlx::Error>(LatestTurn {
+                            metadata: row.try_get("metadata")?,
+                        })
+                    })
                     .transpose()?;
-                header = Some((revision, row.try_get("latest_response_id")?, turn));
+                header = Some((revision, row.try_get("latest_response_id")?, latest_turn));
             }
             None => items.push(Item::from_row(row)?),
         }
     }
-    let Some((revision, latest_response_id, turn)) = header else {
+    let Some((revision, latest_response_id, latest_turn)) = header else {
         return Ok(None);
     };
     items.sort_unstable_by_key(|item| item.seq);
-    Ok(Some((revision, latest_response_id, turn, items)))
+    Ok(Some(ConversationHistory {
+        revision,
+        latest_response_id,
+        latest_turn,
+        items,
+    }))
 }
 
 /// Locks an existing conversation for the lifetime of the transaction.

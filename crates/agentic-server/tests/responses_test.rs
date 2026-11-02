@@ -265,7 +265,6 @@ async fn persist_competing_turn(pool: &Arc<DbPool>, conversation_id: &str) {
         &ConversationStore::new(Arc::clone(pool)),
         conversation_id,
         COMPETING_RESPONSE_ID,
-        None,
         competing_turn_items(),
         &ResponseMetadata {
             multi_agent_tree: None,

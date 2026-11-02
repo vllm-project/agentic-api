@@ -135,6 +135,7 @@ impl MultiAgentRun {
             response_id: self.payload.id.clone(),
             conversation_id: None,
             conversation_version: None,
+            rehydrated_metadata: None,
             continuation: None,
         };
         // Round tasks present through the response owner's relay, never the client queue.

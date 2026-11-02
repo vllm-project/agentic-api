@@ -8,10 +8,11 @@ use crate::types::io::{InOutItem, InputItem};
 use crate::types::io::{ItemOrder, ItemPage, ListItemsResponse};
 use crate::types::request_response::ResponsePayload;
 
-use super::CommittedResponse;
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::multi_agent::ValidatedTreeCheckpoint;
 use crate::executor::request::RequestContext;
+
+/// The conflict for a response stored without a snapshot, such as a `store: false` session checkpoint.
+const NOT_RETRIEVABLE: &str = "stored response has no retrievable payload; create a new response with store=true";
 
 /// Handles all response store operations: lookup, rehydration, and persistence.
 #[derive(Clone, Debug)]
@@ -20,18 +21,6 @@ pub struct ResponseHandler {
 }
 
 impl ResponseHandler {
-    pub(crate) async fn commit_tree(
-        &self,
-        ctx: RequestContext,
-        output_items: Vec<OutputItem>,
-        mut metadata: ResponseMetadata,
-        tree: ValidatedTreeCheckpoint,
-    ) -> ExecutorResult<CommittedResponse> {
-        let response_id = ctx.response_id.clone();
-        metadata.multi_agent_tree = Some(tree.into_snapshot());
-        self.execute_turn_with_metadata(ctx, output_items, metadata).await?;
-        Ok(CommittedResponse { response_id })
-    }
     #[must_use]
     pub fn new(store: ResponseStore) -> Self {
         Self { store }
@@ -42,8 +31,14 @@ impl ResponseHandler {
     /// # Errors
     /// Returns `ResponseNotFound` for missing IDs, a storage error for unavailable storage, and a conflict
     /// for older records that contain continuation history but no response snapshot.
-    pub async fn retrieve(&self, response_id: &str) -> ExecutorResult<ResponsePayload> {
-        response_snapshot(self.store.get(response_id).await?)
+    pub async fn get_snapshot(&self, response_id: &str) -> ExecutorResult<ResponsePayload> {
+        self.store
+            .get(response_id)
+            .await?
+            .metadata
+            .response_snapshot
+            .map(|snapshot| *snapshot)
+            .ok_or_else(|| ExecutorError::Conflict(NOT_RETRIEVABLE.into()))
     }
 
     /// Deletes a stored response.
@@ -89,7 +84,10 @@ impl ResponseHandler {
     /// without a retrievable snapshot.
     pub async fn list_input_items(&self, response_id: &str, page: ItemPage<'_>) -> ExecutorResult<ListItemsResponse> {
         let (stored, mut items) = self.store.get_items(response_id).await?;
-        let snapshot = response_snapshot(stored)?;
+        let snapshot = stored
+            .metadata
+            .response_snapshot
+            .ok_or_else(|| ExecutorError::Conflict(NOT_RETRIEVABLE.into()))?;
         // Both persistence paths append public outputs after the turn's inputs.
         // Bound the suffix by this snapshot's output count so an inherited output
         // remains input even when a turn supplies no new items. Session execution
@@ -184,35 +182,12 @@ impl ResponseHandler {
 
     /// Completes response-scoped persistence and optional transient checkpoint retention.
     ///
-    /// Takes `ctx` and `output_items` by value so fields can be moved directly
-    /// into [`ResponseMetadata`]. Normally only this turn's items are inserted;
-    /// promoting a transient parent to a stored child requires its full canonical
-    /// history because there are no durable parent item IDs to reference.
+    /// Normally only this turn's items are inserted; promoting a transient parent to a stored child requires its
+    /// full canonical history because there are no durable parent item IDs to reference.
     ///
     /// # Errors
     /// Returns `ExecutorError` if the store is disabled or the database operation fails.
-    pub async fn execute_turn(&self, mut ctx: RequestContext, output_items: Vec<OutputItem>) -> ExecutorResult<()> {
-        let metadata = ResponseMetadata {
-            multi_agent_tree: ctx.multi_agent_tree.take().map(ValidatedTreeCheckpoint::into_snapshot),
-            model: std::mem::take(&mut ctx.enriched_request.model),
-            previous_response_id: ctx.original_request.previous_response_id.take(),
-            effective_tools: ctx.enriched_request.tools.take(),
-            tool_search_loaded_tools: None,
-            response_snapshot: None,
-            effective_tool_choice: ctx
-                .original_request
-                .tool_choice
-                .take()
-                .or_else(|| ctx.enriched_request.tool_choice.take())
-                .unwrap_or_default(),
-            effective_instructions: ctx.enriched_request.instructions.take(),
-        };
-
-        self.execute_turn_with_metadata(ctx, output_items, metadata).await
-    }
-
-    /// Persists a response using metadata prepared by request-scoped tool behavior.
-    pub(crate) async fn execute_turn_with_metadata(
+    pub async fn persist(
         &self,
         mut ctx: RequestContext,
         output_items: Vec<OutputItem>,
@@ -245,15 +220,7 @@ impl ResponseHandler {
         let snapshot = metadata.response_snapshot.take();
         let checkpoint = continuation
             .as_ref()
-            .map(|lease| {
-                lease.checkpoint(
-                    ctx.response_id.clone(),
-                    ctx.conversation_id.clone(),
-                    &metadata,
-                    &new_items,
-                    write_durable,
-                )
-            })
+            .map(|lease| lease.checkpoint(ctx.response_id.clone(), &metadata, &new_items, write_durable))
             .transpose()?;
 
         metadata.response_snapshot = snapshot;
@@ -301,19 +268,6 @@ impl ResponseHandler {
     }
 }
 
-/// The terminal payload stored for `GET /v1/responses/{id}`; legacy and history-only records have none.
-fn response_snapshot(stored: ResponseData) -> ExecutorResult<ResponsePayload> {
-    stored
-        .metadata
-        .response_snapshot
-        .map(|snapshot| *snapshot)
-        .ok_or_else(|| {
-            ExecutorError::Conflict(
-                "stored response has no retrievable payload; create a new response with store=true".into(),
-            )
-        })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -340,6 +294,7 @@ mod tests {
             response_id: "resp_test".into(),
             conversation_id: None,
             conversation_version: None,
+            rehydrated_metadata: None,
             continuation: None,
         }
     }
@@ -369,13 +324,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_execute_turn_disabled_store_returns_error() {
-        let result = disabled_handler().execute_turn(make_ctx(None), vec![]).await;
+    async fn test_persist_disabled_store_returns_error() {
+        let result = disabled_handler()
+            .persist(make_ctx(None), vec![], ResponseMetadata::default())
+            .await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
-    async fn execute_turn_persists_public_selector_after_inference_relaxation() {
+    async fn persisted_metadata_keeps_public_selector_after_inference_relaxation() {
         use crate::storage::create_pool_with_schema;
         use crate::types::io::ToolChoice;
 
@@ -387,7 +344,10 @@ mod tests {
         ctx.relax_tool_choice();
         assert_eq!(ctx.enriched_request.tool_choice, Some(ToolChoice::Auto));
 
-        handler.execute_turn(ctx, vec![]).await.unwrap();
+        let conversations = crate::executor::ConversationHandler::new(crate::storage::ConversationStore::disabled());
+        crate::executor::persist::persist_prepared_turn(ctx, None, vec![], None, &conversations, &handler)
+            .await
+            .unwrap();
 
         let stored = store.get("resp_test").await.unwrap();
         assert_eq!(stored.metadata.effective_tool_choice, ToolChoice::Required);

@@ -238,7 +238,6 @@ async fn postgres_item_crud_uses_turn_locking_and_preserves_history() {
         &store,
         &conv.conversation_id,
         &response_id,
-        None,
         vec![make_item()],
         &ResponseMetadata::default(),
     )
@@ -285,7 +284,6 @@ async fn postgres_item_crud_uses_turn_locking_and_preserves_history() {
             &conv.conversation_id,
             snapshot.version,
             &agentic_core::utils::common::uuid7_str("resp_"),
-            None,
             vec![],
             &ResponseMetadata::default(),
         )

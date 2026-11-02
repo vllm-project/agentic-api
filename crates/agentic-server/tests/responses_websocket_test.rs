@@ -1434,7 +1434,6 @@ async fn persist_competing_turn(pool: &Arc<DbPool>, conversation_id: &str) {
         &ConversationStore::new(Arc::clone(pool)),
         conversation_id,
         COMPETING_RESPONSE_ID,
-        None,
         competing_turn_items(),
         &ResponseMetadata {
             multi_agent_tree: None,
@@ -2274,6 +2273,7 @@ async fn test_websocket_generate_false_prewarm_redacts_mcp_runtime_credentials()
         response_id: "resp_lookup".to_owned(),
         conversation_id: None,
         conversation_version: None,
+        rehydrated_metadata: None,
         continuation: None,
     };
     let stored = fixture
@@ -2607,7 +2607,6 @@ async fn websocket_empty_prewarm_replaces_compacted_conversation_tool_search_sta
         &conversation_store,
         &conversation_id,
         "resp_before_prewarm",
-        None,
         vec![InOutItem::Input(InputItem::Compaction(CompactionItem {
             agent: None,
             id: Some("cmp_before_prewarm".to_owned()),

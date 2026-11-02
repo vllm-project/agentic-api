@@ -227,7 +227,6 @@ async fn postgres_migrations_and_state_survive_pool_restarts() {
         &first_conversation_store,
         &conversation.conversation_id,
         &conversation_response_id,
-        None,
         vec![
             input_item("conversation turn one"),
             input_item("conversation turn one follow-up"),
@@ -275,7 +274,6 @@ async fn postgres_migrations_and_state_survive_pool_restarts() {
         &second_conversation_store,
         &conversation.conversation_id,
         &conversation_continuation_id,
-        Some(&conversation_response_id),
         vec![input_item("conversation turn two")],
         &metadata,
     )
@@ -365,11 +363,11 @@ async fn postgres_concurrent_conversation_writes_have_contiguous_sequences() {
             .expect("persist concurrent turn");
     }
 
-    let (_, _, _, rows) =
-        agentic_core::storage::models::conversation::get_with_items(&first_pool, &conversation.conversation_id)
-            .await
-            .expect("load concurrent conversation items")
-            .expect("conversation exists");
+    let rows = agentic_core::storage::models::conversation::get_with_items(&first_pool, &conversation.conversation_id)
+        .await
+        .expect("load concurrent conversation items")
+        .expect("conversation exists")
+        .items;
     let sequences = rows
         .iter()
         .map(|row| row.seq.expect("conversation item sequence"))
@@ -430,7 +428,6 @@ async fn postgres_optimistic_conversation_conflict() {
                     &conversation_id,
                     version,
                     &response_id,
-                    None,
                     items.clone(),
                     &ResponseMetadata::default(),
                 )
@@ -451,7 +448,6 @@ async fn postgres_optimistic_conversation_conflict() {
                     &conversation_id,
                     version,
                     &response_id,
-                    None,
                     items.clone(),
                     &ResponseMetadata::default(),
                 )
@@ -486,11 +482,11 @@ async fn postgres_optimistic_conversation_conflict() {
     } else {
         (writer_two_items, writer_one_response_id)
     };
-    let (_, _, _, rows) =
-        agentic_core::storage::models::conversation::get_with_items(&first_pool, &conversation.conversation_id)
-            .await
-            .expect("load winning conversation items")
-            .expect("conversation exists");
+    let rows = agentic_core::storage::models::conversation::get_with_items(&first_pool, &conversation.conversation_id)
+        .await
+        .expect("load winning conversation items")
+        .expect("conversation exists")
+        .items;
     let sequences = rows
         .iter()
         .map(|row| row.seq.expect("conversation item sequence"))
@@ -557,7 +553,6 @@ async fn postgres_lock_wait_is_bounded_without_blocking_other_conversations() {
             &blocked_store,
             &blocked_conversation_id,
             &format!("resp_postgres_{}", uuid::Uuid::now_v7()),
-            None,
             vec![input_item("blocked turn")],
             &ResponseMetadata::default(),
         )
@@ -570,7 +565,6 @@ async fn postgres_lock_wait_is_bounded_without_blocking_other_conversations() {
         &unrelated_store,
         &unrelated_conversation.conversation_id,
         &unrelated_response_id,
-        None,
         vec![input_item("unrelated turn")],
         &unrelated_metadata,
     );
@@ -620,7 +614,6 @@ async fn postgres_get_or_create_creates_then_returns_the_existing_conversation()
         &store,
         &conversation_id,
         &response_id,
-        None,
         vec![input_item("first turn")],
         &ResponseMetadata::default(),
     )

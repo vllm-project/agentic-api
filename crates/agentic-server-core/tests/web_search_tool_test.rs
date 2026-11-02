@@ -1539,7 +1539,7 @@ async fn builtin_tool_declarations_stay_public_in_json_and_stored_responses() {
         "terminal payload",
     );
     assert_eq!(response.tool_choice, Some(ToolChoice::Required));
-    let stored = exec_ctx.resp_handler.retrieve(&response.id).await.unwrap();
+    let stored = exec_ctx.resp_handler.get_snapshot(&response.id).await.unwrap();
     assert_eq!(stored.tool_choice, Some(ToolChoice::Required));
     assert_public_tool_metadata(
         &serde_json::to_value(&stored).unwrap(),
@@ -1656,7 +1656,7 @@ async fn builtin_tool_declarations_stay_public_for_mixed_tool_kinds() {
         .collect();
     assert_eq!(public_output_kinds, ["web_search_call", "message"]);
     let payload: ResponsePayload = serde_json::from_value(terminal).expect("terminal payload");
-    let stored = exec_ctx.resp_handler.retrieve(&payload.id).await.unwrap();
+    let stored = exec_ctx.resp_handler.get_snapshot(&payload.id).await.unwrap();
     assert_eq!(
         serde_json::to_value(&stored).unwrap()["tools"],
         public_tools,
@@ -2843,7 +2843,7 @@ async fn service_tier_comes_only_from_the_final_tool_round() {
             panic!("expected JSON response");
         };
         assert_eq!(response.service_tier.as_deref(), actual);
-        let stored = exec.resp_handler.retrieve(&response.id).await.unwrap();
+        let stored = exec.resp_handler.get_snapshot(&response.id).await.unwrap();
         assert_eq!(stored.service_tier.as_deref(), actual.or(Some("default")));
         let requests = llm.request_bodies().await;
         assert_eq!(requests.len(), 2);

@@ -770,19 +770,11 @@ pub async fn persist_turn(
     store: &ConversationStore,
     conversation_id: &str,
     response_id: &str,
-    previous_response_id: Option<&str>,
     items: Vec<InOutItem>,
     metadata: &ResponseMetadata,
 ) -> StoreResult<()> {
     let version = store.rehydrate(conversation_id).await?.version;
     store
-        .persist(
-            conversation_id,
-            version,
-            response_id,
-            previous_response_id,
-            items,
-            metadata,
-        )
+        .persist(conversation_id, version, response_id, items, metadata)
         .await
 }

@@ -6,7 +6,7 @@ use agentic_core::types::conversations::ConversationMetadata;
 use std::sync::Arc;
 
 use agentic_core::executor::{ConversationHandler, ExecutionContext, ResponseHandler, execute};
-use agentic_core::storage::{ConversationStore, ConversationVersion, ResponseMetadata, ResponseStore, StorageError};
+use agentic_core::storage::{ConversationStore, ResponseMetadata, ResponseStore, StorageError};
 use support::persist_turn;
 use support::{MockResponse, MockServer, load_cassette, make_request, setup_pool, unwrap_blocking};
 
@@ -63,12 +63,10 @@ async fn invalid_metadata_blocks_both_stores_without_echoing_secrets() -> Result
         &conversations,
         &conversation.conversation_id,
         "resp_parent",
-        None,
         Vec::new(),
         &ResponseMetadata::default(),
     )
     .await?;
-    let version = conversations.rehydrate(&conversation.conversation_id).await?.version;
     let secret_metadata = format!(r#"{{"model":"test","effective_tool_choice":"{SECRET}"}}"#);
 
     for invalid in ["not JSON", "null", "[]", "{}", r#"{"model":42}"#, &secret_metadata] {
@@ -81,7 +79,7 @@ async fn invalid_metadata_blocks_both_stores_without_echoing_secrets() -> Result
             responses.get("resp_parent").await.unwrap_err(),
             responses.rehydrate("resp_parent").await.unwrap_err(),
             conversations
-                .response_metadata_at_version(&conversation.conversation_id, &version)
+                .rehydrate(&conversation.conversation_id)
                 .await
                 .unwrap_err(),
             responses
@@ -106,52 +104,34 @@ async fn invalid_metadata_blocks_both_stores_without_echoing_secrets() -> Result
 }
 
 #[tokio::test]
-async fn missing_or_foreign_captured_response_is_not_empty_metadata() -> Result<(), Box<dyn std::error::Error>> {
+async fn foreign_latest_turn_is_not_empty_metadata() -> Result<(), Box<dyn std::error::Error>> {
     let pool = setup_pool().await;
-    let store = ConversationStore::new(pool);
+    let store = ConversationStore::new(Arc::clone(&pool));
     let first = store
         .create("default_tenant", &ConversationMetadata::new(), &[])
         .await?;
     let other = store
         .create("default_tenant", &ConversationMetadata::new(), &[])
         .await?;
+    assert!(store.rehydrate(&other.conversation_id).await?.turn_metadata.is_none());
     persist_turn(
         &store,
         &first.conversation_id,
         "resp_first",
-        None,
         Vec::new(),
         &ResponseMetadata::default(),
     )
     .await?;
-    for response_id in ["resp_missing", "resp_first"] {
-        let error = store
-            .response_metadata_at_version(
-                &other.conversation_id,
-                &ConversationVersion {
-                    response_id: Some(response_id.to_owned()),
-                    last_sequence: None,
-                    revision: 0,
-                },
-            )
-            .await
-            .unwrap_err();
-        assert!(matches!(error, StorageError::InvalidResponseMetadata { .. }));
-    }
-    for version in [
-        ConversationVersion::default(),
-        ConversationVersion {
-            last_sequence: Some(0),
-            ..ConversationVersion::default()
-        },
-    ] {
-        assert!(
-            store
-                .response_metadata_at_version(&first.conversation_id, &version)
-                .await?
-                .is_none()
-        );
-    }
+    sqlx::query("UPDATE conversations SET latest_response_id = $1 WHERE id = $2")
+        .bind("resp_first")
+        .bind(&other.conversation_id)
+        .execute(pool.as_ref())
+        .await?;
+    let error = store.rehydrate(&other.conversation_id).await.unwrap_err();
+    assert!(matches!(
+        error,
+        StorageError::InvalidResponseMetadata { ref response_id } if response_id == "resp_first"
+    ));
     Ok(())
 }
 
@@ -167,7 +147,6 @@ async fn sql_null_legacy_fields_remain_readable() -> Result<(), Box<dyn std::err
         &conversations,
         &conversation.conversation_id,
         "resp_legacy",
-        None,
         Vec::new(),
         &ResponseMetadata::default(),
     )
@@ -180,11 +159,11 @@ async fn sql_null_legacy_fields_remain_readable() -> Result<(), Box<dyn std::err
     assert!(response.history_item_ids.is_empty());
     assert!(response.metadata.model.is_empty());
     assert!(responses.rehydrate("resp_legacy").await?.1.is_empty());
-    let version = conversations.rehydrate(&conversation.conversation_id).await?.version;
     assert!(
         conversations
-            .response_metadata_at_version(&conversation.conversation_id, &version)
+            .rehydrate(&conversation.conversation_id)
             .await?
+            .turn_metadata
             .is_none()
     );
     Ok(())

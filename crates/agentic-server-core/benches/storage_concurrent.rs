@@ -46,20 +46,12 @@ async fn persist_turn(
     store: &ConversationStore,
     conversation_id: &str,
     response_id: &str,
-    previous_response_id: Option<&str>,
     items: Vec<InOutItem>,
     metadata: &ResponseMetadata,
 ) -> StoreResult<()> {
     let version = store.rehydrate(conversation_id).await?.version;
     store
-        .persist(
-            conversation_id,
-            version,
-            response_id,
-            previous_response_id,
-            items,
-            metadata,
-        )
+        .persist(conversation_id, version, response_id, items, metadata)
         .await
 }
 
@@ -170,7 +162,6 @@ fn bench_concurrent_conversation_rehydrate(c: &mut Criterion, store: &Conversati
             &store,
             &conv.conversation_id,
             &next_id(),
-            None,
             make_items(),
             &make_metadata(),
         )
@@ -258,7 +249,6 @@ fn bench_concurrent_conversation_persist_independent(c: &mut Criterion, store: &
                                             &store,
                                             &cid,
                                             &next_id(),
-                                            None,
                                             black_box(make_items()),
                                             &black_box(make_metadata()),
                                         )
@@ -297,7 +287,6 @@ fn bench_concurrent_conversation_rehydrate_independent(c: &mut Criterion, store:
                 &store,
                 &conv.conversation_id,
                 &next_id(),
-                None,
                 make_items(),
                 &make_metadata(),
             )
@@ -374,7 +363,6 @@ fn bench_concurrent_conversation_mixed_read_write(c: &mut Criterion) {
                             &writer_store,
                             &conversation_id,
                             &next_id(),
-                            None,
                             make_items(),
                             &make_metadata(),
                         )
@@ -392,7 +380,6 @@ fn bench_concurrent_conversation_mixed_read_write(c: &mut Criterion) {
                                     &writer_store,
                                     &writer_id,
                                     &next_id(),
-                                    None,
                                     black_box(make_items()),
                                     &black_box(make_metadata()),
                                 )

@@ -199,16 +199,9 @@ impl Fixture {
                 .create("default_tenant", &ConversationMetadata::new(), &[])
                 .await
                 .expect("create conversation");
-            persist_turn(
-                &store,
-                &data.conversation_id,
-                response_id,
-                None,
-                vec![placeholder],
-                &metadata,
-            )
-            .await
-            .expect("persist conversation fixture");
+            persist_turn(&store, &data.conversation_id, response_id, vec![placeholder], &metadata)
+                .await
+                .expect("persist conversation fixture");
             json!({"conversation_id":data.conversation_id})
         } else {
             response_store
@@ -660,6 +653,7 @@ fn composed_upstream_request_cannot_bypass_file_validation() {
         response_id: "resp_composed".to_owned(),
         conversation_id: None,
         conversation_version: None,
+        rehydrated_metadata: None,
         continuation: None,
     };
     for stream in [false, true] {

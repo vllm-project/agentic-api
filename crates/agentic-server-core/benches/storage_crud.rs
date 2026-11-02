@@ -70,7 +70,6 @@ async fn seed_conversation(store: &ConversationStore, items: usize) -> String {
             &conversation.conversation_id,
             ConversationVersion::default(),
             &next_id("resp_"),
-            None,
             history(items),
             &ResponseMetadata::default(),
         )
@@ -142,7 +141,6 @@ fn bench_conversation_persist(c: &mut Criterion, rt: &Runtime, store: &Conversat
                             &id,
                             version,
                             &response_id,
-                            None,
                             black_box(new_items),
                             &ResponseMetadata::default(),
                         )

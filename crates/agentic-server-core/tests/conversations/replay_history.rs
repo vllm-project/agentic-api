@@ -143,7 +143,12 @@ impl Histories {
                 history_shape(&remap_ids(&Value::Array(expected.clone()), ids)),
                 "{location}: response snapshot {id}"
             );
-            let payload = fixture.exec_ctx.resp_handler.retrieve(&ids.forward[id]).await.unwrap();
+            let payload = fixture
+                .exec_ctx
+                .resp_handler
+                .get_snapshot(&ids.forward[id])
+                .await
+                .unwrap();
             assert_eq!(
                 response_fields(&serde_json::to_value(payload).unwrap()),
                 remap_ids(&self.payloads[id], ids),

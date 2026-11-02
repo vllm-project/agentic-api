@@ -136,7 +136,7 @@ async fn assert_branch_is_detached(streaming: bool) {
                 let retrieved = fixture
                     .exec_ctx
                     .resp_handler
-                    .retrieve(branch["id"].as_str().unwrap())
+                    .get_snapshot(branch["id"].as_str().unwrap())
                     .await
                     .unwrap();
                 assert_eq!(serde_json::to_value(retrieved).unwrap(), branch);

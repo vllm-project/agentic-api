@@ -183,7 +183,6 @@ async fn reused_item_occurrences_preserve_content_order_and_response_snapshot() 
         &store,
         &target.conversation_id,
         "resp_references",
-        None,
         vec![],
         &ResponseMetadata::default(),
     )
