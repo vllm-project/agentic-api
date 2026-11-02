@@ -6,13 +6,15 @@ use tokio::sync::RwLock;
 use super::code_interpreter::CodeInterpreterHandler;
 use super::declaration::ToolDeclaration;
 use super::mcp::handler::McpServerToolSet;
+use super::mcp::pool::server_entry_from_param;
 use super::mcp::{McpClientPool, McpDiscoveredHandler, McpHandler};
 use super::normalize::code_interpreter_unavailable_error;
 use super::web_fetch::{WebFetchExecutor, WebFetchHandler};
 use super::web_search::{WebSearchExecutor, WebSearchHandler};
-use super::{GatewayExecutor, ToolError};
+use super::{GatewayExecutor, ToolError, ToolHandler};
 use crate::config::{DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS, ToolRuntimeConfig, WebFetchConfig};
-use crate::types::tools::McpToolParam;
+use crate::types::io::output::McpListTools;
+use crate::types::tools::{McpToolParam, ResponsesTool};
 
 use super::code_interpreter::CodeInterpreterExecutor;
 
@@ -233,19 +235,44 @@ impl GatewayExecutors {
     ///
     /// # Errors
     ///
-    /// Returns a configuration error for an invalid declaration or an empty
-    /// allowed tool set, and an execution error when the server cannot connect.
+    /// Returns a configuration error for an invalid declaration, and an
+    /// execution error when the server cannot connect.
     pub async fn mcp_handler(&mut self, param: &McpToolParam) -> Result<Vec<McpDiscoveredHandler>, ToolError> {
-        Ok(self.mcp_server_tools(param).await?.discovered_handlers)
+        Ok(self.mcp_server_tools(param, None).await?.discovered_handlers)
+    }
+
+    /// Applies operator defaults to request declarations of configured MCP
+    /// servers: `defer_loading` and the catalog `description` fill fields the
+    /// request leaves unset.
+    pub(crate) fn apply_configured_mcp_defaults(&self, tools: Option<&mut [ResponsesTool]>) {
+        for tool in tools.into_iter().flatten() {
+            let ResponsesTool::Mcp(param) = tool else {
+                continue;
+            };
+            let Some(entry) = self.mcp_configs.get(param.server_label.trim()) else {
+                continue;
+            };
+            if param.defer_loading.is_none() {
+                param.defer_loading = entry.defer_loading();
+            }
+            if param.server_description.is_none() {
+                param.server_description = entry.description().map(str::to_owned);
+            }
+        }
     }
 
     /// Returns the request-scoped tools and public discovery item for one MCP server.
+    /// An `allowed_tools` filter that matches nothing yields an empty listing, as in the Responses API.
     ///
     /// # Errors
     ///
-    /// Returns a configuration error for an invalid declaration or an empty
-    /// allowed tool set, and an execution error when the server cannot connect.
-    pub(crate) async fn mcp_server_tools(&mut self, param: &McpToolParam) -> Result<McpServerToolSet, ToolError> {
+    /// Returns a configuration error for an invalid declaration, and an
+    /// execution error when the server cannot connect.
+    pub(crate) async fn mcp_server_tools(
+        &mut self,
+        param: &McpToolParam,
+        listing: Option<McpListTools>,
+    ) -> Result<McpServerToolSet, ToolError> {
         let server_label = param.server_label.trim();
         if server_label.is_empty() {
             return Err(ToolError::Config(
@@ -254,17 +281,17 @@ impl GatewayExecutors {
         }
         let configured_handlers = self.mcp.get(server_label);
         let configured_server = self.mcp_configs.contains_key(server_label);
-        validate_mcp_execution_options(param, configured_server || configured_handlers.is_some())?;
+        // Request validation ran the declaration's own checks already; a caller that builds a registry directly
+        // reaches discovery without it.
+        McpHandler::spec_from_param(param).validate(param)?;
+        validate_mcp_approval_source(param, configured_server || configured_handlers.is_some())?;
         if (configured_server || configured_handlers.is_some()) && param.server_url.is_some() {
             return Err(ToolError::Config(format!(
                 "MCP server '{server_label}' is configured by the gateway; omit server_url from the request"
             )));
         }
         if let Some(configured_handlers) = configured_handlers {
-            let discovered_handlers = require_non_empty_mcp_handlers(
-                server_label,
-                filter_allowed_mcp_handlers(configured_handlers, param.allowed_tools.as_deref()),
-            )?;
+            let discovered_handlers = filter_allowed_mcp_handlers(configured_handlers, param.allowed_tools.as_deref());
             return Ok(McpHandler::server_tool_set_from_handlers(
                 server_label,
                 discovered_handlers,
@@ -272,73 +299,96 @@ impl GatewayExecutors {
         }
 
         if configured_server {
-            let Some(entry) = self.mcp_configs.get(server_label).cloned() else {
-                return Err(ToolError::Config(format!(
-                    "configured MCP server '{server_label}' is missing"
-                )));
-            };
-            let cached_client = self.mcp_clients.read().await.get(server_label).cloned();
-            let client = if let Some(client) = cached_client {
-                client
-            } else {
-                let mut servers = HashMap::new();
-                servers.insert(server_label.to_owned(), entry.clone());
-                let pool = McpClientPool::from_config(servers).await;
-                let Some(client) = pool.get(server_label).cloned() else {
-                    return Err(ToolError::Execution(format!(
-                        "configured MCP server '{server_label}' failed to connect: {}",
-                        pool.connection_error(server_label)
-                            .unwrap_or("unknown connection error")
-                    )));
-                };
-                self.mcp_clients
-                    .write()
-                    .await
-                    .insert(server_label.to_owned(), Arc::clone(&client));
-                client
-            };
-            let discovered_handlers = if let Some(discovered_handlers) =
-                self.mcp_discovered.read().await.get(server_label).cloned()
-            {
-                discovered_handlers
-            } else {
-                let tool_set = McpHandler::discover_tools(server_label, client, entry.allowed_tools()).await?;
-                let discovered_handlers = require_non_empty_mcp_handlers(server_label, tool_set.discovered_handlers)?;
-                self.mcp_discovered
-                    .write()
-                    .await
-                    .insert(server_label.to_owned(), discovered_handlers.clone());
-                discovered_handlers
-            };
-            let discovered_handlers = require_non_empty_mcp_handlers(
-                server_label,
-                filter_allowed_mcp_handlers(&discovered_handlers, param.allowed_tools.as_deref()),
-            )?;
-            return Ok(McpHandler::server_tool_set_from_handlers(
-                server_label,
+            let retained_listing = listing.is_some();
+            let mut tool_set = self.configured_mcp_tools(param, listing).await?;
+            let discovered_handlers =
+                filter_allowed_mcp_handlers(&tool_set.discovered_handlers, param.allowed_tools.as_deref());
+            if !retained_listing {
+                tool_set.list_tools_item.tools.retain(|tool| {
+                    param
+                        .allowed_tools
+                        .as_ref()
+                        .is_none_or(|allowed| allowed.contains(&tool.name))
+                });
+            }
+            return Ok(McpServerToolSet {
                 discovered_handlers,
-            ));
+                ..tool_set
+            });
         }
 
-        let pool =
-            McpClientPool::from_params_with_allowed_hosts(std::slice::from_ref(param), &self.mcp_allowed_hosts).await;
-        let Some(client) = pool.get(server_label).cloned() else {
-            return Err(pool.connection_error(server_label).map_or_else(
-                || {
-                    ToolError::Config(format!(
-                        "MCP server '{server_label}' has no valid request-declared configuration"
-                    ))
-                },
-                |error| ToolError::Execution(format!("MCP server '{server_label}' failed to connect: {error}")),
-            ));
+        let Some((_, entry)) = server_entry_from_param(param, &self.mcp_allowed_hosts) else {
+            return Err(ToolError::Config(format!(
+                "MCP server '{server_label}' has no valid request-declared configuration"
+            )));
         };
-        let tool_set = McpHandler::discover_tools(server_label, client, param.allowed_tools.as_deref()).await?;
-        let discovered_handlers = require_non_empty_mcp_handlers(server_label, tool_set.discovered_handlers)?;
+        let handler = Arc::new(McpHandler::deferred(entry, false));
+        let tool_set = McpHandler::discover_tools(param, &handler, param.allowed_tools.as_deref(), listing).await?;
+        let discovered_handlers = tool_set.discovered_handlers;
         self.mcp.insert(server_label.to_owned(), discovered_handlers.clone());
-        Ok(McpHandler::server_tool_set_from_handlers(
-            server_label,
+        Ok(McpServerToolSet {
             discovered_handlers,
-        ))
+            ..tool_set
+        })
+    }
+
+    /// Operator-authorized remote discovery is shared; client-supplied history remains request-scoped.
+    async fn configured_mcp_tools(
+        &mut self,
+        param: &McpToolParam,
+        listing: Option<McpListTools>,
+    ) -> Result<McpServerToolSet, ToolError> {
+        let label = param.server_label.trim();
+        let cached = self.mcp_discovered.read().await.get(label).cloned();
+        if let Some(handlers) = cached {
+            return Ok(match listing {
+                Some(listing) => McpServerToolSet {
+                    discovered_handlers: handlers,
+                    list_tools_item: listing,
+                },
+                None => McpHandler::server_tool_set_from_handlers(label, handlers),
+            });
+        }
+        let entry = self
+            .mcp_configs
+            .get(label)
+            .cloned()
+            .ok_or_else(|| ToolError::Config(format!("configured MCP server '{label}' is missing")))?;
+        if listing.is_some() || !param.discovered_tools.is_empty() {
+            let handler = Arc::new(McpHandler::deferred(entry.clone(), true));
+            return McpHandler::discover_tools(param, &handler, entry.allowed_tools(), listing).await;
+        }
+        let cached_client = self.mcp_clients.read().await.get(label).cloned();
+        let client = if let Some(client) = cached_client {
+            client
+        } else {
+            let pool = McpClientPool::from_config(HashMap::from([(label.to_owned(), entry.clone())])).await;
+            let client = pool.get(label).cloned().ok_or_else(|| {
+                ToolError::Execution(format!(
+                    "configured MCP server '{label}' failed to connect: {}",
+                    pool.connection_error(label).unwrap_or("unknown connection error")
+                ))
+            })?;
+            self.mcp_clients
+                .write()
+                .await
+                .insert(label.to_owned(), Arc::clone(&client));
+            client
+        };
+        let handler = Arc::new(McpHandler::tool_call(client));
+        let tool_set = McpHandler::discover_tools(param, &handler, entry.allowed_tools(), None).await?;
+        let handlers = tool_set.discovered_handlers;
+        // An empty listing may be a server still starting up; rediscover it next time.
+        if !handlers.is_empty() {
+            self.mcp_discovered
+                .write()
+                .await
+                .insert(label.to_owned(), handlers.clone());
+        }
+        Ok(McpServerToolSet {
+            discovered_handlers: handlers,
+            ..tool_set
+        })
     }
 }
 
@@ -355,33 +405,8 @@ fn filter_allowed_mcp_handlers(
         .collect()
 }
 
-fn require_non_empty_mcp_handlers(
-    server_label: &str,
-    handlers: Vec<McpDiscoveredHandler>,
-) -> Result<Vec<McpDiscoveredHandler>, ToolError> {
-    if handlers.is_empty() {
-        return Err(ToolError::Config(format!(
-            "MCP server '{server_label}' has an empty final allowed tool set"
-        )));
-    }
-    Ok(handlers)
-}
-
-fn validate_mcp_execution_options(param: &McpToolParam, configured_server: bool) -> Result<(), ToolError> {
-    if param.connector_id.is_some() {
-        return Err(ToolError::Config(
-            "MCP connector_id is not supported; configure server_url instead".to_owned(),
-        ));
-    }
-    if param
-        .require_approval
-        .as_deref()
-        .is_some_and(|policy| policy != "never")
-    {
-        return Err(ToolError::Config(
-            "MCP require_approval supports only 'never'; approval gating is not yet supported".to_owned(),
-        ));
-    }
+/// A server the gateway does not configure needs the request to set `require_approval`.
+fn validate_mcp_approval_source(param: &McpToolParam, configured_server: bool) -> Result<(), ToolError> {
     if !configured_server && param.require_approval.is_none() {
         return Err(ToolError::Config(
             "MCP require_approval must be set to 'never' in gateway configuration or the request".to_owned(),

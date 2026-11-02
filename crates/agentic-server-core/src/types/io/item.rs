@@ -13,7 +13,7 @@ use utoipa::{
     openapi::{Ref, RefOr, schema::Schema},
 };
 
-use super::{InputContent, InputItem, InputMessageContent, InputTextContent, OutputItem};
+use super::{InputContent, InputItem, InputMessageContent, InputTextContent, InputToolSearchCall, OutputItem};
 use crate::types::event::MessageStatus;
 use crate::utils::common::serialize_to_value;
 
@@ -78,6 +78,21 @@ impl InOutItem {
         self
     }
 
+    /// The stored record a client replays as input. The continuation conversion leaves out a hosted search item, which
+    /// the executor records as history itself; a replayed one is input the upstream projection lowers, so it stays an
+    /// input record.
+    #[must_use]
+    pub(crate) fn into_replayed_input(self) -> Self {
+        match self {
+            Self::Output(OutputItem::ToolSearchOutput(output)) => Self::Input(InputItem::ToolSearchOutput(output)),
+            Self::Output(OutputItem::ToolSearchCall(call)) => InputToolSearchCall::try_from(&call)
+                .map_or(Self::Output(OutputItem::ToolSearchCall(call)), |call| {
+                    Self::Input(InputItem::ToolSearchCall(call))
+                }),
+            item @ (Self::Input(_) | Self::Output(_)) => item,
+        }
+    }
+
     /// Borrow an input record or project a public output using the existing continuation conversion.
     pub(crate) fn as_input(&self) -> Option<Cow<'_, InputItem>> {
         match self {
@@ -90,7 +105,7 @@ impl InOutItem {
         match self {
             Self::Input(item) => item.call_id(),
             Self::Output(OutputItem::FunctionCall(call)) => Some(&call.call_id),
-            Self::Output(OutputItem::ToolSearchCall(call)) => Some(&call.call_id),
+            Self::Output(OutputItem::ToolSearchCall(call)) => call.call_id.as_deref(),
             Self::Output(OutputItem::CustomToolCall(call)) => Some(&call.call_id),
             Self::Output(OutputItem::ShellCall(call)) => Some(&call.call_id),
             Self::Output(_) => None,

@@ -6,7 +6,9 @@
 //!   * surfaced `content_block_*` forwarded with client-visible indices rebased
 //!     contiguously across rounds;
 //!   * gateway-owned `tool_use` blocks suppressed (and their `input_json_delta`
-//!     buffered to reconstruct the call for dispatch);
+//!     buffered to reconstruct the call for dispatch); a call to a native
+//!     server tool is shown as its `server_tool_use` and result blocks once its
+//!     round runs it;
 //!   * intermediate `message_delta`/`message_stop` (the per-round terminals)
 //!     suppressed; the final terminal is forwarded once, carrying every round's summed `usage`.
 //!
@@ -18,8 +20,10 @@
 
 mod blocks;
 mod ingestion;
+mod server_tools;
 mod wire;
-use blocks::{BufferedBlock, StreamedCall, execute_gateway_calls};
+use blocks::BufferedBlock;
+use ingestion::Frame;
 use wire::{error_sse, executor_error_sse, sse};
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -33,13 +37,16 @@ use tracing::Instrument as _;
 use crate::executor::error::ExecutorResult;
 use crate::executor::inference::{BoxStream, response_lines, send_request};
 use crate::executor::messages_context::MessagesRequestContext;
-use crate::executor::messages_tools::request_gateway_map;
+use crate::executor::messages_round::{MessagesRoundDecision, decide_round};
+use crate::executor::messages_server_tools::{NativeServerTools, ServerToolView};
+use crate::executor::messages_tools::{execute_gateway_calls, request_gateway_map};
 use crate::executor::messages_usage::MessagesUsageTotals;
 use crate::executor::request::ExecutionContext;
 use crate::executor::telemetry::metrics::{Stage, StageTimer};
 use crate::executor::telemetry::{Api, ExecutionSpan, FailureCategory, InstrumentedStream, Route};
 use crate::proxy::processed_response_headers;
 use crate::tool::ToolRegistry;
+use crate::types::messages::tool_call::MessagesToolCall;
 use crate::types::messages::tool_seam;
 
 // Shared with the non-streaming loop so the two Messages loops can't drift.
@@ -61,6 +68,16 @@ pub async fn run_messages_stream(
     ctx.force_stream(true);
     let mut execution = ExecutionSpan::start(Api::Messages, Route::Executor, true, &exec_ctx.metrics);
     let span = execution.span().clone();
+    // Earlier turns' server tool blocks are restored before anything is sent,
+    // so an invalid one is refused with its own status.
+    if let Err(error) = exec_ctx
+        .messages_result_key()
+        .and_then(|key| ctx.replay_server_tool_blocks(key))
+    {
+        execution.failed(&error);
+        execution.not_delivered();
+        return Err(error);
+    }
     // Send the first upstream request before the handler commits an HTTP 200,
     // so initial vLLM errors retain their original status and body.
     let opened = open_round(&ctx, &exec_ctx, &upstream, 0).instrument(span.clone()).await;
@@ -136,8 +153,12 @@ fn messages_stream_body(
     mut execution: ExecutionSpan,
 ) -> BoxStream {
     Box::pin(stream! {
+        // The key was resolved before the stream opened; this cannot fail.
+        let Ok(key) = exec_ctx.messages_result_key() else { return };
+        let view = ServerToolView { native: ctx.native_server_tools(), key };
         let mut acc = MessagesStreamAccumulator {
             gateway_map: request_gateway_map(&exec_ctx.messages_gateway_tools, &registry),
+            native: view.native,
             ..Default::default()
         };
         let mut prepared_response = Some(first_round);
@@ -203,33 +224,36 @@ fn messages_stream_body(
 
             // Round finished. Continue only for a pure gateway-tool round; a
             // client-executed function tool makes the round terminal.
-            if !acc.should_continue_loop(&ctx) {
-                execution.completed_with_stop_reason(acc.stop_reason());
-                let terminal = acc.finish();
-                execution.delivered();
-                for out in terminal {
-                    yield out;
+            let decision = acc.round_decision(&ctx);
+            match decision {
+                MessagesRoundDecision::ContinueGateway => {}
+                MessagesRoundDecision::ReturnClient | MessagesRoundDecision::Finish => {
+                    execution.completed_with_stop_reason(acc.stop_reason());
+                    let terminal = acc.terminal_frames(decision);
+                    execution.delivered();
+                    for (out, text) in terminal {
+                        clock.client_event(text);
+                        yield out;
+                    }
+                    return;
                 }
-                return;
             }
-            // Reconstruct the FULL assistant turn (thinking/text/signature +
-            // gateway tool_use, in order) for the next round's history — not just
-            // the gateway tool_use (F3, streaming half). The gateway calls are
-            // derived from the same buffered blocks for dispatch.
-            let (assistant_content, calls) = acc.take_round();
-            let tool_results = execute_gateway_calls(
-                &calls,
-                &mut ctx,
-                &registry,
-                &acc.gateway_map,
-                &exec_ctx.gateway_scheduler_policy,
-                &exec_ctx.metrics,
-            ).await;
-            if let Err(e) = ctx.append_round(&assistant_content, tool_results) {
-                execution.failed(&e);
-                execution.delivered();
-                yield executor_error_sse(&e);
-                return;
+            // The round runs its calls: show them before they execute.
+            for (out, text) in acc.release_held(true) {
+                clock.client_event(text);
+                yield out;
+            }
+            match execute_round(&mut acc, &mut ctx, &registry, &exec_ctx, view).await {
+                Ok(results) => for (out, text) in results {
+                    clock.client_event(text);
+                    yield out;
+                },
+                Err(e) => {
+                    execution.failed(&e);
+                    execution.delivered();
+                    yield executor_error_sse(&e);
+                    return;
+                }
             }
         }
 
@@ -238,6 +262,35 @@ fn messages_stream_body(
         execution.delivered();
         yield error_sse(&format!("gateway tool loop exceeded {MAX_GATEWAY_TOOL_ROUNDS} rounds"));
     })
+}
+
+/// Execute a completed round's gateway calls and append the round for the next
+/// inference; returns the result blocks the client is shown.
+async fn execute_round(
+    acc: &mut MessagesStreamAccumulator,
+    ctx: &mut MessagesRequestContext,
+    registry: &ToolRegistry,
+    exec_ctx: &ExecutionContext,
+    view: ServerToolView<'_>,
+) -> ExecutorResult<Vec<Frame>> {
+    // Reconstruct the FULL assistant turn (thinking/text/signature + gateway
+    // tool_use, in order) for the next round's history — not just the gateway
+    // tool_use (F3, streaming half). The gateway calls are derived from the
+    // same buffered blocks for dispatch.
+    let (assistant_content, calls) = acc.take_round();
+    let executed = execute_gateway_calls(
+        calls,
+        ctx,
+        registry,
+        &acc.gateway_map,
+        view,
+        &exec_ctx.gateway_scheduler_policy,
+        &exec_ctx.metrics,
+    )
+    .await;
+    let (results, tool_results) = acc.record_executed(executed);
+    ctx.append_round(&assistant_content, tool_results)?;
+    Ok(results)
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -287,6 +340,10 @@ struct MessagesStreamAccumulator {
     /// tool like Claude Code's `WebSearch` is classified gateway-owned (and
     /// suppressed) the same way the built-in `web_search` is.
     gateway_map: tool_seam::GatewayToolMap,
+    /// The native server tools the client declared, whose calls it is shown.
+    native: NativeServerTools,
+    /// Events held since this round's first native call, in arrival order.
+    held: Vec<Value>,
 }
 
 impl MessagesStreamAccumulator {
@@ -296,6 +353,7 @@ impl MessagesStreamAccumulator {
         self.tool_ids.clear();
         self.blocks.clear();
         self.has_client_tool_use = false;
+        self.held.clear();
         self.round_state = RoundState::Active;
         self.round_started = false;
         // F6: clear the previous round's terminal so a clean-EOF round can't
@@ -303,52 +361,40 @@ impl MessagesStreamAccumulator {
         self.final_message_delta = None;
     }
 
-    /// Number of gateway `tool_use` blocks buffered this round.
-    fn gateway_call_count(&self) -> usize {
-        self.blocks.values().filter(|b| b.is_gateway_tool).count()
-    }
-
     /// Consume this round's buffered blocks, returning (full assistant content in
     /// order, gateway calls to dispatch). The assistant content preserves
     /// `thinking`/`text`/`signature` and the gateway `tool_use` blocks (F3); the
     /// calls are the gateway `tool_use` blocks reconstructed for dispatch.
-    fn take_round(&mut self) -> (Vec<Value>, Vec<StreamedCall>) {
+    fn take_round(&mut self) -> (Vec<Value>, Vec<MessagesToolCall>) {
         // This round's terminal is suppressed; its usage joins the final one's.
         self.usage.commit();
         let blocks = std::mem::take(&mut self.blocks);
         let mut assistant_content = Vec::with_capacity(blocks.len());
         let mut calls = Vec::new();
-        for buffered in blocks.values() {
-            assistant_content.push(buffered.to_block());
-            if buffered.is_gateway_tool {
-                calls.push(StreamedCall {
-                    id: buffered.block["id"].as_str().unwrap_or_default().to_owned(),
-                    name: buffered.block["name"].as_str().unwrap_or_default().to_owned(),
-                    input_json: buffered.input_json.clone(),
-                });
+        for buffered in blocks.into_values() {
+            let (block, call) = buffered.into_parts();
+            assistant_content.push(block);
+            if let Some(call) = call {
+                calls.push(call);
             }
         }
         (assistant_content, calls)
     }
 
-    /// The loop should continue only when the round asked for a gateway tool AND
-    /// did not also surface a client-owned tool (which the client must handle,
-    /// making the round terminal — E7).
-    fn should_continue_loop(&self, ctx: &MessagesRequestContext) -> bool {
-        let stop_reason = self
-            .final_message_delta
-            .as_ref()
-            .and_then(|event| event["delta"]["stop_reason"].as_str());
-        self.has_completed_round()
-            && self.gateway_call_count() > 0
-            && !self.has_client_tool_use
-            && ctx.is_tool_call_stop(
-                stop_reason,
-                self.blocks
-                    .values()
-                    .filter(|block| block.is_gateway_tool)
-                    .filter_map(|block| block.block["name"].as_str()),
-            )
+    /// Only ingestion's completed round may ask the shared execution policy.
+    fn round_decision(&self, ctx: &MessagesRequestContext) -> MessagesRoundDecision {
+        if !self.has_completed_round() {
+            return MessagesRoundDecision::Finish;
+        }
+        decide_round(
+            ctx,
+            self.stop_reason(),
+            self.has_client_tool_use,
+            self.blocks
+                .values()
+                .filter(|block| block.is_gateway_tool)
+                .filter_map(|block| block.block["name"].as_str()),
+        )
     }
 
     fn has_error(&self) -> bool {
@@ -375,15 +421,16 @@ impl MessagesStreamAccumulator {
     }
 
     /// Emit completion only for an explicitly completed upstream round.
-    fn finish(&mut self) -> Vec<String> {
+    fn finish(&mut self, decision: MessagesRoundDecision) -> Vec<String> {
         if !self.has_completed_round() {
             return vec![error_sse("upstream Messages stream ended before message_stop")];
         }
         let mut out = Vec::new();
         if let Some(mut delta) = self.final_message_delta.take() {
-            // A completed client call requires client action even when vLLM labels it end_turn.
-            if self.has_client_tool_use && delta["delta"]["stop_reason"] == "end_turn" {
-                delta["delta"]["stop_reason"] = json!("tool_use");
+            let stop_reason = delta["delta"]["stop_reason"].as_str();
+            let visible_stop = decision.visible_stop_reason(stop_reason);
+            if visible_stop != stop_reason {
+                delta["delta"]["stop_reason"] = json!(visible_stop);
             }
             self.usage.finish(&mut delta);
             out.push(sse("message_delta", &delta));
@@ -399,6 +446,7 @@ mod tests {
 
     use super::*;
     use crate::executor::gateway::GatewaySchedulerPolicy;
+    use crate::executor::messages_server_tools::sealing::process_result_key;
     use crate::executor::telemetry::metrics::ExecutorMetrics;
 
     fn line(v: &Value) -> String {
@@ -436,7 +484,7 @@ mod tests {
             &json!({"type":"message_delta", "delta":{"stop_reason":"tool_use"}, "usage":{"output_tokens":4}}),
         ));
         acc.push(&line(&json!({"type":"message_stop"})));
-        assert!(acc.should_continue_loop(&context()));
+        assert_eq!(acc.round_decision(&context()), MessagesRoundDecision::ContinueGateway);
         acc.take_round();
 
         acc.begin_round();
@@ -446,7 +494,7 @@ mod tests {
         ));
         acc.push(&line(&json!({"type":"message_stop"})));
         assert_eq!(
-            acc.finish(),
+            acc.finish(acc.round_decision(&context())),
             vec![
                 sse(
                     "message_delta",
@@ -485,7 +533,7 @@ mod tests {
                 "usage":{"output_tokens":4, "cache_read_input_tokens":128}}),
         ));
         acc.push(&line(&json!({"type":"message_stop"})));
-        assert!(acc.should_continue_loop(&context()));
+        assert_eq!(acc.round_decision(&context()), MessagesRoundDecision::ContinueGateway);
         let (_, calls) = acc.take_round();
         assert_eq!(calls.len(), 1);
 
@@ -500,9 +548,9 @@ mod tests {
                 "usage":{"output_tokens":6, "extension":{"value":1}}}),
         ));
         acc.push(&line(&json!({"type":"message_stop"})));
-        assert!(!acc.should_continue_loop(&context()));
+        assert_ne!(acc.round_decision(&context()), MessagesRoundDecision::ContinueGateway);
         assert_eq!(
-            acc.finish(),
+            acc.finish(acc.round_decision(&context())),
             vec![
                 sse(
                     "message_delta",
@@ -534,10 +582,10 @@ mod tests {
                 if completed {
                     acc.push(&line(&json!({"type":"message_stop"})));
                 }
-                assert!(!acc.should_continue_loop(&context()));
+                assert_ne!(acc.round_decision(&context()), MessagesRoundDecision::ContinueGateway);
                 if !completed {
                     assert_eq!(
-                        acc.finish(),
+                        acc.finish(acc.round_decision(&context())),
                         vec![error_sse("upstream Messages stream ended before message_stop")]
                     );
                     continue;
@@ -546,7 +594,7 @@ mod tests {
                     terminal["delta"]["stop_reason"] = json!("tool_use");
                 }
                 assert_eq!(
-                    acc.finish(),
+                    acc.finish(acc.round_decision(&context())),
                     vec![
                         sse("message_delta", &terminal),
                         sse("message_stop", &json!({"type":"message_stop"}))
@@ -591,7 +639,7 @@ mod tests {
                 acc.push(&line(&json!({"type":"message_stop"})));
             }
             assert_eq!(
-                acc.should_continue_loop(&ctx),
+                acc.round_decision(&ctx) == MessagesRoundDecision::ContinueGateway,
                 expected,
                 "{name}, {stop}, {completed}, {client_tool}"
             );
@@ -626,7 +674,7 @@ mod tests {
             while let Some(line) = lines.next().await {
                 output.extend(acc.push(&line.expect("valid SSE transport")));
             }
-            output.extend(acc.finish());
+            output.extend(acc.finish(acc.round_decision(&context())));
 
             let output = output.join("");
             assert_eq!(output.matches("event: message_start").count(), 1, "{prefix:?}");
@@ -656,8 +704,12 @@ mod tests {
             &json!({"type": "message_delta", "delta": {"stop_reason": "end_turn"}}),
         )));
         out.extend(acc.push(&line(&json!({"type": "message_stop"}))));
-        assert!(!acc.should_continue_loop(&context()), "text-only round is terminal");
-        out.extend(acc.finish());
+        assert_ne!(
+            acc.round_decision(&context()),
+            MessagesRoundDecision::ContinueGateway,
+            "text-only round is terminal"
+        );
+        out.extend(acc.finish(acc.round_decision(&context())));
         let s = out.join("");
         assert_eq!(s.matches("event: message_start").count(), 1);
         assert_eq!(s.matches("event: message_stop").count(), 1);
@@ -689,8 +741,9 @@ mod tests {
         out.extend(acc.push(&line(&json!({"type": "message_stop"}))));
 
         let s = out.join("");
-        assert!(
-            acc.should_continue_loop(&context()),
+        assert_eq!(
+            acc.round_decision(&context()),
+            MessagesRoundDecision::ContinueGateway,
             "pure gateway-tool round continues the loop"
         );
         assert!(!s.contains("tool_use"), "gateway tool_use must not surface: {s}");
@@ -699,7 +752,7 @@ mod tests {
         let (_assistant, calls) = acc.take_round();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].name, "web_search");
-        assert_eq!(calls[0].input_json, "{\"query\":\"rust\"}");
+        assert_eq!(calls[0].input.as_ref().unwrap()["query"], "rust");
     }
 
     // Across two rounds, client-visible block indices stay contiguous (round 1
@@ -753,8 +806,9 @@ mod tests {
             "client tool_use forwarded"
         );
         // The loop must terminate despite a gateway call being present.
-        assert!(
-            !acc.should_continue_loop(&context()),
+        assert_ne!(
+            acc.round_decision(&context()),
+            MessagesRoundDecision::ContinueGateway,
             "mixed round is terminal — loop must not continue"
         );
     }
@@ -783,7 +837,7 @@ mod tests {
             &json!({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "hi"}}),
         ));
         acc.push(&line(&json!({"type": "content_block_stop", "index": 0})));
-        let out = acc.finish().join("");
+        let out = acc.finish(acc.round_decision(&context())).join("");
         assert!(out.contains("event: error"), "incomplete later round must fail: {out}");
         assert!(!out.contains("event: message_stop"), "no synthetic completion: {out}");
         assert!(
@@ -854,23 +908,26 @@ mod tests {
         let (_assistant, calls) = acc.take_round();
         assert_eq!(calls.len(), 1);
         // The reconstructed input is invalid JSON.
-        assert!(
-            serde_json::from_str::<serde_json::Value>(&calls[0].input_json).is_err(),
-            "incomplete partial_json is invalid JSON"
-        );
+        assert!(calls[0].input.is_err(), "incomplete partial_json is invalid JSON");
         // After the fix, execute_gateway_calls must NOT coerce invalid input to
         // {} and dispatch — it must produce an error tool_result. Assert the
         // reconstructed call is flagged invalid rather than silently dispatchable.
+        let mut request = context();
+        let view = ServerToolView {
+            native: request.native_server_tools(),
+            key: process_result_key().unwrap(),
+        };
         let resolved = execute_gateway_calls(
-            &calls,
-            &mut context(),
+            calls,
+            &mut request,
             &no_op_registry().await,
             &tool_seam::GatewayToolMap::default(),
+            view,
             &GatewaySchedulerPolicy::default(),
             &ExecutorMetrics::from_global(),
         )
         .await;
-        let content = &resolved[0].content;
+        let content = &resolved[0].tool_result.content;
         assert!(
             content.contains("invalid") || content.contains("malformed") || content.contains("could not"),
             "malformed args must yield an error tool_result, not an empty-arg dispatch: {content:?}"

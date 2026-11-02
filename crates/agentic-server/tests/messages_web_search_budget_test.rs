@@ -1,5 +1,6 @@
 //! `max_uses` on a native Messages web search limits the searches the gateway
-//! performs, over HTTP JSON and SSE alike, for every supported version (#419).
+//! performs, over HTTP JSON and SSE alike, for every supported version (#419),
+//! and the client sees every call with its result block (#409).
 #[allow(dead_code)]
 mod common;
 
@@ -158,15 +159,40 @@ async fn assert_max_uses_limits_searches(tool: &Value, stream: bool) {
     let body = response.text().await.unwrap();
 
     assert!(body.contains("Done."), "the answer reaches the client: {body}");
-    assert!(!body.contains("web_search"), "gateway calls stay hidden: {body}");
     if stream {
         assert!(body.contains("event: message_stop"), "{body}");
         assert!(!body.contains("event: error"), "{body}");
+        assert!(
+            body.contains(r#""server_tool_use":{"web_search_requests":2}"#),
+            "the final usage counts the searches: {body}"
+        );
     } else {
         let message: Value = serde_json::from_str(&body).unwrap();
         assert_eq!(message["stop_reason"], "end_turn", "{body}");
-        assert_eq!(message["content"], json!([{"type":"text", "text":"Done."}]));
+        assert_eq!(message["usage"]["server_tool_use"], json!({"web_search_requests": 2}));
     }
+    let shown = common::assembled_messages_content(&body, stream);
+    assert_eq!(
+        common::shown_blocks(&shown),
+        [
+            "server_tool_use srvtoolu_gw_t1",
+            "server_tool_use srvtoolu_gw_t2",
+            "server_tool_use srvtoolu_gw_t3",
+            "web_search_tool_result srvtoolu_gw_t1 max_uses_exceeded",
+            "web_search_tool_result srvtoolu_gw_t2 1 results",
+            "web_search_tool_result srvtoolu_gw_t3 max_uses_exceeded",
+            "server_tool_use srvtoolu_gw_t4",
+            "web_search_tool_result srvtoolu_gw_t4 1 results",
+            "server_tool_use srvtoolu_gw_t5",
+            "web_search_tool_result srvtoolu_gw_t5 max_uses_exceeded",
+            "text Done.",
+        ],
+        "{body}"
+    );
+    assert_eq!(shown[0]["input"], json!({"queries":["a one", "a two", "a three"]}));
+    assert_eq!(shown[4]["content"][0]["url"], "https://example.com/proof");
+    assert_eq!(shown[4]["content"][0]["title"], "proof");
+    assert!(!body.contains("found"), "the result text travels sealed: {body}");
 
     let mut searches = backend.searches.lock().unwrap().clone();
     searches.sort();

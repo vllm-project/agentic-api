@@ -94,6 +94,173 @@ and final answers: a completed HTTP response alone does not establish task succe
 
 ## Mixed tools: web search, MCP, and shell
 
+### HTTP `store:false` characterization
+
+Use `record_store_false_cassettes.sh` with `STORE_FALSE_SUITE=multi-agent` to send the
+complete accumulated public history on each HTTP continuation. `MULTI_AGENT_SUITE`
+selects `mixed-tools` (default), `tool-search`, `code-interpreter`,
+or `client-agent-message`; `all` selects those four. Review and proposals are excluded.
+Each scenario and transport has a separate standard `turns` cassette. Set
+`MULTI_AGENT_STREAM_MODE` to `nonstreaming`, `streaming`, or `both` (default).
+`MULTI_AGENT_MAX_CONTINUATIONS` controls the client-tool follow-up limit (default
+10, range 1 through 100), as in the stored multi-agent recorder. Reaching that
+limit with pending calls still fails and retains the unfinished capture.
+The first three scenarios reuse their existing original request bodies; tool outputs
+and matching client results are taken from the live responses for continuation. The recorder
+preserves agent attribution, collaboration items and encrypted content, and adds
+matching simulated shell outputs without `previous_response_id`. It does not
+execute shell commands. `replay_old_cassettes.py` loads the existing mixed-tools
+request, then the shared recorder continues from each live response. Gateway mode
+connects to the already-running service at `GATEWAY_URL`. Its existing model,
+web-search, and MCP configuration is used.
+
+The `tool-search` case covers both client and hosted tool search in one
+continuous stateless session. The root first discovers the weather and timezone
+functions, then delegates the three client-tool tasks. Children must read actual
+client results before finishing; pending callbacks must not trigger interruption.
+This covers functions, namespace members and the custom tool. After those calls finish, the same full
+history continues with hosted search and the deferred MCP server from the existing
+hosted-search fixture. The request has one `tool_search` declaration at a time;
+the second phase switches its execution to the service and retains the other
+client declarations and loaded history.
+
+A new child loads `mcp_gitmcp_tiktoken`, calls MCP, and requests fresh Paris weather
+from the client fixture. A normal user follow-up then resumes that child for a new
+MCP lookup after the client result, testing discovery and loaded-tool carry-over. Only actual
+client calls receive simulated outputs. MCP and hosted-search outputs come from
+the service. When client results are pending, the prompt asks the root to return
+`PENDING_CLIENT_RESULTS` and retain its children, allowing the next HTTP request to
+supply the callbacks. It must not keep waiting for results that cannot arrive yet.
+Both phases share one standard `turns` YAML per transport, for eight
+files from a complete `all` run. The continuation limit applies to each automatic
+request chain; exhaustion fails the recording before the next phase starts.
+If a model ends the root before executing the required client functions, one
+ordinary user follow-up asks it to finish the existing assignments. The recorder
+retains that request and its real callbacks, then checks complete tool coverage.
+The recorder also rejects missing client-tool executions, repeated MCP listings, or
+an absent child callback between the MCP calls, so an HTTP 200 alone cannot mark
+the scenario complete.
+Re-record this combined case for both providers before comparing their behavior.
+
+```bash
+STORE_FALSE_SUITE=multi-agent STORE_FALSE_RECORD_SET=openai \
+  bash crates/agentic-server-core/tests/cassettes/record_store_false_cassettes.sh
+
+STORE_FALSE_SUITE=multi-agent STORE_FALSE_RECORD_SET=gateway \
+  MULTI_AGENT_SUITE=all \
+  GATEWAY_MODEL=Qwen/Qwen3.8-27B-FP8 \
+  bash crates/agentic-server-core/tests/cassettes/record_store_false_cassettes.sh
+```
+
+Files are written to `../store_false/` as
+`multi-agent-store-false-PROVIDER-SCENARIO-MODEL-MODE.yaml`, leaving the original
+stored captures intact. `MULTI_AGENT_OUTPUT_DIR` can override the directory.
+The gateway supports the same client-carried continuation flow as the
+[OpenAI multi-agent HTTP example](https://developers.openai.com/api/docs/guides/responses-multi-agent#http)
+using `store:false` and full-history replay. Enable `gitmcp.io` in the gateway's
+`AGENTIC_MCP_ALLOWED_HOSTS` and configure its web-search provider before recording.
+The recorder's shell commands receive fixture outputs and are not executed.
+
+The client sends the complete public history on each continuation. There is no
+mandatory compaction item or private gateway tree payload. Both the OpenAI and refreshed
+gateway mixed-tools JSON/SSE recordings continue without any compaction item.
+Do not edit captured YAML by hand.
+
+The recorded OpenAI `gpt-5.6-sol` SSE trial completes in two turns with
+`store:false` on both: three delegated agents perform web search, MCP lookup,
+and local shell calls; the client replays all 80 first-turn output items and
+four matching simulated shell outputs; the root then returns its final answer
+including `55`. The first request took several minutes and repeated shell calls.
+Its continuation was resumed with the existing recorder's `--append --input-file`
+after interruption, using the actual captured history and existing shell fixtures.
+`store_false_mixed_tools_openai_matches_stored_contract` compares this
+capture with the older stored OpenAI mixed-tools contract, including call/output
+identity, agent attribution, complete history replay, and terminal completion.
+
+The nonstreaming capture also completes in two HTTP 200 turns with `store:false`
+and no `previous_response_id`. Three delegated agents use web search, MCP, and
+local shell. The continuation replays the initial user message, all 72 output
+items, and three matching simulated shell outputs; the root's final answer
+includes `55`. The same Rust contract test checks this JSON capture against the
+stored OpenAI JSON reference. Earlier timed-out attempts are not parity evidence.
+
+`store_false_mixed_tools_gateway_matches_openai_contract` compares the gateway
+JSON/SSE captures with the corresponding OpenAI captures, checking three delegated
+agents, hosted web/MCP activity, client shell outputs, full-history continuation,
+and terminal completion. Core JSON/SSE regression tests also resume the child
+that owns a shell call from the full history, allow independent
+branches, and assert that response, item, and conversation tables stay empty.
+
+The HTTP regression tests also execute these client turns through a fresh gateway:
+
+```bash
+cargo test -p agentic-server --test responses_test mixed_tools_store_false_
+```
+
+These tests run both JSON and SSE using captured model, You search, and MCP
+responses from `../store_false/multi-agent-store-false-*-dependencies-*.yaml`.
+They send the accumulated public history and matching shell results to the live test
+gateway, exercise hosted-tool routing, compare the resulting session with the recorded
+OpenAI contract, check retrieval returns 404 and assert zero response/item/conversation
+rows. Compaction remains an independent context-management feature.
+The live replay uses the refreshed client capture's opening request with the token
+budget from the paired model dependency trace, then answers its own shell calls with
+results from the recorded model history. The upstream request budget is still
+compared exactly; independently refreshed client captures can use a larger budget. This preserves
+command/result pairing when an independent gateway recording uses different call IDs
+or a different number of client continuations. Every recorded model and tool RPC
+must be consumed, with the five identical historical MCP connection/discovery
+setups represented by one required setup. Their requests and responses must match exactly;
+a second live initialization or listing fails replay. Matching preserves request
+content, tool arguments, and client call IDs. Gateway-owned MCP pairs compare their
+call/result linkage because public items do not carry the private inference call ID;
+negative tests retain unmatched outputs, argument, result, and status differences.
+The comparison normalizes absent/null output-text
+`logprobs` to the canonical empty array and ignores generated item/JSON-RPC IDs and
+concurrent capacity/status notices. Legacy expected input is upgraded through the
+existing `ResponsesInput::into_canonical_items` conversion; actual result statuses
+remain strictly compared, including missing, null, or non-completed values.
+Unsupported MCP polling/teardown returns 405 without
+requiring timing-dependent request counts. No external services or credentials
+are needed to run the tests.
+
+The SSE replay also validates the freshly emitted gateway stream with the strict
+relay decoder. The original captures remain unchanged. The model dependency
+capture has 17 streams using message content-part events on reasoning items;
+the strict-relay cassette test asserts that exact rejection reason and count for
+that file. The recorded gateway streams and both live replay turns must pass
+strict validation. Typed output-text parts normalize missing or null `logprobs`
+to `[]`, matching public SSE normalization while preserving populated arrays.
+
+To refresh the gateway client captures, start the release gateway and use the
+shared `store:false` shell script:
+
+```bash
+STORE_FALSE_SUITE=multi-agent STORE_FALSE_RECORD_SET=gateway \
+GATEWAY_URL=http://127.0.0.1:9000 \
+GATEWAY_MODEL=Qwen/Qwen3.8-27B-FP8 \
+bash crates/agentic-server-core/tests/cassettes/record_store_false_cassettes.sh
+```
+
+The recorder sends the existing mixed-tools opening request to the running gateway,
+then submits its live response history and matching simulated shell outputs with
+`store:false`. It preserves the multi-agent beta header and uses the existing
+`--manual-item-replay` continuation path. It uses the usual recorder dependencies
+and `PYTHON` override. `MULTI_AGENT_OUTPUT_DIR` can redirect the client captures.
+The model, search, and MCP dependency recordings consumed by the HTTP replay tests
+are separate captures and must match one another and the opening request.
+Client-facing recordings can be refreshed independently: live regression tests
+construct their continuations from the responses emitted by the test gateway.
+The OpenAI reference captures remain separate. Model names and answer wording
+can differ; these comparisons establish the mixed-tools continuation contract,
+not byte-identical responses or parity for every multi-agent feature.
+
+Separately, `recorded_store_false_mixed_tools_replay_full_history` replays both turns
+of the older single-agent web/function/custom captures through the HTTP gateway,
+checking normalized declarations, matching outputs, final responses, and zero rows.
+
+### Scenario and stored recordings
+
 `MULTI_AGENT_SUITE=mixed-tools` supplies one prompt requesting three agents for
 Python CSV web research, GitMCP tiktoken research, and the local-shell command
 `python3 -c 'print(sum(range(1, 11)))'`. `mixed_tools.json` declares only web search,
@@ -141,8 +308,8 @@ claimed as behavioral coverage:
 
 The compaction recording must show that compaction actually occurred; merely
 setting a threshold does not establish coverage. The capture remains passive;
-coverage is assessed from recorded results afterward. Gateway multi-agent support
-remains scoped to `store: true`.
+coverage is assessed from recorded results afterward. The `store: false` captures
+currently cover mixed tools in JSON and SSE; the scenarios above still need recordings.
 
 Re-recording replaces the selected scenarios. `--dry-run` previews commands without
 writing files or contacting an API. Input fixtures in this directory are required
@@ -549,3 +716,79 @@ separate model dependency sidecar; it is not a new provider reference or a repla
 for the duplex YAML. Hosted-tool dependencies, request matching, and replay barriers
 for concurrent dependency completion still need to be added for **full dependency-backed
 replay**. The present captures alone do not supply that evidence.
+
+### Client-authored agent messages
+
+The `store_false/multi-agent-store-false-openai-reference-client-agent-message-*`
+captures send a plaintext `agent_message` from `/root` to `/root`, with multi-agent
+enabled and a prompt asking it to spawn `token_checker`. Both JSON and SSE returned
+HTTP 200 and spawned that child. The JSON capture returned the supplied token; the
+SSE capture returned `NO_AGENT_MESSAGE`. These recordings establish acceptance and
+spawning, not deterministic token delivery. Both refreshed gateway captures return
+the token. The executor regression loads the actual OpenAI and gateway requests
+rather than constructing an unrecorded request fixture.
+
+The `tool::code_interpreter::tests::multi_agent` matrix loads the gateway
+`store_false` mixed-tools, tool-search, and code-interpreter recordings for
+each transport and calls `ExecuteRequest`. Later turns carry the live complete public
+history plus the recorded new client results. Inference actions come from the source outputs;
+search, MCP and interpreter backends are mocked. Hosted calls are emitted by inference
+and executed by the gateway, never inserted into the opening client request. This
+checks orchestration and projection, not sandbox execution or model intelligence.
+
+The mixed-tools regression also executes stored continuations. Both paths require
+equivalent successful MCP discovery to appear only once across the session, including
+restored children whose forked history omits the root's discovery item. The existing
+registry comparison still exposes changed or failed discovery. The original gateway
+mixed-tools captures added in PR #373 contain three extra child discovery items on
+turn 2. Both refreshed stateless captures now match OpenAI's discovery behavior:
+exactly one successful root listing on turn 1, no listing on turn 2, and no failed
+discovery items. The implementation reuses those schemas before materialization
+and connects only when an MCP tool is actually invoked. The raw-capture assertions
+require that initial listing and reject repeated or failed discovery in this
+successful scenario. Executor regressions also make the server reject subsequent
+initialization/listing and verify that passive continuation still succeeds with
+callable definitions. Retained-listing schemas remain request-scoped, and alias
+regressions cover narrowed permissions and configured-server caches.
+
+Client-tool replays inspect actual upstream requests after each completed search:
+loaded function and namespace definitions must remain callable. They also require
+each recorded model search call to be emitted exactly once. Repeated searches with
+different call IDs are model decisions; their count is not required to match OpenAI's.
+
+The earlier stateless tool-search OpenAI JSON capture produces a root
+final answer before a later child-only cleanup response. Session comparison
+requires a root final answer somewhere in the session and no remaining client
+calls at the end; it does not require repeating that answer during cleanup.
+Static comparisons now cover all four stateless scenarios for both transports,
+including message and gateway-projected item ID prefixes, completed raw tool statuses, full-history continuation,
+and successful MCP discovery suppression. The new OpenAI code-interpreter SSE capture
+contains 22 text/annotation events with `output_index: -1`. Its terminal response is
+compared semantically through the same session and ownership checks; separate wire
+regressions pin the 22 raw events and the strict readers' exact rejection. Public
+hosted-search sessions contain gateway-owned `tool_search_output` items that the
+upstream model accumulator intentionally does not ingest. They use the existing
+public SSE validator for complete item lifecycles, identities, terminal snapshots,
+and callback ownership; model dependency streams still use the strict upstream decoder. A successful terminal comparison does
+not establish wire parity for the incompatible OpenAI stream. The captured bytes
+have not been repaired or filtered.
+
+The refreshed stateless gateway tool-search JSON and SSE captures now use `fc_` IDs
+for every public function call, including SSE item events and argument references.
+The stateless contract once again requires that prefix. Public translation retains
+native ingestion identities, execution `call_id` values, and other tools' projected
+IDs. Translation regressions still cover the earlier three bare provider IDs.
+
+Review regressions also cover near-prefix message IDs (`msg-123` and `msg123`),
+stored single-agent history followed by attributed multi-agent input, and expanding
+or removing an MCP `allowed_tools` restriction after a partial listing. The MCP
+trace tests execute fresh and retained-listing calls through the gateway: only
+operator-configured servers receive propagated trace context and baggage.
+These deterministic counterexamples use the existing test fixtures; the captured
+provider exchanges are preserved unchanged.
+
+One pre-existing identifier-format difference remains visible: gateway streaming
+reasoning items retain bare provider IDs, while gateway JSON and the OpenAI
+captures use `rs_` IDs. Streaming item additions, references, completions, terminal
+output, and subsequent client history consistently retain those identities. These
+recordings demonstrate successful continuation, not identical reasoning-ID formats.

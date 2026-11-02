@@ -140,7 +140,8 @@ impl ResponseContinuation {
     }
 
     pub(crate) fn retains_output(&self, index: usize, item: &OutputItem) -> bool {
-        index >= self.recorded_output_count || matches!(item, OutputItem::McpListTools(_))
+        (index >= self.recorded_output_count && !item.is_recorded_as_history())
+            || matches!(item, OutputItem::McpListTools(_))
     }
 
     /// Retain orchestration records across compaction without restoring the old

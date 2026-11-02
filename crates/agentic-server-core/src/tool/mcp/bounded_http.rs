@@ -12,6 +12,7 @@ use rmcp::transport::streamable_http_client::{
 use rmcp_reqwest as http_client;
 use sse_stream::{Sse, SseStream};
 
+use super::propagation::W3cPropagation;
 use crate::tool::handler::MAX_GATEWAY_TOOL_OUTPUT_BYTES;
 
 const EVENT_STREAM_MIME_TYPE: &str = "text/event-stream";
@@ -93,6 +94,8 @@ impl StreamableHttpClient for BoundedMcpHttpClient {
         if let Some(auth_token) = auth_token {
             request = request.bearer_auth(auth_token);
         }
+        let mut custom_headers = custom_headers;
+        W3cPropagation::from_message(&message).apply_to(&mut custom_headers);
         request = apply_custom_headers(request, custom_headers)?;
         let session_was_attached = session_id.is_some();
         if let Some(session_id) = session_id {

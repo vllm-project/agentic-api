@@ -1,10 +1,11 @@
 //! The gateway-executed `web_fetch` tool through the Messages loops (#408).
 //!
 //! A native `web_fetch_20250910` declaration is rewritten for the upstream,
-//! the fetch runs in the gateway against the page the user linked, the call
-//! never reaches the client, and the documented refusals reach the model as
-//! error `tool_result`s over the JSON and SSE loops alike. One local listener
-//! plays both the mock vLLM `/v1/messages` and the pages the model may fetch.
+//! the fetch runs in the gateway against the page the user linked, the client
+//! sees the call as `server_tool_use` and `web_fetch_tool_result` blocks, and
+//! the documented refusals reach the model as error `tool_result`s over the
+//! JSON and SSE loops alike. One local listener plays both the mock vLLM
+//! `/v1/messages` and the pages the model may fetch.
 
 use std::fmt::Write as _;
 use std::sync::atomic::{AtomicU16, Ordering};
@@ -273,7 +274,7 @@ fn result_content(result: &Value) -> Value {
 }
 
 #[tokio::test]
-async fn web_fetch_runs_in_the_gateway_and_stays_hidden_over_json() {
+async fn web_fetch_runs_in_the_gateway_and_is_shown_over_json() {
     let harness = harness(&loopback_config()).await;
     let page_url = harness.page_url("doc.html");
     harness.script(vec![
@@ -298,11 +299,24 @@ async fn web_fetch_runs_in_the_gateway_and_stays_hidden_over_json() {
     .await;
 
     assert_eq!(message["stop_reason"], "end_turn", "{message}");
-    assert_eq!(message["content"], json!([{"type": "text", "text": "Done."}]));
-    assert!(
-        !message.to_string().contains("web_fetch"),
-        "gateway calls stay hidden: {message}"
+    let retrieved_at = message["content"][2]["content"]["retrieved_at"].clone();
+    assert!(retrieved_at.is_string(), "{message}");
+    assert_eq!(
+        message["content"],
+        json!([
+            {"type": "text", "text": "Fetching."},
+            {"type": "server_tool_use", "id": "srvtoolu_gw_t1", "name": "web_fetch", "input": {"url": page_url}},
+            {"type": "web_fetch_tool_result", "tool_use_id": "srvtoolu_gw_t1",
+             "content": {"type": "web_fetch_result", "url": page_url,
+                         "content": {"type": "document",
+                                     "source": {"type": "text", "media_type": "text/plain",
+                                                "data": "Hello\nfrom the page"},
+                                     "title": "Page Title"},
+                         "retrieved_at": retrieved_at, "content_type": "text/html", "truncated": false}},
+            {"type": "text", "text": "Done."}
+        ])
     );
+    assert_eq!(message["usage"]["server_tool_use"], json!({"web_fetch_requests": 1}));
     assert_eq!(harness.served_pages(), vec!["doc.html"]);
 
     let requests = harness.upstream_requests();
@@ -323,6 +337,10 @@ async fn web_fetch_runs_in_the_gateway_and_stays_hidden_over_json() {
     assert_eq!(content["content_type"], "text/html");
     assert_eq!(content["content"], "Hello\nfrom the page");
     assert_eq!(content["truncated"], false);
+    assert_eq!(
+        content["retrieved_at"], retrieved_at,
+        "the model read what the client was shown"
+    );
 }
 
 /// Every native web-fetch version the gateway executes runs as the basic fetch
@@ -355,14 +373,20 @@ async fn every_native_web_fetch_version_runs_as_the_basic_fetch() {
                 let sse = run_sse(&harness, request).await;
                 assert!(sse.contains("Done."), "{tool_type}: final answer streams:\n{sse}");
                 assert!(
-                    !sse.contains("web_fetch"),
-                    "{tool_type}: gateway calls stay hidden:\n{sse}"
+                    sse.contains(r#""content_block":{"type":"web_fetch_tool_result""#),
+                    "{tool_type}: the fetch is shown:\n{sse}"
                 );
             } else {
                 let message = run_json(&harness, request).await;
+                let types: Vec<&str> = message["content"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|block| block["type"].as_str().unwrap())
+                    .collect();
                 assert_eq!(
-                    message["content"],
-                    json!([{"type": "text", "text": "Done."}]),
+                    types,
+                    ["server_tool_use", "web_fetch_tool_result", "text"],
                     "{tool_type}"
                 );
             }
@@ -433,7 +457,7 @@ async fn a_later_web_fetch_version_refuses_a_blocked_domain() {
 }
 
 #[tokio::test]
-async fn web_fetch_runs_in_the_gateway_and_stays_hidden_over_sse() {
+async fn web_fetch_runs_in_the_gateway_and_is_shown_over_sse() {
     let harness = harness(&loopback_config()).await;
     let page_url = harness.page_url("plain.txt");
     harness.script(vec![assistant(&[fetch_call("t1", &page_url)], "tool_use"), done()]);
@@ -446,9 +470,41 @@ async fn web_fetch_runs_in_the_gateway_and_stays_hidden_over_sse() {
 
     assert_eq!(body.matches("event: message_start").count(), 1, "{body}");
     assert_eq!(body.matches("event: message_stop").count(), 1, "{body}");
-    assert!(body.contains("Done."), "{body}");
-    assert!(!body.contains("web_fetch"), "gateway tool_use suppressed: {body}");
     assert!(!body.contains("event: error"), "{body}");
+    assert!(
+        !body.contains(r#""type":"tool_use""#),
+        "the upstream call stays internal: {body}"
+    );
+    let blocks: Vec<Value> = body
+        .lines()
+        .filter_map(|line| line.strip_prefix("data: "))
+        .map(|data| serde_json::from_str::<Value>(data).unwrap())
+        .filter(|event| event["type"].as_str().unwrap().starts_with("content_block"))
+        .collect();
+    let retrieved_at = blocks[3]["content_block"]["content"]["retrieved_at"].clone();
+    assert_eq!(
+        blocks,
+        [
+            json!({"type": "content_block_start", "index": 0, "content_block":
+                {"type": "server_tool_use", "id": "srvtoolu_gw_t1", "name": "web_fetch", "input": {}}}),
+            json!({"type": "content_block_delta", "index": 0, "delta":
+                {"type": "input_json_delta", "partial_json": json!({"url": page_url}).to_string()}}),
+            json!({"type": "content_block_stop", "index": 0}),
+            json!({"type": "content_block_start", "index": 1, "content_block":
+                {"type": "web_fetch_tool_result", "tool_use_id": "srvtoolu_gw_t1",
+                 "content": {"type": "web_fetch_result", "url": page_url,
+                             "content": {"type": "document",
+                                         "source": {"type": "text", "media_type": "text/plain",
+                                                    "data": "plain text body"}},
+                             "retrieved_at": retrieved_at, "content_type": "text/plain", "truncated": false}}}),
+            json!({"type": "content_block_stop", "index": 1}),
+            json!({"type": "content_block_start", "index": 2, "content_block": {"type": "text", "text": ""}}),
+            json!({"type": "content_block_delta", "index": 2, "delta": {"type": "text_delta", "text": "Done."}}),
+            json!({"type": "content_block_stop", "index": 2}),
+        ],
+        "{body}"
+    );
+    assert!(body.contains(r#""server_tool_use":{"web_fetch_requests":1}"#), "{body}");
     assert_eq!(harness.served_pages(), vec!["plain.txt"]);
     let results = harness.fed_back_results(1);
     let content = result_content(&results[0]);
@@ -506,7 +562,22 @@ async fn a_url_the_conversation_never_showed_is_refused_and_still_charged() {
     )
     .await;
 
-    assert_eq!(message["content"][0]["text"], "Done.");
+    let shown: Vec<&Value> = message["content"].as_array().unwrap().iter().collect();
+    assert_eq!(shown.last().unwrap()["text"], "Done.");
+    assert_eq!(
+        shown
+            .iter()
+            .filter(|block| block["type"] == "web_fetch_tool_result")
+            .map(|block| block["content"]["error_code"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["url_not_in_prior_context", "max_uses_exceeded"],
+        "the client sees both refusals"
+    );
+    assert_eq!(
+        message["usage"].get("server_tool_use"),
+        None,
+        "a refused fetch is not a use"
+    );
     assert!(harness.served_pages().is_empty(), "nothing was fetched");
     let first = harness.fed_back_results(1);
     let refused = result_content(&first[0]);

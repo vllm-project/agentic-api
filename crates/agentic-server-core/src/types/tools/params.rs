@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use super::domain::DomainFilters;
+pub use super::tool_search::{ToolSearchExecution, ToolSearchStatus, ToolSearchToolParam};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -195,42 +196,6 @@ impl CustomToolParam {
     }
 }
 
-/// Only client-executed tool search is part of the public gateway contract.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[serde(rename_all = "snake_case")]
-pub enum ToolSearchExecution {
-    #[default]
-    Client,
-    // TODO: Support `Server` execution type for gateway built-in tool
-}
-
-/// Lifecycle status of a public tool-search call or output item.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[serde(rename_all = "snake_case")]
-pub enum ToolSearchStatus {
-    InProgress,
-    #[default]
-    Completed,
-    Incomplete,
-}
-
-/// Parameters for a client-executed tool-search declaration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct ToolSearchToolParam {
-    pub execution: ToolSearchExecution,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub parameters: Option<Value>,
-    /// `async` applies only to function and custom tools; captured so declaration validation can reject it.
-    #[serde(default, rename = "async", skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "openapi", schema(ignore))]
-    pub unsupported_async: Option<bool>,
-}
-
 /// Parameters for a gateway MCP built-in tool declaration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -254,6 +219,10 @@ pub struct McpToolParam {
     #[serde(default, rename = "async", skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "openapi", schema(ignore))]
     pub unsupported_async: Option<bool>,
+    /// Catalog text for a deferred server; hosted tool search returns it as the
+    /// description of the server's `mcp_<server_label>` namespace.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_description: Option<String>,
     /// Request-scoped `tools/list` results used by MCP normalization. This
     /// field is populated internally and ignored on the public request wire.
     #[serde(
@@ -264,6 +233,12 @@ pub struct McpToolParam {
     )]
     #[cfg_attr(feature = "openapi", schema(ignore))]
     pub(crate) discovered_tools: Vec<McpDiscoveredToolParam>,
+    /// For a server deferred behind hosted tool search, the discovered tools
+    /// loaded so far; upstream normalization exposes only these. `None` for a
+    /// server that is not deferred. Internal and never on the wire.
+    #[serde(skip)]
+    #[cfg_attr(feature = "openapi", schema(ignore))]
+    pub(crate) loaded_tool_names: Option<Vec<String>>,
 }
 
 /// Parameters for a discovered MCP (Model Context Protocol) server tool.
@@ -814,25 +789,28 @@ mod tests {
     }
 
     #[test]
-    fn responses_tool_search_declaration_rejects_invalid_wire_shapes() {
+    fn responses_tool_search_declaration_defaults_to_hosted_and_echoes_like_openai() {
         for declaration in [
-            serde_json::json!({
-                "type": "tool_search",
-                "description": "Missing execution",
-                "parameters": {"type": "object"}
-            }),
-            serde_json::json!({
-                "type": "tool_search",
-                "execution": "server",
-                "description": "Hosted execution is excluded",
-                "parameters": {"type": "object"}
-            }),
+            serde_json::json!({"type": "tool_search"}),
+            serde_json::json!({"type": "tool_search", "execution": "server"}),
+            serde_json::json!({"type": "tool_search", "description": null, "parameters": null}),
         ] {
-            assert!(
-                serde_json::from_value::<ResponsesTool>(declaration).is_err(),
-                "invalid tool-search wire shape must not fall back to an unknown tool"
+            let tool: ResponsesTool = serde_json::from_value(declaration).expect("hosted declaration");
+            let ResponsesTool::ToolSearch(param) = &tool else {
+                panic!("expected a tool-search declaration");
+            };
+            assert!(param.is_hosted());
+            // Recorded OpenAI echo: `execution` is dropped, the optional fields are null.
+            assert_eq!(
+                serde_json::to_value(&tool).expect("tool serializes"),
+                serde_json::json!({"type": "tool_search", "description": null, "parameters": null})
             );
         }
+        assert!(
+            serde_json::from_value::<ResponsesTool>(serde_json::json!({"type": "tool_search", "execution": "remote"}))
+                .is_err(),
+            "an unknown execution must not fall back to an unknown tool"
+        );
     }
 
     #[test]

@@ -155,7 +155,7 @@ each round contains its upstream `http.client.request`.
 | --- | --- |
 | `agentic.rehydrate` | `agentic.rehydrate.source`: `none`, `previous_response`, or `conversation` |
 | `agentic.inference_round` | `agentic.inference.round`: zero-based round index |
-| `agentic.tool.execute` | `agentic.tool.type`: the gateway's tool category (`function`, `tool_search`, `custom`, `shell`, `codex_namespace`, `mcp`, `web_search`, `web_fetch`, `file_search`, or `code_interpreter`), never the tool name |
+| `agentic.tool.execute` | `agentic.tool.type`: the gateway's tool category (`function`, `hosted_tool_search` for a tool search the gateway runs, `custom`, `shell`, `codex_namespace`, `mcp`, `web_search`, `web_fetch`, `file_search`, or `code_interpreter`), never the tool name |
 | `agentic.compaction` | `agentic.compaction.operation`: `summarize`; `agentic.compaction.trigger`: `context_management`, `input_item`, or `explicit` |
 | `agentic.persist` | `agentic.persist.destination`: `response` or `conversation` |
 
@@ -181,6 +181,18 @@ consumption continues inside the inference round. It never records
 Both upstream API adapters replace outgoing `traceparent` and `tracestate`
 with the active HTTP client span's W3C context. These headers carry context,
 not span attributes; inherited trace state may travel with that context.
+Inbound W3C `baggage` is extracted with the trace context and sent on with it.
+
+Gateway-executed MCP `tools/call` requests to servers configured by the
+operator carry the calling span's context the same way: as `traceparent`,
+`tracestate`, and `baggage` headers on HTTP servers, and in the request's
+`params._meta` for every transport, so stdio servers can join the trace too.
+These values replace any `traceparent`, `tracestate`, or `baggage` set in the
+server's configured `headers`; a value that is not a valid HTTP header (baggage
+properties can decode to control characters) is left out rather than failing
+the tool call.
+A server URL declared in a request receives neither: baggage can carry values
+your edge added to the inbound request, and that server is not yours to trust.
 
 #### WebSocket sessions
 

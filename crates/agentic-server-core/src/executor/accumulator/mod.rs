@@ -327,6 +327,10 @@ impl ResponseAccumulator {
         self.strict_call_ids.entry(output_index).or_default().observe(call_id);
     }
 
+    pub(super) fn accumulated_item_type(&self, output_index: u32) -> Option<SSEItemType> {
+        self.slots.get(OutputIndex::new(output_index))?.state.item_type()
+    }
+
     pub(super) fn accumulated_function_call(&self, output_index: u32) -> Option<AccumulatedFunctionCall<'_>> {
         let slot = self.slots.get(OutputIndex::new(output_index))?;
         match &slot.state {

@@ -12,6 +12,7 @@ use crate::executor::telemetry::metrics::Stage;
 use crate::storage::{ResponseMetadata, StorageError};
 use crate::tool::ToolError;
 use crate::types::io::InOutItem;
+use crate::types::io::input::is_search_item;
 use crate::types::io::{
     InputItem, OutputItem, ReasoningOutput, ReasoningTextContent, ResponsesInput, resolve_tool_choice, resolve_tools,
 };
@@ -90,10 +91,10 @@ pub(super) fn prepare_reasoning_for_vllm(input: &mut ResponsesInput) -> Executor
 /// for `original_request` so the engine retains an unmodified copy for persistence
 /// and ID resolution.
 ///
-/// Dispatches based on `store` flag and which ID is present:
+/// Dispatches based on the supplied history source, independently of `store`:
 /// - `previous_response_id`: rehydrate from the prior response checkpoint
 /// - `conversation`:         rehydrate from the conversation
-/// - no ids:                 forward only the new input
+/// - no ids:                 normalize the complete history supplied by the client
 ///
 /// # Errors
 /// Returns [`ExecutorError`] if storage is unavailable, a referenced ID does not exist,
@@ -169,20 +170,37 @@ async fn rehydrate_request(
         continuation,
     };
 
-    if ctx.original_request.conversation.is_some() && ctx.original_request.previous_response_id.is_some() {
+    match (
+        ctx.original_request.conversation.is_some(),
+        ctx.original_request.previous_response_id.is_some(),
+    ) {
+        (true, true) => {
+            return Err(ExecutorError::InvalidRequest(
+                "provide only one of conversation or previous_response_id".into(),
+            ));
+        }
+        (true, false) => from_conversation(&mut ctx, exec_ctx).await?,
+        (false, true) => from_response(&mut ctx, exec_ctx).await?,
+        (false, false) => from_responses(&mut ctx)?,
+    }
+
+    // Stateless multi-agent runs use the existing automatic per-agent compactor.
+    // The explicit trigger extension cannot return a resumable stateless tree.
+    if !ctx.original_request.store
+        && ctx.original_request.input.has_compaction_trigger()
+        && ctx
+            .enriched_request
+            .multi_agent
+            .as_ref()
+            .is_some_and(|config| config.enabled)
+    {
         return Err(ExecutorError::InvalidRequest(
-            "provide only one of conversation or previous_response_id".into(),
+            "compaction_trigger is not supported with multi_agent and store: false; use automatic compaction".into(),
         ));
     }
-
-    if ctx.original_request.conversation.is_some() {
-        from_conversation(&mut ctx, exec_ctx).await?;
-    } else if ctx.original_request.previous_response_id.is_some() {
-        from_response(&mut ctx, exec_ctx).await?;
-    } else {
-        ctx.enriched_request.input = ResponsesInput::from(InOutItem::into_input_items(ctx.new_input_items.clone()));
-    }
-
+    exec_ctx
+        .gateway_executors
+        .apply_configured_mcp_defaults(ctx.enriched_request.tools.as_deref_mut());
     exec_ctx
         .gateway_executors
         .validate_declarations(ctx.enriched_request.tool_declarations().as_deref())?;
@@ -191,15 +209,31 @@ async fn rehydrate_request(
     Ok(ctx)
 }
 
+/// Use the submitted Responses history without accessing response or conversation storage.
+fn from_responses(ctx: &mut RequestContext) -> ExecutorResult<()> {
+    let items = InOutItem::into_input_items(ctx.new_input_items.clone());
+    if items.iter().any(is_search_item) {
+        reject_unanswered_sync_call(&items)?;
+    }
+    ctx.enriched_request.input = ResponsesInput::from(items);
+    Ok(())
+}
+
+/// Refuses a history whose synchronous call has no output yet; the pending-call ledger also rejects a duplicate
+/// call id, an output with no call, and an output for a call of another kind.
+fn reject_unanswered_sync_call(items: &[InputItem]) -> ExecutorResult<()> {
+    match first_unanswered_sync_call(items)? {
+        Some(pending) => Err(ExecutorError::Tool(ToolError::MissingOutput {
+            call_id: pending.call_id,
+        })),
+        None => Ok(()),
+    }
+}
+
 fn validate_multi_agent_request(request: &RequestPayload) -> ExecutorResult<()> {
     let Some(config) = request.multi_agent.as_ref().filter(|config| config.enabled) else {
         return Ok(());
     };
-    if !request.store {
-        return Err(ExecutorError::InvalidRequest(
-            "multi_agent requires store: true; store: false is not supported".into(),
-        ));
-    }
     if config.max_concurrent_subagents == Some(0) {
         return Err(ExecutorError::InvalidRequest(
             "max_concurrent_subagents must be positive".into(),
@@ -256,11 +290,7 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
     let mut items = InOutItem::into_input_items(history);
     items.reserve(ctx.new_input_items.len());
     items.extend(InOutItem::into_input_items(ctx.new_input_items.clone()));
-    if let Some(pending) = first_unanswered_sync_call(&items)? {
-        return Err(ExecutorError::Tool(ToolError::MissingOutput {
-            call_id: pending.call_id,
-        }));
-    }
+    reject_unanswered_sync_call(&items)?;
 
     ctx.enriched_request.previous_response_id = None;
     ctx.enriched_request.input = ResponsesInput::from(items);
@@ -315,11 +345,7 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
     // inference copy. new_input_items retains their public wire types.
     items.extend(InOutItem::into_input_items(ctx.new_input_items.clone()));
     let items = canonical_session_history(items);
-    if let Some(pending) = first_unanswered_sync_call(&items)? {
-        return Err(ExecutorError::Tool(ToolError::MissingOutput {
-            call_id: pending.call_id,
-        }));
-    }
+    reject_unanswered_sync_call(&items)?;
     ctx.enriched_request.previous_response_id = None;
     ctx.enriched_request.input = ResponsesInput::from(items);
     ctx.enriched_request.tools = resolve_tools(
@@ -368,11 +394,7 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
     let mut items = InOutItem::into_input_items(snapshot.items);
     items.reserve(ctx.new_input_items.len());
     items.extend(InOutItem::into_input_items(ctx.new_input_items.clone()));
-    if let Some(pending) = first_unanswered_sync_call(&items)? {
-        return Err(ExecutorError::Tool(ToolError::MissingOutput {
-            call_id: pending.call_id,
-        }));
-    }
+    reject_unanswered_sync_call(&items)?;
 
     ctx.enriched_request.input = ResponsesInput::from(items);
     ctx.conversation_id = Some(conv_data.conversation_id);
@@ -400,11 +422,13 @@ fn restore_agent_tree(ctx: &mut RequestContext, metadata: &ResponseMetadata, max
     let Some(tree) = &metadata.multi_agent_tree else {
         return Ok(false);
     };
-    if !ctx.original_request.store {
-        return Err(ExecutorError::InvalidRequest(
-            "multi_agent requires store: true; store: false is not supported".into(),
-        ));
-    }
+    let tree = ValidatedTreeCheckpoint::from_stored(tree.clone(), &CheckpointLimits::for_response(max_bytes))?;
+    apply_effective_settings(ctx, metadata);
+    apply_agent_tree(ctx, tree)?;
+    Ok(true)
+}
+
+fn apply_agent_tree(ctx: &mut RequestContext, tree: ValidatedTreeCheckpoint) -> ExecutorResult<()> {
     if ctx
         .original_request
         .multi_agent
@@ -415,22 +439,19 @@ fn restore_agent_tree(ctx: &mut RequestContext, metadata: &ResponseMetadata, max
             "cannot disable multi_agent when continuing an agent tree".into(),
         ));
     }
-    apply_effective_settings(ctx, metadata);
     if ctx.enriched_request.multi_agent.is_none() {
-        ctx.enriched_request.multi_agent = Some(tree.config.clone());
+        ctx.enriched_request.multi_agent = Some(tree.snapshot().config.clone());
     }
     let root = tree
+        .snapshot()
         .agents
         .first()
         .filter(|agent| agent.identity.is_root())
         .ok_or_else(|| ExecutorError::InvalidRequest("multi-agent checkpoint has no root".into()))?;
     ctx.enriched_request.input = ResponsesInput::from(root.history.clone());
     ctx.enriched_request.previous_response_id = None;
-    ctx.multi_agent_tree = Some(ValidatedTreeCheckpoint::from_stored(
-        tree.clone(),
-        &CheckpointLimits::for_response(max_bytes),
-    )?);
-    Ok(true)
+    ctx.multi_agent_tree = Some(tree);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -666,7 +687,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn multi_agent_session_admission_requires_storage() {
+    async fn multi_agent_session_admission_allows_both_storage_values() {
         let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
         for store in [true, false] {
             let session = ResponseSession::new(NonZeroUsize::new(128).unwrap(), NonZeroUsize::new(65_536).unwrap());
@@ -676,15 +697,9 @@ mod tests {
                 enabled: true,
                 max_concurrent_subagents: Some(3),
             });
-            let result = rehydrate_in_session(request, &exec_ctx, &session).await;
-            if store {
-                let ctx = result.unwrap();
-                assert!(ctx.enriched_request.multi_agent.unwrap().enabled);
-                assert!(ctx.continuation.is_some());
-            } else {
-                assert!(matches!(result, Err(ExecutorError::InvalidRequest(message))
-                    if message == "multi_agent requires store: true; store: false is not supported"));
-            }
+            let ctx = rehydrate_in_session(request, &exec_ctx, &session).await.unwrap();
+            assert!(ctx.enriched_request.multi_agent.unwrap().enabled);
+            assert!(ctx.continuation.is_some());
         }
     }
 
@@ -862,30 +877,22 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn nonstored_multi_agent_is_rejected_before_history_access() {
+    async fn nonstored_multi_agent_needs_no_history_store_without_state_ids() {
         let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
-        for store in [false] {
-            for stream in [false, true] {
-                for (conversation_id, previous_response_id) in
-                    [(None, None), (Some("conv_missing"), None), (None, Some("resp_missing"))]
-                {
-                    let mut request = request(conversation_id, previous_response_id);
-                    request.store = store;
-                    request.stream = stream;
-                    request.multi_agent = Some(crate::types::io::MultiAgentConfig {
-                        enabled: true,
-                        max_concurrent_subagents: Some(3),
-                    });
-                    let error = rehydrate_conversation(request, &exec_ctx).await.unwrap_err();
-                    let ExecutorError::InvalidRequest(message) = error else {
-                        panic!("admission must reject before accessing disabled history stores: {error}");
-                    };
-                    assert_eq!(
-                        message,
-                        "multi_agent requires store: true; store: false is not supported"
-                    );
-                }
-            }
+        for stream in [false, true] {
+            let mut request = request(None, None);
+            request.store = false;
+            request.stream = stream;
+            request.multi_agent = Some(MultiAgentConfig {
+                enabled: true,
+                max_concurrent_subagents: Some(3),
+            });
+            let ctx = rehydrate_conversation(request.clone(), &exec_ctx).await.unwrap();
+            assert!(ctx.multi_agent_tree.is_none());
+            assert_eq!(ctx.new_input_items.len(), 1);
+            request.input.push(InputItem::CompactionTrigger);
+            assert!(matches!(rehydrate_conversation(request, &exec_ctx).await,
+                Err(ExecutorError::InvalidRequest(message)) if message.contains("compaction_trigger")));
         }
     }
 

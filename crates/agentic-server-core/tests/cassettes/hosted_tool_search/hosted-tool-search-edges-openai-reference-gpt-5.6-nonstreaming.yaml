@@ -1,0 +1,1943 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: 'This is a test of the tool loader. Call tool_search exactly once with
+        exactly these arguments, unchanged: {"paths":["get_weather"],"query":"CURRENT"}.
+        Do not call any other tool and do not search again. Then reply with only the
+        names of the tools that the search loaded, or "none".'
+      max_output_tokens: 4096
+      model: gpt-5.6
+      parallel_tool_calls: false
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Reserve an airline seat between two airports
+          name: book_flight
+          parameters:
+            additionalProperties: false
+            properties:
+              destination_airport:
+                type: string
+              origin_airport:
+                type: string
+            required:
+            - origin_airport
+            - destination_airport
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - allowed_tools:
+        - fetch_tiktoken_documentation
+        - search_tiktoken_documentation
+        - search_tiktoken_code
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792171594
+      created_at: 1792171591
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0996ed2f5bf40458006ad25e475aa487d1b8d3bf7dc12746c7
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_0996ed2f5bf40458006ad25e47e0a887d18da55092835e8909
+        server_label: gitmcp_tiktoken
+        tools:
+        - annotations:
+            read_only: false
+          description: 'Fetch entire documentation file from GitHub repository: openai/tiktoken.
+            Useful for general questions. Always call this tool first if asked about
+            openai/tiktoken.'
+          input_schema:
+            type: object
+          name: fetch_tiktoken_documentation
+        - annotations:
+            read_only: false
+          description: 'Semantically search within the fetched documentation from
+            GitHub repository: openai/tiktoken. Useful for specific queries.'
+          input_schema:
+            $schema: http://json-schema.org/draft-07/schema#
+            additionalProperties: false
+            properties:
+              query:
+                description: The search query to find relevant documentation
+                type: string
+            required:
+            - query
+            type: object
+          name: search_tiktoken_documentation
+        - annotations:
+            read_only: false
+          description: 'Search for code within the GitHub repository: "openai/tiktoken"
+            using the GitHub Search API (exact match). Returns matching files for
+            you to query further if relevant.'
+          input_schema:
+            $schema: http://json-schema.org/draft-07/schema#
+            additionalProperties: false
+            properties:
+              page:
+                description: Page number to retrieve (starting from 1). Each page
+                  contains 30 results.
+                type: number
+              query:
+                description: The search query to find relevant code files
+                type: string
+            required:
+            - query
+            type: object
+          name: search_tiktoken_code
+        type: mcp_list_tools
+      - content: []
+        encrypted_content: gAAAAABq0l5KLWBygmfjdiBD3eFlgl01UPZvvLktdpT41mveuZQOaN-f0cYm51CYiUCp8IEyphSSBv6vsLbRInZsBr8maITvXMUVaqdS0CsdGFP06afhdDgArhkD9AzOLJKcPbC72o5t6ploUnnn5ow4yTZw_KN3glWuO9yd0mM7c7Q5vXTzIqt0houG0Y5ShyEhS1fuBx4WFNlPH7l6-dv6vS44V9t5NPm4dnNPKvXPpSe7M3WxSsR1VgHh5nMZvIRjlHM6M1V9BL8G7fWIaAYYzZmP3jDk_uEeQy62dDLbdoLGo6KXvfych9dMu5X_9KbK6WhPYSTjB1FDlTDjMOsGKIiKtqtBP08wjTCbx2X_GbTxa01vnqkFyOePb8shhZbF1lJ7eKsKxtthk5klKXVzOt6CgwdrNyS3FNQ5nUy6IiScBEQIT0t6-0Ly1jYKy0wiSePzfFFbOPE78WP5pydkgcforTBGn2KfJo9jl6SUOvFmSN6YFoSOMYryCPnkkbMT9Azhiyy3idFuTdzas5lHYzc8n6MhG2HGeLKUNnzoGSnPy910Hz9MIx3GiKjDQ21zgcvlNUtcg2fUMRPEzSBC5Nw_Hub4DFC5g4l0I04-y56GBbvMlnRTnDIsTNFahbDdH2EsAcxB7iy5iClOeEbe1gEAyNQqFVbYqp_Q7Wwo-ocvBzs2D74AZb5vwiL0i7gSgSu-YXUJzv3bOK3cQzHOJSFwu_yueRLd9m8N6i_RWynVz0ZTrG7uN3yfDxttAnIdTOicXYR97wc7Hn7ogBEr6S6gjMcotf4mgh26ecXYsRF-HXvSimoou9Hjr44TH1l6hcAwz2p5CurCS_rDQKodTBEbdjdVBG5HD4GVThQk5W0aEJZu9uask0pNeGa_3II5Pg4KlK6azjFa2J4SkXKv9MM_Nxnmg6WgLQpEpJZHqLlJbVd3P4AZsCDfVrMXaJBw2G3j8vd4eoK54QMNk3wn0gKEjYhx0ZcVPb5aSLStP0Y_869TvMKmQph2mDmyj3lKTqjXWA4QMaWAuF2b3wAb8IFGdVbXe6wLEhQKVmzxmAxo21j0DeB-UyxpDhMdbF8P2_OSZfD-P7D9F5TbNLzLkJpzOCbX6TcPUGlCnJX-sJh_G75ilyNfvuH9kmCtwx0FRwbNaVP7pnwQkZZF77WhuZmugolTYo7YMz9Qimx_Iewi0-fDDpGdOoEnuLX2TEG8HyMg_doWiNW1xoy1vF979F1APDrp1etIVUQITM7gCKyEi77I2He2WS7ZU-BeNJrdiVtNp2ueCmcB-Tv4J2Wse3uWry9n8oj5kKmPuwIwmFxKH-L7sZZo2sAlYiXT7-eghwuYkI9E5Mj-GmNAGbJhXIKIRO4KZstpa05vVlYcZMn0kJqw4aVfZP49rv2G6sUmeoYLYXbjSbCiwUnWG5iDA9gpHLWvlXj_XGro_6qidY0DixDnzWvaLU9YAbHD2kDV3KOdR8YtXsTudzBSbH0AJjoquIdB3kqW47PP29k-g4Q69F6Tdb2T2lJDV00WoPlw4KszeMuQtjfmDYE-EkbqrFAjUwgG732ukfyeTEzXXIv_bnW726HO_XEpU5irx5ZntuOd_YSbzcEEIonh0R6XdE0_Ki74G9OVlS36mjwjHUkAOizdFY92V7Z9RxT8nIZ0zFMliqb_tdG4jVGgxw7wHwdT7iVJXSmWTKv7s1MBIFzrYiiHVykeQ1ioOTO9PbEczNJjhegKpvl5U16ZtVsmzNIWko7ghe4_EtxRhIhr0Ugucwnbg6unXe-y3TNq3XqIRqshq-1y6eAIVdtDDqKLpj2w2LjuE77IiVidtxHFu2EIAmiK0iVEkblEUNX9e5NJORP-WK1B
+        id: rs_0996ed2f5bf40458006ad25e49372087d1be48361f5d98aa5b
+        summary: []
+        type: reasoning
+      - arguments:
+          paths:
+          - get_weather
+          query: CURRENT
+        call_id: null
+        execution: server
+        id: tsc_0996ed2f5bf40458006ad25e49a17087d1942e2cbacbfe1644
+        status: completed
+        type: tool_search_call
+      - call_id: null
+        execution: server
+        id: tso_0996ed2f5bf40458006ad25e49c15087d1b0ad821f33600187
+        status: completed
+        tools:
+        - defer_loading: true
+          description: Get the current weather for a city
+          name: get_weather
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        type: tool_search_output
+      - content:
+        - annotations: []
+          logprobs: []
+          text: get_weather
+          type: output_text
+        id: msg_0996ed2f5bf40458006ad25e4a3c2487d18f0eaeee97df5f3b
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - allowed_tools:
+        - fetch_tiktoken_documentation
+        - search_tiktoken_documentation
+        - search_tiktoken_code
+        defer_loading: true
+        headers: null
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      - description: null
+        parameters: null
+        type: tool_search
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Reserve an airline seat between two airports
+          name: book_flight
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              destination_airport:
+                type: string
+              origin_airport:
+                type: string
+            required:
+            - origin_airport
+            - destination_airport
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 741
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 65
+        output_tokens_details:
+          reasoning_tokens: 59
+        total_tokens: 806
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input: 'This is a test of the tool loader. Call tool_search four times, one
+        call after another, with exactly these arguments in this order, unchanged:
+        {"paths":["get_weather"]}, then {"paths":["get_weather"]}, then {"paths":["travel"],"query":"timezone"},
+        then {"paths":["travel"]}. Do not call any other tool. Then reply with only
+        the names of the tools that each search loaded, or "none" for a search that
+        loaded nothing.'
+      max_output_tokens: 4096
+      model: gpt-5.6
+      parallel_tool_calls: false
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Reserve an airline seat between two airports
+          name: book_flight
+          parameters:
+            additionalProperties: false
+            properties:
+              destination_airport:
+                type: string
+              origin_airport:
+                type: string
+            required:
+            - origin_airport
+            - destination_airport
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - allowed_tools:
+        - fetch_tiktoken_documentation
+        - search_tiktoken_documentation
+        - search_tiktoken_code
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792171602
+      created_at: 1792171597
+      error: null
+      frequency_penalty: 0.0
+      id: resp_00a907bf620233da006ad25e4cd85487d1a61b16e2bdae8dd4
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_00a907bf620233da006ad25e4d1d7c87d18704da327fa50fb0
+        server_label: gitmcp_tiktoken
+        tools:
+        - annotations:
+            read_only: false
+          description: 'Fetch entire documentation file from GitHub repository: openai/tiktoken.
+            Useful for general questions. Always call this tool first if asked about
+            openai/tiktoken.'
+          input_schema:
+            type: object
+          name: fetch_tiktoken_documentation
+        - annotations:
+            read_only: false
+          description: 'Semantically search within the fetched documentation from
+            GitHub repository: openai/tiktoken. Useful for specific queries.'
+          input_schema:
+            $schema: http://json-schema.org/draft-07/schema#
+            additionalProperties: false
+            properties:
+              query:
+                description: The search query to find relevant documentation
+                type: string
+            required:
+            - query
+            type: object
+          name: search_tiktoken_documentation
+        - annotations:
+            read_only: false
+          description: 'Search for code within the GitHub repository: "openai/tiktoken"
+            using the GitHub Search API (exact match). Returns matching files for
+            you to query further if relevant.'
+          input_schema:
+            $schema: http://json-schema.org/draft-07/schema#
+            additionalProperties: false
+            properties:
+              page:
+                description: Page number to retrieve (starting from 1). Each page
+                  contains 30 results.
+                type: number
+              query:
+                description: The search query to find relevant code files
+                type: string
+            required:
+            - query
+            type: object
+          name: search_tiktoken_code
+        type: mcp_list_tools
+      - arguments:
+          paths:
+          - get_weather
+        call_id: null
+        execution: server
+        id: tsc_00a907bf620233da006ad25e4f28cc87d1a31b245b61beaa11
+        status: completed
+        type: tool_search_call
+      - call_id: null
+        execution: server
+        id: tso_00a907bf620233da006ad25e4f523c87d18f402fe0e7c59b75
+        status: completed
+        tools:
+        - defer_loading: true
+          description: Get the current weather for a city
+          name: get_weather
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        type: tool_search_output
+      - arguments:
+          paths:
+          - get_weather
+        call_id: null
+        execution: server
+        id: tsc_00a907bf620233da006ad25e4fb78487d18489157a1c7a1144
+        status: completed
+        type: tool_search_call
+      - call_id: null
+        execution: server
+        id: tso_00a907bf620233da006ad25e4fde3c87d1814056c97e8fb733
+        status: completed
+        tools:
+        - defer_loading: true
+          description: Get the current weather for a city
+          name: get_weather
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        type: tool_search_output
+      - arguments:
+          paths:
+          - travel
+          query: timezone
+        call_id: null
+        execution: server
+        id: tsc_00a907bf620233da006ad25e50418087d180c5137698120d5a
+        status: completed
+        type: tool_search_call
+      - call_id: null
+        execution: server
+        id: tso_00a907bf620233da006ad25e50696c87d1808239fbe0a9d0db
+        status: completed
+        tools:
+        - description: Travel location tools
+          name: travel
+          tools:
+          - defer_loading: true
+            description: Get the IANA time zone for a city
+            name: get_timezone
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                city:
+                  type: string
+              required:
+              - city
+              type: object
+            strict: true
+            type: function
+          type: namespace
+        type: tool_search_output
+      - arguments:
+          paths:
+          - travel
+        call_id: null
+        execution: server
+        id: tsc_00a907bf620233da006ad25e51000887d1ab500303f701ffca
+        status: completed
+        type: tool_search_call
+      - call_id: null
+        execution: server
+        id: tso_00a907bf620233da006ad25e51296c87d1a8d368dba0135ba8
+        status: completed
+        tools:
+        - description: Travel location tools
+          name: travel
+          tools:
+          - defer_loading: true
+            description: Get the IANA time zone for a city
+            name: get_timezone
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                city:
+                  type: string
+              required:
+              - city
+              type: object
+            strict: true
+            type: function
+          - defer_loading: true
+            description: Get latitude and longitude for a city
+            name: get_coordinates
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                city:
+                  type: string
+              required:
+              - city
+              type: object
+            strict: true
+            type: function
+          - defer_loading: true
+            description: Calculate the distance between two cities
+            name: calculate_distance
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                destination:
+                  type: string
+                origin:
+                  type: string
+              required:
+              - origin
+              - destination
+              type: object
+            strict: true
+            type: function
+          - defer_loading: true
+            description: Reserve an airline seat between two airports
+            name: book_flight
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                destination_airport:
+                  type: string
+                origin_airport:
+                  type: string
+              required:
+              - origin_airport
+              - destination_airport
+              type: object
+            strict: true
+            type: function
+          type: namespace
+        type: tool_search_output
+      - content:
+        - annotations: []
+          logprobs: []
+          text: 'get_weather
+
+            get_weather
+
+            get_timezone
+
+            get_timezone, get_coordinates, calculate_distance, book_flight'
+          type: output_text
+        id: msg_00a907bf620233da006ad25e51c4dc87d1914671bff37576ca
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - allowed_tools:
+        - fetch_tiktoken_documentation
+        - search_tiktoken_documentation
+        - search_tiktoken_code
+        defer_loading: true
+        headers: null
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      - description: null
+        parameters: null
+        type: tool_search
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Reserve an airline seat between two airports
+          name: book_flight
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              destination_airport:
+                type: string
+              origin_airport:
+                type: string
+            required:
+            - origin_airport
+            - destination_airport
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 1319
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 107
+        output_tokens_details:
+          reasoning_tokens: 82
+        total_tokens: 1426
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input: 'This is a test of the tool loader. Call tool_search exactly once with
+        exactly these arguments, unchanged: {"paths":["travel"],"query":"timezone"}.
+        Do not call any other tool and do not search again. Then reply with only the
+        names of the tools that the search loaded, or "none".'
+      max_output_tokens: 4096
+      model: gpt-5.6
+      parallel_tool_calls: false
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Reserve an airline seat between two airports
+          name: book_flight
+          parameters:
+            additionalProperties: false
+            properties:
+              destination_airport:
+                type: string
+              origin_airport:
+                type: string
+            required:
+            - origin_airport
+            - destination_airport
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - allowed_tools:
+        - fetch_tiktoken_documentation
+        - search_tiktoken_documentation
+        - search_tiktoken_code
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792171608
+      created_at: 1792171604
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0637f31d968c6dc7006ad25e5489f087d18a3a47e82b519c1c
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_0637f31d968c6dc7006ad25e54ee4887d1b84d6251ab011ecb
+        server_label: gitmcp_tiktoken
+        tools:
+        - annotations:
+            read_only: false
+          description: 'Fetch entire documentation file from GitHub repository: openai/tiktoken.
+            Useful for general questions. Always call this tool first if asked about
+            openai/tiktoken.'
+          input_schema:
+            type: object
+          name: fetch_tiktoken_documentation
+        - annotations:
+            read_only: false
+          description: 'Semantically search within the fetched documentation from
+            GitHub repository: openai/tiktoken. Useful for specific queries.'
+          input_schema:
+            $schema: http://json-schema.org/draft-07/schema#
+            additionalProperties: false
+            properties:
+              query:
+                description: The search query to find relevant documentation
+                type: string
+            required:
+            - query
+            type: object
+          name: search_tiktoken_documentation
+        - annotations:
+            read_only: false
+          description: 'Search for code within the GitHub repository: "openai/tiktoken"
+            using the GitHub Search API (exact match). Returns matching files for
+            you to query further if relevant.'
+          input_schema:
+            $schema: http://json-schema.org/draft-07/schema#
+            additionalProperties: false
+            properties:
+              page:
+                description: Page number to retrieve (starting from 1). Each page
+                  contains 30 results.
+                type: number
+              query:
+                description: The search query to find relevant code files
+                type: string
+            required:
+            - query
+            type: object
+          name: search_tiktoken_code
+        type: mcp_list_tools
+      - content: []
+        encrypted_content: gAAAAABq0l5YOsg3CXcqgmBCZTHlhJMmn9P9r9ojqNVGR_lcHgJv9S9L3aRbSafYopC01gSBtobj0Z7fwtVbXx9-BYl3aofLQWFTwAavKTvTbNLvK9VKYOhyvKkXgIA1xc6EJDHU07Be7YB24Z-hdIxlE9OsqnjIGX_XieFKYyglY8VcIFDBfTrKafBqUIEchMLJBlJ4QTjMn6JFDau7FohrfwkVWaeTFfwzKWywaEZDqyIRMmUKKO_cE4cnqUSrbFT86Tx_s8ndLbiOBLkvdm9MjvLS_QFlg8sRGjgdhLbcMIRBrCBDfb-MKuqLyuJukRjuU4a0VQje1p5RSIaoXeGVOE_L9q0Bq6SFQcPgliIoKh1I5bWXxjR9B6Gv2aE46wNhmLlr7LmMaxCCFfflekTRDVx5Ooy2K6yaL8wpVDkRlr_msukeiJH4atQZ9fHNg6CNegKSyi_-Q_oEXMq1RozXMZzQJ_qhHQGIOdWchZZ-5r-J1GpVUNhLqEcaB8hjIEOPIvAr3OOH8OKwggaTbMj2C66_JU9rT4iersAwlb1JhAF7bDlnOXgTNhULC037Aqif5tT-BapmbypteiJKvzYkrhG1pYyl6zAb-XbcTgf-3co8FFdmd0Rhn89i4fQW38rsgSAu8UG4moJiM5yk6kSfynHgQZI9iMgjwpzxtrcKjpGBaDGV2FCWqK4y7b90Ke3oSZb1CV0npBMp1wMv6s1ZNui7DXSXJkRTWCuGit9mv9cNGPPGDaxTvrABRiwt0bqT1RkNpkZAiQ2MhUszwvLGiZUFIun0Io1Q_8T3y8bsT-orARILzRbyXGasBPbersjtO6hq8EzIZLYQXOKElLmPcueZClzEQV2FYYDsOnpl1hSjv9IVMtBkKsNBYTBKUZz3MnZcRBWhuT3sjkopCOvpSpE-p61Io1hneepDOgms6bsoNQNyoNzv2xMSINNVeqy6PVyiAKI5qDfx08I4w6VPjJLnr2vmOT35zP2vspwUgI4I7EKlE18aC0nzkk2kZCIx3VKnGvMkTkNuW27Jgd397vLM5ZvJsnIJk6wtfLZ9GtDtY0QbEEKzI8b_wgc-irACoIhaXg_JZ8XdpxPuv4lYybzldp9nZ0XmXDVQR9v-a3sXZ8GvFK1pa1MquuPVMSIh5KMLmJ1lCIO4PNcLv2xIAB7dOkIJHxZdp7dESCcEuGSp4WI_aUsPKEJaD0cuX3dEqhRjkCdePDqylHjBPxxRYIV4DTSbzHSRvyJJQwiUNbT-JeNe9VbtKU0uaYKDF23XpzyoOB9ZIs2-MjBDkzJMuKlT8N5p_5rTQgcV29_SNm8ATxfFFUyCSA-QbYEUOB0fl91PetcnDnKQHWzb4lyEYuA0Ah8baTV1oTCqfrtQ4-DPSxKZexL3glvOR6nFVlVdyEl-9j9RO4LdfeN42NUfcHet81uQLBmMX1hDpE2bMgCM1kFyNX2p7SPoNGnYv6v3fhNOxvYwuAbV54hfUk-967OPeKD7dt7Cb2rYLPx9HeBr5sAytSpd1NOgKjlxsquxMSLxyNS_-WB5tIFZ8MVBfz_exQiBxcYkruoCKOu_T8h4MU4CQnBFpRYrCgw10I7i7hTE-UuXfL31KO1x5Rceve1kFWce5UqsO_akfyHSzYpZGlBlsSYlYnJrLIqA-GwOYZYzS1spaAeszaIfQO7JGUIeVMghNijcIa4EpYsR0ybarf1UhoRl0yM_FCk3UfMUI6D-g057Wntx9Yh6rOtEswPL4z4MJ6kXHA1XH12sgsDlsDigqzOdxQ0S_I6Xho7iCO3l5sfGBDne0Gkkjt6Ev9CZrkBWVSQptrarFc92m_qfME4Zc7gEKm0hswxDZYMZ6Jtz8P4aYj0BcNEre4Te1m1Ix83KNQ9owOdK-v5QVnIOpn1BYo0=
+        id: rs_0637f31d968c6dc7006ad25e56a29887d1a1fb0426e2a90730
+        summary: []
+        type: reasoning
+      - arguments:
+          paths:
+          - travel
+          query: timezone
+        call_id: null
+        execution: server
+        id: tsc_0637f31d968c6dc7006ad25e57133087d18aecd8dfcf462e74
+        status: completed
+        type: tool_search_call
+      - call_id: null
+        execution: server
+        id: tso_0637f31d968c6dc7006ad25e57372487d1abf53a0a9fc3c835
+        status: completed
+        tools:
+        - description: Travel location tools
+          name: travel
+          tools:
+          - defer_loading: true
+            description: Get the IANA time zone for a city
+            name: get_timezone
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                city:
+                  type: string
+              required:
+              - city
+              type: object
+            strict: true
+            type: function
+          type: namespace
+        type: tool_search_output
+      - content:
+        - annotations: []
+          logprobs: []
+          text: get_timezone
+          type: output_text
+        id: msg_0637f31d968c6dc7006ad25e57af8c87d1a51c5f138767a029
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - allowed_tools:
+        - fetch_tiktoken_documentation
+        - search_tiktoken_documentation
+        - search_tiktoken_code
+        defer_loading: true
+        headers: null
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      - description: null
+        parameters: null
+        type: tool_search
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Reserve an airline seat between two airports
+          name: book_flight
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              destination_airport:
+                type: string
+              origin_airport:
+                type: string
+            required:
+            - origin_airport
+            - destination_airport
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 750
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 67
+        output_tokens_details:
+          reasoning_tokens: 61
+        total_tokens: 817
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body:
+      input: 'This is a test of the tool loader. Call tool_search twice, one call
+        after another, with exactly these arguments in this order, unchanged: {"paths":["travel"],"query":"timezone"},
+        then {"paths":["travel"]}. Do not call any other tool. Then reply with only
+        the names of the tools that each search loaded, or "none" for a search that
+        loaded nothing.'
+      max_output_tokens: 4096
+      model: gpt-5.6
+      parallel_tool_calls: false
+      previous_response_id: resp_0637f31d968c6dc7006ad25e5489f087d18a3a47e82b519c1c
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Reserve an airline seat between two airports
+          name: book_flight
+          parameters:
+            additionalProperties: false
+            properties:
+              destination_airport:
+                type: string
+              origin_airport:
+                type: string
+            required:
+            - origin_airport
+            - destination_airport
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - allowed_tools:
+        - fetch_tiktoken_documentation
+        - search_tiktoken_documentation
+        - search_tiktoken_code
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792171611
+      created_at: 1792171609
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0637f31d968c6dc7006ad25e58f1e487d1a00a31dd48474b53
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - content: []
+        encrypted_content: gAAAAABq0l5b1BUDVR3vqUWs7rRMv2y-Fh_MHMuvYcdtYgcFrnFX-b4ER8y--3ilxiowEAXW5XgYtEAz-owznsWHbp1cpE2P2UW0yD_YfttwD7Tbp8lSf4x9aYwp42L8VXZc5OucIvZHseEISpkfs70fOpjx4IggQvatLQsMvFCXFRB9N_6z7U7-PTcWXkrG6OcDbBfnRd7EQKJdXW-RPLKp96jbc8edyrWgYnHo_dwYFbZwp-GknR-lGOmLHqPQXDByNcO0ZbBOCwQEV4K3HXwXtq29F_MxJBg_D3OasFm_WYYSqBFpl22uCshAslTWVaZyOgY4e6M4sqwQlRtRQmoMSEGP7fCvMo3X8TvKi3Lvlcau70xahtmKCNaUyfy9fjUeFVkjiBiovwJoaVBNhYSOhuuNGUVBS8OAScUhikypMjn-r9vqKIF-4z6x5kQO3W6FUz-204OAZjh92LgVnqT3cZJlfevFVErP5O1F2RVMVSSXAtbcibPXXxdEtOwlixIbXL6UQX26I3pcQbowOylpfiy9gatvhuR-WqVvSjlocWuyoC-Oju0Lb1jyOrYfERkVu8F4jkIGUVagB_bBgC6G6Jpb1i-OK9K2vm0Xqs3tOXKNwCrAf5iKG5HQ6q3iBrBP7EnBT9D82ibwZs4_6-VfuLvDjoXjGB48zzAnv53ub4WVsvNDnuWTkaZ-SYi6guR3jMPSjUKcBxovmXZZOuqCB53hJa1p0MZKGgjmYQutOXPfcjc0wuLRyeycgBVMI3M7_Qo_ObwrTQdKFQ4lUbLvRXH6TkXF95Pd4uMha7QNqGgcSEflNDXk2J3TYfbFKvsWbeZAB41q-dQaPJIhT3C88erhvwduefIg70O5UvUICyT9D-fsDCaPC6zIeIZ5NJR2G9tdp2_DbTAu4OAYkqWVEZj236iXjHkYOL9agWgHPmO7s50BxuLQAX4LOFr39zBfo5Kwr67GoDhp-lBrIKpsjozlvi3ePH_dSR8pYZWNeryMQqQ8ix6ldHujn8Ke8vEn2yDJ9fkMPa9UrlaHUy-VFNY_Ev_g8FRZHml2LVQIEZFEmIFYj52VoGTYdeVo8mEEiFX5D6CpyR1vnm_FrF67KaFazeNRR-ZNgtwi4vxa_YFkMcBGTdWvlQVbtUEYwVqBCrQgh5OMbDynUrRXIUESywgDC_otkhgHhnAtkukz-ce4mJFDUtyFVZKPo8cJpT3lTqq16DaIWbc_q6mwSz-lsV4Ee-9x_2pby_GR613_0S2KFXjTKoVbD0KyvgnUC05yKmxHocJ0Q8tXjW5LZihML1nsE1xRAaRVwFXSB_OT-lSTsHibwiV_dODtUhps-gizOUh7T1frKld192MGcXNUs1m1FViN4lWNAg_w1yOClQu7_AQY71WsJoZHg3Gz-J5RyX3NxWme_eJj8A2swZ4B6xyZS4rjCCLxSiYLA1hOPjWh25TZzkLPr6ysZS8vYrzxAf5Xl0V_V7xfa8XaBpGxObpwucTJ2FwuBsu0tNNWfwoqmJb-cSJcwyUyRlYisLVjdVlQSAopJizxh-tw6zvij_Z9oD1WLk4sS2nk-G7n_KbRDxPrl2uVONTi9CFI287Ow8xDwJaF
+        id: rs_0637f31d968c6dc7006ad25e59a7ec87d19c22a059ae6185c3
+        summary: []
+        type: reasoning
+      - arguments:
+          paths:
+          - travel
+          query: timezone
+        call_id: null
+        execution: server
+        id: tsc_0637f31d968c6dc7006ad25e59e28c87d18428072d36ae0e72
+        status: completed
+        type: tool_search_call
+      - call_id: null
+        execution: server
+        id: tso_0637f31d968c6dc7006ad25e5a02bc87d189c3fbb43c1d87ce
+        status: completed
+        tools: []
+        type: tool_search_output
+      - arguments:
+          paths:
+          - travel
+        call_id: null
+        execution: server
+        id: tsc_0637f31d968c6dc7006ad25e5a67ac87d1883ec013076bad0d
+        status: completed
+        type: tool_search_call
+      - call_id: null
+        execution: server
+        id: tso_0637f31d968c6dc7006ad25e5a81d087d1813388241563fb9d
+        status: completed
+        tools:
+        - description: Travel location tools
+          name: travel
+          tools:
+          - defer_loading: true
+            description: Get latitude and longitude for a city
+            name: get_coordinates
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                city:
+                  type: string
+              required:
+              - city
+              type: object
+            strict: true
+            type: function
+          - defer_loading: true
+            description: Calculate the distance between two cities
+            name: calculate_distance
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                destination:
+                  type: string
+                origin:
+                  type: string
+              required:
+              - origin
+              - destination
+              type: object
+            strict: true
+            type: function
+          - defer_loading: true
+            description: Reserve an airline seat between two airports
+            name: book_flight
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                destination_airport:
+                  type: string
+                origin_airport:
+                  type: string
+              required:
+              - origin_airport
+              - destination_airport
+              type: object
+            strict: true
+            type: function
+          type: namespace
+        type: tool_search_output
+      - content:
+        - annotations: []
+          logprobs: []
+          text: 'none
+
+            get_coordinates, calculate_distance, book_flight'
+          type: output_text
+        id: msg_0637f31d968c6dc7006ad25e5af5e087d181d45624cf5a3d43
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_0637f31d968c6dc7006ad25e5489f087d18a3a47e82b519c1c
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - allowed_tools:
+        - fetch_tiktoken_documentation
+        - search_tiktoken_documentation
+        - search_tiktoken_code
+        defer_loading: true
+        headers: null
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      - description: null
+        parameters: null
+        type: tool_search
+      - description: Travel location tools
+        name: travel
+        tools:
+        - description: Get the IANA time zone for a city
+          name: get_timezone
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Reserve an airline seat between two airports
+          name: book_flight
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              destination_airport:
+                type: string
+              origin_airport:
+                type: string
+            required:
+            - origin_airport
+            - destination_airport
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 1124
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 75
+        output_tokens_details:
+          reasoning_tokens: 60
+        total_tokens: 1199
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      input: What is the current weather in Paris? Use a tool.
+      max_output_tokens: 4096
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        require_approval: never
+        server_description: Documentation search for the example project.
+        server_label: broken_docs
+        server_url: https://mcp.invalid/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: http_error
+        message: 'Error retrieving tool list from MCP server: ''broken_docs''. Http
+          status code: 424 (Failed Dependency)'
+        param: tools
+        type: external_connector_error
+    headers:
+      content-type: application/json
+    status_code: 424
+- filename: t6
+  request:
+    body:
+      input: Use the broken_docs documentation tools to find how to configure the
+        example project. Answer in one sentence.
+      max_output_tokens: 4096
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        require_approval: never
+        server_description: Documentation search for the example project.
+        server_label: broken_docs
+        server_url: https://mcp.invalid/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: http_error
+        message: 'Error retrieving tool list from MCP server: ''broken_docs''. Http
+          status code: 424 (Failed Dependency)'
+        param: tools
+        type: external_connector_error
+    headers:
+      content-type: application/json
+    status_code: 424
+- filename: t7
+  request:
+    body:
+      input: What is the current weather in Paris? Use a tool.
+      max_output_tokens: 4096
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - require_approval: never
+        server_description: Documentation search for the example project.
+        server_label: broken_docs
+        server_url: https://mcp.invalid/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: http_error
+        message: 'Error retrieving tool list from MCP server: ''broken_docs''. Http
+          status code: 424 (Failed Dependency)'
+        param: tools
+        type: external_connector_error
+    headers:
+      content-type: application/json
+    status_code: 424

@@ -293,7 +293,11 @@ graph LR
 - **Round execution (`GatewayScheduler`):** plans one slot per gateway-owned call,
   keeping the item index, typed binding, and lifecycle projection together; it then
   executes those slots through the configured sliding window and per-binding
-  same-tool policy and collects results in model call order.
+  same-tool policy and yields results in model call order, each as soon as it and every
+  earlier call have finished. A slot whose plan carries a `PlannedResult` (a hosted search,
+  known when the call is planned) is recorded without a permit or execution. Each result is
+  one set of input items, the turn's history and the next round's input alike; the upstream
+  projection lowers any public record among them.
 - **Multi-round orchestration (`classify_round` + the loop):** decides whether
   the turn continues, is done, hands back to the client, or exhausts the round
   budget, then re-infers when gateway results require another round.
@@ -502,7 +506,7 @@ Several of these were resolved as the framework shipped; resolutions noted.
 
 | # | Question | Resolution |
 |---|----------|-----------|
-| Q1 | What if a discovered/namespaced tool name collides with another declared tool? | **Partially resolved (#91):** a Codex-namespace member that would flatten onto an already-declared name is a hard `ToolError` at registry-build time (`resolve_namespace_members`). Plain duplicate `function` names (and duplicate namespace *members*) remain last-write-wins with a `warn!` log — not a hard error. Tightening the plain-duplicate case is open. |
+| Q1 | What if a discovered/namespaced tool name collides with another declared tool? | **Partially resolved (#91):** a Codex-namespace member that would flatten onto an already-declared name is a hard `ToolError` at registry-build time, through the tool catalog's name rule (`ToolCatalog::validate_declared_names`, which tool search also applies to its whole catalog, deferred definitions included). Plain duplicate `function` names (and duplicate namespace *members*) remain last-write-wins with a `warn!` log — not a hard error. Tightening the plain-duplicate case is open. |
 | Q2 | How does a mixed gateway+client turn look to the streaming client? | **Resolved (#83):** gateway tool events stream in output order during the round; the response returns the unresolved client-owned calls in that same round (`RequiresClientAction` precedence in `classify_round`). No `ContinuePartial`. |
 | Q3 | Should `tool_choice: {function: {name: "x"}}` work for discovered/namespaced tools? | **Resolved (#84/#91):** yes. vLLM sees all normalized functions; a forced namespaced name resolves through the namespace map. `tool_choice` names are validated as non-empty. |
 | Q4 | Should `prepare_tools` be a Praxis filter or part of `execute_loop`? | **As built:** part of the core loop (`run_until_gateway_tools_complete`), not a per-stage Praxis filter. Praxis wraps the whole loop (ADR-03). |

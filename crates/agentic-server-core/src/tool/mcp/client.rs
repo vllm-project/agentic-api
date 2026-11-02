@@ -22,6 +22,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
 use super::bounded_http::BoundedMcpHttpClient;
+use super::propagation::W3cPropagation;
 
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(30);
 const TOOL_TIMEOUT: Duration = Duration::from_secs(60);
@@ -106,6 +107,8 @@ impl ClientHandler for AgenticMcpClientHandler {
 pub struct McpClient {
     inner: Arc<RunningService<RoleClient, AgenticMcpClientHandler>>,
     tool_timeout: Duration,
+    /// Whether `tools/call` carries the caller's trace context and baggage.
+    propagate_trace_context: bool,
 }
 
 impl McpClient {
@@ -148,6 +151,7 @@ impl McpClient {
         Ok(Self {
             inner: Arc::new(service),
             tool_timeout: TOOL_TIMEOUT,
+            propagate_trace_context: false,
         })
     }
 
@@ -216,7 +220,19 @@ impl McpClient {
         Ok(Self {
             inner: Arc::new(service),
             tool_timeout: TOOL_TIMEOUT,
+            propagate_trace_context: false,
         })
+    }
+
+    /// Send the caller's trace context and baggage with every `tools/call`.
+    ///
+    /// Off by default. Baggage can hold values an operator's edge added to the
+    /// inbound request, so only servers the operator configured are trusted with
+    /// it; a server URL supplied in a request may belong to anyone.
+    #[must_use]
+    pub fn with_trace_context_propagation(mut self) -> Self {
+        self.propagate_trace_context = true;
+        self
     }
 
     /// Lists all tools exposed by the connected MCP server, following cursor-based pagination.
@@ -292,6 +308,9 @@ impl McpClient {
 
         let mut params = CallToolRequestParams::new(name.to_owned());
         params.arguments = arguments;
+        if self.propagate_trace_context {
+            params.meta = W3cPropagation::capture().into_meta();
+        }
 
         let result = tokio::time::timeout(self.tool_timeout, async {
             self.inner

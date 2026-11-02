@@ -36,8 +36,8 @@ use url::Url;
 
 use self::backend::{FetchFailure, FetchedDocument, WebFetchBackend};
 use self::http::HttpFetchBackend;
+pub(crate) use self::output::{FailureOutput, WebFetchErrorCode, WebFetchToolOutput, failure_output};
 use self::output::{Refusal, WebFetchOutcome, render_document};
-pub(crate) use self::output::{WebFetchErrorCode, failure_output};
 use super::domain_policy::{DomainFilter, validate_domain_filters};
 use super::handler::{GatewayExecutor, ToolError, ToolHandler, ToolOutput};
 use super::ownership::GatewayBinding;

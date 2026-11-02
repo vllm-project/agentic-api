@@ -137,7 +137,7 @@ async fn replay(path: &str, streaming: bool, expected_usage: Value) {
                 let request = MessagesRequestContext::from_value(expected[0].clone()).unwrap();
                 let response = run_messages_loop(request, &registry, &ctx, &upstream).await.unwrap();
                 assert_eq!(response.body["stop_reason"], "end_turn");
-                assert_eq!(response.body["content"], turns[1]["response"]["body"]["content"]);
+                assert_eq!(response.body["content"], shown_content(turns));
                 assert_eq!(
                     response.body["usage"], expected_usage,
                     "the public message sums every round"
@@ -240,6 +240,16 @@ fn events(raw: &str) -> Vec<Value> {
     raw.lines()
         .filter_map(|line| line.strip_prefix("data:"))
         .filter_map(|s| serde_json::from_str(s.trim()).ok())
+        .collect()
+}
+
+/// Every recorded round's content, as the stream shows it: the gateway's own
+/// call stays hidden.
+fn shown_content(turns: &[Value]) -> Value {
+    turns
+        .iter()
+        .flat_map(|turn| turn["response"]["body"]["content"].as_array().unwrap().clone())
+        .filter(|block| block["type"] != "tool_use")
         .collect()
 }
 

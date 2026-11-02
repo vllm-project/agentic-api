@@ -30,7 +30,64 @@ use serde_json::Value;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 
+mod messages_round_cases;
 mod support;
+
+#[tokio::test]
+async fn json_round_decisions_preserve_execution_history_and_terminal_policy() {
+    for case in messages_round_cases::cases() {
+        let message = case.message();
+        let (vllm_url, upstream, _v) =
+            spawn_mock_vllm_messages(vec![message, messages_round_cases::final_message()]).await;
+        let (search_url, mut captured, _s) = spawn_mock_search().await;
+        let exec_ctx = build_exec_ctx(&vllm_url, &search_url).await;
+        let request = case.request(false);
+        let tools = serde_json::from_value(request["tools"].clone()).unwrap();
+        let registry = build_tool_registry(&tools, &exec_ctx).await;
+        let result = run_test_messages_loop(request, &registry, &exec_ctx).await.unwrap();
+        assert_eq!(
+            upstream.calls.load(Ordering::SeqCst),
+            1 + case.searches,
+            "{}",
+            case.label
+        );
+        let mut searches = Vec::new();
+        while let Ok(search) = captured.try_recv() {
+            searches.push(search);
+        }
+        assert_eq!(searches.len(), case.searches, "{}", case.label);
+        assert_eq!(result["stop_reason"].as_str(), case.visible_stop, "{}", case.label);
+        let visible = result["content"].as_array().unwrap();
+        assert!(
+            !visible.iter().any(|block| block["name"] == "web_search"),
+            "{}",
+            case.label
+        );
+        assert_eq!(
+            visible.iter().any(|block| block["id"] == "c1"),
+            case.client,
+            "{}",
+            case.label
+        );
+        if case.searches == 1 {
+            assert_eq!(searches[0].body["query"], "rust \"你好\"\nrelease", "{}", case.label);
+            let requests = upstream.requests.lock().await;
+            assert_eq!(
+                requests[1]["messages"][1]["content"],
+                serde_json::json!(case.content),
+                "{}",
+                case.label
+            );
+            assert_eq!(
+                requests[1]["messages"][2]["content"][0]["tool_use_id"], "g1",
+                "{}",
+                case.label
+            );
+            assert_eq!(result["usage"]["input_tokens"], 12, "{}", case.label);
+            assert_eq!(result["usage"]["output_tokens"], 5, "{}", case.label);
+        }
+    }
+}
 
 const CASSETTE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -488,7 +545,8 @@ async fn native_search_outcomes(
     let message = run_test_messages_loop(request, &registry, &exec_ctx)
         .await
         .expect("loop runs");
-    assert_eq!(message["content"][0]["text"], "Done.");
+    let content = message["content"].as_array().expect("content");
+    assert_eq!(content.last().expect("final answer")["text"], "Done.");
 
     let mut searched = Vec::new();
     while let Ok(search) = captured.try_recv() {
@@ -523,6 +581,8 @@ async fn native_search_outcomes(
 }
 
 const MAX_USES_EXCEEDED: &str = "web_search max_uses exceeded; search was not run";
+/// A native search whose arguments do not parse is answered without running.
+const INVALID_SEARCH_INPUT: &str = "web_search input was invalid; search was not run";
 
 /// `max_uses` limits the searches performed, so a batched call is charged for
 /// every query. A call the remaining budget cannot cover is refused whole and
@@ -570,17 +630,8 @@ async fn native_web_search_malformed_calls_do_not_use_the_budget() {
     .await;
 
     assert_eq!(searched, ["kept"]);
-    assert_eq!(
-        outcomes,
-        [vec![
-            Some(
-                "tool execution failed: invalid tool config: web_search requires a non-empty query or queries"
-                    .to_owned()
-            ),
-            Some("invalid tool arguments (not a JSON object); tool was not run".to_owned()),
-            None
-        ]]
-    );
+    let invalid = Some(INVALID_SEARCH_INPUT.to_owned());
+    assert_eq!(outcomes, [vec![invalid.clone(), invalid, None]]);
 }
 
 /// Controls: a batch the budget covers runs in full, and a request without

@@ -5,11 +5,12 @@ use ring::{
     aead,
     rand::{SecureRandom, SystemRandom},
 };
+use std::sync::OnceLock;
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::types::agent::AgentIdentity;
 use crate::types::agent_commands::AgentCommand;
-use crate::types::io::{AgentAttribution, FunctionTool};
+use crate::types::io::{AgentAttribution, FunctionTool, MultiAgentAction};
 use crate::types::request_response::UpstreamTool;
 use crate::utils::common::serialize_to_string;
 
@@ -139,16 +140,75 @@ pub(in crate::executor) fn tools() -> Vec<UpstreamTool> {
     .collect()
 }
 
-/// A response-local key protects public transcript content. Durable continuation
-/// uses the private canonical tree, never decrypted client-supplied transcript.
+/// Protects inter-agent message text. The key is shared across requests so a
+/// client can return the gateway's encrypted messages in ordinary input history.
 pub(in crate::executor) struct TranscriptSealer(aead::LessSafeKey);
 
 impl TranscriptSealer {
     pub(in crate::executor) fn new() -> ExecutorResult<Self> {
-        let mut key = [0; 32];
-        SystemRandom::new().fill(&mut key).map_err(|_| crypto_error())?;
-        let key = aead::UnboundKey::new(&aead::AES_256_GCM, &key).map_err(|_| crypto_error())?;
+        static KEY: OnceLock<Result<[u8; 32], &'static str>> = OnceLock::new();
+        let key = KEY
+            .get_or_init(|| match std::env::var("AGENTIC_MULTI_AGENT_TRANSCRIPT_KEY") {
+                Ok(value) => base64::engine::general_purpose::STANDARD
+                    .decode(value)
+                    .ok()
+                    .and_then(|bytes| bytes.try_into().ok())
+                    .ok_or("AGENTIC_MULTI_AGENT_TRANSCRIPT_KEY must be a base64-encoded 32-byte key"),
+                Err(std::env::VarError::NotPresent) => {
+                    let mut key = [0; 32];
+                    SystemRandom::new()
+                        .fill(&mut key)
+                        .map_err(|_| "could not generate multi-agent transcript key")?;
+                    Ok(key)
+                }
+                Err(std::env::VarError::NotUnicode(_)) => {
+                    Err("AGENTIC_MULTI_AGENT_TRANSCRIPT_KEY must be valid base64")
+                }
+            })
+            .as_ref()
+            .map_err(|message| ExecutorError::StreamError((*message).into()))?;
+        let key = aead::UnboundKey::new(&aead::AES_256_GCM, key).map_err(|_| crypto_error())?;
         Ok(Self(aead::LessSafeKey::new(key)))
+    }
+
+    pub(in crate::executor) fn open(&self, text: &str) -> ExecutorResult<String> {
+        let invalid = || ExecutorError::InvalidRequest("invalid encrypted agent message or transcript key".into());
+        let mut bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(text.strip_prefix("enc_").ok_or_else(invalid)?)
+            .map_err(|_| invalid())?;
+        if bytes.len() < aead::NONCE_LEN + aead::AES_256_GCM.tag_len() {
+            return Err(invalid());
+        }
+        let nonce = aead::Nonce::try_assume_unique_for_key(&bytes[..aead::NONCE_LEN]).map_err(|_| invalid())?;
+        let plaintext = self
+            .0
+            .open_in_place(
+                nonce,
+                aead::Aad::from(b"agentic-api/multi-agent/v1"),
+                &mut bytes[aead::NONCE_LEN..],
+            )
+            .map_err(|_| invalid())?;
+        String::from_utf8(plaintext.to_vec()).map_err(|_| invalid())
+    }
+
+    pub(in crate::executor) fn command(&self, action: MultiAgentAction, arguments: &str) -> ExecutorResult<String> {
+        let arguments = if arguments.starts_with("enc_") {
+            self.open(arguments)?
+        } else {
+            arguments.to_owned()
+        };
+        let Ok(mut command) = AgentCommand::parse(action, &arguments) else {
+            return Ok(arguments);
+        };
+        let message = match &mut command {
+            AgentCommand::Spawn(task) => Some(&mut task.message),
+            AgentCommand::Send(task) | AgentCommand::Followup(task) => Some(&mut task.message),
+            AgentCommand::Wait(_) | AgentCommand::Interrupt(_) | AgentCommand::List(_) => None,
+        };
+        if let Some(message) = message.filter(|message| message.starts_with("enc_")) {
+            *message = self.open(message)?;
+        }
+        serialize_to_string(&command).map_err(ExecutorError::JsonError)
     }
 
     pub(in crate::executor) fn seal(&self, text: &str) -> ExecutorResult<String> {

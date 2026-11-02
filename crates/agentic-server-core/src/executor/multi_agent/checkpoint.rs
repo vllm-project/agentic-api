@@ -1,4 +1,4 @@
-//! Validate durable trees before constructing live registries or discovering tools.
+//! Validate restored trees before constructing live registries or discovering tools.
 use std::collections::{HashMap, HashSet};
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
@@ -16,7 +16,9 @@ pub struct CheckpointLimits {
 }
 
 #[derive(Debug)]
-pub struct ValidatedTreeCheckpoint(StoredTreeSnapshot);
+pub struct ValidatedTreeCheckpoint {
+    pub(super) snapshot: StoredTreeSnapshot,
+}
 
 impl CheckpointLimits {
     pub(in crate::executor) fn for_response(max_bytes: usize) -> Self {
@@ -110,11 +112,15 @@ impl ValidatedTreeCheckpoint {
         if !unresolved.is_empty() {
             return Err(invalid("unresolved call has no ownership record"));
         }
-        Ok(Self(snapshot))
+        Ok(Self { snapshot })
     }
 
     pub(in crate::executor) fn into_snapshot(self) -> StoredTreeSnapshot {
-        self.0
+        self.snapshot
+    }
+
+    pub(in crate::executor) fn snapshot(&self) -> &StoredTreeSnapshot {
+        &self.snapshot
     }
 }
 

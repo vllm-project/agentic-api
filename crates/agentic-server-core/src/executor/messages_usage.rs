@@ -16,6 +16,10 @@
 //! passes through from the final round untouched. A single-round turn is
 //! returned exactly as the upstream sent it, while a final round that omits
 //! `usage` after hidden rounds still reports those rounds' counters.
+//!
+//! `usage.server_tool_use` counts the server tool uses of the turn: those the
+//! upstream reported in any round plus the native server tool calls the gateway
+//! ran for the client.
 
 use serde_json::{Map, Value};
 
@@ -29,6 +33,25 @@ const COUNTERS: [&str; 4] = [
 
 type Counters = [Option<u64>; COUNTERS.len()];
 
+/// The `usage.server_tool_use` counters.
+const SERVER_TOOL_COUNTERS: [&str; 2] = ["web_search_requests", "web_fetch_requests"];
+
+type ServerToolCounters = [Option<u64>; SERVER_TOOL_COUNTERS.len()];
+
+/// Server tool uses the gateway performed for the client, reported in
+/// `usage.server_tool_use`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct ServerToolUses {
+    pub(super) web_search_requests: u64,
+    pub(super) web_fetch_requests: u64,
+}
+
+impl ServerToolUses {
+    fn counters(self) -> [u64; SERVER_TOOL_COUNTERS.len()] {
+        [self.web_search_requests, self.web_fetch_requests]
+    }
+}
+
 /// Saturating per-counter totals across the rounds committed so far.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) struct MessagesUsageTotals {
@@ -38,6 +61,12 @@ pub(super) struct MessagesUsageTotals {
     rounds: usize,
     /// The counters the current round reported most recently.
     round: Counters,
+    /// Upstream-reported server tool counters of every committed round.
+    server_committed: ServerToolCounters,
+    /// The server tool counters the current round reported most recently.
+    server_round: ServerToolCounters,
+    /// Native server tool calls the gateway ran for the client.
+    gateway: ServerToolUses,
 }
 
 impl MessagesUsageTotals {
@@ -53,6 +82,21 @@ impl MessagesUsageTotals {
                 *current = Some(value);
             }
         }
+        let server = usage.get("server_tool_use").and_then(Value::as_object);
+        for (current, name) in self.server_round.iter_mut().zip(SERVER_TOOL_COUNTERS) {
+            if let Some(value) = server.and_then(|server| server.get(name)).and_then(Value::as_u64) {
+                *current = Some(value);
+            }
+        }
+    }
+
+    /// Count the server tool uses of native calls the gateway ran.
+    pub(super) fn add_server_tool_uses(&mut self, uses: ServerToolUses) {
+        self.gateway.web_search_requests = self
+            .gateway
+            .web_search_requests
+            .saturating_add(uses.web_search_requests);
+        self.gateway.web_fetch_requests = self.gateway.web_fetch_requests.saturating_add(uses.web_fetch_requests);
     }
 
     /// The current round's prompt and completion token counts, for metrics.
@@ -69,11 +113,8 @@ impl MessagesUsageTotals {
 
     /// Add the current round to the totals and start the next one.
     pub(super) fn commit(&mut self) {
-        for (total, value) in self.committed.iter_mut().zip(std::mem::take(&mut self.round)) {
-            if let Some(value) = value {
-                *total = Some(total.unwrap_or(0).saturating_add(value));
-            }
-        }
+        add_counters(&mut self.committed, std::mem::take(&mut self.round));
+        add_counters(&mut self.server_committed, std::mem::take(&mut self.server_round));
         self.rounds += 1;
     }
 
@@ -91,7 +132,8 @@ impl MessagesUsageTotals {
     /// dropped; any other unrecognised `usage` shape is left as it is.
     pub(super) fn finish(&mut self, carrier: &mut Value) {
         self.record(carrier.get("usage"));
-        if self.rounds < 2 || self.committed.iter().all(Option::is_none) {
+        let server_totals = self.server_tool_totals();
+        if self.rounds < 2 || (self.committed.iter().all(Option::is_none) && server_totals.is_none()) {
             return;
         }
         let Some(fields) = carrier.as_object_mut() else {
@@ -104,10 +146,45 @@ impl MessagesUsageTotals {
         let Some(usage) = usage.as_object_mut() else {
             return;
         };
-        for (total, name) in self.committed.iter().zip(COUNTERS) {
-            if let Some(total) = total {
-                usage.insert(name.to_owned(), Value::from(*total));
+        insert_counters(usage, &self.committed, &COUNTERS);
+        if let Some(server_totals) = server_totals {
+            let server = usage
+                .entry("server_tool_use")
+                .or_insert_with(|| Value::Object(Map::new()));
+            if !server.is_object() {
+                *server = Value::Object(Map::new());
             }
+            if let Some(server) = server.as_object_mut() {
+                insert_counters(server, &server_totals, &SERVER_TOOL_COUNTERS);
+            }
+        }
+    }
+
+    /// The turn's server tool counters: what the upstream reported plus the
+    /// gateway's own calls, or `None` when neither reported any.
+    fn server_tool_totals(&self) -> Option<ServerToolCounters> {
+        let mut totals = self.server_committed;
+        for (total, uses) in totals.iter_mut().zip(self.gateway.counters()) {
+            if uses > 0 {
+                *total = Some(total.unwrap_or(0).saturating_add(uses));
+            }
+        }
+        totals.iter().any(Option::is_some).then_some(totals)
+    }
+}
+
+fn add_counters<const N: usize>(totals: &mut [Option<u64>; N], round: [Option<u64>; N]) {
+    for (total, value) in totals.iter_mut().zip(round) {
+        if let Some(value) = value {
+            *total = Some(total.unwrap_or(0).saturating_add(value));
+        }
+    }
+}
+
+fn insert_counters(object: &mut Map<String, Value>, totals: &[Option<u64>], names: &[&str]) {
+    for (total, name) in totals.iter().zip(names) {
+        if let Some(total) = total {
+            object.insert((*name).to_owned(), Value::from(*total));
         }
     }
 }
@@ -235,6 +312,49 @@ mod tests {
         let mut message = json!({"usage": {"input_tokens": 1}});
         recorded(&[json!({"input_tokens": u64::MAX})]).finish(&mut message);
         assert_eq!(message["usage"]["input_tokens"], json!(u64::MAX));
+    }
+
+    #[test]
+    fn server_tool_use_counts_upstream_reports_and_gateway_calls() {
+        let mut totals = recorded(&[
+            json!({"input_tokens": 1, "server_tool_use": {"web_search_requests": 0}}),
+            json!({"input_tokens": 1, "server_tool_use": {"web_search_requests": 2, "web_fetch_requests": 1}}),
+        ]);
+        totals.add_server_tool_uses(ServerToolUses {
+            web_search_requests: 3,
+            web_fetch_requests: 0,
+        });
+        totals.add_server_tool_uses(ServerToolUses {
+            web_search_requests: 1,
+            web_fetch_requests: 2,
+        });
+        let mut message =
+            json!({"usage": {"input_tokens": 1, "server_tool_use": {"web_search_requests": 0, "other": "kept"}}});
+        totals.finish(&mut message);
+        assert_eq!(
+            message["usage"],
+            json!({"input_tokens": 3, "server_tool_use": {
+                "web_search_requests": 6, "other": "kept", "web_fetch_requests": 3
+            }})
+        );
+
+        // Gateway calls alone create the object; an unused counter stays absent.
+        let mut totals = recorded(&[json!({"output_tokens": 1})]);
+        totals.add_server_tool_uses(ServerToolUses {
+            web_search_requests: 0,
+            web_fetch_requests: 1,
+        });
+        let mut message = json!({"usage": {"output_tokens": 2}});
+        totals.finish(&mut message);
+        assert_eq!(
+            message["usage"],
+            json!({"output_tokens": 3, "server_tool_use": {"web_fetch_requests": 1}})
+        );
+
+        // No server tool use anywhere: nothing is added.
+        let mut message = json!({"usage": {"output_tokens": 2}});
+        recorded(&[json!({"output_tokens": 1})]).finish(&mut message);
+        assert_eq!(message["usage"], json!({"output_tokens": 3}));
     }
 
     #[test]

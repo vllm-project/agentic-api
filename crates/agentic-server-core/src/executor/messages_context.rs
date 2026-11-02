@@ -38,6 +38,9 @@ use serde_json::{Map, Value, json};
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::messages_request::{ServerToolBudgets, normalize_native_server_tools};
+use crate::executor::messages_server_tools::NativeServerTools;
+use crate::executor::messages_server_tools::replay::replay_server_tool_blocks;
+use crate::executor::messages_server_tools::sealing::MessagesResultKey;
 use crate::types::messages::request::MessagesToolDeclarations;
 use crate::types::messages::{
     GatewayToolMap, GatewayToolResult, MessagesRequest, MessagesToolChoice, ToolParam, has_gateway_tool,
@@ -126,6 +129,8 @@ pub struct MessagesRequestContext {
     raw: Value,
     /// Request-wide native server-tool budgets, derived while normalizing `raw`.
     budgets: ServerToolBudgets,
+    /// The native server tools the client declared, whose calls it is shown.
+    native: NativeServerTools,
 }
 
 /// Whether `text` mentions `url` as a whole URL rather than as the prefix of a
@@ -204,6 +209,7 @@ impl MessagesRequestContext {
         let budgets = normalize_native_server_tools(&mut raw)?;
         Ok(Self {
             tool_choice: typed.tool_choice.take(),
+            native: NativeServerTools::from_declarations(typed.tools.as_ref()),
             typed: typed.into(),
             raw,
             budgets,
@@ -230,6 +236,21 @@ impl MessagesRequestContext {
     #[must_use]
     pub fn model(&self) -> &str {
         &self.typed.model
+    }
+
+    /// The native server tools the client declared.
+    pub(super) fn native_server_tools(&self) -> NativeServerTools {
+        self.native
+    }
+
+    /// Turn the gateway-made server tool blocks of earlier turns back into the
+    /// rounds the upstream saw, before the first round is sent.
+    ///
+    /// # Errors
+    /// Returns [`ExecutorError::InvalidRequest`] when such a block is
+    /// malformed, unpaired, or was modified.
+    pub(super) fn replay_server_tool_blocks(&mut self, key: &MessagesResultKey) -> ExecutorResult<()> {
+        replay_server_tool_blocks(&mut self.raw, key).map(drop)
     }
 
     /// The body to POST upstream for the next round.

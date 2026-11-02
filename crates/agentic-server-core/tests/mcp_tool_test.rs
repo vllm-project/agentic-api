@@ -1,6 +1,8 @@
+use agentic_core::config::ToolRuntimeConfig;
 use agentic_core::executor::ExecuteRequest;
 use agentic_core::executor::accumulator::ResponseAccumulator;
 use agentic_core::tool::ToolDeclaration;
+use agentic_core::tool::mcp::McpServerEntry;
 use agentic_core::tool::{GatewayExecutors, ToolOwnership, ToolRegistry, ToolType};
 use agentic_core::types::io::output::McpListTools;
 use agentic_core::types::io::{ItemPage, McpCall, OutputItem, ToolChoice};
@@ -15,6 +17,7 @@ use futures::StreamExt;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 mod support;
 
@@ -85,6 +88,405 @@ async fn spawn_forecast_mcp() -> String {
     let address = listener.local_addr().expect("mock MCP address");
     tokio::spawn(async move { axum::serve(listener, app).await.expect("mock MCP server") });
     format!("http://{address}/mcp")
+}
+
+/// A server that remains callable after its first successful listing, but refuses any repeated discovery.
+async fn spawn_forecast_mcp_with_one_listing(
+    refuse_reinitialization: bool,
+) -> (String, Arc<AtomicUsize>, Arc<AtomicUsize>, tokio::task::JoinHandle<()>) {
+    let listings = Arc::new(AtomicUsize::new(0));
+    let initializations = Arc::new(AtomicUsize::new(0));
+    let counter = Arc::clone(&listings);
+    let handshakes = Arc::clone(&initializations);
+    let app = Router::new().route(
+        "/mcp",
+        post(move |axum::Json(request): axum::Json<Value>| {
+            let listings = Arc::clone(&counter);
+            let initializations = Arc::clone(&handshakes);
+            async move {
+                let id = &request["id"];
+                if id.is_null() {
+                    return StatusCode::ACCEPTED.into_response();
+                }
+                let result = match request["method"].as_str().unwrap() {
+                    "initialize" => {
+                        if initializations.fetch_add(1, Ordering::SeqCst) > 0 && refuse_reinitialization {
+                            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                        }
+                        json!({"protocolVersion":"2025-06-18", "capabilities":{"tools":{}},
+                            "serverInfo":{"name":"one-listing", "version":"1"}})
+                    }
+                    "tools/list" if listings.fetch_add(1, Ordering::SeqCst) == 0 => json!({"tools":[{
+                        "name":"forecast", "description":"Forecast a city.",
+                        "inputSchema":{"type":"object", "properties":{"city":{"type":"string"}}}
+                    }]}),
+                    "tools/list" => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+                    "tools/call" => {
+                        assert_eq!(request["params"]["name"], "forecast");
+                        json!({"content":[{"type":"text", "text":"forecast result"}], "isError":false})
+                    }
+                    other => panic!("unexpected MCP operation {other}"),
+                };
+                axum::Json(json!({"jsonrpc":"2.0", "id":id, "result":result})).into_response()
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}/mcp", listener.local_addr().unwrap());
+    let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (url, listings, initializations, task)
+}
+
+#[tokio::test]
+async fn continuations_reuse_mcp_discovery_and_keep_tools_callable() {
+    for store in [false, true] {
+        for stream in [false, true] {
+            let (mcp_url, listings, initializations, server) = spawn_forecast_mcp_with_one_listing(false).await;
+            let mut responses = mcp_inference_responses(stream, "mcp__stub__forecast", &json!({"city":"Tokyo"}));
+            responses.insert(0, support::text_response("Ready to check the forecast."));
+            responses.push(if stream {
+                support::text_sse_response("The earlier forecast is retained.")
+            } else {
+                support::text_response("The earlier forecast is retained.")
+            });
+            let fixture = support::TestFixture::new_with_responses(responses).await;
+            let mut seed = forecast_request(false, &mcp_url);
+            seed.store = store;
+            seed.tool_choice = Some(ToolChoice::Auto);
+            let input = serde_json::to_value(&seed.input).unwrap();
+            let first = complete_mcp_response(seed, &fixture).await;
+            assert_eq!(listings.load(Ordering::SeqCst), 1);
+            assert!(
+                first["output"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|item| item["type"] == "mcp_list_tools")
+            );
+            let mut continuation = forecast_request(stream, &mcp_url);
+            continuation.store = store;
+            if store {
+                continuation.previous_response_id = Some(first["id"].as_str().unwrap().to_owned());
+            } else {
+                let mut history = match input {
+                    Value::Array(items) => items,
+                    Value::String(text) => vec![json!({"role":"user", "content":text})],
+                    _ => unreachable!(),
+                };
+                history.extend(first["output"].as_array().unwrap().iter().cloned());
+                history.push(json!({"role":"user", "content":"Forecast Tokyo now."}));
+                assert!(!history.iter().any(|item| item["type"] == "mcp_call"));
+                continuation.input = serde_json::from_value(json!(history)).unwrap();
+            }
+            let mut third = continuation.clone();
+            let response = complete_mcp_response(continuation, &fixture).await;
+            let output = response["output"].as_array().unwrap();
+            assert!(output.iter().all(|item| item["type"] != "mcp_list_tools"));
+            let call = output.iter().find(|item| item["type"] == "mcp_call").unwrap();
+            assert_eq!(call["status"], "completed");
+            assert!(call["output"].as_str().unwrap().contains("forecast result"));
+            if store {
+                third.previous_response_id = Some(response["id"].as_str().unwrap().to_owned());
+                third.input = serde_json::from_value(json!("What was the forecast?")).unwrap();
+            } else {
+                let mut history = serde_json::to_value(&third.input).unwrap().as_array().unwrap().clone();
+                history.extend(output.iter().cloned());
+                history.push(json!({"role":"user", "content":"What was the forecast?"}));
+                third.input = serde_json::from_value(json!(history)).unwrap();
+            }
+            complete_mcp_response(third, &fixture).await;
+            assert_eq!(
+                listings.load(Ordering::SeqCst),
+                1,
+                "continuations must not fetch tools/list again"
+            );
+            assert_eq!(
+                initializations.load(Ordering::SeqCst),
+                2,
+                "connect only for discovery and the actual tool call"
+            );
+            let bodies = fixture.request_bodies().await;
+            assert_eq!(bodies.len(), 4);
+            let input = bodies.last().unwrap()["input"].as_array().unwrap();
+            assert!(input.iter().all(|item| item["type"] != "mcp_call"));
+            let prior = input
+                .iter()
+                .find(|item| item["type"] == "function_call" && item["name"] == "mcp__stub__forecast")
+                .unwrap();
+            assert_eq!(
+                serde_json::from_str::<Value>(prior["arguments"].as_str().unwrap()).unwrap(),
+                json!({"city":"Tokyo"})
+            );
+            let result = input
+                .iter()
+                .find(|item| item["type"] == "function_call_output" && item["call_id"] == prior["call_id"])
+                .unwrap();
+            assert_eq!(result["output"], call["output"]);
+            for body in &bodies {
+                assert_lowered_forecast_upstream(body, "retained discovery");
+            }
+            server.abort();
+        }
+    }
+}
+
+#[tokio::test]
+async fn retained_mcp_tools_need_no_connection_for_a_passive_continuation() {
+    for store in [false, true] {
+        for stream in [false, true] {
+            let (url, listings, initializations, server) = spawn_forecast_mcp_with_one_listing(true).await;
+            let answer = if stream {
+                support::text_sse_response("No external tool is needed.")
+            } else {
+                support::text_response("No external tool is needed.")
+            };
+            let fixture =
+                support::TestFixture::new_with_responses(vec![support::text_response("Ready."), answer]).await;
+            let mut request = forecast_request(false, &url);
+            request.store = store;
+            request.tool_choice = Some(ToolChoice::Auto);
+            let input = serde_json::to_value(&request.input).unwrap();
+            let first = complete_mcp_response(request, &fixture).await;
+            let mut next = forecast_request(stream, &url);
+            next.store = store;
+            next.tool_choice = Some(ToolChoice::Auto);
+            if store {
+                next.previous_response_id = Some(first["id"].as_str().unwrap().to_owned());
+            } else {
+                let mut history = vec![json!({"role":"user", "content":input})];
+                history.extend(first["output"].as_array().unwrap().iter().cloned());
+                history.push(json!({"role":"user", "content":"Answer without calling tools."}));
+                next.input = serde_json::from_value(json!(history)).unwrap();
+            }
+            let second = complete_mcp_response(next, &fixture).await;
+            assert!(
+                second["output"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .all(|item| item["type"] != "mcp_list_tools")
+            );
+            assert_eq!(
+                initializations.load(Ordering::SeqCst),
+                1,
+                "retained schemas must not reconnect until invoked"
+            );
+            assert_eq!(listings.load(Ordering::SeqCst), 1);
+            let bodies = fixture.request_bodies().await;
+            assert_eq!(bodies.len(), 2);
+            assert_lowered_forecast_upstream(&bodies[1], "passive continuation");
+            server.abort();
+        }
+    }
+}
+
+async fn complete_mcp_response(request: RequestPayload, fixture: &support::TestFixture) -> Value {
+    let response = match ExecuteRequest::new(request, Arc::clone(&fixture.exec_ctx))
+        .run()
+        .await
+        .unwrap()
+    {
+        Either::Left(response) => serde_json::to_value(response).unwrap(),
+        Either::Right(stream) => {
+            let chunks: Vec<_> = stream.collect().await;
+            support::streamed_sse_events(&chunks)
+                .into_iter()
+                .find(|event| event["type"] == "response.completed")
+                .unwrap()["response"]
+                .clone()
+        }
+    };
+    assert_eq!(response["status"], "completed");
+    response
+}
+
+async fn spawn_colliding_mcp(allow_rediscovery: bool) -> (String, Arc<AtomicUsize>, tokio::task::JoinHandle<()>) {
+    let listings = Arc::new(AtomicUsize::new(0));
+    let count = Arc::clone(&listings);
+    let app = Router::new().route("/mcp", post(move |axum::Json(request): axum::Json<Value>| {
+        let count = Arc::clone(&count);
+        async move {
+            if request["id"].is_null() { return StatusCode::ACCEPTED.into_response(); }
+            let result = match request["method"].as_str().unwrap() {
+                "initialize" => json!({"protocolVersion":"2025-06-18", "capabilities":{"tools":{}}, "serverInfo":{"name":"collisions", "version":"1"}}),
+                "tools/list" if count.fetch_add(1, Ordering::SeqCst) == 0 || allow_rediscovery => json!({"tools":[
+                    {"name":"read.file", "inputSchema":{"type":"object", "properties":{"path":{"type":"string"}}}},
+                    {"name":"read_file", "inputSchema":{"type":"object", "properties":{"path":{"type":"string"}}}}
+                ]}),
+                "tools/list" => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+                "tools/call" => {
+                    assert_eq!(request["params"]["name"], "read_file");
+                    assert_eq!(request["params"]["arguments"], json!({"path":"sample"}));
+                    json!({"content":[{"type":"text", "text":"underscore result"}], "isError":false})
+                }
+                other => panic!("unexpected MCP operation {other}"),
+            };
+            axum::Json(json!({"jsonrpc":"2.0", "id":request["id"], "result":result})).into_response()
+        }
+    }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}/mcp", listener.local_addr().unwrap());
+    let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (url, listings, task)
+}
+
+#[tokio::test]
+async fn narrowing_mcp_permissions_preserves_discovery_aliases_and_history() {
+    // The second raw tool collides with read.file after sanitization, so discovery assigns this alias.
+    const ALIAS: &str = "mcp__stub__read_file__597ac8fee0";
+    for (store, stream, configured) in [false, true].into_iter().flat_map(|store| {
+        [false, true]
+            .into_iter()
+            .flat_map(move |stream| [false, true].map(|configured| (store, stream, configured)))
+    }) {
+        let (url, listings, server) = spawn_colliding_mcp(false).await;
+        let answer = if stream {
+            support::text_sse_response("History retained.")
+        } else {
+            support::text_response("History retained.")
+        };
+        let mut fixture = support::TestFixture::new_with_responses(vec![
+            support::function_call_response("fc_collision", "call_collision", ALIAS, r#"{"path":"sample"}"#),
+            support::text_response("Read complete."),
+            answer,
+        ])
+        .await;
+        let mut body = json!({"model":"test-model", "store":store, "input":"Read sample.", "tools":[{
+            "type":"mcp", "server_label":"stub", "server_url":url, "require_approval":"never"
+        }]});
+        if configured {
+            configure_collision_mcp(&mut fixture, &url);
+            body["tools"][0].as_object_mut().unwrap().remove("server_url");
+            body["tools"][0]["allowed_tools"] = json!(["read_file"]);
+        }
+        let first = complete_mcp_response(serde_json::from_value(body.clone()).unwrap(), &fixture).await;
+        let output = first["output"].as_array().unwrap();
+        let call = output.iter().find(|item| item["type"] == "mcp_call").unwrap();
+        assert_eq!(call["name"], "read_file");
+        assert_eq!(call["status"], "completed");
+        body["stream"] = json!(stream);
+        body["tools"][0]["allowed_tools"] = json!(["read_file"]);
+        if store {
+            body["previous_response_id"] = first["id"].clone();
+            body["input"] = json!("Use the earlier result.");
+        } else {
+            let mut history = vec![json!({"role":"user", "content":"Read sample."})];
+            history.extend(output.iter().cloned());
+            history.push(json!({"role":"user", "content":"Use the earlier result."}));
+            body["input"] = json!(history);
+        }
+        let second = complete_mcp_response(serde_json::from_value(body).unwrap(), &fixture).await;
+        assert!(
+            second["output"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|item| item["type"] != "mcp_list_tools")
+        );
+        assert_eq!(listings.load(Ordering::SeqCst), 1);
+        let bodies = fixture.request_bodies().await;
+        let next = bodies.last().unwrap();
+        let tools = next["tools"].as_array().unwrap();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(
+            tools[0]["name"], ALIAS,
+            "filtering must not reassign a discovered tool's alias"
+        );
+        let input = next["input"].as_array().unwrap();
+        let prior = input
+            .iter()
+            .find(|item| item["type"] == "function_call" && item["name"] == ALIAS)
+            .unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(prior["arguments"].as_str().unwrap()).unwrap(),
+            json!({"path":"sample"})
+        );
+        let result = input
+            .iter()
+            .find(|item| item["type"] == "function_call_output" && item["call_id"] == prior["call_id"])
+            .unwrap();
+        assert_eq!(result["output"], call["output"]);
+        assert!(input.iter().all(|item| item["type"] != "mcp_call"));
+        server.abort();
+    }
+}
+
+#[tokio::test]
+async fn expanded_mcp_permissions_rediscover_a_partial_listing() {
+    const NEW_ALIAS: &str = "mcp__stub__read_file__597ac8fee0";
+    for (store, stream, unrestricted) in [false, true].into_iter().flat_map(|store| {
+        [false, true]
+            .into_iter()
+            .flat_map(move |stream| [false, true].map(|all| (store, stream, all)))
+    }) {
+        let (url, listings, server) = spawn_colliding_mcp(true).await;
+        let mut responses = mcp_inference_responses(stream, NEW_ALIAS, &json!({"path":"sample"}));
+        responses.insert(0, support::text_response("Ready."));
+        let fixture = support::TestFixture::new_with_responses(responses).await;
+        let mut body = json!({"model":"test-model", "store":store, "input":"Read sample.", "tools":[{
+            "type":"mcp", "server_label":"stub", "server_url":url,
+            "allowed_tools":["read.file"], "require_approval":"never"
+        }]});
+        let first = complete_mcp_response(serde_json::from_value(body.clone()).unwrap(), &fixture).await;
+        let listing = first["output"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["type"] == "mcp_list_tools")
+            .unwrap();
+        assert_eq!(listing["tools"].as_array().unwrap().len(), 1);
+        body["stream"] = json!(stream);
+        if unrestricted {
+            body["tools"][0].as_object_mut().unwrap().remove("allowed_tools");
+        } else {
+            body["tools"][0]["allowed_tools"] = json!(["read.file", "read_file"]);
+        }
+        if store {
+            body["previous_response_id"] = first["id"].clone();
+            body["input"] = json!("Use read_file now.");
+        } else {
+            let mut history = vec![json!({"role":"user", "content":"Read sample."})];
+            history.extend(first["output"].as_array().unwrap().iter().cloned());
+            history.push(json!({"role":"user", "content":"Use read_file now."}));
+            body["input"] = json!(history);
+        }
+        let second = complete_mcp_response(serde_json::from_value(body).unwrap(), &fixture).await;
+        let bodies = fixture.request_bodies().await;
+        assert_eq!(
+            bodies[1]["tools"].as_array().unwrap().len(),
+            2,
+            "removed restrictions must expose the full catalog"
+        );
+        assert!(
+            second["output"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|item| item["type"] == "mcp_call" && item["name"] == "read_file"),
+            "store={store}, stream={stream}, unrestricted={unrestricted}: {second}"
+        );
+        assert_eq!(listings.load(Ordering::SeqCst), 2);
+        server.abort();
+    }
+}
+
+fn configure_collision_mcp(fixture: &mut support::TestFixture, url: &str) {
+    let config = ToolRuntimeConfig {
+        mcp_servers: HashMap::from([(
+            "stub".to_owned(),
+            McpServerEntry::Http {
+                url: url.to_owned(),
+                headers: None,
+                allowed_tools: None,
+                require_approval: Some("never".to_owned()),
+                description: None,
+                defer_loading: None,
+            },
+        )]),
+        ..Default::default()
+    };
+    Arc::get_mut(&mut fixture.exec_ctx).unwrap().gateway_executors =
+        GatewayExecutors::from_config(Arc::new(reqwest::Client::new()), &config).unwrap();
 }
 
 /// The declaration a client submits, including the request-scoped credentials that the
@@ -240,13 +642,8 @@ async fn mcp_declarations_stay_public_in_json_and_stored_responses() {
     assert_lowered_forecast_upstream(&bodies[0], "blocking turn");
 }
 
-fn forecast_inference_responses(stream: bool, city: &str) -> Vec<support::MockResponse> {
-    let call = support::function_call_response(
-        "fc_forecast",
-        "call_forecast",
-        "mcp__stub__forecast",
-        &json!({"city": city}).to_string(),
-    );
+fn mcp_inference_responses(stream: bool, name: &str, arguments: &Value) -> Vec<support::MockResponse> {
+    let call = support::function_call_response("fc_forecast", "call_forecast", name, &arguments.to_string());
     if !stream {
         return vec![call, support::text_response("Forecast handled.")];
     }
@@ -302,7 +699,7 @@ async fn assert_continuation_tool_choice(fixture: &support::TestFixture, parent:
 
 async fn assert_mcp_tool_choice_after_execution(stream: bool, city: &str, inherit_selector: bool) {
     let mcp_url = spawn_forecast_mcp().await;
-    let mut responses = forecast_inference_responses(stream, city);
+    let mut responses = mcp_inference_responses(stream, "mcp__stub__forecast", &json!({"city":city}));
     if inherit_selector {
         responses.insert(0, support::text_response("Seed inherited tool settings."));
     }
@@ -901,7 +1298,12 @@ fn successful_blocking_mcp_call_matches_openai() {
 #[tokio::test]
 async fn mcp_input_items_return_stored_call_and_result() {
     let mcp_url = spawn_forecast_mcp().await;
-    let fixture = support::TestFixture::new_with_responses(forecast_inference_responses(false, "Paris")).await;
+    let fixture = support::TestFixture::new_with_responses(mcp_inference_responses(
+        false,
+        "mcp__stub__forecast",
+        &json!({"city":"Paris"}),
+    ))
+    .await;
     let Either::Left(response) = ExecuteRequest::new(forecast_request(false, &mcp_url), Arc::clone(&fixture.exec_ctx))
         .run()
         .await

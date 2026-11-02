@@ -14,6 +14,8 @@ mod root_completion;
 mod service_tier;
 #[path = "multi_agent_tests/shell_continuation.rs"]
 mod shell_continuation;
+#[path = "multi_agent_tests/stateless_replay.rs"]
+mod stateless_replay;
 use crate::executor::{
     ExecuteRequest,
     modes::{ConversationHandler, ResponseHandler},
@@ -144,6 +146,7 @@ async fn setup_with_compaction_gate(
         let compaction_gate = compaction_gate.clone();
         async move {
             assert!(request.get("multi_agent").is_none());
+            assert!(!request.to_string().contains("enc_"), "encrypted replay state must not reach inference");
             assert!(request["input"].as_array().unwrap().iter().all(|item| !matches!(
                 item["type"].as_str(), Some("multi_agent_call" | "multi_agent_call_output" | "agent_message"))));
             let input = request["input"].as_array().unwrap();
@@ -166,7 +169,14 @@ async fn setup_with_compaction_gate(
             } else if let Some(output) = shell_review_output(&request) {
                 output
             } else if input.iter().any(|item| has_message_text(item, "simple compaction test")) {
-                vec![message("finished")]
+                // vLLM can use bare hexadecimal message IDs. Returned public
+                // messages must remain valid on the next full-history request.
+                let mut output = message("finished");
+                let bare_id = output["id"].as_str().unwrap().strip_prefix("msg_").unwrap().to_owned();
+                output["id"] = json!(bare_id);
+                vec![output]
+            } else if let Some(output) = stateless_replay::client_agent_message_output(&request) {
+                output
             } else if let Some(child) = child {
                 let call_id = format!("proposal_{child}");
                 let resumed = input.iter().any(|item| item["type"] == "function_call_output" && item["call_id"] == call_id);
@@ -229,32 +239,6 @@ async fn setup_with_compaction_gate(
         format!("http://{address}"),
     );
     (Arc::new(exec), server)
-}
-
-#[tokio::test]
-async fn automatic_compaction_is_attributed_and_usage_is_counted_once() {
-    let (exec, server) = setup().await;
-    let request = RequestPayload {
-        model: "test".into(),
-        store: true,
-        input: ResponsesInput::Text("simple compaction test".into()),
-        multi_agent: Some(MultiAgentConfig {
-            enabled: true,
-            max_concurrent_subagents: Some(3),
-        }),
-        context_management: Some(vec![ContextManagement {
-            type_: "compaction".into(),
-            compact_threshold: Some(1),
-        }]),
-        ..Default::default()
-    };
-    let result = tokio::time::timeout(Duration::from_secs(10), response(request, exec)).await;
-    server.abort();
-    let result = result.unwrap();
-    assert_eq!(result.usage.unwrap().total_tokens, 6);
-    assert!(matches!(result.output.first(), Some(OutputItem::Compaction(item))
-        if item.agent.as_ref().is_some_and(|agent| agent.agent_name == "/root")));
-    assert_eq!(result.output.len(), 2);
 }
 
 #[tokio::test]
@@ -407,7 +391,7 @@ async fn response(request: RequestPayload, exec: Arc<ExecutionContext>) -> Respo
     }
 }
 
-fn upstream_events(payload: &Value) -> String {
+pub(crate) fn upstream_events(payload: &Value) -> String {
     let mut events =
         vec![json!({"type":"response.created","response":{"id":"upstream","status":"in_progress","output":[]}})];
     for (index, item) in payload["output"].as_array().unwrap().iter().enumerate() {

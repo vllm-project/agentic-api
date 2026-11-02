@@ -11,6 +11,8 @@ use super::{ContractMismatch, RecordedSession, mismatch};
 use crate::support::Turn;
 
 impl RecordedSession {
+    /// # Errors
+    /// The session violates the delegated code-interpreter contract.
     pub fn assert_code_interpreter(&self, require_execution_logs: bool) -> Result<(), ContractMismatch> {
         if self.exchanges.len() != 1 {
             return Err(mismatch(

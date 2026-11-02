@@ -1,8 +1,12 @@
 #[cfg(test)]
-use crate::types::io::InOutItem;
+use crate::types::io::{InOutItem, OutputItem};
 use serde_json::json;
 
+use crate::types::tools::McpDiscoveredToolParam;
+use crate::utils::common::serialize_to_value;
+
 use super::*;
+use crate::tool::catalog::hosted_mcp_member;
 
 fn param(value: Value) -> ToolSearchToolParam {
     let ResponsesTool::ToolSearch(param) = serde_json::from_value(value).expect("valid tool_search declaration") else {
@@ -149,7 +153,7 @@ fn terminal_projection_preserves_incomplete_and_discards_failed_calls() {
     let native = ToolSearchCall {
         agent: None,
         id: "tsc_search".to_owned(),
-        call_id: "call_search".to_owned(),
+        call_id: Some("call_search".to_owned()),
         execution: crate::types::tools::ToolSearchExecution::Client,
         arguments: json!({"query": "weather"}),
         status: ToolSearchStatus::InProgress,
@@ -487,5 +491,187 @@ fn tool_search_output_rejects_mcp_definitions() {
     assert!(matches!(
         error,
         ToolError::Config(message) if message.contains("unsupported tool definition")
+    ));
+}
+
+#[test]
+fn restored_mcp_loads_survive_compaction_and_offer_only_the_rest() {
+    let request: RequestPayload = serde_json::from_value(json!({
+        "model": "m",
+        "input": "continue",
+        "tools": [
+            {"type": "tool_search"},
+            {"type": "mcp", "server_label": "stub", "server_url": "http://127.0.0.1:9/mcp", "defer_loading": true}
+        ]
+    }))
+    .unwrap();
+    let restored: Vec<ResponsesTool> = serde_json::from_value(json!([{
+        "type": "namespace", "name": "mcp_stub", "description": "",
+        "tools": [{"type": "function", "name": "echo", "defer_loading": true}]
+    }]))
+    .unwrap();
+    let mut state = ToolSearchState::build_with_loaded_tools(&request, &restored, true).unwrap();
+    assert!(state.is_hosted());
+
+    let mut prepared = request.clone();
+    state.prepare_inference_request(&mut prepared).unwrap();
+    let Some(ResponsesTool::Mcp(server)) = prepared
+        .tools
+        .as_mut()
+        .and_then(|tools| tools.iter_mut().find(|tool| matches!(tool, ResponsesTool::Mcp(_))))
+    else {
+        panic!("the deferred server stays declared");
+    };
+    assert_eq!(
+        server.loaded_tool_names.as_deref(),
+        Some(["echo".to_owned()].as_slice())
+    );
+
+    // With discovery, the catalog offers only the tool not loaded before this response.
+    for name in ["echo", "reverse"] {
+        server.discovered_tools.push(McpDiscoveredToolParam {
+            server_label: "stub".to_owned(),
+            tool_name: name.to_owned(),
+            internal_name: format!("mcp__stub__{name}"),
+            tool: serde_json::from_value(json!({"name": name, "inputSchema": {"type": "object"}})).unwrap(),
+        });
+    }
+    let tools = prepared.tools.clone().unwrap();
+    let mut catalog = state.catalog().expect("prepared catalog").clone();
+    catalog.discover_mcp(&tools);
+    let found = catalog.search_raw(r#"{"paths":["mcp_stub"]}"#);
+    let ResponsesTool::Namespace(namespace) = &found[0] else {
+        panic!("an MCP server loads as a namespace");
+    };
+    assert_eq!(namespace.tools.len(), 1);
+    assert!(
+        matches!(&namespace.tools[0], CodexNamespaceMember::Function(function) if function.name.as_str() == "reverse")
+    );
+    assert_eq!(
+        state
+            .catalog()
+            .expect("prepared catalog")
+            .withheld_mcp_tool_names(&tools),
+        HashSet::from(["mcp__stub__reverse".to_owned()])
+    );
+    // Restored loads are kept for the next response's metadata.
+    assert_eq!(state.loaded_public_tools().len(), 1);
+}
+
+#[test]
+fn hosted_mcp_member_survives_a_storage_round_trip_unchanged() {
+    let discovered = McpDiscoveredToolParam {
+        server_label: "stub".to_owned(),
+        tool_name: "echo".to_owned(),
+        internal_name: "mcp__stub__echo".to_owned(),
+        tool: serde_json::from_value(
+            json!({"name": "echo", "description": "Echo.", "inputSchema": {"type": "object"}}),
+        )
+        .unwrap(),
+    };
+    let member = hosted_mcp_member(&discovered).expect("named MCP tool");
+    let stored = serde_json::to_value(&member).unwrap();
+    let reloaded: CodexNamespaceMember = serde_json::from_value(stored.clone()).unwrap();
+    assert_eq!(serde_json::to_value(reloaded).unwrap(), stored);
+    assert_eq!(
+        stored,
+        json!({"type": "function", "name": "echo", "description": "Echo.", "parameters": {"type": "object"},
+            "defer_loading": true, "output_schema": null})
+    );
+}
+
+/// The registry owns the catalog: a deferred function or MCP tool is known but refused until a search loads it.
+#[tokio::test]
+async fn the_registry_refuses_deferred_definitions_until_a_search_loads_them() {
+    let weather = json!({"type": "function", "name": "weather", "defer_loading": true,
+        "parameters": {"type": "object"}});
+    let mut request: RequestPayload = serde_json::from_value(json!({
+        "model": "m",
+        "input": "weather?",
+        "tools": [
+            {"type": "tool_search"},
+            weather,
+            {"type": "mcp", "server_label": "stub", "server_url": "http://127.0.0.1:9/mcp", "defer_loading": true}
+        ]
+    }))
+    .unwrap();
+    let mut state = ToolSearchState::build(&request).unwrap();
+    state.prepare_inference_request(&mut request).unwrap();
+    for tool in request.tools.as_mut().unwrap() {
+        if let ResponsesTool::Mcp(server) = tool {
+            server.discovered_tools.push(McpDiscoveredToolParam {
+                server_label: "stub".to_owned(),
+                tool_name: "echo".to_owned(),
+                internal_name: "mcp__stub__echo".to_owned(),
+                tool: serde_json::from_value(json!({"name": "echo", "inputSchema": {"type": "object"}})).unwrap(),
+            });
+        }
+    }
+    let mut registry = crate::tool::ToolRegistry::default();
+    let catalog = state.take_catalog().expect("prepared catalog");
+    let tools = request.tools.clone().unwrap();
+    registry.attach_tool_search(catalog, state.synthetic_tool_search().cloned(), true, &tools);
+
+    assert!(registry.is_deferred("weather"));
+    assert!(registry.is_deferred("mcp__stub__echo"));
+    assert_eq!(
+        registry.withheld_names(),
+        HashSet::from(["weather".to_owned(), "mcp__stub__echo".to_owned()])
+    );
+    let call: OutputItem = serde_json::from_value(json!({"type": "function_call", "id": "fc_w", "call_id": "call_w",
+        "name": "weather", "arguments": "{}", "status": "completed"}))
+    .unwrap();
+    assert!(matches!(
+        registry.ensure_loaded_calls(std::slice::from_ref(&call)),
+        Err(ToolError::UpstreamWithheldFunctionCall)
+    ));
+    // A hosted search's function call is restored with its own name as namespace.
+    let self_named: OutputItem =
+        serde_json::from_value(json!({"type": "function_call", "id": "fc_w", "call_id": "call_w",
+        "name": "weather", "namespace": "weather", "arguments": "{}", "status": "completed"}))
+        .unwrap();
+    assert!(matches!(
+        registry.ensure_loaded_calls(std::slice::from_ref(&self_named)),
+        Err(ToolError::UpstreamWithheldFunctionCall)
+    ));
+
+    let loaded: ResponsesTool = serde_json::from_value(weather).unwrap();
+    let snapshot = registry
+        .load_searched_tools(&[loaded], &mut request)
+        .await
+        .expect("the search's tool loads")
+        .expect("tool search is active");
+    assert_eq!(snapshot.1.len(), 1);
+    assert!(!registry.is_deferred("weather"));
+    assert!(registry.is_deferred("mcp__stub__echo"));
+    assert!(registry.ensure_loaded_calls(&[call, self_named]).is_ok());
+}
+
+/// A namespace member's call reaches the registry restored to its public `{namespace, name}`; a deferred member is
+/// still refused.
+#[test]
+fn the_registry_refuses_a_restored_call_to_a_deferred_namespace_member() {
+    let request: RequestPayload = serde_json::from_value(json!({
+        "model": "m",
+        "input": "time?",
+        "tools": [
+            {"type": "tool_search"},
+            {"type": "namespace", "name": "travel", "description": "Travel tools", "tools": [
+                {"type": "function", "name": "get_timezone", "defer_loading": true, "parameters": {"type": "object"}}
+            ]}
+        ]
+    }))
+    .unwrap();
+    let mut state = ToolSearchState::build(&request).unwrap();
+    let mut registry = crate::tool::ToolRegistry::default();
+    let catalog = state.take_catalog().expect("prepared catalog");
+    registry.attach_tool_search(catalog, state.synthetic_tool_search().cloned(), true, &[]);
+    let call: OutputItem = serde_json::from_value(json!({"type": "function_call", "id": "fc_t", "call_id": "call_t",
+        "name": "get_timezone", "namespace": "travel", "arguments": "{}", "status": "completed"}))
+    .unwrap();
+
+    assert!(matches!(
+        registry.ensure_loaded_calls(&[call]),
+        Err(ToolError::UpstreamWithheldFunctionCall)
     ));
 }

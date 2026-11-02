@@ -2,7 +2,7 @@
 //!
 //! These values describe the public transcript, not executable collaboration commands or
 //! scheduler state. Request admission owns defaults and deployment limits. The gateway
-//! currently supports stored execution only; `store: true` is not a wire-type requirement.
+//! supports stored continuation and client-carried history with `store: false`.
 //! Deserializing these types does not enable multi-agent execution.
 
 use serde::{Deserialize, Serialize};
@@ -145,7 +145,7 @@ mod tests {
                 "action": "send_message", "arguments": "{ \"message\": \"opaque\" }",
                 "agent": {"agent_name": "/root"}}),
             serde_json::json!({"type": "multi_agent_call_output", "id": "maco_test", "call_id": "call_test",
-                "action": "send_message", "output": [{"type": "output_text", "text": ""}]}),
+                "action": "send_message", "output": [{"type": "output_text", "text": "", "logprobs": []}]}),
             serde_json::json!({"type": "agent_message", "id": "amsg_test", "author": "/root",
                 "recipient": "/root/review", "agent": {"agent_name": "/root/review"},
                 "content": [{"type": "encrypted_content", "encrypted_content": "opaque"}]}),
@@ -302,7 +302,7 @@ mod tests {
     }
 
     #[test]
-    fn collaboration_output_preserves_omitted_attribution_and_part_metadata() {
+    fn collaboration_output_preserves_omitted_attribution_and_defaults_logprobs() {
         let wire = serde_json::json!({
             "id": "maco_test",
             "call_id": "call_test",
@@ -311,7 +311,9 @@ mod tests {
         });
         let output: MultiAgentCallOutput = serde_json::from_value(wire.clone()).unwrap();
         assert!(output.agent.is_none());
-        assert_eq!(serde_json::to_value(output).unwrap(), wire);
+        let mut expected = wire;
+        expected["output"][0]["logprobs"] = serde_json::json!([]);
+        assert_eq!(serde_json::to_value(output).unwrap(), expected);
     }
 
     #[test]

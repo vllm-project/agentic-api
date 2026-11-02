@@ -32,6 +32,12 @@ pub enum ToolChoice {
         mode: AllowedToolsMode,
         tools: Vec<AllowedTool>,
     },
+    /// Forces a tool from one MCP server. Parsed so admission can reject it
+    /// with a typed `tool_choice` error; the gateway does not execute it.
+    Mcp {
+        server_label: String,
+        name: Option<NonEmptyToolName>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -90,6 +96,17 @@ impl utoipa::PartialSchema for ToolChoice {
             )
             .item(
                 ObjectBuilder::new()
+                    .description(Some(
+                        "Accepted for parsing but not supported: rejected with 400 unsupported_value.",
+                    ))
+                    .property("type", str_type().enum_values(Some(["mcp"])))
+                    .required("type")
+                    .property("server_label", str_type())
+                    .required("server_label")
+                    .property("name", name_ref()),
+            )
+            .item(
+                ObjectBuilder::new()
                     .property(
                         "function",
                         ObjectBuilder::new()
@@ -143,6 +160,15 @@ impl Serialize for ToolChoice {
                 map.serialize_entry("type", "allowed_tools")?;
                 map.serialize_entry("mode", mode)?;
                 map.serialize_entry("tools", tools)?;
+                map.end()
+            }
+            Self::Mcp { server_label, name } => {
+                let mut map = serializer.serialize_map(Some(2 + usize::from(name.is_some())))?;
+                map.serialize_entry("type", "mcp")?;
+                map.serialize_entry("server_label", server_label)?;
+                if let Some(name) = name {
+                    map.serialize_entry("name", name.as_str())?;
+                }
                 map.end()
             }
         }
@@ -202,6 +228,22 @@ impl<'de> Deserialize<'de> for ToolChoice {
                     return Ok(Self::AllowedTools { mode, tools });
                 }
 
+                if object.get("type").and_then(Value::as_str) == Some("mcp") {
+                    let server_label = object
+                        .get("server_label")
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| de::Error::missing_field("server_label"))?
+                        .to_owned();
+                    let name = match object.get("name") {
+                        None | Some(Value::Null) => None,
+                        Some(Value::String(name)) => {
+                            Some(NonEmptyToolName::try_from(name.as_str()).map_err(de::Error::custom)?)
+                        }
+                        Some(_) => return Err(de::Error::custom("MCP tool_choice name must be a string")),
+                    };
+                    return Ok(Self::Mcp { server_label, name });
+                }
+
                 if let Some(function) = object.get("function").and_then(Value::as_object) {
                     let namespace = function.get("namespace").and_then(Value::as_str).map(str::to_string);
                     let name = function
@@ -224,6 +266,21 @@ impl<'de> Deserialize<'de> for ToolChoice {
 }
 
 impl ToolChoice {
+    /// Whether the gateway can honor this selector; an MCP selector is parsed only to be rejected.
+    #[must_use]
+    pub const fn is_supported(&self) -> bool {
+        match self {
+            Self::Mcp { .. } => false,
+            Self::Auto
+            | Self::None
+            | Self::Required
+            | Self::Shell
+            | Self::Function { .. }
+            | Self::Custom { .. }
+            | Self::AllowedTools { .. } => true,
+        }
+    }
+
     /// Converts client-facing custom-tool selectors to the function-tool shape
     /// used by the normalized upstream tool declarations.
     #[must_use]
@@ -242,7 +299,10 @@ impl ToolChoice {
                 mode: *mode,
                 tools: tools.iter().cloned().map(normalize_allowed_tool).collect(),
             },
-            choice => choice.clone(),
+            // An MCP selector never reaches inference: admission rejects it.
+            choice @ (Self::Auto | Self::None | Self::Required | Self::Function { .. } | Self::Mcp { .. }) => {
+                choice.clone()
+            }
         }
     }
 }
@@ -307,6 +367,24 @@ mod tests {
             }))
             .is_err()
         );
+    }
+
+    #[test]
+    fn mcp_tool_choice_round_trips_and_is_unsupported() {
+        for wire in [
+            serde_json::json!({"type": "mcp", "server_label": "docs"}),
+            serde_json::json!({"type": "mcp", "server_label": "docs", "name": "search"}),
+        ] {
+            let choice: ToolChoice = serde_json::from_value(wire.clone()).expect("MCP tool_choice parses");
+            assert_eq!(serde_json::to_value(&choice).expect("serialize"), wire);
+            assert!(!choice.is_supported());
+        }
+        assert!(serde_json::from_value::<ToolChoice>(serde_json::json!({"type": "mcp"})).is_err());
+        assert!(
+            serde_json::from_value::<ToolChoice>(serde_json::json!({"type": "mcp", "server_label": "docs", "name": 1}))
+                .is_err()
+        );
+        assert!(ToolChoice::Required.is_supported());
     }
 
     #[test]
