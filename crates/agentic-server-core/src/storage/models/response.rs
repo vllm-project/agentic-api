@@ -58,25 +58,17 @@ pub async fn create_in_tx(
     .await
 }
 
-/// Get a response by ID.
+/// Get a response by ID through a pool or the caller's transaction.
 ///
 /// # Errors
 /// Returns `DbResult::Err` if the database query fails.
-pub async fn get(pool: &DbPool, id: &str) -> DbResult<Option<Response>> {
+pub async fn get<'e, E>(executor: E, id: &str) -> DbResult<Option<Response>>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Any>,
+{
     sqlx::query_as::<_, Response>("SELECT * FROM responses WHERE id = $1")
         .bind(id)
-        .fetch_optional(pool)
-        .await
-}
-
-/// Read a response row inside the caller's transaction.
-///
-/// # Errors
-/// Returns an error if the database query fails.
-pub async fn get_in_tx(tx: &mut DbTransaction<'_>, id: &str) -> DbResult<Option<Response>> {
-    sqlx::query_as::<_, Response>("SELECT * FROM responses WHERE id = $1")
-        .bind(id)
-        .fetch_optional(&mut **tx)
+        .fetch_optional(executor)
         .await
 }
 
@@ -87,7 +79,7 @@ pub async fn get_in_tx(tx: &mut DbTransaction<'_>, id: &str) -> DbResult<Option<
 /// # Errors
 /// Returns an error if history is malformed or the transaction fails.
 pub async fn delete_in_tx(tx: &mut DbTransaction<'_>, id: &str) -> DbResult<bool> {
-    let Some(root) = get_in_tx(tx, id).await? else {
+    let Some(root) = get(&mut **tx, id).await? else {
         return Ok(false);
     };
     let inherited: HashSet<String> = root
@@ -125,18 +117,6 @@ pub async fn delete_in_tx(tx: &mut DbTransaction<'_>, id: &str) -> DbResult<bool
     Ok(true)
 }
 
-/// Read the ordered history item IDs without loading response metadata.
-/// A legacy NULL history is empty; a missing response returns `None`.
-///
-/// # Errors
-/// Returns an error if the database query fails.
-pub async fn get_item_ids(pool: &DbPool, id: &str) -> DbResult<Option<String>> {
-    sqlx::query_scalar("SELECT COALESCE(history_item_ids, '[]') FROM responses WHERE id = $1")
-        .bind(id)
-        .fetch_optional(pool)
-        .await
-}
-
 /// Get the response that committed a conversation turn.
 ///
 /// # Errors
@@ -167,14 +147,6 @@ impl Response {
             .map(serde_json::from_str)
             .transpose()
             .map(Option::unwrap_or_default)
-    }
-
-    /// Deserialize metadata from JSON string to the given type.
-    ///
-    /// # Errors
-    /// Returns an error if present metadata does not match the requested schema.
-    pub fn metadata_as<T: serde::de::DeserializeOwned>(&self) -> Result<Option<T>, serde_json::Error> {
-        self.metadata.as_deref().map(serde_json::from_str).transpose()
     }
 }
 
@@ -211,25 +183,5 @@ mod tests {
         let ids = response.history_item_ids_vec().expect("valid history references");
         assert_eq!(ids.len(), 2);
         assert_eq!(ids[0], "item_1");
-    }
-
-    #[test]
-    fn test_response_metadata_deserialize() {
-        #[derive(serde::Deserialize, PartialEq, Debug)]
-        struct TestMeta {
-            model: String,
-        }
-
-        let response = Response {
-            id: "resp_1".to_string(),
-            conversation_id: None,
-            previous_response_id: None,
-            history_item_ids: None,
-            metadata: Some(r#"{"model":"gpt-4"}"#.to_string()),
-            created_at: 1_704_067_200,
-        };
-
-        let meta: Option<TestMeta> = response.metadata_as().expect("valid metadata");
-        assert!(meta.is_some());
     }
 }

@@ -69,23 +69,15 @@ impl ConversationHandler {
         self.store.get(conv_id).await.map_err(ExecutorError::Storage)
     }
 
-    /// Creates a brand-new conversation with a freshly generated ID.
+    /// Creates a tenant-owned conversation with its metadata and initial history.
     ///
     /// # Errors
-    /// Returns `ExecutorError` if the store is disabled or the database query fails.
-    pub async fn create(&self) -> ExecutorResult<ConversationData> {
-        self.store.create().await.map_err(ExecutorError::Storage)
-    }
-
-    /// Creates a tenant-owned conversation with optional metadata and initial history.
-    ///
-    /// # Errors
-    /// Returns an error if too many items are supplied or storage fails.
-    pub async fn create_with_metadata_and_items(
+    /// Returns an error if more than 20 items are supplied or storage fails.
+    pub async fn create(
         &self,
         tenant_id: &str,
-        metadata: Option<ConversationMetadata>,
-        items: Vec<InOutItem>,
+        metadata: &ConversationMetadata,
+        items: &[InOutItem],
     ) -> ExecutorResult<ConversationData> {
         if items.len() > 20 {
             return Err(ExecutorError::InvalidRequest(
@@ -93,7 +85,7 @@ impl ConversationHandler {
             ));
         }
         self.store
-            .create_with_metadata_and_items(Some(tenant_id), metadata, items)
+            .create(tenant_id, metadata, items)
             .await
             .map_err(ExecutorError::Storage)
     }
@@ -136,35 +128,19 @@ impl ConversationHandler {
             .map_err(ExecutorError::Storage)
     }
 
-    /// Loads all history items for the conversation referenced by the request.
-    ///
-    /// Reads `conversation` from `ctx.original_request`. Returns an empty vec
-    /// if the conversation exists but has no items yet.
+    /// Loads the conversation referenced by the request: its history items, storage version,
+    /// and the metadata of the turn at that version.
     ///
     /// # Errors
     /// Returns `ExecutorError` if `conversation` is absent, the store is
     /// disabled, or the database query fails.
-    pub async fn rehydrate(&self, ctx: &RequestContext) -> ExecutorResult<Vec<InOutItem>> {
-        Ok(self.rehydrate_snapshot(ctx).await?.items)
-    }
-
-    /// Loads the conversation's history items and storage version.
-    ///
-    /// Reads `conversation` from `ctx.original_request`.
-    ///
-    /// # Errors
-    /// Returns `ExecutorError` if `conversation` is absent, the store is
-    /// disabled, or the database query fails.
-    pub async fn rehydrate_snapshot(&self, ctx: &RequestContext) -> ExecutorResult<ConversationSnapshot> {
+    pub async fn rehydrate(&self, ctx: &RequestContext) -> ExecutorResult<ConversationSnapshot> {
         let conv_id = ctx
             .original_request
             .conversation
             .as_deref()
             .ok_or_else(|| ExecutorError::InvalidRequest("conversation is required for rehydrate".into()))?;
-        self.store
-            .rehydrate_snapshot(conv_id)
-            .await
-            .map_err(ExecutorError::Storage)
+        self.store.rehydrate(conv_id).await.map_err(ExecutorError::Storage)
     }
 
     /// Loads metadata for the persisted turn matching a captured conversation version.
@@ -202,20 +178,10 @@ impl ConversationHandler {
             ));
         }
 
-        let created = self
-            .store
+        self.store
             .create_items(tenant_id, conversation_id, items)
             .await
-            .map_err(ExecutorError::Storage)?;
-
-        // Perform fallible conversion - propagate errors instead of silently dropping items
-        let mut item_responses = Vec::with_capacity(created.len());
-        for db_item in created {
-            let conversation_item = InOutItem::try_from(&db_item)?;
-            item_responses.push(conversation_item.into_public(db_item.public_id().to_owned()));
-        }
-
-        Ok(item_responses)
+            .map_err(ExecutorError::Storage)
     }
 
     /// Lists items in a conversation with pagination.
@@ -236,15 +202,7 @@ impl ConversationHandler {
             .map_err(ExecutorError::Storage)?;
         let has_more = items.len() > page.limit.get();
         items.truncate(page.limit.get());
-
-        // Perform fallible conversion - propagate errors instead of silently dropping items
-        let mut item_responses = Vec::with_capacity(items.len());
-        for db_item in items {
-            let conversation_item = InOutItem::try_from(&db_item)?;
-            item_responses.push(conversation_item.into_public(db_item.public_id().to_owned()));
-        }
-
-        Ok(ListItemsResponse::new(item_responses, has_more))
+        Ok(ListItemsResponse::new(items, has_more))
     }
 
     /// Retrieves a single item by ID.
@@ -257,14 +215,10 @@ impl ConversationHandler {
         conversation_id: &str,
         item_id: &str,
     ) -> ExecutorResult<InOutItem> {
-        let db_item = self
-            .store
+        self.store
             .retrieve_item(tenant_id, conversation_id, item_id)
             .await
-            .map_err(ExecutorError::Storage)?;
-
-        let conversation_item = InOutItem::try_from(&db_item)?;
-        Ok(conversation_item.into_public(db_item.public_id().to_owned()))
+            .map_err(ExecutorError::Storage)
     }
 
     /// Deletes an item by ID, returning the updated conversation.
@@ -335,7 +289,7 @@ impl ConversationHandler {
         new_items.extend(output_items.into_iter().map(InOutItem::Output));
 
         self.store
-            .persist_if_version(
+            .persist(
                 &conversation_id,
                 conversation_version,
                 &ctx.response_id,
@@ -423,7 +377,9 @@ mod tests {
     -> Result<(), Box<dyn std::error::Error>> {
         let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
         let store = ConversationStore::new(pool);
-        let conversation = store.create().await?;
+        let conversation = store
+            .create("default_tenant", &ConversationMetadata::new(), &[])
+            .await?;
         let handler = ConversationHandler::new(store.clone());
         let mut ctx = make_ctx(Some(&conversation.conversation_id));
         ctx.new_input_items = ctx.original_request.input.clone().into_canonical_items();
@@ -438,7 +394,7 @@ mod tests {
             ExecutorError::InvalidRequest(message)
                 if message == "conversation version is required for execute_turn"
         ));
-        assert!(store.rehydrate(&conversation.conversation_id).await?.is_empty());
+        assert!(store.rehydrate(&conversation.conversation_id).await?.items.is_empty());
         Ok(())
     }
 
@@ -448,7 +404,9 @@ mod tests {
 
         let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
         let store = ConversationStore::new(pool);
-        let conversation = store.create().await?;
+        let conversation = store
+            .create("default_tenant", &ConversationMetadata::new(), &[])
+            .await?;
         let handler = ConversationHandler::new(store.clone());
         let mut ctx = make_ctx(Some(&conversation.conversation_id));
         ctx.new_input_items = ctx.original_request.input.clone().into_canonical_items();
@@ -458,7 +416,7 @@ mod tests {
 
         handler.execute_turn(ctx, vec![]).await?;
 
-        let snapshot = store.rehydrate_snapshot(&conversation.conversation_id).await?;
+        let snapshot = store.rehydrate(&conversation.conversation_id).await?;
         let metadata = store
             .response_metadata_at_version(&conversation.conversation_id, &snapshot.version)
             .await?
@@ -482,7 +440,9 @@ mod tests {
 
         let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
         let store = ConversationStore::new(pool);
-        let conversation = store.create().await?;
+        let conversation = store
+            .create("default_tenant", &ConversationMetadata::new(), &[])
+            .await?;
         let handler = ConversationHandler::new(store.clone());
         let mut ctx = make_ctx(Some(&conversation.conversation_id));
         ctx.new_input_items = ctx.original_request.input.clone().into_canonical_items();
@@ -494,6 +454,7 @@ mod tests {
         store
             .persist(
                 &conversation.conversation_id,
+                ConversationVersion::default(),
                 "resp_competing",
                 None,
                 competing_items,

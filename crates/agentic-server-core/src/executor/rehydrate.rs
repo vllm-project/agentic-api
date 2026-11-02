@@ -275,17 +275,14 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
     if ctx.continuation.is_some() {
         return from_session_response(ctx, exec_ctx).await;
     }
-    let stored = exec_ctx.resp_handler.get(ctx).await.map_err(|error| match error {
-        ExecutorError::Storage(ref source) if source.is_not_found() => StorageError::PreviousResponseNotFound {
-            id: ctx.original_request.previous_response_id.clone().unwrap_or_default(),
-        }
-        .into(),
-        other => other,
-    })?;
+    let (stored, history) = exec_ctx
+        .resp_handler
+        .rehydrate(ctx)
+        .await?
+        .ok_or_else(missing_previous_response_id)?;
     if restore_agent_tree(ctx, &stored.metadata, exec_ctx.responses_config.max_retained_bytes)? {
         return Ok(());
     }
-    let history = exec_ctx.resp_handler.rehydrate(ctx).await?;
 
     let mut items = InOutItem::into_input_items(history);
     items.reserve(ctx.new_input_items.len());
@@ -313,15 +310,11 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
             }
             .into());
         }
-        let map_missing = |error| match error {
-            ExecutorError::Storage(ref source) if source.is_not_found() => StorageError::PreviousResponseNotFound {
-                id: previous_id.to_owned(),
-            }
-            .into(),
-            other => other,
-        };
-        let stored = exec_ctx.resp_handler.get(ctx).await.map_err(map_missing)?;
-        let history = exec_ctx.resp_handler.rehydrate(ctx).await.map_err(map_missing)?;
+        let (stored, history) = exec_ctx
+            .resp_handler
+            .rehydrate(ctx)
+            .await?
+            .ok_or_else(missing_previous_response_id)?;
         let checkpoint = ResponseCheckpoint {
             response_id: stored.response_id,
             conversation_id: stored.conversation_id,
@@ -364,6 +357,11 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
     Ok(())
 }
 
+/// Response continuation runs only for a request with `previous_response_id`.
+fn missing_previous_response_id() -> ExecutorError {
+    ExecutorError::InvalidRequest("previous_response_id is required to continue a response".to_owned())
+}
+
 /// Hydrates `ctx` from the conversation store.
 ///
 /// Gets or creates the conversation (depending on `store`) and rehydrates its
@@ -377,14 +375,11 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
                 exec_ctx.conv_handler.get(ctx).await
             }
         },
-        exec_ctx.conv_handler.rehydrate_snapshot(ctx),
+        exec_ctx.conv_handler.rehydrate(ctx),
     )?;
 
-    if let Some(metadata) = exec_ctx
-        .conv_handler
-        .response_metadata_at_version(ctx, &snapshot.version)
-        .await?
-        && restore_agent_tree(ctx, &metadata, exec_ctx.responses_config.max_retained_bytes)?
+    if let Some(metadata) = &snapshot.metadata
+        && restore_agent_tree(ctx, metadata, exec_ctx.responses_config.max_retained_bytes)?
     {
         ctx.conversation_id = Some(conv_data.conversation_id);
         ctx.conversation_version = Some(snapshot.version);
@@ -467,6 +462,7 @@ mod tests {
     };
     use crate::types::agent::{AgentIdentity, AgentTurnId};
     use crate::types::agent_tree::{AgentState, StoredAgent, StoredTreeSnapshot};
+    use crate::types::conversations::ConversationMetadata;
     use crate::types::io::InOutItem;
     use crate::types::io::MultiAgentConfig;
     use crate::types::io::output::{McpListTools, OutputItem};
@@ -804,7 +800,10 @@ mod tests {
         let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await.unwrap();
         let response_store = ResponseStore::new(pool.clone());
         let conversation_store = ConversationStore::new(pool);
-        let conversation = conversation_store.create().await.unwrap();
+        let conversation = conversation_store
+            .create("default_tenant", &ConversationMetadata::new(), &[])
+            .await
+            .unwrap();
         let metadata = ResponseMetadata {
             multi_agent_tree: Some(StoredTreeSnapshot {
                 version: 1,
@@ -836,6 +835,7 @@ mod tests {
         conversation_store
             .persist(
                 &conversation.conversation_id,
+                ConversationVersion::default(),
                 "resp_conversation_tree",
                 None,
                 Vec::new(),
@@ -925,7 +925,9 @@ mod tests {
     async fn new_conversation_rehydration_captures_empty_version() -> Result<(), Box<dyn std::error::Error>> {
         let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
         let conversation_store = ConversationStore::new(pool);
-        let conversation = conversation_store.create().await?;
+        let conversation = conversation_store
+            .create("default_tenant", &ConversationMetadata::new(), &[])
+            .await?;
         let exec_ctx = execution_context(conversation_store, ResponseStore::disabled());
 
         let ctx = rehydrate_conversation(request(Some(&conversation.conversation_id), None), &exec_ctx).await?;
@@ -938,7 +940,9 @@ mod tests {
     async fn existing_conversation_rehydration_captures_last_response() -> Result<(), Box<dyn std::error::Error>> {
         let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
         let conversation_store = ConversationStore::new(pool);
-        let conversation = conversation_store.create().await?;
+        let conversation = conversation_store
+            .create("default_tenant", &ConversationMetadata::new(), &[])
+            .await?;
         let prior_items = Vec::<InputItem>::from(&ResponsesInput::Text("prior input".into()))
             .into_iter()
             .map(InOutItem::Input)
@@ -946,6 +950,7 @@ mod tests {
         conversation_store
             .persist(
                 &conversation.conversation_id,
+                ConversationVersion::default(),
                 "resp_prior",
                 None,
                 prior_items,
@@ -971,10 +976,13 @@ mod tests {
     async fn conversation_rehydration_remembers_listed_mcp_servers() -> Result<(), Box<dyn std::error::Error>> {
         let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
         let conversation_store = ConversationStore::new(pool);
-        let conversation = conversation_store.create().await?;
+        let conversation = conversation_store
+            .create("default_tenant", &ConversationMetadata::new(), &[])
+            .await?;
         conversation_store
             .persist(
                 &conversation.conversation_id,
+                ConversationVersion::default(),
                 "resp_prior",
                 None,
                 vec![InOutItem::Output(OutputItem::McpListTools(McpListTools::new(
@@ -1202,10 +1210,13 @@ mod tests {
                 &ResponseMetadata::default(),
             )
             .await?;
-        let conversation = conversation_store.create().await?;
+        let conversation = conversation_store
+            .create("default_tenant", &ConversationMetadata::new(), &[])
+            .await?;
         conversation_store
             .persist(
                 &conversation.conversation_id,
+                ConversationVersion::default(),
                 "resp_conversation_native",
                 None,
                 vec![InOutItem::Output(native_call)],

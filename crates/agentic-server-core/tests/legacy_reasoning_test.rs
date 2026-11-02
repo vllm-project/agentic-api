@@ -3,6 +3,7 @@
 
 mod support;
 
+use agentic_core::types::conversations::ConversationMetadata;
 use std::sync::Arc;
 
 use agentic_core::executor::{ConversationHandler, ExecuteRequest, ExecutionContext, ExecutorError, ResponseHandler};
@@ -70,7 +71,7 @@ async fn legacy_rows_keep_every_field_that_still_decodes() {
         "status": "failed"
     }))
     .await;
-    let reasoning = only_reasoning(store.rehydrate("resp_legacy").await.unwrap());
+    let reasoning = only_reasoning(store.rehydrate("resp_legacy").await.unwrap().1);
     assert_eq!(reasoning.content.len(), 1);
     assert_eq!(reasoning.content[0].type_, ReasoningTextKind::ReasoningText);
     assert_eq!(reasoning.content[0].text, "keep this");
@@ -87,7 +88,7 @@ async fn legacy_rows_keep_every_field_that_still_decodes() {
         "agent": {"agent_name": "/root/worker"}
     }))
     .await;
-    let reasoning = only_reasoning(store.rehydrate("resp_legacy").await.unwrap());
+    let reasoning = only_reasoning(store.rehydrate("resp_legacy").await.unwrap().1);
     assert!(reasoning.summary.is_empty());
     assert_eq!(
         reasoning
@@ -173,7 +174,13 @@ async fn stored_turn(in_conversation: bool) -> StoredTurn {
     .await;
     let conversations = ConversationStore::new(Arc::clone(&pool));
     let conversation_id = if in_conversation {
-        Some(conversations.create().await.unwrap().conversation_id)
+        Some(
+            conversations
+                .create("default_tenant", &ConversationMetadata::new(), &[])
+                .await
+                .unwrap()
+                .conversation_id,
+        )
     } else {
         None
     };

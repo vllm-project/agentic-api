@@ -1,6 +1,7 @@
 //! Client-supplied history is used directly; stateless requests carry no tree snapshot.
 use super::*;
 use crate::executor::rehydrate::rehydrate_conversation;
+use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 use crate::utils::common::deserialize_from_value;
 
@@ -21,7 +22,13 @@ async fn attributed_continuation_preserves_resolved_single_agent_history() {
             seed.store = true;
             seed.multi_agent = None;
             if conversation {
-                seed.conversation = Some(exec.conv_handler.create().await.unwrap().conversation_id);
+                seed.conversation = Some(
+                    exec.conv_handler
+                        .create("default_tenant", &ConversationMetadata::new(), &[])
+                        .await
+                        .unwrap()
+                        .conversation_id,
+                );
             }
             let previous = response(seed.clone(), exec.clone()).await;
             let mut continuation = request(stream);

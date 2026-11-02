@@ -1385,22 +1385,7 @@ async fn assert_plaintext_reasoning_replay(stream: bool, conversation: bool, opa
     );
     assert!(!contains_key(&requests[1], "_agentic_item_kind"));
 
-    let lookup = lookup_context(previous_response_id, conversation_id);
-    let history = if conversation {
-        fixture
-            .exec_ctx
-            .conv_handler
-            .rehydrate(&lookup)
-            .await
-            .expect("rehydrate conversation")
-    } else {
-        fixture
-            .exec_ctx
-            .resp_handler
-            .rehydrate(&lookup)
-            .await
-            .expect("rehydrate response")
-    };
+    let history = stored_history(&fixture, previous_response_id, conversation_id).await;
     let stored = persisted_reasoning(&history);
     assert_eq!(stored.content.len(), 2);
     assert_eq!(stored.content[0].text, "");
@@ -1468,22 +1453,7 @@ async fn assert_summary_only_reasoning_not_replayed(stream: bool, conversation: 
         "a reasoning summary must never be promoted into the vLLM-bound copy"
     );
 
-    let lookup = lookup_context(previous_response_id, conversation_id);
-    let history = if conversation {
-        fixture
-            .exec_ctx
-            .conv_handler
-            .rehydrate(&lookup)
-            .await
-            .expect("rehydrate conversation")
-    } else {
-        fixture
-            .exec_ctx
-            .resp_handler
-            .rehydrate(&lookup)
-            .await
-            .expect("rehydrate response")
-    };
+    let history = stored_history(&fixture, previous_response_id, conversation_id).await;
     let stored = persisted_reasoning(&history);
     assert!(stored.content.is_empty());
     assert_eq!(stored.summary[0].text, "public summary");
@@ -1501,6 +1471,23 @@ async fn run_response(
         collect_stream(result).await
     } else {
         unwrap_blocking(result)
+    }
+}
+
+/// Rehydrate the stored history of the conversation, or else of the previous response.
+async fn stored_history(
+    fixture: &TestFixture,
+    previous_response_id: Option<String>,
+    conversation_id: Option<String>,
+) -> Vec<InOutItem> {
+    let conversation = conversation_id.is_some();
+    let lookup = lookup_context(previous_response_id, conversation_id);
+    if conversation {
+        let snapshot = fixture.exec_ctx.conv_handler.rehydrate(&lookup).await;
+        snapshot.expect("rehydrate conversation").items
+    } else {
+        let response = fixture.exec_ctx.resp_handler.rehydrate(&lookup).await;
+        response.expect("rehydrate response").expect("previous response").1
     }
 }
 

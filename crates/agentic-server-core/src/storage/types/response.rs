@@ -61,7 +61,11 @@ impl TryFrom<StorageDbResponse> for ResponseData {
             .map_err(|_| StorageError::InvalidResponseHistory {
                 response_id: row.id.clone(),
             })?;
-        let metadata = decode_metadata(&row)
+        let metadata = row
+            .metadata
+            .as_deref()
+            .map(ResponseMetadata::try_from)
+            .transpose()
             .map_err(|_| StorageError::InvalidResponseMetadata {
                 response_id: row.id.clone(),
             })?
@@ -78,36 +82,38 @@ impl TryFrom<StorageDbResponse> for ResponseData {
     }
 }
 
-/// Decode stored metadata; every reader of stored [`ResponseMetadata`] goes through here.
+/// Decode the `responses.metadata` column; every reader of stored [`ResponseMetadata`] goes through here.
 ///
 /// Snapshots and agent trees stored before typed reasoning can hold reasoning items
 /// in the earlier shape; project those and decode again. Anything the projection
 /// can't read still fails closed.
-pub(in crate::storage) fn decode_metadata(
-    row: &StorageDbResponse,
-) -> Result<Option<ResponseMetadata>, serde_json::Error> {
-    row.metadata_as::<ResponseMetadata>().or_else(|error| {
-        let Some(mut metadata) = row.metadata_as::<Value>()? else {
-            return Err(error);
-        };
-        if let Some(output) = metadata
-            .pointer_mut("/response_snapshot/output")
-            .and_then(Value::as_array_mut)
-        {
-            upgrade_legacy_reasoning(output);
-        }
-        if let Some(agents) = metadata
-            .pointer_mut("/multi_agent_tree/agents")
-            .and_then(Value::as_array_mut)
-        {
-            for agent in agents {
-                if let Some(history) = agent.get_mut("history").and_then(Value::as_array_mut) {
-                    upgrade_legacy_reasoning(history);
+impl TryFrom<&str> for ResponseMetadata {
+    type Error = StorageError;
+
+    fn try_from(json: &str) -> Result<Self, Self::Error> {
+        serde_json::from_str::<Self>(json).or_else(|error| {
+            let Ok(mut metadata) = serde_json::from_str::<Value>(json) else {
+                return Err(StorageError::Serialization(error));
+            };
+            if let Some(output) = metadata
+                .pointer_mut("/response_snapshot/output")
+                .and_then(Value::as_array_mut)
+            {
+                upgrade_legacy_reasoning(output);
+            }
+            if let Some(agents) = metadata
+                .pointer_mut("/multi_agent_tree/agents")
+                .and_then(Value::as_array_mut)
+            {
+                for agent in agents {
+                    if let Some(history) = agent.get_mut("history").and_then(Value::as_array_mut) {
+                        upgrade_legacy_reasoning(history);
+                    }
                 }
             }
-        }
-        ResponseMetadata::deserialize(metadata).map(Some)
-    })
+            Self::deserialize(metadata).map_err(StorageError::Serialization)
+        })
+    }
 }
 
 impl TryFrom<&ResponseMetadata> for String {

@@ -3,6 +3,7 @@
 
 mod support;
 
+use agentic_core::types::conversations::ConversationMetadata;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -832,7 +833,7 @@ async fn supplied_id_validation_matches_recorded_openai_errors() {
                 .await
                 .unwrap_err(),
             handler
-                .create_with_metadata_and_items("tenant", None, request.items)
+                .create("tenant", &ConversationMetadata::new(), &request.items)
                 .await
                 .unwrap_err(),
         ];
@@ -905,10 +906,10 @@ async fn existing_conversation_item_error_matches_openai_recording() {
     let source = &reference.turns[7].response.body.as_ref().unwrap()["data"][2];
     let original = InOutItem::Input(serde_json::from_value(source.clone()).unwrap());
     let conversation = store
-        .create_with_metadata_and_items(Some("default_tenant"), None, vec![original])
+        .create("default_tenant", &ConversationMetadata::new(), &[original])
         .await
         .unwrap();
-    let before = store.rehydrate_snapshot(&conversation.conversation_id).await.unwrap();
+    let before = store.rehydrate(&conversation.conversation_id).await.unwrap();
     let request: CreateItemRequest = serde_json::from_value(reference.turns[17].request.body.clone()).unwrap();
     let error: ExecutorError = store
         .create_items("default_tenant", &conversation.conversation_id, request.items)
@@ -918,7 +919,7 @@ async fn existing_conversation_item_error_matches_openai_recording() {
     assert_eq!(error.http_status().as_u16(), reference.turns[17].response.status_code);
     let body: Value = serde_json::from_slice(&error.into_response_body()).unwrap();
     assert_eq!(&body, reference.turns[17].response.body.as_ref().unwrap());
-    let after = store.rehydrate_snapshot(&conversation.conversation_id).await.unwrap();
+    let after = store.rehydrate(&conversation.conversation_id).await.unwrap();
     assert_eq!(after.items, before.items);
     assert_eq!(after.version, before.version);
 }
@@ -938,9 +939,9 @@ async fn deleted_cursor_error_body_matches_openai_recording() {
         .unwrap()
         .iter()
         .map(|value| InOutItem::Input(serde_json::from_value(value.clone()).unwrap()))
-        .collect();
+        .collect::<Vec<_>>();
     let conversation = store
-        .create_with_metadata_and_items(Some("tenant"), None, items)
+        .create("tenant", &ConversationMetadata::new(), &items)
         .await
         .unwrap();
     let cursor = reference.turns[10].request.query_params["after"].as_str().unwrap();

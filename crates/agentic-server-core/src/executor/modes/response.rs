@@ -43,16 +43,7 @@ impl ResponseHandler {
     /// Returns `ResponseNotFound` for missing IDs, a storage error for unavailable storage, and a conflict
     /// for older records that contain continuation history but no response snapshot.
     pub async fn retrieve(&self, response_id: &str) -> ExecutorResult<ResponsePayload> {
-        let stored = self.store.get(response_id).await?;
-        stored
-            .metadata
-            .response_snapshot
-            .map(|snapshot| *snapshot)
-            .ok_or_else(|| {
-                ExecutorError::Conflict(
-                    "stored response has no retrievable payload; create a new response with store=true".into(),
-                )
-            })
+        response_snapshot(self.store.get(response_id).await?)
     }
 
     /// Deletes a stored response.
@@ -84,10 +75,8 @@ impl ResponseHandler {
             ) {
                 item.validate_client_id(format!("input[{index}].id"))?;
             }
-            if let Some(row) = self.store.get_input_item(id).await? {
-                *item = InOutItem::try_from(&row)?
-                    .into_public(row.public_id().to_owned())
-                    .into_replayed_input();
+            if let Some(stored) = self.store.get_input_item(id).await? {
+                *item = stored.into_replayed_input();
             }
         }
         Ok(())
@@ -99,15 +88,8 @@ impl ResponseHandler {
     /// Returns an error for invalid pagination, missing history, or a legacy response
     /// without a retrievable snapshot.
     pub async fn list_input_items(&self, response_id: &str, page: ItemPage<'_>) -> ExecutorResult<ListItemsResponse> {
-        let snapshot = self.retrieve(response_id).await?;
-        let rows = self.store.get_items(response_id).await?;
-        let mut items = rows
-            .into_iter()
-            .map(|row| {
-                let item = InOutItem::try_from(&row)?;
-                Ok(item.into_public(row.public_id().to_owned()))
-            })
-            .collect::<Result<Vec<_>, StorageError>>()?;
+        let (stored, mut items) = self.store.get_items(response_id).await?;
+        let snapshot = response_snapshot(stored)?;
         // Both persistence paths append public outputs after the turn's inputs.
         // Bound the suffix by this snapshot's output count so an inherited output
         // remains input even when a turn supplies no new items. Session execution
@@ -177,18 +159,27 @@ impl ResponseHandler {
         self.get(ctx).await.map(|_| ())
     }
 
-    /// Loads all history items referenced by the previous response.
+    /// Loads the previous response and its full history in one storage query.
     ///
-    /// Reads `previous_response_id` from `ctx.original_request`. Returns an empty
-    /// vec if there is no previous response.
+    /// Returns `None` when the request does not continue a previous response. The stored response
+    /// snapshot is dropped: continuation needs only the effective settings.
     ///
     /// # Errors
-    /// Returns `ExecutorError` if the store is disabled or the database query fails.
-    pub async fn rehydrate(&self, ctx: &RequestContext) -> ExecutorResult<Vec<InOutItem>> {
+    /// Returns [`StorageError::PreviousResponseNotFound`] for an unknown `previous_response_id`, or
+    /// `ExecutorError` if the store is disabled or the history is invalid.
+    pub async fn rehydrate(&self, ctx: &RequestContext) -> ExecutorResult<Option<(ResponseData, Vec<InOutItem>)>> {
         let Some(prev_id) = ctx.original_request.previous_response_id.as_deref() else {
-            return Ok(vec![]);
+            return Ok(None);
         };
-        self.store.rehydrate(prev_id).await.map_err(ExecutorError::Storage)
+        let (mut stored, history) = self.store.rehydrate(prev_id).await.map_err(|error| {
+            if error.is_not_found() {
+                StorageError::PreviousResponseNotFound { id: prev_id.to_owned() }.into()
+            } else {
+                ExecutorError::Storage(error)
+            }
+        })?;
+        stored.metadata.response_snapshot = None;
+        Ok(Some((stored, history)))
     }
 
     /// Completes response-scoped persistence and optional transient checkpoint retention.
@@ -285,13 +276,7 @@ impl ResponseHandler {
 
         let result = if write_durable {
             self.store
-                .persist_with_conversation_id(
-                    &ctx.response_id,
-                    ctx.conversation_id.as_deref(),
-                    previous_durable_id,
-                    new_items,
-                    &metadata,
-                )
+                .persist(&ctx.response_id, previous_durable_id, new_items, &metadata)
                 .await
         } else {
             Ok(())
@@ -314,6 +299,19 @@ impl ResponseHandler {
             }
         }
     }
+}
+
+/// The terminal payload stored for `GET /v1/responses/{id}`; legacy and history-only records have none.
+fn response_snapshot(stored: ResponseData) -> ExecutorResult<ResponsePayload> {
+    stored
+        .metadata
+        .response_snapshot
+        .map(|snapshot| *snapshot)
+        .ok_or_else(|| {
+            ExecutorError::Conflict(
+                "stored response has no retrievable payload; create a new response with store=true".into(),
+            )
+        })
 }
 
 #[cfg(test)]
@@ -359,10 +357,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_rehydrate_no_prev_id_returns_empty() {
+    async fn test_rehydrate_no_prev_id_returns_none() {
         let result = disabled_handler().rehydrate(&make_ctx(None)).await;
-        assert!(result.is_ok());
-        assert!(result.unwrap().is_empty());
+        assert!(result.unwrap().is_none());
     }
 
     #[tokio::test]

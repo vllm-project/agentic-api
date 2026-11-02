@@ -36,7 +36,10 @@ impl PartialEq for CodeInterpreterCall {
 
 impl Eq for CodeInterpreterCall {}
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+/// Where a code-interpreter call ran. Not part of the public wire; storage records a gateway origin
+/// beside the item so a gateway projection is never replayed upstream.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum CodeInterpreterCallOrigin {
     #[default]
     Upstream,

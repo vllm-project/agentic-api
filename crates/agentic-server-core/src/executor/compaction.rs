@@ -366,7 +366,8 @@ pub async fn compact_response(
     let mut history_calls = if from_history.is_empty() {
         HashMap::new()
     } else {
-        public_calls(exec_ctx.resp_handler.rehydrate(&ctx).await?, &from_history)
+        let history = exec_ctx.resp_handler.rehydrate(&ctx).await?;
+        public_calls(history.map(|(_, items)| items).unwrap_or_default(), &from_history)
     };
     let (compacted, usage, service_tier) = compact_items_with_trigger(
         &ctx.enriched_request,
@@ -1293,7 +1294,7 @@ mod tests {
         let response = compact_response(compact_request(), &exec_ctx, None)
             .await
             .expect("compaction succeeds");
-        let history = response_store
+        let (_, history) = response_store
             .rehydrate(&response.id)
             .await
             .expect("compaction checkpoint can be rehydrated");
@@ -1338,7 +1339,7 @@ mod tests {
         let response = compact_response(request, &exec_ctx, None)
             .await
             .expect("previous response compacts");
-        let history = response_store
+        let (_, history) = response_store
             .rehydrate(&response.id)
             .await
             .expect("compacted continuation rehydrates");

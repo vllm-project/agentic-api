@@ -27,6 +27,11 @@ fn test_inout_item_from_output() {
 }
 
 #[test]
+fn test_into_input_items_omits_unknown_outputs() {
+    assert!(InOutItem::into_input_items(vec![InOutItem::Output(OutputItem::Unknown)]).is_empty());
+}
+
+#[test]
 fn test_into_input_items_converts_output_messages() {
     let mut output = OutputMessage::new("out1", MessageStatus::Completed);
     output.phase = Some(MessagePhase::FinalAnswer);

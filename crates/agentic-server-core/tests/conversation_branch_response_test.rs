@@ -2,6 +2,7 @@
 
 mod support;
 
+use agentic_core::types::conversations::ConversationMetadata;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 
@@ -81,7 +82,7 @@ async fn assert_branch_is_detached(streaming: bool) {
             let conversation_id = fixture
                 .exec_ctx
                 .conv_handler
-                .create_with_metadata_and_items("default_tenant", None, Vec::new())
+                .create("default_tenant", &ConversationMetadata::new(), &[])
                 .await
                 .unwrap()
                 .conversation_id;

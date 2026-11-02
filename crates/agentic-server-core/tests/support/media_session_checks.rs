@@ -100,8 +100,10 @@ async fn combined_media_text_compaction_promotes_and_restores_canonical_image_hi
         "long text must still cause a summary"
     );
     assert!(store.get(&first.id).await.unwrap_err().is_not_found());
-    let durable =
-        serde_json::to_value(InOutItem::into_input_items(store.rehydrate(&second.id).await.unwrap())).unwrap();
+    let durable = serde_json::to_value(InOutItem::into_input_items(
+        store.rehydrate(&second.id).await.unwrap().1,
+    ))
+    .unwrap();
     assert_eq!(retained_image(&durable), &input[0]["content"][1]);
     assert!(!durable.to_string().contains(&old_answer));
     assert_eq!(

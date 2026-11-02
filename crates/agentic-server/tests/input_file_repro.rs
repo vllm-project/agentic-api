@@ -4,6 +4,7 @@
 #[allow(dead_code)]
 mod common;
 
+use agentic_core::types::conversations::ConversationMetadata;
 use std::fmt::Write as _;
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,6 +18,7 @@ use axum::Router;
 use axum::body::Bytes;
 use axum::response::IntoResponse;
 use axum::routing::post;
+use common::persist_turn;
 use futures::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
@@ -193,11 +195,20 @@ impl Fixture {
         let response_store = ResponseStore::new(Arc::clone(&self.pool));
         let reference = if conversation {
             let store = ConversationStore::new(Arc::clone(&self.pool));
-            let data = store.create().await.expect("create conversation");
-            store
-                .persist(&data.conversation_id, response_id, None, vec![placeholder], &metadata)
+            let data = store
+                .create("default_tenant", &ConversationMetadata::new(), &[])
                 .await
-                .expect("persist conversation fixture");
+                .expect("create conversation");
+            persist_turn(
+                &store,
+                &data.conversation_id,
+                response_id,
+                None,
+                vec![placeholder],
+                &metadata,
+            )
+            .await
+            .expect("persist conversation fixture");
             json!({"conversation_id":data.conversation_id})
         } else {
             response_store

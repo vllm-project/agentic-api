@@ -288,7 +288,7 @@ async fn terminal_event_still_follows_persistence_and_checkpoint_publication() {
             .rehydrate(&stored)
             .await
             .unwrap()
-            .is_empty()
+            .is_none_or(|(_, history)| history.is_empty())
     );
     let checkpoint = rehydrate_in_session(followup, &fixture.context, &session)
         .await

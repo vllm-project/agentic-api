@@ -131,7 +131,7 @@ impl Histories {
         for (id, expected) in &self.conversations {
             let actual = conversations.rehydrate(&ids.forward[id]).await.unwrap();
             assert_eq!(
-                history_shape(&stored_values(actual)),
+                history_shape(&stored_values(actual.items)),
                 history_shape(&remap_ids(&Value::Array(expected.clone()), ids)),
                 "{location}: conversation {id}"
             );
@@ -139,7 +139,7 @@ impl Histories {
         for (id, expected) in &self.responses {
             let actual = responses.rehydrate(&ids.forward[id]).await.unwrap();
             assert_eq!(
-                history_shape(&stored_values(actual)),
+                history_shape(&stored_values(actual.1)),
                 history_shape(&remap_ids(&Value::Array(expected.clone()), ids)),
                 "{location}: response snapshot {id}"
             );

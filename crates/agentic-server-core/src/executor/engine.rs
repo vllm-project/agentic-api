@@ -283,18 +283,6 @@ async fn run_blocking(
     Ok(payload)
 }
 
-/// Create a new conversation and return its data.
-///
-/// Exposes the conversation-creation step as a standalone function so callers
-/// (e.g. `agentic-server`, Praxis filters, or tests) can pre-create a
-/// conversation before submitting response turns.
-///
-/// # Errors
-/// Returns [`crate::executor::error::ExecutorError`] if the conversation store is unavailable.
-pub async fn create_conversation(exec_ctx: &ExecutionContext) -> ExecutorResult<crate::ConversationData> {
-    exec_ctx.conv_handler.create().await
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -762,7 +750,7 @@ mod tests {
             panic!("non-streaming trigger request must return a payload");
         };
 
-        let history = response_store
+        let (_, history) = response_store
             .rehydrate(&response.id)
             .await
             .expect("compaction trigger response rehydrates");

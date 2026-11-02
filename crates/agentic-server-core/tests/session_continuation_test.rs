@@ -3,6 +3,7 @@
 //! Set `AGENTIC_SESSION_TEST_POSTGRES_URL` to an isolated PostgreSQL database with
 //! CREATE DATABASE privileges to rerun persistence cases using fresh databases.
 
+use agentic_core::types::conversations::ConversationMetadata;
 use std::collections::VecDeque;
 use std::future::Future;
 use std::num::NonZeroUsize;
@@ -310,7 +311,12 @@ async fn session_explicit_conversation_generated_turns_match_no_session_history(
             let conversations = ConversationStore::new(pool.clone());
             model.exec.conv_handler = ConversationHandler::new(conversations.clone());
             model.exec.resp_handler = ResponseHandler::new(ResponseStore::new(Arc::clone(&pool)));
-            let conversation = model.exec.conv_handler.create().await.unwrap();
+            let conversation = model
+                .exec
+                .conv_handler
+                .create("default_tenant", &ConversationMetadata::new(), &[])
+                .await
+                .unwrap();
             let session = session();
             for input in ["first question", "second question"] {
                 let mut payload = request(None, json!(input));
@@ -341,7 +347,7 @@ async fn session_explicit_conversation_generated_turns_match_no_session_history(
             drop(requests);
             let history = conversations.rehydrate(&conversation.conversation_id).await.unwrap();
             assert_eq!(
-                history.len(),
+                history.items.len(),
                 if store { 4 } else { 0 },
                 "session={use_session}, store={store}"
             );
@@ -369,7 +375,12 @@ async fn explicit_conversation_tool_history(use_session: bool, gateway_tool: boo
     let conversations = ConversationStore::new(Arc::clone(&pool));
     model.exec.conv_handler = ConversationHandler::new(conversations.clone());
     model.exec.resp_handler = ResponseHandler::new(ResponseStore::new(Arc::clone(&pool)));
-    let conversation = model.exec.conv_handler.create().await.unwrap();
+    let conversation = model
+        .exec
+        .conv_handler
+        .create("default_tenant", &ConversationMetadata::new(), &[])
+        .await
+        .unwrap();
     let session = session();
     let next_input = if gateway_tool {
         json!("second question")
@@ -415,7 +426,7 @@ async fn explicit_conversation_tool_history(use_session: bool, gateway_tool: boo
     let mut model_history = requests.last().unwrap()["input"].clone();
     drop(requests);
     let history = conversations.rehydrate(&conversation.conversation_id).await.unwrap();
-    let mut stored_history = serde_json::to_value(InOutItem::into_input_items(history)).unwrap();
+    let mut stored_history = serde_json::to_value(InOutItem::into_input_items(history.items)).unwrap();
     // Independently executed sessions generate different result item IDs. Check
     // persistence within each execution before comparing their semantic history.
     for item in model_history.as_array_mut().unwrap() {
@@ -775,8 +786,10 @@ async fn session_compacted_transient_parent_promotes_only_the_canonical_window()
         Some(serde_json::from_value(json!([{"type":"compaction", "compact_threshold":1}])).unwrap());
     let second = execute_local(&model, &session, payload).await;
     assert!(store.get(&first.id).await.unwrap_err().is_not_found());
-    let durable =
-        serde_json::to_value(InOutItem::into_input_items(store.rehydrate(&second.id).await.unwrap())).unwrap();
+    let durable = serde_json::to_value(InOutItem::into_input_items(
+        store.rehydrate(&second.id).await.unwrap().1,
+    ))
+    .unwrap();
     assert_eq!(durable.as_array().unwrap().len(), 4);
     assert!(!durable.to_string().contains("obsolete assistant detail"));
     let fresh = ResponseSession::new(NonZeroUsize::new(4).unwrap(), NonZeroUsize::new(100_000).unwrap());
@@ -902,7 +915,7 @@ async fn session_tool_round_compaction_does_not_restore_superseded_output() {
         assert_eq!(history.as_array().unwrap().len(), 4);
         assert_eq!(history[1]["type"], "compaction");
         if store_durable {
-            let durable = InOutItem::into_input_items(store.rehydrate(&result.id).await.unwrap());
+            let durable = InOutItem::into_input_items(store.rehydrate(&result.id).await.unwrap().1);
             let durable = serde_json::to_value(durable).unwrap();
             assert_eq!(durable.as_array().unwrap().len(), 3);
             assert!(!durable.to_string().contains(&obsolete));
@@ -1354,7 +1367,7 @@ async fn session_tool_round_preserves_reasoning_message_call_output_order() {
         assert!(history[2].to_string().contains("intermediate answer"));
         assert!(history[5].to_string().contains("final answer"));
         if store_durable {
-            let durable = InOutItem::into_input_items(store.rehydrate(&result.id).await.unwrap());
+            let durable = InOutItem::into_input_items(store.rehydrate(&result.id).await.unwrap().1);
             let durable = serde_json::to_value(durable).unwrap();
             assert_eq!(durable, Value::Array(history.as_array().unwrap()[..6].to_vec()));
         }
@@ -1491,7 +1504,7 @@ async fn session_compacted_durable_parent_restores_within_the_canonical_budget()
             Some(serde_json::from_value(json!([{"type":"compaction", "compact_threshold":1}])).unwrap());
         let compacted = execute_local(&model, &original_session, payload).await;
         assert_eq!(
-            store.rehydrate(&compacted.id).await.unwrap().len(),
+            store.rehydrate(&compacted.id).await.unwrap().1.len(),
             6,
             "durable history still references its pre-compaction parent rows"
         );

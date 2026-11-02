@@ -599,6 +599,7 @@ mod tests {
         MAX_CONCURRENT_MATERIALIZATIONS, PlannedResult,
     };
     use crate::executor::response_budget::ExecutorResponseBudget;
+    use crate::storage::{ResponseMetadata, ResponseStore, create_pool_with_schema};
     use crate::tool::ToolDeclaration;
     use crate::tool::{
         GatewayBinding, GatewayExecutor, GatewayExecutors, GatewayToolEventPlan, ToolError, ToolHandler, ToolOutput,
@@ -1815,20 +1816,22 @@ mod tests {
 
         // Emitting SSE frames must not turn the typed gateway projection into
         // an upstream-native call when the response is stored for continuation.
-        let stored = String::try_from(&InOutItem::Output(final_item)).expect("store streamed gateway projection");
-        let item = crate::storage::models::item::Item {
-            id: "ci_1".to_owned(),
-            reference_id: None,
-            public_id: None,
-            data: stored,
-            created_at: 0,
-            conversation_id: None,
-            seq: None,
-            tenant_id: None,
-        };
-        let history = vec![item.as_inout().expect("rehydrate streamed projection")];
+        let store = ResponseStore::new(create_pool_with_schema(Some("sqlite://?mode=memory")).await.unwrap());
+        store
+            .persist(
+                "resp_projection",
+                None,
+                vec![InOutItem::Output(final_item)],
+                &ResponseMetadata::default(),
+            )
+            .await
+            .expect("store streamed gateway projection");
+        let (_, history) = store
+            .rehydrate("resp_projection")
+            .await
+            .expect("rehydrate streamed projection");
+        let public = serde_json::to_value(&history[0]).expect("serialize public item");
         assert!(InOutItem::into_input_items(history).is_empty());
-        let public = serde_json::to_value(item.as_output().expect("public output")).expect("serialize public item");
         assert!(public.get("_agentic_code_interpreter_origin").is_none());
     }
 

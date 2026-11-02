@@ -280,8 +280,9 @@ async fn validate_output_call_ids(
         let items: Vec<_> = model_items(projected).collect();
         return validate_history_call_ids(items.iter().map(|item| item.call_id()), &call_ids);
     }
-    let history = resp_handler.rehydrate(ctx).await?;
-    validate_history_call_ids(history.iter().map(InOutItem::call_id), &call_ids)?;
+    if let Some((_, history)) = resp_handler.rehydrate(ctx).await? {
+        validate_history_call_ids(history.iter().map(InOutItem::call_id), &call_ids)?;
+    }
     for (input_index, item) in ctx.new_input_items.iter().enumerate() {
         if let Some((output_index, item_type)) = item.call_id().and_then(|call_id| call_ids.get(call_id)) {
             return Err(ExecutorError::InvalidRequest(format!(
