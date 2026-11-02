@@ -26,7 +26,8 @@ impl InputItem {
             | Self::Reasoning(_)
             | Self::McpListTools(_)
             | Self::Compaction(_)
-            | Self::CompactionTrigger => None,
+            | Self::CompactionTrigger
+            | Self::ConfigurationUpdate(_) => None,
         }
     }
 
@@ -54,7 +55,8 @@ impl InputItem {
             | Self::Reasoning(_)
             | Self::McpListTools(_)
             | Self::Compaction(_)
-            | Self::CompactionTrigger => None,
+            | Self::CompactionTrigger
+            | Self::ConfigurationUpdate(_) => None,
         }
     }
 
@@ -79,6 +81,7 @@ impl InputItem {
             | Self::McpListTools(_)
             | Self::Compaction(_)
             | Self::CompactionTrigger
+            | Self::ConfigurationUpdate(_)
             | Self::WebSearchCall(_)
             | Self::McpCall(_) => false,
         }

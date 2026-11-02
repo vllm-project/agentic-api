@@ -273,6 +273,7 @@ fn scan_calls(items: &[InputItem]) -> ExecutorResult<CallLedger> {
             | InputItem::McpListTools(_)
             | InputItem::Compaction(_)
             | InputItem::CompactionTrigger
+            | InputItem::ConfigurationUpdate(_)
             | InputItem::MultiAgentCall(_)
             | InputItem::MultiAgentCallOutput(_)
             | InputItem::AgentMessage(_)

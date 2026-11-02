@@ -46,6 +46,7 @@ impl InputItem {
             Self::McpCall(item) => Some(&item.id),
             Self::CustomToolCallOutput(item) => item.id.as_deref(),
             Self::FunctionCallOutput(item) => item.id.as_deref(),
+            Self::ConfigurationUpdate(item) => item.id.as_deref(),
             Self::CompactionTrigger => None,
         }
     }
@@ -72,7 +73,7 @@ impl InputItem {
             Self::McpCall(_) => Some("mcp_"),
             Self::ShellCallOutput(_) => Some("sho_"),
             Self::CustomToolCallOutput(_) => Some("ctco_"),
-            Self::CompactionTrigger => None,
+            Self::CompactionTrigger | Self::ConfigurationUpdate(_) => None,
         }
     }
 }
@@ -158,6 +159,7 @@ impl InOutItem {
                 InputItem::WebSearchCall(item) => item.id = id,
                 InputItem::McpCall(item) => item.id = id,
                 InputItem::FunctionCallOutput(item) => item.id = Some(id),
+                InputItem::ConfigurationUpdate(item) => item.id = Some(id),
                 InputItem::CompactionTrigger => {}
             },
             Self::Output(item) => match item {

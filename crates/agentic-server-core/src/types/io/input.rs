@@ -1,4 +1,5 @@
 mod calls;
+mod configuration_update;
 mod content;
 mod conversions;
 mod file_text;
@@ -22,6 +23,7 @@ pub(crate) use window::{
     async_records, latest_compaction_window, model_items, open_async_call_ids, retain_window, retained_async_call,
 };
 
+pub use configuration_update::{ConfigurationUpdateItem, ConfigurationUpdateReasoning};
 pub use content::{InputContent, InputFileContent, InputImageContent, InputTextContent, RefusalContent};
 
 use std::borrow::Cow;
@@ -317,6 +319,10 @@ pub enum InputItem {
     /// Carries no payload; it is never forwarded to the upstream model.
     #[serde(rename = "compaction_trigger")]
     CompactionTrigger,
+    /// A reasoning-effort change between responses. It keeps its position in history and upstream input, and the
+    /// request-level `reasoning.effort` stays as sent.
+    #[serde(rename = "configuration_update")]
+    ConfigurationUpdate(ConfigurationUpdateItem),
     /// Messages allow an omitted discriminator, but reject any type other than `message`.
     #[serde(untagged)]
     Message(InputMessage),

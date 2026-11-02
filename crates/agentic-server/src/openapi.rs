@@ -66,6 +66,8 @@ use utoipa::OpenApi;
         agentic_core::types::io::ToolCallOutput,
         agentic_core::types::io::ToolOutputContent,
         agentic_core::types::io::CompactionItem,
+        agentic_core::types::io::ConfigurationUpdateItem,
+        agentic_core::types::io::ConfigurationUpdateReasoning,
         agentic_core::types::io::CustomToolCallOutputMessage,
         agentic_core::types::io::OutputItem,
         agentic_core::types::io::MultiAgentConfig,
@@ -355,6 +357,15 @@ mod tests {
             ),
             (serde_json::json!({"type":"web_search_call", "id":"ws_1"}), false),
             (serde_json::json!({"type":"mcp_call", "id":"mcp_1"}), false),
+            (serde_json::json!({"type":"configuration_update"}), false),
+            (
+                serde_json::json!({"type":"configuration_update", "reasoning":{"effort":"high", "summary":"auto"}}),
+                false,
+            ),
+            (
+                serde_json::json!({"type":"configuration_update", "reasoning":{"effort":"high"}, "text":{"format":{"type":"text"}}}),
+                false,
+            ),
             (
                 serde_json::json!({"type":"function_call", "call_id":"call_1", "name":"weather", "arguments":"{}"}),
                 true,
@@ -365,6 +376,10 @@ mod tests {
             ),
             (
                 serde_json::json!({"type":"mcp_call", "id":"mcp_1", "server_label":"weather", "name":"forecast", "arguments":"{}", "output":"sunny"}),
+                true,
+            ),
+            (
+                serde_json::json!({"type":"configuration_update", "reasoning":{"effort":"high"}}),
                 true,
             ),
         ] {
@@ -714,6 +729,8 @@ mod tests {
             serde_json::json!({"type": "compaction_trigger"}),
             serde_json::json!({"type": "web_search_call", "id": "ws1", "status": "completed", "action": {"type": "search", "query": "q"}}),
             serde_json::json!({"type": "mcp_call", "id": "mc1", "server_label": "s", "name": "n", "arguments": "{}"}),
+            serde_json::json!({"type": "configuration_update", "reasoning": {"effort": "high"}}),
+            serde_json::json!({"type": "configuration_update", "id": "item_1", "reasoning": {"effort": "low"}}),
         ];
         for fixture in &input_items {
             validate("InputItem", fixture);
@@ -1055,6 +1072,12 @@ mod tests {
             &serde_json::json!({
                 "encrypted_content": "enc", "id": null
             }),
+        );
+
+        // -- ConfigurationUpdateItem: id --
+        check(
+            "ConfigurationUpdateItem",
+            &serde_json::json!({"id": null, "reasoning": {"effort": "high"}}),
         );
 
         // -- IncompleteDetails: reason --

@@ -106,7 +106,8 @@ impl InputItem {
             Self::FunctionCallOutput(_)
             | Self::CustomToolCallOutput(_)
             | Self::ShellCallOutput(_)
-            | Self::CompactionTrigger => None,
+            | Self::CompactionTrigger
+            | Self::ConfigurationUpdate(_) => None,
         }
     }
 
@@ -131,7 +132,8 @@ impl InputItem {
             Self::FunctionCallOutput(_)
             | Self::CustomToolCallOutput(_)
             | Self::ShellCallOutput(_)
-            | Self::CompactionTrigger => None,
+            | Self::CompactionTrigger
+            | Self::ConfigurationUpdate(_) => None,
         }
     }
 }
