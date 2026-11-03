@@ -4,10 +4,11 @@
 //! mapping to public `web_search_call` output items. [`provider`] defines the
 //! private provider contract, normalized result types, and the response helpers every provider shares. [`args`]
 //! parses the model's arguments; provider modules ([`you`], [`brave`], [`tavily`], [`searxng`],
-//! [`serply`]) shape requests and map responses.
+//! [`serply`], [`keenable`]) shape requests and map responses.
 
 pub(crate) mod args;
 pub(crate) mod brave;
+pub(crate) mod keenable;
 pub(crate) mod output;
 pub(crate) mod provider;
 pub(crate) mod searxng;
@@ -29,6 +30,7 @@ use tokio::sync::Semaphore;
 
 use self::args::{MAX_WEB_SEARCH_QUERIES, WebSearchArguments};
 use self::brave::BraveSearchProvider;
+use self::keenable::KeenableSearchProvider;
 use self::output::{WebSearchResultSections, WebSearchToolOutput};
 use self::provider::{
     ApiKey, WebSearchProvider, WebSearchProviderMetadata, WebSearchProviderResponse, WebSearchResult, clean_base_url,
@@ -265,6 +267,15 @@ impl WebSearchHandler {
                 config
                     .max_concurrent_queries
                     .or(WebSearchProviderKind::Serply.default_max_concurrent_queries())
+                    .unwrap_or(max_concurrent_gateway_calls),
+            )),
+            WebSearchProviderKind::Keenable => Arc::new(KeenableSearchProvider::from_values(
+                client,
+                config.api_key.clone(),
+                config.base_url.clone(),
+                config
+                    .max_concurrent_queries
+                    .or(WebSearchProviderKind::Keenable.default_max_concurrent_queries())
                     .unwrap_or(max_concurrent_gateway_calls),
             )),
         };
