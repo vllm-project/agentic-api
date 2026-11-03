@@ -14,6 +14,9 @@ use crate::types::file_search::{
 
 mod blob_cleanup;
 mod list;
+mod sqlite_publication;
+
+pub(crate) use sqlite_publication::publish_attachment_sqlite;
 
 // The bound covers serialized 768-dimensional embeddings as well as chunk text.
 pub(crate) const MAX_CORPUS_BYTES: i64 = 256 * 1024 * 1024;
@@ -398,7 +401,7 @@ impl FileSearchStorage {
     }
 }
 
-fn validate_capacity(bytes: i64, chunks: i64) -> Result<(), FileSearchError> {
+pub(crate) fn validate_capacity(bytes: i64, chunks: i64) -> Result<(), FileSearchError> {
     if bytes > MAX_CORPUS_BYTES || chunks > MAX_CORPUS_CHUNKS {
         return Err(FileSearchError::InvalidRequest(
             "Vector store exceeds 256 MiB of serialized chunks or 10000 chunks; reduce file size or use another vector store".into(),
@@ -407,7 +410,7 @@ fn validate_capacity(bytes: i64, chunks: i64) -> Result<(), FileSearchError> {
     Ok(())
 }
 
-async fn serialize_chunks(chunks: &[StoredChunk]) -> Result<(Vec<String>, i64), FileSearchError> {
+pub(crate) async fn serialize_chunks(chunks: &[StoredChunk]) -> Result<(Vec<String>, i64), FileSearchError> {
     let mut encoded = Vec::with_capacity(chunks.len());
     let mut bytes = 0i64;
     for (index, chunk) in chunks.iter().enumerate() {

@@ -9,9 +9,11 @@ use super::{
 use crate::tool::file_search::ranking;
 use crate::{
     storage::file_search::{MAX_CORPUS_BYTES, MAX_CORPUS_CHUNKS, StoredChunk},
-    types::file_search::{FileSearchError, SearchRequest, SearchResult},
+    types::file_search::{FileSearchError, SearchMode, SearchRequest, SearchResult},
 };
 use sqlx::SqliteConnection;
+
+const SQLITE_VEC_MAX_K: i64 = 4096;
 
 impl SqliteVecRepository {
     pub(super) async fn semantic_search(
@@ -50,28 +52,61 @@ impl SqliteVecRepository {
                 "Semantic search requires one embedding per query".into(),
             ));
         }
-        let mut matches = Vec::new();
-        let mut tx = self.index.begin().await?;
         for vector in query_embeddings {
             if expected_dimensions.is_some_and(|dimensions| dimensions != vector.len()) {
                 return Err(FileSearchError::ProviderProtocol);
+            }
+            normalized_vector(vector)?;
+        }
+        let mut matches = Vec::new();
+        let mut tx = self.index.begin().await?;
+        let mut stores = Vec::with_capacity(store_ids.len());
+        for store_id in store_ids {
+            let table = table_name(store_id)?;
+            let (published_rows, index_rows) = validate_index_rows(&mut tx, store_id, &table).await?;
+            if index_rows > 0 {
+                stores.push((store_id, table, published_rows, index_rows));
+            }
+        }
+        let mut use_exact = request.filters.is_some();
+        'queries: for vector in query_embeddings {
+            if use_exact {
+                break;
             }
             if vector.iter().all(|value| *value == 0.0) {
                 continue;
             }
             let encoded = normalized_vector(vector)?;
-            for store_id in store_ids {
-                let table = table_name(store_id)?;
-                let (published_rows, index_rows) = validate_index_rows(&mut tx, store_id, &table).await?;
-                if index_rows == 0 {
-                    continue;
+            for (store_id, table, published_rows, index_rows) in &stores {
+                if let Some(candidates) = fetch_candidates(
+                    &mut tx,
+                    table,
+                    store_id,
+                    &encoded,
+                    *index_rows,
+                    *published_rows,
+                    request,
+                )
+                .await?
+                {
+                    matches.extend(candidates);
+                } else {
+                    use_exact = true;
+                    break 'queries;
                 }
-                matches.extend(
-                    fetch_candidates(&mut tx, &table, store_id, &encoded, index_rows, published_rows, request).await?,
-                );
             }
         }
         tx.commit().await?;
+        if use_exact {
+            let chunks = self.metadata.chunks(store_ids).await?;
+            return Ok(ranking::rank(
+                chunks,
+                queries,
+                query_embeddings,
+                SearchMode::Semantic,
+                request,
+            ));
+        }
         Ok(ranking::rank_semantic_candidates(matches, request))
     }
 }
@@ -84,16 +119,11 @@ async fn fetch_candidates(
     index_rows: i64,
     published_rows: i64,
     request: &SearchRequest,
-) -> Result<Vec<(StoredChunk, f64)>, FileSearchError> {
+) -> Result<Option<Vec<(StoredChunk, f64)>>, FileSearchError> {
     let target = request.max_num_results.unwrap_or(10).max(1);
-    let filtered = request.filters.is_some();
-    let mut k = if filtered {
-        index_rows
-    } else {
-        i64::try_from(target.saturating_add(1))
-            .unwrap_or(i64::MAX)
-            .min(index_rows)
-    };
+    let mut k = i64::try_from(target.saturating_add(1))
+        .unwrap_or(i64::MAX)
+        .min(index_rows);
     let sql = format!(
         "SELECT chunks.data, nearest.distance FROM \
          (SELECT rowid, distance FROM {table} WHERE embedding MATCH $1 AND k = $2) AS nearest \
@@ -103,14 +133,16 @@ async fn fetch_candidates(
          WHERE indexed.store_id = $3 ORDER BY nearest.distance"
     );
     loop {
+        if k > SQLITE_VEC_MAX_K {
+            return Ok(None);
+        }
         let rows: Vec<(String, Option<f64>)> = sqlx::query_as(&sql)
             .bind(encoded)
             .bind(k)
             .bind(store_id)
             .fetch_all(&mut *connection)
             .await?;
-        let expected_rows = if filtered { published_rows } else { k };
-        if i64::try_from(rows.len()).unwrap_or(i64::MAX) != expected_rows {
+        if k == index_rows && i64::try_from(rows.len()).unwrap_or(i64::MAX) != published_rows {
             return Err(FileSearchError::Unavailable(
                 "SQLite vector index is incomplete; recreate this vector store".into(),
             ));
@@ -133,11 +165,11 @@ async fn fetch_candidates(
                 candidates.push((chunk, score));
             }
         }
-        if filtered || k == index_rows || last_score <= 0.0 {
-            return Ok(candidates);
+        if k == index_rows {
+            return Ok(Some(candidates));
         }
         if unique_scores.get(target - 1).is_some_and(|score| *score > last_score) {
-            return Ok(candidates);
+            return Ok(Some(candidates));
         }
         k = k.saturating_mul(2).min(index_rows);
     }
@@ -165,6 +197,9 @@ async fn validate_index_rows(
         .bind(store_id)
         .fetch_one(&mut *connection)
         .await?;
+    if published_rows == 0 && index_rows == 0 {
+        return Ok((0, 0));
+    }
     let vector_rows: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}"))
         .fetch_one(&mut *connection)
         .await?;

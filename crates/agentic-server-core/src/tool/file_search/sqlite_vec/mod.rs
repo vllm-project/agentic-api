@@ -19,6 +19,7 @@ use crate::{
         DbPool,
         file_search::{
             Collection, FilePublicationFailure, FileSearchStorage, PreparedAttachment, StoredVectorStore, UploadedFile,
+            publish_attachment_sqlite, serialize_chunks, validate_capacity,
         },
     },
     types::file_search::{
@@ -135,17 +136,35 @@ impl FileSearchRepository for SqliteVecRepository {
     ) -> BoxFuture<'a, Result<(), FileSearchError>> {
         Box::pin(async move {
             let _guard = self.operations.lock().await;
-            self.stage(&object.id, attachments).await?;
-            if let Err(error) = self
-                .metadata
-                .create_store(object, embedding_identity, attachments)
-                .await
-            {
-                if let Err(cleanup) = self.remove_index_rows(Collection::Stores, &object.id, None).await {
-                    tracing::warn!(%cleanup, store_id = %object.id, "sqlite-vec staging cleanup failed");
-                }
-                return Err(error);
+            let mut encoded = Vec::with_capacity(attachments.len());
+            let mut total_bytes = 0i64;
+            for attachment in attachments {
+                let chunks = serialize_chunks(&attachment.chunks).await?;
+                total_bytes = total_bytes.saturating_add(chunks.1);
+                validate_capacity(total_bytes, 0)?;
+                encoded.push(chunks);
             }
+            let mut tx = self.index.begin().await?;
+            sqlx::query("INSERT INTO file_search_stores (id, created_at, data, embedding_identity, embedding_dimensions) VALUES ($1, $2, $3, $4, 0)")
+                .bind(&object.id)
+                .bind(object.created_at)
+                .bind(serde_json::to_string(object)?)
+                .bind(embedding_identity)
+                .execute(&mut *tx)
+                .await?;
+            self.stage(&mut tx, &object.id, attachments).await?;
+            for (attachment, (chunks, storage_bytes)) in attachments.iter().zip(encoded) {
+                publish_attachment_sqlite(
+                    &mut tx,
+                    &object.id,
+                    embedding_identity,
+                    attachment,
+                    &chunks,
+                    storage_bytes,
+                )
+                .await?;
+            }
+            tx.commit().await?;
             Ok(())
         })
     }
@@ -158,6 +177,7 @@ impl FileSearchRepository for SqliteVecRepository {
     ) -> BoxFuture<'a, Result<(), FileSearchError>> {
         Box::pin(async move {
             let _guard = self.operations.lock().await;
+            let (chunks, storage_bytes) = serialize_chunks(&attachment.chunks).await?;
             let store = self.metadata.store(store_id).await?;
             if store.embedding_identity != embedding_identity
                 || (store.embedding_dimensions != 0 && store.embedding_dimensions != attachment.dimensions)
@@ -176,16 +196,18 @@ impl FileSearchRepository for SqliteVecRepository {
                     "File is already attached to this vector store".into(),
                 ));
             }
-            self.stage(store_id, std::slice::from_ref(attachment)).await?;
-            if let Err(error) = self.metadata.attach(store_id, embedding_identity, attachment).await {
-                if let Err(cleanup) = self
-                    .remove_index_rows(Collection::Attachments, &attachment.object.id, Some(store_id))
-                    .await
-                {
-                    tracing::warn!(%cleanup, %store_id, file_id = %attachment.object.id, "sqlite-vec staging cleanup failed");
-                }
-                return Err(error);
-            }
+            let mut tx = self.index.begin().await?;
+            self.stage(&mut tx, store_id, std::slice::from_ref(attachment)).await?;
+            publish_attachment_sqlite(
+                &mut tx,
+                store_id,
+                embedding_identity,
+                attachment,
+                &chunks,
+                storage_bytes,
+            )
+            .await?;
+            tx.commit().await?;
             Ok(())
         })
     }

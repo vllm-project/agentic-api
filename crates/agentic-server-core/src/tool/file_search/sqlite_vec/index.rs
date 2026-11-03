@@ -11,6 +11,7 @@ use crate::{
 impl SqliteVecRepository {
     pub(super) async fn stage(
         &self,
+        connection: &mut sqlx::SqliteConnection,
         store_id: &str,
         attachments: &[PreparedAttachment],
     ) -> Result<(), FileSearchError> {
@@ -32,11 +33,10 @@ impl SqliteVecRepository {
             ));
         }
         let table = table_name(store_id)?;
-        let mut tx = self.index.begin().await?;
         sqlx::query(&format!(
             "CREATE VIRTUAL TABLE IF NOT EXISTS {table} USING vec0(embedding float[{dimensions}] distance_metric=cosine)"
         ))
-        .execute(&mut *tx)
+        .execute(&mut *connection)
         .await?;
         for attachment in attachments {
             for chunk in &attachment.chunks {
@@ -67,21 +67,20 @@ impl SqliteVecRepository {
                 .bind(&attachment.object.id)
                 .bind(chunk_index)
                 .bind(chrono::Utc::now().timestamp())
-                .fetch_optional(&mut *tx)
+                .fetch_optional(&mut *connection)
                 .await?
                 .ok_or_else(|| FileSearchError::Conflict("File is already indexed in this vector store".into()))?;
                 sqlx::query(&format!("DELETE FROM {table} WHERE rowid = $1"))
                     .bind(row_id)
-                    .execute(&mut *tx)
+                    .execute(&mut *connection)
                     .await?;
                 sqlx::query(&format!("INSERT INTO {table} (rowid, embedding) VALUES ($1, $2)"))
                     .bind(row_id)
                     .bind(encoded)
-                    .execute(&mut *tx)
+                    .execute(&mut *connection)
                     .await?;
             }
         }
-        tx.commit().await?;
         Ok(())
     }
 
@@ -92,25 +91,45 @@ impl SqliteVecRepository {
         store_id: Option<&str>,
     ) -> Result<(), FileSearchError> {
         let mut tx = self.index.begin().await?;
+        // Reserve SQLite's writer lock before reading candidates. A concurrent
+        // publication cannot make an orphan live between selection and cleanup.
+        sqlx::query("UPDATE file_search_vec_map SET created_at = created_at WHERE id = -1")
+            .execute(&mut *tx)
+            .await?;
         let rows: Vec<(i64, String)> = match collection {
             Collection::Files => {
-                sqlx::query_as("SELECT id, store_id FROM file_search_vec_map WHERE file_id = $1")
-                    .bind(id)
-                    .fetch_all(&mut *tx)
-                    .await?
+                sqlx::query_as(
+                    "SELECT indexed.id, indexed.store_id FROM file_search_vec_map AS indexed \
+                     WHERE indexed.file_id = $1 AND NOT EXISTS \
+                     (SELECT 1 FROM file_search_chunks AS chunks WHERE chunks.store_id = indexed.store_id \
+                       AND chunks.file_id = indexed.file_id AND chunks.chunk_index = indexed.chunk_index)",
+                )
+                .bind(id)
+                .fetch_all(&mut *tx)
+                .await?
             }
             Collection::Stores => {
-                sqlx::query_as("SELECT id, store_id FROM file_search_vec_map WHERE store_id = $1")
-                    .bind(id)
-                    .fetch_all(&mut *tx)
-                    .await?
+                sqlx::query_as(
+                    "SELECT indexed.id, indexed.store_id FROM file_search_vec_map AS indexed \
+                     WHERE indexed.store_id = $1 AND NOT EXISTS \
+                     (SELECT 1 FROM file_search_chunks AS chunks WHERE chunks.store_id = indexed.store_id \
+                       AND chunks.file_id = indexed.file_id AND chunks.chunk_index = indexed.chunk_index)",
+                )
+                .bind(id)
+                .fetch_all(&mut *tx)
+                .await?
             }
             Collection::Attachments => {
-                sqlx::query_as("SELECT id, store_id FROM file_search_vec_map WHERE file_id = $1 AND store_id = $2")
-                    .bind(id)
-                    .bind(store_id.ok_or_else(|| FileSearchError::InvalidRequest("Missing vector store ID".into()))?)
-                    .fetch_all(&mut *tx)
-                    .await?
+                sqlx::query_as(
+                    "SELECT indexed.id, indexed.store_id FROM file_search_vec_map AS indexed \
+                     WHERE indexed.file_id = $1 AND indexed.store_id = $2 AND NOT EXISTS \
+                     (SELECT 1 FROM file_search_chunks AS chunks WHERE chunks.store_id = indexed.store_id \
+                       AND chunks.file_id = indexed.file_id AND chunks.chunk_index = indexed.chunk_index)",
+                )
+                .bind(id)
+                .bind(store_id.ok_or_else(|| FileSearchError::InvalidRequest("Missing vector store ID".into()))?)
+                .fetch_all(&mut *tx)
+                .await?
             }
         };
         let mut tables = HashMap::new();
@@ -139,9 +158,15 @@ impl SqliteVecRepository {
                 .await?;
         }
         if matches!(collection, Collection::Stores) {
-            sqlx::query(&format!("DROP TABLE IF EXISTS {}", table_name(id)?))
-                .execute(&mut *tx)
+            let live: Option<i64> = sqlx::query_scalar("SELECT 1 FROM file_search_stores WHERE id = $1")
+                .bind(id)
+                .fetch_optional(&mut *tx)
                 .await?;
+            if live.is_none() {
+                sqlx::query(&format!("DROP TABLE IF EXISTS {}", table_name(id)?))
+                    .execute(&mut *tx)
+                    .await?;
+            }
         }
         tx.commit().await?;
         Ok(())
@@ -151,6 +176,10 @@ impl SqliteVecRepository {
         // A process can stop after index staging and before metadata commits.
         // Ignore recent rows so another replica's in-flight publication is safe.
         let cutoff = chrono::Utc::now().timestamp() - 24 * 60 * 60;
+        let mut tx = self.index.begin().await?;
+        sqlx::query("UPDATE file_search_vec_map SET created_at = created_at WHERE id = -1")
+            .execute(&mut *tx)
+            .await?;
         let rows: Vec<(i64, String)> = sqlx::query_as(
             "SELECT indexed.id, indexed.store_id FROM file_search_vec_map AS indexed \
              LEFT JOIN file_search_chunks AS chunks ON chunks.store_id = indexed.store_id \
@@ -158,9 +187,8 @@ impl SqliteVecRepository {
              WHERE chunks.store_id IS NULL AND indexed.created_at < $1",
         )
         .bind(cutoff)
-        .fetch_all(&self.index)
+        .fetch_all(&mut *tx)
         .await?;
-        let mut tx = self.index.begin().await?;
         for (row_id, store_id) in rows {
             let table = table_name(&store_id)?;
             let exists: Option<String> =

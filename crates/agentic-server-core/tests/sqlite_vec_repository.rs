@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
+use std::{collections::BTreeMap, path::PathBuf, str::FromStr, sync::Arc};
 
 use agentic_core::{
     storage::create_pool_with_schema,
@@ -10,6 +10,49 @@ use agentic_core::{
     },
 };
 use tokio_util::sync::CancellationToken;
+
+fn test_file() -> FileObject {
+    FileObject {
+        id: format!("file_{}", uuid::Uuid::now_v7()),
+        object: "file".into(),
+        bytes: 10,
+        created_at: 1,
+        filename: "search.txt".into(),
+        purpose: "assistants".into(),
+        status: "processed".into(),
+    }
+}
+
+fn test_store() -> VectorStoreObject {
+    VectorStoreObject {
+        id: format!("vs_{}", uuid::Uuid::now_v7()),
+        object: "vector_store".into(),
+        created_at: 1,
+        name: "search".into(),
+        usage_bytes: 0,
+        file_counts: FileCounts::default(),
+        status: "completed".into(),
+        metadata: BTreeMap::default(),
+    }
+}
+
+fn test_attachment(file: &FileObject, store: &VectorStoreObject, chunks: Vec<StoredChunk>) -> PreparedAttachment {
+    PreparedAttachment {
+        object: VectorStoreFileObject {
+            id: file.id.clone(),
+            object: "vector_store.file".into(),
+            created_at: 1,
+            vector_store_id: store.id.clone(),
+            status: "completed".into(),
+            usage_bytes: file.bytes,
+            attributes: BTreeMap::default(),
+            chunking_strategy: ChunkingStrategy::Auto,
+            last_error: None,
+        },
+        chunks,
+        dimensions: 2,
+    }
+}
 
 #[tokio::test]
 #[ignore = "requires SQLITE_VEC_EXTENSION_PATH pointing to a trusted sqlite-vec loadable extension"]
@@ -240,4 +283,195 @@ async fn sqlite_vec_indexes_published_chunks_and_excludes_deleted_rows() {
         .unwrap();
     assert!(results.is_empty());
     assert!(matches!(reopened.attachment(&store.id, &file.id).await, Ok(None)));
+}
+
+#[tokio::test]
+#[ignore = "requires SQLITE_VEC_EXTENSION_PATH pointing to a trusted sqlite-vec loadable extension"]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one integration scenario covers concurrent publication, orphan visibility, and empty stores"
+)]
+async fn sqlite_vec_fences_concurrent_publication_and_skips_unpublished_rows() {
+    let path = PathBuf::from(std::env::var_os("SQLITE_VEC_EXTENSION_PATH").expect("set SQLITE_VEC_EXTENSION_PATH"));
+    let directory = tempfile::tempdir().unwrap();
+    let url = format!("sqlite://{}?mode=rwc", directory.path().join("concurrent.db").display());
+    let pool = create_pool_with_schema(Some(&url)).await.unwrap();
+    let first = SqliteVecRepository::open(Arc::clone(&pool), &path).await.unwrap();
+    let second = SqliteVecRepository::open(Arc::clone(&pool), &path).await.unwrap();
+    let file = test_file();
+    first
+        .stage_blob_cleanup(&file.id, "test-upload", i64::MAX)
+        .await
+        .unwrap();
+    first
+        .upload_file_metadata(&file, "text/plain", "test-upload", &CancellationToken::new())
+        .await
+        .unwrap();
+    let store = test_store();
+    let empty = test_store();
+    first.create_store(&store, "model", &[]).await.unwrap();
+    first.create_store(&empty, "model", &[]).await.unwrap();
+    let attachment = test_attachment(
+        &file,
+        &store,
+        vec![StoredChunk {
+            file_id: file.id.clone(),
+            filename: file.filename.clone(),
+            chunk_index: 0,
+            text: "published result".into(),
+            embedding: Some(vec![1.0, 0.0]),
+            attributes: BTreeMap::default(),
+        }],
+    );
+    let (left, right) = tokio::join!(
+        first.attach(&store.id, "model", &attachment),
+        second.attach(&store.id, "model", &attachment)
+    );
+    assert_eq!(usize::from(left.is_ok()) + usize::from(right.is_ok()), 1);
+    assert!(matches!(
+        left.as_ref().err().or(right.as_ref().err()),
+        Some(FileSearchError::Conflict(_))
+    ));
+
+    let table = format!(
+        "file_search_vec_{}",
+        uuid::Uuid::parse_str(store.id.strip_prefix("vs_").unwrap())
+            .unwrap()
+            .simple()
+    );
+    let orphan_id: i64 = sqlx::query_scalar(
+        "INSERT INTO file_search_vec_map (store_id, file_id, chunk_index, created_at) \
+         VALUES ($1, 'file_unpublished', 0, $2) RETURNING id",
+    )
+    .bind(&store.id)
+    .bind(chrono::Utc::now().timestamp())
+    .fetch_one(pool.as_ref())
+    .await
+    .unwrap();
+    let options = sqlx::sqlite::SqliteConnectOptions::from_str(&url)
+        .unwrap()
+        .extension(path.to_string_lossy().into_owned());
+    let index = sqlx::sqlite::SqlitePoolOptions::new()
+        .connect_with(options)
+        .await
+        .unwrap();
+    sqlx::query(&format!(
+        "INSERT INTO {table} (rowid, embedding) VALUES ($1, '[1.0,0.0]')"
+    ))
+    .bind(orphan_id)
+    .execute(&index)
+    .await
+    .unwrap();
+
+    let request = SearchRequest {
+        query: SearchQuery::Text("result".into()),
+        search_mode: Some(SearchMode::Semantic),
+        ..SearchRequest::default()
+    };
+    let results = first
+        .search(
+            &[empty.id.clone(), store.id.clone()],
+            &["result".into()],
+            &[vec![1.0, 0.0]],
+            Some(2),
+            SearchMode::Semantic,
+            &request,
+        )
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].file_id, file.id);
+
+    sqlx::query("UPDATE file_search_vec_map SET created_at = $1 WHERE id = $2")
+        .bind(chrono::Utc::now().timestamp() - 25 * 60 * 60)
+        .bind(orphan_id)
+        .execute(pool.as_ref())
+        .await
+        .unwrap();
+    let reopened = SqliteVecRepository::open(pool, &path).await.unwrap();
+    let results = reopened
+        .search(
+            std::slice::from_ref(&store.id),
+            &["result".into()],
+            &[vec![1.0, 0.0]],
+            Some(2),
+            SearchMode::Semantic,
+            &request,
+        )
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].file_id, file.id);
+}
+
+#[tokio::test]
+#[ignore = "requires SQLITE_VEC_EXTENSION_PATH pointing to a trusted sqlite-vec loadable extension"]
+async fn sqlite_vec_uses_exact_fallback_above_candidate_limit() {
+    let path = PathBuf::from(std::env::var_os("SQLITE_VEC_EXTENSION_PATH").expect("set SQLITE_VEC_EXTENSION_PATH"));
+    let directory = tempfile::tempdir().unwrap();
+    let url = format!("sqlite://{}?mode=rwc", directory.path().join("large.db").display());
+    let pool = create_pool_with_schema(Some(&url)).await.unwrap();
+    let repository = SqliteVecRepository::open(pool, &path).await.unwrap();
+    let file = test_file();
+    repository
+        .stage_blob_cleanup(&file.id, "test-upload", i64::MAX)
+        .await
+        .unwrap();
+    repository
+        .upload_file_metadata(&file, "text/plain", "test-upload", &CancellationToken::new())
+        .await
+        .unwrap();
+    let store = test_store();
+    let chunks = (0..4097)
+        .map(|chunk_index| StoredChunk {
+            file_id: file.id.clone(),
+            filename: file.filename.clone(),
+            chunk_index,
+            text: format!("chunk {chunk_index}"),
+            embedding: Some(vec![1.0, 0.0]),
+            attributes: BTreeMap::from([("selected".into(), AttributeValue::Boolean(chunk_index == 4096))]),
+        })
+        .collect();
+    let attachment = test_attachment(&file, &store, chunks);
+    repository.create_store(&store, "model", &[attachment]).await.unwrap();
+    let request = SearchRequest {
+        query: SearchQuery::Text("chunk".into()),
+        search_mode: Some(SearchMode::Semantic),
+        max_num_results: Some(4096),
+        ..SearchRequest::default()
+    };
+    let results = repository
+        .search(
+            std::slice::from_ref(&store.id),
+            &["chunk".into()],
+            &[vec![1.0, 0.0]],
+            Some(2),
+            SearchMode::Semantic,
+            &request,
+        )
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 4096);
+    let filtered = SearchRequest {
+        max_num_results: Some(1),
+        filters: Some(SearchFilter::Comparison(ComparisonFilter {
+            operator: ComparisonOperator::Eq,
+            key: "selected".into(),
+            value: FilterValue::Scalar(AttributeValue::Boolean(true)),
+        })),
+        ..request
+    };
+    let results = repository
+        .search(
+            std::slice::from_ref(&store.id),
+            &["chunk".into()],
+            &[vec![1.0, 0.0]],
+            Some(2),
+            SearchMode::Semantic,
+            &filtered,
+        )
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].content[0].text, "chunk 4096");
 }
