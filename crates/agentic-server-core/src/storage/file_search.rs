@@ -531,7 +531,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn serialized_embedding_capacity_is_checked_before_publication() {
+    async fn large_serialized_embedding_is_published_within_capacity() {
         let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
         let files = tempfile::tempdir().unwrap();
         let service = FileSearchService::new(
@@ -549,18 +549,15 @@ mod tests {
             .unwrap();
         let attachment = prepared(&service, &store.id, 1024, 4096).await;
         let storage = FileSearchStorage::new(pool);
-        assert!(matches!(
-            storage.attach(&store.id, "keyword:cl100k_base:v1", &attachment).await,
-            Err(FileSearchError::InvalidRequest(_))
-        ));
-        assert!(
-            storage
-                .chunks(std::slice::from_ref(&store.id))
-                .await
-                .unwrap()
-                .is_empty()
+        storage
+            .attach(&store.id, "keyword:cl100k_base:v1", &attachment)
+            .await
+            .unwrap();
+        assert_eq!(
+            storage.chunks(std::slice::from_ref(&store.id)).await.unwrap().len(),
+            1024
         );
-        assert_eq!(service.get_vector_store(&store.id).await.unwrap().file_counts.total, 0);
+        assert_eq!(service.get_vector_store(&store.id).await.unwrap().file_counts.total, 1);
     }
 
     #[tokio::test]
@@ -621,19 +618,19 @@ mod tests {
             .await
             .unwrap();
         let storage = FileSearchStorage::new(pool);
-        let first = prepared(&service, &store.id, 512, 4096).await;
+        let first = prepared(&service, &store.id, 2048, 4096).await;
         storage
             .attach(&store.id, "keyword:cl100k_base:v1", &first)
             .await
             .unwrap();
-        let overflow = prepared(&service, &store.id, 512, 4096).await;
+        let overflow = prepared(&service, &store.id, 2048, 4096).await;
         assert!(matches!(
             storage.attach(&store.id, "keyword:cl100k_base:v1", &overflow).await,
             Err(FileSearchError::InvalidRequest(_))
         ));
         assert_eq!(
             storage.chunks(std::slice::from_ref(&store.id)).await.unwrap().len(),
-            512
+            2048
         );
         assert_eq!(service.get_vector_store(&store.id).await.unwrap().file_counts.total, 1);
         assert!(
