@@ -15,8 +15,9 @@ use crate::types::file_search::{
 mod blob_cleanup;
 mod list;
 
-const MAX_CORPUS_BYTES: i64 = 64 * 1024 * 1024;
-const MAX_CORPUS_CHUNKS: i64 = 10_000;
+// The bound covers serialized 768-dimensional embeddings as well as chunk text.
+pub(crate) const MAX_CORPUS_BYTES: i64 = 256 * 1024 * 1024;
+pub(crate) const MAX_CORPUS_CHUNKS: i64 = 10_000;
 
 /// The default SQL-backed file metadata and exact chunk repository.
 #[derive(Clone)]
@@ -400,7 +401,7 @@ impl FileSearchStorage {
 fn validate_capacity(bytes: i64, chunks: i64) -> Result<(), FileSearchError> {
     if bytes > MAX_CORPUS_BYTES || chunks > MAX_CORPUS_CHUNKS {
         return Err(FileSearchError::InvalidRequest(
-            "Vector store exceeds 64 MiB of serialized chunks or 10000 chunks; reduce file size or use another vector store".into(),
+            "Vector store exceeds 256 MiB of serialized chunks or 10000 chunks; reduce file size or use another vector store".into(),
         ));
     }
     Ok(())

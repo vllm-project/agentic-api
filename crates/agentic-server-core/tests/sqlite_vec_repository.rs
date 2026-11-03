@@ -4,8 +4,9 @@ use agentic_core::{
     storage::create_pool_with_schema,
     tool::file_search::{Collection, FileSearchRepository, PreparedAttachment, SqliteVecRepository, StoredChunk},
     types::file_search::{
-        ChunkingStrategy, FileCounts, FileObject, FileSearchError, SearchMode, SearchQuery, SearchRequest,
-        VectorStoreFileObject, VectorStoreObject,
+        AttributeValue, ChunkingStrategy, ComparisonFilter, ComparisonOperator, FileCounts, FileObject,
+        FileSearchError, FilterValue, SearchFilter, SearchMode, SearchQuery, SearchRequest, VectorStoreFileObject,
+        VectorStoreObject,
     },
 };
 use tokio_util::sync::CancellationToken;
@@ -70,7 +71,7 @@ async fn sqlite_vec_indexes_published_chunks_and_excludes_deleted_rows() {
                 chunk_index: 0,
                 text: "coral reef".into(),
                 embedding: Some(vec![1e-300, 0.0]),
-                attributes: BTreeMap::default(),
+                attributes: BTreeMap::from([("section".into(), AttributeValue::String("reef".into()))]),
             },
             StoredChunk {
                 file_id: file.id.clone(),
@@ -78,7 +79,15 @@ async fn sqlite_vec_indexes_published_chunks_and_excludes_deleted_rows() {
                 chunk_index: 1,
                 text: "mountain trail".into(),
                 embedding: Some(vec![0.0, 1e300]),
-                attributes: BTreeMap::default(),
+                attributes: BTreeMap::from([("section".into(), AttributeValue::String("trail".into()))]),
+            },
+            StoredChunk {
+                file_id: file.id.clone(),
+                filename: file.filename.clone(),
+                chunk_index: 2,
+                text: "coral reef".into(),
+                embedding: Some(vec![1e-300, 0.0]),
+                attributes: BTreeMap::from([("section".into(), AttributeValue::String("reef".into()))]),
             },
         ],
         dimensions: 2,
@@ -106,6 +115,66 @@ async fn sqlite_vec_indexes_published_chunks_and_excludes_deleted_rows() {
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].content[0].text, "coral reef");
     assert!(results[0].score > 0.99);
+
+    let top_one = SearchRequest {
+        max_num_results: Some(1),
+        ..request.clone()
+    };
+    let results = repository
+        .search(
+            std::slice::from_ref(&store.id),
+            &["trail".into()],
+            &[vec![0.1, 1.0]],
+            Some(2),
+            SearchMode::Semantic,
+            &top_one,
+        )
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].content[0].text, "mountain trail");
+
+    let top_two = SearchRequest {
+        max_num_results: Some(2),
+        ..request.clone()
+    };
+    let results = repository
+        .search(
+            std::slice::from_ref(&store.id),
+            &["reef".into()],
+            &[vec![1.0, 0.1]],
+            Some(2),
+            SearchMode::Semantic,
+            &top_two,
+        )
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0].content[0].text, "coral reef");
+    assert_eq!(results[1].content[0].text, "mountain trail");
+
+    let filtered = SearchRequest {
+        max_num_results: Some(1),
+        filters: Some(SearchFilter::Comparison(ComparisonFilter {
+            operator: ComparisonOperator::Eq,
+            key: "section".into(),
+            value: FilterValue::Scalar(AttributeValue::String("trail".into())),
+        })),
+        ..request.clone()
+    };
+    let results = repository
+        .search(
+            std::slice::from_ref(&store.id),
+            &["reef".into()],
+            &[vec![1.0, 0.1]],
+            Some(2),
+            SearchMode::Semantic,
+            &filtered,
+        )
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].content[0].text, "mountain trail");
 
     // Simulate a crash after index staging: leave recent vector rows without
     // published chunks, then retry after reopening the repository.
