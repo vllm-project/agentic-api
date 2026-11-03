@@ -51,16 +51,29 @@ impl SqliteVecRepository {
                 let encoded = normalized_vector(vector)?;
                 let chunk_index = i64::try_from(chunk.chunk_index)
                     .map_err(|_| FileSearchError::InvalidRequest("Too many chunks".into()))?;
+                // Reuse a staged row left by an interrupted publication, but never
+                // replace an index entry whose metadata has already been published.
                 let row_id: i64 = sqlx::query_scalar(
                     "INSERT INTO file_search_vec_map (store_id, file_id, chunk_index, created_at) \
-                     VALUES ($1, $2, $3, $4) RETURNING id",
+                     VALUES ($1, $2, $3, $4) \
+                     ON CONFLICT(store_id, file_id, chunk_index) DO UPDATE SET created_at = excluded.created_at \
+                     WHERE NOT EXISTS (SELECT 1 FROM file_search_chunks AS published \
+                       WHERE published.store_id = file_search_vec_map.store_id \
+                         AND published.file_id = file_search_vec_map.file_id \
+                         AND published.chunk_index = file_search_vec_map.chunk_index) \
+                     RETURNING id",
                 )
                 .bind(store_id)
                 .bind(&attachment.object.id)
                 .bind(chunk_index)
                 .bind(chrono::Utc::now().timestamp())
-                .fetch_one(&mut *tx)
-                .await?;
+                .fetch_optional(&mut *tx)
+                .await?
+                .ok_or_else(|| FileSearchError::Conflict("File is already indexed in this vector store".into()))?;
+                sqlx::query(&format!("DELETE FROM {table} WHERE rowid = $1"))
+                    .bind(row_id)
+                    .execute(&mut *tx)
+                    .await?;
                 sqlx::query(&format!("INSERT INTO {table} (rowid, embedding) VALUES ($1, $2)"))
                     .bind(row_id)
                     .bind(encoded)

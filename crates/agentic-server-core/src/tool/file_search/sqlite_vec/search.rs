@@ -22,10 +22,8 @@ impl SqliteVecRepository {
         expected_dimensions: Option<usize>,
         request: &SearchRequest,
     ) -> Result<Vec<SearchResult>, FileSearchError> {
-        if queries.len() != query_embeddings.len() {
-            return Err(FileSearchError::Unavailable(
-                "Indexed content changed during search; retry the request".into(),
-            ));
+        if store_ids.is_empty() {
+            return Ok(Vec::new());
         }
         let placeholders = (1..=store_ids.len())
             .map(|index| format!("${index}"))
@@ -46,6 +44,11 @@ impl SqliteVecRepository {
         }
         if count == 0 {
             return Ok(Vec::new());
+        }
+        if queries.len() != query_embeddings.len() {
+            return Err(FileSearchError::InvalidRequest(
+                "Semantic search requires one embedding per query".into(),
+            ));
         }
         let mut matches = Vec::new();
         let mut tx = self.index.begin().await?;

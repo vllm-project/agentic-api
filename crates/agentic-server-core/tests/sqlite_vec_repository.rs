@@ -4,8 +4,8 @@ use agentic_core::{
     storage::create_pool_with_schema,
     tool::file_search::{Collection, FileSearchRepository, PreparedAttachment, SqliteVecRepository, StoredChunk},
     types::file_search::{
-        ChunkingStrategy, FileCounts, FileObject, SearchMode, SearchQuery, SearchRequest, VectorStoreFileObject,
-        VectorStoreObject,
+        ChunkingStrategy, FileCounts, FileObject, FileSearchError, SearchMode, SearchQuery, SearchRequest,
+        VectorStoreFileObject, VectorStoreObject,
     },
 };
 use tokio_util::sync::CancellationToken;
@@ -84,7 +84,8 @@ async fn sqlite_vec_indexes_published_chunks_and_excludes_deleted_rows() {
         dimensions: 2,
     };
     let identity = "sqlite-vec-test-model";
-    repository.create_store(&store, identity, &[attachment]).await.unwrap();
+    let mut attachments = [attachment];
+    repository.create_store(&store, identity, &attachments).await.unwrap();
 
     let request = SearchRequest {
         query: SearchQuery::Text("reef".into()),
@@ -106,13 +107,23 @@ async fn sqlite_vec_indexes_published_chunks_and_excludes_deleted_rows() {
     assert_eq!(results[0].content[0].text, "coral reef");
     assert!(results[0].score > 0.99);
 
+    // Simulate a crash after index staging: leave recent vector rows without
+    // published chunks, then retry after reopening the repository.
+    sqlx::query("DELETE FROM file_search_attachments WHERE store_id = $1 AND file_id = $2")
+        .bind(&store.id)
+        .bind(&file.id)
+        .execute(pool.as_ref())
+        .await
+        .unwrap();
     drop(repository);
     let reopened = SqliteVecRepository::open(pool, &path).await.unwrap();
+    attachments[0].chunks[0].embedding = Some(vec![-1e-300, 0.0]);
+    reopened.attach(&store.id, identity, &attachments[0]).await.unwrap();
     let results = reopened
         .search(
             std::slice::from_ref(&store.id),
             &["reef".into()],
-            &[vec![1.0, 0.0]],
+            &[vec![-1.0, 0.0]],
             Some(2),
             SearchMode::Semantic,
             &request,
@@ -120,6 +131,29 @@ async fn sqlite_vec_indexes_published_chunks_and_excludes_deleted_rows() {
         .await
         .unwrap();
     assert_eq!(results.len(), 1);
+    assert_eq!(results[0].content[0].text, "coral reef");
+    assert!(results[0].score > 0.99);
+    assert!(
+        reopened
+            .search(&[], &["reef".into()], &[], Some(2), SearchMode::Semantic, &request)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let mismatch = reopened
+        .search(
+            std::slice::from_ref(&store.id),
+            &["reef".into(), "trail".into()],
+            &[vec![-1.0, 0.0]],
+            Some(2),
+            SearchMode::Semantic,
+            &request,
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(mismatch, FileSearchError::InvalidRequest(message) if message.contains("one embedding per query"))
+    );
     reopened
         .delete(Collection::Attachments, &file.id, Some(&store.id))
         .await
@@ -128,7 +162,7 @@ async fn sqlite_vec_indexes_published_chunks_and_excludes_deleted_rows() {
         .search(
             std::slice::from_ref(&store.id),
             &["reef".into()],
-            &[vec![1.0, 0.0]],
+            &[vec![-1.0, 0.0]],
             Some(2),
             SearchMode::Semantic,
             &request,
