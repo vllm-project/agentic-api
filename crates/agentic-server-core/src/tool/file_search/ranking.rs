@@ -101,6 +101,57 @@ pub(super) fn rank(
         .collect()
 }
 
+/// Applies the common filter, threshold, deduplication, and global limit to
+/// candidates scored by a provider's native cosine search.
+pub(super) fn rank_semantic_candidates(
+    candidates: Vec<(StoredChunk, f64)>,
+    request: &SearchRequest,
+) -> Vec<SearchResult> {
+    let threshold = request
+        .ranking_options
+        .as_ref()
+        .and_then(|options| options.score_threshold)
+        .unwrap_or(0.0);
+    let mut best: HashMap<(String, String), (StoredChunk, f64)> = HashMap::new();
+    for (chunk, score) in candidates {
+        if score <= 0.0
+            || score < threshold
+            || !request
+                .filters
+                .as_ref()
+                .is_none_or(|filter| filter.matches(&chunk.attributes))
+        {
+            continue;
+        }
+        let key = (chunk.file_id.clone(), chunk.text.clone());
+        let entry = best.entry(key).or_insert_with(|| (chunk.clone(), score));
+        if score > entry.1 {
+            *entry = (chunk, score);
+        }
+    }
+    let mut matches: Vec<_> = best.into_values().collect();
+    matches.sort_by(|(left, left_score), (right, right_score)| {
+        right_score
+            .total_cmp(left_score)
+            .then_with(|| left.file_id.cmp(&right.file_id))
+            .then_with(|| left.chunk_index.cmp(&right.chunk_index))
+    });
+    matches.truncate(request.max_num_results.unwrap_or(10));
+    matches
+        .into_iter()
+        .map(|(chunk, score)| SearchResult {
+            file_id: chunk.file_id,
+            filename: chunk.filename,
+            score,
+            attributes: chunk.attributes,
+            content: vec![SearchContent {
+                type_: "text".into(),
+                text: chunk.text,
+            }],
+        })
+        .collect()
+}
+
 fn cosine(left: &[f64], right: &[f64]) -> f64 {
     if left.len() != right.len() {
         return 0.0;

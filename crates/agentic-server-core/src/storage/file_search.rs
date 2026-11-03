@@ -39,6 +39,7 @@ pub enum StoredFileContent {
 }
 
 /// Whether a failed metadata publication permits deleting the uploaded blob.
+#[derive(Debug)]
 pub enum FilePublicationFailure {
     SafeToRemove(FileSearchError),
     // A lost connection during COMMIT can leave the outcome unknown. Keeping
