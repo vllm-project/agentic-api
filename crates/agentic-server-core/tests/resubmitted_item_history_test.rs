@@ -161,17 +161,22 @@ async fn recorded_continuation_keeps_history(cassette_name: &str) {
     );
 
     // Each stored occurrence has a private row ID; public IDs stay stable for clients.
-    let response = store.get(&second.id).await.expect("read response row");
-    assert_eq!(response.history_item_ids.len(), 4);
+    let row_ids = store
+        .get_items(&second.id)
+        .await
+        .expect("read history rows")
+        .into_iter()
+        .map(|row| row.id)
+        .collect::<Vec<_>>();
+    assert_eq!(row_ids.len(), 4);
     assert_eq!(
-        response.history_item_ids.iter().collect::<HashSet<_>>().len(),
+        row_ids.iter().collect::<HashSet<_>>().len(),
         4,
         "history rows must not share a primary key"
     );
     assert!(
-        response.history_item_ids.iter().all(|id| id.starts_with("item_")),
-        "history rows are addressed by row ID: {:?}",
-        response.history_item_ids
+        row_ids.iter().all(|id| id.starts_with("item_")),
+        "history rows are addressed by row ID: {row_ids:?}"
     );
 }
 
@@ -237,16 +242,22 @@ async fn resubmitted_output_items_keep_every_occurrence(cassette_name: &str) {
         ]
     );
 
-    let response = store.get(&second.id).await.expect("read response row");
-    assert_eq!(response.history_item_ids.len(), 4);
+    let row_ids = store
+        .get_items(&second.id)
+        .await
+        .expect("read history rows")
+        .into_iter()
+        .map(|row| row.id)
+        .collect::<Vec<_>>();
+    assert_eq!(row_ids.len(), 4);
     assert_eq!(
-        response.history_item_ids.iter().collect::<HashSet<_>>().len(),
+        row_ids.iter().collect::<HashSet<_>>().len(),
         4,
         "repeated public IDs must not reuse a row ID"
     );
     // The resubmitted message keeps the upstream public ID but not as the row's primary key.
     let resubmitted = &ids(&first_output)[0];
-    assert_ne!(&response.history_item_ids[1], resubmitted);
+    assert_ne!(&row_ids[1], resubmitted);
     assert_eq!(history[1]["id"], json!(resubmitted));
 }
 

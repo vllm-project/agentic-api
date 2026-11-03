@@ -2594,6 +2594,16 @@ async fn test_websocket_generate_false_persists_valid_tool_search_state_for_reus
     );
 }
 
+async fn current_conversation_item_count(pool: &agentic_core::storage::DbPool, conversation_id: &str) -> i64 {
+    sqlx::query_scalar(
+        "SELECT COUNT(*) FROM conversation_entries WHERE conversation_id = $1 AND removed_revision IS NULL",
+    )
+    .bind(conversation_id)
+    .fetch_one(pool)
+    .await
+    .expect("conversation item count")
+}
+
 #[tokio::test]
 async fn websocket_empty_prewarm_replaces_compacted_conversation_tool_search_state() {
     let mock = MockResponsesServer::start(vec![sse_tool_search_call_response()]).await;
@@ -2642,11 +2652,7 @@ async fn websocket_empty_prewarm_replaces_compacted_conversation_tool_search_sta
             mock.request_bodies().await.is_empty(),
             "generate:false must not run inference"
         );
-        let item_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM items WHERE conversation_id = $1")
-            .bind(&conversation_id)
-            .fetch_one(fixture.pool.as_ref())
-            .await
-            .expect("conversation item count");
+        let item_count = current_conversation_item_count(&fixture.pool, &conversation_id).await;
         assert_eq!(item_count, 1, "an empty prewarm must not advance item history");
         let prewarm_checkpoint: String =
             sqlx::query_scalar("SELECT latest_response_id FROM conversations WHERE id = $1")

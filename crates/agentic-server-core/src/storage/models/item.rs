@@ -1,8 +1,12 @@
 //! Conversation history item stored in the database.
 
 use serde_json::Value;
+use std::collections::HashMap;
 use std::fmt::Write;
 use tracing::warn;
+
+mod insert;
+pub(crate) use insert::InsertItem;
 
 use super::super::pool::{DbPool, DbResult, DbTransaction};
 use super::super::types::item::{ItemKind, STORED_CODE_INTERPRETER_ORIGIN_KEY, STORED_ITEM_KIND_KEY};
@@ -13,10 +17,10 @@ use crate::types::io::code_interpreter::CodeInterpreterCallOrigin;
 use crate::types::io::{InputItem, OutputItem, ReasoningOutput};
 use crate::utils::common::{deserialize_from_str_opt, utcnow_str, uuid7_str};
 
-const ITEM_COLUMN_COUNT: usize = 5;
-const SEQUENCE_COLUMN_INDEX: usize = 4;
+const ITEM_INSERT_COLUMNS: usize = 8;
+const ENTRY_INSERT_COLUMNS: usize = 5;
 const MAX_BIND_PARAMETERS: usize = 999;
-const MAX_ITEMS_PER_INSERT: usize = (MAX_BIND_PARAMETERS - 2) / (ITEM_COLUMN_COUNT + 1);
+const MAX_ITEMS_PER_INSERT: usize = MAX_BIND_PARAMETERS / ITEM_INSERT_COLUMNS;
 
 /// Conversation history item stored in the database.
 ///
@@ -137,169 +141,208 @@ impl Item {
     }
 }
 
-fn item_values_clause(row_count: usize, first_bind_index: usize, sequence_from_cte: bool) -> String {
-    let mut clause = String::new();
-    let mut bind_index = first_bind_index;
+/// Item columns for rows read directly from `items`.
+pub(crate) const ITEM_COLUMNS: &str = "items.id, items.reference_id, items.public_id, items.data, items.created_at, \
+     items.conversation_id, items.seq, items.tenant_id";
 
-    for row_index in 0..row_count {
-        if row_index > 0 {
+/// Item columns for rows read through a conversation entry, which supplies list position and identity.
+const ENTRY_ITEM_COLUMNS: &str = "items.id, items.reference_id, entries.public_id AS public_id, items.data, \
+     items.created_at, entries.conversation_id AS conversation_id, entries.seq AS seq, items.tenant_id";
+
+fn numbered_rows(row_count: usize, columns: usize, first_bind_index: usize) -> String {
+    let mut clause = String::new();
+    for row in 0..row_count {
+        if row > 0 {
             clause.push_str(", ");
         }
         clause.push('(');
-        for column_index in 0..(ITEM_COLUMN_COUNT + usize::from(sequence_from_cte)) {
-            if column_index > 0 {
+        for column in 0..columns {
+            if column > 0 {
                 clause.push_str(", ");
             }
-            if sequence_from_cte && column_index == SEQUENCE_COLUMN_INDEX {
-                write!(clause, "(SELECT start + ${bind_index} FROM next_seq)").expect("writing to String cannot fail");
-            } else {
-                write!(clause, "${bind_index}").expect("writing to String cannot fail");
-            }
-            bind_index += 1;
+            write!(clause, "${}", first_bind_index + row * columns + column).expect("writing to String cannot fail");
         }
         clause.push(')');
     }
-
     clause
 }
 
-/// Create items in a transaction with optional conversation context.
-///
-/// If `conversation_id` is provided, the next sequence range is computed in the insert statement so
-/// concurrent `SQLite` writers do not take a stale read snapshot before writing.
-///
-/// Without a conversation, each item is an independent response-history row: it receives a fresh
-/// row ID and keeps the supplied ID as its public identity, so a repeated public ID can be stored
-/// once per occurrence. Rows are returned in input order.
+/// Store a response's own items in order. Each occurrence gets a fresh row ID; the supplied ID
+/// stays its public identity, so a repeated public ID is stored once per occurrence.
 ///
 /// # Errors
-/// Returns an error if insertion fails or an item already belongs to the conversation.
-pub async fn create_in_tx(
+/// Returns an error if insertion fails.
+pub(crate) async fn create_for_response_in_tx(
     tx: &mut DbTransaction<'_>,
-    items: Vec<(String, String)>,
-    conversation_id: Option<&str>,
+    tenant_id: &str,
+    response_id: &str,
+    items: Vec<InsertItem>,
+) -> DbResult<Vec<Item>> {
+    insert_rows(tx, tenant_id, Some(response_id), items).await
+}
+
+async fn insert_rows(
+    tx: &mut DbTransaction<'_>,
+    tenant_id: &str,
+    response_id: Option<&str>,
+    items: Vec<InsertItem>,
+) -> DbResult<Vec<Item>> {
+    let now = utcnow_str();
+    let rows = items
+        .into_iter()
+        .enumerate()
+        .map(|(position, item)| (i64::try_from(position).unwrap_or(i64::MAX), uuid7_str("item_"), item))
+        .collect::<Vec<_>>();
+    for batch in rows.chunks(MAX_ITEMS_PER_INSERT) {
+        let sql = format!(
+            "INSERT INTO items (id, public_id, data, reasoning_provenance, position, created_at, tenant_id, response_id) \
+             VALUES {}",
+            numbered_rows(batch.len(), ITEM_INSERT_COLUMNS, 1)
+        );
+        let mut query = sqlx::query(&sql);
+        for (position, row_id, item) in batch {
+            query = query
+                .bind(row_id)
+                .bind(&item.id)
+                .bind(&item.data)
+                .bind(&item.reasoning_provenance)
+                .bind(response_id.map(|_| *position))
+                .bind(now)
+                .bind(tenant_id)
+                .bind(response_id);
+        }
+        query.execute(&mut **tx).await?;
+    }
+    Ok(rows
+        .into_iter()
+        .map(|(_, id, item)| Item {
+            id,
+            reference_id: None,
+            public_id: Some(item.id),
+            data: item.data,
+            created_at: now,
+            conversation_id: None,
+            seq: None,
+            tenant_id: Some(tenant_id.to_owned()),
+        })
+        .collect())
+}
+
+/// Append items to a locked conversation as entries added at `revision`.
+///
+/// An ID already stored for the tenant references that item instead of copying it, so the
+/// submitted content is ignored; other items are written as new rows owned by
+/// `owner_response_id` (a conversation turn) or by nobody (the items API). Rows are returned in
+/// list order.
+///
+/// # Errors
+/// Returns [`StorageError::ItemAlreadyInConversation`] if an ID is already in the conversation.
+pub(crate) async fn attach_to_conversation_in_tx(
+    tx: &mut DbTransaction<'_>,
+    conversation_id: &str,
+    tenant_id: &str,
+    revision: i64,
+    items: Vec<InsertItem>,
+    owner_response_id: Option<&str>,
 ) -> StoreResult<Vec<Item>> {
     if items.is_empty() {
         return Ok(Vec::new());
     }
-
-    let mut created: Vec<Item> = Vec::with_capacity(items.len());
-    for batch in items.chunks(MAX_ITEMS_PER_INSERT) {
-        let mut rows = if let Some(conversation_id) = conversation_id {
-            // Later SQL batches check history from before this call, excluding
-            // rows inserted by earlier batches of the same request.
-            create_in_tx_with_next_conversation_seq(
-                tx,
-                batch,
-                conversation_id,
-                created.iter().filter_map(|item| item.seq).min(),
-            )
-            .await?
-        } else {
-            create_in_tx_without_conversation(tx, batch).await?
-        };
-        if conversation_id.is_some() {
-            rows.sort_by_key(|row| row.seq);
+    let public_ids = items.iter().map(|item| item.id.clone()).collect::<Vec<_>>();
+    let mut sources: HashMap<String, Item> = HashMap::new();
+    for batch in public_ids.chunks(MAX_BIND_PARAMETERS - 1) {
+        let placeholders = (2..batch.len() + 2)
+            .map(|index| format!("${index}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "SELECT 1 FROM conversation_entries \
+             WHERE conversation_id = $1 AND removed_revision IS NULL AND public_id IN ({placeholders}) LIMIT 1"
+        );
+        let mut query = sqlx::query(&sql).bind(conversation_id);
+        for id in batch {
+            query = query.bind(id);
         }
-        created.append(&mut rows);
+        if query.fetch_optional(&mut **tx).await?.is_some() {
+            return Err(StorageError::ItemAlreadyInConversation);
+        }
+        // A repeated public ID resolves to the row whose own ID matches it, else the earliest one.
+        let sql = format!(
+            "SELECT {ITEM_COLUMNS} FROM items \
+             WHERE items.tenant_id = $1 AND COALESCE(items.public_id, items.reference_id, items.id) IN ({placeholders}) \
+             ORDER BY items.id"
+        );
+        let mut query = sqlx::query_as::<_, Item>(&sql).bind(tenant_id);
+        for id in batch {
+            query = query.bind(id);
+        }
+        for row in query.fetch_all(&mut **tx).await? {
+            let public_id = row.public_id().to_owned();
+            let preferred = sources
+                .get(&public_id)
+                .is_none_or(|found| found.id != public_id && row.id == public_id);
+            if preferred {
+                sources.insert(public_id, row);
+            }
+        }
     }
-    Ok(created)
-}
-
-async fn create_in_tx_without_conversation(
-    tx: &mut DbTransaction<'_>,
-    items: &[(String, String)],
-) -> DbResult<Vec<Item>> {
-    // Each occurrence gets a fresh row ID; the supplied ID is public and may repeat.
-    let now = utcnow_str();
-    let row_ids = items.iter().map(|_| uuid7_str("item_")).collect::<Vec<_>>();
-    let values_clause = (0..items.len())
-        .map(|index| format!("($1, ${}, ${}, ${})", 3 * index + 2, 3 * index + 3, 3 * index + 4))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let sql = format!(
-        "WITH incoming (created_at, id, public_id, data) AS (VALUES {values_clause}) \
-         INSERT INTO items (id, public_id, data, created_at, tenant_id) \
-         SELECT id, public_id, data, created_at, 'default_tenant' FROM incoming RETURNING *"
-    );
-
-    let mut query = sqlx::query_as::<_, Item>(&sql).bind(now);
-    for ((public_id, data), row_id) in items.iter().zip(&row_ids) {
-        query = query.bind(row_id).bind(public_id).bind(data);
-    }
-
-    let mut rows = query.fetch_all(&mut **tx).await?;
-    // `RETURNING` does not promise output order; restore it so history matches the request.
-    rows.sort_by_key(|row| row_ids.iter().position(|id| id == &row.id));
-    Ok(rows)
-}
-
-async fn create_in_tx_with_next_conversation_seq(
-    tx: &mut DbTransaction<'_>,
-    items: &[(String, String)],
-    conversation_id: &str,
-    first_inserted_sequence: Option<i64>,
-) -> StoreResult<Vec<Item>> {
-    let now = utcnow_str();
-    let values_clause = item_values_clause(items.len(), 3, true);
-    // A repeated public ID resolves to the row whose own ID matches it, else the earliest one.
-    let sql = format!(
-        "WITH next_seq AS ( \
-             SELECT COALESCE(MAX(seq), -1) + 1 AS start FROM items WHERE conversation_id = $1 \
-         ), incoming (id, data, created_at, conversation_id, seq, entry_id) AS ( \
-             VALUES {values_clause} \
-         ), owner AS ( \
-             SELECT COALESCE(tenant_id, 'default_tenant') AS tenant_id FROM conversations WHERE id = $1 \
-         ), source_rows AS ( \
-             SELECT incoming.seq AS incoming_seq, \
-                    COALESCE(MIN(CASE WHEN source.id = incoming.id THEN source.id END), MIN(source.id)) AS source_id \
-             FROM incoming CROSS JOIN owner JOIN items source \
-                 ON COALESCE(source.public_id, source.reference_id, source.id) = incoming.id \
-                AND source.tenant_id = owner.tenant_id \
-                AND (CAST($2 AS BIGINT) IS NULL OR source.conversation_id IS NULL \
-                     OR source.conversation_id <> $1 OR source.seq < $2) \
-             GROUP BY incoming.seq \
-         ) \
-         INSERT INTO items (id, data, created_at, conversation_id, seq, reference_id, public_id, tenant_id) \
-         SELECT CASE WHEN source.id IS NULL THEN incoming.id ELSE incoming.entry_id END, \
-                COALESCE(source.data, incoming.data), COALESCE(source.created_at, incoming.created_at), \
-                incoming.conversation_id, incoming.seq, source.id, \
-                COALESCE(source.public_id, source.reference_id, source.id, incoming.id), owner.tenant_id \
-         FROM incoming CROSS JOIN owner \
-         LEFT JOIN source_rows ON source_rows.incoming_seq = incoming.seq \
-         LEFT JOIN items source ON source.id = source_rows.source_id \
-         WHERE NOT EXISTS ( \
-             SELECT 1 FROM items existing \
-             JOIN incoming ON incoming.id = COALESCE(existing.public_id, existing.reference_id, existing.id) \
-             WHERE existing.conversation_id = $1 \
-               AND (CAST($2 AS BIGINT) IS NULL OR existing.seq < $2) \
-         ) \
-         ORDER BY incoming.seq \
-         RETURNING *"
-    );
-
-    let mut query = sqlx::query_as::<_, Item>(&sql)
+    let fresh = insert_rows(
+        tx,
+        tenant_id,
+        owner_response_id,
+        items
+            .into_iter()
+            .filter(|item| !sources.contains_key(&item.id))
+            .collect(),
+    )
+    .await?;
+    let mut fresh = fresh
+        .into_iter()
+        .map(|item| (item.public_id().to_owned(), item))
+        .collect::<HashMap<_, _>>();
+    let first_seq: i64 = sqlx::query_scalar("SELECT next_seq FROM conversations WHERE id = $1")
         .bind(conversation_id)
-        .bind(first_inserted_sequence);
-    #[allow(clippy::cast_possible_wrap)]
-    for (idx, (id, data)) in items.iter().enumerate() {
-        query = query
-            .bind(id)
-            .bind(data)
-            .bind(now)
-            .bind(conversation_id)
-            .bind(idx as i64)
-            .bind(uuid7_str("item_"));
+        .fetch_one(&mut **tx)
+        .await?;
+    let mut entries = Vec::with_capacity(public_ids.len());
+    for (offset, public_id) in public_ids.into_iter().enumerate() {
+        let mut item = match sources.get(&public_id) {
+            Some(source) => source.clone(),
+            None => fresh.remove(&public_id).ok_or_else(|| {
+                StorageError::Validation(format!("item ID '{public_id}' appears more than once in one request"))
+            })?,
+        };
+        item.public_id = Some(public_id);
+        item.conversation_id = Some(conversation_id.to_owned());
+        item.seq = Some(first_seq + i64::try_from(offset).unwrap_or(i64::MAX));
+        entries.push(item);
     }
-
-    let rows = query.fetch_all(&mut **tx).await?;
-    if rows.is_empty() {
-        return Err(StorageError::ItemAlreadyInConversation);
+    for batch in entries.chunks(MAX_BIND_PARAMETERS / ENTRY_INSERT_COLUMNS) {
+        let sql = format!(
+            "INSERT INTO conversation_entries (conversation_id, seq, item_id, public_id, added_revision) VALUES {}",
+            numbered_rows(batch.len(), ENTRY_INSERT_COLUMNS, 1)
+        );
+        let mut query = sqlx::query(&sql);
+        for item in batch {
+            query = query
+                .bind(conversation_id)
+                .bind(item.seq)
+                .bind(&item.id)
+                .bind(item.public_id())
+                .bind(revision);
+        }
+        query.execute(&mut **tx).await?;
     }
-    Ok(rows)
+    let count = i64::try_from(entries.len()).unwrap_or(i64::MAX);
+    sqlx::query("UPDATE conversations SET next_seq = next_seq + $1 WHERE id = $2")
+        .bind(count)
+        .bind(conversation_id)
+        .execute(&mut **tx)
+        .await?;
+    Ok(entries)
 }
 
-/// Get items by IDs.
+/// Get items by row IDs (legacy `history_item_ids` lists).
 ///
 /// # Errors
 /// Returns `DbResult::Err` if the database query fails.
@@ -313,7 +356,7 @@ pub async fn get_items(pool: &DbPool, ids: &[String]) -> DbResult<Vec<Item>> {
             .map(|index| format!("${index}"))
             .collect::<Vec<_>>()
             .join(", ");
-        let sql = format!("SELECT * FROM items WHERE id IN ({placeholders})");
+        let sql = format!("SELECT {ITEM_COLUMNS} FROM items WHERE id IN ({placeholders})");
         let mut query = sqlx::query_as::<_, Item>(&sql);
         for id in batch {
             query = query.bind(id);
@@ -328,37 +371,30 @@ pub async fn get_items(pool: &DbPool, ids: &[String]) -> DbResult<Vec<Item>> {
 /// # Errors
 /// Returns an error if the database query fails.
 pub async fn get_by_public_id(pool: &DbPool, id: &str) -> DbResult<Option<Item>> {
-    sqlx::query_as::<_, Item>(
-        "SELECT * FROM items WHERE COALESCE(public_id, reference_id, id) = $1 ORDER BY created_at, id LIMIT 1",
-    )
+    sqlx::query_as::<_, Item>(&format!(
+        "SELECT {ITEM_COLUMNS} FROM items WHERE COALESCE(public_id, reference_id, id) = $1 \
+         ORDER BY created_at, id LIMIT 1"
+    ))
     .bind(id)
     .fetch_optional(pool)
     .await
 }
 
-/// Get items by conversation ID ordered by sequence.
+/// Get a conversation's current items in list order.
 ///
 /// # Errors
 /// Returns `DbResult::Err` if the database query fails.
 pub async fn get_items_by_conversation(pool: &DbPool, conversation_id: &str) -> DbResult<Vec<Item>> {
-    sqlx::query_as::<_, Item>("SELECT * FROM items WHERE conversation_id = $1 ORDER BY seq ASC")
-        .bind(conversation_id)
-        .fetch_all(pool)
-        .await
+    sqlx::query_as::<_, Item>(&format!(
+        "SELECT {ENTRY_ITEM_COLUMNS} FROM conversation_entries entries JOIN items ON items.id = entries.item_id \
+         WHERE entries.conversation_id = $1 AND entries.removed_revision IS NULL ORDER BY entries.seq ASC"
+    ))
+    .bind(conversation_id)
+    .fetch_all(pool)
+    .await
 }
 
-/// Collect active item IDs in conversation order while holding the turn's transaction.
-///
-/// # Errors
-/// Returns `DbResult::Err` if the database query fails.
-pub async fn ids_for_conversation_in_tx(tx: &mut DbTransaction<'_>, conversation_id: &str) -> DbResult<Vec<String>> {
-    sqlx::query_scalar("SELECT id FROM items WHERE conversation_id = $1 ORDER BY seq ASC")
-        .bind(conversation_id)
-        .fetch_all(&mut **tx)
-        .await
-}
-
-/// Returns the last stored item sequence for a conversation inside a transaction.
+/// Returns the last current item sequence for a conversation inside a transaction.
 ///
 /// # Errors
 /// Returns `DbResult::Err` if the database query fails.
@@ -366,13 +402,15 @@ pub async fn last_conversation_sequence_in_tx(
     tx: &mut DbTransaction<'_>,
     conversation_id: &str,
 ) -> DbResult<Option<i64>> {
-    sqlx::query_scalar("SELECT MAX(seq) FROM items WHERE conversation_id = $1")
-        .bind(conversation_id)
-        .fetch_one(&mut **tx)
-        .await
+    sqlx::query_scalar(
+        "SELECT MAX(seq) FROM conversation_entries WHERE conversation_id = $1 AND removed_revision IS NULL",
+    )
+    .bind(conversation_id)
+    .fetch_one(&mut **tx)
+    .await
 }
 
-/// List a page using keyset pagination with (seq, id) ordering.
+/// List a page using keyset pagination over the conversation's list order.
 ///
 /// # Errors
 /// Returns an error if the query fails or the cursor is not in this conversation.
@@ -388,38 +426,41 @@ pub async fn list_for_conversation(
         ItemOrder::Asc => (">", "ASC"),
         ItemOrder::Desc => ("<", "DESC"),
     };
-    let base = "SELECT items.* FROM items \
-                JOIN conversations ON conversations.id = items.conversation_id \
-                WHERE conversations.id = $1 AND conversations.tenant_id = $2";
-    let ordering = format!("ORDER BY COALESCE(items.seq, -1) {direction}, items.id {direction}");
+    let base = format!(
+        "SELECT {ENTRY_ITEM_COLUMNS} FROM conversation_entries entries \
+         JOIN conversations ON conversations.id = entries.conversation_id \
+         JOIN items ON items.id = entries.item_id \
+         WHERE conversations.id = $1 AND conversations.tenant_id = $2 AND conversations.deleted_at IS NULL \
+           AND entries.removed_revision IS NULL"
+    );
 
     if let Some(cursor_id) = after_id {
         // An ID can name several occurrences. Advance beyond the furthest
         // occurrence in this ordering so the public cursor cannot loop forever.
-        let cursor_direction = if order == ItemOrder::Asc { "DESC" } else { "ASC" };
-        let cursor_query = format!(
-            "{base} AND COALESCE(items.public_id, items.reference_id, items.id) = $3 \
-             ORDER BY items.seq {cursor_direction}, items.id {cursor_direction} LIMIT 1"
-        );
-        let cursor = sqlx::query_as::<_, Item>(&cursor_query)
-            .bind(conversation_id)
-            .bind(tenant_id)
-            .bind(cursor_id)
-            .fetch_optional(pool)
-            .await?
-            .ok_or(sqlx::Error::RowNotFound)?;
-        let query = format!("{base} AND (COALESCE(items.seq, -1), items.id) {comparison} ($3, $4) {ordering} LIMIT $5");
-        sqlx::query_as(&query)
-            .bind(conversation_id)
-            .bind(tenant_id)
-            .bind(cursor.seq.unwrap_or(-1))
-            .bind(cursor.id)
-            .bind(limit)
-            .fetch_all(pool)
-            .await
+        let furthest = if order == ItemOrder::Asc { "MAX" } else { "MIN" };
+        let cursor: Option<i64> = sqlx::query_scalar(&format!(
+            "SELECT {furthest}(entries.seq) FROM conversation_entries entries \
+             JOIN conversations ON conversations.id = entries.conversation_id \
+             WHERE conversations.id = $1 AND conversations.tenant_id = $2 AND conversations.deleted_at IS NULL \
+               AND entries.removed_revision IS NULL AND entries.public_id = $3"
+        ))
+        .bind(conversation_id)
+        .bind(tenant_id)
+        .bind(cursor_id)
+        .fetch_one(pool)
+        .await?;
+        let cursor = cursor.ok_or(sqlx::Error::RowNotFound)?;
+        sqlx::query_as(&format!(
+            "{base} AND entries.seq {comparison} $3 ORDER BY entries.seq {direction} LIMIT $4"
+        ))
+        .bind(conversation_id)
+        .bind(tenant_id)
+        .bind(cursor)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
     } else {
-        let query = format!("{base} {ordering} LIMIT $3");
-        sqlx::query_as(&query)
+        sqlx::query_as(&format!("{base} ORDER BY entries.seq {direction} LIMIT $3"))
             .bind(conversation_id)
             .bind(tenant_id)
             .bind(limit)
@@ -428,7 +469,7 @@ pub async fn list_for_conversation(
     }
 }
 
-/// Get an item through its conversation, including items written by Responses persistence.
+/// Get the first current occurrence of an item in a conversation.
 ///
 /// # Errors
 /// Returns an error if the query fails.
@@ -438,12 +479,14 @@ pub async fn get_for_conversation(
     conversation_id: &str,
     item_id: &str,
 ) -> DbResult<Option<Item>> {
-    sqlx::query_as(
-        "SELECT items.* FROM items JOIN conversations ON conversations.id = items.conversation_id \
-         WHERE conversations.id = $1 AND conversations.tenant_id = $2 \
-           AND COALESCE(items.public_id, items.reference_id, items.id) = $3 \
-         ORDER BY items.seq ASC LIMIT 1",
-    )
+    sqlx::query_as(&format!(
+        "SELECT {ENTRY_ITEM_COLUMNS} FROM conversation_entries entries \
+         JOIN conversations ON conversations.id = entries.conversation_id \
+         JOIN items ON items.id = entries.item_id \
+         WHERE conversations.id = $1 AND conversations.tenant_id = $2 AND conversations.deleted_at IS NULL \
+           AND entries.removed_revision IS NULL AND entries.public_id = $3 \
+         ORDER BY entries.seq ASC LIMIT 1"
+    ))
     .bind(conversation_id)
     .bind(tenant_id)
     .bind(item_id)
@@ -451,7 +494,8 @@ pub async fn get_for_conversation(
     .await
 }
 
-/// Remove one or all items from a locked conversation while preserving stored response history.
+/// Remove one or all items from a locked conversation's current list at `revision`. Stored
+/// responses keep reading the conversation as it was at their own turn.
 ///
 /// # Errors
 /// Returns an error if the update fails.
@@ -459,13 +503,15 @@ pub async fn detach_from_conversation_in_tx(
     tx: &mut DbTransaction<'_>,
     conversation_id: &str,
     item_id: Option<&str>,
+    revision: i64,
 ) -> DbResult<u64> {
     let result = sqlx::query(
-        "UPDATE items SET conversation_id = NULL, seq = NULL \
-         WHERE conversation_id = $1 AND (CAST($2 AS TEXT) IS NULL OR COALESCE(public_id, reference_id, id) = $2)",
+        "UPDATE conversation_entries SET removed_revision = $3 \
+         WHERE conversation_id = $1 AND removed_revision IS NULL AND (CAST($2 AS TEXT) IS NULL OR public_id = $2)",
     )
     .bind(conversation_id)
     .bind(item_id)
+    .bind(revision)
     .execute(&mut **tx)
     .await?;
     Ok(result.rows_affected())
@@ -473,46 +519,58 @@ pub async fn detach_from_conversation_in_tx(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
     use crate::types::event::MessageStatus;
     use crate::types::io::{InputItem, OutputItem, ReasoningOutput, ReasoningTextContent};
 
-    #[test]
-    fn item_values_clause_numbers_plain_rows() {
-        assert_eq!(
-            item_values_clause(2, 1, false),
-            "($1, $2, $3, $4, $5), ($6, $7, $8, $9, $10)"
-        );
+    async fn pool_with_response(response_id: &str) -> Arc<DbPool> {
+        let pool = crate::storage::create_pool_with_schema(Some("sqlite://?mode=memory"))
+            .await
+            .expect("create in-memory database");
+        let mut transaction = pool.begin().await.expect("begin transaction");
+        crate::storage::models::response::create_in_tx(
+            &mut transaction,
+            &crate::storage::models::response::NewResponse {
+                id: response_id,
+                tenant_id: "default_tenant",
+                conversation_id: None,
+                conversation_revision: None,
+                previous_response_id: None,
+                history_base: crate::storage::models::response::HistoryBase::Chain,
+                metadata: None,
+            },
+        )
+        .await
+        .expect("create response");
+        transaction.commit().await.expect("commit response");
+        pool
     }
 
     #[test]
-    fn item_values_clause_numbers_conversation_rows_after_cte_bind() {
-        assert_eq!(
-            item_values_clause(2, 2, true),
-            "($2, $3, $4, $5, (SELECT start + $6 FROM next_seq), $7), \
-             ($8, $9, $10, $11, (SELECT start + $12 FROM next_seq), $13)"
-        );
+    fn numbered_rows_bind_each_column_in_order() {
+        assert_eq!(numbered_rows(2, 3, 1), "($1, $2, $3), ($4, $5, $6)");
+        assert_eq!(numbered_rows(1, 2, 5), "($5, $6)");
     }
 
     #[tokio::test]
     async fn item_queries_chunk_above_portable_bind_limit() {
-        let pool = crate::storage::create_pool_with_schema(Some("sqlite://?mode=memory"))
-            .await
-            .expect("create in-memory database");
-        let items = (0..=MAX_BIND_PARAMETERS)
-            .map(|index| (format!("item_{index}"), "{}".to_owned()))
+        let pool = pool_with_response("resp_batches").await;
+        let items = (0..=MAX_ITEMS_PER_INSERT)
+            .map(|index| InsertItem::unmarked(format!("item_{index}"), "{}".to_owned()))
             .collect::<Vec<_>>();
-        let public_ids = items.iter().map(|(id, _)| id.clone()).collect::<Vec<_>>();
+        let public_ids = items.iter().map(|item| item.id.clone()).collect::<Vec<_>>();
         let mut transaction = pool.begin().await.expect("begin transaction");
-        let created = create_in_tx(&mut transaction, items, None)
+        let created = create_for_response_in_tx(&mut transaction, "default_tenant", "resp_batches", items)
             .await
             .expect("insert item batches");
         transaction.commit().await.expect("commit item batches");
         let row_ids = created.iter().map(|item| item.id.clone()).collect::<Vec<_>>();
         let loaded = get_items(&pool, &row_ids).await.expect("load item batches");
 
-        assert_eq!(created.len(), MAX_BIND_PARAMETERS + 1);
-        assert_eq!(loaded.len(), MAX_BIND_PARAMETERS + 1);
+        assert_eq!(created.len(), MAX_ITEMS_PER_INSERT + 1);
+        assert_eq!(loaded.len(), MAX_ITEMS_PER_INSERT + 1);
         assert_eq!(
             created.iter().map(Item::public_id).collect::<Vec<_>>(),
             public_ids.iter().map(String::as_str).collect::<Vec<_>>()
@@ -522,12 +580,10 @@ mod tests {
 
     #[tokio::test]
     async fn repeated_public_ids_get_distinct_history_rows() {
-        let pool = crate::storage::create_pool_with_schema(Some("sqlite://?mode=memory"))
-            .await
-            .expect("create in-memory database");
-        let items = vec![("item_repeated".to_owned(), "{}".to_owned()); 2];
+        let pool = pool_with_response("resp_repeated").await;
+        let items = vec![InsertItem::unmarked("item_repeated".to_owned(), "{}".to_owned()); 2];
         let mut transaction = pool.begin().await.expect("begin transaction");
-        let created = create_in_tx(&mut transaction, items, None)
+        let created = create_for_response_in_tx(&mut transaction, "default_tenant", "resp_repeated", items)
             .await
             .expect("insert repeated public ids");
         transaction.commit().await.expect("commit history rows");
@@ -549,12 +605,12 @@ mod tests {
         crate::storage::models::conversation::create(&pool, conversation_id)
             .await
             .expect("create conversation");
-        let item_count = MAX_ITEMS_PER_INSERT + 1;
+        let item_count = MAX_BIND_PARAMETERS / ENTRY_INSERT_COLUMNS + 1;
         let items = (0..item_count)
-            .map(|index| (format!("conversation_item_{index}"), "{}".to_owned()))
+            .map(|index| InsertItem::unmarked(format!("conversation_item_{index}"), "{}".to_owned()))
             .collect::<Vec<_>>();
         let mut transaction = pool.begin().await.expect("begin transaction");
-        let created = create_in_tx(&mut transaction, items, Some(conversation_id))
+        let created = attach_to_conversation_in_tx(&mut transaction, conversation_id, "default_tenant", 1, items, None)
             .await
             .expect("insert conversation item batches");
         transaction.commit().await.expect("commit item batches");

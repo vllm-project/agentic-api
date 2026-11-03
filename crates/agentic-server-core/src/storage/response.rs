@@ -1,14 +1,16 @@
 //! Response storage operations and queries.
 
-use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
 
-use super::models::{item, response};
+use super::models::item::{self, InsertItem};
+use super::models::response::{self, HistoryBase, NewResponse};
 use super::pool::DbPool;
 use super::types::{ResponseData, ResponseMetadata, StorageError, StoreResult};
 use crate::types::io::InOutItem;
-use crate::utils::common::{deserialize_from_str, serialize_to_string, uuid7_str};
+
+/// Owner of rows written through the Responses API until requests carry an authenticated tenant.
+const DEFAULT_TENANT_ID: &str = "default_tenant";
 
 /// Response storage operations.
 #[derive(Clone, Debug)]
@@ -86,61 +88,31 @@ impl ResponseStore {
         Ok(item::get_by_public_id(pool, id).await?)
     }
 
-    /// Loads the response's existing item rows in history order.
+    /// Loads the response's item rows in history order.
     ///
     /// # Errors
-    /// Returns an error for missing or invalid history, unavailable storage, or query failure.
+    /// Returns an error for a missing response, unavailable storage, or query failure.
     pub async fn get_items(&self, response_id: &str) -> StoreResult<Vec<item::Item>> {
-        let pool = self.pool()?;
-        let json = response::get_item_ids(pool, response_id)
+        let mut connection = self.pool()?.acquire().await?;
+        response::history(&mut connection, response_id)
             .await?
             .ok_or_else(|| StorageError::ResponseNotFound {
                 id: response_id.to_owned(),
-            })?;
-        let ids: Vec<String> = deserialize_from_str(&json).map_err(|_| StorageError::InvalidResponseHistory {
-            response_id: response_id.to_owned(),
-        })?;
-        let mut rows: HashMap<_, _> = item::get_items(pool, &ids)
-            .await?
-            .into_iter()
-            .map(|row| (row.id.clone(), row))
-            .collect();
-        ids.into_iter()
-            .map(|id| rows.remove(&id).ok_or(StorageError::InvalidHistoryItem { item_id: id }))
-            .collect()
+            })
     }
 
     /// Rehydrates a response with full history.
     ///
-    /// Fetches all history items referenced by a response.
-    ///
     /// # Errors
     ///
-    /// Returns an error if a history item is missing or invalid, the database query
-    /// fails, or the store is disabled.
+    /// Returns an error if the response is missing, a history item is invalid, the database
+    /// query fails, or the store is disabled.
     pub async fn rehydrate(&self, response_id: &str) -> StoreResult<Vec<InOutItem>> {
-        let pool = self.pool()?;
-        let response = self.get(response_id).await?;
-        let rows = item::get_items(pool, &response.history_item_ids).await?;
-        let mut items_by_id: HashMap<String, InOutItem> = rows
-            .into_iter()
-            .map(|row| {
-                let item = InOutItem::try_from(&row)?;
-                Ok((row.id, item))
-            })
-            .collect::<StoreResult<_>>()?;
-
-        let ordered_items = response
-            .history_item_ids
+        self.get_items(response_id)
+            .await?
             .iter()
-            .map(|id| {
-                items_by_id
-                    .remove(id)
-                    .ok_or_else(|| StorageError::InvalidHistoryItem { item_id: id.clone() })
-            })
-            .collect::<StoreResult<_>>()?;
-
-        Ok(ordered_items)
+            .map(InOutItem::try_from)
+            .collect()
     }
 
     /// Persists a response with its items and metadata.
@@ -163,6 +135,9 @@ impl ResponseStore {
 
     /// Persists a response with its optional conversation association.
     ///
+    /// Only this turn's items are written; the history before them is found through
+    /// `previous_response_id`.
+    ///
     /// # Errors
     ///
     /// Returns [`StorageError`] if database operation fails or store is disabled.
@@ -175,47 +150,29 @@ impl ResponseStore {
         metadata: &ResponseMetadata,
     ) -> StoreResult<()> {
         let pool = self.pool()?;
-
-        let mut item_ids: Vec<String> = match previous_response_id {
-            Some(prev_id) => self.get(prev_id).await?.history_item_ids,
-            None => Vec::new(),
-        };
-        let new_items = new_items
-            .into_iter()
-            .map(|item| {
-                let prefix = match &item {
-                    InOutItem::Input(input) => input.id_prefix(),
-                    InOutItem::Output(output) => output.id_prefix(),
-                };
-                if item.id() == Some("") {
-                    return Err(StorageError::Validation("item id cannot be an empty string".to_owned()));
-                }
-                let id = item
-                    .id()
-                    .map_or_else(|| uuid7_str(prefix.unwrap_or("item_")), str::to_owned);
-                let data = String::try_from(&item)?;
-                Ok((id, data))
-            })
-            .collect::<StoreResult<Vec<_>>>()?;
-
+        let new_items = InsertItem::prepare_all(new_items)?;
         let metadata_json = String::try_from(metadata)?;
 
         let mut tx = pool.begin().await?;
-
-        // History rows get their own row IDs, so repeated public IDs keep every position.
-        let created = item::create_in_tx(&mut tx, new_items, None).await?;
-        item_ids.extend(created.into_iter().map(|item| item.id));
-        let history_item_ids_json = serialize_to_string(&item_ids)?;
-
-        response::create_in_tx(
+        let created = response::create_in_tx(
             &mut tx,
-            response_id,
-            conversation_id,
-            previous_response_id,
-            Some(&history_item_ids_json),
-            Some(&metadata_json),
+            &NewResponse {
+                id: response_id,
+                tenant_id: DEFAULT_TENANT_ID,
+                conversation_id,
+                conversation_revision: None,
+                previous_response_id,
+                history_base: HistoryBase::Chain,
+                metadata: Some(&metadata_json),
+            },
         )
         .await?;
+        if created.is_none() {
+            return Err(StorageError::ResponseNotFound {
+                id: previous_response_id.unwrap_or_default().to_owned(),
+            });
+        }
+        item::create_for_response_in_tx(&mut tx, DEFAULT_TENANT_ID, response_id, new_items).await?;
         tx.commit().await?;
 
         Ok(())

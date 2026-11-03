@@ -1075,7 +1075,7 @@ async fn grouped_aggregate_sql_failure_rolls_back_items_and_releases_capacity() 
             "candidate items must roll back; only the seeded response remains"
         );
         let after = store.get(&failed_id).await.unwrap();
-        assert_eq!(after.history_item_ids, existing.history_item_ids);
+        assert!(store.get_items(&failed_id).await.unwrap().is_empty());
         assert_eq!(after.created_at, existing.created_at);
         assert!(matches!(
             rehydrate_in_session(request(Some(&failed_id), json!("no failed checkpoint")), &exec, target).await,

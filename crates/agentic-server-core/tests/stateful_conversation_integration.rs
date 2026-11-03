@@ -104,18 +104,18 @@ async fn assert_recorded_conversation_history(
         ]
     );
 
-    // Each row keeps the recorded public identity and its own primary key.
-    let rows: Vec<(String, Option<String>)> =
-        sqlx::query_as("SELECT id, public_id FROM items WHERE conversation_id = $1 ORDER BY seq")
-            .bind(conversation_id)
-            .fetch_all(fixture.pool.as_ref())
-            .await
-            .expect("list conversation rows");
+    // Each entry keeps the recorded public identity and its own item row.
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT item_id, public_id FROM conversation_entries \
+         WHERE conversation_id = $1 AND removed_revision IS NULL ORDER BY seq",
+    )
+    .bind(conversation_id)
+    .fetch_all(fixture.pool.as_ref())
+    .await
+    .expect("list conversation rows");
     assert_eq!(rows.len(), 4);
-    assert_eq!(rows[1].0, item_ids(&first_output)[0]);
-    assert_eq!(rows[3].0, item_ids(&second_output)[0]);
-    assert_eq!(rows[1].1.as_deref(), Some(item_ids(&first_output)[0].as_str()));
-    assert_eq!(rows[3].1.as_deref(), Some(item_ids(&second_output)[0].as_str()));
+    assert_eq!(rows[1].1, item_ids(&first_output)[0]);
+    assert_eq!(rows[3].1, item_ids(&second_output)[0]);
     assert_eq!(
         rows.iter().map(|row| &row.0).collect::<HashSet<_>>().len(),
         4,

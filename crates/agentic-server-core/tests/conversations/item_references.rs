@@ -32,10 +32,11 @@ async fn response_history_public_ids_stay_independent_across_conversation_batche
         .await
         .unwrap();
     assert_eq!(added.len(), 200);
+    // Each occurrence is its own list position; all reference the stored item.
     assert_eq!(
         added
             .iter()
-            .map(|item| &item.id)
+            .map(|item| item.seq)
             .collect::<std::collections::HashSet<_>>()
             .len(),
         200
@@ -142,10 +143,11 @@ async fn reused_item_occurrences_preserve_content_order_and_response_snapshot() 
         .await
         .unwrap();
     assert_eq!(added.len(), 200);
+    // Each occurrence is its own list position; all reference the stored item.
     assert_eq!(
         added
             .iter()
-            .map(|item| &item.id)
+            .map(|item| item.seq)
             .collect::<std::collections::HashSet<_>>()
             .len(),
         200
@@ -201,12 +203,8 @@ async fn reused_item_occurrences_preserve_content_order_and_response_snapshot() 
         store.rehydrate(&source.conversation_id).await.unwrap(),
         vec![message_with_id("msg_original", "original content")]
     );
-    let response = agentic_core::storage::models::response::get(store.pool().unwrap(), "resp_references")
-        .await
-        .unwrap()
-        .unwrap();
-    let ids = response.history_item_ids_vec().unwrap();
-    let snapshot = agentic_core::storage::models::item::get_items(store.pool().unwrap(), &ids)
+    let snapshot = ResponseStore::new(Arc::new(store.pool().unwrap().clone()))
+        .get_items("resp_references")
         .await
         .unwrap();
     assert_eq!(snapshot.len(), before.len());
@@ -224,21 +222,23 @@ async fn reused_item_cannot_read_another_tenants_content() {
         .create_with_metadata_and_items(Some("other"), None, vec![])
         .await
         .unwrap();
-    assert!(
-        store
-            .create_items(
-                "other",
-                &target.conversation_id,
-                vec![message_with_id("msg_private", "replacement")]
-            )
-            .await
-            .is_err()
+    // Another tenant's item is invisible, so the ID creates this tenant's own item.
+    store
+        .create_items(
+            "other",
+            &target.conversation_id,
+            vec![message_with_id("msg_private", "replacement")],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        store.rehydrate(&target.conversation_id).await.unwrap(),
+        vec![message_with_id("msg_private", "replacement")]
     );
-    assert!(store.rehydrate(&target.conversation_id).await.unwrap().is_empty());
 }
 
-/// Several stored rows can share one public ID: the original row and every reference to it.
-/// Resolving that public ID must still insert exactly one row per submitted occurrence.
+/// Several stored rows can share one public ID. Resolving that public ID must still add exactly one
+/// list entry per submitted occurrence.
 #[tokio::test]
 async fn public_id_matching_many_rows_inserts_one_row_per_occurrence() {
     let store = test_store().await;
@@ -278,7 +278,7 @@ async fn public_id_matching_many_rows_inserts_one_row_per_occurrence() {
         .await
         .unwrap();
     assert_eq!(added.len(), 2);
-    assert_ne!(added[0].id, added[1].id);
+    assert_ne!(added[0].seq, added[1].seq);
     for item in &added {
         assert_eq!(item.public_id(), "msg_many");
         assert_eq!(
