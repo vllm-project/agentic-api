@@ -11,6 +11,7 @@ pub mod custom;
 pub mod declaration;
 pub(crate) mod domain_policy;
 pub mod executors;
+pub mod file_search;
 pub mod function;
 pub mod handler;
 pub mod mcp;
