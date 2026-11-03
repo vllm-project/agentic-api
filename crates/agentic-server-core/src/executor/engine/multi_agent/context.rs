@@ -296,7 +296,6 @@ pub(super) async fn prepare_agent(
         new_input_items: Vec::new(),
         response_id: parent.response_id.clone(),
         conversation_id: None,
-        conversation_version: None,
         rehydrated_metadata: None,
         continuation: None,
     };

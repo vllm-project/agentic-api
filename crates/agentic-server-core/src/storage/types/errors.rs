@@ -47,10 +47,6 @@ pub enum StorageError {
     #[error("stored response '{response_id}' has missing or invalid metadata")]
     InvalidResponseMetadata { response_id: String },
 
-    /// A conversation changed after its version was read.
-    #[error("conversation changed while the response was being generated")]
-    ConversationConflict { conversation_id: String },
-
     /// Database operation failed.
     ///
     /// Wraps `sqlx::Error` and automatically converts from it via `#[from]`.
@@ -111,12 +107,6 @@ impl StorageError {
     #[must_use]
     pub fn is_not_configured(&self) -> bool {
         matches!(self, Self::NotConfigured)
-    }
-
-    /// Returns `true` if this error is a conversation version conflict.
-    #[must_use]
-    pub fn is_conversation_conflict(&self) -> bool {
-        matches!(self, Self::ConversationConflict { .. })
     }
 
     /// Returns `true` when the database rejected a duplicate unique key.

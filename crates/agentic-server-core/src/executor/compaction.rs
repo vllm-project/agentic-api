@@ -196,7 +196,6 @@ async fn summarize_items(
         new_input_items: Vec::new(),
         response_id: uuid7_str("resp_"),
         conversation_id: None,
-        conversation_version: None,
         rehydrated_metadata: None,
         continuation: None,
     };
@@ -460,7 +459,6 @@ mod tests {
             new_input_items: Vec::new(),
             response_id: "resp_test".to_owned(),
             conversation_id: None,
-            conversation_version: None,
             rehydrated_metadata: None,
             continuation: None,
         }

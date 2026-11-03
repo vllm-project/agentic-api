@@ -154,7 +154,7 @@ contents must be kept.
 On a new PostgreSQL database, the first startup applies the migrations and then widens timestamp and sequence columns to
 64-bit integers.
 
-Stored requests now fail if their response or conversation state cannot be persisted. For streaming requests, the gateway sends an error event instead of `response.completed`. Most client responses use the generic message `failed to persist response`; the underlying database error is written only to gateway logs. The exception is an optimistic conversation conflict, which returns status `400`, type `invalid_request_error`, code `conversation_locked`, and param `conversation`. No part of the stale turn is persisted, so the client can retry the request against the conversation's latest state. This prevents clients from receiving a response ID that cannot be continued after a lock timeout or other database failure without exposing database schema or constraint details.
+Stored requests now fail if their response or conversation state cannot be persisted. For streaming requests, the gateway sends an error event instead of `response.completed`. Client responses use the generic message `failed to persist response`; the underlying database error is written only to gateway logs. This prevents clients from receiving a response ID that cannot be continued after a lock timeout or other database failure without exposing database schema or constraint details.
 
 `AGENTIC_API_SCHEMA_READY` keeps schema changes under supervisor control. Startup performs a read-only compatibility
 check and fails if the database was created by an earlier release, if required persistence columns, types,
@@ -166,8 +166,7 @@ widen the integer columns in one transaction before starting the DML-only gatewa
 ```sql
 BEGIN;
 ALTER TABLE conversations
-    ALTER COLUMN created_at TYPE BIGINT USING created_at::BIGINT,
-    ALTER COLUMN revision TYPE BIGINT USING revision::BIGINT;
+    ALTER COLUMN created_at TYPE BIGINT USING created_at::BIGINT;
 ALTER TABLE items
     ALTER COLUMN created_at TYPE BIGINT USING created_at::BIGINT,
     ALTER COLUMN seq TYPE BIGINT USING seq::BIGINT;

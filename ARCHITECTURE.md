@@ -1814,14 +1814,14 @@ the upstream reported.
   See [Schema, migrations, and where data goes](#schema-migrations-and-where-data-goes).
 - **`conversation.rs` (tenant-scoped API)** — conversation and item CRUD. Item ownership is checked through
   the conversation so Responses-persisted items are visible too. Item writes share `lock_in_tx` with
-  turn persistence; a monotonic conversation revision makes deletions invalidate active snapshots.
+  turn persistence, so concurrent writers get distinct sequence numbers.
   Removal detaches items rather than destroying history referenced by stored responses.
 - **`models/`** — one `sqlx::FromRow` row struct per table (`Conversation`, `Item`,
   `Response`) plus one SQL function per table operation (`create_in_tx`, `get`,
   `lock_in_tx`, ...). This is the literal DB row shape: JSON columns are still strings
   here. Query SQL is portable across SQLite and PostgreSQL; `lock_in_tx` is the one
   backend-specific operation, because SQLite has no row locks. `conversation::get_with_items` reads
-  a conversation's `revision`, `latest_response_id`, the latest turn's metadata, and its items in
+  a conversation's `latest_response_id`, the latest turn's metadata, and its items in
   one `UNION ALL` statement and orders the items in Rust, so the database does not sort item data.
 - **`types/`** — the only place stored JSON is read or written. Each column has one
   conversion pair:
@@ -1863,8 +1863,9 @@ the upstream reported.
   typed function per operation, taking and returning `InOutItem` and storage types rather
   than rows (`create`, `get`, `get_or_create`, `rehydrate`, `persist`, and the item CRUD).
   Conversation `rehydrate` is one query; response `rehydrate` reads the response row and then its
-  history items. Conversation `persist` always checks the version
-  captured at rehydration and rejects a stale turn; writes run in one transaction via
+  history items. Conversation `persist` locks the conversation and appends the turn after whatever it holds
+  then, as OpenAI does, so a turn never fails because the conversation changed while it ran; writes run in one
+  transaction via
   `pool.begin()` / `tx.commit()`. **These are not to be called outside `executor/` and `storage/`
   themselves.** The only sanctioned callers are `executor/modes/conversation.rs` and
   `executor/modes/response.rs`, described above. (Integration tests and benches import

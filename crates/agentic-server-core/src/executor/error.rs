@@ -46,16 +46,6 @@ pub enum ExecutorError {
     #[error("failed to persist response")]
     Persistence(#[source] Box<ExecutorError>),
 
-    /// A persisted conversation changed after its history was read.
-    ///
-    /// The storage source is retained for internal diagnostics while the
-    /// display message remains safe to send to API clients.
-    #[error("conversation changed while the response was being generated; retry the request")]
-    ConversationLocked {
-        #[source]
-        source: StorageError,
-    },
-
     /// The LLM backend returned a non-2xx HTTP response.
     #[error("LLM request failed ({status}): {body}")]
     LLMRequest {
@@ -173,27 +163,11 @@ impl ExecutorError {
         )
     }
 
-    fn client_visible_error(&self) -> &Self {
-        match self {
-            Self::Persistence(source) if source.contains_conversation_locked() => source.client_visible_error(),
-            _ => self,
-        }
-    }
-
-    fn contains_conversation_locked(&self) -> bool {
-        match self {
-            Self::ConversationLocked { .. } => true,
-            Self::Persistence(source) => source.contains_conversation_locked(),
-            _ => false,
-        }
-    }
-
     /// HTTP status code that best represents this error to an API caller.
     #[must_use]
     pub fn http_status(&self) -> StatusCode {
-        match self.client_visible_error() {
+        match self {
             Self::Storage(StorageError::PreviousResponseNotFound { .. })
-            | Self::ConversationLocked { .. }
             | Self::Tool(
                 ToolError::Config(_)
                 | ToolError::MissingOutput { .. }
@@ -231,9 +205,8 @@ impl ExecutorError {
     /// Machine-readable error type for the API error envelope.
     #[must_use]
     pub fn error_type(&self) -> &'static str {
-        match self.client_visible_error() {
-            Self::ConversationLocked { .. }
-            | Self::Tool(
+        match self {
+            Self::Tool(
                 ToolError::Config(_)
                 | ToolError::MissingOutput { .. }
                 | ToolError::UnknownCallOutput { .. }
@@ -274,8 +247,7 @@ impl ExecutorError {
     /// Short machine-readable error code for the API error envelope.
     #[must_use]
     pub fn error_code(&self) -> &'static str {
-        match self.client_visible_error() {
-            Self::ConversationLocked { .. } => "conversation_locked",
+        match self {
             Self::Storage(StorageError::PreviousResponseNotFound { .. }) => "previous_response_not_found",
             Self::Conflict(_) => "response_already_stored",
             Self::Storage(StorageError::InvalidItemId { .. }) => "invalid_value",
@@ -295,13 +267,12 @@ impl ExecutorError {
     /// Request parameter associated with the API error, when applicable.
     #[must_use]
     pub fn error_param(&self) -> Option<&str> {
-        match self.client_visible_error() {
+        match self {
             Self::Storage(StorageError::InvalidItemId { param, .. })
             | Self::Tool(ToolError::UnknownParameter { param })
             | Self::UnsupportedValue { param, .. } => Some(param),
             Self::Storage(StorageError::ItemAlreadyInConversation) => Some("items"),
             Self::Storage(StorageError::ItemCursorNotFound { .. }) => Some("after"),
-            Self::ConversationLocked { .. } => Some("conversation"),
             Self::Storage(StorageError::PreviousResponseNotFound { .. }) => Some("previous_response_id"),
             Self::Tool(ToolError::MissingOutput { .. } | ToolError::UnknownCallOutput { .. }) => Some("input"),
             Self::InvalidPromptCacheOptions(_) => Some("prompt_cache_options"),
@@ -315,7 +286,7 @@ impl ExecutorError {
     /// Client-safe message for the API error envelope.
     #[must_use]
     pub fn error_message(&self) -> String {
-        match self.client_visible_error() {
+        match self {
             Self::Storage(
                 error @ (StorageError::InvalidItemId { .. }
                 | StorageError::ItemAlreadyInConversation
@@ -336,7 +307,7 @@ impl ExecutorError {
     /// Builds the OpenAI-compatible error object shared by HTTP and SSE.
     pub(crate) fn response_error(&self) -> serde_json::Value {
         let code = if matches!(
-            self.client_visible_error(),
+            self,
             Self::Tool(ToolError::MissingOutput { .. } | ToolError::UnknownCallOutput { .. })
                 | Self::Storage(StorageError::ItemCursorNotFound { .. } | StorageError::ResponseNotFound { .. })
                 | Self::UnsupportedValue { code: None, .. }
@@ -351,10 +322,7 @@ impl ExecutorError {
         error.insert("code".to_owned(), code);
         if let Some(param) = self.error_param() {
             error.insert("param".to_owned(), serde_json::json!(param));
-        } else if matches!(
-            self.client_visible_error(),
-            Self::Storage(StorageError::ResponseNotFound { .. })
-        ) {
+        } else if matches!(self, Self::Storage(StorageError::ResponseNotFound { .. })) {
             error.insert("param".to_owned(), serde_json::Value::Null);
         }
         serde_json::Value::Object(error)
@@ -440,41 +408,6 @@ mod tests {
         let exec_err = ExecutorError::from(json_err);
         assert!(exec_err.source().is_some(), "source should be chained");
         assert!(exec_err.to_string().contains("json error"));
-    }
-
-    #[test]
-    fn conversation_locked_response_preserves_conflict_through_persistence() {
-        use std::error::Error;
-
-        let error = ExecutorError::Persistence(Box::new(ExecutorError::ConversationLocked {
-            source: StorageError::ConversationConflict {
-                conversation_id: "conv_internal".to_owned(),
-            },
-        }));
-
-        let conversation_locked = error.source().expect("persistence source must be retained");
-        let conflict = conversation_locked
-            .source()
-            .expect("conversation conflict source must be retained");
-        assert!(matches!(
-            conflict.downcast_ref::<StorageError>(),
-            Some(StorageError::ConversationConflict { conversation_id })
-                if conversation_id == "conv_internal"
-        ));
-
-        assert_eq!(error.http_status(), StatusCode::BAD_REQUEST);
-        assert_eq!(
-            serde_json::from_slice::<serde_json::Value>(&error.into_response_body())
-                .expect("valid error response JSON"),
-            serde_json::json!({
-                "error": {
-                    "message": "conversation changed while the response was being generated; retry the request",
-                    "type": "invalid_request_error",
-                    "code": "conversation_locked",
-                    "param": "conversation"
-                }
-            })
-        );
     }
 
     #[test]

@@ -166,7 +166,6 @@ async fn rehydrate_request(
         new_input_items,
         response_id,
         conversation_id: None,
-        conversation_version: None,
         rehydrated_metadata: None,
         continuation,
     };
@@ -352,7 +351,6 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
         exec_ctx.conv_handler.rehydrate(ctx),
     )?;
     ctx.conversation_id = Some(conv_data.conversation_id);
-    ctx.conversation_version = Some(snapshot.version);
     let restored = match &snapshot.turn_metadata {
         Some(metadata) => restore_agent_tree(ctx, metadata, exec_ctx.responses_config.max_retained_bytes)?,
         None => false,
@@ -439,9 +437,7 @@ mod tests {
     use super::*;
     use crate::executor::modes::{ConversationHandler, ResponseHandler};
     use crate::executor::pending_calls::pending_calls;
-    use crate::storage::{
-        ConversationStore, ConversationVersion, ResponseMetadata, ResponseStore, create_pool_with_schema,
-    };
+    use crate::storage::{ConversationStore, ResponseMetadata, ResponseStore, create_pool_with_schema};
     use crate::types::agent::{AgentIdentity, AgentTurnId};
     use crate::types::agent_tree::{AgentState, StoredAgent, StoredTreeSnapshot};
     use crate::types::conversations::ConversationMetadata;
@@ -817,7 +813,6 @@ mod tests {
         conversation_store
             .persist(
                 &conversation.conversation_id,
-                ConversationVersion::default(),
                 "resp_conversation_tree",
                 Vec::new(),
                 None,
@@ -904,7 +899,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn new_conversation_rehydration_captures_empty_version() -> Result<(), Box<dyn std::error::Error>> {
+    async fn new_conversation_rehydration_has_no_turn_metadata() -> Result<(), Box<dyn std::error::Error>> {
         let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
         let conversation_store = ConversationStore::new(pool);
         let conversation = conversation_store
@@ -914,12 +909,16 @@ mod tests {
 
         let ctx = rehydrate_conversation(request(Some(&conversation.conversation_id), None), &exec_ctx).await?;
 
-        assert_eq!(ctx.conversation_version, Some(ConversationVersion::default()));
+        assert_eq!(
+            ctx.conversation_id.as_deref(),
+            Some(conversation.conversation_id.as_str())
+        );
+        assert!(ctx.rehydrated_metadata.is_none());
         Ok(())
     }
 
     #[tokio::test]
-    async fn existing_conversation_rehydration_captures_last_response() -> Result<(), Box<dyn std::error::Error>> {
+    async fn existing_conversation_rehydration_continues_the_latest_turn() -> Result<(), Box<dyn std::error::Error>> {
         let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
         let conversation_store = ConversationStore::new(pool);
         let conversation = conversation_store
@@ -932,7 +931,6 @@ mod tests {
         conversation_store
             .persist(
                 &conversation.conversation_id,
-                ConversationVersion::default(),
                 "resp_prior",
                 prior_items,
                 None,
@@ -943,14 +941,9 @@ mod tests {
 
         let ctx = rehydrate_conversation(request(Some(&conversation.conversation_id), None), &exec_ctx).await?;
 
-        assert_eq!(
-            ctx.conversation_version,
-            Some(ConversationVersion {
-                response_id: Some("resp_prior".to_owned()),
-                revision: 1,
-                last_sequence: Some(0),
-            })
-        );
+        assert!(ctx.rehydrated_metadata.is_some());
+        // The stored turn followed by this request's own input.
+        assert_eq!(ctx.enriched_request.input.input_items().count(), 2);
         Ok(())
     }
 
@@ -964,7 +957,6 @@ mod tests {
         conversation_store
             .persist(
                 &conversation.conversation_id,
-                ConversationVersion::default(),
                 "resp_prior",
                 vec![InOutItem::Output(OutputItem::McpListTools(McpListTools::new(
                     "mcpl_prior",
@@ -993,16 +985,6 @@ mod tests {
                 .iter()
                 .all(|item| !matches!(item, InOutItem::Input(InputItem::McpListTools(_))))
         );
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn request_without_continuation_has_no_conversation_version() -> Result<(), Box<dyn std::error::Error>> {
-        let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
-
-        let ctx = rehydrate_conversation(request(None, None), &exec_ctx).await?;
-
-        assert_eq!(ctx.conversation_version, None);
         Ok(())
     }
 
@@ -1197,7 +1179,6 @@ mod tests {
         conversation_store
             .persist(
                 &conversation.conversation_id,
-                ConversationVersion::default(),
                 "resp_conversation_projection",
                 vec![InOutItem::Output(projection)],
                 None,
@@ -1220,21 +1201,6 @@ mod tests {
             assert_eq!(model_input[1]["type"], "function_call_output");
             assert_eq!(model_input[2]["role"], "user");
         }
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn previous_response_rehydration_has_no_conversation_version() -> Result<(), Box<dyn std::error::Error>> {
-        let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
-        let response_store = ResponseStore::new(pool);
-        response_store
-            .persist("resp_prior", None, Vec::new(), None, &ResponseMetadata::default())
-            .await?;
-        let exec_ctx = execution_context(ConversationStore::disabled(), response_store);
-
-        let ctx = rehydrate_conversation(request(None, Some("resp_prior")), &exec_ctx).await?;
-
-        assert_eq!(ctx.conversation_version, None);
         Ok(())
     }
 

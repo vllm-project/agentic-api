@@ -6,25 +6,12 @@ use super::response::ResponseMetadata;
 use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 
-/// Version of a conversation snapshot, including item mutations and legacy state.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct ConversationVersion {
-    /// Last sequence still detects writes by legacy persistence paths.
-    pub last_sequence: Option<i64>,
-    /// Exact persisted turn used to restore effective request metadata.
-    pub response_id: Option<String>,
-    /// Monotonic revision detects deletion, including deleting all items.
-    pub revision: i64,
-}
-
-/// Rehydrated conversation items together with their storage version.
+/// Rehydrated conversation items together with the metadata of the latest turn.
 #[derive(Debug, Clone)]
 pub struct ConversationSnapshot {
     /// Rehydrated input and output items in stored order.
     pub items: Vec<InOutItem>,
-    /// Version derived from the final item sequence and latest response identity.
-    pub version: ConversationVersion,
-    /// `responses.metadata` of the turn that produced `version`; `None` before the first turn.
+    /// `responses.metadata` of the latest turn; `None` before the first turn.
     pub turn_metadata: Option<ResponseMetadata>,
 }
 
@@ -80,7 +67,6 @@ mod tests {
             metadata: metadata.map(str::to_owned),
             created_at: 1_704_067_200,
             latest_response_id: None,
-            revision: 0,
             tenant_id: Some("tenant_test".to_owned()),
         }
     }
