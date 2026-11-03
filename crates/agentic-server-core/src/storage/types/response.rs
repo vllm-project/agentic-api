@@ -1,6 +1,7 @@
 //! Domain type for response storage.
 
 use std::convert::TryFrom;
+use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
@@ -8,7 +9,7 @@ use super::super::models::Response as StorageDbResponse;
 use super::super::models::conversation::LatestTurn;
 use super::errors::StorageError;
 use crate::types::agent_tree::StoredTreeSnapshot;
-use crate::types::io::ToolChoice;
+use crate::types::io::{InputItem, ToolChoice};
 use crate::types::request_response::ResponsePayload;
 use crate::types::tools::ResponsesTool;
 use crate::utils::common::serialize_to_string;
@@ -28,6 +29,44 @@ pub struct ResponseMetadata {
     pub tool_search_loaded_tools: Option<Vec<ResponsesTool>>,
     pub effective_tool_choice: ToolChoice,
     pub effective_instructions: Option<String>,
+}
+
+/// What a turn continues, produced by rehydration and extended by persistence: a stored response, a conversation's
+/// latest turn, or a session's in-memory parent.
+#[derive(Clone, Default, Serialize)]
+pub struct ResponseCheckpoint {
+    /// The response that produced it; `None` for a conversation before its first turn.
+    pub response_id: Option<String>,
+    /// The continued turn's metadata.
+    pub metadata: ResponseMetadata,
+    /// Whether storage holds its history; a transient (`store: false`) session checkpoint has none.
+    pub durable: bool,
+    /// The stored history's rows, in order. Not counted in a session's retained size: the item limit bounds them.
+    #[serde(skip)]
+    pub history_item_ids: Vec<String>,
+    /// The history items a session keeps in memory; empty when only storage holds them.
+    pub history: Vec<InputItem>,
+}
+
+impl fmt::Debug for ResponseCheckpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ResponseCheckpoint")
+            .field("response_id", &self.response_id)
+            .field("items", &self.history.len())
+            .finish_non_exhaustive()
+    }
+}
+
+impl From<ResponseData> for ResponseCheckpoint {
+    fn from(response: ResponseData) -> Self {
+        Self {
+            response_id: Some(response.response_id),
+            metadata: response.metadata,
+            durable: true,
+            history_item_ids: response.history_item_ids,
+            history: Vec::new(),
+        }
+    }
 }
 
 /// Domain entity for a stored LLM response.

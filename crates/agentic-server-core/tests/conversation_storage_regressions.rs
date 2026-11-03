@@ -541,7 +541,13 @@ async fn response_history_keeps_each_occurrence_of_a_public_id() {
     );
 
     responses
-        .persist("resp_next", Some("resp_replay"), vec![updated.clone()], None, &metadata)
+        .persist(
+            "resp_next",
+            Some(&responses.get("resp_replay").await.expect("parent").into()),
+            vec![updated.clone()],
+            None,
+            &metadata,
+        )
         .await
         .unwrap();
     let mut expected = replay;

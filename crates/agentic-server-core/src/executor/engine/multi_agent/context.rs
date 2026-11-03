@@ -296,7 +296,7 @@ pub(super) async fn prepare_agent(
         new_input_items: Vec::new(),
         response_id: parent.response_id.clone(),
         conversation_id: None,
-        rehydrated_metadata: None,
+        checkpoint: None,
         continuation: None,
     };
     let mut pipeline = AgentPipeline::new(ctx, tool_search, StreamRelay::detached());

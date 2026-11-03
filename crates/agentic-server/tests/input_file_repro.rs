@@ -652,11 +652,12 @@ fn composed_upstream_request_cannot_bypass_file_validation() {
         new_input_items: Vec::new(),
         response_id: "resp_composed".to_owned(),
         conversation_id: None,
-        rehydrated_metadata: None,
+        checkpoint: None,
         continuation: None,
     };
     for stream in [false, true] {
-        let error = upstream_request(&ctx, stream).expect_err("direct typed upstream preparation must reject files");
+        let error = upstream_request(&ctx, stream, None, None)
+            .expect_err("direct typed upstream preparation must reject files");
         assert_eq!(error.http_status().as_u16(), 400);
         assert!(error.error_message().contains("input_file"));
     }

@@ -217,7 +217,7 @@ async fn postgres_concurrent_tenant_isolation() {
 #[tokio::test]
 #[ignore = "requires TEST_POSTGRES_URL pointing to an isolated PostgreSQL database"]
 async fn postgres_item_crud_uses_turn_locking_and_preserves_history() {
-    use agentic_core::storage::{ResponseMetadata, ResponseStore};
+    use agentic_core::storage::{ResponseCheckpoint, ResponseMetadata, ResponseStore};
     use agentic_core::types::io::ItemOrder;
 
     let pool = setup_postgres_pool().await;
@@ -282,6 +282,7 @@ async fn postgres_item_crud_uses_turn_locking_and_preserves_history() {
     store
         .persist(
             &conv.conversation_id,
+            &ResponseCheckpoint::default(),
             &agentic_core::utils::common::uuid7_str("resp_"),
             vec![],
             None,

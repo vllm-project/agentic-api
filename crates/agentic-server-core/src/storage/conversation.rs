@@ -9,7 +9,9 @@ use super::pool::{DbPool, DbTransaction};
 use super::types::conversation::encode_metadata;
 use super::types::item::{decode_public, encode};
 use super::types::response::decode_turn_metadata;
-use super::types::{ConversationData, ConversationSnapshot, ResponseMetadata, StorageError, StoreResult};
+use super::types::{
+    ConversationData, ConversationSnapshot, ResponseCheckpoint, ResponseMetadata, StorageError, StoreResult,
+};
 use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 use crate::types::io::ItemOrder;
@@ -77,25 +79,13 @@ impl ConversationStore {
         conversation::get_or_create(pool, conversation_id).await?.try_into()
     }
 
-    /// Gets a conversation by ID.
+    /// Rehydrates a conversation: its items and the checkpoint a turn continues (the latest turn's metadata and the
+    /// history rows).
     ///
     /// # Errors
     ///
-    /// Returns error if conversation not found or database query fails.
-    pub async fn get(&self, conversation_id: &str) -> StoreResult<ConversationData> {
-        let pool = self.pool()?;
-        conversation::get(pool, conversation_id)
-            .await?
-            .ok_or_else(|| StorageError::not_found("Conversation", conversation_id))?
-            .try_into()
-    }
-
-    /// Rehydrates a conversation: its items and the metadata of its latest turn.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if a stored item is invalid or missing its sequence number, the turn's metadata
-    /// is missing or invalid, or the database query fails.
+    /// Returns an error if the conversation does not exist, a stored item is invalid or missing its sequence number,
+    /// the turn's metadata is missing or invalid, or the database query fails.
     pub async fn rehydrate(&self, conversation_id: &str) -> StoreResult<ConversationSnapshot> {
         let pool = self.pool()?;
         let Some(ConversationHistory {
@@ -104,10 +94,7 @@ impl ConversationStore {
             items: rows,
         }) = conversation::get_with_items(pool, conversation_id).await?
         else {
-            return Ok(ConversationSnapshot {
-                items: Vec::new(),
-                turn_metadata: None,
-            });
+            return Err(StorageError::not_found("Conversation", conversation_id));
         };
 
         if let Some(row) = rows.iter().find(|row| row.seq.is_none()) {
@@ -117,16 +104,28 @@ impl ConversationStore {
             });
         }
         let items = rows.iter().map(InOutItem::try_from).collect::<StoreResult<_>>()?;
-        let turn_metadata = match &latest_response_id {
+        let history_item_ids = rows.into_iter().map(|row| row.id).collect();
+        // A latest turn that is missing or belongs to another conversation is not continued.
+        let metadata = match &latest_response_id {
             None => None,
             Some(response_id) => decode_turn_metadata(response_id, latest_turn.as_ref())?,
         };
+        let response_id = metadata.is_some().then_some(latest_response_id).flatten();
 
-        Ok(ConversationSnapshot { items, turn_metadata })
+        Ok(ConversationSnapshot {
+            items,
+            checkpoint: ResponseCheckpoint {
+                response_id,
+                metadata: metadata.unwrap_or_default(),
+                durable: true,
+                history_item_ids,
+                history: Vec::new(),
+            },
+        })
     }
 
-    /// Persists a conversation turn: appends its new items after whatever the conversation holds now, as `OpenAI`
-    /// does, and stores the response with its snapshot and metadata as the latest turn.
+    /// Persists a conversation turn: appends its new items after whatever the conversation holds now, and stores the
+    /// response with its snapshot and metadata as the latest turn.
     ///
     /// # Errors
     ///
@@ -134,6 +133,7 @@ impl ConversationStore {
     pub async fn persist(
         &self,
         conversation_id: &str,
+        checkpoint: &ResponseCheckpoint,
         response_id: &str,
         new_items: Vec<InOutItem>,
         snapshot: Option<&ResponsePayload>,
@@ -148,10 +148,11 @@ impl ConversationStore {
         conversation::lock_in_tx(&mut tx, conversation_id)
             .await
             .map_err(|error| conversation_error(error, conversation_id))?;
-        item::create_in_tx(&mut tx, new_items, Some(conversation_id)).await?;
-        // A response branch must see the conversation as it existed at this turn,
-        // including manually added items that may later be detached or deleted.
-        let history_item_ids = item::ids_for_conversation_in_tx(&mut tx, conversation_id).await?;
+        // The response keeps the history the turn continued, as OpenAI does: items added to or removed from the
+        // conversation while the turn ran are not part of it.
+        let mut history_item_ids = checkpoint.history_item_ids.clone();
+        let created = item::create_in_tx(&mut tx, new_items, Some(conversation_id)).await?;
+        history_item_ids.extend(created.into_iter().map(|row| row.id));
         let history_item_ids_json = serialize_to_string(&history_item_ids)?;
 
         response::create_in_tx(

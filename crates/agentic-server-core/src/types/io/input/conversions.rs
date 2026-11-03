@@ -1,6 +1,7 @@
 use crate::types::event::MessageStatus;
 use crate::types::io::{
-    InOutItem, McpCall, OutputItem, OutputMessage, OutputMessageContent, ShellCallOutputMessage, ShellCallStatus,
+    InOutItem, McpCall, OutputItem, OutputMessage, OutputMessageContent, ReasoningTextContent, ShellCallOutputMessage,
+    ShellCallStatus,
 };
 use crate::types::tools::ResponsesTool;
 use crate::utils::common::stable_name_hash;
@@ -221,12 +222,15 @@ impl ResponsesInput {
 
     /// The model-facing copy of canonical history; the public history is unchanged. Every tool reaches the model as a
     /// function tool (MCP, web search and code interpreter records as a call and its output, MCP with the discovery
-    /// naming rule), message files become `input_text` parts and images without a detail get `auto`.
+    /// naming rule), message files become `input_text` parts and images without a detail get `auto`. Reasoning keeps
+    /// only its plaintext, joined into one part: vLLM's generic conversion reads the first part and its Harmony
+    /// conversion joins them all, and neither can use a summary or provider-encrypted state, so a summary-only item
+    /// is dropped.
     ///
     /// # Errors
-    /// Returns a file that cannot be converted to text. Positions refer to the
-    /// model-facing copy; [`Self::validate`] reports the same failure with the
-    /// request's positions and runs first on typed paths.
+    /// Returns a file that cannot be converted to text, or a reasoning item with only encrypted state. Positions refer
+    /// to the model-facing copy; [`Self::validate`] reports a file failure with the request's positions and runs
+    /// first on typed paths.
     pub(crate) fn normalized_model_input(&self, tools: &[ResponsesTool]) -> Result<Self, InputValidationError> {
         let input = self.model_input().into_owned();
         let Self::Items(_) = input else {
@@ -248,6 +252,19 @@ impl ResponsesInput {
                 InputItem::CustomToolCallOutput(output) => model.push(InputItem::FunctionCallOutput(output.into())),
                 InputItem::ShellCall(call) => model.push(InputItem::FunctionCall(call.into())),
                 InputItem::ShellCallOutput(output) => model.push(InputItem::FunctionCallOutput(output.into())),
+                InputItem::Reasoning(mut reasoning) => {
+                    if reasoning.content.iter().all(|content| content.text.is_empty()) {
+                        if reasoning.encrypted_content.is_some() {
+                            return Err(InputValidationError::encrypted_reasoning(model.len()));
+                        }
+                        continue;
+                    }
+                    let text = reasoning.content.iter().map(|content| content.text.as_str());
+                    reasoning.content = vec![ReasoningTextContent::new(text.collect::<Vec<_>>().join("\n"))];
+                    reasoning.summary.clear();
+                    reasoning.encrypted_content = None;
+                    model.push(InputItem::Reasoning(reasoning));
+                }
                 InputItem::Message(mut message) => {
                     if let InputMessageContent::Parts(parts) = &mut message.content {
                         for (part_index, part) in parts.iter_mut().enumerate() {
@@ -454,5 +471,112 @@ mod tests {
                 .starts_with("input[0].content[1]: input_file content is not supported"),
             "{error}"
         );
+    }
+
+    fn reasoning_item(content: &[&str], encrypted_content: Option<&str>) -> InputItem {
+        InputItem::Reasoning(crate::types::io::ReasoningOutput {
+            agent: None,
+            id: "rs_prior".to_owned(),
+            content: content.iter().map(|text| ReasoningTextContent::new(*text)).collect(),
+            summary: vec![crate::types::ReasoningSummaryContent::new("public summary")],
+            encrypted_content: encrypted_content
+                .map(|text| crate::types::OpaqueReasoning::try_from(text.to_owned()).unwrap()),
+            status: Some(crate::types::ReasoningStatus::Completed),
+        })
+    }
+
+    #[test]
+    fn plaintext_reasoning_is_normalized_for_both_vllm_paths() {
+        let input = ResponsesInput::from(vec![reasoning_item(
+            &["first continuation part", "second continuation part"],
+            Some("opaque-provider-state"),
+        )]);
+
+        let model = input
+            .normalized_model_input(&[])
+            .expect("plaintext reasoning is replayable");
+
+        assert!(
+            matches!(&input, ResponsesInput::Items(items) if items.len() == 1),
+            "public history is unchanged"
+        );
+        let ResponsesInput::Items(items) = model else {
+            panic!("expected structured input");
+        };
+        let InOutItem::Input(InputItem::Reasoning(reasoning)) = &items[0] else {
+            panic!("expected reasoning item");
+        };
+        assert_eq!(reasoning.id, "rs_prior");
+        assert_eq!(reasoning.content.len(), 1);
+        assert_eq!(
+            reasoning.content[0].text,
+            "first continuation part\nsecond continuation part"
+        );
+        assert!(reasoning.summary.is_empty());
+        assert_eq!(reasoning.status, Some(crate::types::ReasoningStatus::Completed));
+        assert_eq!(reasoning.encrypted_content, None);
+    }
+
+    #[test]
+    fn encrypted_reasoning_requires_nonempty_plaintext_content() {
+        for content in [Vec::new(), vec![""], vec!["", ""]] {
+            let input = ResponsesInput::from(vec![reasoning_item(&content, Some("opaque-provider-state"))]);
+
+            let error = input
+                .normalized_model_input(&[])
+                .expect_err("encrypted-only reasoning must not reach vLLM");
+
+            assert!(
+                error
+                    .to_string()
+                    .contains("encrypted state without plaintext reasoning content")
+            );
+            assert!(!error.to_string().contains("opaque-provider-state"));
+        }
+    }
+
+    #[test]
+    fn plaintext_reasoning_with_null_encrypted_state_is_normalized_without_summary() {
+        let input = ResponsesInput::from(vec![reasoning_item(&["plaintext continuation"], None)]);
+
+        let model = input
+            .normalized_model_input(&[])
+            .expect("null encrypted state is valid");
+
+        let ResponsesInput::Items(items) = model else {
+            panic!("expected structured input");
+        };
+        let InOutItem::Input(InputItem::Reasoning(reasoning)) = &items[0] else {
+            panic!("expected reasoning item");
+        };
+        assert_eq!(
+            reasoning.content[0].type_,
+            crate::types::ReasoningTextKind::ReasoningText
+        );
+        assert_eq!(reasoning.content[0].text, "plaintext continuation");
+        assert!(reasoning.summary.is_empty());
+        assert_eq!(reasoning.encrypted_content, None);
+    }
+
+    #[test]
+    fn summary_only_reasoning_without_opaque_state_is_removed_from_vllm_copy() {
+        for input in [
+            r#"[{"type":"reasoning","summary":[{"type":"summary_text","text":"public summary"}]}]"#,
+            r#"[{"type":"reasoning","summary":[{"type":"summary_text","text":"public summary"}],"encrypted_content":null}]"#,
+        ] {
+            let input: ResponsesInput = serde_json::from_str(input).unwrap();
+
+            let model = input
+                .normalized_model_input(&[])
+                .expect("summary-only reasoning has no usable vLLM state");
+
+            let ResponsesInput::Items(items) = model else {
+                panic!("expected structured input");
+            };
+            assert!(
+                items.is_empty(),
+                "a reasoning summary must never be promoted to reasoning text"
+            );
+        }
     }
 }

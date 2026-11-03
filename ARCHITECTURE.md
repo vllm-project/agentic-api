@@ -822,10 +822,16 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   for the two request copies' responsibilities.
 - **`rehydrate.rs`** — `rehydrate_conversation()` loads prior history from either the
   conversation store or the response store depending on which ID the request carries,
-  and builds the enriched `RequestContext`. It keeps the continued response's or conversation turn's
-  `ResponseMetadata` on the context (`rehydrated_metadata`), so `prepare.rs` restores tool-search state after
-  compaction without another storage read, and `persist.rs` builds the new turn's metadata (`prepare_metadata`)
-  from the same context. Rehydration retains internal
+  and builds the enriched `RequestContext`. Every source (a stored response, a session parent, or a
+  conversation turn) leaves its `ResponseCheckpoint` on the context (`checkpoint`): the continued turn's
+  metadata and its stored history rows. `prepare.rs` restores tool-search
+  state after compaction from it without another storage read, and persistence extends it: a response's history
+  is its parent's rows plus the new ones, so neither store reads the parent again. A conversation turn's response
+  keeps the history the turn continued, as OpenAI does, while its items are appended after whatever the
+  conversation holds when it is stored. A session keeps the same
+  checkpoint type in memory, with the history items, as the next turn's parent. A conversation is read in one
+  statement; a missing one is created for a stored turn and rejected for an unstored one. Client-supplied item IDs are checked and resolved against storage
+  in one query. Rehydration retains internal
   `InputItem::McpListTools` records so `ToolRegistry` can suppress repeated MCP
   discovery lifecycle output. After stored history and the new request input are
   combined, `pending_calls.rs` validates the complete continuation's function/custom

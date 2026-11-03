@@ -8,4 +8,4 @@ pub mod response;
 pub use conversation::{ConversationData, ConversationSnapshot};
 pub use errors::{StorageError, StoreResult};
 pub use item::{ItemKind, ItemMetadata};
-pub use response::{ResponseData, ResponseMetadata};
+pub use response::{ResponseCheckpoint, ResponseData, ResponseMetadata};

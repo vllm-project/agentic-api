@@ -1,6 +1,7 @@
 mod support;
 
 use agentic_core::config::SqliteConfig;
+use agentic_core::storage::ResponseCheckpoint;
 use agentic_core::storage::ResponseMetadata;
 use agentic_core::storage::StorageError;
 use agentic_core::storage::{
@@ -41,7 +42,10 @@ async fn test_conversation_store_create_and_get() {
     let created = create_conversation(&store).await.expect("create failed");
     assert!(created.conversation_id.starts_with("conv_"));
 
-    let retrieved = store.get(&created.conversation_id).await.expect("get failed");
+    let retrieved = store
+        .retrieve("default_tenant", &created.conversation_id)
+        .await
+        .expect("retrieve failed");
 
     assert_eq!(retrieved.conversation_id, created.conversation_id);
 }
@@ -75,7 +79,7 @@ async fn conversation_snapshot_reports_empty_and_last_response() -> Result<(), B
 
     let snapshot = store.rehydrate(&conversation.conversation_id).await?;
     assert!(snapshot.items.is_empty());
-    assert!(snapshot.turn_metadata.is_none());
+    assert!(snapshot.checkpoint.response_id.is_none());
 
     persist_turn(
         &store,
@@ -88,7 +92,7 @@ async fn conversation_snapshot_reports_empty_and_last_response() -> Result<(), B
 
     let snapshot = store.rehydrate(&conversation.conversation_id).await?;
     assert_eq!(snapshot.items.len(), 2);
-    assert!(snapshot.turn_metadata.is_some());
+    assert!(snapshot.checkpoint.response_id.is_some());
     assert_eq!(
         store.rehydrate(&conversation.conversation_id).await?.items,
         snapshot.items
@@ -183,7 +187,7 @@ async fn items_added_before_a_turn_precede_it() -> Result<(), Box<dyn std::error
 
     let item_only = store.rehydrate(&conversation.conversation_id).await?;
     // Adding items records no turn.
-    assert!(item_only.turn_metadata.is_none());
+    assert!(item_only.checkpoint.response_id.is_none());
 
     let turn = create_input_item("turn");
     persist_turn(
@@ -196,7 +200,7 @@ async fn items_added_before_a_turn_precede_it() -> Result<(), Box<dyn std::error
     .await?;
     let recorded = store.rehydrate(&conversation.conversation_id).await?;
     assert_eq!(recorded.items, vec![added, turn]);
-    assert!(recorded.turn_metadata.is_some());
+    assert!(recorded.checkpoint.response_id.is_some());
 
     Ok(())
 }
@@ -211,6 +215,7 @@ async fn first_turn_stores_its_items() -> Result<(), Box<dyn std::error::Error>>
     store
         .persist(
             &conversation.conversation_id,
+            &ResponseCheckpoint::default(),
             "resp_first",
             items.clone(),
             None,
@@ -247,10 +252,7 @@ async fn zero_item_turns_record_their_exact_metadata() -> Result<(), Box<dyn std
 
         let snapshot = store.rehydrate(&conversation.conversation_id).await?;
         assert!(snapshot.items.is_empty());
-        assert_eq!(
-            snapshot.turn_metadata.as_ref().map(|metadata| metadata.model.as_str()),
-            Some(model)
-        );
+        assert_eq!(Some(snapshot.checkpoint.metadata.model.as_str()), Some(model));
     }
 
     Ok(())
@@ -313,6 +315,7 @@ async fn a_turn_changes_only_its_own_conversation() -> Result<(), Box<dyn std::e
     store
         .persist(
             &second.conversation_id,
+            &ResponseCheckpoint::default(),
             "resp_second_conversation",
             vec![create_input_item("second conversation")],
             None,
@@ -471,7 +474,7 @@ async fn test_response_store_with_previous_response() {
     store
         .persist(
             "resp_2",
-            Some("resp_1"),
+            Some(&store.get("resp_1").await.expect("parent").into()),
             vec![create_output_item("out_2")],
             None,
             &metadata,
@@ -574,7 +577,11 @@ async fn test_response_store_chaining_respects_foreign_key() {
     let result = store
         .persist(
             "resp_3",
-            Some("resp_2"),
+            Some(&ResponseCheckpoint {
+                response_id: Some("resp_2".to_owned()),
+                durable: true,
+                ..ResponseCheckpoint::default()
+            }),
             vec![create_output_item("out3")],
             None,
             &metadata,
@@ -602,6 +609,7 @@ async fn test_conversation_concurrent_turns() {
             store
                 .persist(
                     &conv_id,
+                    &ResponseCheckpoint::default(),
                     response_id,
                     vec![create_input_item(text)],
                     None,
@@ -785,11 +793,11 @@ async fn test_sqlite_same_pool_mixed_read_write_concurrency() {
 // Store-level error handling edge cases
 
 #[tokio::test]
-async fn test_conversation_store_get_nonexistent() {
+async fn test_conversation_store_rehydrate_nonexistent() {
     let pool = setup_pool().await;
     let store = ConversationStore::new(pool);
 
-    let result = store.get("nonexistent_conv").await;
+    let result = store.rehydrate("nonexistent_conv").await;
     assert!(result.is_err(), "expected error for non-existent conversation");
 
     // Verify it's a not found error
@@ -851,20 +859,6 @@ async fn test_response_store_disabled() {
 
     let err = result.unwrap_err();
     assert!(err.is_not_configured());
-}
-
-#[tokio::test]
-async fn test_conversation_store_get_after_create() {
-    let pool = setup_pool().await;
-    let store = ConversationStore::new(pool);
-
-    let created = create_conversation(&store).await.expect("create failed");
-
-    // Immediately try to get it
-    let retrieved = store.get(&created.conversation_id).await.expect("get should succeed");
-
-    assert_eq!(retrieved.conversation_id, created.conversation_id);
-    assert_eq!(retrieved.created_at, created.created_at);
 }
 
 #[tokio::test]
@@ -982,9 +976,7 @@ async fn test_tool_search_conversation_metadata_matches_snapshot_version() {
     .await
     .expect("persist a newer conversation turn");
     // The snapshot keeps the metadata of the turn it was rehydrated at.
-    let metadata = snapshot
-        .turn_metadata
-        .expect("response metadata accompanies conversation items");
+    let metadata = snapshot.checkpoint.metadata;
     assert_eq!(metadata.model, "latest-model");
     assert_eq!(metadata.tool_search_loaded_tools.as_deref().map(<[_]>::len), Some(1));
 }

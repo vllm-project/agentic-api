@@ -139,7 +139,7 @@ async fn hydrate(request: RequestPayload, ctx: &ExecutionContext) -> ExecutorRes
     let live = rehydrate_conversation(request, ctx).await?;
     ensure_splittable(&live.enriched_request)?;
     let stream = live.original_request.stream;
-    let body = RawValue::from_string(upstream_request(&live, stream)?).map_err(ExecutorError::JsonError)?;
+    let body = RawValue::from_string(upstream_request(&live, stream, None, None)?).map_err(ExecutorError::JsonError)?;
     Ok(Hydration {
         request: body,
         context: seal(live.into(), &signing_key())?,
@@ -873,6 +873,7 @@ async fn the_wire_context_round_trips_into_an_equal_context() {
         back.enriched_request.previous_response_id.is_none(),
         "upstream stays stateless"
     );
+    assert!(back.checkpoint.is_none(), "a split context carries no checkpoint");
 }
 
 /// A context `hydrate` did not issue must not be usable.

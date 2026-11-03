@@ -3,87 +3,19 @@
 //! Builds a [`RequestContext`] by loading prior turns from storage and
 //! injecting them into the enriched request before it is forwarded to the LLM.
 
-use super::session::{ResponseCheckpoint, ResponseContinuation, ResponseSession, canonical_session_history};
+use super::session::{ResponseContinuation, ResponseSession, canonical_session_history};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::multi_agent::{CheckpointLimits, ValidatedTreeCheckpoint};
 use crate::executor::pending_calls::first_unanswered_sync_call;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::telemetry::metrics::Stage;
-use crate::storage::{ResponseMetadata, StorageError};
+use crate::storage::{ConversationSnapshot, ResponseCheckpoint, ResponseMetadata, StorageError};
 use crate::tool::ToolError;
 use crate::types::io::InOutItem;
 use crate::types::io::input::is_search_item;
-use crate::types::io::{
-    InputItem, OutputItem, ReasoningOutput, ReasoningTextContent, ResponsesInput, resolve_tool_choice, resolve_tools,
-};
+use crate::types::io::{InputItem, ResponsesInput, resolve_tool_choice, resolve_tools};
 use crate::types::request_response::RequestPayload;
 use crate::utils::uuid7_str;
-
-fn has_plaintext_reasoning(reasoning: &ReasoningOutput) -> bool {
-    reasoning.content.iter().any(|content| !content.text.is_empty())
-}
-
-fn has_opaque_reasoning_state(reasoning: &ReasoningOutput) -> bool {
-    reasoning.encrypted_content.is_some()
-}
-
-/// Reject opaque reasoning that vLLM cannot replay before any normal inference call.
-pub(super) fn validate_reasoning_for_vllm(input: &ResponsesInput) -> ExecutorResult<()> {
-    let ResponsesInput::Items(items) = input else {
-        return Ok(());
-    };
-
-    if items.iter().any(|item| {
-        matches!(item, InOutItem::Input(InputItem::Reasoning(reasoning)) | InOutItem::Output(OutputItem::Reasoning(reasoning)) if has_opaque_reasoning_state(reasoning) && !has_plaintext_reasoning(reasoning))
-    }) {
-        return Err(ExecutorError::InvalidRequest(
-            "reasoning item contains encrypted state without plaintext reasoning content and cannot be replayed to vLLM"
-                .to_owned(),
-        ));
-    }
-
-    Ok(())
-}
-
-/// Prepare reasoning in the vLLM-bound request copy.
-///
-/// vLLM can replay plaintext reasoning content but cannot interpret opaque provider state. Its generic Responses
-/// conversion reads only the first reasoning content part and falls back to a summary when content is absent, while
-/// its Harmony conversion joins all content parts. Normalize usable plaintext into one ordered, newline-delimited part
-/// and remove summaries so both paths receive the same continuation state. Summary-only items have no usable vLLM
-/// state and are omitted. [`RequestContext`] keeps the original request and new input items separately, so none of
-/// these changes mutate persisted state.
-pub(super) fn prepare_reasoning_for_vllm(input: &mut ResponsesInput) -> ExecutorResult<()> {
-    // Validate the complete input before mutation so an error never leaves a partially prepared request behind.
-    validate_reasoning_for_vllm(input)?;
-
-    let ResponsesInput::Items(items) = input else {
-        return Ok(());
-    };
-
-    items.retain_mut(|item| {
-        let (InOutItem::Input(InputItem::Reasoning(reasoning)) | InOutItem::Output(OutputItem::Reasoning(reasoning))) =
-            item
-        else {
-            return true;
-        };
-        if !has_plaintext_reasoning(reasoning) {
-            return false;
-        }
-
-        let plaintext = reasoning
-            .content
-            .iter()
-            .map(|content| content.text.as_str())
-            .collect::<Vec<_>>()
-            .join("\n");
-        reasoning.content = vec![ReasoningTextContent::new(plaintext)];
-        reasoning.summary.clear();
-        reasoning.encrypted_content = None;
-        true
-    });
-    Ok(())
-}
 
 /// Step 1 — Build [`RequestContext`] by rehydrating conversation history.
 ///
@@ -166,7 +98,7 @@ async fn rehydrate_request(
         new_input_items,
         response_id,
         conversation_id: None,
-        rehydrated_metadata: None,
+        checkpoint: None,
         continuation,
     };
 
@@ -273,17 +205,17 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
     if ctx.continuation.is_some() {
         return from_session_response(ctx, exec_ctx).await;
     }
-    let (stored, history) = exec_ctx
+    let (checkpoint, history) = exec_ctx
         .resp_handler
         .rehydrate(ctx)
         .await?
         .ok_or_else(missing_previous_response_id)?;
-    if !restore_agent_tree(ctx, &stored.metadata, exec_ctx.responses_config.max_retained_bytes)? {
+    if !restore_agent_tree(ctx, &checkpoint.metadata, exec_ctx.responses_config.max_retained_bytes)? {
         let items = with_request_items(ctx, InOutItem::into_input_items(history));
         set_model_input(ctx, items)?;
-        apply_effective_settings(ctx, &stored.metadata);
+        apply_effective_settings(ctx, &checkpoint.metadata);
     }
-    ctx.rehydrated_metadata = Some(stored.metadata);
+    ctx.checkpoint = Some(checkpoint);
     Ok(())
 }
 
@@ -303,17 +235,12 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
             }
             .into());
         }
-        let (stored, history) = exec_ctx
+        let (mut checkpoint, history) = exec_ctx
             .resp_handler
             .rehydrate(ctx)
             .await?
             .ok_or_else(missing_previous_response_id)?;
-        let checkpoint = ResponseCheckpoint {
-            response_id: stored.response_id,
-            history: canonical_session_history(InOutItem::into_input_items(history)),
-            metadata: stored.metadata,
-            durable: true,
-        };
+        checkpoint.history = canonical_session_history(InOutItem::into_input_items(history));
         let continuation = ctx.continuation.as_ref().ok_or_else(|| {
             ExecutorError::InvalidRequest("session response requires a continuation lease".to_owned())
         })?;
@@ -324,6 +251,14 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
         set_model_input(ctx, items)?;
         apply_effective_settings(ctx, &parent.metadata);
     }
+    // The model input holds the parent's history; the turn's checkpoint keeps what persistence extends.
+    ctx.checkpoint = Some(ResponseCheckpoint {
+        response_id: parent.response_id.clone(),
+        metadata: parent.metadata.clone(),
+        durable: parent.durable,
+        history_item_ids: parent.history_item_ids.clone(),
+        history: Vec::new(),
+    });
     if let Some(continuation) = ctx.continuation.as_mut() {
         continuation.parent = Some(parent);
     }
@@ -337,29 +272,27 @@ fn missing_previous_response_id() -> ExecutorError {
 
 /// Hydrates `ctx` from the conversation store.
 ///
-/// Gets or creates the conversation (depending on `store`) and rehydrates its history in parallel, then continues
-/// that history with this request's items. A conversation turn does not inherit the stored settings.
+/// Rehydrates the conversation's history and continues it with this request's items. A missing conversation is
+/// created by a stored turn and required by an unstored one. A conversation turn does not inherit the stored settings.
 async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) -> ExecutorResult<()> {
-    let (conv_data, snapshot) = tokio::try_join!(
-        async {
-            if ctx.original_request.store {
-                exec_ctx.conv_handler.get_or_create(ctx).await
-            } else {
-                exec_ctx.conv_handler.get(ctx).await
-            }
-        },
-        exec_ctx.conv_handler.rehydrate(ctx),
-    )?;
-    ctx.conversation_id = Some(conv_data.conversation_id);
-    let restored = match &snapshot.turn_metadata {
-        Some(metadata) => restore_agent_tree(ctx, metadata, exec_ctx.responses_config.max_retained_bytes)?,
-        None => false,
+    let snapshot = match exec_ctx.conv_handler.rehydrate(ctx).await {
+        Err(ExecutorError::Storage(error)) if error.is_not_found() && ctx.original_request.store => {
+            exec_ctx.conv_handler.get_or_create(ctx).await?;
+            ConversationSnapshot::default()
+        }
+        result => result?,
     };
-    if !restored {
+    ctx.conversation_id.clone_from(&ctx.original_request.conversation);
+
+    if !restore_agent_tree(
+        ctx,
+        &snapshot.checkpoint.metadata,
+        exec_ctx.responses_config.max_retained_bytes,
+    )? {
         let items = with_request_items(ctx, InOutItem::into_input_items(snapshot.items));
         set_model_input(ctx, items)?;
     }
-    ctx.rehydrated_metadata = snapshot.turn_metadata;
+    ctx.checkpoint = Some(snapshot.checkpoint);
     Ok(())
 }
 
@@ -437,7 +370,9 @@ mod tests {
     use super::*;
     use crate::executor::modes::{ConversationHandler, ResponseHandler};
     use crate::executor::pending_calls::pending_calls;
-    use crate::storage::{ConversationStore, ResponseMetadata, ResponseStore, create_pool_with_schema};
+    use crate::storage::{
+        ConversationStore, ResponseCheckpoint, ResponseMetadata, ResponseStore, create_pool_with_schema,
+    };
     use crate::types::agent::{AgentIdentity, AgentTurnId};
     use crate::types::agent_tree::{AgentState, StoredAgent, StoredTreeSnapshot};
     use crate::types::conversations::ConversationMetadata;
@@ -511,133 +446,6 @@ mod tests {
         let pending = pending_calls(&history).unwrap();
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].call_id, "live");
-    }
-
-    fn reasoning_item(content: &[&str], encrypted_content: Option<&str>) -> InputItem {
-        InputItem::Reasoning(ReasoningOutput {
-            agent: None,
-            id: "rs_prior".to_owned(),
-            content: content.iter().map(|text| ReasoningTextContent::new(*text)).collect(),
-            summary: vec![crate::types::ReasoningSummaryContent::new("public summary")],
-            encrypted_content: encrypted_content
-                .map(|text| crate::types::OpaqueReasoning::try_from(text.to_owned()).unwrap()),
-            status: Some(crate::types::ReasoningStatus::Completed),
-        })
-    }
-
-    #[test]
-    fn plaintext_reasoning_is_normalized_for_both_vllm_paths() {
-        let mut input = ResponsesInput::from(vec![reasoning_item(
-            &["first continuation part", "second continuation part"],
-            Some("opaque-provider-state"),
-        )]);
-
-        prepare_reasoning_for_vllm(&mut input).expect("plaintext reasoning is replayable");
-
-        let ResponsesInput::Items(items) = input else {
-            panic!("expected structured input");
-        };
-        let InOutItem::Input(InputItem::Reasoning(reasoning)) = &items[0] else {
-            panic!("expected reasoning item");
-        };
-        assert_eq!(reasoning.id, "rs_prior");
-        assert_eq!(reasoning.content.len(), 1);
-        assert_eq!(
-            reasoning.content[0].text,
-            "first continuation part\nsecond continuation part"
-        );
-        assert!(reasoning.summary.is_empty());
-        assert_eq!(reasoning.status, Some(crate::types::ReasoningStatus::Completed));
-        assert_eq!(reasoning.encrypted_content, None);
-    }
-
-    #[test]
-    fn encrypted_reasoning_requires_nonempty_plaintext_content() {
-        for content in [Vec::new(), vec![""], vec!["", ""]] {
-            let mut input = ResponsesInput::from(vec![reasoning_item(&content, Some("opaque-provider-state"))]);
-
-            let error =
-                prepare_reasoning_for_vllm(&mut input).expect_err("encrypted-only reasoning must not reach vLLM");
-
-            assert_eq!(error.http_status(), http::StatusCode::BAD_REQUEST);
-            assert!(
-                error
-                    .to_string()
-                    .contains("encrypted state without plaintext reasoning content")
-            );
-            assert!(!error.to_string().contains("opaque-provider-state"));
-        }
-    }
-
-    #[test]
-    fn plaintext_reasoning_with_null_encrypted_state_is_normalized_without_summary() {
-        let item = reasoning_item(&["plaintext continuation"], None);
-        let mut input = ResponsesInput::from(vec![item]);
-
-        prepare_reasoning_for_vllm(&mut input).expect("null encrypted state is valid");
-
-        let ResponsesInput::Items(items) = input else {
-            panic!("expected structured input");
-        };
-        let InOutItem::Input(InputItem::Reasoning(reasoning)) = &items[0] else {
-            panic!("expected reasoning item");
-        };
-        assert_eq!(
-            reasoning.content[0].type_,
-            crate::types::ReasoningTextKind::ReasoningText
-        );
-        assert_eq!(reasoning.content[0].text, "plaintext continuation");
-        assert!(reasoning.summary.is_empty());
-        assert_eq!(reasoning.encrypted_content, None);
-    }
-
-    #[test]
-    fn summary_only_reasoning_without_opaque_state_is_removed_from_vllm_copy() {
-        for input in [
-            r#"[{"type":"reasoning","summary":[{"type":"summary_text","text":"public summary"}]}]"#,
-            r#"[{"type":"reasoning","summary":[{"type":"summary_text","text":"public summary"}],"encrypted_content":null}]"#,
-        ] {
-            let mut input: ResponsesInput = serde_json::from_str(input).unwrap();
-
-            prepare_reasoning_for_vllm(&mut input).expect("summary-only reasoning has no usable vLLM state");
-
-            let ResponsesInput::Items(items) = input else {
-                panic!("expected structured input");
-            };
-            assert!(
-                items.is_empty(),
-                "a reasoning summary must never be promoted to reasoning text"
-            );
-        }
-    }
-
-    #[test]
-    fn validation_failure_does_not_partially_mutate_input() {
-        let valid = reasoning_item(&["plaintext continuation"], Some("first-opaque-state"));
-        let invalid = reasoning_item(&[], Some("second-opaque-state"));
-        let mut input = ResponsesInput::from(vec![valid.clone(), invalid]);
-
-        prepare_reasoning_for_vllm(&mut input).expect_err("the complete input must validate before normalization");
-
-        let ResponsesInput::Items(items) = input else {
-            panic!("expected structured input");
-        };
-        let (InOutItem::Input(InputItem::Reasoning(actual)), InputItem::Reasoning(expected)) = (&items[0], &valid)
-        else {
-            panic!("expected reasoning items");
-        };
-        assert_eq!(actual.content[0].text, expected.content[0].text);
-        assert_eq!(actual.summary, expected.summary);
-        assert_eq!(actual.encrypted_content, expected.encrypted_content);
-    }
-
-    #[test]
-    fn text_input_is_unchanged() {
-        let mut input = ResponsesInput::Text("plain user input".to_owned());
-
-        prepare_reasoning_for_vllm(&mut input).expect("text input contains no reasoning item");
-
-        assert!(matches!(input, ResponsesInput::Text(ref text) if text == "plain user input"));
     }
 
     fn request(conversation_id: Option<&str>, previous_response_id: Option<&str>) -> RequestPayload {
@@ -813,6 +621,7 @@ mod tests {
         conversation_store
             .persist(
                 &conversation.conversation_id,
+                &ResponseCheckpoint::default(),
                 "resp_conversation_tree",
                 Vec::new(),
                 None,
@@ -913,7 +722,10 @@ mod tests {
             ctx.conversation_id.as_deref(),
             Some(conversation.conversation_id.as_str())
         );
-        assert!(ctx.rehydrated_metadata.is_none());
+        assert!(
+            ctx.checkpoint
+                .is_some_and(|checkpoint| checkpoint.response_id.is_none())
+        );
         Ok(())
     }
 
@@ -931,6 +743,7 @@ mod tests {
         conversation_store
             .persist(
                 &conversation.conversation_id,
+                &ResponseCheckpoint::default(),
                 "resp_prior",
                 prior_items,
                 None,
@@ -941,7 +754,10 @@ mod tests {
 
         let ctx = rehydrate_conversation(request(Some(&conversation.conversation_id), None), &exec_ctx).await?;
 
-        assert!(ctx.rehydrated_metadata.is_some());
+        assert!(
+            ctx.checkpoint
+                .is_some_and(|checkpoint| checkpoint.response_id.as_deref() == Some("resp_prior"))
+        );
         // The stored turn followed by this request's own input.
         assert_eq!(ctx.enriched_request.input.input_items().count(), 2);
         Ok(())
@@ -957,6 +773,7 @@ mod tests {
         conversation_store
             .persist(
                 &conversation.conversation_id,
+                &ResponseCheckpoint::default(),
                 "resp_prior",
                 vec![InOutItem::Output(OutputItem::McpListTools(McpListTools::new(
                     "mcpl_prior",
@@ -985,6 +802,16 @@ mod tests {
                 .iter()
                 .all(|item| !matches!(item, InOutItem::Input(InputItem::McpListTools(_))))
         );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn request_without_continuation_has_no_checkpoint() -> Result<(), Box<dyn std::error::Error>> {
+        let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
+
+        let ctx = rehydrate_conversation(request(None, None), &exec_ctx).await?;
+
+        assert!(ctx.checkpoint.is_none());
         Ok(())
     }
 
@@ -1179,6 +1006,7 @@ mod tests {
         conversation_store
             .persist(
                 &conversation.conversation_id,
+                &ResponseCheckpoint::default(),
                 "resp_conversation_projection",
                 vec![InOutItem::Output(projection)],
                 None,
@@ -1201,6 +1029,24 @@ mod tests {
             assert_eq!(model_input[1]["type"], "function_call_output");
             assert_eq!(model_input[2]["role"], "user");
         }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn previous_response_rehydration_checkpoints_the_parent() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
+        let response_store = ResponseStore::new(pool);
+        response_store
+            .persist("resp_prior", None, Vec::new(), None, &ResponseMetadata::default())
+            .await?;
+        let exec_ctx = execution_context(ConversationStore::disabled(), response_store);
+
+        let ctx = rehydrate_conversation(request(None, Some("resp_prior")), &exec_ctx).await?;
+
+        assert!(
+            ctx.checkpoint
+                .is_some_and(|checkpoint| checkpoint.response_id.as_deref() == Some("resp_prior"))
+        );
         Ok(())
     }
 

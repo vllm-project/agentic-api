@@ -326,10 +326,6 @@ fn compare_recordings(name: &str, openai: &Cassette, gateway: &Cassette) {
         if name.starts_with("pagination") && i >= 4 {
             continue;
         }
-        // B's stored input items (t5, t12) are checked against the `OpenAI` recording only.
-        if name == "concurrent-writes" && (i == 4 || i == 11) {
-            continue;
-        }
         let location = format!("{name} turn {}", i + 1);
         assert_eq!(a.request.method, b.request.method, "{location}: method");
         compare_path(&a.request.path, &b.request.path, &mut ids);
@@ -727,7 +723,7 @@ fn output_id(turn: &Turn) -> String {
 
 /// Three conversations, each changed while its streamed turn B (t3, t10, t16) runs: t4 adds an item,
 /// t11 deletes A's first item, t17 deletes response A. B completes in every case, as on `OpenAI`.
-fn check_concurrent_writes(cassette: &Cassette, openai: bool) {
+fn check_concurrent_writes(cassette: &Cassette) {
     let turns = &cassette.turns;
     assert_eq!(turns.len(), 22, "API step count");
     for (index, turn) in turns.iter().enumerate() {
@@ -774,12 +770,9 @@ fn check_concurrent_writes(cassette: &Cassette, openai: bool) {
     assert_eq!(history(&turns[20]), [finished(14, 15), vec![follow_up]].concat());
     assert_answer(&turns[19], "APRICOT");
 
-    // `OpenAI` stores the history B started from: no side item, and still the deleted item. This gateway
-    // stores the conversation at commit instead, so only the reference recording is pinned here.
-    if openai {
-        assert_eq!(history(&turns[4]), started(1));
-        assert_eq!(history(&turns[11]), started(7));
-    }
+    // B stores the history it started from: no side item, and still the deleted item.
+    assert_eq!(history(&turns[4]), started(1));
+    assert_eq!(history(&turns[11]), started(7));
 }
 
 #[test]
@@ -787,8 +780,8 @@ fn conversation_turn_completes_when_the_conversation_changes_mid_stream() {
     let Some((openai, gateway)) = pair("concurrent-writes") else {
         return;
     };
-    check_concurrent_writes(&openai, true);
-    check_concurrent_writes(&gateway, false);
+    check_concurrent_writes(&openai);
+    check_concurrent_writes(&gateway);
     compare_recordings("concurrent-writes", &openai, &gateway);
 }
 

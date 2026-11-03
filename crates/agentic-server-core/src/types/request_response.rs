@@ -5,6 +5,7 @@ use std::num::NonZeroU64;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use super::conversations::ConversationMetadata;
 use super::io::input::{HistoryNaming, InputValidationError};
 use super::io::{FunctionTool, InputItem, MultiAgentConfig, OutputItem, ResponseUsage, ResponsesInput, ToolChoice};
 use super::tools::ResponsesTool;
@@ -98,7 +99,7 @@ pub struct RequestPayload<T: ?Sized = ResponseTextConfig, C = PromptCacheOptions
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ignore_eos: Option<bool>,
     pub truncation: Option<String>,
-    pub metadata: Option<Value>,
+    pub metadata: Option<ConversationMetadata>,
     pub parallel_tool_calls: Option<bool>,
     /// Hosted collaboration configuration, interpreted by the gateway coordinator.
     /// Independent of the model's `parallel_tool_calls` generation preference.
@@ -175,7 +176,7 @@ pub struct UpstreamRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub truncation: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<&'a Value>,
+    pub metadata: Option<&'a ConversationMetadata>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]

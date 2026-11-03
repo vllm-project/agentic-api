@@ -43,7 +43,7 @@ fn context() -> RequestContext {
         new_input_items: Vec::new(),
         response_id: "resp_reserved".to_owned(),
         conversation_id: None,
-        rehydrated_metadata: None,
+        checkpoint: None,
         continuation: None,
     }
 }

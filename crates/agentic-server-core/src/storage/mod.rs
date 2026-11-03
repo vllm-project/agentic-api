@@ -34,5 +34,6 @@ pub use pool::{
 pub use response::ResponseStore;
 pub use schema::{PoolWithSchema, SchemaManager};
 pub use types::{
-    ConversationData, ConversationSnapshot, ItemKind, ResponseData, ResponseMetadata, StorageError, StoreResult,
+    ConversationData, ConversationSnapshot, ItemKind, ResponseCheckpoint, ResponseData, ResponseMetadata, StorageError,
+    StoreResult,
 };

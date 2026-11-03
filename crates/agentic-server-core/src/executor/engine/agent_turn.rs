@@ -21,7 +21,6 @@ use crate::executor::gateway::{
     execute_and_emit_output_calls, public_output_items, relay_round_events,
 };
 use crate::executor::pipeline::AgentPipeline;
-use crate::executor::rehydrate::prepare_reasoning_for_vllm;
 use crate::executor::request::ExecutionContext;
 use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::telemetry::metrics::Stage;
@@ -90,13 +89,6 @@ pub(super) async fn build_tool_registry(
     registry.cache_listed_mcp_tools(history);
     hosted_search::attach_tool_search(agent, &mut registry)?;
     Ok(registry)
-}
-
-fn prepare_initial_reasoning_for_vllm(input: &mut ResponsesInput, round: usize, compacted: bool) -> ExecutorResult<()> {
-    if round == 0 && !compacted {
-        return prepare_reasoning_for_vllm(input);
-    }
-    Ok(())
 }
 
 /// One agent's tool registry and execution state, retained across its rounds.
@@ -247,11 +239,6 @@ impl<'a> AgentTurn<'a> {
         {
             continuation.mark_outputs_compacted(output_offset);
         }
-        prepare_initial_reasoning_for_vllm(
-            &mut self.pipeline.request.enriched_request.input,
-            round,
-            compaction_usage.is_some(),
-        )?;
         let round_span = crate::executor::telemetry::stages::inference_round(round);
         let timer = self.exec_ctx.metrics.stage(Stage::Inference);
         let fetched = if stream_upstream {

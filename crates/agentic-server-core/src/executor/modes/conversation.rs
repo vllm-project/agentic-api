@@ -37,22 +37,6 @@ impl ConversationHandler {
         self.store.get_or_create(conv_id).await.map_err(ExecutorError::Storage)
     }
 
-    /// Gets an existing conversation.
-    ///
-    /// Reads `conversation` from `ctx.original_request`.
-    ///
-    /// # Errors
-    /// Returns `ExecutorError` if `conversation` is absent, the store is
-    /// disabled, the conversation does not exist, or the database query fails.
-    pub async fn get(&self, ctx: &RequestContext) -> ExecutorResult<ConversationData> {
-        let conv_id = ctx
-            .original_request
-            .conversation
-            .as_deref()
-            .ok_or_else(|| ExecutorError::InvalidRequest("conversation is required for get".into()))?;
-        self.store.get(conv_id).await.map_err(ExecutorError::Storage)
-    }
-
     /// Creates a tenant-owned conversation with its metadata and initial history.
     ///
     /// # Errors
@@ -112,11 +96,10 @@ impl ConversationHandler {
             .map_err(ExecutorError::Storage)
     }
 
-    /// Loads the conversation referenced by the request: its history items, storage version,
-    /// and the metadata of the turn at that version.
+    /// Loads the conversation referenced by the request: its history items and the checkpoint of its latest turn.
     ///
     /// # Errors
-    /// Returns `ExecutorError` if `conversation` is absent, the store is
+    /// Returns `ExecutorError` if `conversation` is absent or does not exist, the store is
     /// disabled, or the database query fails.
     pub async fn rehydrate(&self, ctx: &RequestContext) -> ExecutorResult<ConversationSnapshot> {
         let conv_id = ctx
@@ -219,9 +202,13 @@ impl ConversationHandler {
             .conversation_id
             .as_deref()
             .ok_or_else(|| ExecutorError::InvalidRequest("conversation is required for persist".into()))?;
+        let checkpoint = ctx
+            .checkpoint
+            .as_ref()
+            .ok_or_else(|| ExecutorError::InvalidRequest("conversation checkpoint is required for persist".into()))?;
 
         self.store
-            .persist(conversation_id, &ctx.response_id, items, snapshot, metadata)
+            .persist(conversation_id, checkpoint, &ctx.response_id, items, snapshot, metadata)
             .await
             .map_err(ExecutorError::Storage)
     }
@@ -230,7 +217,7 @@ impl ConversationHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::{ResponseMetadata, create_pool_with_schema};
+    use crate::storage::{ResponseCheckpoint, ResponseMetadata, create_pool_with_schema};
     use crate::types::io::ResponsesInput;
     use crate::types::io::{InputItem, InputMessageContent};
     use crate::types::request_response::RequestPayload;
@@ -254,7 +241,7 @@ mod tests {
             new_input_items: vec![],
             response_id: "resp_test".into(),
             conversation_id: conversation_id.map(str::to_string),
-            rehydrated_metadata: None,
+            checkpoint: None,
             continuation: None,
         }
     }
@@ -274,12 +261,6 @@ mod tests {
     #[tokio::test]
     async fn test_get_or_create_disabled_store_returns_error() {
         let result = disabled_handler().get_or_create(&make_ctx(Some("conv_1"))).await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_get_disabled_store_returns_error() {
-        let result = disabled_handler().get(&make_ctx(Some("conv_1"))).await;
         assert!(result.is_err());
     }
 
@@ -309,6 +290,7 @@ mod tests {
         let handler = ConversationHandler::new(store.clone());
         let mut ctx = make_ctx(Some(&conversation.conversation_id));
         ctx.new_input_items = ctx.original_request.input.clone().into_canonical_items();
+        ctx.checkpoint = Some(ResponseCheckpoint::default());
         ctx.enriched_request.tool_choice = Some(ToolChoice::Required);
         ctx.relax_tool_choice();
 
@@ -318,7 +300,7 @@ mod tests {
         crate::executor::persist::persist(ctx, input_only, None, &exec).await?;
 
         let snapshot = store.rehydrate(&conversation.conversation_id).await?;
-        let metadata = snapshot.turn_metadata.clone().expect("persisted turn metadata");
+        let metadata = snapshot.checkpoint.metadata.clone();
         assert_eq!(metadata.effective_tool_choice, ToolChoice::Required);
         assert_eq!(snapshot.items.len(), 1);
         Ok(())
@@ -334,6 +316,7 @@ mod tests {
         let handler = ConversationHandler::new(store.clone());
         let mut ctx = make_ctx(Some(&conversation.conversation_id));
         ctx.new_input_items = ctx.original_request.input.clone().into_canonical_items();
+        ctx.checkpoint = Some(ResponseCheckpoint::default());
         let competing_items = Vec::from(&ResponsesInput::Text("competing input".into()))
             .into_iter()
             .map(InOutItem::Input)
@@ -341,6 +324,7 @@ mod tests {
         store
             .persist(
                 &conversation.conversation_id,
+                &ResponseCheckpoint::default(),
                 "resp_competing",
                 competing_items,
                 None,

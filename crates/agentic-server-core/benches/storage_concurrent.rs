@@ -49,7 +49,10 @@ async fn persist_turn(
     items: Vec<InOutItem>,
     metadata: &ResponseMetadata,
 ) -> StoreResult<()> {
-    store.persist(conversation_id, response_id, items, None, metadata).await
+    let checkpoint = store.rehydrate(conversation_id).await?.checkpoint;
+    store
+        .persist(conversation_id, &checkpoint, response_id, items, None, metadata)
+        .await
 }
 
 static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);

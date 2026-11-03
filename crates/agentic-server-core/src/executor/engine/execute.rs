@@ -19,7 +19,6 @@ use crate::executor::inference::BoxStream;
 use crate::executor::multi_agent::RunControlReceiver;
 use crate::executor::prepare::prepare_request_tools;
 use crate::executor::rehydrate::rehydrate_with_continuation;
-use crate::executor::rehydrate::validate_reasoning_for_vllm;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::session::{ResponseCheckpointPin, ResponseContinuation, ResponseSession, SteeringQueue};
 use crate::executor::telemetry::{Api, ExecutionSpan, Route};
@@ -206,7 +205,7 @@ impl ExecuteRequest {
             .and_then(|continuation| continuation.parent.as_ref());
         if !self.pinned_continuation
             || self.payload.previous_response_id.as_deref() != Some(steer.previous_response_id.as_str())
-            || parent.is_none_or(|parent| parent.response_id != steer.previous_response_id)
+            || parent.is_none_or(|parent| parent.response_id.as_deref() != Some(steer.previous_response_id.as_str()))
         {
             return Err(ExecutorError::InvalidRequest(
                 "steering input requires an explicitly pinned continuation for its parent".into(),
@@ -444,9 +443,8 @@ async fn prepare(
             "run control requires streaming multi-agent inference".into(),
         ));
     }
-    if !ctx.enriched_request.input.has_compaction_trigger() {
-        validate_reasoning_for_vllm(&ctx.enriched_request.input)?;
-    }
+    // Fail before any tool preparation or response event if the model can't be given this input.
+    ctx.enriched_request.input.normalized_model_input(&[])?;
     prepare_request_tools(ctx)
 }
 

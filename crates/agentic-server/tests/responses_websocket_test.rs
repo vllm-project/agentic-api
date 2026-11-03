@@ -2262,7 +2262,7 @@ async fn test_websocket_generate_false_prewarm_redacts_mcp_runtime_credentials()
         new_input_items: vec![],
         response_id: "resp_lookup".to_owned(),
         conversation_id: None,
-        rehydrated_metadata: None,
+        checkpoint: None,
         continuation: None,
     };
     let stored = fixture

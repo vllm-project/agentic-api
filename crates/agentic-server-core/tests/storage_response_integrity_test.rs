@@ -35,10 +35,6 @@ async fn invalid_history_references_block_read_and_child_persistence() -> Result
         for error in [
             store.get("resp_parent").await.unwrap_err(),
             store.rehydrate("resp_parent").await.unwrap_err(),
-            store
-                .persist("resp_child", Some("resp_parent"), Vec::new(), None, &metadata)
-                .await
-                .unwrap_err(),
         ] {
             assert!(matches!(
                 error,
@@ -82,16 +78,6 @@ async fn invalid_metadata_blocks_both_stores_without_echoing_secrets() -> Result
                 .rehydrate(&conversation.conversation_id)
                 .await
                 .unwrap_err(),
-            responses
-                .persist(
-                    "resp_child",
-                    Some("resp_parent"),
-                    Vec::new(),
-                    None,
-                    &ResponseMetadata::default(),
-                )
-                .await
-                .unwrap_err(),
         ] {
             assert!(matches!(
                 error,
@@ -114,7 +100,14 @@ async fn foreign_latest_turn_is_not_empty_metadata() -> Result<(), Box<dyn std::
     let other = store
         .create("default_tenant", &ConversationMetadata::new(), &[])
         .await?;
-    assert!(store.rehydrate(&other.conversation_id).await?.turn_metadata.is_none());
+    assert!(
+        store
+            .rehydrate(&other.conversation_id)
+            .await?
+            .checkpoint
+            .response_id
+            .is_none()
+    );
     persist_turn(
         &store,
         &first.conversation_id,
@@ -164,7 +157,8 @@ async fn sql_null_legacy_fields_remain_readable() -> Result<(), Box<dyn std::err
         conversations
             .rehydrate(&conversation.conversation_id)
             .await?
-            .turn_metadata
+            .checkpoint
+            .response_id
             .is_none()
     );
     Ok(())

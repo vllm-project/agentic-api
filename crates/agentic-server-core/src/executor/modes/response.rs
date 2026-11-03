@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use crate::storage::{ResponseData, ResponseMetadata, ResponseStore, StorageError};
+use crate::storage::{ResponseCheckpoint, ResponseData, ResponseMetadata, ResponseStore, StorageError};
 use crate::types::io::OutputItem;
 use crate::types::io::{InOutItem, InputItem};
 use crate::types::io::{ItemOrder, ItemPage, ListItemsResponse};
@@ -49,7 +49,7 @@ impl ResponseHandler {
     /// Resolve client references without overwriting the stored item with supplied content.
     pub(crate) async fn resolve_input_items(&self, items: &mut [InOutItem]) -> ExecutorResult<()> {
         let mut seen = HashSet::new();
-        for (index, item) in items.iter_mut().enumerate() {
+        for (index, item) in items.iter().enumerate() {
             let Some(id) = item.id() else { continue };
             if !seen.insert(id.to_owned()) {
                 return Err(ExecutorError::UnsupportedValue {
@@ -67,7 +67,13 @@ impl ResponseHandler {
             ) {
                 item.validate_client_id(format!("input[{index}].id"))?;
             }
-            if let Some(stored) = self.store.get_input_item(id).await? {
+        }
+        let mut stored = self
+            .store
+            .get_input_items_by_id(&seen.into_iter().collect::<Vec<_>>())
+            .await?;
+        for item in items {
+            if let Some(stored) = item.id().and_then(|id| stored.remove(id)) {
                 *item = stored.into_replayed_input();
             }
         }
@@ -149,7 +155,10 @@ impl ResponseHandler {
     /// # Errors
     /// Returns [`StorageError::PreviousResponseNotFound`] for an unknown `previous_response_id`, or
     /// `ExecutorError` if the store is disabled or the history is invalid.
-    pub async fn rehydrate(&self, ctx: &RequestContext) -> ExecutorResult<Option<(ResponseData, Vec<InOutItem>)>> {
+    pub async fn rehydrate(
+        &self,
+        ctx: &RequestContext,
+    ) -> ExecutorResult<Option<(ResponseCheckpoint, Vec<InOutItem>)>> {
         let Some(prev_id) = ctx.original_request.previous_response_id.as_deref() else {
             return Ok(None);
         };
@@ -163,8 +172,8 @@ impl ResponseHandler {
         Ok(Some((stored, history)))
     }
 
-    /// Stores one response turn: its items, snapshot and metadata, extending the history of the request's
-    /// `previous_response_id`.
+    /// Stores one response turn: its items, snapshot and metadata, extending the history rehydration captured in
+    /// `ctx.checkpoint`. Returns the turn's history rows.
     ///
     /// # Errors
     /// [`ExecutorError::Conflict`] when a turn is already stored under this response's id, or `ExecutorError` if the
@@ -175,12 +184,13 @@ impl ResponseHandler {
         items: Vec<InOutItem>,
         snapshot: Option<&ResponsePayload>,
         metadata: &ResponseMetadata,
-    ) -> ExecutorResult<()> {
+    ) -> ExecutorResult<Vec<String>> {
         let result = self
             .store
+            // A transient session parent has no stored history to extend.
             .persist(
                 &ctx.response_id,
-                ctx.original_request.previous_response_id.as_deref(),
+                ctx.checkpoint.as_ref().filter(|checkpoint| checkpoint.durable),
                 items,
                 snapshot,
                 metadata,
@@ -225,7 +235,7 @@ mod tests {
             new_input_items: vec![],
             response_id: "resp_test".into(),
             conversation_id: None,
-            rehydrated_metadata: None,
+            checkpoint: None,
             continuation: None,
         }
     }
