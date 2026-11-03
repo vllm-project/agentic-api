@@ -293,7 +293,7 @@ pub fn shown_blocks(content: &Value) -> Vec<String> {
         .collect()
 }
 
-/// Persist a turn at the conversation's current version, as the executor does after rehydrating.
+/// Persist a turn without a response snapshot.
 #[allow(dead_code)]
 pub async fn persist_turn(
     store: &ConversationStore,
@@ -302,8 +302,5 @@ pub async fn persist_turn(
     items: Vec<InOutItem>,
     metadata: &ResponseMetadata,
 ) -> StoreResult<()> {
-    let version = store.rehydrate(conversation_id).await?.version;
-    store
-        .persist(conversation_id, version, response_id, items, None, metadata)
-        .await
+    store.persist(conversation_id, response_id, items, None, metadata).await
 }

@@ -12,8 +12,7 @@ use crate::executor::multi_agent::ValidatedTreeCheckpoint;
 use crate::executor::telemetry::ExecutorMetrics;
 use crate::storage::backend::redact_database_urls;
 use crate::storage::{
-    ConversationStore, ConversationVersion, DatabaseBackend, ResponseMetadata, ResponseStore,
-    create_pool_with_schema_and_configs,
+    ConversationStore, DatabaseBackend, ResponseMetadata, ResponseStore, create_pool_with_schema_and_configs,
 };
 use crate::tool::{GatewayExecutorRegistration, GatewayExecutors};
 use crate::types::io::{InOutItem, ToolChoice};
@@ -44,9 +43,6 @@ pub struct RequestContext {
     pub response_id: String,
     /// Resolved conversation ID. `None` when `store=false` or non-conversational.
     pub conversation_id: Option<String>,
-    /// Conversation version captured with rehydrated history.
-    /// `None` for non-conversation and `previous_response_id` execution.
-    pub conversation_version: Option<ConversationVersion>,
     /// Metadata of the stored response or conversation turn this request continues, loaded by rehydration.
     /// A transient session parent keeps its own; read both through [`RequestContext::rehydrated_metadata`].
     pub rehydrated_metadata: Option<ResponseMetadata>,

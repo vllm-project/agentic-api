@@ -307,7 +307,7 @@ fn comparable_body(turn: &Turn) -> Value {
             turn.request.body.get("conversation").is_some() || turn.request.body.get("conversation_id").is_some();
         return response_shape(&body, has_conversation);
     }
-    if turn.request.path.ends_with("/items") && turn.response.status_code == 200 {
+    if turn.request.path.ends_with("items") && turn.response.status_code == 200 {
         return list_shape(&body);
     }
     if turn.request.path.contains("/items/") && turn.request.method == "GET" && turn.response.status_code == 200 {
@@ -324,6 +324,10 @@ fn compare_recordings(name: &str, openai: &Cassette, gateway: &Cassette) {
         // boundaries therefore differ; each provider's pages are checked
         // against its own full ordered list below.
         if name.starts_with("pagination") && i >= 4 {
+            continue;
+        }
+        // B's stored input items (t5, t12) are checked against the `OpenAI` recording only.
+        if name == "concurrent-writes" && (i == 4 || i == 11) {
             continue;
         }
         let location = format!("{name} turn {}", i + 1);
@@ -367,7 +371,8 @@ fn compare_recordings(name: &str, openai: &Cassette, gateway: &Cassette) {
                 "{location}: SSE lifecycle"
             );
         }
-        let a_body = comparable_body(a);
+        let mut a_body = comparable_body(a);
+        remap_error_message(&mut a_body, &ids);
         let b_body = comparable_body(b);
         compare_value(&a_body, &b_body, &location, &mut ids, false);
     }
@@ -693,6 +698,100 @@ async fn pagination_matches_openai() {
 #[path = "conversations/replay.rs"]
 mod replay;
 
+const APRICOT: &str = "Remember the word APRICOT. Reply with only OK.";
+const COUNT: &str = "Count from 1 to 120, one number per line, digits only.";
+
+/// Message history as user text and generated item IDs, so recordings compare despite model wording.
+fn history(turn: &Turn) -> Vec<String> {
+    turn.response.body.as_ref().expect("list body")["data"]
+        .as_array()
+        .expect("list data")
+        .iter()
+        .filter(|item| item["type"] == "message")
+        .map(|item| match item["role"].as_str() {
+            Some("user") => item["content"][0]["text"].as_str().expect("user text").to_owned(),
+            _ => item["id"].as_str().expect("item ID").to_owned(),
+        })
+        .collect()
+}
+
+fn output_id(turn: &Turn) -> String {
+    let body = result_body(&turn.response);
+    let output = body["output"].as_array().expect("response output");
+    let message = output
+        .iter()
+        .find(|item| item["type"] == "message")
+        .expect("output message");
+    message["id"].as_str().expect("message ID").to_owned()
+}
+
+/// Three conversations, each changed while its streamed turn B (t3, t10, t16) runs: t4 adds an item,
+/// t11 deletes A's first item, t17 deletes response A. B completes in every case, as on `OpenAI`.
+fn check_concurrent_writes(cassette: &Cassette, openai: bool) {
+    let turns = &cassette.turns;
+    assert_eq!(turns.len(), 22, "API step count");
+    for (index, turn) in turns.iter().enumerate() {
+        assert_eq!(turn.filename, format!("t{}", index + 1));
+        let status = if index == 21 { 404 } else { 200 };
+        assert_eq!(turn.response.status_code, status, "t{} status", index + 1);
+    }
+    for b in [2, 9, 15] {
+        assert_eq!(turns[b].request.body["input"][0]["content"], COUNT);
+        assert!(
+            sse_events(&turns[b].response)
+                .iter()
+                .all(|event| event["type"] != "error")
+        );
+        assert_eq!(lifecycle(&turns[b].response).last().unwrap(), "response.completed");
+    }
+    let started = |a: usize| vec![APRICOT.to_owned(), output_id(&turns[a]), COUNT.to_owned()];
+    let finished = |a: usize, b: usize| [started(a), vec![output_id(&turns[b])]].concat();
+
+    let mut expected = finished(1, 2);
+    expected.insert(2, "Side note: the marker is VIOLET.".to_owned());
+    assert_eq!(history(&turns[5]), expected, "side item precedes B's items");
+
+    let deleted = turns[8].response.body.as_ref().unwrap()["data"][0]["id"]
+        .as_str()
+        .unwrap();
+    assert!(turns[10].request.path.ends_with(&format!("/items/{deleted}")));
+    assert_eq!(history(&turns[12]), finished(7, 9)[1..], "deleted item stays deleted");
+
+    let response_a = result_body(&turns[14].response)["id"].as_str().unwrap().to_owned();
+    assert_eq!(turns[16].request.path, format!("/v1/responses/{response_a}"));
+    assert_eq!(turns[16].response.body.as_ref().unwrap()["deleted"], true);
+    assert_eq!(turns[21].request.path, turns[16].request.path);
+    assert_eq!(history(&turns[17]), started(14));
+    assert_eq!(
+        history(&turns[18]),
+        finished(14, 15),
+        "deleting a response keeps its items"
+    );
+    let follow_up = turns[19].request.body["input"][0]["content"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(history(&turns[20]), [finished(14, 15), vec![follow_up]].concat());
+    assert_answer(&turns[19], "APRICOT");
+
+    // `OpenAI` stores the history B started from: no side item, and still the deleted item. This gateway
+    // stores the conversation at commit instead, so only the reference recording is pinned here.
+    if openai {
+        assert_eq!(history(&turns[4]), started(1));
+        assert_eq!(history(&turns[11]), started(7));
+    }
+}
+
+#[test]
+fn conversation_turn_completes_when_the_conversation_changes_mid_stream() {
+    let Some((openai, gateway)) = pair("concurrent-writes") else {
+        return;
+    };
+    check_concurrent_writes(&openai, true);
+    check_concurrent_writes(&gateway, false);
+    compare_recordings("concurrent-writes", &openai, &gateway);
+}
+
 fn check_edge_case_recording(cassette: &Cassette) {
     let turns = &cassette.turns;
     assert_eq!(turns.len(), 19);
@@ -921,7 +1020,6 @@ async fn existing_conversation_item_error_matches_openai_recording() {
     assert_eq!(&body, reference.turns[17].response.body.as_ref().unwrap());
     let after = store.rehydrate(&conversation.conversation_id).await.unwrap();
     assert_eq!(after.items, before.items);
-    assert_eq!(after.version, before.version);
 }
 
 #[tokio::test]

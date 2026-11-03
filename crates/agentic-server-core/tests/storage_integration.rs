@@ -2,11 +2,11 @@ mod support;
 
 use agentic_core::config::SqliteConfig;
 use agentic_core::storage::ResponseMetadata;
+use agentic_core::storage::StorageError;
 use agentic_core::storage::{
     ConversationData, ConversationStore, ResponseStore, StoreResult, create_pool_with_schema,
     create_pool_with_schema_and_sqlite_config,
 };
-use agentic_core::storage::{ConversationVersion, StorageError};
 use agentic_core::types::conversations::ConversationMetadata;
 use agentic_core::types::event::MessageStatus;
 use agentic_core::types::io::InOutItem;
@@ -75,7 +75,7 @@ async fn conversation_snapshot_reports_empty_and_last_response() -> Result<(), B
 
     let snapshot = store.rehydrate(&conversation.conversation_id).await?;
     assert!(snapshot.items.is_empty());
-    assert_eq!(snapshot.version, ConversationVersion::default());
+    assert!(snapshot.turn_metadata.is_none());
 
     persist_turn(
         &store,
@@ -88,14 +88,7 @@ async fn conversation_snapshot_reports_empty_and_last_response() -> Result<(), B
 
     let snapshot = store.rehydrate(&conversation.conversation_id).await?;
     assert_eq!(snapshot.items.len(), 2);
-    assert_eq!(
-        snapshot.version,
-        ConversationVersion {
-            response_id: Some("resp_1".to_owned()),
-            revision: 1,
-            last_sequence: Some(1),
-        }
-    );
+    assert!(snapshot.turn_metadata.is_some());
     assert_eq!(
         store.rehydrate(&conversation.conversation_id).await?.items,
         snapshot.items
@@ -179,54 +172,37 @@ async fn conversation_snapshot_rejects_items_without_a_sequence() -> Result<(), 
 }
 
 #[tokio::test]
-async fn item_only_version_records_a_turn_on_the_next_persist() -> Result<(), Box<dyn std::error::Error>> {
+async fn items_added_before_a_turn_precede_it() -> Result<(), Box<dyn std::error::Error>> {
     let pool = setup_pool().await;
     let store = ConversationStore::new(Arc::clone(&pool));
     let conversation = create_conversation(&store).await?;
+    let added = create_input_item("item");
     store
-        .create_items(
-            "default_tenant",
-            &conversation.conversation_id,
-            vec![create_input_item("item")],
-        )
+        .create_items("default_tenant", &conversation.conversation_id, vec![added.clone()])
         .await?;
 
     let item_only = store.rehydrate(&conversation.conversation_id).await?;
-    // Adding items advances the revision but records no turn.
-    assert_eq!(
-        item_only.version,
-        ConversationVersion {
-            last_sequence: Some(0),
-            response_id: None,
-            revision: 1,
-        }
-    );
+    // Adding items records no turn.
+    assert!(item_only.turn_metadata.is_none());
 
-    store
-        .persist(
-            &conversation.conversation_id,
-            item_only.version,
-            "resp_after_items",
-            Vec::new(),
-            None,
-            &ResponseMetadata::default(),
-        )
-        .await?;
+    let turn = create_input_item("turn");
+    persist_turn(
+        &store,
+        &conversation.conversation_id,
+        "resp_after_items",
+        vec![turn.clone()],
+        &ResponseMetadata::default(),
+    )
+    .await?;
     let recorded = store.rehydrate(&conversation.conversation_id).await?;
-    assert_eq!(
-        recorded.version,
-        ConversationVersion {
-            response_id: Some("resp_after_items".to_owned()),
-            revision: 2,
-            last_sequence: Some(0),
-        }
-    );
+    assert_eq!(recorded.items, vec![added, turn]);
+    assert!(recorded.turn_metadata.is_some());
 
     Ok(())
 }
 
 #[tokio::test]
-async fn conversation_version_empty_checked_persist_succeeds() -> Result<(), Box<dyn std::error::Error>> {
+async fn first_turn_stores_its_items() -> Result<(), Box<dyn std::error::Error>> {
     let pool = setup_pool().await;
     let store = ConversationStore::new(pool);
     let conversation = create_conversation(&store).await?;
@@ -235,7 +211,6 @@ async fn conversation_version_empty_checked_persist_succeeds() -> Result<(), Box
     store
         .persist(
             &conversation.conversation_id,
-            ConversationVersion::default(),
             "resp_first",
             items.clone(),
             None,
@@ -245,109 +220,49 @@ async fn conversation_version_empty_checked_persist_succeeds() -> Result<(), Box
 
     let snapshot = store.rehydrate(&conversation.conversation_id).await?;
     assert_eq!(snapshot.items, items);
-    assert_eq!(
-        snapshot.version,
-        ConversationVersion {
-            response_id: Some("resp_first".to_owned()),
-            revision: 1,
-            last_sequence: Some(1),
-        }
-    );
 
     Ok(())
 }
 
 #[tokio::test]
-async fn zero_item_turn_advances_version_and_retains_exact_metadata() -> Result<(), Box<dyn std::error::Error>> {
+async fn zero_item_turns_record_their_exact_metadata() -> Result<(), Box<dyn std::error::Error>> {
     let pool = setup_pool().await;
-    let store = ConversationStore::new(Arc::clone(&pool));
-    let response_store = ResponseStore::new(pool);
+    let store = ConversationStore::new(pool);
     let conversation = create_conversation(&store).await?;
-    let empty = store.rehydrate(&conversation.conversation_id).await?;
-    let first_metadata = ResponseMetadata {
-        multi_agent_tree: None,
-        model: "first-zero-item-turn".to_owned(),
-        ..ResponseMetadata::default()
-    };
 
-    store
-        .persist(
+    for model in ["first-zero-item-turn", "second-zero-item-turn"] {
+        let metadata = ResponseMetadata {
+            multi_agent_tree: None,
+            model: model.to_owned(),
+            ..ResponseMetadata::default()
+        };
+        persist_turn(
+            &store,
             &conversation.conversation_id,
-            empty.version,
-            "resp_zero_items_first",
+            &format!("resp_{model}"),
             Vec::new(),
-            None,
-            &first_metadata,
+            &metadata,
         )
         .await?;
 
-    let first = store.rehydrate(&conversation.conversation_id).await?;
-    assert!(first.items.is_empty());
-    assert_eq!(
-        first.version,
-        ConversationVersion {
-            response_id: Some("resp_zero_items_first".to_owned()),
-            revision: 1,
-            last_sequence: None,
-        }
-    );
-    assert_eq!(
-        first.turn_metadata.as_ref().map(|metadata| metadata.model.as_str()),
-        Some("first-zero-item-turn")
-    );
-
-    store
-        .persist(
-            &conversation.conversation_id,
-            first.version.clone(),
-            "resp_zero_items_second",
-            Vec::new(),
-            None,
-            &ResponseMetadata {
-                multi_agent_tree: None,
-                model: "second-zero-item-turn".to_owned(),
-                ..ResponseMetadata::default()
-            },
-        )
-        .await?;
-
-    let second = store.rehydrate(&conversation.conversation_id).await?;
-    assert!(second.items.is_empty());
-    assert_ne!(second.version, first.version);
-    assert_eq!(
-        first.turn_metadata.as_ref().map(|metadata| metadata.model.as_str()),
-        Some("first-zero-item-turn")
-    );
-    assert_eq!(
-        second.turn_metadata.as_ref().map(|metadata| metadata.model.as_str()),
-        Some("second-zero-item-turn")
-    );
-
-    let error = store
-        .persist(
-            &conversation.conversation_id,
-            first.version,
-            "resp_zero_items_stale",
-            Vec::new(),
-            None,
-            &ResponseMetadata::default(),
-        )
-        .await
-        .expect_err("an earlier zero-item turn must be stale");
-    assert!(error.is_conversation_conflict());
-    assert!(response_store.get("resp_zero_items_stale").await.is_err());
+        let snapshot = store.rehydrate(&conversation.conversation_id).await?;
+        assert!(snapshot.items.is_empty());
+        assert_eq!(
+            snapshot.turn_metadata.as_ref().map(|metadata| metadata.model.as_str()),
+            Some(model)
+        );
+    }
 
     Ok(())
 }
 
 #[tokio::test]
-async fn conversation_version_stale_checked_persist_rolls_back_items_and_response()
--> Result<(), Box<dyn std::error::Error>> {
+async fn turn_appends_after_a_turn_stored_while_it_ran() -> Result<(), Box<dyn std::error::Error>> {
     let pool = setup_pool().await;
     let store = ConversationStore::new(Arc::clone(&pool));
     let response_store = ResponseStore::new(Arc::clone(&pool));
     let conversation = create_conversation(&store).await?;
-    let snapshot = store.rehydrate(&conversation.conversation_id).await?;
+    // Both turns start from the empty conversation; OpenAI stores each after whatever is there when it finishes.
     let competing_items = vec![
         create_input_item("competing input"),
         create_output_item("msg_competing"),
@@ -360,123 +275,28 @@ async fn conversation_version_stale_checked_persist_rolls_back_items_and_respons
         &ResponseMetadata::default(),
     )
     .await?;
-    let rejected_items = vec![create_input_item("stale input"), create_output_item("msg_stale")];
+    let later_items = vec![create_input_item("later input"), create_output_item("msg_later")];
 
-    let error = store
-        .persist(
-            &conversation.conversation_id,
-            snapshot.version,
-            "resp_stale",
-            rejected_items,
-            None,
-            &ResponseMetadata::default(),
-        )
-        .await
-        .expect_err("a stale conversation version must be rejected");
+    persist_turn(
+        &store,
+        &conversation.conversation_id,
+        "resp_later",
+        later_items.clone(),
+        &ResponseMetadata::default(),
+    )
+    .await?;
 
-    assert!(error.is_conversation_conflict());
-    assert!(matches!(
-        error,
-        StorageError::ConversationConflict { conversation_id }
-            if conversation_id == conversation.conversation_id
-    ));
     assert_eq!(
         store.rehydrate(&conversation.conversation_id).await?.items,
-        competing_items
+        [competing_items, later_items].concat()
     );
-    let response_error = response_store
-        .get("resp_stale")
-        .await
-        .expect_err("the rejected response must not be stored");
-    assert!(response_error.is_not_found());
-
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn conversation_version_racing_checked_persists_allow_exactly_one_winner()
--> Result<(), Box<dyn std::error::Error>> {
-    let pool = setup_pool().await;
-    let store = ConversationStore::new(Arc::clone(&pool));
-    let conversation = create_conversation(&store).await?;
-    let version = store.rehydrate(&conversation.conversation_id).await?.version;
-    let barrier = Arc::new(tokio::sync::Barrier::new(2));
-
-    let writer_one = {
-        let store = ConversationStore::new(Arc::clone(&pool));
-        let conversation_id = conversation.conversation_id.clone();
-        let barrier = Arc::clone(&barrier);
-        let version = version.clone();
-        tokio::spawn(async move {
-            let items = vec![create_input_item("writer one"), create_output_item("msg_writer_one")];
-            barrier.wait().await;
-            let result = store
-                .persist(
-                    &conversation_id,
-                    version,
-                    "resp_writer_one",
-                    items.clone(),
-                    None,
-                    &ResponseMetadata::default(),
-                )
-                .await;
-            (result, items)
-        })
-    };
-    let writer_two = {
-        let store = ConversationStore::new(pool);
-        let conversation_id = conversation.conversation_id.clone();
-        tokio::spawn(async move {
-            let items = vec![create_input_item("writer two"), create_output_item("msg_writer_two")];
-            barrier.wait().await;
-            let result = store
-                .persist(
-                    &conversation_id,
-                    version,
-                    "resp_writer_two",
-                    items.clone(),
-                    None,
-                    &ResponseMetadata::default(),
-                )
-                .await;
-            (result, items)
-        })
-    };
-
-    let (writer_one_result, writer_one_items) = writer_one.await?;
-    let (writer_two_result, writer_two_items) = writer_two.await?;
-
-    assert_eq!(
-        usize::from(writer_one_result.is_ok()) + usize::from(writer_two_result.is_ok()),
-        1
-    );
-    assert_eq!(
-        usize::from(
-            writer_one_result
-                .as_ref()
-                .is_err_and(StorageError::is_conversation_conflict)
-        ) + usize::from(
-            writer_two_result
-                .as_ref()
-                .is_err_and(StorageError::is_conversation_conflict)
-        ),
-        1
-    );
-    let winner_items = if writer_one_result.is_ok() {
-        writer_one_items
-    } else {
-        writer_two_items
-    };
-    assert_eq!(
-        store.rehydrate(&conversation.conversation_id).await?.items,
-        winner_items
-    );
+    response_store.get("resp_later").await?;
 
     Ok(())
 }
 
 #[tokio::test]
-async fn conversation_version_is_scoped_per_conversation() -> Result<(), Box<dyn std::error::Error>> {
+async fn a_turn_changes_only_its_own_conversation() -> Result<(), Box<dyn std::error::Error>> {
     let pool = setup_pool().await;
     let store = ConversationStore::new(pool);
     let first = create_conversation(&store).await?;
@@ -490,12 +310,9 @@ async fn conversation_version_is_scoped_per_conversation() -> Result<(), Box<dyn
         &ResponseMetadata::default(),
     )
     .await?;
-    let first_snapshot = store.rehydrate(&first.conversation_id).await?;
-
     store
         .persist(
             &second.conversation_id,
-            ConversationVersion::default(),
             "resp_second_conversation",
             vec![create_input_item("second conversation")],
             None,
@@ -505,7 +322,6 @@ async fn conversation_version_is_scoped_per_conversation() -> Result<(), Box<dyn
 
     let first_after = store.rehydrate(&first.conversation_id).await?;
     assert_eq!(first_after.items, first_items);
-    assert_eq!(first_after.version, first_snapshot.version);
 
     Ok(())
 }
@@ -778,18 +594,14 @@ async fn test_conversation_concurrent_turns() {
 
     let conversation = create_conversation(&store).await.expect("create failed");
     let conv_id = conversation.conversation_id.clone();
-    // Both turns were rehydrated from the same conversation version.
-    let version = store.rehydrate(&conv_id).await.expect("rehydrate failed").version;
 
     let spawn_turn = |response_id: &'static str, text: &'static str| {
         let store = ConversationStore::new(pool.clone());
         let conv_id = conv_id.clone();
-        let version = version.clone();
         tokio::spawn(async move {
             store
                 .persist(
                     &conv_id,
-                    version,
                     response_id,
                     vec![create_input_item(text)],
                     None,
@@ -804,15 +616,10 @@ async fn test_conversation_concurrent_turns() {
         second.await.expect("turn task panicked"),
     ];
 
-    // Exactly one turn commits; the other is rejected as stale.
-    assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
-    assert!(
-        results
-            .iter()
-            .any(|result| matches!(result, Err(StorageError::ConversationConflict { .. })))
-    );
+    // As on OpenAI, both turns commit, each appended after the other's items in commit order.
+    assert!(results.iter().all(Result::is_ok));
     let rehydrated = store.rehydrate(&conv_id).await.expect("rehydrate failed");
-    assert_eq!(rehydrated.items.len(), 1);
+    assert_eq!(rehydrated.items.len(), 2);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -1180,79 +987,6 @@ async fn test_tool_search_conversation_metadata_matches_snapshot_version() {
         .expect("response metadata accompanies conversation items");
     assert_eq!(metadata.model, "latest-model");
     assert_eq!(metadata.tool_search_loaded_tools.as_deref().map(<[_]>::len), Some(1));
-}
-
-#[tokio::test]
-async fn test_tool_search_conversation_conflict_does_not_persist_stale_loaded_state() {
-    let pool = setup_pool().await;
-    let store = ConversationStore::new(pool);
-    let conversation = create_conversation(&store).await.expect("create conversation");
-    let snapshot = store
-        .rehydrate(&conversation.conversation_id)
-        .await
-        .expect("capture empty version");
-    let winning_tool: agentic_core::types::tools::ResponsesTool = serde_json::from_value(serde_json::json!({
-        "type": "function",
-        "name": "winning_tool",
-        "parameters": {"type": "object"},
-        "defer_loading": true
-    }))
-    .expect("winning tool");
-    let stale_tool: agentic_core::types::tools::ResponsesTool = serde_json::from_value(serde_json::json!({
-        "type": "function",
-        "name": "stale_tool",
-        "parameters": {"type": "object"},
-        "defer_loading": true
-    }))
-    .expect("stale tool");
-    let winning = ResponseMetadata {
-        multi_agent_tree: None,
-        model: "winner".to_owned(),
-        effective_tools: Some(vec![winning_tool.clone()]),
-        tool_search_loaded_tools: Some(vec![winning_tool]),
-        ..ResponseMetadata::default()
-    };
-    let stale = ResponseMetadata {
-        multi_agent_tree: None,
-        model: "stale".to_owned(),
-        effective_tools: Some(vec![stale_tool.clone()]),
-        tool_search_loaded_tools: Some(vec![stale_tool]),
-        ..ResponseMetadata::default()
-    };
-
-    store
-        .persist(
-            &conversation.conversation_id,
-            snapshot.version.clone(),
-            "resp_tool_search_winner",
-            vec![create_input_item("winner")],
-            None,
-            &winning,
-        )
-        .await
-        .expect("winning turn persists");
-    let error = store
-        .persist(
-            &conversation.conversation_id,
-            snapshot.version,
-            "resp_tool_search_stale",
-            vec![create_input_item("stale")],
-            None,
-            &stale,
-        )
-        .await
-        .expect_err("stale turn conflicts");
-    assert!(matches!(error, StorageError::ConversationConflict { .. }));
-
-    let snapshot = store
-        .rehydrate(&conversation.conversation_id)
-        .await
-        .expect("rehydrate winning state");
-    let latest = snapshot.turn_metadata.expect("winning metadata");
-    assert_eq!(latest.model, "winner");
-    let serialized = serde_json::to_value(latest.tool_search_loaded_tools).unwrap();
-    assert_eq!(serialized[0]["name"], "winning_tool");
-    assert!(!serialized.to_string().contains("stale_tool"));
 }
 
 #[tokio::test]

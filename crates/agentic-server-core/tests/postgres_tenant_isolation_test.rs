@@ -217,7 +217,7 @@ async fn postgres_concurrent_tenant_isolation() {
 #[tokio::test]
 #[ignore = "requires TEST_POSTGRES_URL pointing to an isolated PostgreSQL database"]
 async fn postgres_item_crud_uses_turn_locking_and_preserves_history() {
-    use agentic_core::storage::{ResponseMetadata, ResponseStore, StorageError};
+    use agentic_core::storage::{ResponseMetadata, ResponseStore};
     use agentic_core::types::io::ItemOrder;
 
     let pool = setup_postgres_pool().await;
@@ -248,7 +248,6 @@ async fn postgres_item_crud_uses_turn_locking_and_preserves_history() {
         .await
         .unwrap();
     assert_eq!(first.len(), 1, "Responses items must be visible");
-    let snapshot = store.rehydrate(&conv.conversation_id).await.unwrap();
     let barrier = Arc::new(tokio::sync::Barrier::new(8));
     let mut tasks = Vec::new();
     for _ in 0..8 {
@@ -279,17 +278,17 @@ async fn postgres_item_crud_uses_turn_locking_and_preserves_history() {
         .delete_item("crud_tenant", &conv.conversation_id, first[0].id().unwrap())
         .await
         .unwrap();
-    let stale = store
+    // A turn that ran while an item was deleted still stores, as on OpenAI.
+    store
         .persist(
             &conv.conversation_id,
-            snapshot.version,
             &agentic_core::utils::common::uuid7_str("resp_"),
             vec![],
             None,
             &ResponseMetadata::default(),
         )
-        .await;
-    assert!(matches!(stale, Err(StorageError::ConversationConflict { .. })));
+        .await
+        .expect("a turn after an item deletion persists");
     store.delete("crud_tenant", &conv.conversation_id).await.unwrap();
     assert_eq!(
         ResponseStore::new(pool).rehydrate(&response_id).await.unwrap().1,

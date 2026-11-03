@@ -20,13 +20,12 @@ use crate::config::{DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS, PostgresConfig, 
 type DbResult<T> = Result<T, sqlx::Error>;
 
 const POSTGRES_SCHEMA_ADVISORY_LOCK: i64 = 7_194_963_546_799_751;
-const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 24;
+const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 23;
 const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 7;
-const REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT: i64 = 5;
+const REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT: i64 = 4;
 const POSTGRES_INTEGER_WIDENING_SQL: &str = "
     ALTER TABLE conversations
-        ALTER COLUMN created_at TYPE BIGINT USING created_at::BIGINT,
-        ALTER COLUMN revision TYPE BIGINT USING revision::BIGINT;
+        ALTER COLUMN created_at TYPE BIGINT USING created_at::BIGINT;
     ALTER TABLE items
         ALTER COLUMN created_at TYPE BIGINT USING created_at::BIGINT,
         ALTER COLUMN seq TYPE BIGINT USING seq::BIGINT;
@@ -77,7 +76,6 @@ where
                  ('conversations', 'tenant_id', 'text', 'YES'), \
                  ('conversations', 'metadata', 'text', 'YES'), \
                  ('conversations', 'latest_response_id', 'text', 'YES'), \
-                 ('conversations', 'revision', 'integer', 'NO'), \
                  ('items', 'id', 'text', 'NO'), \
                  ('items', 'data', 'text', 'NO'), \
                  ('items', 'public_id', 'text', 'NO'), \
@@ -166,7 +164,7 @@ where
          JOIN pg_namespace table_namespace \
            ON table_namespace.oid = table_relation.relnamespace \
           AND table_namespace.nspname = actual.table_schema \
-         WHERE (actual.table_name = 'conversations' AND actual.column_name IN ('created_at', 'revision')) \
+         WHERE (actual.table_name = 'conversations' AND actual.column_name = 'created_at') \
             OR (actual.table_name = 'items' AND actual.column_name IN ('created_at', 'seq')) \
             OR (actual.table_name = 'responses' AND actual.column_name = 'created_at')",
     )
@@ -778,7 +776,7 @@ mod tests {
         let bigint_columns: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM information_schema.columns \
              WHERE table_schema = $1 AND data_type = 'bigint' \
-             AND ((table_name = 'conversations' AND column_name IN ('created_at', 'revision')) \
+             AND ((table_name = 'conversations' AND column_name = 'created_at') \
                OR (table_name = 'items' AND column_name IN ('created_at', 'seq')) \
                OR (table_name = 'responses' AND column_name = 'created_at'))",
         )
@@ -901,7 +899,7 @@ mod tests {
         let bigint_columns: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM information_schema.columns \
              WHERE table_schema = $1 AND data_type = 'bigint' \
-             AND ((table_name = 'conversations' AND column_name IN ('created_at', 'revision')) \
+             AND ((table_name = 'conversations' AND column_name = 'created_at') \
                OR (table_name = 'items' AND column_name IN ('created_at', 'seq')) \
                OR (table_name = 'responses' AND column_name = 'created_at'))",
         )

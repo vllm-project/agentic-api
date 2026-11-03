@@ -90,7 +90,6 @@ mod tests {
             new_input_items: Vec::new(),
             response_id: "resp_child".to_owned(),
             conversation_id: None,
-            conversation_version: None,
             rehydrated_metadata: None,
             continuation: Some(session.begin(Some("resp_parent")).unwrap()),
         };

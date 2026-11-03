@@ -20,7 +20,7 @@ Modes:
   responses   No conversation created. Chains turns purely via
               previous_response_id. Supports --openai, --vllm, and --gateway backends.
   items       Records flat conversation/item API steps. Select --items-scenario
-              continuation, deletion, branch, pagination, or edge-cases.
+              continuation, deletion, branch, pagination, edge-cases, or concurrent-writes.
 
 Usage:
     python tests/cassettes/record_cassette.py --turns 2 --no-stream --output path/to/cassette.yaml
@@ -44,6 +44,7 @@ import os
 import secrets
 import socket
 import ssl
+import itertools
 import struct
 import sys
 import threading
@@ -51,7 +52,7 @@ import time
 import types
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Callable
 from urllib.parse import urlparse
 
 import click
@@ -71,6 +72,8 @@ logger = logging.getLogger("cassette_proxy")
 MODEL = "gpt-4o"
 PROXY_HOST = "127.0.0.1"
 PROXY_PORT = 7070
+# A driver that overlaps requests numbers each one in send order; the proxy strips this header.
+RECORDING_TURN_HEADER = "x-recording-turn"
 TIMEOUT = 60 * 5
 HTTP_READ_TIMEOUT = TIMEOUT
 
@@ -127,7 +130,7 @@ def _turn_number(output_file: Path) -> int:
     return len(data["turns"]) + 1
 
 
-def _append_turn(output_file: Path, turn: dict[str, Any]) -> None:
+def _append_turn(output_file: Path, turn: dict[str, Any], *, ordered: bool = False) -> None:
     output_file.parent.mkdir(parents=True, exist_ok=True)
     if output_file.exists() and output_file.stat().st_size > 0:
         data = yaml_load(output_file.read_text(encoding="utf-8")) or {}
@@ -135,6 +138,9 @@ def _append_turn(output_file: Path, turn: dict[str, Any]) -> None:
         data = {}
     turns: list = data.get("turns", [])
     turns.append(turn)
+    if ordered:
+        # Driver-numbered requests can complete out of order; keep the file in send order.
+        turns.sort(key=lambda recorded: int(recorded["filename"][1:]))
     data["turns"] = turns
     with open(output_file, "w", encoding="utf-8") as f:
         yaml_dump(data, f, allow_unicode=True, default_flow_style=False)
@@ -186,7 +192,8 @@ async def proxy_request(request: Request, path: str) -> Response:
     target_host: str = request.app.state.target_host
     output_file: Path = request.app.state.output_file
 
-    turn_num = getattr(request.state, "recording_turn", None)
+    sent_turn = request.headers.get(RECORDING_TURN_HEADER)
+    turn_num = getattr(request.state, "recording_turn", None) or (int(sent_turn) if sent_turn else None)
     if turn_num is None:
         turn_num = _turn_number(output_file)
     filename = f"t{turn_num}"
@@ -214,7 +221,9 @@ async def proxy_request(request: Request, path: str) -> Response:
         "response": {},
     }
 
-    forward_headers = {k: v for k, v in request.headers.items() if k.lower() != "host"}
+    forward_headers = {
+        k: v for k, v in request.headers.items() if k.lower() not in {"host", RECORDING_TURN_HEADER}
+    }
 
     if parsed_body.get("stream", False):
 
@@ -253,7 +262,7 @@ async def proxy_request(request: Request, path: str) -> Response:
                         "content-type", "text/event-stream"
                     )
                 }
-                _append_turn(output_file, turn)
+                _append_turn(output_file, turn, ordered=sent_turn is not None)
                 print(f"  [recorded turn {turn_num} -> {output_file.name}]")
 
         agen = _stream()
@@ -287,7 +296,7 @@ async def proxy_request(request: Request, path: str) -> Response:
         turn["response"]["body"] = body
         turn["response"]["status_code"] = response.status_code
         turn["response"]["headers"] = {"content-type": media_type}
-        _append_turn(output_file, turn)
+        _append_turn(output_file, turn, ordered=sent_turn is not None)
         print(f"  [recorded turn {turn_num} -> {output_file.name}]")
         return Response(
             content=response.content,
@@ -382,6 +391,7 @@ def _item_response(
     previous_response_id: str | None = None,
     stream: bool = False,
     store: bool = True,
+    during: Callable[[], None] | None = None,
 ) -> dict:
     if conversation and previous_response_id:
         raise ValueError("conversation and previous_response_id are mutually exclusive")
@@ -396,7 +406,7 @@ def _item_response(
     if previous_response_id:
         body["previous_response_id"] = previous_response_id
     result = (
-        _send_streaming(client, body, proxy_url)
+        _send_streaming(client, body, proxy_url, during)
         if stream
         else _send_nonstreaming(client, body, proxy_url)
     )
@@ -425,6 +435,46 @@ def _record_duplicate_items(
     _item_request(client, proxy_url, "GET", source_items_path, params={"order": "asc"})
 
 
+def _record_concurrent_writes(client: httpx.Client, proxy_url: str, model: str) -> None:
+    """Change a conversation while its streamed turn B runs, once per case on a fresh conversation.
+
+    Each side request runs after B's first output text delta. Requests are numbered in send order, so B
+    precedes its side request in every recording even though the side request completes first.
+    """
+    sequence = itertools.count(1)
+    client.event_hooks["request"].append(
+        lambda sent: sent.headers.__setitem__(RECORDING_TURN_HEADER, str(next(sequence)))
+    )
+
+    def request(method: str, path: str, **kwargs: Any) -> dict:
+        return _item_request(client, proxy_url, method, path, **kwargs)
+
+    def turn(conversation: str, prompt: str, during: Callable[[], None] | None = None) -> dict:
+        return _item_response(client, proxy_url, model, prompt, conversation=conversation,
+                              stream=during is not None, during=during)
+
+    ascending = {"order": "asc"}
+    for case in ("add-item", "delete-item", "delete-response"):
+        conversation = _create_conversation(client, proxy_url)
+        items_path = f"/v1/conversations/{conversation}/items"
+        first = turn(conversation, "Remember the word APRICOT. Reply with only OK.")
+        if case == "add-item":
+            side_item = {"type": "message", "role": "user", "content": "Side note: the marker is VIOLET."}
+            during = lambda: request("POST", items_path, body={"items": [side_item]})
+        elif case == "delete-item":
+            first_item = request("GET", items_path, params={"order": "asc", "limit": 1})["data"][0]["id"]
+            during = lambda: request("DELETE", f"{items_path}/{first_item}")
+        else:
+            during = lambda: request("DELETE", f"/v1/responses/{first['id']}")
+        streamed = turn(conversation, "Count from 1 to 120, one number per line, digits only.", during)
+        request("GET", f"/v1/responses/{streamed['id']}/input_items", params=ascending)
+        request("GET", items_path, params=ascending)
+        if case == "delete-response":
+            follow_up = turn(conversation, "What word did I ask you to remember? Reply with only that word.")
+            request("GET", f"/v1/responses/{follow_up['id']}/input_items", params=ascending)
+            request("GET", f"/v1/responses/{first['id']}", expected_status=None)
+
+
 def run_items(
     client: httpx.Client, proxy_url: str, model: str, scenario: str, stream: bool,
     *, max_output_tokens: int | None = None,
@@ -436,6 +486,11 @@ def run_items(
             run_responses=run_responses, load_tool_outputs=_load_tool_outputs_file,
             max_output_tokens=max_output_tokens,
         )
+        return
+    if scenario == "concurrent-writes":
+        if not stream:
+            raise click.UsageError("--items-scenario concurrent-writes streams turn B; use --stream.")
+        _record_concurrent_writes(client, proxy_url, model)
         return
     if scenario == "store-false":
         conv_id = _create_conversation(client, proxy_url)
@@ -795,7 +850,10 @@ def _send_nonstreaming(client: httpx.Client, body: dict, proxy_url: str) -> dict
     return data
 
 
-def _send_streaming(client: httpx.Client, body: dict, proxy_url: str) -> dict | None:
+def _send_streaming(
+    client: httpx.Client, body: dict, proxy_url: str, on_first_delta: Callable[[], None] | None = None
+) -> dict | None:
+    """Stream a Responses call; `on_first_delta` runs once, mid-stream, after the first output text delta."""
     response_data = None
     print("\n[Streaming response]")
     with client.stream(
@@ -822,8 +880,13 @@ def _send_streaming(client: httpx.Client, body: dict, proxy_url: str) -> dict | 
                     elif payload.get("object") == "response" and payload.get("status") == "completed":
                         response_data = payload
                 except Exception:
-                    pass
+                    continue
+                if on_first_delta and payload.get("type") == "response.output_text.delta":
+                    on_first_delta, during = None, on_first_delta
+                    during()
     print()
+    if on_first_delta:
+        raise RuntimeError("stream ended before the first output text delta")
     return response_data
 
 
@@ -1948,7 +2011,7 @@ def run_responses(
 )
 @click.option(
     "--items-scenario",
-    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "store-false", "multi-agent-store-false", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items"]),
+    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "concurrent-writes", "store-false", "multi-agent-store-false", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items"]),
     default="continuation",
     help="Fixed Conversation Items or Responses API scenario (for --mode items).",
 )
@@ -2226,7 +2289,8 @@ def main(
                           48 if items_scenario == "response-tool-items" else
                           10 if items_scenario == "pagination" else
                           6 if items_scenario == "branch" else
-                          19 if items_scenario == "edge-cases" else 5)
+                          19 if items_scenario == "edge-cases" else
+                          22 if items_scenario == "concurrent-writes" else 5)
         if turns != expected_turns:
             raise click.UsageError(
                 f"--mode items --items-scenario {items_scenario} requires --turns {expected_turns}."

@@ -29,7 +29,6 @@ fn request_context() -> RequestContext {
         new_input_items: Vec::new(),
         response_id: "resp_reserved".to_owned(),
         conversation_id: None,
-        conversation_version: None,
         rehydrated_metadata: None,
         continuation: None,
     }

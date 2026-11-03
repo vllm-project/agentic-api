@@ -143,7 +143,7 @@ async fn regression_cursor_follows_sequence() {
 }
 
 #[tokio::test]
-async fn regression_delete_invalidates_version() {
+async fn regression_turn_after_an_item_deletion_appends() {
     let store = test_store().await;
     let conv = store
         .create(
@@ -153,7 +153,6 @@ async fn regression_delete_invalidates_version() {
         )
         .await
         .unwrap();
-    let snapshot = store.rehydrate(&conv.conversation_id).await.unwrap();
     let items = store
         .list_items("default_tenant", &conv.conversation_id, 100, None, ItemOrder::Asc)
         .await
@@ -162,23 +161,19 @@ async fn regression_delete_invalidates_version() {
         .delete_item("default_tenant", &conv.conversation_id, items[0].id().unwrap())
         .await
         .unwrap();
-    let result = store
-        .persist(
-            &conv.conversation_id,
-            snapshot.version,
-            "resp_stale",
-            vec![regression_message("based on deleted history")],
-            None,
-            &ResponseMetadata::default(),
-        )
-        .await;
-    assert!(
-        matches!(
-            result,
-            Err(agentic_core::storage::StorageError::ConversationConflict { .. })
-        ),
-        "{result:?}"
-    );
+    // OpenAI stores a turn that ran while an item was deleted after the remaining items.
+    persist_turn(
+        &store,
+        &conv.conversation_id,
+        "resp_after_deletion",
+        vec![regression_message("based on deleted history")],
+        &ResponseMetadata::default(),
+    )
+    .await
+    .unwrap();
+    let snapshot = store.rehydrate(&conv.conversation_id).await.unwrap();
+    assert_eq!(snapshot.items.len(), 2);
+    assert_eq!(snapshot.items[1], regression_message("based on deleted history"));
 }
 
 #[tokio::test]
@@ -233,13 +228,12 @@ async fn insert_with_ids(
 }
 
 #[tokio::test]
-async fn deletion_preserves_stored_response_history_and_invalidates_empty_snapshot() {
+async fn deletion_preserves_stored_response_history() {
     let store = test_store().await;
     let conv = store
         .create("default_tenant", &ConversationMetadata::new(), &[])
         .await
         .unwrap();
-    let empty = store.rehydrate(&conv.conversation_id).await.unwrap();
     let inputs = vec![regression_message("keep response history")];
     persist_turn(
         &store,
@@ -258,20 +252,6 @@ async fn deletion_preserves_stored_response_history_and_invalidates_empty_snapsh
         .delete_item("default_tenant", &conv.conversation_id, rows[0].id().unwrap())
         .await
         .unwrap();
-    let result = store
-        .persist(
-            &conv.conversation_id,
-            empty.version,
-            "resp_stale_empty",
-            vec![],
-            None,
-            &ResponseMetadata::default(),
-        )
-        .await;
-    assert!(matches!(
-        result,
-        Err(agentic_core::storage::StorageError::ConversationConflict { .. })
-    ));
     let response_store = ResponseStore::new(Arc::new(store.pool().unwrap().clone()));
     assert_eq!(response_store.rehydrate("resp_kept").await.unwrap().1, inputs);
     persist_turn(
@@ -532,8 +512,6 @@ async fn regression_concurrent_insert_checks_membership_under_the_conversation_l
         snapshot.items.iter().map(InOutItem::id).collect::<Vec<_>>(),
         created.iter().map(InOutItem::id).collect::<Vec<_>>()
     );
-    assert_eq!(snapshot.version.last_sequence, Some(0));
-    assert_eq!(snapshot.version.revision, 1);
 }
 
 #[path = "conversations/item_references.rs"]

@@ -11,9 +11,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use agentic_core::storage::{
-    ConversationStore, ConversationVersion, DbPool, ResponseMetadata, ResponseStore, create_pool_with_schema,
-};
+use agentic_core::storage::{ConversationStore, DbPool, ResponseMetadata, ResponseStore, create_pool_with_schema};
 use agentic_core::types::conversations::ConversationMetadata;
 use agentic_core::types::event::MessageStatus;
 use agentic_core::types::io::{InOutItem, InputItem, InputMessage, InputMessageContent, OutputItem, OutputMessage};
@@ -68,7 +66,6 @@ async fn seed_conversation(store: &ConversationStore, items: usize) -> String {
     store
         .persist(
             &conversation.conversation_id,
-            ConversationVersion::default(),
             &next_id("resp_"),
             history(items),
             None,
@@ -130,8 +127,8 @@ fn bench_response_persist(c: &mut Criterion, rt: &Runtime, store: &ResponseStore
     group.finish();
 }
 
-/// Append one turn to a fresh conversation with `items` of history, checking the captured version
-/// as the executor does. Each sample prepares its conversation outside the timed call.
+/// Append one turn to a fresh conversation with `items` of history. Each sample prepares its conversation
+/// outside the timed call.
 fn bench_conversation_persist(c: &mut Criterion, rt: &Runtime, store: &ConversationStore) {
     let mut group = c.benchmark_group("conversation_persist");
     for items in HISTORY_ITEMS {
@@ -140,13 +137,11 @@ fn bench_conversation_persist(c: &mut Criterion, rt: &Runtime, store: &Conversat
                 let mut elapsed = Duration::ZERO;
                 for _ in 0..iters {
                     let id = seed_conversation(store, items).await;
-                    let version = store.rehydrate(&id).await.expect("capture version").version;
                     let (response_id, new_items) = (next_id("resp_"), turn());
                     let start = Instant::now();
                     store
                         .persist(
                             &id,
-                            version,
                             &response_id,
                             black_box(new_items),
                             None,

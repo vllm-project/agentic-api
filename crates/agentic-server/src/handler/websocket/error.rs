@@ -108,32 +108,6 @@ impl WsError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agentic_core::StorageError;
-
-    #[test]
-    fn executor_conflict_ws_frame_uses_client_conflict_contract() {
-        let error = WsError::Executor(Box::new(ExecutorError::Persistence(Box::new(
-            ExecutorError::ConversationLocked {
-                source: StorageError::ConversationConflict {
-                    conversation_id: "conv_test".to_owned(),
-                },
-            },
-        ))));
-
-        assert_eq!(
-            error.to_ws_frame().expect("client-visible websocket error"),
-            json!({
-                "type": "error",
-                "status": 400,
-                "error": {
-                    "message": "conversation changed while the response was being generated; retry the request",
-                    "type": "invalid_request_error",
-                    "code": "conversation_locked",
-                    "param": "conversation"
-                }
-            })
-        );
-    }
 
     #[test]
     fn non_conflict_ws_frame_omits_param() {
