@@ -167,7 +167,7 @@ async fn rehydrate_request(
         response_id,
         conversation_id: None,
         conversation_version: None,
-        rehydrated_metadata: None,
+        checkpoint: None,
         continuation,
     };
 
@@ -281,8 +281,14 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
         .rehydrate(ctx)
         .await?
         .ok_or_else(missing_previous_response_id)?;
-    if restore_agent_tree(ctx, &stored.metadata, exec_ctx.responses_config.max_retained_bytes)? {
-        ctx.rehydrated_metadata = Some(stored.metadata);
+    let checkpoint = ResponseCheckpoint {
+        response_id: stored.response_id,
+        history: Vec::new(),
+        metadata: stored.metadata,
+        durable: true,
+    };
+    if restore_agent_tree(ctx, &checkpoint.metadata, exec_ctx.responses_config.max_retained_bytes)? {
+        ctx.checkpoint = Some(checkpoint);
         return Ok(());
     }
 
@@ -293,8 +299,8 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
 
     ctx.enriched_request.previous_response_id = None;
     ctx.enriched_request.input = ResponsesInput::from(items);
-    apply_effective_settings(ctx, &stored.metadata);
-    ctx.rehydrated_metadata = Some(stored.metadata);
+    apply_effective_settings(ctx, &checkpoint.metadata);
+    ctx.checkpoint = Some(checkpoint);
     Ok(())
 }
 
@@ -329,6 +335,13 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
         })?;
         std::sync::Arc::new(continuation.retain_parent(checkpoint)?)
     };
+    // The model input holds the parent's history; the turn's checkpoint keeps the rest.
+    ctx.checkpoint = Some(ResponseCheckpoint {
+        response_id: parent.response_id.clone(),
+        history: Vec::new(),
+        metadata: parent.metadata.clone(),
+        durable: parent.durable,
+    });
     if restore_agent_tree(ctx, &parent.metadata, exec_ctx.responses_config.max_retained_bytes)? {
         if let Some(continuation) = ctx.continuation.as_mut() {
             continuation.parent = Some(parent);
@@ -380,12 +393,18 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
         exec_ctx.conv_handler.rehydrate(ctx),
     )?;
 
-    if let Some(metadata) = &snapshot.turn_metadata
-        && restore_agent_tree(ctx, metadata, exec_ctx.responses_config.max_retained_bytes)?
+    let checkpoint = snapshot.turn_metadata.map(|metadata| ResponseCheckpoint {
+        response_id: snapshot.version.response_id.clone().unwrap_or_default(),
+        history: Vec::new(),
+        metadata,
+        durable: true,
+    });
+    if let Some(turn) = &checkpoint
+        && restore_agent_tree(ctx, &turn.metadata, exec_ctx.responses_config.max_retained_bytes)?
     {
         ctx.conversation_id = Some(conv_data.conversation_id);
         ctx.conversation_version = Some(snapshot.version);
-        ctx.rehydrated_metadata = snapshot.turn_metadata;
+        ctx.checkpoint = checkpoint;
         return Ok(());
     }
 
@@ -397,7 +416,7 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
     ctx.enriched_request.input = ResponsesInput::from(items);
     ctx.conversation_id = Some(conv_data.conversation_id);
     ctx.conversation_version = Some(snapshot.version);
-    ctx.rehydrated_metadata = snapshot.turn_metadata;
+    ctx.checkpoint = checkpoint;
     Ok(())
 }
 

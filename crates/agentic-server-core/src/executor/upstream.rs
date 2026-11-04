@@ -567,7 +567,7 @@ pub(super) mod tests {
             response_id: "resp_test".to_owned(),
             conversation_id: None,
             conversation_version: None,
-            rehydrated_metadata: None,
+            checkpoint: None,
             continuation: None,
         }
     }

@@ -273,7 +273,7 @@ mod tests {
             response_id: "resp_test".into(),
             conversation_id: conversation_id.map(str::to_string),
             conversation_version: None,
-            rehydrated_metadata: None,
+            checkpoint: None,
             continuation: None,
         }
     }

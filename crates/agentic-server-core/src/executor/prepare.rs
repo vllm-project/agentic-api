@@ -37,18 +37,19 @@ fn restored_loaded_tools(ctx: &mut RequestContext) -> Vec<ResponsesTool> {
         return Vec::new();
     }
     let Some(loaded) = ctx
-        .rehydrated_metadata()
-        .and_then(|metadata| metadata.tool_search_loaded_tools.clone())
+        .checkpoint
+        .as_ref()
+        .and_then(|checkpoint| checkpoint.metadata.tool_search_loaded_tools.clone())
     else {
         return Vec::new();
     };
     // A response continuation already applied its parent's settings during rehydration; a conversation turn
     // applies them only when compaction made it depend on the loaded definitions.
     if ctx.original_request.conversation.is_some()
-        && let Some(metadata) = ctx.rehydrated_metadata.take()
+        && let Some(checkpoint) = ctx.checkpoint.take()
     {
-        apply_effective_settings(ctx, &metadata);
-        ctx.rehydrated_metadata = Some(metadata);
+        apply_effective_settings(ctx, &checkpoint.metadata);
+        ctx.checkpoint = Some(checkpoint);
     }
     loaded
 }
@@ -91,7 +92,7 @@ mod tests {
             response_id: "resp_child".to_owned(),
             conversation_id: None,
             conversation_version: None,
-            rehydrated_metadata: None,
+            checkpoint: None,
             continuation: Some(session.begin(Some("resp_parent")).unwrap()),
         };
         let restored = restored_loaded_tools(&mut ctx);
