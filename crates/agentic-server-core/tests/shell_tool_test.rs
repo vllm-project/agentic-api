@@ -1,4 +1,5 @@
 //! Constructed regression fixtures, not live OpenAI/vLLM recordings.
+use agentic_core::types::conversations::ConversationMetadata;
 use std::fmt::Write;
 use std::sync::Arc;
 
@@ -43,6 +44,7 @@ fn context() -> RequestContext {
         response_id: "resp_reserved".to_owned(),
         conversation_id: None,
         conversation_version: None,
+        checkpoint: None,
         continuation: None,
     }
 }
@@ -251,7 +253,13 @@ async fn client_shell_continuation_blocking_and_streaming() {
         );
         let mut stored_context = context();
         stored_context.original_request.previous_response_id = Some(final_response.id.clone());
-        let stored = fixture.exec_ctx.resp_handler.rehydrate(&stored_context).await.unwrap();
+        let (_, stored) = fixture
+            .exec_ctx
+            .resp_handler
+            .rehydrate(&stored_context)
+            .await
+            .unwrap()
+            .expect("previous response");
         assert!(
             stored
                 .iter()
@@ -275,7 +283,15 @@ async fn submitted_shell_items_preserve_public_fields_in_storage() {
         let fixture = support::TestFixture::new_with_responses(vec![model_response(false, false, "msg_1")]).await;
         let mut req = request(false);
         if conversation {
-            req.conversation = Some(fixture.exec_ctx.conv_handler.create().await.unwrap().conversation_id);
+            req.conversation = Some(
+                fixture
+                    .exec_ctx
+                    .conv_handler
+                    .create("default_tenant", &ConversationMetadata::new(), &[])
+                    .await
+                    .unwrap()
+                    .conversation_id,
+            );
         }
         let mut call = shell_item("completed");
         call["extension"] = json!("call metadata");
@@ -289,10 +305,17 @@ async fn submitted_shell_items_preserve_public_fields_in_storage() {
         let stored = if let Some(id) = conversation_id {
             ctx.original_request.conversation = Some(id.clone());
             ctx.conversation_id = Some(id);
-            fixture.exec_ctx.conv_handler.rehydrate(&ctx).await.unwrap()
+            fixture.exec_ctx.conv_handler.rehydrate(&ctx).await.unwrap().items
         } else {
             ctx.original_request.previous_response_id = Some(response.id);
-            fixture.exec_ctx.resp_handler.rehydrate(&ctx).await.unwrap()
+            fixture
+                .exec_ctx
+                .resp_handler
+                .rehydrate(&ctx)
+                .await
+                .unwrap()
+                .expect("previous response")
+                .1
         };
         let inputs = stored
             .iter()

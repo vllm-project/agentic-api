@@ -2,7 +2,7 @@ use axum::extract::{Path, Request, State};
 use axum::response::{IntoResponse, Response};
 
 use agentic_core::executor::ExecutorError;
-use agentic_core::storage::{ConversationData, StorageError};
+use agentic_core::storage::ConversationData;
 use agentic_core::types::{
     ConversationResponse, CreateConversationRequest, DeletedResponse, UpdateConversationRequest,
 };
@@ -51,7 +51,11 @@ pub async fn create_conversation(State(state): State<AppState>, req: Request) ->
     match state
         .exec_ctx
         .conv_handler
-        .create_with_metadata_and_items(DEFAULT_TENANT_ID, request.metadata, request.items.unwrap_or_default())
+        .create(
+            DEFAULT_TENANT_ID,
+            &request.metadata.unwrap_or_default(),
+            &request.items.unwrap_or_default(),
+        )
         .await
     {
         Ok(data) => conversation_response(data),
@@ -156,19 +160,11 @@ pub async fn delete_conversation(State(state): State<AppState>, Path(conversatio
     }
 }
 
-pub(super) fn storage_error(error: StorageError) -> Response {
-    executor_error_response(ExecutorError::Storage(error))
-}
-
 pub(super) fn conversation_response(data: ConversationData) -> Response {
-    let metadata = match data.metadata.as_deref().map(serde_json::from_str).transpose() {
-        Ok(metadata) => metadata,
-        Err(error) => return storage_error(StorageError::Serialization(error)),
-    };
     axum::Json(ConversationResponse::new(
         data.conversation_id,
         data.created_at,
-        metadata,
+        data.metadata,
     ))
     .into_response()
 }

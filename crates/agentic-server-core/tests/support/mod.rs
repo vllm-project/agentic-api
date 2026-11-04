@@ -23,6 +23,8 @@ use tokio::task::JoinHandle;
 
 use agentic_core::executor::{BoxStream, ConversationHandler, ExecutionContext, ResponseHandler};
 use agentic_core::storage::{ConversationStore, DbPool, ResponseStore, create_pool_with_schema};
+use agentic_core::storage::{ResponseMetadata, StoreResult};
+use agentic_core::types::io::InOutItem;
 use agentic_core::types::io::{OutputItem, OutputMessageContent};
 use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
 
@@ -761,4 +763,18 @@ pub fn query_params_as_json(uri: &axum::http::Uri) -> serde_json::Value {
         }
     }
     serde_json::Value::Object(params)
+}
+
+/// Persist a turn at the conversation's current version, as the executor does after rehydrating.
+pub async fn persist_turn(
+    store: &ConversationStore,
+    conversation_id: &str,
+    response_id: &str,
+    items: Vec<InOutItem>,
+    metadata: &ResponseMetadata,
+) -> StoreResult<()> {
+    let version = store.rehydrate(conversation_id).await?.version;
+    store
+        .persist(conversation_id, version, response_id, items, metadata)
+        .await
 }

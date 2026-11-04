@@ -682,7 +682,7 @@ async fn disconnect_while_waiting_fails_run_without_publication() {
         }
         (&mut drain).await.unwrap();
         assert!(failed);
-        assert!(exec.resp_handler.retrieve(&response_id).await.is_err());
+        assert!(exec.resp_handler.get_snapshot(&response_id).await.is_err());
     };
     let result = tokio::time::timeout(Duration::from_secs(15), work).await;
     server.abort();
@@ -780,7 +780,7 @@ async fn dropping_event_stream_cancels_waiting_core_and_closes_control() {
             }
             tokio::task::yield_now().await;
         }
-        assert!(exec.resp_handler.retrieve(&response_id).await.is_err());
+        assert!(exec.resp_handler.get_snapshot(&response_id).await.is_err());
     };
     let result = tokio::time::timeout(Duration::from_secs(15), work).await;
     server.abort();
@@ -1070,7 +1070,7 @@ async fn disconnect_during_compaction_cancels_control_without_publishing() {
         }
         // Release the fake upstream only after coordinator teardown: no late commit.
         release.add_permits(1);
-        assert!(exec.resp_handler.retrieve(&response_id).await.is_err());
+        assert!(exec.resp_handler.get_snapshot(&response_id).await.is_err());
     };
     let result = tokio::time::timeout(Duration::from_secs(10), Box::pin(work)).await;
     server.abort();

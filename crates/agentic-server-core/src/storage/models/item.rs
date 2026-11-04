@@ -1,17 +1,11 @@
 //! Conversation history item stored in the database.
 
-use serde_json::Value;
 use std::fmt::Write;
-use tracing::warn;
 
 use super::super::pool::{DbPool, DbResult, DbTransaction};
-use super::super::types::item::{ItemKind, STORED_CODE_INTERPRETER_ORIGIN_KEY, STORED_ITEM_KIND_KEY};
 use crate::storage::{StorageError, StoreResult};
-use crate::types::io::InOutItem;
 use crate::types::io::ItemOrder;
-use crate::types::io::code_interpreter::CodeInterpreterCallOrigin;
-use crate::types::io::{InputItem, OutputItem, ReasoningOutput};
-use crate::utils::common::{deserialize_from_str_opt, utcnow_str, uuid7_str};
+use crate::utils::common::{utcnow_str, uuid7_str};
 
 const ITEM_COLUMN_COUNT: usize = 5;
 const SEQUENCE_COLUMN_INDEX: usize = 4;
@@ -58,82 +52,6 @@ impl Item {
             .as_deref()
             .or(self.reference_id.as_deref())
             .unwrap_or(&self.id)
-    }
-
-    fn data_without_storage_marker(&self) -> Option<(Value, bool)> {
-        let mut value = deserialize_from_str_opt::<Value>(&self.data)?;
-        let gateway_origin = value.get(STORED_CODE_INTERPRETER_ORIGIN_KEY).and_then(Value::as_str) == Some("gateway");
-        if let Some(object) = value.as_object_mut() {
-            object.remove(STORED_ITEM_KIND_KEY);
-            object.remove(STORED_CODE_INTERPRETER_ORIGIN_KEY);
-        }
-        Some((value, gateway_origin))
-    }
-
-    /// Deserialize data column as `InputItem`, projecting pre-typed reasoning rows.
-    #[must_use]
-    pub fn as_input(&self) -> Option<InputItem> {
-        let (value, _) = self.data_without_storage_marker()?;
-        serde_json::from_value(value)
-            .ok()
-            .or_else(|| self.legacy_reasoning().map(InputItem::Reasoning))
-    }
-
-    /// Deserialize data column as `OutputItem`, projecting pre-typed reasoning rows.
-    #[must_use]
-    pub fn as_output(&self) -> Option<OutputItem> {
-        let (value, gateway_origin) = self.data_without_storage_marker()?;
-        let mut output = serde_json::from_value(value)
-            .ok()
-            .or_else(|| self.legacy_reasoning().map(OutputItem::Reasoning))?;
-        if gateway_origin && let OutputItem::CodeInterpreterCall(call) = &mut output {
-            call.origin = CodeInterpreterCallOrigin::Gateway;
-        }
-        Some(output)
-    }
-
-    /// Project a reasoning row written before typed reasoning. Typed decoding already
-    /// failed, so this rare path parses the row again instead of copying every row up front.
-    fn legacy_reasoning(&self) -> Option<ReasoningOutput> {
-        let (value, _) = self.data_without_storage_marker()?;
-        ReasoningOutput::from_legacy_value(&value)
-    }
-
-    /// Deserialize data column as either `InputItem` or `OutputItem`.
-    #[must_use]
-    pub fn as_inout(&self) -> Option<InOutItem> {
-        if let Some(kind) = self.stored_item_kind() {
-            match kind {
-                ItemKind::Input => {
-                    if let Some(input) = self.as_input() {
-                        return Some(InOutItem::Input(input));
-                    }
-                }
-                ItemKind::Output => {
-                    if let Some(output) = self.as_output() {
-                        return Some(InOutItem::Output(output));
-                    }
-                }
-            }
-        }
-
-        let output = self.as_output();
-        if output.as_ref().is_some_and(|item| !matches!(item, OutputItem::Unknown)) {
-            return output.map(InOutItem::Output);
-        }
-
-        self.as_input()
-            .map(InOutItem::Input)
-            .or_else(|| output.map(InOutItem::Output))
-            .or_else(|| {
-                warn!(item_id = %self.id, "unrecognized item type in stored data");
-                None
-            })
-    }
-
-    fn stored_item_kind(&self) -> Option<ItemKind> {
-        let value = deserialize_from_str_opt::<Value>(&self.data)?;
-        ItemKind::from_stored_str(value.get(STORED_ITEM_KIND_KEY)?.as_str()?)
     }
 }
 
@@ -336,17 +254,6 @@ pub async fn get_by_public_id(pool: &DbPool, id: &str) -> DbResult<Option<Item>>
     .await
 }
 
-/// Get items by conversation ID ordered by sequence.
-///
-/// # Errors
-/// Returns `DbResult::Err` if the database query fails.
-pub async fn get_items_by_conversation(pool: &DbPool, conversation_id: &str) -> DbResult<Vec<Item>> {
-    sqlx::query_as::<_, Item>("SELECT * FROM items WHERE conversation_id = $1 ORDER BY seq ASC")
-        .bind(conversation_id)
-        .fetch_all(pool)
-        .await
-}
-
 /// Collect active item IDs in conversation order while holding the turn's transaction.
 ///
 /// # Errors
@@ -473,9 +380,8 @@ pub async fn detach_from_conversation_in_tx(
 
 #[cfg(test)]
 mod tests {
+    use super::super::conversation;
     use super::*;
-    use crate::types::event::MessageStatus;
-    use crate::types::io::{InputItem, OutputItem, ReasoningOutput, ReasoningTextContent};
 
     #[test]
     fn item_values_clause_numbers_plain_rows() {
@@ -508,11 +414,8 @@ mod tests {
             .await
             .expect("insert item batches");
         transaction.commit().await.expect("commit item batches");
-        let row_ids = created.iter().map(|item| item.id.clone()).collect::<Vec<_>>();
-        let loaded = get_items(&pool, &row_ids).await.expect("load item batches");
 
         assert_eq!(created.len(), MAX_BIND_PARAMETERS + 1);
-        assert_eq!(loaded.len(), MAX_BIND_PARAMETERS + 1);
         assert_eq!(
             created.iter().map(Item::public_id).collect::<Vec<_>>(),
             public_ids.iter().map(String::as_str).collect::<Vec<_>>()
@@ -536,8 +439,6 @@ mod tests {
         assert_ne!(created[0].id, created[1].id);
         assert_eq!(created[0].public_id(), "item_repeated");
         assert_eq!(created[1].public_id(), "item_repeated");
-        let row_ids = created.iter().map(|item| item.id.clone()).collect::<Vec<_>>();
-        assert_eq!(get_items(&pool, &row_ids).await.expect("reload history rows").len(), 2);
     }
 
     #[tokio::test]
@@ -546,21 +447,23 @@ mod tests {
             .await
             .expect("create in-memory database");
         let conversation_id = "conv_batch";
-        crate::storage::models::conversation::create(&pool, conversation_id)
-            .await
-            .expect("create conversation");
         let item_count = MAX_ITEMS_PER_INSERT + 1;
         let items = (0..item_count)
             .map(|index| (format!("conversation_item_{index}"), "{}".to_owned()))
             .collect::<Vec<_>>();
         let mut transaction = pool.begin().await.expect("begin transaction");
+        conversation::create_in_tx(&mut transaction, conversation_id, None, None)
+            .await
+            .expect("create conversation");
         let created = create_in_tx(&mut transaction, items, Some(conversation_id))
             .await
             .expect("insert conversation item batches");
         transaction.commit().await.expect("commit item batches");
-        let stored = get_items_by_conversation(&pool, conversation_id)
+        let stored = conversation::get_with_items(&pool, conversation_id)
             .await
-            .expect("load conversation item batches");
+            .expect("load conversation item batches")
+            .expect("conversation exists")
+            .items;
         let expected_sequences = (0..i64::try_from(item_count).expect("item count fits in i64")).collect::<Vec<_>>();
 
         assert_eq!(
@@ -577,361 +480,5 @@ mod tests {
                 .collect::<Vec<_>>(),
             expected_sequences
         );
-    }
-
-    #[test]
-    fn test_item_basic() {
-        let item = Item {
-            id: "item_123".to_string(),
-            data: r#"{"role":"user","content":"hello"}"#.to_string(),
-            created_at: 1_704_067_200,
-            conversation_id: Some("conv_456".to_string()),
-            seq: Some(1),
-            tenant_id: None,
-            reference_id: None,
-            public_id: None,
-        };
-
-        assert_eq!(item.id, "item_123");
-        assert_eq!(item.conversation_id, Some("conv_456".to_string()));
-        assert_eq!(item.seq, Some(1));
-    }
-
-    #[test]
-    fn test_item_optional_fields() {
-        let item = Item {
-            id: "item_789".to_string(),
-            data: r#"{"role":"assistant"}"#.to_string(),
-            created_at: 1_704_067_200,
-            conversation_id: None,
-            seq: None,
-            tenant_id: None,
-            reference_id: None,
-            public_id: None,
-        };
-
-        assert!(item.conversation_id.is_none());
-        assert!(item.seq.is_none());
-    }
-
-    #[test]
-    fn complete_reasoning_round_trip_strips_storage_marker() {
-        let mut reasoning = ReasoningOutput::new("rs_1");
-        reasoning.content.extend([
-            ReasoningTextContent::new("first thought"),
-            ReasoningTextContent::new("second thought"),
-        ]);
-        reasoning
-            .summary
-            .push(crate::types::ReasoningSummaryContent::new("concise summary"));
-        reasoning.encrypted_content = Some(crate::types::OpaqueReasoning::try_from("opaque".to_owned()).unwrap());
-        reasoning.status = Some(crate::types::ReasoningStatus::Completed);
-        let stored = InOutItem::Output(OutputItem::Reasoning(reasoning));
-        let stored_json = String::try_from(&stored).expect("serialization failed");
-        assert!(stored_json.contains(STORED_ITEM_KIND_KEY));
-        let item = Item {
-            id: "item_reasoning".to_string(),
-            data: stored_json,
-            created_at: 1_704_067_200,
-            conversation_id: None,
-            seq: None,
-            tenant_id: None,
-            reference_id: None,
-            public_id: None,
-        };
-
-        let Some(InOutItem::Output(OutputItem::Reasoning(reasoning))) = item.as_inout() else {
-            panic!("expected stored reasoning output");
-        };
-        assert_eq!(reasoning.id, "rs_1");
-        assert_eq!(reasoning.content.len(), 2);
-        assert_eq!(reasoning.summary[0].text, "concise summary");
-        assert_eq!(
-            reasoning
-                .encrypted_content
-                .as_ref()
-                .map(crate::types::OpaqueReasoning::as_str),
-            Some("opaque")
-        );
-        assert_eq!(reasoning.status, Some(crate::types::ReasoningStatus::Completed));
-
-        let reconstructed = serde_json::to_value(OutputItem::Reasoning(reasoning)).expect("reasoning value");
-        assert!(reconstructed.get(STORED_ITEM_KIND_KEY).is_none());
-    }
-
-    #[test]
-    fn test_legacy_output_message_rehydrates_as_output_before_unknown_input() {
-        let item = Item {
-            id: "item_message".to_string(),
-            data: serde_json::json!({
-                "type": "message",
-                "id": "msg_1",
-                "role": "assistant",
-                "status": "completed",
-                "content": [{"type": "output_text", "text": "hello", "annotations": []}]
-            })
-            .to_string(),
-            created_at: 1_704_067_200,
-            conversation_id: None,
-            seq: None,
-            tenant_id: None,
-            reference_id: None,
-            public_id: None,
-        };
-
-        let stored = item.as_inout().expect("stored item");
-        assert!(matches!(stored, InOutItem::Output(OutputItem::Message(_))));
-
-        let inputs = InOutItem::into_input_items(vec![stored]);
-        assert!(matches!(inputs[0], InputItem::Message(_)));
-    }
-
-    #[test]
-    fn test_namespaced_function_call_rehydrates_without_storage_marker() {
-        let stored = InOutItem::Output(OutputItem::FunctionCall(crate::types::io::FunctionToolCall {
-            async_execution: false,
-            agent: None,
-            id: "fc_1".to_string(),
-            call_id: "call_1".to_string(),
-            name: "run".to_string(),
-            namespace: Some("mcp__shell".to_string()),
-            arguments: "{\"cmd\":\"pwd\"}".to_string(),
-            status: MessageStatus::Completed,
-        }));
-        let item = Item {
-            id: "item_function_call".to_string(),
-            data: String::try_from(&stored).expect("serialization failed"),
-            created_at: 1_704_067_200,
-            conversation_id: None,
-            seq: None,
-            tenant_id: None,
-            reference_id: None,
-            public_id: None,
-        };
-
-        let inputs = InOutItem::into_input_items(vec![item.as_inout().expect("stored item")]);
-        let value = serde_json::to_value(&inputs[0]).expect("input value");
-
-        assert_eq!(value["type"], "function_call");
-        assert_eq!(value["namespace"], "mcp__shell");
-        assert_eq!(value["name"], "run");
-        assert!(value.get(STORED_ITEM_KIND_KEY).is_none());
-
-        println!("namespace round-trip: mcp__shell.run -> storage -> input function_call");
-        println!("storage marker stripped: _agentic_item_kind absent");
-    }
-
-    #[test]
-    fn shell_call_round_trips_through_storage_and_rehydration() {
-        let output: OutputItem = serde_json::from_value(serde_json::json!({
-            "type": "shell_call",
-            "id": "sh_1",
-            "call_id": "call_shell",
-            "action": {
-                "commands": ["pwd"],
-                "timeout_ms": 1_000,
-                "max_output_length": 4_096
-            },
-            "status": "completed"
-        }))
-        .expect("shell output item");
-        let stored = InOutItem::Output(output);
-        let item = Item {
-            id: "item_shell_call".to_owned(),
-            data: String::try_from(&stored).expect("serialization failed"),
-            created_at: 1_704_067_200,
-            conversation_id: None,
-            seq: None,
-            tenant_id: None,
-            reference_id: None,
-            public_id: None,
-        };
-
-        let inputs = InOutItem::into_input_items(vec![item.as_inout().expect("stored shell item")]);
-        let value = serde_json::to_value(&inputs[0]).expect("rehydrated shell input");
-
-        assert_eq!(value["type"], "function_call");
-        assert_eq!(value["name"], "shell");
-        assert_eq!(value["call_id"], "call_shell");
-        let action: serde_json::Value = serde_json::from_str(value["arguments"].as_str().unwrap()).unwrap();
-        assert_eq!(action["commands"][0], "pwd");
-        assert!(value.get(STORED_ITEM_KIND_KEY).is_none());
-    }
-
-    #[test]
-    fn test_multiple_namespaced_function_calls_rehydrate_without_storage_marker() {
-        let stored_items = [
-            InOutItem::Output(OutputItem::FunctionCall(crate::types::io::FunctionToolCall {
-                async_execution: false,
-                agent: None,
-                id: "fc_1".to_string(),
-                call_id: "call_1".to_string(),
-                name: "run".to_string(),
-                namespace: Some("mcp__shell".to_string()),
-                arguments: "{\"cmd\":\"pwd\"}".to_string(),
-                status: MessageStatus::Completed,
-            })),
-            InOutItem::Output(OutputItem::FunctionCall(crate::types::io::FunctionToolCall {
-                async_execution: false,
-                agent: None,
-                id: "fc_2".to_string(),
-                call_id: "call_2".to_string(),
-                name: "run".to_string(),
-                namespace: Some("mcp__git".to_string()),
-                arguments: "{\"args\":[\"status\",\"--short\"]}".to_string(),
-                status: MessageStatus::Completed,
-            })),
-        ];
-        let rows: Vec<InOutItem> = stored_items
-            .iter()
-            .enumerate()
-            .map(|(idx, stored)| Item {
-                id: format!("item_function_call_{idx}"),
-                data: String::try_from(stored).expect("serialization failed"),
-                created_at: 1_704_067_200,
-                conversation_id: None,
-                seq: Some(idx.try_into().expect("seq")),
-                tenant_id: None,
-                reference_id: None,
-                public_id: None,
-            })
-            .map(|item| item.as_inout().expect("stored item"))
-            .collect();
-
-        let inputs = InOutItem::into_input_items(rows);
-        let values = serde_json::to_value(&inputs).expect("input values");
-
-        assert_eq!(values[0]["type"], "function_call");
-        assert_eq!(values[0]["namespace"], "mcp__shell");
-        assert_eq!(values[0]["name"], "run");
-        assert_eq!(values[0]["call_id"], "call_1");
-        assert!(values[0].get(STORED_ITEM_KIND_KEY).is_none());
-
-        assert_eq!(values[1]["type"], "function_call");
-        assert_eq!(values[1]["namespace"], "mcp__git");
-        assert_eq!(values[1]["name"], "run");
-        assert_eq!(values[1]["call_id"], "call_2");
-        assert!(values[1].get(STORED_ITEM_KIND_KEY).is_none());
-
-        println!("namespace round-trip: mcp__shell.run -> call_1");
-        println!("namespace round-trip: mcp__git.run -> call_2");
-        println!("same tool name preserved under separate namespaces");
-    }
-
-    #[test]
-    fn test_unknown_rehydrated_items_are_omitted() {
-        let stored = InOutItem::Output(OutputItem::Unknown);
-        let item = Item {
-            id: "item_unknown".to_string(),
-            data: String::try_from(&stored).expect("serialization failed"),
-            created_at: 1_704_067_200,
-            conversation_id: None,
-            seq: None,
-            tenant_id: None,
-            reference_id: None,
-            public_id: None,
-        };
-
-        let inputs = InOutItem::into_input_items(vec![item.as_inout().expect("stored item")]);
-
-        assert!(inputs.is_empty());
-    }
-}
-
-#[cfg(test)]
-mod item_id_tests {
-    use super::*;
-    use serde_json::json;
-
-    fn stored(value: serde_json::Value) -> InOutItem {
-        serde_json::from_value(value).unwrap()
-    }
-
-    #[test]
-    fn submitted_gateway_calls_remain_inputs_after_storage_round_trip() {
-        for wire in [
-            json!({"type":"web_search_call", "id":"ws_1", "status":"completed", "action":{"type":"search", "query":"weather"}}),
-            json!({"type":"mcp_call", "id":"mcp_1", "server_label":"weather", "name":"forecast", "arguments":"{}", "output":"sunny"}),
-        ] {
-            let input = stored(wire);
-            let expected = serde_json::to_value(&input).unwrap();
-            let row = Item {
-                id: "row_1".to_owned(),
-                reference_id: None,
-                public_id: None,
-                data: String::try_from(&input).unwrap(),
-                created_at: 0,
-                conversation_id: None,
-                seq: None,
-                tenant_id: None,
-            };
-            let restored = row.as_inout().unwrap();
-            assert!(matches!(restored, InOutItem::Input(_)));
-            let replay = InOutItem::into_input_items(vec![restored]);
-            assert_eq!(replay.len(), 1);
-            assert_eq!(serde_json::to_value(&replay[0]).unwrap(), expected);
-        }
-    }
-
-    #[test]
-    fn supplied_ids_are_validated_by_item_type_without_changing_call_ids() {
-        let cases = [
-            json!({"type":"message", "id":"msg_1", "role":"user", "content":"hello"}),
-            json!({"type":"function_call", "id":"fc_1", "call_id":"call_1", "name":"f", "arguments":"{}"}),
-            json!({"type":"tool_search_call", "id":"tsc_1", "call_id":"call_1", "arguments":{}}),
-            json!({"type":"function_call_output", "id":"fc_1", "call_id":"call_1", "output":"done"}),
-            json!({"type":"custom_tool_call_output", "id":"ctco_1", "call_id":"call_1", "output":"done"}),
-            json!({"type":"shell_call_output", "id":"sho_1", "call_id":"call_1", "output":[]}),
-            json!({"type":"tool_search_output", "id":"tso_1", "call_id":"call_1", "tools":[]}),
-            json!({"type":"custom_tool_call", "id":"ctc_1", "call_id":"call_1", "name":"f", "input":"x"}),
-            json!({"type":"shell_call", "id":"sh_1", "call_id":"call_1", "action":{"commands":["pwd"]}}),
-            json!({"type":"reasoning", "id":"rs_1", "summary":[]}),
-            json!({"type":"mcp_list_tools", "id":"mcpl_1", "server_label":"s", "tools":[]}),
-            json!({"type":"mcp_call", "id":"mcp_1", "server_label":"s", "name":"f", "arguments":"{}"}),
-            json!({"type":"web_search_call", "id":"ws_1", "status":"completed", "action":{"type":"search", "query":"test"}}),
-            json!({"type":"compaction", "id":"cmp_1", "encrypted_content":"opaque"}),
-        ];
-        for mut value in cases {
-            let item = stored(value.clone());
-            item.validate_client_id("items[0].id".into())
-                .expect("matching public ID prefix");
-            value["id"] = json!("wrong_1");
-            let item = stored(value);
-            let error = item.validate_client_id("items[0].id".into()).unwrap_err();
-            assert!(error.is_validation());
-            assert!(matches!(error, StorageError::InvalidItemId { param, .. } if param == "items[0].id"));
-        }
-    }
-
-    #[test]
-    fn optional_ids_are_not_required() {
-        for value in [
-            json!({"type":"message", "role":"user", "content":"hello"}),
-            json!({"type":"function_call", "call_id":"call_1", "name":"f", "arguments":"{}"}),
-            json!({"type":"function_call_output", "call_id":"call_1", "output":"done"}),
-            json!({"type":"shell_call_output", "call_id":"call_1", "output":[]}),
-        ] {
-            stored(value).validate_client_id("items[0].id".into()).unwrap();
-        }
-    }
-
-    #[test]
-    fn invalid_id_reports_its_batch_index_and_rejects_empty_ids() {
-        for id in ["", "item_wrongprefix"] {
-            let items = [
-                stored(json!({"type":"message", "role":"user", "content":"valid"})),
-                stored(json!({"type":"message", "id":id, "role":"user", "content":"invalid"})),
-            ];
-            let error = items
-                .iter()
-                .enumerate()
-                .try_for_each(|(index, item)| item.validate_client_id(format!("items[{index}].id")))
-                .unwrap_err();
-            assert!(matches!(&error, StorageError::InvalidItemId { param, .. } if param == "items[1].id"));
-            assert_eq!(
-                error.to_string(),
-                format!("Invalid 'items[1].id': '{id}'. Expected an ID that begins with 'msg'.")
-            );
-        }
     }
 }

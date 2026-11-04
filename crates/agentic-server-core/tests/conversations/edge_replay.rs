@@ -24,7 +24,7 @@ fn conversation_body(data: ConversationData) -> Value {
     serde_json::to_value(ConversationResponse::new(
         data.conversation_id,
         data.created_at,
-        data.metadata.map(|metadata| serde_json::from_str(&metadata).unwrap()),
+        data.metadata,
     ))
     .unwrap()
 }
@@ -44,7 +44,11 @@ pub(super) async fn execute_step(
         ("POST", 2) => {
             let request: CreateConversationRequest = serde_json::from_value(body).unwrap();
             let data = handler
-                .create_with_metadata_and_items("default_tenant", request.metadata, request.items.unwrap_or_default())
+                .create(
+                    "default_tenant",
+                    &request.metadata.unwrap_or_default(),
+                    &request.items.unwrap_or_default(),
+                )
                 .await?;
             Ok(conversation_body(data))
         }

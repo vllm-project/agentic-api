@@ -343,7 +343,7 @@ async fn dropping_multi_agent_stream_aborts_round_tasks_without_storing() {
         assert!(closed.is_ok(), "both child upstream bodies must close after the drop");
         let response_id = response_id.expect("response.created");
         assert!(
-            exec.resp_handler.retrieve(&response_id).await.is_err(),
+            exec.resp_handler.get_snapshot(&response_id).await.is_err(),
             "a dropped stream must not store its response"
         );
     };

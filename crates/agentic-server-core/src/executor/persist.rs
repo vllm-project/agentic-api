@@ -7,6 +7,7 @@ use std::collections::HashMap;
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::modes::{ConversationHandler, ResponseHandler};
+use crate::executor::multi_agent::ValidatedTreeCheckpoint;
 use crate::executor::prepare::prepare_request_tools;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::telemetry::metrics::{ExecutorMetrics, Stage};
@@ -83,7 +84,7 @@ pub async fn persist_response(
         return Ok(());
     }
 
-    let (ctx, tool_search_state) = prepare_request_tools(ctx, &conv_handler, &resp_handler).await?;
+    let (ctx, tool_search_state) = prepare_request_tools(ctx)?;
     let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);
     persist_prepared_response(payload, ctx, tool_search_metadata, conv_handler, resp_handler).await
 }
@@ -136,7 +137,7 @@ pub async fn persist_turn(
     if !should_persist(&ctx) {
         return Ok(());
     }
-    let (ctx, tool_search_state) = prepare_request_tools(ctx, conv_handler, resp_handler).await?;
+    let (ctx, tool_search_state) = prepare_request_tools(ctx)?;
     let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);
     persist_prepared_turn(
         ctx,
@@ -160,12 +161,31 @@ pub(crate) async fn persist_prepared_turn(
     conv_handler: &ConversationHandler,
     resp_handler: &ResponseHandler,
 ) -> ExecutorResult<()> {
-    let mut metadata = ResponseMetadata {
-        multi_agent_tree: None,
+    let metadata = prepare_metadata(&mut ctx, tool_search_metadata, response_snapshot);
+    if ctx.original_request.conversation.is_some() {
+        Box::pin(conv_handler.persist(ctx, output_items, metadata)).await
+    } else {
+        Box::pin(resp_handler.persist(ctx, output_items, metadata)).await
+    }
+}
+
+/// The metadata this turn stores: the effective settings, the tool-search state, and the multi-agent tree, moved
+/// out of the request context, with the response snapshot for retrieval.
+fn prepare_metadata(
+    ctx: &mut RequestContext,
+    tool_search_metadata: Option<ToolSearchMetadata>,
+    response_snapshot: Option<Box<ResponsePayload>>,
+) -> ResponseMetadata {
+    let (effective_tools, tool_search_loaded_tools) = match tool_search_metadata {
+        Some(tool_search) => (tool_search.effective_tools, Some(tool_search.loaded_tools)),
+        None => (ctx.enriched_request.tools.take(), None),
+    };
+    ResponseMetadata {
+        multi_agent_tree: ctx.multi_agent_tree.take().map(ValidatedTreeCheckpoint::into_snapshot),
         model: std::mem::take(&mut ctx.enriched_request.model),
         previous_response_id: ctx.original_request.previous_response_id.take(),
-        effective_tools: ctx.enriched_request.tools.take(),
-        tool_search_loaded_tools: None,
+        effective_tools,
+        tool_search_loaded_tools,
         response_snapshot,
         effective_tool_choice: ctx
             .original_request
@@ -174,28 +194,6 @@ pub(crate) async fn persist_prepared_turn(
             .or_else(|| ctx.enriched_request.tool_choice.take())
             .unwrap_or_default(),
         effective_instructions: ctx.enriched_request.instructions.take(),
-    };
-    if let Some(tool_search_metadata) = tool_search_metadata {
-        metadata.effective_tools = tool_search_metadata.effective_tools;
-        metadata.tool_search_loaded_tools = Some(tool_search_metadata.loaded_tools);
-    }
-    if let Some(tree) = ctx.multi_agent_tree.take() {
-        let committed = if ctx.original_request.conversation.is_some() {
-            Box::pin(conv_handler.commit_tree(ctx, output_items, metadata, tree)).await?
-        } else {
-            Box::pin(resp_handler.commit_tree(ctx, output_items, metadata, tree)).await?
-        };
-        tracing::debug!(response_id = %committed.response_id, "committed response and agent tree");
-        return Ok(());
-    }
-    if ctx.original_request.conversation.is_some() {
-        conv_handler
-            .execute_turn_with_metadata(ctx, output_items, metadata)
-            .await
-    } else {
-        resp_handler
-            .execute_turn_with_metadata(ctx, output_items, metadata)
-            .await
     }
 }
 
@@ -280,8 +278,9 @@ async fn validate_output_call_ids(
         let items: Vec<_> = model_items(projected).collect();
         return validate_history_call_ids(items.iter().map(|item| item.call_id()), &call_ids);
     }
-    let history = resp_handler.rehydrate(ctx).await?;
-    validate_history_call_ids(history.iter().map(InOutItem::call_id), &call_ids)?;
+    if let Some((_, history)) = resp_handler.rehydrate(ctx).await? {
+        validate_history_call_ids(history.iter().map(InOutItem::call_id), &call_ids)?;
+    }
     for (input_index, item) in ctx.new_input_items.iter().enumerate() {
         if let Some((output_index, item_type)) = item.call_id().and_then(|call_id| call_ids.get(call_id)) {
             return Err(ExecutorError::InvalidRequest(format!(
