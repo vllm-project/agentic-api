@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use agentic_core::storage::models::{conversation as conversation_model, response as response_model};
 use agentic_core::storage::{
-    ConversationStore, DbPool, ResponseMetadata, ResponseStore, StorageError, create_pool_with_schema,
+    ConversationStore, DbPool, ResponseData, ResponseMetadata, ResponseStore, StorageError, create_pool_with_schema,
 };
 use agentic_core::types::io::InOutItem;
 use serde_json::json;
@@ -45,7 +45,14 @@ async fn item_count(pool: &DbPool) -> i64 {
 
 async fn turn(store: &ResponseStore, id: &str, previous: Option<&str>) {
     let parent = match previous {
-        Some(previous) => Some(store.get(previous).await.expect("parent").into()),
+        Some(previous) => Some(
+            store
+                .get(previous)
+                .await
+                .and_then(ResponseData::try_from)
+                .expect("parent")
+                .into(),
+        ),
         None => None,
     };
     store

@@ -12,7 +12,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use agentic_core::storage::{
-    ConversationStore, DbPool, ResponseCheckpoint, ResponseMetadata, ResponseStore, create_pool_with_schema,
+    ConversationStore, DbPool, ResponseCheckpoint, ResponseData, ResponseMetadata, ResponseStore,
+    create_pool_with_schema,
 };
 use agentic_core::types::conversations::ConversationMetadata;
 use agentic_core::types::event::MessageStatus;
@@ -109,7 +110,12 @@ fn bench_response_persist(c: &mut Criterion, rt: &Runtime, store: &ResponseStore
     for items in HISTORY_ITEMS {
         let parent: ResponseCheckpoint = rt.block_on(async {
             let id = seed_response(store, items).await;
-            store.get(&id).await.expect("parent").into()
+            store
+                .get(&id)
+                .await
+                .and_then(ResponseData::try_from)
+                .expect("parent")
+                .into()
         });
         group.bench_with_input(BenchmarkId::from_parameter(items), &parent, |b, parent| {
             b.to_async(rt).iter_batched(

@@ -7,7 +7,7 @@ mod support;
 
 use agentic_core::executor::request::RequestContext;
 use agentic_core::executor::{ExecutionContext, ExecutorError, commit, execute, persist_turn, rehydrate_conversation};
-use agentic_core::storage::StorageError;
+use agentic_core::storage::{ResponseData, StorageError};
 use agentic_core::types::io::InOutItem;
 use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
 use agentic_core::types::tools::{FunctionToolParam, NonEmptyToolName};
@@ -1065,6 +1065,7 @@ async fn test_previous_response_id_persists_inherited_tools_and_choice() {
         .get(&lookup_ctx)
         .await
         .expect("fetch persisted response");
+    let stored = ResponseData::try_from(stored).expect("decode persisted response");
 
     assert_eq!(stored.metadata.model, "test-model");
     assert!(matches!(stored.metadata.effective_tool_choice, ToolChoice::Required));

@@ -9,6 +9,7 @@ use crate::executor::gateway::GatewaySchedulerPolicy;
 use crate::executor::messages_server_tools::sealing::{MessagesResultKey, process_result_key};
 use crate::executor::modes::{ConversationHandler, ResponseHandler};
 use crate::executor::multi_agent::ValidatedTreeCheckpoint;
+use crate::executor::session::ResponseContinuation;
 use crate::executor::telemetry::ExecutorMetrics;
 use crate::storage::backend::redact_database_urls;
 use crate::storage::{
@@ -46,7 +47,7 @@ pub struct RequestContext {
     /// rehydration read it: its metadata and stored history, which persistence extends.
     pub checkpoint: Option<ResponseCheckpoint>,
     /// Optional transient-session lease and canonical parent snapshot. Never serialized.
-    pub continuation: Option<super::session::ResponseContinuation>,
+    pub continuation: Option<ResponseContinuation>,
 }
 
 impl RequestContext {

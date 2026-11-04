@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
 
-use super::models::{item, response};
+use super::models::{Response as DbResponse, item, response};
 use super::pool::DbPool;
 use super::types::item::{decode_public, encode};
 use super::types::response::snapshot_output_count;
@@ -47,18 +47,12 @@ impl ResponseStore {
         self.pool.as_deref().ok_or(StorageError::NotConfigured)
     }
 
-    /// Retrieves a response by ID.
+    /// Retrieves the stored row of a response by ID; [`ResponseData::try_from`] decodes it.
     ///
     /// # Errors
     ///
-    /// Returns an error if the response is missing or invalid, the database query
-    /// fails, or the store is disabled.
-    pub async fn get(&self, response_id: &str) -> StoreResult<ResponseData> {
-        self.row(response_id).await?.try_into()
-    }
-
-    /// The stored row of a response.
-    async fn row(&self, response_id: &str) -> StoreResult<response::Response> {
+    /// Returns an error if the response is missing, the database query fails, or the store is disabled.
+    pub async fn get(&self, response_id: &str) -> StoreResult<DbResponse> {
         response::get(self.pool()?, response_id)
             .await?
             .ok_or_else(|| StorageError::ResponseNotFound {
@@ -74,7 +68,7 @@ impl ResponseStore {
     /// Returns an error if the response is missing, the snapshot is invalid, the database query fails, or the
     /// store is disabled.
     pub async fn get_snapshot(&self, response_id: &str) -> StoreResult<Option<ResponsePayload>> {
-        self.row(response_id)
+        self.get(response_id)
             .await?
             .snapshot
             .as_deref()
@@ -120,7 +114,7 @@ impl ResponseStore {
     /// # Errors
     /// Returns an error for a missing response, missing or invalid history, unavailable storage, or query failure.
     pub async fn get_input_items(&self, response_id: &str) -> StoreResult<Option<Vec<InOutItem>>> {
-        let row = self.row(response_id).await?;
+        let row = self.get(response_id).await?;
         let Some(output_count) = row.snapshot.as_deref().map(snapshot_output_count).transpose()? else {
             return Ok(None);
         };
@@ -149,7 +143,7 @@ impl ResponseStore {
     /// Returns an error if the response or a history item is missing or invalid, the database query
     /// fails, or the store is disabled.
     pub async fn rehydrate(&self, response_id: &str) -> StoreResult<(ResponseCheckpoint, Vec<InOutItem>)> {
-        let response = self.get(response_id).await?;
+        let response = ResponseData::try_from(self.get(response_id).await?)?;
         let items = self
             .history(&response)
             .await?
@@ -307,7 +301,7 @@ mod tests {
             .await
             .expect("serialize code interpreter response history");
 
-        let response = store.get("resp_items").await.unwrap();
+        let response = ResponseData::try_from(store.get("resp_items").await.unwrap()).unwrap();
         let rows = store.history(&response).await.unwrap();
         assert_eq!(rows[0].public_id, "ci_public");
         let data: Value = serde_json::from_str(&rows[0].data).expect("stored output JSON");

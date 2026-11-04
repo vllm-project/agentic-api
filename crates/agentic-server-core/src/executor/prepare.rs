@@ -57,28 +57,24 @@ fn restored_loaded_tools(ctx: &mut RequestContext) -> Vec<ResponsesTool> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::executor::ResponseSession;
     use crate::storage::{ResponseCheckpoint, ResponseMetadata};
     use crate::types::request_response::RequestPayload;
-    use std::num::NonZeroUsize;
 
     #[test]
     fn compacted_session_restores_loaded_tools_without_durable_storage() {
-        let session = ResponseSession::new(NonZeroUsize::new(100).unwrap(), NonZeroUsize::new(100_000).unwrap());
         let loaded: ResponsesTool = serde_json::from_value(serde_json::json!({
             "type": "function", "name": "weather", "parameters": {"type": "object"}
         }))
         .unwrap();
-        let metadata = ResponseMetadata {
-            multi_agent_tree: None,
-            tool_search_loaded_tools: Some(vec![loaded.clone()]),
-            ..ResponseMetadata::default()
+        // The session parent as rehydration records it: not durable, history not kept on the checkpoint.
+        let checkpoint = ResponseCheckpoint {
+            response_id: Some("resp_parent".to_owned()),
+            metadata: ResponseMetadata {
+                tool_search_loaded_tools: Some(vec![loaded.clone()]),
+                ..ResponseMetadata::default()
+            },
+            ..ResponseCheckpoint::default()
         };
-        let lease = session.begin(None).unwrap();
-        let checkpoint = lease
-            .checkpoint("resp_parent".to_owned(), &metadata, &[], false)
-            .unwrap();
-        lease.publish(checkpoint).unwrap();
         let request: RequestPayload = serde_json::from_value(serde_json::json!({
             "model": "test", "store": false, "previous_response_id": "resp_parent",
             "input": [{"type": "compaction", "id": "cmp_1", "encrypted_content": "summary"}]
@@ -91,12 +87,8 @@ mod tests {
             new_input_items: Vec::new(),
             response_id: "resp_child".to_owned(),
             conversation_id: None,
-            // Rehydration keeps the session parent's metadata on the checkpoint.
-            checkpoint: Some(ResponseCheckpoint {
-                metadata,
-                ..ResponseCheckpoint::default()
-            }),
-            continuation: Some(session.begin(Some("resp_parent")).unwrap()),
+            checkpoint: Some(checkpoint),
+            continuation: None,
         };
         let restored = restored_loaded_tools(&mut ctx);
         assert_eq!(serde_json::to_value(restored).unwrap(), serde_json::json!([loaded]));
