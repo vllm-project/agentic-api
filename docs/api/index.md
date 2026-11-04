@@ -763,3 +763,95 @@ another key, such as by a process without `AGENTIC_MESSAGES_RESULT_KEY` before
 a restart, reach the model as a note that they are no longer available. A
 `web_fetch_tool_result` also carries the page's `content_type` and `truncated`
 flag, and a refusal its `message`, so the model reads the same text again.
+
+### Message threads
+
+
+Requests without `thread` retain the existing transparent proxy or gateway tool
+loop behavior. To keep conversation history locally, use Anthropic's
+[message threads](https://platform.claude.com/docs/en/build-with-claude/message-threads)
+contract and send `anthropic-beta: message-threads-2026-08-12` on every turn:
+
+```bash
+curl http://localhost:8080/v1/messages \
+  -H 'content-type: application/json' \
+  -H 'anthropic-beta: message-threads-2026-08-12' \
+  -d '{"model":"local-model","max_tokens":128,"system":"Keep replies short.",
+       "messages":[{"role":"user","content":"Remember the number 42."}],
+       "thread":{"type":"create"}}'
+```
+
+Continue using the returned message `id`, with only the new messages:
+
+```bash
+curl http://localhost:8080/v1/messages \
+  -H 'content-type: application/json' \
+  -H 'anthropic-beta: message-threads-2026-08-12' \
+  -d '{"model":"local-model","max_tokens":128,
+       "messages":[{"role":"user","content":"Which number?"}],
+       "thread":{"type":"continue","previous_message_id":"msg_REPLACE_ME"}}'
+```
+
+The gateway stores thread state in the configured SQLite or PostgreSQL database,
+restores the full conversation for the stateless upstream, and consumes this beta locally. It preserves Messages content, including images, thinking
+signatures, client `tool_use`/`tool_result`, and hidden gateway tool rounds. The
+Messages thread request, checkpoint, and error types are independent of Responses
+items and response sessions. Thread checkpoints use their own `message_threads`
+table and preserve the Anthropic object model.
+
+Omit `system` and `tools` entirely on continuation, including `null`. Keep `model`,
+`tool_choice`, `thinking`, `mcp_servers` (except authorization tokens),
+`context_management`, `output_config`, container skills, top-level `cache_control`,
+and the beta set fixed. Send MCP and container parameters on each applicable
+request; only the presence of `fallbacks` is fixed. Generation settings such as
+`max_tokens`, `stop_sequences`, and `stream` can change.
+
+The gateway provides a Claude Code compatibility extension when the beta set
+includes `claude-code-20250219` from thread creation onward. These continuations
+may repeat `system` and `tools` only when their JSON values equal the stored
+values. Changed prompts or tool definitions return `thread_fingerprint_mismatch`;
+explicit `null` remains invalid. The CLI's reserved, single-line
+`x-anthropic-billing-header:` text block is removed from `system` before storage,
+comparison, and inference. A continuation containing only that attribution block
+inherits the stored prompt. Blocks with extra fields, control characters, or
+malformed attribution syntax remain ordinary prompt content. This is a gateway
+extension for Claude Code's wire behavior; ordinary thread requests retain the
+create-only rules above.
+
+Each message can be continued once. Simultaneous continuations return
+`400 thread_continue_in_flight`; an already consumed ID returns
+`400 thread_already_continued`. Fixed-field changes return
+`400 thread_fingerprint_mismatch`. These codes appear in `error.details.error_code`.
+Use the same credentials and workspace throughout a thread; with OIDC, ownership
+also includes the verified issuer and subject.
+
+Set `stream: true` for SSE. Continue from the ID in `message_start` only after
+`message_stop`. Failed or incomplete streams publish no checkpoint and release the
+parent reservation. A `pause_turn` continuation requires `messages: []`.
+Refusals, fallback-model responses, and token-truncated tool calls produce no
+continuable checkpoint.
+
+Thread checkpoints survive gateway restarts and can be continued by another gateway
+instance sharing the same database and credentials. Parent consumption and child
+checkpoint insertion commit in one transaction before the JSON response or SSE
+`message_stop` reaches the client. A failed write returns an error and leaves the
+parent retryable. Threaded requests require configured persistence; there is no
+silent memory-only fallback.
+
+Threads retain the five-minute lifetime after each completed response. The server
+polls database expiry and renews active continuation leases every ten seconds.
+Leases expire after sixty seconds without renewal, so an interrupted gateway cannot
+lock a thread indefinitely. A replacement lease fences stale completions from the
+previous process. Graceful shutdown joins cancellation cleanup operations.
+
+Each serialized checkpoint and each threaded SSE request has a 32 MiB budget.
+An oversized checkpoint fails before committing the new message. Thread history is
+stored in the database, so database retention and access controls apply. There is
+no list, read, or delete thread API.
+
+Keep a client copy of the conversation. On `404 thread_not_found`, replay that
+copy with `thread: {"type":"create"}`, `system`, and `tools`. Remove older cache
+breakpoints to stay within the four-breakpoint limit. Token counting rejects
+`thread`; send the full conversation without it. Thread requests also reject
+compaction and context editing other than `clear_thinking_20251015` with
+`keep: "all"`.

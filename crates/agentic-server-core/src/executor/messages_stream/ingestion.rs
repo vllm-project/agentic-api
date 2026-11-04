@@ -2,7 +2,7 @@
 
 use serde_json::Value;
 
-use super::{BufferedBlock, MessagesStreamAccumulator, RoundState, error_sse, sse};
+use super::{BufferedBlock, MessagesStreamAccumulator, RoundState, error_sse, has_fallback, sse};
 use crate::events::{ClassifiedSseLine, SseLine};
 use crate::utils::common::deserialize_from_str;
 
@@ -13,6 +13,12 @@ impl MessagesStreamAccumulator {
     /// Translate one upstream SSE line into zero or more client SSE lines.
     pub(super) fn push(&mut self, line: &str) -> Vec<String> {
         self.pushed_text = false;
+        if self.thread_message_id.is_some() {
+            self.thread_bytes = self.thread_bytes.saturating_add(line.len());
+            if self.thread_bytes > crate::executor::messages_threads::MAX_CHECKPOINT_BYTES {
+                return self.fail("Messages thread stream exceeds the storage limit");
+            }
+        }
         let ClassifiedSseLine::Data(data) = SseLine::parse(line) else {
             return Vec::new();
         };
@@ -58,6 +64,7 @@ impl MessagesStreamAccumulator {
             Some("content_block_stop") => self.on_block_stop(&mut event),
             Some("message_delta") => {
                 // Buffer as the (possibly) final terminal; suppress mid-loop.
+                self.fallback |= has_fallback(event.get("usage"));
                 self.usage.observe(event.get("usage"));
                 self.final_message_delta = Some(event);
                 Vec::new()
@@ -67,6 +74,9 @@ impl MessagesStreamAccumulator {
                 vec![sse("error", &event)]
             }
             Some("message_stop") => {
+                if self.thread_message_id.is_some() && self.stop_reason().is_none() {
+                    return self.fail("upstream thread stream ended without a stop reason");
+                }
                 if self.blocks.values().any(|block| !block.closed) {
                     self.round_state = RoundState::Failed;
                     return vec![error_sse("upstream Messages stream ended with open content blocks")];
@@ -93,13 +103,18 @@ impl MessagesStreamAccumulator {
             return self.fail("invalid identifier in upstream Messages stream");
         }
         self.round_started = true;
+        self.fallback |= has_fallback(event["message"].get("usage"));
         // Later rounds' message_start is suppressed, but its usage still counts.
         self.usage.observe(event["message"].get("usage"));
         if self.message_started {
             return Vec::new();
         }
         self.message_started = true;
-        vec![sse("message_start", event)]
+        let mut event = event.clone();
+        if let Some(id) = &self.thread_message_id {
+            event["message"]["id"] = Value::String(id.clone());
+        }
+        vec![sse("message_start", &event)]
     }
 
     fn on_block_start(&mut self, event: &mut Value) -> Vec<String> {

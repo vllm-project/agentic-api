@@ -25,7 +25,7 @@ use crate::executor::messages_context::MessagesRequestContext;
 use crate::executor::messages_round::{MessagesRoundDecision, decide_round};
 use crate::executor::messages_server_tools::{NativeServerTools, ServerToolView};
 use crate::executor::messages_tools::{ExecutedCall, execute_gateway_calls, request_gateway_map};
-use crate::executor::messages_usage::MessagesUsageTotals;
+use crate::executor::messages_usage::{MessagesUsageTotals, has_fallback};
 use crate::executor::request::ExecutionContext;
 use crate::executor::telemetry::metrics::{ExecutorMetrics, Stage};
 use crate::executor::telemetry::{Api, ExecutionSpan, FailureCategory, Route};
@@ -169,7 +169,7 @@ async fn run_messages_loop_traced(
         // the loop server-side — return the turn to the client (edge E7).
         let Some(content) = content else {
             execution.completed_with_stop_reason(stop_reason);
-            return Ok(deliver(message, turn, &gateway_map, response_headers));
+            return deliver(message, turn, &gateway_map, response_headers, &mut ctx).await;
         };
         let mut gateway_calls: Vec<&Value> = Vec::new();
         let mut has_client_tool_use = false;
@@ -198,7 +198,7 @@ async fn run_messages_loop_traced(
                 if visible_stop != stop_reason {
                     message["stop_reason"] = json!(visible_stop);
                 }
-                return Ok(deliver(message, turn, &gateway_map, response_headers));
+                return deliver(message, turn, &gateway_map, response_headers, &mut ctx).await;
             }
         }
         // Pure gateway-tool round: execute the calls, then feed the model's FULL
@@ -288,13 +288,31 @@ fn record_message_usage(metrics: &ExecutorMetrics, usage: Option<&Value>) {
 /// mid-call. The streaming loop suppresses these blocks too; this is the
 /// non-streaming half of the same contract. A final round whose `content` is a
 /// bare string keeps it as a text block after the shown rounds.
-fn deliver(
+async fn deliver(
     mut message: Value,
     turn: ClientTurn,
     gateway_map: &tool_seam::GatewayToolMap,
     headers: http::HeaderMap,
-) -> MessagesResponse<Value> {
+    ctx: &mut MessagesRequestContext,
+) -> ExecutorResult<MessagesResponse<Value>> {
     let ClientTurn { mut shown, mut usage } = turn;
+    if let Some(id) = ctx.thread_message_id() {
+        message["id"] = json!(id);
+        if message["stop_reason"].as_str().is_none() || !message["content"].is_array() {
+            return Err(ExecutorError::InvalidRequest(
+                "invalid upstream thread message".to_owned(),
+            ));
+        }
+        let retained = message["content"]
+            .as_array()
+            .map(|content| Value::Array(tool_seam::strip_gateway_tool_use(content, gateway_map)))
+            .unwrap_or(Value::Null);
+        let stop_reason = message["stop_reason"]
+            .as_str()
+            .filter(|_| !has_fallback(message.get("usage")));
+        ctx.complete_thread(&retained, stop_reason).await?;
+    }
+
     let visible = match message.get("content") {
         Some(Value::Array(content)) => {
             let visible = tool_seam::strip_gateway_tool_use(content, gateway_map);
@@ -308,7 +326,7 @@ fn deliver(
         fields.insert("content".to_owned(), Value::Array(shown));
     }
     usage.finish(&mut message);
-    MessagesResponse { body: message, headers }
+    Ok(MessagesResponse { body: message, headers })
 }
 
 /// The round's gateway-owned `tool_use` blocks as dispatchable calls.

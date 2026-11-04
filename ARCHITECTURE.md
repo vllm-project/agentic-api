@@ -1729,16 +1729,16 @@ reachable only through the raw body, never the typed view.
 matching a returned gateway call result) to `auto`. The first round retains the
 client's selector; later rounds can answer from the tool result or choose another
 tool. Parallel-use settings and extension fields remain intact. Rounds containing
-client-executed function tools return before this mutation, and Messages does not
-persist this state.
+client-executed function tools return before this mutation. Threaded requests retain
+the resulting conversation in the independent Messages database store.
 
 `MessagesToolChoice` models `auto`, `any`, `tool` with a non-empty name, and
 `none` as an exhaustive enum. It retains parallel-use settings and flattened
 extension fields. The context performs fulfillment checks and transitions using
 that enum, then serializes the changed selector into the raw body. Malformed
 gateway-tool requests return HTTP 400 before inference; a parse failure cannot
-bypass validation by falling back to the proxy. Requests without gateway tools
-retain the transparent proxy contract and upstream validation.
+bypass validation by falling back to the proxy. Requests without gateway tools or
+`thread` retain the transparent proxy contract and upstream validation.
 
 vLLM can label a completed, explicitly named tool call `end_turn`. The shared
 request context accepts that stop only when the selected gateway tool appears in
@@ -1797,6 +1797,31 @@ pass through from the final round, a single-round turn is returned unchanged, an
 round that omits `usage` still reports the hidden rounds' counters. `usage.server_tool_use`
 adds the gateway's successful native searches (one per query) and fetches to the counters
 the upstream reported.
+
+`messages_threads.rs` owns local Anthropic message-thread admission, rehydration,
+exclusive continuation reservations, and bounded durable checkpoints.
+`types/messages/thread.rs` defines the independent thread request, lossless message,
+and error contracts; `storage/messages.rs` persists them in the `message_threads`
+table. No Responses items, sessions, or stores are involved. The HTTP
+adapter supplies an opaque owner derived from credentials, workspace, and verified
+OIDC identity, plus the beta set. Core strips `thread`, restores `system` and `tools`,
+and passes the full conversation to the existing stateless Messages loop.
+`messages_threads/claude_code.rs` handles the explicit `claude-code-20250219`
+compatibility extension: it removes reserved billing attribution before retaining
+the prompt, permits unchanged repeated prompt/tool fields, and rejects mutations
+before reserving the parent. This shares the same checkpoint and execution path
+as ordinary Messages threads.
+
+`messages_stream/accumulator.rs` is the single Messages SSE ingestion and assistant
+assembly path. The streaming runner uses its completed round to publish the thread
+checkpoint before emitting the public terminal. It adds no second SSE parser,
+channel, or ingestion worker. Publication consumes the parent's token-fenced lease
+and inserts the child's checkpoint in one database transaction. Dropping an unfinished
+reservation schedules a lease release in a `TaskTracker`; shutdown joins these
+cleanup operations. A stale lease cannot publish a child or release its replacement.
+The serving future polls expiry and renews active leases every ten seconds without
+holding a database transaction across inference. See [the API guide](docs/api/index.md#messages)
+for the five-minute lifetime, serialized-size budget, and crash recovery rules.
 
 ### `storage/` — persistence
 

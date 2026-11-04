@@ -3,11 +3,12 @@
 //! The gateway serves `/v1/messages` natively: requests that declare a
 //! gateway-owned tool are driven through a Messages-native tool loop that talks
 //! to vLLM `/v1/messages` upstream (see `executor::messages_loop`); everything
-//! else is a transparent proxy. These are the Anthropic wire types shared by
-//! the handler, the loop, and the tool seam.
+//! else is a transparent proxy unless `thread` requests local continuation.
+//! These Anthropic wire types are shared by the handler, loop, and tool seam.
 
 pub mod request;
 pub mod server_tools;
+pub mod thread;
 pub(crate) mod tool_call;
 pub mod tool_choice;
 pub mod tool_seam;

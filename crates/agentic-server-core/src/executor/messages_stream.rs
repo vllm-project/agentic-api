@@ -40,7 +40,7 @@ use crate::executor::messages_context::MessagesRequestContext;
 use crate::executor::messages_round::{MessagesRoundDecision, decide_round};
 use crate::executor::messages_server_tools::{NativeServerTools, ServerToolView};
 use crate::executor::messages_tools::{execute_gateway_calls, request_gateway_map};
-use crate::executor::messages_usage::MessagesUsageTotals;
+use crate::executor::messages_usage::{MessagesUsageTotals, has_fallback};
 use crate::executor::request::ExecutionContext;
 use crate::executor::telemetry::metrics::{Stage, StageTimer};
 use crate::executor::telemetry::{Api, ExecutionSpan, FailureCategory, InstrumentedStream, Route};
@@ -159,6 +159,7 @@ fn messages_stream_body(
         let mut acc = MessagesStreamAccumulator {
             gateway_map: request_gateway_map(&exec_ctx.messages_gateway_tools, &registry),
             native: view.native,
+            thread_message_id: ctx.thread_message_id().map(str::to_owned),
             ..Default::default()
         };
         let mut prepared_response = Some(first_round);
@@ -228,6 +229,22 @@ fn messages_stream_body(
             match decision {
                 MessagesRoundDecision::ContinueGateway => {}
                 MessagesRoundDecision::ReturnClient | MessagesRoundDecision::Finish => {
+                    if !acc.has_completed_round() {
+                        execution.failed_with(FailureCategory::Stream);
+                        execution.delivered();
+                        yield error_sse("upstream Messages stream ended before message_stop");
+                        return;
+                    }
+                    if ctx.thread_message_id().is_some() {
+                    let content = acc.terminal_content();
+                    let stop_reason = decision.visible_stop_reason(acc.stop_reason()).filter(|_| !acc.fallback);
+                    if let Err(error) = ctx.complete_thread(&content, stop_reason).await {
+                        execution.failed(&error);
+                        execution.delivered();
+                        yield executor_error_sse(&error);
+                        return;
+                    }
+                    }
                     execution.completed_with_stop_reason(acc.stop_reason());
                     let terminal = acc.terminal_frames(decision);
                     execution.delivered();
@@ -309,6 +326,9 @@ enum RoundState {
 #[derive(Default)]
 struct MessagesStreamAccumulator {
     message_started: bool,
+    thread_message_id: Option<String>,
+    thread_bytes: usize,
+    fallback: bool,
     /// Whether the current upstream round has supplied its `message_start`.
     round_started: bool,
     /// Next client-visible block index (contiguous across rounds).
@@ -359,6 +379,18 @@ impl MessagesStreamAccumulator {
         // F6: clear the previous round's terminal so a clean-EOF round can't
         // re-emit a stale stop_reason.
         self.final_message_delta = None;
+    }
+
+    /// Retain only the terminal round's visible blocks. Executed rounds are
+    /// already owned by the context's model-facing conversation.
+    fn terminal_content(&self) -> Value {
+        Value::Array(
+            self.blocks
+                .values()
+                .filter(|block| !block.is_gateway_tool)
+                .map(BufferedBlock::completed_block)
+                .collect(),
+        )
     }
 
     /// Consume this round's buffered blocks, returning (full assistant content in

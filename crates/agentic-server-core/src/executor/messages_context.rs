@@ -120,6 +120,7 @@ impl From<MessagesRequest> for MessagesTypedState {
 /// loops need. See the module docs for why both exist.
 #[derive(Debug)]
 pub struct MessagesRequestContext {
+    pub(super) thread: Option<super::messages_threads::MessagesThreadTurn>,
     /// The only typed request fields needed after routing.
     typed: MessagesTypedState,
     /// Current upstream selection policy; updated together with `raw`.
@@ -208,6 +209,7 @@ impl MessagesRequestContext {
     fn from_parts(mut typed: MessagesRequest, mut raw: Value) -> ExecutorResult<Self> {
         let budgets = normalize_native_server_tools(&mut raw)?;
         Ok(Self {
+            thread: None,
             tool_choice: typed.tool_choice.take(),
             native: NativeServerTools::from_declarations(typed.tools.as_ref()),
             typed: typed.into(),
@@ -251,6 +253,17 @@ impl MessagesRequestContext {
     /// malformed, unpaired, or was modified.
     pub(super) fn replay_server_tool_blocks(&mut self, key: &MessagesResultKey) -> ExecutorResult<()> {
         replay_server_tool_blocks(&mut self.raw, key).map(drop)
+    }
+
+    pub(super) fn thread_message_id(&self) -> Option<&str> {
+        self.thread.as_ref().map(|turn| turn.message_id.as_str())
+    }
+
+    pub(super) async fn complete_thread(&mut self, content: &Value, stop_reason: Option<&str>) -> ExecutorResult<()> {
+        if let Some(turn) = self.thread.take() {
+            turn.complete(&self.raw["messages"], content, stop_reason).await?;
+        }
+        Ok(())
     }
 
     /// The body to POST upstream for the next round.

@@ -21,6 +21,8 @@ pub struct MessagesRequest {
     pub max_tokens: u32,
     pub messages: Vec<MessageParam>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread: Option<super::thread::MessageThreadParam>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub system: Option<SystemPrompt>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<ToolParam>>,
