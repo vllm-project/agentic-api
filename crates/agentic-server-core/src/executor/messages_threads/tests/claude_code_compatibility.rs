@@ -1,4 +1,5 @@
 use super::*;
+use crate::executor::messages_threads::ThreadRetention;
 use crate::types::messages::thread::CLAUDE_CODE_BETA;
 
 async fn prepare_cli(store: &MessagesThreadStore, body: &Value) -> Result<PreparedMessagesThread, MessagesThreadError> {
@@ -29,7 +30,7 @@ async fn start(store: &MessagesThreadStore, create: &Value) -> String {
     let id = ctx.thread_message_id().unwrap().to_owned();
     let upstream: Value = serde_json::from_str(&ctx.upstream_body().unwrap()).unwrap();
     assert_eq!(upstream["system"], json!([create["system"][1]]));
-    ctx.complete_thread(&json!([{"type":"text","text":"first answer"}]), Some("end_turn"))
+    ctx.complete_thread(&json!([{"type":"text","text":"first answer"}]), ThreadRetention::Ready)
         .await
         .unwrap();
     id
@@ -54,7 +55,7 @@ async fn full_and_inherited_cli_fields_preserve_one_prompt_and_one_history() {
         assert_eq!(upstream["tools"], create["tools"]);
         assert_eq!(upstream["messages"].as_array().unwrap().len(), 3 + 2 * index);
         id = ctx.thread_message_id().unwrap().to_owned();
-        ctx.complete_thread(&json!([{"type":"text","text":"next answer"}]), Some("end_turn"))
+        ctx.complete_thread(&json!([{"type":"text","text":"next answer"}]), ThreadRetention::Ready)
             .await
             .unwrap();
     }
@@ -110,7 +111,7 @@ async fn ordinary_threads_keep_create_only_rules_and_literal_system_text() {
     let id = ctx.thread_message_id().unwrap().to_owned();
     let upstream: Value = serde_json::from_str(&ctx.upstream_body().unwrap()).unwrap();
     assert_eq!(upstream["system"], create["system"]);
-    ctx.complete_thread(&json!([]), Some("end_turn")).await.unwrap();
+    ctx.complete_thread(&json!([]), ThreadRetention::Ready).await.unwrap();
     let mut next = continuation(&id);
     next["system"] = create["system"].clone();
     assert!(prepare(&store, &next).await.is_err());
@@ -150,7 +151,7 @@ async fn legacy_checkpoints_are_normalized_and_new_checkpoints_do_not_retain_att
     let mut ctx = prepare_cli(&store, &next).await.unwrap().into_context().unwrap();
     assert!(!ctx.upstream_body().unwrap().contains("x-anthropic-billing-header:"));
     let child = ctx.thread_message_id().unwrap().to_owned();
-    ctx.complete_thread(&json!([]), Some("end_turn")).await.unwrap();
+    ctx.complete_thread(&json!([]), ThreadRetention::Ready).await.unwrap();
     let checkpoint: String = sqlx::query_scalar("SELECT checkpoint FROM message_threads WHERE message_id = $1")
         .bind(&child)
         .fetch_one(pool.as_ref())
@@ -172,7 +173,7 @@ async fn attribution_only_system_does_not_create_a_phantom_prompt() {
             .get("system")
             .is_none()
     );
-    ctx.complete_thread(&json!([]), Some("end_turn")).await.unwrap();
+    ctx.complete_thread(&json!([]), ThreadRetention::Ready).await.unwrap();
     let mut next = continuation(&id);
     next["system"] = json!([attribution("new")]);
     let ctx = prepare_cli(&store, &next).await.unwrap().into_context().unwrap();

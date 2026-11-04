@@ -1815,7 +1815,11 @@ as ordinary Messages threads.
 `messages_stream/ingestion.rs` validates Messages SSE events and fills the existing
 `MessagesStreamAccumulator`; `messages_stream/blocks.rs` assembles content blocks.
 The streaming runner uses its completed round to publish the thread
-checkpoint before emitting the public terminal. It adds no second SSE parser,
+checkpoint before emitting the public terminal. The existing block assembler also
+retains streamed citation deltas. Both loops decide retention from the unfiltered
+round, so hiding a truncated tool call cannot make it continuable; fallback status
+is retained across every inference round. JSON execution success is recorded only
+after checkpoint publication succeeds. It adds no second SSE parser,
 channel, or ingestion worker. Publication consumes the parent's token-fenced lease
 and inserts the child's checkpoint in one database transaction. Dropping an unfinished
 reservation schedules a lease release in a `TaskTracker`; shutdown joins these

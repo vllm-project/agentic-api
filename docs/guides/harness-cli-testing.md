@@ -320,7 +320,9 @@ types, and thread directives without logging prompts or authentication headers.
 It exercises protocol compatibility rather than live-model answer quality.
 
 For PostgreSQL, pass `--database-url` with an isolated test database. The same test
-also runs against a temporary SQLite file by default. For storage and HTTP tests,
+also runs against a temporary SQLite file by default. The child gateway uses a
+separate temporary `AGENTIC_API_HOME`, and the smoke test checks that startup writes
+its configuration there. For storage and HTTP tests,
 set `TEST_POSTGRES_URL` to an isolated PostgreSQL server with permission to create
 databases; each test creates its own UUID-named database:
 

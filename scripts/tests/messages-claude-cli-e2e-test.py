@@ -234,7 +234,7 @@ def main():
         gateway_env = os.environ.copy()
         for key in ["OIDC_ISSUER", "OIDC_AUDIENCE", "AGENTIC_API_SCHEMA_READY"]:
             gateway_env.pop(key, None)
-        gateway_env["AGENTIC_HOME"] = str(work / "gateway-home")
+        gateway_env["AGENTIC_API_HOME"] = str(work / "gateway-home")
         log = (work / "gateway.log").open("w+")
 
         def launch():
@@ -247,6 +247,7 @@ def main():
                     raise AssertionError(f"gateway exited: {log.read()}")
                 try:
                     urllib.request.urlopen(f"http://127.0.0.1:{gateway_port}/health", timeout=1).close()
+                    assert (work / "gateway-home" / "config.toml").is_file(), "gateway config escaped its temporary home"
                     return process
                 except OSError:
                     time.sleep(0.05)

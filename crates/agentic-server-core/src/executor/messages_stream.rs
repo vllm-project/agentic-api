@@ -39,6 +39,7 @@ use crate::executor::inference::{BoxStream, response_lines, send_request};
 use crate::executor::messages_context::MessagesRequestContext;
 use crate::executor::messages_round::{MessagesRoundDecision, decide_round};
 use crate::executor::messages_server_tools::{NativeServerTools, ServerToolView};
+use crate::executor::messages_threads::ThreadRetention;
 use crate::executor::messages_tools::{execute_gateway_calls, request_gateway_map};
 use crate::executor::messages_usage::{MessagesUsageTotals, has_fallback};
 use crate::executor::request::ExecutionContext;
@@ -282,7 +283,9 @@ async fn complete_round(
         let stop_reason = decision
             .visible_stop_reason(acc.stop_reason())
             .filter(|_| !acc.fallback);
-        ctx.complete_thread(&content, stop_reason).await?;
+        let has_tool_call = acc.blocks.values().any(|block| block.block["type"] == "tool_use");
+        let retention = ThreadRetention::for_response(stop_reason, has_tool_call);
+        ctx.complete_thread(&content, retention).await?;
     }
     Ok(())
 }

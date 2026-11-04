@@ -306,6 +306,26 @@ impl PreparedMessagesThread {
     }
 }
 
+/// Whether a completed upstream round may seed another thread turn. Decide
+/// from the original round before removing calls that the client cannot see.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ThreadRetention {
+    Discard,
+    Ready,
+    Paused,
+}
+
+impl ThreadRetention {
+    pub(super) fn for_response(stop_reason: Option<&str>, has_tool_call: bool) -> Self {
+        match stop_reason {
+            Some("pause_turn") => Self::Paused,
+            Some("end_turn" | "stop_sequence" | "tool_use") => Self::Ready,
+            Some("max_tokens") if !has_tool_call => Self::Ready,
+            _ => Self::Discard,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(super) struct MessagesThreadTurn {
     storage: MessageThreadStore,
@@ -320,25 +340,19 @@ impl MessagesThreadTurn {
         mut self,
         history: &Value,
         content: &Value,
-        stop_reason: Option<&str>,
+        retention: ThreadRetention,
     ) -> ExecutorResult<()> {
-        let retain = matches!(
-            stop_reason,
-            Some("end_turn" | "stop_sequence" | "tool_use" | "pause_turn" | "max_tokens")
-        ) && !(stop_reason == Some("max_tokens")
-            && content
-                .as_array()
-                .is_some_and(|blocks| blocks.iter().any(|block| block["type"] == "tool_use")));
-        let checkpoint = if retain {
-            self.checkpoint.messages = serde_json::from_value(history.clone())?;
-            self.checkpoint.messages.push(ThreadMessage {
-                role: ThreadMessageRole::Assistant,
-                content: serde_json::from_value::<ThreadMessageContent>(content.clone())?,
-            });
-            self.checkpoint.paused = stop_reason == Some("pause_turn");
-            Some(&self.checkpoint)
-        } else {
-            None
+        let checkpoint = match retention {
+            ThreadRetention::Discard => None,
+            ThreadRetention::Ready | ThreadRetention::Paused => {
+                self.checkpoint.messages = serde_json::from_value(history.clone())?;
+                self.checkpoint.messages.push(ThreadMessage {
+                    role: ThreadMessageRole::Assistant,
+                    content: serde_json::from_value::<ThreadMessageContent>(content.clone())?,
+                });
+                self.checkpoint.paused = retention == ThreadRetention::Paused;
+                Some(&self.checkpoint)
+            }
         };
         self.storage
             .publish(&self.owner, &self.message_id, checkpoint, self.lease)

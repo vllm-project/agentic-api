@@ -22,7 +22,17 @@ async fn prepare(store: &MessagesThreadStore, value: &Value) -> Result<PreparedM
 async fn finish(store: &MessagesThreadStore, value: &Value, stop: &str, content: &Value) -> String {
     let mut ctx = prepare(store, value).await.unwrap().into_context().unwrap();
     let id = ctx.thread_message_id().unwrap().to_owned();
-    ctx.complete_thread(content, Some(stop)).await.unwrap();
+    ctx.complete_thread(
+        content,
+        ThreadRetention::for_response(
+            Some(stop),
+            content
+                .as_array()
+                .is_some_and(|blocks| blocks.iter().any(|block| block["type"] == "tool_use")),
+        ),
+    )
+    .await
+    .unwrap();
     id
 }
 
@@ -228,7 +238,7 @@ async fn oversized_checkpoint_fails_without_consuming_parent() {
         .unwrap();
     let huge = json!([{"type":"text","text":"x".repeat(MAX_CHECKPOINT_BYTES)}]);
     assert!(matches!(
-        ctx.complete_thread(&huge, Some("end_turn")).await,
+        ctx.complete_thread(&huge, ThreadRetention::Ready).await,
         Err(ExecutorError::PayloadTooLarge(_))
     ));
     store.shutdown().await;

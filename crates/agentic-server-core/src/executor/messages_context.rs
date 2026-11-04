@@ -41,6 +41,7 @@ use crate::executor::messages_request::{ServerToolBudgets, normalize_native_serv
 use crate::executor::messages_server_tools::NativeServerTools;
 use crate::executor::messages_server_tools::replay::replay_server_tool_blocks;
 use crate::executor::messages_server_tools::sealing::MessagesResultKey;
+use crate::executor::messages_threads::ThreadRetention;
 use crate::types::messages::request::MessagesToolDeclarations;
 use crate::types::messages::{
     GatewayToolMap, GatewayToolResult, MessagesRequest, MessagesToolChoice, ToolParam, has_gateway_tool,
@@ -259,9 +260,9 @@ impl MessagesRequestContext {
         self.thread.as_ref().map(|turn| turn.message_id.as_str())
     }
 
-    pub(super) async fn complete_thread(&mut self, content: &Value, stop_reason: Option<&str>) -> ExecutorResult<()> {
+    pub(super) async fn complete_thread(&mut self, content: &Value, retention: ThreadRetention) -> ExecutorResult<()> {
         if let Some(turn) = self.thread.take() {
-            turn.complete(&self.raw["messages"], content, stop_reason).await?;
+            turn.complete(&self.raw["messages"], content, retention).await?;
         }
         Ok(())
     }

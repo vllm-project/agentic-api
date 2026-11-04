@@ -3,6 +3,9 @@
 mod common;
 #[path = "common/messages_database.rs"]
 mod messages_database;
+#[path = "../../agentic-server-core/tests/execution_metrics/harness.rs"]
+mod metrics;
+use metrics::{Metrics, total};
 
 use std::fmt::Write as _;
 use std::sync::Arc;
@@ -44,14 +47,21 @@ async fn infer(State(requests): State<Requests>, headers: HeaderMap, Json(reques
     } else {
         json!([{"type":"text","text":"remembered 雪"}])
     };
-    let stop = if content[0]["type"] == "tool_use" {
+    let stop = if request["metadata"]["max_tokens"] == true {
+        "max_tokens"
+    } else if content[0]["type"] == "tool_use" {
         "tool_use"
     } else {
         "end_turn"
     };
     let mut message = json!({"type":"message","id":"upstream-id","role":"assistant","model":"local-model",
         "content":content,"stop_reason":stop,"usage":{"input_tokens":4,"output_tokens":2}});
-    if request["metadata"]["fallback"] == true {
+    if request["metadata"]["missing_content"] == true {
+        message["content"] = Value::Null;
+    }
+    if request["metadata"]["fallback"] == true
+        || (request["metadata"]["earlier_fallback"] == true && content[0]["type"] == "tool_use")
+    {
         message["usage"]["iterations"] = json!([{"type":"fallback_message","model":"fallback-model"}]);
     }
     if request["stream"] == true {
@@ -71,8 +81,16 @@ async fn infer(State(requests): State<Requests>, headers: HeaderMap, Json(reques
             events.extend([
                 json!({"type":"content_block_start","index":index,"content_block":skeleton}),
                 json!({"type":"content_block_delta","index":index,"delta":delta}),
-                json!({"type":"content_block_stop","index":index}),
             ]);
+            if block["type"] == "text"
+                && let Some(citations) = request["metadata"]["citations"].as_array()
+            {
+                for citation in citations {
+                    events.push(json!({"type":"content_block_delta","index":index,
+                        "delta":{"type":"citations_delta","citation":citation}}));
+                }
+            }
+            events.push(json!({"type":"content_block_stop","index":index}));
         }
         let streamed_stop = if request["metadata"]["null_stop"] == true {
             Value::Null
@@ -435,6 +453,105 @@ async fn fallback_responses_are_delivered_but_not_retained() {
 }
 
 #[tokio::test]
+async fn fallback_in_an_earlier_gateway_round_prevents_continuation() {
+    for stream in [false, true] {
+        let (url, requests, _upstream, _gateway) = setup().await;
+        let mut first = create(stream);
+        first["tools"] = json!([{"type":"web_search_20250305","name":"web_search"}]);
+        first["metadata"] = json!({"gateway_tool":true,"earlier_fallback":true});
+        let response = send(&url, &first).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.text().await.unwrap();
+        assert!(body.contains("remembered 雪"));
+        let id = if stream {
+            stream_id(&body)
+        } else {
+            serde_json::from_str::<Value>(&body).unwrap()["id"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        };
+        assert_eq!(
+            send(&url, &continuation(&id, false)).await.status(),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            requests.lock().await.len(),
+            2,
+            "both model rounds completed, then continuation was refused locally"
+        );
+    }
+}
+
+#[tokio::test]
+async fn truncated_gateway_calls_are_not_retained_but_truncated_text_is() {
+    for stream in [false, true] {
+        for has_gateway_call in [false, true] {
+            let (url, requests, _upstream, _gateway) = setup().await;
+            let mut first = create(stream);
+            first["tools"] = json!([{"type":"web_search_20250305","name":"web_search"}]);
+            first["metadata"] = json!({"max_tokens":true,"gateway_tool":has_gateway_call});
+            let response = send(&url, &first).await;
+            assert_eq!(response.status(), StatusCode::OK);
+            let body = response.text().await.unwrap();
+            assert!(body.contains("max_tokens"));
+            assert!(!body.contains("gateway-call"), "an unexecuted call remains hidden");
+            let id = if stream {
+                stream_id(&body)
+            } else {
+                serde_json::from_str::<Value>(&body).unwrap()["id"]
+                    .as_str()
+                    .unwrap()
+                    .to_owned()
+            };
+            let response = send(&url, &continuation(&id, false)).await;
+            assert_eq!(
+                response.status(),
+                if has_gateway_call {
+                    StatusCode::NOT_FOUND
+                } else {
+                    StatusCode::OK
+                }
+            );
+            assert_eq!(requests.lock().await.len(), if has_gateway_call { 1 } else { 2 });
+        }
+    }
+}
+
+#[tokio::test]
+async fn streamed_citations_are_preserved_in_the_next_model_request() {
+    let (url, requests, _upstream, _gateway) = setup().await;
+    let citations = json!([
+        {"type":"char_location","cited_text":"local","document_index":0,"document_title":"proof",
+         "start_char_index":0,"end_char_index":5},
+        {"type":"char_location","cited_text":"proof","document_index":0,"document_title":"proof",
+         "start_char_index":6,"end_char_index":11}
+    ]);
+    let mut first = create(true);
+    first["messages"][0]["content"] = json!([{"type":"document","title":"proof","citations":{"enabled":true},
+        "source":{"type":"text","media_type":"text/plain","data":"local proof"}}]);
+    first["metadata"] = json!({"citations":citations});
+    let response = send(&url, &first).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.text().await.unwrap();
+    let delivered: Vec<Value> = body
+        .lines()
+        .filter_map(|line| line.strip_prefix("data: "))
+        .map(|data| serde_json::from_str::<Value>(data).unwrap())
+        .filter(|event| event["delta"]["type"] == "citations_delta")
+        .map(|event| event["delta"]["citation"].clone())
+        .collect();
+    assert_eq!(Value::Array(delivered), citations);
+    let id = stream_id(&body);
+    assert_eq!(send(&url, &continuation(&id, false)).await.status(), StatusCode::OK);
+    let requests = requests.lock().await;
+    assert_eq!(requests.len(), 2);
+    let retained = &requests[1]["messages"][1]["content"][0];
+    assert_eq!(retained["text"], "remembered 雪");
+    assert_eq!(retained["citations"], citations);
+}
+
+#[tokio::test]
 async fn continuation_survives_gateway_and_execution_context_restart() {
     for stream in [false, true] {
         let (url, requests, upstream, mut gateway, database_url) = setup_database().await;
@@ -488,8 +605,9 @@ async fn continuation_survives_gateway_and_execution_context_restart() {
 }
 
 #[tokio::test]
-async fn persistence_failure_never_emits_successful_completion() {
-    for stream in [false, true] {
+async fn failed_delivery_never_emits_or_records_successful_completion() {
+    for (stream, missing_content) in [(false, false), (false, true), (true, false)] {
+        let metrics = Metrics::new();
         let (database_url, directory) = messages_database::database().await;
         let pool = agentic_core::storage::create_pool_with_schema(Some(&database_url))
             .await
@@ -518,19 +636,55 @@ async fn persistence_failure_never_emits_successful_completion() {
             None,
         );
         let mut state = common::test_state(&common::test_config(&backend_url));
+        Arc::make_mut(&mut state.exec_ctx).metrics = metrics.executor();
         Arc::make_mut(&mut state.exec_ctx).messages_threads =
             agentic_core::executor::messages_threads::MessagesThreadStore::new(pool);
         let (url, handle) = common::spawn_gateway(state).await;
         let _gateway = Server(handle, directory);
-        let response = send(&url, &create(stream)).await;
+        let mut request = create(stream);
+        request["metadata"] = json!({"missing_content":missing_content});
+        let response = send(&url, &request).await;
         if stream {
             assert_eq!(response.status(), StatusCode::OK);
             let body = response.text().await.unwrap();
             assert!(body.contains("event: error"), "{body}");
             assert!(!body.contains("event: message_stop"), "{body}");
         } else {
-            assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+            assert_eq!(
+                response.status(),
+                if missing_content {
+                    StatusCode::BAD_REQUEST
+                } else {
+                    StatusCode::INTERNAL_SERVER_ERROR
+                }
+            );
             assert_eq!(response.json::<Value>().await.unwrap()["type"], "error");
         }
+        let points = metrics
+            .wait_for("one failed execution", |points| {
+                total(points, "agentic.execution.count", &[]) == 1
+            })
+            .await;
+        let category = if missing_content {
+            "invalid_request"
+        } else {
+            "persistence"
+        };
+        assert_eq!(
+            total(
+                &points,
+                "agentic.execution.count",
+                &[("agentic.execution.outcome", "failed"), ("error.type", category)]
+            ),
+            1
+        );
+        assert_eq!(
+            total(
+                &points,
+                "agentic.execution.count",
+                &[("agentic.execution.outcome", "completed")]
+            ),
+            0
+        );
     }
 }
