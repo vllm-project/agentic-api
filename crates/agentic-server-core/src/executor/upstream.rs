@@ -566,7 +566,7 @@ pub(super) mod tests {
             new_input_items: Vec::new(),
             response_id: "resp_test".to_owned(),
             conversation_id: None,
-            rehydrated_metadata: None,
+            checkpoint: None,
             continuation: None,
         }
     }

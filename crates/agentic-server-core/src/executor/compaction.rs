@@ -198,7 +198,7 @@ async fn summarize_items(
         new_input_items: Vec::new(),
         response_id: uuid7_str("resp_"),
         conversation_id: None,
-        rehydrated_metadata: None,
+        checkpoint: None,
         continuation: None,
     };
     let mut agent = AgentPipeline::new(ctx, None, StreamRelay::detached());
@@ -504,7 +504,7 @@ mod tests {
             new_input_items: Vec::new(),
             response_id: "resp_test".to_owned(),
             conversation_id: None,
-            rehydrated_metadata: None,
+            checkpoint: None,
             continuation: None,
         }
     }

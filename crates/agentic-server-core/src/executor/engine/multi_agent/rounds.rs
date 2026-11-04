@@ -134,7 +134,7 @@ impl MultiAgentRun {
             new_input_items: Vec::new(),
             response_id: self.payload.id.clone(),
             conversation_id: None,
-            rehydrated_metadata: None,
+            checkpoint: None,
             continuation: None,
         };
         // Round tasks present through the response owner's relay, never the client queue.

@@ -9,7 +9,7 @@ use agentic_core::executor::request::RequestContext;
 use agentic_core::executor::{
     ExecutionContext, ExecutorError, execute, persist_response, persist_turn, rehydrate_conversation,
 };
-use agentic_core::storage::StorageError;
+use agentic_core::storage::{ResponseData, StorageError};
 use agentic_core::types::io::InOutItem;
 use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
 use agentic_core::types::tools::{FunctionToolParam, NonEmptyToolName};
@@ -1000,7 +1000,7 @@ async fn tool_search_store_false_manual_replay_completes_without_reusable_respon
         new_input_items: Vec::new(),
         response_id: "resp_lookup".to_owned(),
         conversation_id: None,
-        rehydrated_metadata: None,
+        checkpoint: None,
         continuation: None,
     };
     let error = fixture
@@ -1070,7 +1070,7 @@ async fn test_previous_response_id_persists_inherited_tools_and_choice() {
         new_input_items: vec![],
         response_id: "resp_lookup".into(),
         conversation_id: None,
-        rehydrated_metadata: None,
+        checkpoint: None,
         continuation: None,
     };
 
@@ -1080,6 +1080,7 @@ async fn test_previous_response_id_persists_inherited_tools_and_choice() {
         .get(&lookup_ctx)
         .await
         .expect("fetch persisted response");
+    let stored = ResponseData::try_from(stored).expect("decode persisted response");
 
     assert_eq!(stored.metadata.model, "test-model");
     assert!(matches!(stored.metadata.effective_tool_choice, ToolChoice::Required));
@@ -1500,7 +1501,7 @@ fn lookup_context(previous_response_id: Option<String>, conversation_id: Option<
         new_input_items: Vec::new(),
         response_id: "resp_lookup".to_owned(),
         conversation_id: None,
-        rehydrated_metadata: None,
+        checkpoint: None,
         continuation: None,
     }
 }

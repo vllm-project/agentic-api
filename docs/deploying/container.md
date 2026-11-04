@@ -147,9 +147,9 @@ normally; one with them is handled as follows:
   error asking the operator to reset the database or configure a new one; the stored data is left unchanged.
 
 To upgrade a deployment that uses PostgreSQL or an explicit `DATABASE_URL`, stop every replica of the earlier release,
-then either point `DATABASE_URL` at a new empty database or drop the `responses`, `items`, `conversations`, and
-`_sqlx_migrations` tables, according to the deployment's data-retention policy. Back up the database first if its
-contents must be kept.
+then either point `DATABASE_URL` at a new empty database or drop all of the gateway's tables (`responses`, `items`,
+`conversations`, the `file_search_*` tables, and `_sqlx_migrations`), according to the deployment's data-retention
+policy. Back up the database first if its contents must be kept.
 
 On a new PostgreSQL database, the first startup applies the migrations and then widens timestamp and sequence columns to
 64-bit integers.

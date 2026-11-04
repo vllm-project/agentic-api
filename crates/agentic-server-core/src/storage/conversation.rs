@@ -106,6 +106,7 @@ impl ConversationStore {
         else {
             return Ok(ConversationSnapshot {
                 items: Vec::new(),
+                latest_response_id: None,
                 turn_metadata: None,
             });
         };
@@ -122,7 +123,11 @@ impl ConversationStore {
             Some(response_id) => decode_turn_metadata(response_id, latest_turn.as_ref())?,
         };
 
-        Ok(ConversationSnapshot { items, turn_metadata })
+        Ok(ConversationSnapshot {
+            items,
+            latest_response_id,
+            turn_metadata,
+        })
     }
 
     /// Persists a conversation turn: appends its new items after whatever the conversation holds now, as `OpenAI`

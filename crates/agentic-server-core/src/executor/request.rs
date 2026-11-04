@@ -9,11 +9,10 @@ use crate::executor::gateway::GatewaySchedulerPolicy;
 use crate::executor::messages_server_tools::sealing::{MessagesResultKey, process_result_key};
 use crate::executor::modes::{ConversationHandler, ResponseHandler};
 use crate::executor::multi_agent::ValidatedTreeCheckpoint;
+use crate::executor::session::{ResponseCheckpoint, ResponseContinuation};
 use crate::executor::telemetry::ExecutorMetrics;
 use crate::storage::backend::redact_database_urls;
-use crate::storage::{
-    ConversationStore, DatabaseBackend, ResponseMetadata, ResponseStore, create_pool_with_schema_and_configs,
-};
+use crate::storage::{ConversationStore, DatabaseBackend, ResponseStore, create_pool_with_schema_and_configs};
 use crate::tool::{GatewayExecutorRegistration, GatewayExecutors};
 use crate::types::io::{InOutItem, ToolChoice};
 use crate::types::messages::GatewayToolMap;
@@ -43,24 +42,14 @@ pub struct RequestContext {
     pub response_id: String,
     /// Resolved conversation ID. `None` when `store=false` or non-conversational.
     pub conversation_id: Option<String>,
-    /// Metadata of the stored response or conversation turn this request continues, loaded by rehydration.
-    /// A transient session parent keeps its own; read both through [`RequestContext::rehydrated_metadata`].
-    pub rehydrated_metadata: Option<ResponseMetadata>,
+    /// The turn this request continues (a stored response, a conversation's latest turn, or a session parent), as
+    /// rehydration read it.
+    pub checkpoint: Option<ResponseCheckpoint>,
     /// Optional transient-session lease and canonical parent snapshot. Never serialized.
-    pub continuation: Option<super::session::ResponseContinuation>,
+    pub continuation: Option<ResponseContinuation>,
 }
 
 impl RequestContext {
-    /// Metadata of the response or conversation turn this request continues, if any.
-    pub(crate) fn rehydrated_metadata(&self) -> Option<&ResponseMetadata> {
-        self.rehydrated_metadata.as_ref().or_else(|| {
-            self.continuation
-                .as_ref()
-                .and_then(|lease| lease.parent.as_deref())
-                .map(|parent| &parent.metadata)
-        })
-    }
-
     /// Submitted or inherited selector for public metadata and continuation settings.
     /// The enriched selector is only a fallback before any inference override.
     pub(super) fn public_tool_choice(&self) -> Option<&ToolChoice> {

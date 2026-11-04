@@ -36,3 +36,5 @@ pub use schema::{PoolWithSchema, SchemaManager};
 pub use types::{
     ConversationData, ConversationSnapshot, ItemKind, ResponseData, ResponseMetadata, StorageError, StoreResult,
 };
+pub mod file_search;
+pub mod local_files;
