@@ -11,7 +11,9 @@ use std::time::Duration;
 
 use agentic_core::executor::{ConversationHandler, ExecutionContext, ResponseHandler};
 use agentic_core::storage::pool::DbPool;
-use agentic_core::storage::{ConversationStore, ResponseMetadata, ResponseStore, create_pool_with_schema};
+use agentic_core::storage::{
+    ConversationStore, ResponseData, ResponseMetadata, ResponseStore, create_pool_with_schema,
+};
 use agentic_core::types::RequestPayload;
 use agentic_core::types::io::InOutItem;
 use axum::Router;
@@ -210,7 +212,11 @@ impl Fixture {
                 .expect("persist response fixture");
             json!({"previous_response_id":response_id})
         };
-        let stored = response_store.get(response_id).await.expect("stored response");
+        let stored = response_store
+            .get(response_id)
+            .await
+            .and_then(ResponseData::try_from)
+            .expect("stored response");
         assert_eq!(stored.history_item_ids.len(), 1);
         // Install exact wire JSON independently of typed parsing. This preserves
         // the file even on the old baseline, which would deserialize it as Unknown.

@@ -73,25 +73,6 @@ pub(super) fn ensure_strict_response(json: &Value) -> ExecutorResult<()> {
     Ok(())
 }
 
-/// Decode one upstream output item under lenient ingestion, logging an item the typed schema rejects by its type
-/// only, never its content.
-fn lenient_output_item(item: Value) -> Option<OutputItem> {
-    let item_type = item
-        .get("type")
-        .and_then(Value::as_str)
-        .filter(|item_type| item_type.len() <= 64)
-        .unwrap_or("unknown")
-        .to_owned();
-    let decoded = deserialize_from_value_opt::<OutputItem>(item);
-    if decoded.is_none() {
-        tracing::warn!(
-            item_type,
-            "dropped an upstream output item that the typed schema rejects"
-        );
-    }
-    decoded
-}
-
 impl ResponseAccumulator {
     /// Parses a non-streaming JSON response body.
     ///
@@ -128,7 +109,12 @@ impl ResponseAccumulator {
 
         let output = deserialize_from_value_opt::<Vec<serde_json::Value>>(json["output"].take())
             // Lenient ingestion drops output items the typed schema rejects; strict ingestion rejected them above.
-            .map(|items| items.into_iter().filter_map(lenient_output_item).collect())
+            .map(|items| {
+                items
+                    .into_iter()
+                    .filter_map(deserialize_from_value_opt::<OutputItem>)
+                    .collect()
+            })
             .unwrap_or_default();
 
         let status = json["status"]
