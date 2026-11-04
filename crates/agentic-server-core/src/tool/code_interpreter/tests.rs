@@ -111,12 +111,6 @@ fn gateway_code_interpreter_ids_match_across_started_and_completed_items() {
             started_output.to_input_item().is_none(),
             "gateway projection must not replay"
         );
-        assert!(
-            serde_json::to_value(&started_output)
-                .expect("public projection serializes")
-                .get("_agentic_code_interpreter_origin")
-                .is_none()
-        );
         let OutputItem::CodeInterpreterCall(started) = started_output else {
             panic!("expected code interpreter item");
         };

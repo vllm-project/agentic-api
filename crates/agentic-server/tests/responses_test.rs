@@ -331,15 +331,12 @@ fn gated_sse_chunks() -> (String, String) {
 }
 
 async fn assert_only_competing_turn_persisted(pool: &Arc<DbPool>, conversation_id: &str) {
-    let conversation_store = ConversationStore::new(Arc::clone(pool));
-    assert_eq!(
-        conversation_store
-            .rehydrate(conversation_id)
-            .await
-            .expect("conversation history")
-            .items,
-        competing_turn_items()
-    );
+    let conversation = ConversationStore::new(Arc::clone(pool))
+        .rehydrate(conversation_id)
+        .await
+        .expect("conversation history");
+    assert_eq!(conversation.items, competing_turn_items());
+    assert_eq!(conversation.version.response_id.as_deref(), Some(COMPETING_RESPONSE_ID));
     let response = ResponseStore::new(Arc::clone(pool))
         .get(COMPETING_RESPONSE_ID)
         .await

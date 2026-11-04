@@ -27,142 +27,6 @@ fn input_item(text: &str) -> InOutItem {
 #[ignore = "requires TEST_POSTGRES_URL pointing to an isolated PostgreSQL database"]
 #[allow(
     clippy::too_many_lines,
-    reason = "keeps the complete index migration lifecycle in one integration test"
-)]
-async fn postgres_index_upgrade_preserves_existing_state() {
-    let database_url = std::env::var("TEST_POSTGRES_URL").expect("TEST_POSTGRES_URL must be set");
-    let pool = create_pool_with_configs(Some(&database_url), SqliteConfig::default(), PostgresConfig::default())
-        .await
-        .expect("create PostgreSQL upgrade-test pool");
-    let schema = format!("upgrade_{}", uuid::Uuid::now_v7().simple());
-    let mut connection = pool.acquire().await.expect("acquire PostgreSQL upgrade connection");
-    sqlx::query(&format!("CREATE SCHEMA {schema}"))
-        .execute(&mut *connection)
-        .await
-        .expect("create isolated upgrade schema");
-    sqlx::query(&format!("SET search_path TO {schema}"))
-        .execute(&mut *connection)
-        .await
-        .expect("select isolated upgrade schema");
-    sqlx::raw_sql(include_str!("../migrations/0001_initial.sql"))
-        .execute(&mut *connection)
-        .await
-        .expect("apply initial PostgreSQL schema");
-    sqlx::raw_sql(include_str!("../migrations/0002_add_placeholders.sql"))
-        .execute(&mut *connection)
-        .await
-        .expect("apply placeholder PostgreSQL schema");
-    sqlx::query("INSERT INTO conversations (id, created_at, metadata) VALUES ($1, $2, $3)")
-        .bind("conv_upgrade")
-        .bind(1_704_067_200_i64)
-        .bind("{\"source\":\"upgrade\"}")
-        .execute(&mut *connection)
-        .await
-        .expect("seed conversation");
-    sqlx::query("INSERT INTO items (id, data, created_at, conversation_id, seq) VALUES ($1, $2, $3, $4, $5)")
-        .bind("item_upgrade")
-        .bind("{}")
-        .bind(1_704_067_200_i64)
-        .bind("conv_upgrade")
-        .bind(0_i64)
-        .execute(&mut *connection)
-        .await
-        .expect("seed item");
-    sqlx::query(
-        "INSERT INTO responses \
-         (id, conversation_id, history_item_ids, metadata, created_at) VALUES ($1, $2, $3, $4, $5)",
-    )
-    .bind("resp_upgrade")
-    .bind("conv_upgrade")
-    .bind("[\"item_upgrade\"]")
-    .bind("{\"source\":\"upgrade\"}")
-    .bind(1_704_067_200_i64)
-    .execute(&mut *connection)
-    .await
-    .expect("seed response");
-
-    sqlx::raw_sql(include_str!("../migrations/0003_index_conversation_sequence.sql"))
-        .execute(&mut *connection)
-        .await
-        .expect("apply PostgreSQL composite index migration");
-
-    let linked_state: (i64, String, String) = sqlx::query_as(
-        "SELECT conversations.created_at, items.id, responses.id \
-         FROM conversations \
-         JOIN items ON items.conversation_id = conversations.id \
-         JOIN responses ON responses.conversation_id = conversations.id \
-         WHERE conversations.id = $1",
-    )
-    .bind("conv_upgrade")
-    .fetch_one(&mut *connection)
-    .await
-    .expect("load migrated linked state");
-    assert_eq!(
-        linked_state,
-        (1_704_067_200, "item_upgrade".to_owned(), "resp_upgrade".to_owned())
-    );
-    let recreated_indexes: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM pg_indexes \
-         WHERE schemaname = $1 AND indexname IN ( \
-           'idx_conversations_tenant_id', 'idx_items_conversation_id', \
-           'idx_items_created_at', 'idx_items_tenant_id', \
-           'idx_responses_conversation_id', 'idx_responses_previous_response_id', \
-           'idx_responses_created_at', 'idx_responses_tenant_id' \
-         )",
-    )
-    .bind(&schema)
-    .fetch_one(&mut *connection)
-    .await
-    .expect("inspect recreated PostgreSQL indexes");
-    assert_eq!(recreated_indexes, 8);
-    let conversation_index: String = sqlx::query_scalar(
-        "SELECT indexdef FROM pg_indexes \
-         WHERE schemaname = $1 AND indexname = 'idx_items_conversation_id'",
-    )
-    .bind(&schema)
-    .fetch_one(&mut *connection)
-    .await
-    .expect("inspect conversation sequence index");
-    assert!(conversation_index.contains("(conversation_id, seq)"));
-    let duplicate_sequence_error =
-        sqlx::query("INSERT INTO items (id, data, created_at, conversation_id, seq) VALUES ($1, $2, $3, $4, $5)")
-            .bind("item_duplicate_sequence")
-            .bind("{}")
-            .bind(1_704_067_200_i64)
-            .bind("conv_upgrade")
-            .bind(0_i64)
-            .execute(&mut *connection)
-            .await;
-    assert!(
-        duplicate_sequence_error.is_err(),
-        "conversation sequences must be database-unique"
-    );
-    let foreign_key_error =
-        sqlx::query("INSERT INTO items (id, data, created_at, conversation_id) VALUES ($1, $2, $3, $4)")
-            .bind("item_invalid")
-            .bind("{}")
-            .bind(1_704_067_200_i64)
-            .bind("conv_missing")
-            .execute(&mut *connection)
-            .await;
-    assert!(foreign_key_error.is_err());
-
-    sqlx::query("SET search_path TO public")
-        .execute(&mut *connection)
-        .await
-        .expect("restore public schema");
-    sqlx::query(&format!("DROP SCHEMA {schema} CASCADE"))
-        .execute(&mut *connection)
-        .await
-        .expect("drop isolated upgrade schema");
-    drop(connection);
-    pool.close().await;
-}
-
-#[tokio::test]
-#[ignore = "requires TEST_POSTGRES_URL pointing to an isolated PostgreSQL database"]
-#[allow(
-    clippy::too_many_lines,
     reason = "keeps the complete restart persistence lifecycle in one integration test"
 )]
 async fn postgres_migrations_and_state_survive_pool_restarts() {
@@ -215,7 +79,7 @@ async fn postgres_migrations_and_state_survive_pool_restarts() {
     assert_eq!(stored_future_timestamp, future_timestamp);
 
     ResponseStore::new(first_pool.clone())
-        .persist(&response_id, None, vec![input_item("first turn")], &metadata)
+        .persist(&response_id, None, vec![input_item("first turn")], None, &metadata)
         .await
         .expect("persist first response");
     let first_conversation_store = ConversationStore::new(first_pool.clone());
@@ -256,6 +120,7 @@ async fn postgres_migrations_and_state_survive_pool_restarts() {
             &continuation_id,
             Some(&response_id),
             vec![input_item("second turn")],
+            None,
             &metadata,
         )
         .await
@@ -429,6 +294,7 @@ async fn postgres_optimistic_conversation_conflict() {
                     version,
                     &response_id,
                     items.clone(),
+                    None,
                     &ResponseMetadata::default(),
                 )
                 .await;
@@ -449,6 +315,7 @@ async fn postgres_optimistic_conversation_conflict() {
                     version,
                     &response_id,
                     items.clone(),
+                    None,
                     &ResponseMetadata::default(),
                 )
                 .await;

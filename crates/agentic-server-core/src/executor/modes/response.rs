@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use crate::storage::{ResponseData, ResponseMetadata, ResponseStore, StorageError};
+use crate::storage::{DbResponse, ResponseData, ResponseMetadata, ResponseStore, StorageError};
 use crate::types::io::OutputItem;
 use crate::types::io::{InOutItem, InputItem};
 use crate::types::io::{ItemOrder, ItemPage, ListItemsResponse};
@@ -30,14 +30,11 @@ impl ResponseHandler {
     ///
     /// # Errors
     /// Returns `ResponseNotFound` for missing IDs, a storage error for unavailable storage, and a conflict
-    /// for older records that contain continuation history but no response snapshot.
+    /// for records stored without a snapshot, such as `store: false` session checkpoints.
     pub async fn get_snapshot(&self, response_id: &str) -> ExecutorResult<ResponsePayload> {
         self.store
-            .get(response_id)
+            .get_snapshot(response_id)
             .await?
-            .metadata
-            .response_snapshot
-            .map(|snapshot| *snapshot)
             .ok_or_else(|| ExecutorError::Conflict(NOT_RETRIEVABLE.into()))
     }
 
@@ -80,24 +77,14 @@ impl ResponseHandler {
     /// Lists stored context, excluding this response's own output.
     ///
     /// # Errors
-    /// Returns an error for invalid pagination, missing history, or a legacy response
+    /// Returns an error for invalid pagination, missing history, or a response
     /// without a retrievable snapshot.
     pub async fn list_input_items(&self, response_id: &str, page: ItemPage<'_>) -> ExecutorResult<ListItemsResponse> {
-        let (stored, mut items) = self.store.get_items(response_id).await?;
-        let snapshot = stored
-            .metadata
-            .response_snapshot
+        let mut items = self
+            .store
+            .get_input_items(response_id)
+            .await?
             .ok_or_else(|| ExecutorError::Conflict(NOT_RETRIEVABLE.into()))?;
-        // Both persistence paths append public outputs after the turn's inputs.
-        // Bound the suffix by this snapshot's output count so an inherited output
-        // remains input even when a turn supplies no new items. Session execution
-        // can already have recorded some outputs as canonical input history.
-        for _ in &snapshot.output {
-            if !items.last().is_some_and(|item| matches!(item, InOutItem::Output(_))) {
-                break;
-            }
-            items.pop();
-        }
         if page.order == ItemOrder::Desc {
             items.reverse();
         }
@@ -127,22 +114,19 @@ impl ResponseHandler {
     /// # Errors
     /// Returns `ExecutorError` if `previous_response_id` is absent, the response
     /// is not found, the store is disabled, or the database query fails.
-    pub async fn get(&self, ctx: &RequestContext) -> ExecutorResult<ResponseData> {
+    pub async fn get(&self, ctx: &RequestContext) -> ExecutorResult<DbResponse> {
         let prev_id = ctx
             .original_request
             .previous_response_id
             .as_deref()
             .ok_or_else(|| ExecutorError::InvalidRequest("previous_response_id is required for get".into()))?;
-        let mut stored = self.store.get(prev_id).await.map_err(|error| {
+        self.store.get(prev_id).await.map_err(|error| {
             if error.is_not_found() {
                 StorageError::PreviousResponseNotFound { id: prev_id.to_owned() }.into()
             } else {
                 ExecutorError::Storage(error)
             }
-        })?;
-        // Continuation checkpoints retain history and settings, not a duplicate payload.
-        stored.metadata.response_snapshot = None;
-        Ok(stored)
+        })
     }
 
     /// Validates that the response for `previous_response_id` exists.
@@ -159,8 +143,7 @@ impl ResponseHandler {
 
     /// Loads the previous response and its full history in one storage query.
     ///
-    /// Returns `None` when the request does not continue a previous response. The stored response
-    /// snapshot is dropped: continuation needs only the effective settings.
+    /// Returns `None` when the request does not continue a previous response.
     ///
     /// # Errors
     /// Returns [`StorageError::PreviousResponseNotFound`] for an unknown `previous_response_id`, or
@@ -169,14 +152,13 @@ impl ResponseHandler {
         let Some(prev_id) = ctx.original_request.previous_response_id.as_deref() else {
             return Ok(None);
         };
-        let (mut stored, history) = self.store.rehydrate(prev_id).await.map_err(|error| {
+        let (stored, history) = self.store.rehydrate(prev_id).await.map_err(|error| {
             if error.is_not_found() {
                 StorageError::PreviousResponseNotFound { id: prev_id.to_owned() }.into()
             } else {
                 ExecutorError::Storage(error)
             }
         })?;
-        stored.metadata.response_snapshot = None;
         Ok(Some((stored, history)))
     }
 
@@ -191,7 +173,8 @@ impl ResponseHandler {
         &self,
         mut ctx: RequestContext,
         output_items: Vec<OutputItem>,
-        mut metadata: ResponseMetadata,
+        snapshot: Option<&ResponsePayload>,
+        metadata: ResponseMetadata,
     ) -> ExecutorResult<()> {
         let continuation = ctx.continuation.take();
         let write_durable = continuation.is_none() || ctx.original_request.store;
@@ -217,13 +200,10 @@ impl ResponseHandler {
                 .map(|(_, (item, _))| InOutItem::Output(item)),
         );
 
-        let snapshot = metadata.response_snapshot.take();
         let checkpoint = continuation
             .as_ref()
             .map(|lease| lease.checkpoint(ctx.response_id.clone(), &metadata, &new_items, write_durable))
             .transpose()?;
-
-        metadata.response_snapshot = snapshot;
 
         // A stored child of a transient parent needs its complete canonical
         // checkpoint, not a database reference to a response that was never stored.
@@ -243,7 +223,7 @@ impl ResponseHandler {
 
         let result = if write_durable {
             self.store
-                .persist(&ctx.response_id, previous_durable_id, new_items, &metadata)
+                .persist(&ctx.response_id, previous_durable_id, new_items, snapshot, &metadata)
                 .await
         } else {
             Ok(())
@@ -326,7 +306,7 @@ mod tests {
     #[tokio::test]
     async fn test_persist_disabled_store_returns_error() {
         let result = disabled_handler()
-            .persist(make_ctx(None), vec![], ResponseMetadata::default())
+            .persist(make_ctx(None), vec![], None, ResponseMetadata::default())
             .await;
         assert!(result.is_err());
     }
@@ -349,7 +329,7 @@ mod tests {
             .await
             .unwrap();
 
-        let stored = store.get("resp_test").await.unwrap();
+        let stored = ResponseData::try_from(store.get("resp_test").await.unwrap()).unwrap();
         assert_eq!(stored.metadata.effective_tool_choice, ToolChoice::Required);
     }
 }

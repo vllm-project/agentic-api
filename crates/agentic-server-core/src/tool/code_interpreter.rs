@@ -343,7 +343,6 @@ fn output_item(
         code,
         status,
         outputs,
-        origin: crate::types::io::code_interpreter::CodeInterpreterCallOrigin::Gateway,
     })
 }
 

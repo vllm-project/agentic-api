@@ -51,7 +51,7 @@ async fn persist_turn(
 ) -> StoreResult<()> {
     let version = store.rehydrate(conversation_id).await?.version;
     store
-        .persist(conversation_id, version, response_id, items, metadata)
+        .persist(conversation_id, version, response_id, items, None, metadata)
         .await
 }
 
@@ -440,6 +440,7 @@ fn bench_concurrent_response_persist(c: &mut Criterion, store: &ResponseStore) {
                                                 &response_id,
                                                 None,
                                                 black_box(make_items()),
+                                                None,
                                                 &black_box(make_metadata()),
                                             )
                                             .await
@@ -468,7 +469,7 @@ fn bench_concurrent_response_rehydrate(c: &mut Criterion, store: &ResponseStore)
     let response_id = rt.block_on(async {
         let id = next_id();
         store
-            .persist(&id, None, make_items(), &make_metadata())
+            .persist(&id, None, make_items(), None, &make_metadata())
             .await
             .expect("setup persist");
         id

@@ -30,7 +30,9 @@ use tokio_util::sync::CancellationToken;
 use agentic_core::config::ResponsesConfig;
 use agentic_core::executor::{ConversationHandler, ExecutionContext, RequestContext, ResponseHandler};
 use agentic_core::proxy::ProxyState;
-use agentic_core::storage::{ConversationStore, DbPool, ResponseMetadata, ResponseStore, create_pool_with_schema};
+use agentic_core::storage::{
+    ConversationStore, DbPool, ResponseData, ResponseMetadata, ResponseStore, create_pool_with_schema,
+};
 use agentic_core::tool::{WebSearchHandler, model_visible_namespace_member_name};
 use agentic_core::types::RequestPayload;
 use agentic_core::types::io::InOutItem;
@@ -1450,15 +1452,12 @@ async fn assert_conflicting_websocket_turn_not_persisted(
     conversation_id: &str,
     stale_response_id: &str,
 ) {
-    let conversation_store = ConversationStore::new(Arc::clone(pool));
-    assert_eq!(
-        conversation_store
-            .rehydrate(conversation_id)
-            .await
-            .expect("conversation history")
-            .items,
-        competing_turn_items()
-    );
+    let conversation = ConversationStore::new(Arc::clone(pool))
+        .rehydrate(conversation_id)
+        .await
+        .expect("conversation history");
+    assert_eq!(conversation.items, competing_turn_items());
+    assert_eq!(conversation.version.response_id.as_deref(), Some(COMPETING_RESPONSE_ID));
     let response_store = ResponseStore::new(Arc::clone(pool));
     let competing = response_store
         .get(COMPETING_RESPONSE_ID)
@@ -2283,6 +2282,7 @@ async fn test_websocket_generate_false_prewarm_redacts_mcp_runtime_credentials()
         .get(&lookup_ctx)
         .await
         .expect("stored prewarm response");
+    let stored = ResponseData::try_from(stored).expect("decode prewarm response");
     let tools = stored.metadata.effective_tools.expect("persisted tools");
     let ResponsesTool::Mcp(tool) = &tools[0] else {
         panic!("expected MCP tool");
@@ -3783,7 +3783,7 @@ async fn websocket_generate_false_rejects_rehydrated_code_interpreter_before_per
         ..ResponseMetadata::default()
     };
     ResponseStore::new(Arc::clone(&fixture.pool))
-        .persist("resp_parent", None, Vec::new(), &parent_metadata)
+        .persist("resp_parent", None, Vec::new(), None, &parent_metadata)
         .await
         .expect("persist legacy parent response");
 

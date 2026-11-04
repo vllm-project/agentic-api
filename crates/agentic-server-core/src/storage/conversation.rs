@@ -15,6 +15,7 @@ use super::types::{
 use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 use crate::types::io::ItemOrder;
+use crate::types::request_response::ResponsePayload;
 use crate::utils::common::{serialize_to_string, uuid7_str};
 
 /// Conversation storage operations.
@@ -140,7 +141,7 @@ impl ConversationStore {
         })
     }
 
-    /// Persists a conversation turn with its new items and response metadata, only if the conversation
+    /// Persists a conversation turn with its new items, response snapshot and metadata, only if the conversation
     /// is still at `expected_version`, the version captured when the turn's history was rehydrated.
     ///
     /// # Errors
@@ -152,10 +153,12 @@ impl ConversationStore {
         expected_version: ConversationVersion,
         response_id: &str,
         new_items: Vec<InOutItem>,
+        snapshot: Option<&ResponsePayload>,
         metadata: &ResponseMetadata,
     ) -> StoreResult<()> {
         let pool = self.pool()?;
         let new_items = new_items.iter().map(encode).collect::<StoreResult<Vec<_>>>()?;
+        let snapshot_json = snapshot.map(String::try_from).transpose()?;
         let metadata_json = String::try_from(metadata)?;
 
         let mut tx = pool.begin().await?;
@@ -190,6 +193,7 @@ impl ConversationStore {
             // A conversation turn never continues a previous response.
             None,
             Some(&history_item_ids_json),
+            snapshot_json.as_deref(),
             Some(&metadata_json),
         )
         .await?;

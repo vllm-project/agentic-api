@@ -18,6 +18,7 @@ async fn response_history_public_ids_stay_independent_across_conversation_batche
             "resp_history",
             None,
             vec![original.clone()],
+            None,
             &ResponseMetadata::default(),
         )
         .await
@@ -43,7 +44,7 @@ async fn response_history_public_ids_stay_independent_across_conversation_batche
         200
     );
     for (index, row) in rows.iter().enumerate() {
-        assert_eq!(row.public_id(), "msg_history");
+        assert_eq!(row.public_id, "msg_history");
         assert_eq!(row.seq, Some(i64::try_from(index).unwrap()));
         assert_eq!(InOutItem::try_from(row).unwrap(), original);
     }
@@ -73,6 +74,7 @@ async fn repeated_response_history_public_ids_keep_every_occurrence_and_order() 
             "resp_two_items",
             None,
             vec![first.clone(), second.clone()],
+            None,
             &ResponseMetadata::default(),
         )
         .await
@@ -150,7 +152,7 @@ async fn reused_item_occurrences_preserve_content_order_and_response_snapshot() 
         200
     );
     for (index, row) in rows.iter().enumerate() {
-        assert_eq!(row.public_id(), "msg_original");
+        assert_eq!(row.public_id, "msg_original");
         assert_eq!(row.seq, Some(i64::try_from(index).unwrap()));
         assert_eq!(
             InOutItem::try_from(row).unwrap(),
@@ -270,7 +272,7 @@ async fn public_id_matching_many_rows_inserts_one_row_per_occurrence() {
     let rows = conversation_rows(&store, &second_target.conversation_id).await;
     assert_ne!(rows[0].id, rows[1].id);
     for row in &rows {
-        assert_eq!(row.public_id(), "msg_many");
+        assert_eq!(row.public_id, "msg_many");
         assert_eq!(
             InOutItem::try_from(row).unwrap(),
             message_with_id("msg_many", "original content")

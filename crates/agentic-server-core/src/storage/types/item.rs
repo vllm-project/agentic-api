@@ -1,29 +1,29 @@
 //! Conversion between stored item rows and history items.
 //!
-//! This is the only place item JSON is read or written: rows decode to [`InOutItem`] and items encode to the
-//! `(public_id, data)` pair inserted by [`crate::storage::models::item::create_in_tx`].
+//! This is the only place item JSON is read or written. `items.data` holds the item exactly as serde writes it, and
+//! `items.metadata` holds its [`ItemMetadata`].
 
 use std::convert::TryFrom;
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use tracing::warn;
 
 use crate::storage::models::Item as StorageDbItem;
 use crate::storage::{StorageError, StoreResult};
-use crate::types::io::code_interpreter::CodeInterpreterCallOrigin;
-use crate::types::io::{InOutItem, InputItem, OutputItem, ReasoningOutput};
-use crate::utils::common::uuid7_str;
+use crate::types::io::InOutItem;
+use crate::utils::common::{utcnow_str, uuid7_str};
 
-pub(crate) const STORED_ITEM_KIND_KEY: &str = "_agentic_item_kind";
-pub(crate) const STORED_CODE_INTERPRETER_ORIGIN_KEY: &str = "_agentic_code_interpreter_origin";
-
-/// Item kind (input vs output) for storage and retrieval.
+/// Item kind (input vs output). Both shapes share item types, so the kind is recorded beside the item.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ItemKind {
     Input,
     Output,
+}
+
+/// Storage metadata kept in `items.metadata`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ItemMetadata {
+    pub kind: ItemKind,
 }
 
 impl InOutItem {
@@ -47,24 +47,21 @@ impl InOutItem {
     }
 }
 
-/// Decode retained history without silently omitting invalid records.
-///
-/// The row is parsed once. A marked row decodes as its recorded kind; a legacy unmarked row prefers a known output,
-/// then an input, then an unknown output. A malformed known item is an error, not an absent item or a replayable
-/// placeholder.
+/// Decode a stored row. A row whose metadata or data does not decode is invalid history; errors never include
+/// stored content.
 impl TryFrom<&StorageDbItem> for InOutItem {
     type Error = StorageError;
 
     fn try_from(row: &StorageDbItem) -> Result<Self, Self::Error> {
-        let invalid = || StorageError::InvalidHistoryItem {
+        let invalid = |_| StorageError::InvalidHistoryItem {
             item_id: row.id.clone(),
         };
-        let mut value: Value = serde_json::from_str(&row.data).map_err(|_| invalid())?;
-        let (kind, origin) = take_storage_markers(&mut value);
-        decode(&value, kind, origin).ok_or_else(|| {
-            warn!(item_id = %row.id, "unrecognized item type in stored data");
-            invalid()
-        })
+        let metadata: ItemMetadata = serde_json::from_str(&row.metadata).map_err(invalid)?;
+        match metadata.kind {
+            ItemKind::Input => serde_json::from_str(&row.data).map(Self::Input),
+            ItemKind::Output => serde_json::from_str(&row.data).map(Self::Output),
+        }
+        .map_err(invalid)
     }
 }
 
@@ -73,15 +70,16 @@ impl TryFrom<&StorageDbItem> for InOutItem {
 /// # Errors
 /// Returns [`StorageError::InvalidHistoryItem`] when the row cannot be decoded.
 pub(in crate::storage) fn decode_public(row: &StorageDbItem) -> StoreResult<InOutItem> {
-    Ok(InOutItem::try_from(row)?.into_public(row.public_id().to_owned()))
+    Ok(InOutItem::try_from(row)?.into_public(row.public_id.clone()))
 }
 
-/// Encode an item as its `(public_id, data)` row values, generating a typed public ID when the item has none.
+/// Encode an item as a new row: a fresh row ID, its public ID (generated with the item's prefix when it has none),
+/// its data and its metadata. `create_in_tx` assigns conversation membership, sequence and tenant.
 ///
 /// # Errors
 /// Returns [`StorageError::Validation`] for an empty ID, or a serialization error.
-pub(in crate::storage) fn encode(item: &InOutItem) -> StoreResult<(String, String)> {
-    let id = match item.id() {
+pub(in crate::storage) fn encode(item: &InOutItem) -> StoreResult<StorageDbItem> {
+    let public_id = match item.id() {
         Some("") => return Err(StorageError::Validation("item id cannot be an empty string".to_owned())),
         Some(id) => id.to_owned(),
         None => {
@@ -92,145 +90,74 @@ pub(in crate::storage) fn encode(item: &InOutItem) -> StoreResult<(String, Strin
             uuid7_str(prefix.unwrap_or("item_"))
         }
     };
-    Ok((id, String::try_from(item)?))
-}
-
-/// Encode the `items.data` column, recording the item kind and a gateway code-interpreter origin.
-impl TryFrom<&InOutItem> for String {
-    type Error = StorageError;
-
-    fn try_from(item: &InOutItem) -> Result<Self, Self::Error> {
-        let (mut value, kind) = match item {
-            InOutItem::Input(input) => (
-                serde_json::to_value(input).map_err(StorageError::Serialization)?,
-                ItemKind::Input,
-            ),
-            InOutItem::Output(output) => (
-                serde_json::to_value(output).map_err(StorageError::Serialization)?,
-                ItemKind::Output,
-            ),
-        };
-        if let Some(object) = value.as_object_mut() {
-            object.insert(STORED_ITEM_KIND_KEY.to_owned(), serde_json::to_value(kind)?);
-            if let InOutItem::Output(OutputItem::CodeInterpreterCall(call)) = item
-                && call.origin == CodeInterpreterCallOrigin::Gateway
-            {
-                object.insert(
-                    STORED_CODE_INTERPRETER_ORIGIN_KEY.to_owned(),
-                    serde_json::to_value(call.origin)?,
-                );
-            }
-        }
-        serde_json::to_string(&value).map_err(StorageError::Serialization)
-    }
-}
-
-/// Remove storage-only keys, returning the recorded item kind and code-interpreter origin.
-fn take_storage_markers(value: &mut Value) -> (Option<ItemKind>, CodeInterpreterCallOrigin) {
-    let Some(object) = value.as_object_mut() else {
-        return (None, CodeInterpreterCallOrigin::default());
+    let (data, kind) = match item {
+        InOutItem::Input(input) => (serde_json::to_string(input)?, ItemKind::Input),
+        InOutItem::Output(output) => (serde_json::to_string(output)?, ItemKind::Output),
     };
-    let kind = object
-        .remove(STORED_ITEM_KIND_KEY)
-        .and_then(|kind| ItemKind::deserialize(kind).ok());
-    let origin = object
-        .remove(STORED_CODE_INTERPRETER_ORIGIN_KEY)
-        .and_then(|origin| CodeInterpreterCallOrigin::deserialize(origin).ok())
-        .unwrap_or_default();
-    (kind, origin)
-}
-
-fn decode(value: &Value, kind: Option<ItemKind>, origin: CodeInterpreterCallOrigin) -> Option<InOutItem> {
-    match kind {
-        Some(ItemKind::Input) => {
-            if let Some(input) = decode_input(value) {
-                return Some(InOutItem::Input(input));
-            }
-        }
-        Some(ItemKind::Output) => {
-            if let Some(output) = decode_output(value, origin) {
-                return Some(InOutItem::Output(output));
-            }
-        }
-        None => {}
-    }
-    let output = decode_output(value, origin);
-    if output.as_ref().is_some_and(|item| !matches!(item, OutputItem::Unknown)) {
-        return output.map(InOutItem::Output);
-    }
-    decode_input(value)
-        .map(InOutItem::Input)
-        .or_else(|| output.map(InOutItem::Output))
-}
-
-/// Typed decoding, projecting reasoning rows written before typed reasoning.
-fn decode_input(value: &Value) -> Option<InputItem> {
-    InputItem::deserialize(value)
-        .ok()
-        .or_else(|| ReasoningOutput::from_legacy_value(value).map(InputItem::Reasoning))
-}
-
-fn decode_output(value: &Value, origin: CodeInterpreterCallOrigin) -> Option<OutputItem> {
-    let mut output = OutputItem::deserialize(value)
-        .ok()
-        .or_else(|| ReasoningOutput::from_legacy_value(value).map(OutputItem::Reasoning))?;
-    if let OutputItem::CodeInterpreterCall(call) = &mut output {
-        call.origin = origin;
-    }
-    Some(output)
+    Ok(StorageDbItem {
+        id: uuid7_str("item_"),
+        public_id,
+        metadata: serde_json::to_string(&ItemMetadata { kind })?,
+        data,
+        created_at: utcnow_str(),
+        conversation_id: None,
+        seq: None,
+        tenant_id: None,
+    })
 }
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
+    use serde_json::{Value, json};
 
     use super::*;
     use crate::types::event::MessageStatus;
-    use crate::types::io::{FunctionToolCall, InputMessage, InputMessageContent, ReasoningTextContent};
+    use crate::types::io::{
+        FunctionToolCall, InputItem, InputMessage, InputMessageContent, OutputItem, ReasoningOutput,
+        ReasoningTextContent,
+    };
 
-    fn row(id: &str, data: String) -> StorageDbItem {
-        StorageDbItem {
-            id: id.to_owned(),
-            reference_id: None,
-            public_id: None,
-            data,
-            created_at: 1_704_067_200,
-            conversation_id: None,
-            seq: None,
-            tenant_id: None,
-        }
-    }
-
+    /// The row `create_in_tx` stores for an item.
     fn stored_row(item: &InOutItem) -> StorageDbItem {
-        row("item_row", String::try_from(item).expect("encode item"))
+        StorageDbItem {
+            id: "item_row".to_owned(),
+            ..encode(item).expect("encode item")
+        }
     }
 
     fn stored(value: Value) -> InOutItem {
         serde_json::from_value(value).unwrap()
     }
 
+    fn round_trip(item: &InOutItem) -> InOutItem {
+        InOutItem::try_from(&stored_row(item)).expect("decode stored item")
+    }
+
     #[test]
-    fn encoded_item_records_its_kind() {
+    fn encoding_records_the_kind_and_plain_item_data() {
         let item = InOutItem::Input(InputItem::Message(InputMessage {
             role: "user".to_owned(),
             content: InputMessageContent::Text("test".to_owned()),
             ..Default::default()
         }));
-        let (id, data) = encode(&item).expect("encode item");
-        assert!(id.starts_with("msg_"));
-        let value: Value = serde_json::from_str(&data).unwrap();
-        assert_eq!(value[STORED_ITEM_KIND_KEY], "input");
-        assert_eq!(value["role"], "user");
-        assert_eq!(value["content"], "test");
+        let row = encode(&item).expect("encode item");
+        assert!(row.id.starts_with("item_"));
+        assert!(row.public_id.starts_with("msg_"));
+        assert_eq!(
+            serde_json::from_str::<Value>(&row.metadata).unwrap(),
+            json!({"kind": "input"})
+        );
+        let data: Value = serde_json::from_str(&row.data).unwrap();
+        assert_eq!(data, json!({"type": "message", "role": "user", "content": "test"}));
     }
 
     #[test]
     fn encoding_keeps_supplied_ids_and_rejects_empty_ids() {
-        let (id, _) = encode(&stored(
+        let row = encode(&stored(
             json!({"type":"message", "id":"msg_keep", "role":"user", "content":"x"}),
         ))
         .unwrap();
-        assert_eq!(id, "msg_keep");
+        assert_eq!(row.public_id, "msg_keep");
         let error = encode(&stored(
             json!({"type":"message", "id":"", "role":"user", "content":"x"}),
         ))
@@ -239,13 +166,7 @@ mod tests {
     }
 
     #[test]
-    fn test_item_kind_serialization() {
-        assert_eq!(serde_json::to_string(&ItemKind::Input).unwrap(), "\"input\"");
-        assert_eq!(serde_json::to_string(&ItemKind::Output).unwrap(), "\"output\"");
-    }
-
-    #[test]
-    fn complete_reasoning_round_trip_strips_storage_marker() {
+    fn reasoning_round_trips() {
         let mut reasoning = ReasoningOutput::new("rs_1");
         reasoning.content.extend([
             ReasoningTextContent::new("first thought"),
@@ -256,48 +177,12 @@ mod tests {
             .push(crate::types::ReasoningSummaryContent::new("concise summary"));
         reasoning.encrypted_content = Some(crate::types::OpaqueReasoning::try_from("opaque".to_owned()).unwrap());
         reasoning.status = Some(crate::types::ReasoningStatus::Completed);
-        let row = stored_row(&InOutItem::Output(OutputItem::Reasoning(reasoning)));
-        assert!(row.data.contains(STORED_ITEM_KIND_KEY));
-
-        let Ok(InOutItem::Output(OutputItem::Reasoning(reasoning))) = InOutItem::try_from(&row) else {
-            panic!("expected stored reasoning output");
-        };
-        assert_eq!(reasoning.id, "rs_1");
-        assert_eq!(reasoning.content.len(), 2);
-        assert_eq!(reasoning.summary[0].text, "concise summary");
-        assert_eq!(
-            reasoning
-                .encrypted_content
-                .as_ref()
-                .map(crate::types::OpaqueReasoning::as_str),
-            Some("opaque")
-        );
-        assert_eq!(reasoning.status, Some(crate::types::ReasoningStatus::Completed));
-
-        let reconstructed = serde_json::to_value(OutputItem::Reasoning(reasoning)).expect("reasoning value");
-        assert!(reconstructed.get(STORED_ITEM_KIND_KEY).is_none());
+        let item = InOutItem::Output(OutputItem::Reasoning(reasoning));
+        assert_eq!(round_trip(&item), item);
     }
 
     #[test]
-    fn legacy_output_message_decodes_as_output_before_unknown_input() {
-        let row = row(
-            "item_message",
-            json!({
-                "type": "message",
-                "id": "msg_1",
-                "role": "assistant",
-                "status": "completed",
-                "content": [{"type": "output_text", "text": "hello", "annotations": []}]
-            })
-            .to_string(),
-        );
-
-        let item = InOutItem::try_from(&row).expect("stored item");
-        assert!(matches!(item, InOutItem::Output(OutputItem::Message(_))));
-    }
-
-    #[test]
-    fn namespaced_function_call_decodes_without_storage_marker() {
+    fn output_items_keep_their_kind() {
         let call = InOutItem::Output(OutputItem::FunctionCall(FunctionToolCall {
             async_execution: false,
             agent: None,
@@ -308,18 +193,7 @@ mod tests {
             arguments: "{\"cmd\":\"pwd\"}".to_owned(),
             status: MessageStatus::Completed,
         }));
-
-        let restored = InOutItem::try_from(&stored_row(&call)).expect("stored item");
-        let value = serde_json::to_value(&restored).expect("item value");
-
-        assert_eq!(restored, call);
-        assert_eq!(value["namespace"], "mcp__shell");
-        assert!(value.get(STORED_ITEM_KIND_KEY).is_none());
-    }
-
-    #[test]
-    fn shell_call_round_trips_through_storage() {
-        let call = InOutItem::Output(
+        let shell = InOutItem::Output(
             serde_json::from_value(json!({
                 "type": "shell_call",
                 "id": "sh_1",
@@ -329,44 +203,44 @@ mod tests {
             }))
             .expect("shell output item"),
         );
-
-        let restored = InOutItem::try_from(&stored_row(&call)).expect("stored shell item");
-
-        assert!(matches!(restored, InOutItem::Output(OutputItem::ShellCall(_))));
-        assert_eq!(restored, call);
+        for item in [call, shell, InOutItem::Output(OutputItem::Unknown)] {
+            assert_eq!(round_trip(&item), item);
+        }
     }
 
     #[test]
-    fn unknown_output_round_trips_as_unknown() {
-        let restored = InOutItem::try_from(&stored_row(&InOutItem::Output(OutputItem::Unknown))).expect("stored item");
-        assert!(matches!(restored, InOutItem::Output(OutputItem::Unknown)));
-    }
-
-    #[test]
-    fn malformed_row_is_an_error() {
-        let error = InOutItem::try_from(&row("item_bad", "not json".to_owned())).unwrap_err();
-        assert!(matches!(error, StorageError::InvalidHistoryItem { item_id } if item_id == "item_bad"));
-    }
-
-    #[test]
-    fn submitted_gateway_calls_remain_inputs_after_storage_round_trip() {
+    fn submitted_gateway_calls_remain_inputs() {
         for wire in [
             json!({"type":"web_search_call", "id":"ws_1", "status":"completed", "action":{"type":"search", "query":"weather"}}),
             json!({"type":"mcp_call", "id":"mcp_1", "server_label":"weather", "name":"forecast", "arguments":"{}", "output":"sunny"}),
         ] {
             let input = stored(wire);
-            let restored = InOutItem::try_from(&stored_row(&input)).unwrap();
-            assert!(matches!(restored, InOutItem::Input(_)));
-            assert_eq!(restored, input);
+            assert!(matches!(input, InOutItem::Input(_)));
+            assert_eq!(round_trip(&input), input);
         }
+    }
+
+    #[test]
+    fn rows_with_malformed_metadata_or_data_are_invalid() {
+        let mut row = stored_row(&stored(json!({"type":"message", "role":"user", "content":"x"})));
+        row.metadata = r#"{"kind":"unknown"}"#.to_owned();
+        assert!(matches!(
+            InOutItem::try_from(&row),
+            Err(StorageError::InvalidHistoryItem { .. })
+        ));
+        row.metadata = r#"{"kind":"input"}"#.to_owned();
+        row.data = "not json".to_owned();
+        assert!(matches!(
+            InOutItem::try_from(&row),
+            Err(StorageError::InvalidHistoryItem { item_id }) if item_id == "item_row"
+        ));
     }
 
     #[test]
     fn public_decoding_uses_the_row_public_identity() {
         let mut row = stored_row(&stored(json!({"type":"message", "role":"user", "content":"hello"})));
-        row.public_id = Some("msg_public".to_owned());
-        let public = decode_public(&row).unwrap();
-        assert_eq!(public.id(), Some("msg_public"));
+        row.public_id = "msg_public".to_owned();
+        assert_eq!(decode_public(&row).unwrap().id(), Some("msg_public"));
     }
 
     #[test]

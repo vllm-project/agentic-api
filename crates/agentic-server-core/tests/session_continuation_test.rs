@@ -1061,7 +1061,7 @@ async fn grouped_aggregate_sql_failure_rolls_back_items_and_releases_capacity() 
         // the candidate's items before hitting this duplicate response ID.
         // This tests a SQL failure after writes, not a disabled store/pool wait.
         store
-            .persist(&failed_id, None, vec![], &ResponseMetadata::default())
+            .persist(&failed_id, None, vec![], None, &ResponseMetadata::default())
             .await
             .unwrap();
         let existing = store.get(&failed_id).await.unwrap();

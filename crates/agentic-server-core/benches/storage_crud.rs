@@ -54,7 +54,7 @@ fn history(items: usize) -> Vec<InOutItem> {
 async fn seed_response(store: &ResponseStore, items: usize) -> String {
     let id = next_id("resp_");
     store
-        .persist(&id, None, history(items), &ResponseMetadata::default())
+        .persist(&id, None, history(items), None, &ResponseMetadata::default())
         .await
         .expect("seed response");
     id
@@ -71,6 +71,7 @@ async fn seed_conversation(store: &ConversationStore, items: usize) -> String {
             ConversationVersion::default(),
             &next_id("resp_"),
             history(items),
+            None,
             &ResponseMetadata::default(),
         )
         .await
@@ -112,7 +113,13 @@ fn bench_response_persist(c: &mut Criterion, rt: &Runtime, store: &ResponseStore
                 || (next_id("resp_"), turn()),
                 |(id, new_items)| async move {
                     store
-                        .persist(&id, Some(parent), black_box(new_items), &ResponseMetadata::default())
+                        .persist(
+                            &id,
+                            Some(parent),
+                            black_box(new_items),
+                            None,
+                            &ResponseMetadata::default(),
+                        )
                         .await
                         .expect("persist");
                 },
@@ -142,6 +149,7 @@ fn bench_conversation_persist(c: &mut Criterion, rt: &Runtime, store: &Conversat
                             version,
                             &response_id,
                             black_box(new_items),
+                            None,
                             &ResponseMetadata::default(),
                         )
                         .await

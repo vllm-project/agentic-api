@@ -111,7 +111,7 @@ async fn regression_cursor_follows_sequence() {
         .create("default_tenant", &ConversationMetadata::new(), &[])
         .await
         .unwrap();
-    let data = String::try_from(&regression_message("hello")).unwrap();
+    let data = serde_json::to_string(&regression_message("hello")).unwrap();
     let earlier_id = agentic_core::utils::common::uuid7_str("item_");
     let later_id = agentic_core::utils::common::uuid7_str("item_");
     assert!(earlier_id < later_id);
@@ -168,6 +168,7 @@ async fn regression_delete_invalidates_version() {
             snapshot.version,
             "resp_stale",
             vec![regression_message("based on deleted history")],
+            None,
             &ResponseMetadata::default(),
         )
         .await;
@@ -211,6 +212,19 @@ async fn insert_with_ids(
     id: &str,
     items: Vec<(String, String)>,
 ) -> agentic_core::storage::StoreResult<()> {
+    let items = items
+        .into_iter()
+        .map(|(id, data)| Item {
+            public_id: id.clone(),
+            id,
+            metadata: r#"{"kind":"input"}"#.to_owned(),
+            data,
+            created_at: 0,
+            conversation_id: None,
+            seq: None,
+            tenant_id: None,
+        })
+        .collect();
     let mut tx = pool.begin().await?;
     agentic_core::storage::models::conversation::lock_in_tx(&mut tx, id).await?;
     item_model::create_in_tx(&mut tx, items, Some(id)).await?;
@@ -250,6 +264,7 @@ async fn deletion_preserves_stored_response_history_and_invalidates_empty_snapsh
             empty.version,
             "resp_stale_empty",
             vec![],
+            None,
             &ResponseMetadata::default(),
         )
         .await;
@@ -441,7 +456,7 @@ async fn regression_database_rejects_duplicate_items_and_rolls_back_all_batches(
         }
         let rows = conversation_rows(&store, &conversation.conversation_id).await;
         assert_eq!(rows.len(), 1, "failed insertion must leave the history unchanged");
-        assert_eq!(rows[0].public_id(), "msg_existing");
+        assert_eq!(rows[0].public_id, "msg_existing");
         assert_eq!(
             InOutItem::try_from(&rows[0]).unwrap(),
             message_with_id("msg_existing", "original")
@@ -456,7 +471,7 @@ async fn regression_database_rejects_duplicate_items_and_rolls_back_all_batches(
         .await
         .unwrap();
     let rows = conversation_rows(&store, &conversation.conversation_id).await;
-    assert_eq!(rows[1].public_id(), "msg_new_0");
+    assert_eq!(rows[1].public_id, "msg_new_0");
     assert_eq!(rows[1].seq, Some(1));
 }
 
@@ -532,13 +547,13 @@ async fn response_history_keeps_each_occurrence_of_a_public_id() {
     let updated = message_with_id("msg_reused", "updated");
     let metadata = ResponseMetadata::default();
     responses
-        .persist("resp_first", None, vec![original.clone()], &metadata)
+        .persist("resp_first", None, vec![original.clone()], None, &metadata)
         .await
         .unwrap();
 
     let replay = vec![original.clone(), updated.clone(), original.clone()];
     responses
-        .persist("resp_replay", None, replay.clone(), &metadata)
+        .persist("resp_replay", None, replay.clone(), None, &metadata)
         .await
         .unwrap();
     assert_eq!(responses.rehydrate("resp_replay").await.unwrap().1, replay);
@@ -548,7 +563,7 @@ async fn response_history_keeps_each_occurrence_of_a_public_id() {
     );
 
     responses
-        .persist("resp_next", Some("resp_replay"), vec![updated.clone()], &metadata)
+        .persist("resp_next", Some("resp_replay"), vec![updated.clone()], None, &metadata)
         .await
         .unwrap();
     let mut expected = replay;
@@ -562,7 +577,7 @@ async fn response_history_keeps_each_occurrence_of_a_public_id() {
             .len(),
         4
     );
-    assert!(rows.iter().all(|row| row.public_id() == "msg_reused"));
+    assert!(rows.iter().all(|row| row.public_id == "msg_reused"));
 }
 
 #[tokio::test]
@@ -584,6 +599,7 @@ async fn response_history_does_not_reuse_another_tenants_item() {
             "resp_shared",
             None,
             vec![supplied.clone()],
+            None,
             &ResponseMetadata::default(),
         )
         .await
@@ -594,9 +610,8 @@ async fn response_history_does_not_reuse_another_tenants_item() {
         vec![original]
     );
     let rows = response_rows(&store, "resp_shared").await;
-    assert_eq!(rows[0].public_id(), "msg_shared");
+    assert_eq!(rows[0].public_id, "msg_shared");
     assert_eq!(rows[0].tenant_id.as_deref(), Some("default_tenant"));
-    assert!(rows[0].reference_id.is_none());
 }
 
 #[tokio::test]
@@ -609,13 +624,13 @@ async fn response_history_batches_keep_order_and_roll_back_together() {
         .collect();
     let metadata = ResponseMetadata::default();
     responses
-        .persist("resp_batches", None, items.clone(), &metadata)
+        .persist("resp_batches", None, items.clone(), None, &metadata)
         .await
         .unwrap();
     assert_eq!(responses.rehydrate("resp_batches").await.unwrap().1, items);
 
     let error = responses
-        .persist("resp_batches", None, items, &metadata)
+        .persist("resp_batches", None, items, None, &metadata)
         .await
         .unwrap_err();
     assert!(error.is_unique_violation());

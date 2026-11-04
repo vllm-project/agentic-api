@@ -106,6 +106,8 @@ persistence back to the client. Check the routes that bypass a stage as well as 
 - For streaming or executor placement, use the existing
   [executor architecture review](../executor-architecture-review/SKILL.md). Keep its checks read-only during planning
   and review; implementation remains governed by the user's authorized task.
+- For schema, migration, stored JSON, or persisted-field changes, use the
+  [storage schema change](../storage-schema-change/SKILL.md) checklist.
 
 ## Keep documentation synchronized
 
