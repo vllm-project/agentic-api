@@ -65,7 +65,7 @@ impl From<SplitContext> for RequestContext {
             conversation_id: wire.conversation_id,
             // Conversation mode is rejected, so there is no version to resume.
             conversation_version: None,
-            rehydrated_metadata: None,
+            checkpoint: None,
             continuation: None,
             multi_agent_tree: None,
         }

@@ -4,6 +4,8 @@
 //! database is rejected until its operator resets it. A database an earlier release migrated but never wrote to
 //! migrates normally.
 
+use std::fmt::Write;
+
 use sqlx::Connection;
 use tracing::warn;
 
@@ -11,11 +13,30 @@ use super::DbResult;
 use crate::storage::backend::DatabaseBackend;
 
 /// Databases whose latest migration is older than this store data in a format this release does not read.
-const MINIMUM_SUPPORTED_MIGRATION: i64 = 8;
+const MINIMUM_SUPPORTED_MIGRATION: i64 = 9;
+
+/// Recreate the database when it holds outdated data and `recreate_sqlite` allows it (`SQLite` only); otherwise
+/// reject it, leaving its data untouched.
+pub(super) async fn recreate_or_reject_outdated(
+    connection: &mut sqlx::AnyConnection,
+    recreate_sqlite: bool,
+) -> DbResult<()> {
+    if !has_outdated_data(connection).await? {
+        return Ok(());
+    }
+    if recreate_sqlite && DatabaseBackend::from_connection(connection) == DatabaseBackend::Sqlite {
+        return drop_outdated_sqlite_tables(connection).await;
+    }
+    Err(sqlx::Error::Configuration(
+        "the database was created by an earlier agentic-api release and its data is not compatible with this \
+         release; reset it (drop its tables) or configure a new database"
+            .into(),
+    ))
+}
 
 /// Whether the database holds rows written by a release older than [`MINIMUM_SUPPORTED_MIGRATION`]. A database
 /// without migration history is new, and one with empty persistence tables has nothing to read in the old format.
-pub(super) async fn has_outdated_data(connection: &mut sqlx::AnyConnection) -> DbResult<bool> {
+async fn has_outdated_data(connection: &mut sqlx::AnyConnection) -> DbResult<bool> {
     let has_history: bool = match DatabaseBackend::from_connection(connection) {
         DatabaseBackend::Postgres => {
             sqlx::query_scalar("SELECT to_regclass('_sqlx_migrations') IS NOT NULL")
@@ -49,28 +70,23 @@ pub(super) async fn has_outdated_data(connection: &mut sqlx::AnyConnection) -> D
     Ok(rows > 0)
 }
 
-pub(super) fn outdated_schema_error() -> sqlx::Error {
-    sqlx::Error::Configuration(
-        "the database was created by an earlier agentic-api release and its data is not compatible with this \
-         release; reset it (drop its tables) or configure a new database"
-            .into(),
-    )
-}
-
 /// Drop every table of an outdated `SQLite` database so migrations recreate it. The tables reference each other, so
 /// foreign keys are checked at commit, when none remain; either every table is dropped or none is.
-pub(super) async fn drop_outdated_sqlite_tables(connection: &mut sqlx::AnyConnection) -> DbResult<()> {
+async fn drop_outdated_sqlite_tables(connection: &mut sqlx::AnyConnection) -> DbResult<()> {
     warn!("[schema] Recreating the default database: it holds data written by an earlier release.");
     let mut transaction = connection.begin().await?;
-    sqlx::raw_sql(
-        "PRAGMA defer_foreign_keys = ON; \
-         DROP TABLE IF EXISTS responses; \
-         DROP TABLE IF EXISTS items; \
-         DROP TABLE IF EXISTS conversations; \
-         DROP TABLE IF EXISTS _sqlx_migrations;",
+    // Newest first, so a table is dropped before the tables its foreign keys reference.
+    let tables: Vec<String> = sqlx::query_scalar(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY rowid DESC",
     )
-    .execute(&mut *transaction)
+    .fetch_all(&mut *transaction)
     .await?;
+    let mut sql = String::from("PRAGMA defer_foreign_keys = ON;");
+    for table in &tables {
+        // Table names come from `sqlite_master`; quoting keeps any name a single identifier.
+        let _ = write!(sql, " DROP TABLE \"{}\";", table.replace('"', "\"\""));
+    }
+    sqlx::raw_sql(&sql).execute(&mut *transaction).await?;
     transaction.commit().await
 }
 

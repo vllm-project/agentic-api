@@ -202,7 +202,7 @@ async fn assert_reference_contract(mode: &str, actual_turns: &[Value]) {
                 response_id: "resp_strict_replay".to_owned(),
                 conversation_id: None,
                 conversation_version: None,
-                rehydrated_metadata: None,
+                checkpoint: None,
                 continuation: None,
             };
             decode_upstream(context, UpstreamBody::Sse(&stream))

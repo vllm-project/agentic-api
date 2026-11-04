@@ -131,7 +131,7 @@ jobs:
             target: macos-x86_64
             wheel-tag: py3-none-macosx_10_12_x86_64
             deployment-target: "10.12"
-          - runs-on: macos-14
+          - runs-on: macos-15
             os: macos
             target: macos-arm64
             wheel-tag: py3-none-macosx_11_0_arm64
