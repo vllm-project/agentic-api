@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use crate::storage::{ResponseData, ResponseMetadata, ResponseStore, StorageError};
+use crate::storage::{DbResponse, ResponseData, ResponseMetadata, ResponseStore, StorageError};
 use crate::types::io::OutputItem;
 use crate::types::io::{InOutItem, InputItem};
 use crate::types::io::{ItemOrder, ItemPage, ListItemsResponse};
@@ -114,20 +114,19 @@ impl ResponseHandler {
     /// # Errors
     /// Returns `ExecutorError` if `previous_response_id` is absent, the response
     /// is not found, the store is disabled, or the database query fails.
-    pub async fn get(&self, ctx: &RequestContext) -> ExecutorResult<ResponseData> {
+    pub async fn get(&self, ctx: &RequestContext) -> ExecutorResult<DbResponse> {
         let prev_id = ctx
             .original_request
             .previous_response_id
             .as_deref()
             .ok_or_else(|| ExecutorError::InvalidRequest("previous_response_id is required for get".into()))?;
-        let stored = self.store.get(prev_id).await.map_err(|error| {
+        self.store.get(prev_id).await.map_err(|error| {
             if error.is_not_found() {
                 StorageError::PreviousResponseNotFound { id: prev_id.to_owned() }.into()
             } else {
                 ExecutorError::Storage(error)
             }
-        })?;
-        Ok(stored)
+        })
     }
 
     /// Validates that the response for `previous_response_id` exists.
@@ -225,7 +224,7 @@ mod tests {
             new_input_items: vec![],
             response_id: "resp_test".into(),
             conversation_id: None,
-            rehydrated_metadata: None,
+            checkpoint: None,
             continuation: None,
         }
     }
@@ -283,7 +282,7 @@ mod tests {
             .await
             .unwrap();
 
-        let stored = store.get("resp_test").await.unwrap();
+        let stored = ResponseData::try_from(store.get("resp_test").await.unwrap()).unwrap();
         assert_eq!(stored.metadata.effective_tool_choice, ToolChoice::Required);
     }
 }

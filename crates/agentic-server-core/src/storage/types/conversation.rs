@@ -11,6 +11,8 @@ use crate::types::io::InOutItem;
 pub struct ConversationSnapshot {
     /// Rehydrated input and output items in stored order.
     pub items: Vec<InOutItem>,
+    /// The conversation's latest turn; `None` before the first turn.
+    pub latest_response_id: Option<String>,
     /// `responses.metadata` of the latest turn; `None` before the first turn.
     pub turn_metadata: Option<ResponseMetadata>,
 }

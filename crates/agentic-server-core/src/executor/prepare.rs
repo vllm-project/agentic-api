@@ -37,18 +37,19 @@ fn restored_loaded_tools(ctx: &mut RequestContext) -> Vec<ResponsesTool> {
         return Vec::new();
     }
     let Some(loaded) = ctx
-        .rehydrated_metadata()
-        .and_then(|metadata| metadata.tool_search_loaded_tools.clone())
+        .checkpoint
+        .as_ref()
+        .and_then(|checkpoint| checkpoint.metadata.tool_search_loaded_tools.clone())
     else {
         return Vec::new();
     };
     // A response continuation already applied its parent's settings during rehydration; a conversation turn
     // applies them only when compaction made it depend on the loaded definitions.
     if ctx.original_request.conversation.is_some()
-        && let Some(metadata) = ctx.rehydrated_metadata.take()
+        && let Some(checkpoint) = ctx.checkpoint.take()
     {
-        apply_effective_settings(ctx, &metadata);
-        ctx.rehydrated_metadata = Some(metadata);
+        apply_effective_settings(ctx, &checkpoint.metadata);
+        ctx.checkpoint = Some(checkpoint);
     }
     loaded
 }
@@ -56,28 +57,26 @@ fn restored_loaded_tools(ctx: &mut RequestContext) -> Vec<ResponsesTool> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::executor::ResponseSession;
+    use crate::executor::session::ResponseCheckpoint;
     use crate::storage::ResponseMetadata;
     use crate::types::request_response::RequestPayload;
-    use std::num::NonZeroUsize;
 
     #[test]
     fn compacted_session_restores_loaded_tools_without_durable_storage() {
-        let session = ResponseSession::new(NonZeroUsize::new(100).unwrap(), NonZeroUsize::new(100_000).unwrap());
         let loaded: ResponsesTool = serde_json::from_value(serde_json::json!({
             "type": "function", "name": "weather", "parameters": {"type": "object"}
         }))
         .unwrap();
-        let metadata = ResponseMetadata {
-            multi_agent_tree: None,
-            tool_search_loaded_tools: Some(vec![loaded.clone()]),
-            ..ResponseMetadata::default()
+        // The session parent as rehydration records it: not durable, history not kept on the checkpoint.
+        let checkpoint = ResponseCheckpoint {
+            response_id: "resp_parent".to_owned(),
+            history: Vec::new(),
+            metadata: ResponseMetadata {
+                tool_search_loaded_tools: Some(vec![loaded.clone()]),
+                ..ResponseMetadata::default()
+            },
+            durable: false,
         };
-        let lease = session.begin(None).unwrap();
-        let checkpoint = lease
-            .checkpoint("resp_parent".to_owned(), &metadata, &[], false)
-            .unwrap();
-        lease.publish(checkpoint).unwrap();
         let request: RequestPayload = serde_json::from_value(serde_json::json!({
             "model": "test", "store": false, "previous_response_id": "resp_parent",
             "input": [{"type": "compaction", "id": "cmp_1", "encrypted_content": "summary"}]
@@ -90,8 +89,8 @@ mod tests {
             new_input_items: Vec::new(),
             response_id: "resp_child".to_owned(),
             conversation_id: None,
-            rehydrated_metadata: None,
-            continuation: Some(session.begin(Some("resp_parent")).unwrap()),
+            checkpoint: Some(checkpoint),
+            continuation: None,
         };
         let restored = restored_loaded_tools(&mut ctx);
         assert_eq!(serde_json::to_value(restored).unwrap(), serde_json::json!([loaded]));

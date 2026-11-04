@@ -254,7 +254,7 @@ mod tests {
             new_input_items: vec![],
             response_id: "resp_test".into(),
             conversation_id: conversation_id.map(str::to_string),
-            rehydrated_metadata: None,
+            checkpoint: None,
             continuation: None,
         }
     }

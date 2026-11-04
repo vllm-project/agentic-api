@@ -83,8 +83,10 @@ pub struct ResponseContinuation {
     pub(super) finished: bool,
 }
 
+/// The turn a request continues: a stored response, a conversation's latest turn, or a session's parent. A session
+/// keeps the parent's history items in it; elsewhere `history` is empty and storage holds the history.
 #[derive(Serialize)]
-pub(crate) struct ResponseCheckpoint {
+pub struct ResponseCheckpoint {
     pub response_id: String,
     pub history: Vec<InputItem>,
     pub metadata: ResponseMetadata,

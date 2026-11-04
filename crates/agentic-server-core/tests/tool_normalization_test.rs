@@ -104,7 +104,7 @@ fn upstream_request_value(payload: RequestPayload, stream: bool) -> Value {
         new_input_items: Vec::new(),
         response_id: "resp_test".to_string(),
         conversation_id: None,
-        rehydrated_metadata: None,
+        checkpoint: None,
         continuation: None,
     };
     let upstream_request = ctx
