@@ -9,6 +9,7 @@ use crate::storage::{
 };
 use crate::types::agent::{AgentIdentity, AgentTurnId};
 use crate::types::agent_tree::{AgentState, StoredAgent, StoredTreeSnapshot};
+use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 use crate::types::io::MultiAgentConfig;
 use crate::types::io::output::{McpListTools, OutputItem};
@@ -344,7 +345,10 @@ async fn inherited_multi_agent_rejects_max_tool_calls() {
     let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await.unwrap();
     let response_store = ResponseStore::new(pool.clone());
     let conversation_store = ConversationStore::new(pool);
-    let conversation = conversation_store.create().await.unwrap();
+    let conversation = conversation_store
+        .create("default_tenant", &ConversationMetadata::new(), &[])
+        .await
+        .unwrap();
     let metadata = ResponseMetadata {
         multi_agent_tree: Some(StoredTreeSnapshot {
             version: 1,
@@ -376,8 +380,8 @@ async fn inherited_multi_agent_rejects_max_tool_calls() {
     conversation_store
         .persist(
             &conversation.conversation_id,
+            ConversationVersion::default(),
             "resp_conversation_tree",
-            None,
             Vec::new(),
             &metadata,
         )
@@ -465,7 +469,9 @@ async fn omitted_or_disabled_multi_agent_preserves_rehydration() {
 async fn new_conversation_rehydration_captures_empty_version() -> Result<(), Box<dyn std::error::Error>> {
     let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
     let conversation_store = ConversationStore::new(pool);
-    let conversation = conversation_store.create().await?;
+    let conversation = conversation_store
+        .create("default_tenant", &ConversationMetadata::new(), &[])
+        .await?;
     let exec_ctx = execution_context(conversation_store, ResponseStore::disabled());
 
     let ctx = rehydrate_conversation(request(Some(&conversation.conversation_id), None), &exec_ctx).await?;
@@ -478,7 +484,9 @@ async fn new_conversation_rehydration_captures_empty_version() -> Result<(), Box
 async fn existing_conversation_rehydration_captures_last_response() -> Result<(), Box<dyn std::error::Error>> {
     let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
     let conversation_store = ConversationStore::new(pool);
-    let conversation = conversation_store.create().await?;
+    let conversation = conversation_store
+        .create("default_tenant", &ConversationMetadata::new(), &[])
+        .await?;
     let prior_items = Vec::<InputItem>::from(&ResponsesInput::Text("prior input".into()))
         .into_iter()
         .map(InOutItem::Input)
@@ -486,8 +494,8 @@ async fn existing_conversation_rehydration_captures_last_response() -> Result<()
     conversation_store
         .persist(
             &conversation.conversation_id,
+            ConversationVersion::default(),
             "resp_prior",
-            None,
             prior_items,
             &ResponseMetadata::default(),
         )
@@ -511,12 +519,14 @@ async fn existing_conversation_rehydration_captures_last_response() -> Result<()
 async fn conversation_rehydration_remembers_listed_mcp_servers() -> Result<(), Box<dyn std::error::Error>> {
     let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
     let conversation_store = ConversationStore::new(pool);
-    let conversation = conversation_store.create().await?;
+    let conversation = conversation_store
+        .create("default_tenant", &ConversationMetadata::new(), &[])
+        .await?;
     conversation_store
         .persist(
             &conversation.conversation_id,
+            ConversationVersion::default(),
             "resp_prior",
-            None,
             vec![InOutItem::Output(OutputItem::McpListTools(McpListTools::new(
                 "mcpl_prior",
                 "counter",
@@ -582,10 +592,8 @@ async fn rehydration_remains_public_until_explicit_tool_search_preparation() {
             if search.execution == crate::types::tools::ToolSearchExecution::Client
     ));
 
-    let (ctx, tool_search_state) =
-        crate::executor::prepare::prepare_request_tools(ctx, &exec_ctx.conv_handler, &exec_ctx.resp_handler)
-            .await
-            .expect("explicit handler preparation accepts the rehydrated request");
+    let (ctx, tool_search_state) = crate::executor::prepare::prepare_request_tools(ctx)
+        .expect("explicit handler preparation accepts the rehydrated request");
 
     assert!(
         tool_search_state
@@ -699,10 +707,8 @@ async fn stored_public_search_call_pairs_with_new_output_after_rehydration() {
     let ctx = rehydrate_conversation(continuation, &exec_ctx)
         .await
         .expect("stored public call rehydrates before new output");
-    let (ctx, tool_search_state) =
-        crate::executor::prepare::prepare_request_tools(ctx, &exec_ctx.conv_handler, &exec_ctx.resp_handler)
-            .await
-            .expect("stored continuation derives valid tool-search state");
+    let (ctx, tool_search_state) = crate::executor::prepare::prepare_request_tools(ctx)
+        .expect("stored continuation derives valid tool-search state");
 
     let state = tool_search_state
         .as_ref()
@@ -741,12 +747,14 @@ async fn native_code_interpreter_call_rehydrates_for_previous_response_and_conve
             &ResponseMetadata::default(),
         )
         .await?;
-    let conversation = conversation_store.create().await?;
+    let conversation = conversation_store
+        .create("default_tenant", &ConversationMetadata::new(), &[])
+        .await?;
     conversation_store
         .persist(
             &conversation.conversation_id,
+            ConversationVersion::default(),
             "resp_conversation_native",
-            None,
             vec![InOutItem::Output(native_call)],
             &ResponseMetadata::default(),
         )
