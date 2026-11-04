@@ -681,6 +681,36 @@ python crates/agentic-server-core/tests/cassettes/record_messages_tool_choice.py
     --binary target/debug/agentic-server --vllm http://localhost:8000 --client-tool
 ```
 
+### Stateful Messages threads (vLLM)
+
+`record_messages_threads.py` captures real vLLM inference through the shared recording proxy.
+The `messages/threads/` set covers text recall and a client-executed `client_echo` call, each over JSON and SSE.
+Every scenario creates a thread, stops the gateway, starts a fresh gateway against the same SQLite file, and
+continues with only the new user message or matching `tool_result`. The client tool returns a local verification
+string; all model responses come from vLLM. A JSON companion stores the actual public requests and responses;
+the YAML stores the stateless upstream requests and original model responses. The complete set is staged and
+validated before replacing fixtures.
+
+Recorded with vLLM `0.29.1rc1.dev391+g90531daf6`, `Qwen/Qwen3.8-27B-FP8` revision
+`017b9c7af6b5689d5dd426a76e0bc077eb5ca20a`, and an NVIDIA GB10. Reproduce from the repository root:
+
+```bash
+vllm serve Qwen/Qwen3.8-27B-FP8 --revision 017b9c7af6b5689d5dd426a76e0bc077eb5ca20a \
+  --host 127.0.0.1 --port 8000 --tool-call-parser qwen3_coder --enable-auto-tool-choice \
+  --reasoning-parser qwen3 --generation-config vllm --enforce-eager \
+  --max-model-len 4096 --max-num-seqs 4 --gpu-memory-utilization 0.5
+cargo build -p agentic-server --bin agentic-server
+python crates/agentic-server-core/tests/cassettes/record_messages_threads.py \
+  --binary target/debug/agentic-server --vllm http://127.0.0.1:8000 --model Qwen/Qwen3.8-27B-FP8
+cargo test -p agentic-server --test messages_threads_cassette_test
+```
+
+The replay test compares complete upstream bodies and public JSON/SSE events, normalizing only generated public
+message IDs. It repeats the database restart with SQLite or an isolated database under `TEST_POSTGRES_URL`,
+checks owner isolation and rejection of an already-consumed parent without extra inference, and verifies that
+Messages does not write Responses, items, or conversations. No provider is contacted during replay.
+Pass `--database-url` with an isolated PostgreSQL database to exercise the live recording flow on PostgreSQL too.
+
 ### Text-only (OpenAI)
 
 ```bash

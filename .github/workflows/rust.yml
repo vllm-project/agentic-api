@@ -277,7 +277,7 @@ jobs:
         run: cargo test -p agentic-server-core --test messages_thread_storage_test
 
       - name: Verify Messages HTTP thread continuations and gateway restart
-        run: cargo test -p agentic-server --test messages_threads_test
+        run: cargo test -p agentic-server --test messages_threads_test --test messages_threads_cassette_test
 
       - name: Verify PostgreSQL conversation CRUD and tenant isolation
         run: cargo test -p agentic-server-core --test postgres_tenant_isolation_test -- --ignored --test-threads=1
