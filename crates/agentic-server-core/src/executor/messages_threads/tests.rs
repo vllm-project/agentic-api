@@ -65,11 +65,11 @@ async fn rehydrates_lossless_messages_system_and_client_tools() {
 
 #[tokio::test]
 async fn concurrent_continue_is_exclusive_and_drop_rolls_back_without_refreshing_ttl() {
-    let (store, _pool) = new_store().await;
+    let (store, pool) = new_store().await;
     let id = finish(&store, &request(&json!({"type":"create"})), "end_turn", &json!([])).await;
     let expiry: i64 = sqlx::query_scalar("SELECT expires_at FROM message_threads WHERE message_id = $1")
         .bind(&id)
-        .fetch_one(_pool.as_ref())
+        .fetch_one(pool.as_ref())
         .await
         .unwrap();
     let reservation = prepare(&store, &continuation(&id)).await.unwrap();
@@ -81,7 +81,7 @@ async fn concurrent_continue_is_exclusive_and_drop_rolls_back_without_refreshing
     store.shutdown().await;
     let unchanged: i64 = sqlx::query_scalar("SELECT expires_at FROM message_threads WHERE message_id = $1")
         .bind(&id)
-        .fetch_one(_pool.as_ref())
+        .fetch_one(pool.as_ref())
         .await
         .unwrap();
     assert_eq!(unchanged, expiry);
@@ -95,7 +95,7 @@ async fn concurrent_continue_is_exclusive_and_drop_rolls_back_without_refreshing
 
 #[tokio::test]
 async fn expiry_and_wrong_owner_return_not_found_and_do_not_refresh() {
-    let (store, _pool) = new_store().await;
+    let (store, pool) = new_store().await;
     let id = finish(&store, &request(&json!({"type":"create"})), "end_turn", &json!([])).await;
     let body = serde_json::to_vec(&continuation(&id)).unwrap();
     assert_eq!(
@@ -109,7 +109,7 @@ async fn expiry_and_wrong_owner_return_not_found_and_do_not_refresh() {
     );
     sqlx::query("UPDATE message_threads SET expires_at = 0 WHERE message_id = $1")
         .bind(&id)
-        .execute(_pool.as_ref())
+        .execute(pool.as_ref())
         .await
         .unwrap();
     assert_eq!(
@@ -118,7 +118,7 @@ async fn expiry_and_wrong_owner_return_not_found_and_do_not_refresh() {
     );
     store.maintain().await.unwrap();
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM message_threads")
-        .fetch_one(_pool.as_ref())
+        .fetch_one(pool.as_ref())
         .await
         .unwrap();
     assert_eq!(count, 0);

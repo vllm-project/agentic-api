@@ -34,7 +34,7 @@ use futures::StreamExt;
 use serde_json::{Value, json};
 use tracing::Instrument as _;
 
-use crate::executor::error::ExecutorResult;
+use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::inference::{BoxStream, response_lines, send_request};
 use crate::executor::messages_context::MessagesRequestContext;
 use crate::executor::messages_round::{MessagesRoundDecision, decide_round};
@@ -156,12 +156,7 @@ fn messages_stream_body(
         // The key was resolved before the stream opened; this cannot fail.
         let Ok(key) = exec_ctx.messages_result_key() else { return };
         let view = ServerToolView { native: ctx.native_server_tools(), key };
-        let mut acc = MessagesStreamAccumulator {
-            gateway_map: request_gateway_map(&exec_ctx.messages_gateway_tools, &registry),
-            native: view.native,
-            thread_message_id: ctx.thread_message_id().map(str::to_owned),
-            ..Default::default()
-        };
+        let mut acc = MessagesStreamAccumulator::for_request(&ctx, &registry, &exec_ctx);
         let mut prepared_response = Some(first_round);
         let clock = execution.clock().clone();
         let mut rounds = exec_ctx.metrics.rounds(Api::Messages);
@@ -229,26 +224,15 @@ fn messages_stream_body(
             match decision {
                 MessagesRoundDecision::ContinueGateway => {}
                 MessagesRoundDecision::ReturnClient | MessagesRoundDecision::Finish => {
-                    if !acc.has_completed_round() {
-                        execution.failed_with(FailureCategory::Stream);
-                        execution.delivered();
-                        yield error_sse("upstream Messages stream ended before message_stop");
-                        return;
-                    }
-                    if ctx.thread_message_id().is_some() {
-                    let content = acc.terminal_content();
-                    let stop_reason = decision.visible_stop_reason(acc.stop_reason()).filter(|_| !acc.fallback);
-                    if let Err(error) = ctx.complete_thread(&content, stop_reason).await {
+                    if let Err(error) = complete_round(&mut ctx, &acc, decision).await {
                         execution.failed(&error);
                         execution.delivered();
                         yield executor_error_sse(&error);
                         return;
                     }
-                    }
                     execution.completed_with_stop_reason(acc.stop_reason());
-                    let terminal = acc.terminal_frames(decision);
                     execution.delivered();
-                    for (out, text) in terminal {
+                    for (out, text) in acc.terminal_frames(decision) {
                         clock.client_event(text);
                         yield out;
                     }
@@ -279,6 +263,28 @@ fn messages_stream_body(
         execution.delivered();
         yield error_sse(&format!("gateway tool loop exceeded {MAX_GATEWAY_TOOL_ROUNDS} rounds"));
     })
+}
+
+/// Publish only after ingestion has established a completed round, before the
+/// runner releases the public terminal. Assembly remains owned by ingestion.
+async fn complete_round(
+    ctx: &mut MessagesRequestContext,
+    acc: &MessagesStreamAccumulator,
+    decision: MessagesRoundDecision,
+) -> ExecutorResult<()> {
+    if ctx.thread_message_id().is_some() {
+        if !acc.has_completed_round() {
+            return Err(ExecutorError::StreamError(
+                "upstream Messages stream ended before message_stop".to_owned(),
+            ));
+        }
+        let content = acc.terminal_content();
+        let stop_reason = decision
+            .visible_stop_reason(acc.stop_reason())
+            .filter(|_| !acc.fallback);
+        ctx.complete_thread(&content, stop_reason).await?;
+    }
+    Ok(())
 }
 
 /// Execute a completed round's gateway calls and append the round for the next
@@ -367,6 +373,15 @@ struct MessagesStreamAccumulator {
 }
 
 impl MessagesStreamAccumulator {
+    fn for_request(ctx: &MessagesRequestContext, registry: &ToolRegistry, exec_ctx: &ExecutionContext) -> Self {
+        Self {
+            gateway_map: request_gateway_map(&exec_ctx.messages_gateway_tools, registry),
+            native: ctx.native_server_tools(),
+            thread_message_id: ctx.thread_message_id().map(str::to_owned),
+            ..Self::default()
+        }
+    }
+
     fn begin_round(&mut self) {
         self.index_map.clear();
         self.suppressed_indices.clear();

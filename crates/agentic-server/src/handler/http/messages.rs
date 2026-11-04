@@ -166,10 +166,10 @@ pub async fn messages(State(state): State<AppState>, request: Request) -> Respon
                 .collect::<Vec<_>>()
                 .join(",");
             headers.remove("anthropic-beta");
-            if let Ok(value) = http::HeaderValue::from_str(&betas) {
-                if !betas.is_empty() {
-                    headers.insert("anthropic-beta", value);
-                }
+            if let Ok(value) = http::HeaderValue::from_str(&betas)
+                && !betas.is_empty()
+            {
+                headers.insert("anthropic-beta", value);
             }
             return execute_messages(&state, &headers, parts.uri.query(), ctx).await;
         }

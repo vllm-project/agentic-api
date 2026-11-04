@@ -4,6 +4,7 @@ use serde_json::Value;
 
 use super::{BufferedBlock, MessagesStreamAccumulator, RoundState, error_sse, has_fallback, sse};
 use crate::events::{ClassifiedSseLine, SseLine};
+use crate::executor::messages_threads::MAX_CHECKPOINT_BYTES;
 use crate::utils::common::deserialize_from_str;
 
 /// One client SSE frame and whether it carries output text.
@@ -15,7 +16,7 @@ impl MessagesStreamAccumulator {
         self.pushed_text = false;
         if self.thread_message_id.is_some() {
             self.thread_bytes = self.thread_bytes.saturating_add(line.len());
-            if self.thread_bytes > crate::executor::messages_threads::MAX_CHECKPOINT_BYTES {
+            if self.thread_bytes > MAX_CHECKPOINT_BYTES {
                 return self.fail("Messages thread stream exceeds the storage limit");
             }
         }

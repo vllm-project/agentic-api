@@ -21,12 +21,12 @@ pub(super) fn fingerprint(request: &ThreadMessagesRequest) -> Result<BTreeMap<St
         if let Some(raw) = request.parameters.get(field) {
             let mut value: Value =
                 serde_json::from_str(raw.get()).map_err(|e| MessagesThreadError::invalid(e.to_string()))?;
-            if field == "mcp_servers" {
-                if let Some(servers) = value.as_array_mut() {
-                    for server in servers {
-                        if let Some(server) = server.as_object_mut() {
-                            server.remove("authorization_token");
-                        }
+            if field == "mcp_servers"
+                && let Some(servers) = value.as_array_mut()
+            {
+                for server in servers {
+                    if let Some(server) = server.as_object_mut() {
+                        server.remove("authorization_token");
                     }
                 }
             }
@@ -73,10 +73,10 @@ pub(super) fn validate_request(request: &ThreadMessagesRequest, betas: &[String]
     if matches!(request.thread, MessageThreadParam::Create) && request.messages.is_empty() {
         return Err(MessagesThreadError::invalid("thread create requires messages"));
     }
-    if let MessageThreadParam::Continue { previous_message_id } = &request.thread {
-        if previous_message_id.is_empty() {
-            return Err(MessagesThreadError::invalid("previous_message_id must not be empty"));
-        }
+    if let MessageThreadParam::Continue { previous_message_id } = &request.thread
+        && previous_message_id.is_empty()
+    {
+        return Err(MessagesThreadError::invalid("previous_message_id must not be empty"));
     }
     let value = serde_json::to_value(request).map_err(|e| MessagesThreadError::invalid(e.to_string()))?;
     if value.get("compaction").is_some_and(|value| !value.is_null()) {

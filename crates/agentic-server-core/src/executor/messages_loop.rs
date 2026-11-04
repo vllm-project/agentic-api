@@ -303,10 +303,9 @@ async fn deliver(
                 "invalid upstream thread message".to_owned(),
             ));
         }
-        let retained = message["content"]
-            .as_array()
-            .map(|content| Value::Array(tool_seam::strip_gateway_tool_use(content, gateway_map)))
-            .unwrap_or(Value::Null);
+        let retained = message["content"].as_array().map_or(Value::Null, |content| {
+            Value::Array(tool_seam::strip_gateway_tool_use(content, gateway_map))
+        });
         let stop_reason = message["stop_reason"]
             .as_str()
             .filter(|_| !has_fallback(message.get("usage")));

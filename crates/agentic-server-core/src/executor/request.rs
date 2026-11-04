@@ -345,6 +345,7 @@ mod tests {
     use std::time::Duration;
 
     use super::{DEFAULT_STREAMING_TIMEOUT, ExecutionContext, database_open_error, parse_streaming_timeout};
+    use crate::executor::messages_threads::MessagesThreadStore;
     use crate::executor::{ConversationHandler, ResponseHandler};
     use crate::storage::{ConversationStore, DatabaseBackend, ResponseStore, create_pool_with_schema};
 
@@ -426,6 +427,7 @@ mod tests {
             Arc::new(reqwest::Client::new()),
             "http://localhost:8000".to_owned(),
         );
+        context.messages_threads = MessagesThreadStore::new(Arc::clone(&pool));
         context.storage_pool = Some(pool.clone());
 
         assert!(!context.storage_ready(Duration::from_millis(10)).await);
@@ -444,6 +446,7 @@ mod tests {
             Arc::new(reqwest::Client::new()),
             "http://localhost:8000".to_owned(),
         );
+        context.messages_threads = MessagesThreadStore::new(Arc::clone(&pool));
         context.storage_pool = Some(pool.clone());
         assert!(context.storage_ready(Duration::from_secs(1)).await);
 
@@ -466,6 +469,7 @@ mod tests {
             Arc::new(reqwest::Client::new()),
             "http://localhost:8000".to_owned(),
         );
+        context.messages_threads = MessagesThreadStore::new(Arc::clone(&pool));
         context.storage_pool = Some(pool.clone());
         assert!(context.storage_ready(Duration::from_secs(1)).await);
 

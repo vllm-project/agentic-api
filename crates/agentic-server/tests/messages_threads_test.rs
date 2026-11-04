@@ -74,7 +74,12 @@ async fn infer(State(requests): State<Requests>, headers: HeaderMap, Json(reques
                 json!({"type":"content_block_stop","index":index}),
             ]);
         }
-        events.push(json!({"type":"message_delta","delta":{"stop_reason":stop},"usage":message["usage"]}));
+        let streamed_stop = if request["metadata"]["null_stop"] == true {
+            Value::Null
+        } else {
+            json!(stop)
+        };
+        events.push(json!({"type":"message_delta","delta":{"stop_reason":streamed_stop},"usage":message["usage"]}));
         if request["metadata"]["truncate"] != true && request["metadata"]["hang"] != true {
             events.push(json!({"type":"message_stop"}));
         }
@@ -303,19 +308,21 @@ async fn claude_code_continues_with_full_or_inherited_fields_without_changing_th
 }
 
 #[tokio::test]
-async fn truncated_stream_never_publishes_a_checkpoint_and_parent_can_be_retried() {
-    let (url, requests, _upstream, _gateway) = setup().await;
-    let first = send(&url, &create(false)).await.json::<Value>().await.unwrap();
-    let mut next = continuation(first["id"].as_str().unwrap(), true);
-    next["metadata"] = json!({"truncate":true});
-    let body = send(&url, &next).await.text().await.unwrap();
-    assert!(body.contains("event: error"));
-    assert!(!body.contains("event: message_stop"));
-    let response = send(&url, &continuation(&stream_id(&body), false)).await;
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    next.as_object_mut().unwrap().remove("metadata");
-    assert_eq!(send(&url, &next).await.status(), StatusCode::OK);
-    assert_eq!(requests.lock().await.len(), 3);
+async fn invalid_stream_never_publishes_a_checkpoint_and_parent_can_be_retried() {
+    for invalid in ["truncate", "null_stop"] {
+        let (url, requests, _upstream, _gateway) = setup().await;
+        let first = send(&url, &create(false)).await.json::<Value>().await.unwrap();
+        let mut next = continuation(first["id"].as_str().unwrap(), true);
+        next["metadata"] = json!({(invalid):true});
+        let body = send(&url, &next).await.text().await.unwrap();
+        assert!(body.contains("event: error"));
+        assert!(!body.contains("event: message_stop"));
+        let response = send(&url, &continuation(&stream_id(&body), false)).await;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        next.as_object_mut().unwrap().remove("metadata");
+        assert_eq!(send(&url, &next).await.status(), StatusCode::OK);
+        assert_eq!(requests.lock().await.len(), 3);
+    }
 }
 
 #[tokio::test]
@@ -332,7 +339,7 @@ async fn count_tokens_rejects_threads_locally() {
 }
 
 #[tokio::test]
-async fn thread_continuation_retains_hidden_gateway_rounds_and_original_tools() {
+async fn thread_continuation_retains_native_gateway_rounds_and_original_tools() {
     for stream in [false, true] {
         let (url, requests, _upstream, _gateway) = setup().await;
         let mut first = create(stream);
@@ -341,7 +348,9 @@ async fn thread_continuation_retains_hidden_gateway_rounds_and_original_tools() 
         let response = send(&url, &first).await;
         assert_eq!(response.status(), StatusCode::OK);
         let body = response.text().await.unwrap();
-        assert!(!body.contains("gateway-call"));
+        assert!(body.contains("server_tool_use"));
+        assert!(body.contains("web_search_tool_result"));
+        assert!(body.contains("srvtoolu_gw_gateway-call"));
         let id = if stream {
             stream_id(&body)
         } else {

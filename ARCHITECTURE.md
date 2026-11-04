@@ -1812,8 +1812,9 @@ the prompt, permits unchanged repeated prompt/tool fields, and rejects mutations
 before reserving the parent. This shares the same checkpoint and execution path
 as ordinary Messages threads.
 
-`messages_stream/accumulator.rs` is the single Messages SSE ingestion and assistant
-assembly path. The streaming runner uses its completed round to publish the thread
+`messages_stream/ingestion.rs` validates Messages SSE events and fills the existing
+`MessagesStreamAccumulator`; `messages_stream/blocks.rs` assembles content blocks.
+The streaming runner uses its completed round to publish the thread
 checkpoint before emitting the public terminal. It adds no second SSE parser,
 channel, or ingestion worker. Publication consumes the parent's token-fenced lease
 and inserts the child's checkpoint in one database transaction. Dropping an unfinished
