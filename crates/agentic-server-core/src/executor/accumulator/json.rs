@@ -35,8 +35,9 @@ pub(super) fn ensure_strict_response(json: &Value) -> ExecutorResult<()> {
                 "upstream response output[{index}] has an unsupported type"
             )));
         }
-        let item_id = item
-            .id()
+        // Read from the body: decoding generates an ID for an item that omits one.
+        let item_id = json["output"][index]["id"]
+            .as_str()
             .filter(|id| !id.is_empty())
             .ok_or_else(|| invalid(format!("upstream response output[{index}] has no valid 'id'")))?;
         if !item_ids.insert(item_id) {
