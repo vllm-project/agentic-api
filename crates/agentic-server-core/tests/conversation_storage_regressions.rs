@@ -9,7 +9,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use agentic_core::storage::models::{
     conversation as conversation_model, item as item_model, response as response_model,
 };
-use agentic_core::storage::{ConversationStore, Item, ResponseMetadata, ResponseStore, create_pool_with_schema};
+use agentic_core::storage::{
+    ConversationStore, Item, ResponseData, ResponseMetadata, ResponseStore, create_pool_with_schema,
+};
 use agentic_core::types::io::InOutItem;
 use agentic_core::types::io::ItemOrder;
 use serde_json::json;
@@ -541,7 +543,20 @@ async fn response_history_keeps_each_occurrence_of_a_public_id() {
     );
 
     responses
-        .persist("resp_next", Some("resp_replay"), vec![updated.clone()], None, &metadata)
+        .persist(
+            "resp_next",
+            Some(
+                &responses
+                    .get("resp_replay")
+                    .await
+                    .and_then(ResponseData::try_from)
+                    .expect("parent")
+                    .into(),
+            ),
+            vec![updated.clone()],
+            None,
+            &metadata,
+        )
         .await
         .unwrap();
     let mut expected = replay;

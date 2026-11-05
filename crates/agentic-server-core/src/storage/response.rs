@@ -8,7 +8,7 @@ use super::models::{Response as DbResponse, item, response};
 use super::pool::DbPool;
 use super::types::item::{decode_public, encode};
 use super::types::response::snapshot_output_count;
-use super::types::{ResponseData, ResponseMetadata, StorageError, StoreResult};
+use super::types::{ResponseCheckpoint, ResponseData, ResponseMetadata, StorageError, StoreResult};
 use crate::types::io::InOutItem;
 use crate::types::request_response::ResponsePayload;
 use crate::utils::common::serialize_to_string;
@@ -91,19 +91,21 @@ impl ResponseStore {
         Ok(())
     }
 
-    /// Resolve a supplied public item ID to its stored public item when storage is configured.
+    /// Resolve supplied public item IDs to their stored public items, in one query, when storage is configured.
     ///
     /// # Errors
-    /// Returns an error if the database query fails or the stored item is invalid.
-    pub async fn get_input_item(&self, id: &str) -> StoreResult<Option<InOutItem>> {
-        let Some(pool) = self.pool.as_deref() else {
-            return Ok(None);
+    /// Returns an error if the database query fails or a stored item is invalid.
+    pub async fn get_input_items_by_id(&self, ids: &[String]) -> StoreResult<HashMap<String, InOutItem>> {
+        let Some(pool) = self.pool.as_deref().filter(|_| !ids.is_empty()) else {
+            return Ok(HashMap::new());
         };
-        item::get_by_public_id(pool, id)
-            .await?
-            .as_ref()
-            .map(decode_public)
-            .transpose()
+        let mut items = HashMap::new();
+        for row in item::get_items_by_public_id(pool, ids).await? {
+            if !items.contains_key(&row.public_id) {
+                items.insert(row.public_id.clone(), decode_public(&row)?);
+            }
+        }
+        Ok(items)
     }
 
     /// Loads the public items a response was generated from: its history without its own output, in history
@@ -134,13 +136,13 @@ impl ResponseStore {
         Ok(Some(items))
     }
 
-    /// Loads a response together with its full history.
+    /// Loads a response's checkpoint together with its full history.
     ///
     /// # Errors
     ///
     /// Returns an error if the response or a history item is missing or invalid, the database query
     /// fails, or the store is disabled.
-    pub async fn rehydrate(&self, response_id: &str) -> StoreResult<(ResponseData, Vec<InOutItem>)> {
+    pub async fn rehydrate(&self, response_id: &str) -> StoreResult<(ResponseCheckpoint, Vec<InOutItem>)> {
         let response = ResponseData::try_from(self.get(response_id).await?)?;
         let items = self
             .history(&response)
@@ -148,7 +150,7 @@ impl ResponseStore {
             .iter()
             .map(InOutItem::try_from)
             .collect::<StoreResult<_>>()?;
-        Ok((response, items))
+        Ok((response.into(), items))
     }
 
     /// The history rows of a response, in history order; a missing row is invalid history.
@@ -167,8 +169,8 @@ impl ResponseStore {
             .collect()
     }
 
-    /// Persists a response with its new items, snapshot and metadata, extending the history of
-    /// `previous_response_id`.
+    /// Persists a response with its new items, snapshot and metadata, extending the history of its `parent`, the
+    /// checkpoint rehydration captured. Returns the response's history rows, which a child extends.
     ///
     /// # Errors
     ///
@@ -176,17 +178,15 @@ impl ResponseStore {
     pub async fn persist(
         &self,
         response_id: &str,
-        previous_response_id: Option<&str>,
+        parent: Option<&ResponseCheckpoint>,
         new_items: Vec<InOutItem>,
         snapshot: Option<&ResponsePayload>,
         metadata: &ResponseMetadata,
-    ) -> StoreResult<()> {
+    ) -> StoreResult<Vec<String>> {
         let pool = self.pool()?;
 
-        let mut item_ids: Vec<String> = match previous_response_id {
-            Some(prev_id) => ResponseData::try_from(self.get(prev_id).await?)?.history_item_ids,
-            None => Vec::new(),
-        };
+        let previous_response_id = parent.and_then(|parent| parent.response_id.as_deref());
+        let mut item_ids = parent.map(|parent| parent.history_item_ids.clone()).unwrap_or_default();
         let new_items = new_items.iter().map(encode).collect::<StoreResult<Vec<_>>>()?;
         let snapshot_json = snapshot.map(String::try_from).transpose()?;
         let metadata_json = String::try_from(metadata)?;
@@ -210,7 +210,7 @@ impl ResponseStore {
         .await?;
         tx.commit().await?;
 
-        Ok(())
+        Ok(item_ids)
     }
 }
 

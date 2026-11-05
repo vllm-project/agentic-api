@@ -141,7 +141,12 @@ impl<'a> SingleAgentRun<'a> {
     async fn new(agent: &'a mut AgentPipeline, exec_ctx: &'a ExecutionContext) -> ExecutorResult<Self> {
         let response_budget = ExecutorResponseBudget::with_limit(exec_ctx.responses_config.max_retained_bytes);
         let root = AgentTurn::new(agent, exec_ctx, &response_budget, MAX_GATEWAY_TOOL_ROUNDS, None).await?;
-        let output = root.discovery_output();
+        let output = root
+            .registry
+            .mcp_list_tool_items()
+            .cloned()
+            .map(OutputItem::McpListTools)
+            .collect();
         Ok(Self {
             root,
             response_budget,

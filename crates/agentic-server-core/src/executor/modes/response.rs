@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use crate::storage::{DbResponse, ResponseData, ResponseMetadata, ResponseStore, StorageError};
+use crate::storage::{DbResponse, ResponseCheckpoint, ResponseMetadata, ResponseStore, StorageError};
 use crate::types::io::OutputItem;
 use crate::types::io::{InOutItem, InputItem};
 use crate::types::io::{ItemOrder, ItemPage, ListItemsResponse};
@@ -49,7 +49,7 @@ impl ResponseHandler {
     /// Resolve client references without overwriting the stored item with supplied content.
     pub(crate) async fn resolve_input_items(&self, items: &mut [InOutItem]) -> ExecutorResult<()> {
         let mut seen = HashSet::new();
-        for (index, item) in items.iter_mut().enumerate() {
+        for (index, item) in items.iter().enumerate() {
             let Some(id) = item.id() else { continue };
             if !seen.insert(id.to_owned()) {
                 return Err(ExecutorError::UnsupportedValue {
@@ -67,7 +67,13 @@ impl ResponseHandler {
             ) {
                 item.validate_client_id(format!("input[{index}].id"))?;
             }
-            if let Some(stored) = self.store.get_input_item(id).await? {
+        }
+        let mut stored = self
+            .store
+            .get_input_items_by_id(&seen.into_iter().collect::<Vec<_>>())
+            .await?;
+        for item in items {
+            if let Some(stored) = item.id().and_then(|id| stored.remove(id)) {
                 *item = stored.into_replayed_input();
             }
         }
@@ -129,18 +135,6 @@ impl ResponseHandler {
         })
     }
 
-    /// Validates that the response for `previous_response_id` exists.
-    ///
-    /// Used in the `store=false` path where we only need to confirm the ID is
-    /// valid without loading any history.
-    ///
-    /// # Errors
-    /// Returns `ExecutorError` if `previous_response_id` is absent, the response
-    /// is not found, or the store is disabled.
-    pub async fn validate_exists(&self, ctx: &RequestContext) -> ExecutorResult<()> {
-        self.get(ctx).await.map(|_| ())
-    }
-
     /// Loads the previous response and its full history in one storage query.
     ///
     /// Returns `None` when the request does not continue a previous response.
@@ -148,7 +142,10 @@ impl ResponseHandler {
     /// # Errors
     /// Returns [`StorageError::PreviousResponseNotFound`] for an unknown `previous_response_id`, or
     /// `ExecutorError` if the store is disabled or the history is invalid.
-    pub async fn rehydrate(&self, ctx: &RequestContext) -> ExecutorResult<Option<(ResponseData, Vec<InOutItem>)>> {
+    pub async fn rehydrate(
+        &self,
+        ctx: &RequestContext,
+    ) -> ExecutorResult<Option<(ResponseCheckpoint, Vec<InOutItem>)>> {
         let Some(prev_id) = ctx.original_request.previous_response_id.as_deref() else {
             return Ok(None);
         };
@@ -162,8 +159,8 @@ impl ResponseHandler {
         Ok(Some((stored, history)))
     }
 
-    /// Stores one response turn: its items, snapshot and metadata, extending the history of the request's
-    /// `previous_response_id`.
+    /// Stores one response turn: its items, snapshot and metadata, extending the history rehydration captured in
+    /// `ctx.checkpoint`. Returns the turn's history rows.
     ///
     /// # Errors
     /// [`ExecutorError::Conflict`] when a turn is already stored under this response's id, or `ExecutorError` if the
@@ -174,12 +171,13 @@ impl ResponseHandler {
         items: Vec<InOutItem>,
         snapshot: Option<&ResponsePayload>,
         metadata: &ResponseMetadata,
-    ) -> ExecutorResult<()> {
+    ) -> ExecutorResult<Vec<String>> {
         let result = self
             .store
+            // A transient session parent has no stored history to extend.
             .persist(
                 &ctx.response_id,
-                ctx.original_request.previous_response_id.as_deref(),
+                ctx.checkpoint.as_ref().filter(|checkpoint| checkpoint.durable),
                 items,
                 snapshot,
                 metadata,
@@ -202,6 +200,7 @@ impl ResponseHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::storage::ResponseData;
     use crate::types::io::ResponsesInput;
     use crate::types::request_response::RequestPayload;
 
@@ -232,12 +231,6 @@ mod tests {
     #[tokio::test]
     async fn test_get_missing_prev_id_returns_error() {
         let result = disabled_handler().get(&make_ctx(None)).await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_validate_exists_missing_prev_id_returns_error() {
-        let result = disabled_handler().validate_exists(&make_ctx(None)).await;
         assert!(result.is_err());
     }
 

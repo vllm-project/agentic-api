@@ -32,7 +32,7 @@ use crate::executor::request::RequestContext;
 use crate::executor::response_events::ResponseEventSink;
 use crate::executor::translate::Translation;
 use crate::tool::ToolRegistry;
-use crate::tool::mcp::handler::list_tools_output_item;
+use crate::types::io::OutputItem;
 use deferred::DeferredFrames;
 use projection::SourceProjection;
 use serde_json::Value;
@@ -249,7 +249,8 @@ impl StreamRelay {
     async fn emit_mcp_discovery_lifecycle(&mut self, registry: &ToolRegistry) -> ExecutorResult<()> {
         let discovered_output = registry
             .mcp_list_tool_items()
-            .map(list_tools_output_item)
+            .cloned()
+            .map(OutputItem::McpListTools)
             .collect::<Vec<_>>();
         let public_output = public_output_items(&discovered_output, registry, &[])?;
         let event_plans = mcp_list_tools_event_plans(&public_output, 0);

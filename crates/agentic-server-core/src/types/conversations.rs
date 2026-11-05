@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use super::io::InOutItem;
 
-/// String metadata attached to a conversation.
+/// String key-value metadata, as `OpenAI` defines it for conversations and responses alike.
 pub type ConversationMetadata = BTreeMap<String, String>;
 
 /// Request to create a new conversation.

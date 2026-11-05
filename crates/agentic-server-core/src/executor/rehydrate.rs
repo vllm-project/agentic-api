@@ -14,77 +14,9 @@ use crate::executor::telemetry::metrics::Stage;
 use crate::storage::{ConversationSnapshot, ResponseCheckpoint, ResponseMetadata, StorageError};
 use crate::types::io::InOutItem;
 use crate::types::io::input::is_search_item;
-use crate::types::io::{
-    InputItem, OutputItem, ReasoningOutput, ReasoningTextContent, ResponsesInput, resolve_tool_choice, resolve_tools,
-};
+use crate::types::io::{InputItem, ResponsesInput, resolve_tool_choice, resolve_tools};
 use crate::types::request_response::RequestPayload;
 use crate::utils::uuid7_str;
-
-fn has_plaintext_reasoning(reasoning: &ReasoningOutput) -> bool {
-    reasoning.content.iter().any(|content| !content.text.is_empty())
-}
-
-fn has_opaque_reasoning_state(reasoning: &ReasoningOutput) -> bool {
-    reasoning.encrypted_content.is_some()
-}
-
-/// Reject opaque reasoning that vLLM cannot replay before any normal inference call.
-pub(super) fn validate_reasoning_for_vllm(input: &ResponsesInput) -> ExecutorResult<()> {
-    let ResponsesInput::Items(items) = input else {
-        return Ok(());
-    };
-
-    if items.iter().any(|item| {
-        matches!(item, InOutItem::Input(InputItem::Reasoning(reasoning)) | InOutItem::Output(OutputItem::Reasoning(reasoning)) if has_opaque_reasoning_state(reasoning) && !has_plaintext_reasoning(reasoning))
-    }) {
-        return Err(ExecutorError::InvalidRequest(
-            "reasoning item contains encrypted state without plaintext reasoning content and cannot be replayed to vLLM"
-                .to_owned(),
-        ));
-    }
-
-    Ok(())
-}
-
-/// Prepare reasoning in the vLLM-bound request copy.
-///
-/// vLLM can replay plaintext reasoning content but cannot interpret opaque provider state. Its generic Responses
-/// conversion reads only the first reasoning content part and falls back to a summary when content is absent, while
-/// its Harmony conversion joins all content parts. Normalize usable plaintext into one ordered, newline-delimited part
-/// and remove summaries so both paths receive the same continuation state. Summary-only items have no usable vLLM
-/// state and are omitted. [`RequestContext`] keeps the original request and new input items separately, so none of
-/// these changes mutate persisted state.
-pub(super) fn prepare_reasoning_for_vllm(input: &mut ResponsesInput) -> ExecutorResult<()> {
-    // Validate the complete input before mutation so an error never leaves a partially prepared request behind.
-    validate_reasoning_for_vllm(input)?;
-
-    let ResponsesInput::Items(items) = input else {
-        return Ok(());
-    };
-
-    items.retain_mut(|item| {
-        let (InOutItem::Input(InputItem::Reasoning(reasoning)) | InOutItem::Output(OutputItem::Reasoning(reasoning))) =
-            item
-        else {
-            return true;
-        };
-        if !has_plaintext_reasoning(reasoning) {
-            return false;
-        }
-
-        let plaintext = reasoning
-            .content
-            .iter()
-            .map(|content| content.text.as_str())
-            .collect::<Vec<_>>()
-            .join("\n");
-        reasoning.content = vec![ReasoningTextContent::new(plaintext)];
-        reasoning.summary.clear();
-        reasoning.encrypted_content = None;
-        true
-    });
-    Ok(())
-}
 
 /// Step 1 — Build [`RequestContext`] by rehydrating conversation history.
 ///
@@ -263,19 +195,11 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
     if ctx.continuation.is_some() {
         return from_session_response(ctx, exec_ctx).await;
     }
-    let (stored, history) = exec_ctx
+    let (checkpoint, history) = exec_ctx
         .resp_handler
         .rehydrate(ctx)
         .await?
         .ok_or_else(missing_previous_response_id)?;
-    let checkpoint = ResponseCheckpoint {
-        response_id: Some(stored.response_id),
-        history: Vec::new(),
-        metadata: stored.metadata,
-        durable: true,
-        history_item_ids: stored.history_item_ids,
-        requires_latest: false,
-    };
     if !restore_agent_tree(ctx, &checkpoint.metadata, exec_ctx.responses_config.max_retained_bytes)? {
         set_model_input(ctx, InOutItem::into_input_items(history), identity)?;
         apply_effective_settings(ctx, &checkpoint.metadata);
@@ -300,37 +224,30 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
             }
             .into());
         }
-        let (stored, history) = exec_ctx
+        let (mut checkpoint, history) = exec_ctx
             .resp_handler
             .rehydrate(ctx)
             .await?
             .ok_or_else(missing_previous_response_id)?;
-        let checkpoint = ResponseCheckpoint {
-            response_id: Some(stored.response_id),
-            history: canonical_session_history(InOutItem::into_input_items(history)),
-            metadata: stored.metadata,
-            durable: true,
-            history_item_ids: stored.history_item_ids,
-            requires_latest: false,
-        };
+        checkpoint.history = canonical_session_history(InOutItem::into_input_items(history));
         let continuation = ctx.continuation.as_ref().ok_or_else(|| {
             ExecutorError::InvalidRequest("session response requires a continuation lease".to_owned())
         })?;
         std::sync::Arc::new(continuation.retain_parent(checkpoint)?)
     };
-    // The model input holds the parent's history; the turn's checkpoint keeps the rest.
-    ctx.checkpoint = Some(ResponseCheckpoint {
-        response_id: parent.response_id.clone(),
-        history: Vec::new(),
-        metadata: parent.metadata.clone(),
-        durable: parent.durable,
-        history_item_ids: parent.history_item_ids.clone(),
-        requires_latest: false,
-    });
     if !restore_agent_tree(ctx, &parent.metadata, exec_ctx.responses_config.max_retained_bytes)? {
         set_model_input(ctx, parent.history.clone(), canonical_session_history)?;
         apply_effective_settings(ctx, &parent.metadata);
     }
+    // The model input holds the parent's history; the turn's checkpoint keeps what persistence extends.
+    ctx.checkpoint = Some(ResponseCheckpoint {
+        response_id: parent.response_id.clone(),
+        metadata: parent.metadata.clone(),
+        durable: parent.durable,
+        history_item_ids: parent.history_item_ids.clone(),
+        requires_latest: false,
+        history: Vec::new(),
+    });
     if let Some(continuation) = ctx.continuation.as_mut() {
         continuation.parent = Some(parent);
     }
@@ -344,20 +261,17 @@ fn missing_previous_response_id() -> ExecutorError {
 
 /// Hydrates `ctx` from the conversation store.
 ///
-/// Gets or creates the conversation (depending on `store`) and rehydrates its history in parallel, then continues
-/// that history with this request's items. A conversation turn does not inherit the stored settings.
+/// Rehydrates the conversation's history and continues it with this request's items. A missing conversation is
+/// created by a stored turn and required by an unstored one. A conversation turn does not inherit the stored settings.
 async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) -> ExecutorResult<()> {
-    let (conv_data, snapshot) = tokio::try_join!(
-        async {
-            if ctx.original_request.store {
-                exec_ctx.conv_handler.get_or_create(ctx).await
-            } else {
-                exec_ctx.conv_handler.get(ctx).await
-            }
-        },
-        exec_ctx.conv_handler.rehydrate(ctx),
-    )?;
-    ctx.conversation_id = Some(conv_data.conversation_id);
+    let snapshot = match exec_ctx.conv_handler.rehydrate(ctx).await {
+        Err(ExecutorError::Storage(error)) if error.is_not_found() && ctx.original_request.store => {
+            exec_ctx.conv_handler.get_or_create(ctx).await?;
+            ConversationSnapshot::default()
+        }
+        result => result?,
+    };
+    ctx.conversation_id.clone_from(&ctx.original_request.conversation);
     let ConversationSnapshot { items, mut checkpoint } = snapshot;
     if !restore_agent_tree(ctx, &checkpoint.metadata, exec_ctx.responses_config.max_retained_bytes)? {
         let history = InOutItem::into_input_items(items);

@@ -63,11 +63,6 @@ pub(crate) fn started_output_item(call: &FunctionToolCall, server_label: &str, t
 }
 
 #[must_use]
-pub(crate) fn list_tools_output_item(item: &McpListTools) -> OutputItem {
-    OutputItem::McpListTools(item.clone())
-}
-
-#[must_use]
 pub(crate) fn started_list_tools_output_item(item: &McpListTools) -> OutputItem {
     OutputItem::McpListTools(McpListTools::new(item.id.clone(), item.server_label.clone(), vec![]))
 }
@@ -648,9 +643,7 @@ mod tests {
         let OutputItem::McpListTools(started) = started_list_tools_output_item(&list_tools) else {
             panic!("expected started mcp_list_tools");
         };
-        let OutputItem::McpListTools(completed) = list_tools_output_item(&list_tools) else {
-            panic!("expected completed mcp_list_tools");
-        };
+        let completed = &list_tools;
 
         assert_eq!(started.id, "mcpl_1");
         assert_eq!(started.server_label, "counter");

@@ -29,6 +29,14 @@ impl fmt::Display for InputValidationError {
 }
 
 impl InputValidationError {
+    /// A reasoning item at `input[item_index]` that carries only provider-encrypted state, which vLLM cannot replay.
+    pub(super) fn encrypted_reasoning(item_index: usize) -> Self {
+        Self {
+            item_index,
+            source: MessageContentError::EncryptedReasoning,
+        }
+    }
+
     /// A message file at `input[item_index].content[part_index]` that cannot be converted to text.
     pub(super) fn unsupported_file(item_index: usize, part_index: usize, reason: InputFileError) -> Self {
         Self {
@@ -49,6 +57,10 @@ enum MessageContentError {
     UnsupportedPart { part_index: usize, kind: String },
     #[error("{reason}")]
     UnsupportedFile { part_index: usize, reason: InputFileError },
+    #[error(
+        "reasoning item contains encrypted state without plaintext reasoning content and cannot be replayed to vLLM"
+    )]
+    EncryptedReasoning,
 }
 
 impl InputMessageContent {

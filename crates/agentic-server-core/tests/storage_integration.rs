@@ -40,7 +40,10 @@ async fn test_conversation_store_create_and_get() {
     let created = create_conversation(&store).await.expect("create failed");
     assert!(created.conversation_id.starts_with("conv_"));
 
-    let retrieved = store.get(&created.conversation_id).await.expect("get failed");
+    let retrieved = store
+        .retrieve("default_tenant", &created.conversation_id)
+        .await
+        .expect("retrieve failed");
 
     assert_eq!(retrieved.conversation_id, created.conversation_id);
 }
@@ -247,7 +250,7 @@ async fn zero_item_turns_record_their_exact_metadata() -> Result<(), Box<dyn std
 
         let snapshot = store.rehydrate(&conversation.conversation_id).await?;
         assert!(snapshot.items.is_empty());
-        assert_eq!(snapshot.checkpoint.metadata.model, model);
+        assert_eq!(Some(snapshot.checkpoint.metadata.model.as_str()), Some(model));
     }
 
     Ok(())
@@ -475,7 +478,14 @@ async fn test_response_store_with_previous_response() {
     store
         .persist(
             "resp_2",
-            Some("resp_1"),
+            Some(
+                &store
+                    .get("resp_1")
+                    .await
+                    .and_then(ResponseData::try_from)
+                    .expect("parent")
+                    .into(),
+            ),
             vec![create_output_item("out_2")],
             None,
             &metadata,
@@ -582,7 +592,11 @@ async fn test_response_store_chaining_respects_foreign_key() {
     let result = store
         .persist(
             "resp_3",
-            Some("resp_2"),
+            Some(&ResponseCheckpoint {
+                response_id: Some("resp_2".to_owned()),
+                durable: true,
+                ..ResponseCheckpoint::default()
+            }),
             vec![create_output_item("out3")],
             None,
             &metadata,
@@ -794,11 +808,11 @@ async fn test_sqlite_same_pool_mixed_read_write_concurrency() {
 // Store-level error handling edge cases
 
 #[tokio::test]
-async fn test_conversation_store_get_nonexistent() {
+async fn test_conversation_store_rehydrate_nonexistent() {
     let pool = setup_pool().await;
     let store = ConversationStore::new(pool);
 
-    let result = store.get("nonexistent_conv").await;
+    let result = store.rehydrate("nonexistent_conv").await;
     assert!(result.is_err(), "expected error for non-existent conversation");
 
     // Verify it's a not found error
@@ -860,20 +874,6 @@ async fn test_response_store_disabled() {
 
     let err = result.unwrap_err();
     assert!(err.is_not_configured());
-}
-
-#[tokio::test]
-async fn test_conversation_store_get_after_create() {
-    let pool = setup_pool().await;
-    let store = ConversationStore::new(pool);
-
-    let created = create_conversation(&store).await.expect("create failed");
-
-    // Immediately try to get it
-    let retrieved = store.get(&created.conversation_id).await.expect("get should succeed");
-
-    assert_eq!(retrieved.conversation_id, created.conversation_id);
-    assert_eq!(retrieved.created_at, created.created_at);
 }
 
 #[tokio::test]

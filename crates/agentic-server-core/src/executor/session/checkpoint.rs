@@ -93,6 +93,14 @@ pub(crate) struct RetainedCheckpoint {
     _reservation: Option<CheckpointReservation>,
 }
 
+impl RetainedCheckpoint {
+    /// Records the history rows the turn stored, once they are written.
+    pub(crate) fn with_history_item_ids(mut self, history_item_ids: Vec<String>) -> Self {
+        self.checkpoint.history_item_ids = history_item_ids;
+        self
+    }
+}
+
 impl Deref for RetainedCheckpoint {
     type Target = ResponseCheckpoint;
 
@@ -161,11 +169,11 @@ impl ResponseContinuation {
         }
         let checkpoint = ResponseCheckpoint {
             response_id: Some(response_id),
-            history: canonical_session_history(history),
             metadata,
             durable,
             history_item_ids: Vec::new(),
             requires_latest: false,
+            history: canonical_session_history(history),
         };
         let (max_items, max_bytes) = {
             let state = lock_state(&self.state)?;

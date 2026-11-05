@@ -6,7 +6,6 @@
 use std::collections::HashMap;
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::modes::ResponseHandler;
 use crate::executor::multi_agent::ValidatedTreeCheckpoint;
 use crate::executor::prepare::prepare_request_tools;
 use crate::executor::request::{ExecutionContext, RequestContext};
@@ -134,17 +133,18 @@ async fn write_turn(
         .as_ref()
         .filter(|lease| lease.parent.as_ref().is_some_and(|parent| !parent.durable));
     // A stored child of a transient parent stores the parent's full history: there is no stored parent to extend.
-    if let Some(lease) = transient_parent {
-        ctx.original_request.previous_response_id = None;
-        if durable {
-            items.splice(0..0, lease.parent_items().cloned().map(InOutItem::Input));
-        }
+    if let Some(lease) = transient_parent
+        && durable
+    {
+        items.splice(0..0, lease.parent_items().cloned().map(InOutItem::Input));
     }
-    if durable {
-        exec_ctx.resp_handler.persist(&ctx, items, snapshot, &metadata).await?;
-    }
+    let history_item_ids = if durable {
+        exec_ctx.resp_handler.persist(&ctx, items, snapshot, &metadata).await?
+    } else {
+        Vec::new()
+    };
     if let Some((lease, checkpoint)) = continuation.zip(checkpoint) {
-        lease.publish(checkpoint)?;
+        lease.publish(checkpoint.with_history_item_ids(history_item_ids))?;
     }
     Ok(())
 }
@@ -197,7 +197,7 @@ fn prepare_metadata(ctx: &mut RequestContext, tool_search_metadata: Option<ToolS
 /// [`ExecutorError::InvalidRequest`] for unusable IDs or an unfinished response,
 /// [`ExecutorError::Conflict`] for an id already stored, or a storage error.
 pub async fn commit(
-    ctx: RequestContext,
+    mut ctx: RequestContext,
     payload: ResponsePayload,
     exec_ctx: &ExecutionContext,
 ) -> ExecutorResult<ResponsePayload> {
@@ -216,17 +216,30 @@ pub async fn commit(
         )));
     }
     if matches!(status, ResponseStatus::Completed | ResponseStatus::Incomplete) {
-        validate_output_call_ids(&ctx, &payload.output, &exec_ctx.resp_handler).await?;
+        // Without a session the caller's context carries no history: load the continued response once, for the
+        // call-ID check and as the checkpoint this turn extends. A session keeps its parent in memory.
+        let stored = match ctx.continuation {
+            Some(_) => None,
+            None => exec_ctx.resp_handler.rehydrate(&ctx).await?,
+        };
+        let history = match stored {
+            Some((checkpoint, history)) => {
+                ctx.checkpoint = Some(checkpoint);
+                history
+            }
+            None => Vec::new(),
+        };
+        validate_output_call_ids(&ctx, &payload.output, &history)?;
     }
 
     Box::pin(persist(ctx, TurnOutput::Response(&payload), None, exec_ctx)).await?;
     Ok(payload)
 }
 
-async fn validate_output_call_ids(
+fn validate_output_call_ids(
     ctx: &RequestContext,
     output_items: &[OutputItem],
-    resp_handler: &ResponseHandler,
+    history: &[InOutItem],
 ) -> ExecutorResult<()> {
     let mut call_ids = HashMap::new();
     for (index, item) in output_items.iter().enumerate() {
@@ -263,9 +276,7 @@ async fn validate_output_call_ids(
         let items: Vec<_> = model_items(projected).collect();
         return validate_history_call_ids(items.iter().map(|item| item.call_id()), &call_ids);
     }
-    if let Some((_, history)) = resp_handler.rehydrate(ctx).await? {
-        validate_history_call_ids(history.iter().map(InOutItem::call_id), &call_ids)?;
-    }
+    validate_history_call_ids(history.iter().map(InOutItem::call_id), &call_ids)?;
     for (input_index, item) in ctx.new_input_items.iter().enumerate() {
         if let Some((output_index, item_type)) = item.call_id().and_then(|call_id| call_ids.get(call_id)) {
             return Err(ExecutorError::InvalidRequest(format!(

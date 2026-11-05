@@ -44,7 +44,7 @@ pub struct RequestContext {
     /// Resolved conversation ID. `None` when `store=false` or non-conversational.
     pub conversation_id: Option<String>,
     /// The turn this request continues (a stored response, a conversation's latest turn, or a session parent), as
-    /// rehydration read it.
+    /// rehydration read it: its metadata and stored history, which persistence extends.
     pub checkpoint: Option<ResponseCheckpoint>,
     /// Optional transient-session lease and canonical parent snapshot. Never serialized.
     pub continuation: Option<ResponseContinuation>,
@@ -128,12 +128,6 @@ impl ExecutionContext {
     #[must_use]
     pub fn responses_url(&self) -> String {
         format!("{}/v1/responses", self.llm_base_url)
-    }
-
-    /// Returns the full URL for the `/v1/conversations` endpoint.
-    #[must_use]
-    pub fn conversations_url(&self) -> String {
-        format!("{}/v1/conversations", self.llm_base_url)
     }
 
     #[must_use]

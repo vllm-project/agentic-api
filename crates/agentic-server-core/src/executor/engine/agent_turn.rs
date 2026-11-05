@@ -21,13 +21,12 @@ use crate::executor::gateway::{
     execute_and_emit_output_calls, public_output_items, relay_round_events,
 };
 use crate::executor::pipeline::AgentPipeline;
-use crate::executor::rehydrate::prepare_reasoning_for_vllm;
 use crate::executor::request::ExecutionContext;
 use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::telemetry::metrics::Stage;
 use crate::executor::upstream::{fetch_blocking_payload, fetch_stream_payload};
 use crate::executor::{inference::UpstreamHeaders, relay::Release};
-use crate::tool::{ToolRegistry, mcp, record_discovered_mcp_tools, responses_declarations};
+use crate::tool::{ToolRegistry, record_discovered_mcp_tools, responses_declarations};
 use crate::types::io::{OutputItem, ResponsesInput};
 use crate::types::request_response::ResponsePayload;
 
@@ -92,13 +91,6 @@ pub(super) async fn build_tool_registry(
     Ok(registry)
 }
 
-fn prepare_initial_reasoning_for_vllm(input: &mut ResponsesInput, round: usize, compacted: bool) -> ExecutorResult<()> {
-    if round == 0 && !compacted {
-        return prepare_reasoning_for_vllm(input);
-    }
-    Ok(())
-}
-
 /// One agent's tool registry and execution state, retained across its rounds.
 ///
 /// The caller supplies the retained-byte budget so descendants can share the
@@ -106,7 +98,7 @@ fn prepare_initial_reasoning_for_vllm(input: &mut ResponsesInput, round: usize, 
 /// therefore remain shared across independently constructed turns as well.
 pub(super) struct AgentTurn<'a> {
     pub(super) pipeline: &'a mut AgentPipeline,
-    registry: ToolRegistry,
+    pub(super) registry: ToolRegistry,
     exec_ctx: &'a ExecutionContext,
     max_rounds: NonZeroUsize,
     next_round: usize,
@@ -144,7 +136,8 @@ impl AgentExecutionState {
         let output = self
             .registry
             .mcp_list_tool_items()
-            .map(mcp::handler::list_tools_output_item)
+            .cloned()
+            .map(OutputItem::McpListTools)
             .collect();
         self.registry.clear_mcp_list_tool_items();
         output
@@ -205,13 +198,6 @@ impl<'a> AgentTurn<'a> {
         })
     }
 
-    pub(super) fn discovery_output(&self) -> Vec<OutputItem> {
-        self.registry
-            .mcp_list_tool_items()
-            .map(mcp::handler::list_tools_output_item)
-            .collect()
-    }
-
     /// Advance through one inference round and its gateway-executed tools.
     /// The turn owns round numbering; the engine supplies the public output
     /// offset and shared budget. Registry and pipeline state survive each step.
@@ -247,11 +233,6 @@ impl<'a> AgentTurn<'a> {
         {
             continuation.mark_outputs_compacted(output_offset);
         }
-        prepare_initial_reasoning_for_vllm(
-            &mut self.pipeline.request.enriched_request.input,
-            round,
-            compaction_usage.is_some(),
-        )?;
         let round_span = crate::executor::telemetry::stages::inference_round(round);
         let timer = self.exec_ctx.metrics.stage(Stage::Inference);
         let fetched = if stream_upstream {

@@ -39,10 +39,6 @@ async fn invalid_history_references_block_read_and_child_persistence() -> Result
                 .and_then(ResponseData::try_from)
                 .unwrap_err(),
             store.rehydrate("resp_parent").await.unwrap_err(),
-            store
-                .persist("resp_child", Some("resp_parent"), Vec::new(), None, &metadata)
-                .await
-                .unwrap_err(),
         ] {
             assert!(matches!(
                 error,
@@ -88,16 +84,6 @@ async fn invalid_metadata_blocks_both_stores_without_echoing_secrets() -> Result
             responses.rehydrate("resp_parent").await.unwrap_err(),
             conversations
                 .rehydrate(&conversation.conversation_id)
-                .await
-                .unwrap_err(),
-            responses
-                .persist(
-                    "resp_child",
-                    Some("resp_parent"),
-                    Vec::new(),
-                    None,
-                    &ResponseMetadata::default(),
-                )
                 .await
                 .unwrap_err(),
         ] {

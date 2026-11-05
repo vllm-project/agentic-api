@@ -174,8 +174,8 @@ async fn create_in_tx_with_next_conversation_seq(
          ) \
          INSERT INTO items (id, metadata, data, created_at, conversation_id, seq, public_id, tenant_id) \
          SELECT CASE WHEN source.id IS NULL THEN incoming.id ELSE incoming.entry_id END, \
-                CASE WHEN source.id IS NULL THEN incoming.metadata ELSE source.metadata END, \
-                COALESCE(source.data, incoming.data), COALESCE(source.created_at, incoming.created_at), \
+                COALESCE(source.metadata, incoming.metadata), COALESCE(source.data, incoming.data), \
+                COALESCE(source.created_at, incoming.created_at), \
                 incoming.conversation_id, incoming.seq, COALESCE(source.public_id, incoming.id), owner.tenant_id \
          FROM incoming CROSS JOIN owner \
          LEFT JOIN source_rows ON source_rows.incoming_seq = incoming.seq \
@@ -236,15 +236,25 @@ pub async fn get_items(pool: &DbPool, ids: &[String]) -> DbResult<Vec<Item>> {
     Ok(rows)
 }
 
-/// Find the original stored item carrying a public identity.
+/// Get every stored occurrence of these public IDs, each public ID's original (earliest) row first.
 ///
 /// # Errors
-/// Returns an error if the database query fails.
-pub async fn get_by_public_id(pool: &DbPool, id: &str) -> DbResult<Option<Item>> {
-    sqlx::query_as::<_, Item>("SELECT * FROM items WHERE public_id = $1 ORDER BY created_at, id LIMIT 1")
-        .bind(id)
-        .fetch_optional(pool)
-        .await
+/// Returns `DbResult::Err` if the database query fails.
+pub async fn get_items_by_public_id(pool: &DbPool, ids: &[String]) -> DbResult<Vec<Item>> {
+    let mut rows = Vec::with_capacity(ids.len());
+    for batch in ids.chunks(MAX_BIND_PARAMETERS) {
+        let placeholders = (1..=batch.len())
+            .map(|index| format!("${index}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!("SELECT * FROM items WHERE public_id IN ({placeholders}) ORDER BY created_at, id");
+        let mut query = sqlx::query_as::<_, Item>(&sql);
+        for id in batch {
+            query = query.bind(id);
+        }
+        rows.extend(query.fetch_all(pool).await?);
+    }
+    Ok(rows)
 }
 
 /// List a page using keyset pagination with (seq, id) ordering.

@@ -86,131 +86,6 @@ fn restored_session_uses_the_latest_window_and_preserves_live_pending_calls() {
     assert_eq!(pending[0].call_id.as_str(), "live");
 }
 
-fn reasoning_item(content: &[&str], encrypted_content: Option<&str>) -> InputItem {
-    InputItem::Reasoning(ReasoningOutput {
-        agent: None,
-        id: "rs_prior".to_owned(),
-        content: content.iter().map(|text| ReasoningTextContent::new(*text)).collect(),
-        summary: vec![crate::types::ReasoningSummaryContent::new("public summary")],
-        encrypted_content: encrypted_content
-            .map(|text| crate::types::OpaqueReasoning::try_from(text.to_owned()).unwrap()),
-        status: Some(crate::types::ReasoningStatus::Completed),
-    })
-}
-
-#[test]
-fn plaintext_reasoning_is_normalized_for_both_vllm_paths() {
-    let mut input = ResponsesInput::from(vec![reasoning_item(
-        &["first continuation part", "second continuation part"],
-        Some("opaque-provider-state"),
-    )]);
-
-    prepare_reasoning_for_vllm(&mut input).expect("plaintext reasoning is replayable");
-
-    let ResponsesInput::Items(items) = input else {
-        panic!("expected structured input");
-    };
-    let InOutItem::Input(InputItem::Reasoning(reasoning)) = &items[0] else {
-        panic!("expected reasoning item");
-    };
-    assert_eq!(reasoning.id, "rs_prior");
-    assert_eq!(reasoning.content.len(), 1);
-    assert_eq!(
-        reasoning.content[0].text,
-        "first continuation part\nsecond continuation part"
-    );
-    assert!(reasoning.summary.is_empty());
-    assert_eq!(reasoning.status, Some(crate::types::ReasoningStatus::Completed));
-    assert_eq!(reasoning.encrypted_content, None);
-}
-
-#[test]
-fn encrypted_reasoning_requires_nonempty_plaintext_content() {
-    for content in [Vec::new(), vec![""], vec!["", ""]] {
-        let mut input = ResponsesInput::from(vec![reasoning_item(&content, Some("opaque-provider-state"))]);
-
-        let error = prepare_reasoning_for_vllm(&mut input).expect_err("encrypted-only reasoning must not reach vLLM");
-
-        assert_eq!(error.http_status(), http::StatusCode::BAD_REQUEST);
-        assert!(
-            error
-                .to_string()
-                .contains("encrypted state without plaintext reasoning content")
-        );
-        assert!(!error.to_string().contains("opaque-provider-state"));
-    }
-}
-
-#[test]
-fn plaintext_reasoning_with_null_encrypted_state_is_normalized_without_summary() {
-    let item = reasoning_item(&["plaintext continuation"], None);
-    let mut input = ResponsesInput::from(vec![item]);
-
-    prepare_reasoning_for_vllm(&mut input).expect("null encrypted state is valid");
-
-    let ResponsesInput::Items(items) = input else {
-        panic!("expected structured input");
-    };
-    let InOutItem::Input(InputItem::Reasoning(reasoning)) = &items[0] else {
-        panic!("expected reasoning item");
-    };
-    assert_eq!(
-        reasoning.content[0].type_,
-        crate::types::ReasoningTextKind::ReasoningText
-    );
-    assert_eq!(reasoning.content[0].text, "plaintext continuation");
-    assert!(reasoning.summary.is_empty());
-    assert_eq!(reasoning.encrypted_content, None);
-}
-
-#[test]
-fn summary_only_reasoning_without_opaque_state_is_removed_from_vllm_copy() {
-    for input in [
-        r#"[{"type":"reasoning","summary":[{"type":"summary_text","text":"public summary"}]}]"#,
-        r#"[{"type":"reasoning","summary":[{"type":"summary_text","text":"public summary"}],"encrypted_content":null}]"#,
-    ] {
-        let mut input: ResponsesInput = serde_json::from_str(input).unwrap();
-
-        prepare_reasoning_for_vllm(&mut input).expect("summary-only reasoning has no usable vLLM state");
-
-        let ResponsesInput::Items(items) = input else {
-            panic!("expected structured input");
-        };
-        assert!(
-            items.is_empty(),
-            "a reasoning summary must never be promoted to reasoning text"
-        );
-    }
-}
-
-#[test]
-fn validation_failure_does_not_partially_mutate_input() {
-    let valid = reasoning_item(&["plaintext continuation"], Some("first-opaque-state"));
-    let invalid = reasoning_item(&[], Some("second-opaque-state"));
-    let mut input = ResponsesInput::from(vec![valid.clone(), invalid]);
-
-    prepare_reasoning_for_vllm(&mut input).expect_err("the complete input must validate before normalization");
-
-    let ResponsesInput::Items(items) = input else {
-        panic!("expected structured input");
-    };
-    let (InOutItem::Input(InputItem::Reasoning(actual)), InputItem::Reasoning(expected)) = (&items[0], &valid) else {
-        panic!("expected reasoning items");
-    };
-    assert_eq!(actual.content[0].text, expected.content[0].text);
-    assert_eq!(actual.summary, expected.summary);
-    assert_eq!(actual.encrypted_content, expected.encrypted_content);
-}
-
-#[test]
-fn text_input_is_unchanged() {
-    let mut input = ResponsesInput::Text("plain user input".to_owned());
-
-    prepare_reasoning_for_vllm(&mut input).expect("text input contains no reasoning item");
-
-    assert!(matches!(input, ResponsesInput::Text(ref text) if text == "plain user input"));
-}
-
 fn request(conversation_id: Option<&str>, previous_response_id: Option<&str>) -> RequestPayload {
     RequestPayload {
         model: "test".into(),
@@ -566,6 +441,16 @@ async fn conversation_rehydration_remembers_listed_mcp_servers() -> Result<(), B
 }
 
 #[tokio::test]
+async fn request_without_continuation_has_no_checkpoint() -> Result<(), Box<dyn std::error::Error>> {
+    let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
+
+    let ctx = rehydrate_conversation(request(None, None), &exec_ctx).await?;
+
+    assert!(ctx.checkpoint.is_none());
+    Ok(())
+}
+
+#[tokio::test]
 async fn rehydration_remains_public_until_explicit_tool_search_preparation() {
     let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
     let request: RequestPayload = serde_json::from_value(serde_json::json!({
@@ -778,6 +663,24 @@ async fn stored_code_interpreter_call_reaches_the_model_as_its_function_call() -
         assert_eq!(model_input[1]["type"], "function_call_output");
         assert_eq!(model_input[2]["role"], "user");
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn previous_response_rehydration_checkpoints_the_parent() -> Result<(), Box<dyn std::error::Error>> {
+    let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
+    let response_store = ResponseStore::new(pool);
+    response_store
+        .persist("resp_prior", None, Vec::new(), None, &ResponseMetadata::default())
+        .await?;
+    let exec_ctx = execution_context(ConversationStore::disabled(), response_store);
+
+    let ctx = rehydrate_conversation(request(None, Some("resp_prior")), &exec_ctx).await?;
+
+    assert!(
+        ctx.checkpoint
+            .is_some_and(|checkpoint| checkpoint.response_id.as_deref() == Some("resp_prior"))
+    );
     Ok(())
 }
 
