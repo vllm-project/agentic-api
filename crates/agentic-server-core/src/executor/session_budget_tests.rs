@@ -291,6 +291,34 @@ fn aggregate_budget_charges_canonical_durable_fallback_before_inference() {
     assert_eq!(used(&group), 0);
 }
 
+/// A durable fallback's history rows share the aggregate budget: a long chain's rows are charged, and refused when they
+/// do not fit.
+#[test]
+fn aggregate_budget_charges_a_durable_fallbacks_history_rows() {
+    let checkpoint = |rows: usize| ResponseCheckpoint {
+        response_id: Some("durable".to_owned()),
+        history: Vec::from(&ResponsesInput::Text("durable history".to_owned())),
+        metadata: ResponseMetadata::default(),
+        durable: true,
+        history_item_ids: (0..rows).map(|row| format!("item_{row:08}")).collect(),
+        requires_latest: false,
+    };
+    let without_rows = serialized_size_up_to(&checkpoint(0), usize::MAX).unwrap().unwrap();
+    let group = group(100_000);
+    let session = group.new_session().unwrap();
+    let lease = session.begin(None).unwrap();
+    let retained = lease.retain_parent(checkpoint(1_000)).unwrap();
+    assert!(used(&group) > without_rows + 1_000 * "item_00000000".len());
+    drop(retained);
+    assert_eq!(used(&group), 0);
+
+    assert!(
+        lease.retain_parent(checkpoint(10_000)).is_err(),
+        "rows beyond the budget are refused"
+    );
+    assert_eq!(used(&group), 0);
+}
+
 #[test]
 fn aggregate_budget_simultaneous_candidates_cannot_oversubscribe_or_leak() {
     let bytes = root_size();
