@@ -121,7 +121,7 @@ use std::sync::Arc;
 use tokio::sync::{Semaphore, oneshot};
 
 use crate::config::CodeInterpreterRuntimeConfig;
-use crate::tool::{GatewayExecutor, GatewayToolEventPlan, ToolOutput};
+use crate::tool::{GatewayExecutor, ToolOutput};
 use crate::types::io::{
     CodeInterpreterCall, CodeInterpreterCallOutput, CodeInterpreterCallStatus, FunctionToolCall, GatewayCallStatus,
     OutputItem,
@@ -270,13 +270,13 @@ impl GatewayExecutor for CodeInterpreterExecutor {
         true
     }
 
-    fn plan_gateway_events(&self, call: &FunctionToolCall, _params: &Self::ExecutionParams) -> GatewayToolEventPlan {
-        GatewayToolEventPlan::new(Some(output_item(
+    fn started_output(&self, call: &FunctionToolCall, _params: &Self::ExecutionParams) -> Option<OutputItem> {
+        Some(output_item(
             call,
             self.config.max_source_bytes,
             CodeInterpreterCallStatus::InProgress,
             None,
-        )))
+        ))
     }
 
     fn public_output(

@@ -11,9 +11,8 @@ use tokio::sync::mpsc;
 
 use crate::executor::gateway_accumulator::StreamEvent;
 use crate::executor::relay::{RelayLimits, StreamRelay};
-use crate::tool::{
-    GatewayExecutor, GatewayExecutors, GatewayToolEventPlan, ToolHandler, ToolType, responses_declarations,
-};
+use crate::tool::web_search;
+use crate::tool::{GatewayExecutor, GatewayExecutors, ToolHandler, ToolType, responses_declarations};
 use crate::types::io::FunctionTool;
 use crate::types::io::output::WebSearchCallStatus;
 use crate::types::tools::{ResponsesTool, WebSearchToolParam};
@@ -43,6 +42,20 @@ impl ToolHandler for CountingSearch {
 impl GatewayExecutor for CountingSearch {
     type ExecutionParams = WebSearchToolParam;
 
+    fn started_output(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> Option<OutputItem> {
+        web_search::started_output_item(call)
+    }
+
+    fn public_output(
+        &self,
+        call: &FunctionToolCall,
+        output: &ToolOutput,
+        status: GatewayCallStatus,
+        _params: &WebSearchToolParam,
+    ) -> Option<OutputItem> {
+        web_search::output_item(call, output, status.into())
+    }
+
     fn execute(
         &self,
         call_id: &str,
@@ -57,20 +70,6 @@ impl GatewayExecutor for CountingSearch {
 
     fn supports_parallel_execution(&self) -> bool {
         true
-    }
-
-    fn plan_gateway_events(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> GatewayToolEventPlan {
-        GatewayToolEventPlan::new(crate::tool::web_search::started_output_item(call))
-    }
-
-    fn public_output(
-        &self,
-        call: &FunctionToolCall,
-        output: &ToolOutput,
-        status: GatewayCallStatus,
-        _params: &WebSearchToolParam,
-    ) -> Option<OutputItem> {
-        crate::tool::web_search::output_item(call, output, status.into())
     }
 }
 

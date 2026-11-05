@@ -1606,9 +1606,11 @@ round:
   are therefore separate concerns.
 - `public_output_items` is the public projection: custom function calls become
   `custom_tool_call`; gateway-owned internal function calls become their handler's
-  `web_search_call`/`mcp_call` output; client-owned function calls remain function
-  calls. The original gateway function calls and `function_call_output` results are
-  retained separately for continuation persistence.
+  public item (`web_search_call`, `mcp_call`, `code_interpreter_call`); client-owned
+  function calls remain function calls. A gateway call no executor can run (a declared
+  `file_search`) leaves the public output, like a hidden `max_tool_calls` refusal. The
+  gateway's `function_call_output` results feed only the next round's model input;
+  history stores the public items.
 
 The round decision remains in `engine.rs`, after gateway execution:
 
@@ -2025,6 +2027,7 @@ the operator enables it, and Eryx runtime readiness succeeds.
           call: &FunctionToolCall,
           params: &Self::ExecutionParams,
       ) -> GatewayToolEventPlan;
+      fn started_output(&self, call: &FunctionToolCall, params: &Self::ExecutionParams) -> Option<OutputItem>;
       fn public_output(
           &self,
           call: &FunctionToolCall,
@@ -2046,7 +2049,11 @@ the operator enables it, and Eryx runtime readiness succeeds.
   controls same-tool self-exclusion, `plan_gateway_events()` creates the typed public
   lifecycle projection (and, for a tool that knows its result when planning, the
   `PlannedResult` recorded instead of executing), and `public_output()` shapes the
-  completed/failed client-visible item. No hook builds model input: the gateway records
+  completed/failed client-visible item. Every handler implements `started_output()` and
+  `public_output()` itself, so every gateway call has a public item for the client and
+  history; `plan_gateway_events()` defaults to `started_output()`. A web search executor
+  registered with `with_gateway_executor` builds its items with the public
+  `web_search::started_output_item` and `web_search::output_item`. No hook builds model input: the gateway records
   the result's items, and the upstream projection lowers them.
   - **Client-owned** tools implement `ToolHandler` and have a translator association:
     see `function.rs` (`FunctionHandler`), `custom.rs` (`CustomHandler`), `codex.rs`

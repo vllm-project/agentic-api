@@ -216,6 +216,11 @@ impl GatewayScheduler {
                         (Some(limit), started_output.filter(|_| shown.is_some()), shown)
                     }
                 };
+                // A call no executor can run has no public item, so like a hidden refusal it leaves the public
+                // output and history; the model still sees its error output.
+                if binding.is_none() && refused.is_none() {
+                    omitted_items.push(item_index);
+                }
                 let planned_result = planned_result.filter(|_| refused.is_none());
                 let follow_up_output = planned_result.as_ref().map(PlannedResult::follow_up_output);
                 if follow_up_output.is_some() {
@@ -429,7 +434,7 @@ impl GatewayScheduler {
                 )));
             }
             let message = format!("gateway tool '{}' has no registered handler", call.name);
-            return unexecuted_result(item_index, &call, &message, None, false, response_budget)
+            return unexecuted_result(item_index, &call, &message, None, true, response_budget)
                 .map(|result| (result, GatewayCallStatus::Failed));
         };
 
@@ -598,9 +603,9 @@ mod tests {
     };
     use crate::executor::response_budget::ExecutorResponseBudget;
     use crate::tool::ToolDeclaration;
+    use crate::tool::web_search;
     use crate::tool::{
-        GatewayBinding, GatewayExecutor, GatewayExecutors, GatewayToolEventPlan, ToolError, ToolHandler, ToolOutput,
-        ToolRegistry, ToolType,
+        GatewayBinding, GatewayExecutor, GatewayExecutors, ToolError, ToolHandler, ToolOutput, ToolRegistry, ToolType,
     };
     use crate::types::io::OutputItem;
     use crate::types::io::output::GatewayCallStatus;
@@ -628,6 +633,20 @@ mod tests {
     impl GatewayExecutor for SlowExecutor {
         type ExecutionParams = WebSearchToolParam;
 
+        fn started_output(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> Option<OutputItem> {
+            web_search::started_output_item(call)
+        }
+
+        fn public_output(
+            &self,
+            call: &FunctionToolCall,
+            output: &ToolOutput,
+            status: GatewayCallStatus,
+            _params: &WebSearchToolParam,
+        ) -> Option<OutputItem> {
+            web_search::output_item(call, output, status.into())
+        }
+
         fn execute(
             &self,
             call_id: &str,
@@ -644,20 +663,6 @@ mod tests {
 
         fn supports_parallel_execution(&self) -> bool {
             true
-        }
-
-        fn plan_gateway_events(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> GatewayToolEventPlan {
-            GatewayToolEventPlan::new(crate::tool::web_search::started_output_item(call))
-        }
-
-        fn public_output(
-            &self,
-            call: &FunctionToolCall,
-            output: &ToolOutput,
-            status: GatewayCallStatus,
-            _params: &WebSearchToolParam,
-        ) -> Option<OutputItem> {
-            crate::tool::web_search::output_item(call, output, status.into())
         }
     }
 
@@ -684,6 +689,20 @@ mod tests {
     impl GatewayExecutor for SizedOutputExecutor {
         type ExecutionParams = WebSearchToolParam;
 
+        fn started_output(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> Option<OutputItem> {
+            web_search::started_output_item(call)
+        }
+
+        fn public_output(
+            &self,
+            call: &FunctionToolCall,
+            output: &ToolOutput,
+            status: GatewayCallStatus,
+            _params: &WebSearchToolParam,
+        ) -> Option<OutputItem> {
+            web_search::output_item(call, output, status.into())
+        }
+
         fn execute(
             &self,
             call_id: &str,
@@ -698,16 +717,6 @@ mod tests {
 
         fn supports_parallel_execution(&self) -> bool {
             true
-        }
-
-        fn public_output(
-            &self,
-            call: &FunctionToolCall,
-            output: &ToolOutput,
-            status: GatewayCallStatus,
-            _params: &WebSearchToolParam,
-        ) -> Option<OutputItem> {
-            crate::tool::web_search::output_item(call, output, status.into())
         }
     }
 
@@ -733,6 +742,20 @@ mod tests {
 
     impl GatewayExecutor for SizedErrorExecutor {
         type ExecutionParams = WebSearchToolParam;
+
+        fn started_output(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> Option<OutputItem> {
+            web_search::started_output_item(call)
+        }
+
+        fn public_output(
+            &self,
+            call: &FunctionToolCall,
+            output: &ToolOutput,
+            status: GatewayCallStatus,
+            _params: &WebSearchToolParam,
+        ) -> Option<OutputItem> {
+            web_search::output_item(call, output, status.into())
+        }
 
         fn execute(
             &self,
@@ -772,6 +795,20 @@ mod tests {
 
     impl GatewayExecutor for DrainTrackingExecutor {
         type ExecutionParams = WebSearchToolParam;
+
+        fn started_output(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> Option<OutputItem> {
+            web_search::started_output_item(call)
+        }
+
+        fn public_output(
+            &self,
+            call: &FunctionToolCall,
+            output: &ToolOutput,
+            status: GatewayCallStatus,
+            _params: &WebSearchToolParam,
+        ) -> Option<OutputItem> {
+            web_search::output_item(call, output, status.into())
+        }
 
         fn execute(
             &self,
@@ -824,6 +861,20 @@ mod tests {
 
     impl GatewayExecutor for MaterializationProbeExecutor {
         type ExecutionParams = WebSearchToolParam;
+
+        fn started_output(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> Option<OutputItem> {
+            web_search::started_output_item(call)
+        }
+
+        fn public_output(
+            &self,
+            call: &FunctionToolCall,
+            output: &ToolOutput,
+            status: GatewayCallStatus,
+            _params: &WebSearchToolParam,
+        ) -> Option<OutputItem> {
+            web_search::output_item(call, output, status.into())
+        }
 
         fn execute(
             &self,
@@ -1087,6 +1138,20 @@ mod tests {
     impl GatewayExecutor for StaggeredExecutor {
         type ExecutionParams = WebSearchToolParam;
 
+        fn started_output(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> Option<OutputItem> {
+            web_search::started_output_item(call)
+        }
+
+        fn public_output(
+            &self,
+            call: &FunctionToolCall,
+            output: &ToolOutput,
+            status: GatewayCallStatus,
+            _params: &WebSearchToolParam,
+        ) -> Option<OutputItem> {
+            web_search::output_item(call, output, status.into())
+        }
+
         fn execute(
             &self,
             call_id: &str,
@@ -1207,7 +1272,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn scheduler_retains_event_slot_for_gateway_tool_without_handler() {
+    async fn scheduler_omits_a_gateway_tool_without_handler_from_public_output() {
         let file_search: ResponsesTool = serde_json::from_value(serde_json::json!({
             "type": "file_search",
             "vector_store_ids": ["vs_test"]
@@ -1233,10 +1298,9 @@ mod tests {
 
         {
             let plans = scheduler.event_plans().collect::<Vec<_>>();
-            assert_eq!(plans.len(), 2, "every gateway-owned call needs one scheduled slot");
-            assert_eq!(plans[0].output_index, 7);
+            assert_eq!(plans.len(), 2, "every gateway-owned call is scheduled");
             assert!(plans[0].started_output.is_none());
-            assert_eq!(plans[1].output_index, 8);
+            assert_eq!(plans[1].output_index, 7, "the unhandled call takes no public position");
             assert!(matches!(plans[1].started_output, Some(OutputItem::WebSearchCall(_))));
         }
 
@@ -1244,6 +1308,10 @@ mod tests {
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].item_index, 0);
         assert!(results[0].public_output.is_none());
+        assert!(
+            results[0].omitted,
+            "the unhandled call leaves the public output and history"
+        );
         assert_eq!(results[1].item_index, 1);
         assert!(matches!(results[1].public_output, Some(OutputItem::WebSearchCall(_))));
 
@@ -1260,7 +1328,7 @@ mod tests {
             .map(|event| parse_named_sse_event(&event.content))
             .collect::<Vec<_>>();
         assert!(!events.is_empty());
-        assert!(events.iter().all(|event| event["output_index"] == 8));
+        assert!(events.iter().all(|event| event["output_index"] == 7));
         assert!(events.iter().all(|event| {
             event["item"]["type"]
                 .as_str()
@@ -1356,6 +1424,20 @@ mod tests {
     impl GatewayExecutor for ExclusiveSlowExecutor {
         type ExecutionParams = WebSearchToolParam;
 
+        fn started_output(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> Option<OutputItem> {
+            web_search::started_output_item(call)
+        }
+
+        fn public_output(
+            &self,
+            call: &FunctionToolCall,
+            output: &ToolOutput,
+            status: GatewayCallStatus,
+            _params: &WebSearchToolParam,
+        ) -> Option<OutputItem> {
+            web_search::output_item(call, output, status.into())
+        }
+
         fn execute(
             &self,
             call_id: &str,
@@ -1428,6 +1510,20 @@ mod tests {
 
     impl GatewayExecutor for SchedulingProbeExecutor {
         type ExecutionParams = WebSearchToolParam;
+
+        fn started_output(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> Option<OutputItem> {
+            web_search::started_output_item(call)
+        }
+
+        fn public_output(
+            &self,
+            call: &FunctionToolCall,
+            output: &ToolOutput,
+            status: GatewayCallStatus,
+            _params: &WebSearchToolParam,
+        ) -> Option<OutputItem> {
+            web_search::output_item(call, output, status.into())
+        }
 
         fn execute(
             &self,

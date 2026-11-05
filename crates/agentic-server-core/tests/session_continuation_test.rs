@@ -18,10 +18,12 @@ use agentic_core::executor::{
 use agentic_core::storage::{
     ConversationStore, ResponseMetadata, ResponseStore, StorageError, create_pool_with_schema,
 };
+use agentic_core::tool::web_search;
 use agentic_core::tool::{GatewayExecutor, ToolError, ToolHandler, ToolOutput, ToolType};
 use agentic_core::types::io::FunctionTool;
 use agentic_core::types::io::InOutItem;
-use agentic_core::types::io::output::{FunctionToolCall, GatewayCallStatus, OutputItem, WebSearchCall};
+use agentic_core::types::io::OutputItem;
+use agentic_core::types::io::output::{FunctionToolCall, GatewayCallStatus};
 use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
 use agentic_core::types::tools::WebSearchToolParam;
 use axum::{Json, Router, routing::post};
@@ -60,6 +62,20 @@ impl ToolHandler for LocalSearch {
 impl GatewayExecutor for LocalSearch {
     type ExecutionParams = WebSearchToolParam;
 
+    fn started_output(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> Option<OutputItem> {
+        web_search::started_output_item(call)
+    }
+
+    fn public_output(
+        &self,
+        call: &FunctionToolCall,
+        output: &ToolOutput,
+        status: GatewayCallStatus,
+        _params: &WebSearchToolParam,
+    ) -> Option<OutputItem> {
+        web_search::output_item(call, output, status.into())
+    }
+
     fn execute(
         &self,
         call_id: &str,
@@ -70,24 +86,6 @@ impl GatewayExecutor for LocalSearch {
         self.calls.fetch_add(1, Ordering::Relaxed);
         let call_id = call_id.to_owned();
         Box::pin(async move { Ok(ToolOutput::success(call_id, "local search result")) })
-    }
-
-    fn public_output(
-        &self,
-        call: &FunctionToolCall,
-        _output: &ToolOutput,
-        status: GatewayCallStatus,
-        _params: &WebSearchToolParam,
-    ) -> Option<OutputItem> {
-        Some(OutputItem::WebSearchCall(
-            WebSearchCall::try_new(
-                format!("ws_{}", call.id.strip_prefix("fc_").unwrap_or(&call.id)),
-                status.into(),
-                vec!["local".to_owned()],
-                Vec::new(),
-            )
-            .unwrap(),
-        ))
     }
 }
 
@@ -664,15 +662,28 @@ async fn session_commit_accepts_a_new_call_without_reading_disabled_storage() {
 }
 
 #[tokio::test]
-async fn session_commit_rejects_reused_call_id_against_pinned_history() {
+async fn session_continuation_rejects_a_call_id_the_pinned_history_already_used() {
     let exec = execution();
     let session = session();
     let parent = parent_with_call(&exec, &session).await;
     let ctx = resolved_continuation(&exec, &session, &parent).await;
     let payload = response(&ctx, json!([function_call("call_first")]));
-    let error = commit(ctx, payload, &exec).await.unwrap_err();
+    // As on the gateway path, the repeated call is stored and refused when a turn continues it.
+    let repeated = commit(ctx, payload, &exec).await.expect("the turn is stored").id;
+    let error = rehydrate_in_session(
+        request(
+            Some(&repeated),
+            json!([
+                {"type": "function_call_output", "call_id": "call_first", "output": "rainy"}
+            ]),
+        ),
+        &exec,
+        &session,
+    )
+    .await
+    .unwrap_err();
     assert!(
-        matches!(&error, ExecutorError::InvalidRequest(message) if message.contains("continued history")),
+        matches!(&error, ExecutorError::InvalidRequest(message) if message.contains("duplicate call_id")),
         "must reject the repeated call, not fail on a database lookup: {error:?}"
     );
 }
