@@ -157,27 +157,33 @@ impl FileSearchService {
         // cleanup marker in the same transaction as metadata deletion.
         tokio::spawn(async move {
             let _permit = permit;
-            let cleanup_token = match storage.file(&id).await {
+            let (needs_blob_cleanup, cleanup_token) = match storage.file(&id).await {
                 Ok(file) => {
                     storage.delete(Collection::Files, &id, None).await?;
                     if matches!(file.content, StoredFileContent::Blob) {
-                        Some(storage.pending_blob_cleanup(&id).await?.ok_or_else(|| {
-                            FileSearchError::Unavailable("File deletion cleanup marker is missing".into())
-                        })?)
+                        (true, storage.pending_blob_cleanup(&id).await?)
                     } else {
-                        None
+                        (false, None)
                     }
                 }
-                Err(FileSearchError::NotFound(_)) => storage
-                    .pending_blob_cleanup(&id)
-                    .await?
-                    .ok_or_else(|| FileSearchError::NotFound("File not found".into()))
-                    .map(Some)?,
+                Err(FileSearchError::NotFound(_)) => (
+                    true,
+                    Some(
+                        storage
+                            .pending_blob_cleanup(&id)
+                            .await?
+                            .ok_or_else(|| FileSearchError::NotFound("File not found".into()))?,
+                    ),
+                ),
                 Err(error) => return Err(error),
             };
-            if let Some(cleanup_token) = cleanup_token {
+            if needs_blob_cleanup {
+                // Reconciliation may have removed the marker and bytes after metadata deletion.
+                // Blob removal is idempotent, so missing marker is still a successful deletion.
                 files.remove(&id).await?;
-                storage.complete_blob_cleanup(&id, &cleanup_token).await?;
+                if let Some(cleanup_token) = cleanup_token {
+                    storage.complete_blob_cleanup(&id, &cleanup_token).await?;
+                }
             }
             Ok(deleted(&id, "file.deleted"))
         })

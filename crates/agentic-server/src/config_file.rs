@@ -1,3 +1,6 @@
+mod file_search;
+use file_search::{FileSearchFileConfig, FilesFileConfig};
+
 use std::collections::{BTreeMap, HashMap};
 use std::io::Write;
 use std::num::{NonZeroU32, NonZeroU64, NonZeroUsize};
@@ -238,6 +241,10 @@ impl ResponsesFileConfig {
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct FileConfig {
+    #[serde(skip_serializing_if = "FilesFileConfig::is_empty")]
+    pub files: FilesFileConfig,
+    #[serde(skip_serializing_if = "FileSearchFileConfig::is_empty")]
+    pub file_search: FileSearchFileConfig,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub llm_api_base: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -383,6 +390,39 @@ impl FileConfig {
 
     fn validate(&self, path: &Path) -> Result<(), Error> {
         if self
+            .file_search
+            .sqlite_vec_extension_path
+            .as_ref()
+            .is_some_and(|extension| extension.as_os_str().is_empty())
+        {
+            return Err(Error::Config(format!(
+                "configuration file {} contains an empty file_search.sqlite_vec_extension_path",
+                path.display()
+            )));
+        }
+        if self
+            .files
+            .storage_dir
+            .as_ref()
+            .is_some_and(|directory| directory.as_os_str().is_empty())
+        {
+            return Err(Error::Config(format!(
+                "configuration file {} contains an empty files.storage_dir",
+                path.display()
+            )));
+        }
+        if self
+            .file_search
+            .api_key_env
+            .as_deref()
+            .is_some_and(|name| name.trim().is_empty())
+        {
+            return Err(Error::Config(format!(
+                "configuration file {} contains an empty file_search.api_key_env",
+                path.display()
+            )));
+        }
+        if self
             .web_search
             .api_key_env
             .as_deref()
@@ -465,6 +505,78 @@ mod tests {
         CodeInterpreterFileConfig, FileConfig, McpFileConfig, ServerFileConfig, WebSearchFileConfig,
         WebSearchProviderKind,
     };
+
+    #[test]
+    fn loads_local_files_storage_directory() {
+        let home = tempdir().expect("temp home");
+        fs::write(
+            home.path().join("config.toml"),
+            "[files]\nstorage_dir = \"/var/lib/agentic/files\"\n",
+        )
+        .unwrap();
+        let config = FileConfig::load(home.path())
+            .expect("valid Files API configuration")
+            .unwrap();
+        let encoded = serde_json::to_value(config).unwrap();
+        assert_eq!(encoded["files"]["storage_dir"], "/var/lib/agentic/files");
+    }
+
+    #[test]
+    fn rejects_empty_local_files_storage_directory() {
+        let home = tempdir().expect("temp home");
+        fs::write(home.path().join("config.toml"), "[files]\nstorage_dir = \"\"\n").unwrap();
+        assert!(
+            FileConfig::load(home.path())
+                .unwrap_err()
+                .to_string()
+                .contains("files.storage_dir")
+        );
+    }
+
+    #[test]
+    fn loads_embedding_configuration_without_persisting_credentials() {
+        let home = tempdir().expect("temp home");
+        fs::write(home.path().join("config.toml"), "[file_search]\nembedding_base_url = \"http://localhost:8001/v1\"\nembedding_model = \"local-embedding\"\napi_key_env = \"LOCAL_EMBEDDING_KEY\"\n").unwrap();
+        let config = FileConfig::load(home.path()).unwrap().unwrap();
+        assert_eq!(config.file_search.embedding_model.as_deref(), Some("local-embedding"));
+        assert_eq!(config.file_search.api_key_env.as_deref(), Some("LOCAL_EMBEDDING_KEY"));
+        fs::write(
+            home.path().join("config.toml"),
+            "[file_search]\nembedding_api_key = \"secret\"\n",
+        )
+        .unwrap();
+        assert!(
+            FileConfig::load(home.path()).is_err(),
+            "raw credentials are not a supported config-file field"
+        );
+    }
+
+    #[test]
+    fn loads_sqlite_vec_extension_path() {
+        let home = tempdir().unwrap();
+        fs::write(
+            home.path().join("config.toml"),
+            "[file_search]\nsqlite_vec_extension_path = \"/opt/sqlite-vec/vec0.so\"\n",
+        )
+        .unwrap();
+        let config = FileConfig::load(home.path()).unwrap().unwrap();
+        assert_eq!(
+            config.file_search.sqlite_vec_extension_path.as_deref(),
+            Some(std::path::Path::new("/opt/sqlite-vec/vec0.so"))
+        );
+    }
+
+    #[test]
+    fn rejects_blank_embedding_api_key_environment_name() {
+        let home = tempdir().expect("temp home");
+        fs::write(home.path().join("config.toml"), "[file_search]\napi_key_env = \" \"\n").unwrap();
+        assert!(
+            FileConfig::load(home.path())
+                .unwrap_err()
+                .to_string()
+                .contains("file_search.api_key_env")
+        );
+    }
 
     #[test]
     fn missing_config_file_uses_defaults() {

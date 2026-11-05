@@ -186,10 +186,16 @@ impl FailureCategory {
 }
 
 impl From<&ExecutorError> for FailureCategory {
-    /// Exhaustive on purpose: a new [`ExecutorError`] variant must choose its
-    /// category here rather than silently falling into a catch-all.
+    /// Exhaustive: every new [`ExecutorError`] variant chooses a category here.
     fn from(error: &ExecutorError) -> Self {
         match error {
+            ExecutorError::FileSearch(source) => match source.status_code() {
+                400 => Self::InvalidRequest,
+                404 => Self::NotFound,
+                409 => Self::Conflict,
+                502 => Self::UpstreamError,
+                _ => Self::Storage,
+            },
             ExecutorError::Storage(source) if source.is_not_found() => Self::NotFound,
             ExecutorError::Storage(_) => Self::Storage,
             ExecutorError::Persistence(_) => Self::Persistence,

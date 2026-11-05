@@ -12,6 +12,20 @@ use utoipa::OpenApi;
         license(name = "Apache-2.0"),
     ),
     paths(
+        crate::handler::http::file_search::upload_file,
+        crate::handler::http::file_search::list_files,
+        crate::handler::http::file_search::get_file,
+        crate::handler::http::file_search::file_content,
+        crate::handler::http::file_search::delete_file,
+        crate::handler::http::file_search::create_vector_store,
+        crate::handler::http::file_search::list_vector_stores,
+        crate::handler::http::file_search::get_vector_store,
+        crate::handler::http::file_search::delete_vector_store,
+        crate::handler::http::file_search::attach_file,
+        crate::handler::http::file_search::list_vector_store_files,
+        crate::handler::http::file_search::get_vector_store_file,
+        crate::handler::http::file_search::detach_file,
+        crate::handler::http::file_search::search,
         crate::handler::http::audio::transcriptions,
         crate::handler::http::audio::translations,
         crate::handler::http::chat_completions::chat_completions,
@@ -38,6 +52,7 @@ use utoipa::OpenApi;
         crate::handler::http::messages::count_tokens,
     ),
     components(schemas(
+        FileUploadRequest,
         agentic_core::types::request_response::PromptCacheOptions,
         agentic_core::types::request_response::PromptCacheMode,
         agentic_core::types::request_response::PromptCacheTtl,
@@ -479,6 +494,42 @@ mod tests {
     }
 
     #[test]
+    fn file_search_operations_describe_uploads_queries_and_store_paths() {
+        let upload = FileUploadRequest {
+            file: "sample.txt".into(),
+            purpose: "assistants".into(),
+        };
+        assert_eq!(
+            (upload.file.as_str(), upload.purpose.as_str()),
+            ("sample.txt", "assistants")
+        );
+        let spec = serde_json::to_value(ApiDoc::openapi()).unwrap();
+        assert!(spec["paths"]["/v1/files"]["post"]["requestBody"]["content"]["multipart/form-data"].is_object());
+        assert_eq!(
+            spec["paths"]["/v1/vector_stores/{store_id}/search"]["post"]["requestBody"]["content"]["application/json"]
+                ["schema"]["$ref"],
+            "#/components/schemas/SearchRequest"
+        );
+        let params = spec["paths"]["/v1/vector_stores/{store_id}/files"]["get"]["parameters"]
+            .as_array()
+            .unwrap();
+        assert!(
+            params
+                .iter()
+                .any(|param| param["name"] == "store_id" && param["in"] == "path")
+        );
+        assert!(
+            params
+                .iter()
+                .any(|param| param["name"] == "limit" && param["in"] == "query")
+        );
+        let schemas = &spec["components"]["schemas"];
+        for name in ["FileObject", "VectorStoreObject", "SearchResult"] {
+            assert!(schemas[name].is_object(), "missing file search schema {name}");
+        }
+    }
+
+    #[test]
     fn spec_has_required_info_fields() {
         let spec = ApiDoc::openapi();
         assert!(!spec.info.title.is_empty(), "info.title must not be empty");
@@ -769,6 +820,10 @@ mod tests {
         for fixture in &tools {
             validate("ResponsesTool", fixture);
         }
+        let file_search: agentic_core::types::tools::ResponsesTool =
+            serde_json::from_value(serde_json::json!({"type": "file_search"}))
+                .expect("serde must accept file search tool");
+        assert_eq!(serde_json::to_value(file_search).unwrap()["type"], "file_search");
 
         let containerless_code_interpreter = serde_json::json!({"type": "code_interpreter"});
         let tool_schema = serde_json::json!({
@@ -926,11 +981,6 @@ mod tests {
         validate("ResponsesTool", &ns_tool);
         let _: agentic_core::types::tools::ResponsesTool =
             serde_json::from_value(ns_tool).expect("serde must accept namespace with tools");
-
-        validate(
-            "ResponsesTool",
-            &serde_json::json!({"type": "file_search", "vector_store_ids": ["vs_abc"]}),
-        );
 
         // -- InputItem: structured custom tool output --
         let structured_output = serde_json::json!({
@@ -1198,4 +1248,12 @@ mod tests {
             errors.join("\n")
         );
     }
+}
+
+/// Multipart upload fields for the Files API.
+#[derive(utoipa::ToSchema)]
+pub struct FileUploadRequest {
+    #[schema(format = Binary)]
+    pub file: String,
+    pub purpose: String,
 }
