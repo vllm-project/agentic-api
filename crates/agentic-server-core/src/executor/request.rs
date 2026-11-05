@@ -130,12 +130,6 @@ impl ExecutionContext {
         format!("{}/v1/responses", self.llm_base_url)
     }
 
-    /// Returns the full URL for the `/v1/conversations` endpoint.
-    #[must_use]
-    pub fn conversations_url(&self) -> String {
-        format!("{}/v1/conversations", self.llm_base_url)
-    }
-
     #[must_use]
     pub fn new(
         conv_handler: ConversationHandler,

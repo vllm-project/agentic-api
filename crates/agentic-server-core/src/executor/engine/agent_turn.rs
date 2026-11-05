@@ -26,7 +26,7 @@ use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::telemetry::metrics::Stage;
 use crate::executor::upstream::{fetch_blocking_payload, fetch_stream_payload};
 use crate::executor::{inference::UpstreamHeaders, relay::Release};
-use crate::tool::{ToolRegistry, mcp, record_discovered_mcp_tools, responses_declarations};
+use crate::tool::{ToolRegistry, record_discovered_mcp_tools, responses_declarations};
 use crate::types::io::{OutputItem, ResponsesInput};
 use crate::types::request_response::ResponsePayload;
 
@@ -98,7 +98,7 @@ pub(super) async fn build_tool_registry(
 /// therefore remain shared across independently constructed turns as well.
 pub(super) struct AgentTurn<'a> {
     pub(super) pipeline: &'a mut AgentPipeline,
-    registry: ToolRegistry,
+    pub(super) registry: ToolRegistry,
     exec_ctx: &'a ExecutionContext,
     max_rounds: NonZeroUsize,
     next_round: usize,
@@ -136,7 +136,8 @@ impl AgentExecutionState {
         let output = self
             .registry
             .mcp_list_tool_items()
-            .map(mcp::handler::list_tools_output_item)
+            .cloned()
+            .map(OutputItem::McpListTools)
             .collect();
         self.registry.clear_mcp_list_tool_items();
         output
@@ -195,13 +196,6 @@ impl<'a> AgentTurn<'a> {
             tool_call_budget,
             async_continuations: AsyncContinuations::default(),
         })
-    }
-
-    pub(super) fn discovery_output(&self) -> Vec<OutputItem> {
-        self.registry
-            .mcp_list_tool_items()
-            .map(mcp::handler::list_tools_output_item)
-            .collect()
     }
 
     /// Advance through one inference round and its gateway-executed tools.

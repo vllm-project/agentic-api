@@ -135,18 +135,6 @@ impl ResponseHandler {
         })
     }
 
-    /// Validates that the response for `previous_response_id` exists.
-    ///
-    /// Used in the `store=false` path where we only need to confirm the ID is
-    /// valid without loading any history.
-    ///
-    /// # Errors
-    /// Returns `ExecutorError` if `previous_response_id` is absent, the response
-    /// is not found, or the store is disabled.
-    pub async fn validate_exists(&self, ctx: &RequestContext) -> ExecutorResult<()> {
-        self.get(ctx).await.map(|_| ())
-    }
-
     /// Loads the previous response and its full history in one storage query.
     ///
     /// Returns `None` when the request does not continue a previous response.
@@ -243,12 +231,6 @@ mod tests {
     #[tokio::test]
     async fn test_get_missing_prev_id_returns_error() {
         let result = disabled_handler().get(&make_ctx(None)).await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_validate_exists_missing_prev_id_returns_error() {
-        let result = disabled_handler().validate_exists(&make_ctx(None)).await;
         assert!(result.is_err());
     }
 
