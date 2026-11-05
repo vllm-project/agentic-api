@@ -1820,7 +1820,8 @@ the upstream reported.
   SQLite extension. Index staging and metadata publication share one
   `BEGIN IMMEDIATE` transaction. The default
   exact-search provider retains a 64 MiB serialized-corpus limit; sqlite-vec
-  admits 256 MiB because normal semantic search reads indexed candidates.
+  admits 256 MiB. Its keyword, hybrid, and filtered semantic paths use that
+  same provider limit when they read chunks for exact ranking.
 - **`conversation.rs` (tenant-scoped API)** — conversation and item CRUD. Item ownership is checked through
   the conversation so Responses-persisted items are visible too. Item writes share `lock_in_tx` with
   turn persistence, so concurrent writers get distinct sequence numbers.

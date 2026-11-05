@@ -93,7 +93,10 @@ impl SqliteVecRepository {
         }
         tx.commit().await?;
         if use_exact {
-            let chunks = self.metadata.chunks(&store_ids).await?;
+            let chunks = self
+                .metadata
+                .chunks_with_limit(&store_ids, SQLITE_VEC_MAX_CORPUS_BYTES)
+                .await?;
             let queries = queries.to_vec();
             let query_embeddings = query_embeddings.to_vec();
             let request = request.clone();

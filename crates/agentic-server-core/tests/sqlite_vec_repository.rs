@@ -528,3 +528,88 @@ async fn sqlite_vec_uses_exact_fallback_above_candidate_limit() {
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].content[0].text, "chunk 4096");
 }
+
+#[tokio::test]
+#[ignore = "requires SQLITE_VEC_EXTENSION_PATH pointing to a trusted sqlite-vec loadable extension"]
+async fn sqlite_vec_exact_searches_use_the_indexed_provider_capacity() {
+    let path = PathBuf::from(std::env::var_os("SQLITE_VEC_EXTENSION_PATH").expect("set SQLITE_VEC_EXTENSION_PATH"));
+    let directory = tempfile::tempdir().unwrap();
+    let url = format!("sqlite://{}?mode=rwc", directory.path().join("capacity.db").display());
+    let pool = create_pool_with_schema(Some(&url)).await.unwrap();
+    let repository = SqliteVecRepository::open(pool, &path).await.unwrap();
+    let file = test_file();
+    repository
+        .stage_blob_cleanup(&file.id, "test-upload", i64::MAX)
+        .await
+        .unwrap();
+    repository
+        .upload_file_metadata(&file, "text/plain", "test-upload", &CancellationToken::new())
+        .await
+        .unwrap();
+
+    let store = test_store();
+    // The large attribute keeps ranking cheap while exercising a serialized
+    // corpus above the default provider's 64 MiB bound.
+    let attributes = BTreeMap::from([
+        ("selected".into(), AttributeValue::Boolean(true)),
+        ("padding".into(), AttributeValue::String("x".repeat(64 * 1024 * 1024))),
+    ]);
+    let attachment = test_attachment(
+        &file,
+        &store,
+        vec![StoredChunk {
+            file_id: file.id.clone(),
+            filename: file.filename.clone(),
+            chunk_index: 0,
+            text: "coral reef".into(),
+            embedding: Some(vec![1.0, 0.0]),
+            attributes,
+        }],
+    );
+    repository.create_store(&store, "model", &[attachment]).await.unwrap();
+
+    for mode in [SearchMode::Keyword, SearchMode::Hybrid] {
+        let request = SearchRequest {
+            query: SearchQuery::Text("reef".into()),
+            search_mode: Some(mode),
+            ..SearchRequest::default()
+        };
+        let results = repository
+            .search(
+                std::slice::from_ref(&store.id),
+                &["reef".into()],
+                &[vec![1.0, 0.0]],
+                Some(2),
+                mode,
+                &request,
+            )
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].file_id, file.id);
+    }
+
+    let filtered = SearchRequest {
+        query: SearchQuery::Text("reef".into()),
+        search_mode: Some(SearchMode::Semantic),
+        filters: Some(SearchFilter::Comparison(ComparisonFilter {
+            operator: ComparisonOperator::Eq,
+            key: "selected".into(),
+            value: FilterValue::Scalar(AttributeValue::Boolean(true)),
+        })),
+        ..SearchRequest::default()
+    };
+    let results = repository
+        .search(
+            std::slice::from_ref(&store.id),
+            &["reef".into()],
+            &[vec![1.0, 0.0]],
+            Some(2),
+            SearchMode::Semantic,
+            &filtered,
+        )
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].file_id, file.id);
+}

@@ -373,7 +373,12 @@ impl FileSearchStorage {
     }
 
     /// Streaming row decoding bounds corpus memory before deserializing vectors.
-    pub(crate) async fn chunks(&self, store_ids: &[String]) -> Result<Vec<StoredChunk>, FileSearchError> {
+    /// The repository passes its own admission limit for exact search.
+    pub(crate) async fn chunks_with_limit(
+        &self,
+        store_ids: &[String],
+        max_bytes: i64,
+    ) -> Result<Vec<StoredChunk>, FileSearchError> {
         use futures::TryStreamExt;
         let placeholders = (1..=store_ids.len())
             .map(|index| format!("${index}"))
@@ -391,7 +396,7 @@ impl FileSearchStorage {
         let mut total_bytes = 0usize;
         while let Some(data) = rows.try_next().await? {
             total_bytes = total_bytes.saturating_add(data.len());
-            if i64::try_from(total_bytes).unwrap_or(i64::MAX) > MAX_CORPUS_BYTES
+            if i64::try_from(total_bytes).unwrap_or(i64::MAX) > max_bytes
                 || i64::try_from(chunks.len()).unwrap_or(i64::MAX) >= MAX_CORPUS_CHUNKS
             {
                 return Err(FileSearchError::Unavailable(
@@ -511,7 +516,11 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(
-            storage.chunks(std::slice::from_ref(&store.id)).await.unwrap().len(),
+            storage
+                .chunks_with_limit(std::slice::from_ref(&store.id), MAX_CORPUS_BYTES)
+                .await
+                .unwrap()
+                .len(),
             512
         );
         assert_eq!(service.get_vector_store(&store.id).await.unwrap().file_counts.total, 1);
@@ -551,7 +560,11 @@ mod tests {
             Err(FileSearchError::InvalidRequest(_))
         ));
         assert_eq!(
-            storage.chunks(std::slice::from_ref(&store.id)).await.unwrap().len(),
+            storage
+                .chunks_with_limit(std::slice::from_ref(&store.id), MAX_CORPUS_BYTES)
+                .await
+                .unwrap()
+                .len(),
             10000
         );
         assert_eq!(service.get_vector_store(&store.id).await.unwrap().file_counts.total, 5);
@@ -586,7 +599,11 @@ mod tests {
             Err(FileSearchError::InvalidRequest(_))
         ));
         assert_eq!(
-            storage.chunks(std::slice::from_ref(&store.id)).await.unwrap().len(),
+            storage
+                .chunks_with_limit(std::slice::from_ref(&store.id), MAX_CORPUS_BYTES)
+                .await
+                .unwrap()
+                .len(),
             512
         );
         assert_eq!(service.get_vector_store(&store.id).await.unwrap().file_counts.total, 1);

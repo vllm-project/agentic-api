@@ -303,9 +303,19 @@ impl FileSearchRepository for SqliteVecRepository {
                 self.semantic_search(store_ids, queries, query_embeddings, expected_dimensions, request)
                     .await
             } else {
-                self.metadata
-                    .search(store_ids, queries, query_embeddings, expected_dimensions, mode, request)
-                    .await
+                super::provider::exact_search(
+                    &self.metadata,
+                    store_ids,
+                    queries,
+                    query_embeddings,
+                    request,
+                    super::provider::ExactSearchOptions {
+                        expected_dimensions,
+                        mode,
+                        max_bytes: SQLITE_VEC_MAX_CORPUS_BYTES,
+                    },
+                )
+                .await
             }
         })
     }
