@@ -850,11 +850,21 @@ async fn competing_outputs_for_one_pending_call_keep_the_conversation_usable() -
     let second = rehydrate_conversation(answer(output(5)), &exec_ctx).await?;
     exec_ctx
         .conv_handler
-        .persist(first, Vec::new(), None, ResponseMetadata::default())
+        .persist(
+            &first,
+            first.new_input_items.clone(),
+            None,
+            &ResponseMetadata::default(),
+        )
         .await?;
     let error = exec_ctx
         .conv_handler
-        .persist(second, Vec::new(), None, ResponseMetadata::default())
+        .persist(
+            &second,
+            second.new_input_items.clone(),
+            None,
+            &ResponseMetadata::default(),
+        )
         .await
         .expect_err("the call is already answered");
     assert!(matches!(error, ExecutorError::ConversationLocked { .. }), "{error}");
@@ -872,7 +882,7 @@ async fn competing_outputs_for_one_pending_call_keep_the_conversation_usable() -
     for ctx in [plain, resubmitted] {
         exec_ctx
             .conv_handler
-            .persist(ctx, Vec::new(), None, ResponseMetadata::default())
+            .persist(&ctx, ctx.new_input_items.clone(), None, &ResponseMetadata::default())
             .await?;
     }
 
