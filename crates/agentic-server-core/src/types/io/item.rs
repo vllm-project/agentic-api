@@ -101,17 +101,6 @@ impl InOutItem {
         }
     }
 
-    pub(crate) fn call_id(&self) -> Option<&str> {
-        match self {
-            Self::Input(item) => item.call_id(),
-            Self::Output(OutputItem::FunctionCall(call)) => Some(&call.call_id),
-            Self::Output(OutputItem::ToolSearchCall(call)) => call.call_id.as_deref(),
-            Self::Output(OutputItem::CustomToolCall(call)) => Some(&call.call_id),
-            Self::Output(OutputItem::ShellCall(call)) => Some(&call.call_id),
-            Self::Output(_) => None,
-        }
-    }
-
     /// Converts stored history into input items for continuation processing. Tool items keep their public types;
     /// the upstream projection lowers them, and `ResponsesInput::model_input` removes internal items.
     #[must_use]
