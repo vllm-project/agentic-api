@@ -33,6 +33,7 @@ pub use output::{
     TopLogprob, WebSearchAction, WebSearchActionError, WebSearchActionFindInPage, WebSearchActionOpenPage,
     WebSearchActionSearch, WebSearchCall, WebSearchCallStatus, WebSearchSource,
 };
+pub use output::{FileCitation, FileSearchCall, FileSearchCallResult};
 pub use reasoning::{
     OpaqueReasoning, OpaqueReasoningError, ReasoningStatus, ReasoningSummaryContent, ReasoningSummaryKind,
     ReasoningTextKind,
