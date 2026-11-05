@@ -1,4 +1,9 @@
-use std::{collections::BTreeMap, path::PathBuf, str::FromStr, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::Arc,
+};
 
 use agentic_core::{
     storage::create_pool_with_schema,
@@ -54,12 +59,198 @@ fn test_attachment(file: &FileObject, store: &VectorStoreObject, chunks: Vec<Sto
     }
 }
 
+async fn assert_semantic_searches(
+    repository: &SqliteVecRepository,
+    store: &VectorStoreObject,
+    request: &SearchRequest,
+) {
+    let results = repository
+        .search(
+            std::slice::from_ref(&store.id),
+            &["reef".into()],
+            &[vec![1e300, 0.0]],
+            Some(2),
+            SearchMode::Semantic,
+            request,
+        )
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].content[0].text, "coral reef");
+    assert!(results[0].score > 0.99);
+
+    let top_one = SearchRequest {
+        max_num_results: Some(1),
+        ..request.clone()
+    };
+    let results = repository
+        .search(
+            std::slice::from_ref(&store.id),
+            &["trail".into()],
+            &[vec![0.1, 1.0]],
+            Some(2),
+            SearchMode::Semantic,
+            &top_one,
+        )
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].content[0].text, "mountain trail");
+
+    let top_two = SearchRequest {
+        max_num_results: Some(2),
+        ..request.clone()
+    };
+    let results = repository
+        .search(
+            std::slice::from_ref(&store.id),
+            &["reef".into()],
+            &[vec![1.0, 0.1]],
+            Some(2),
+            SearchMode::Semantic,
+            &top_two,
+        )
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0].content[0].text, "coral reef");
+    assert_eq!(results[1].content[0].text, "mountain trail");
+
+    let filtered = SearchRequest {
+        max_num_results: Some(1),
+        filters: Some(SearchFilter::Comparison(ComparisonFilter {
+            operator: ComparisonOperator::Eq,
+            key: "section".into(),
+            value: FilterValue::Scalar(AttributeValue::String("trail".into())),
+        })),
+        ..request.clone()
+    };
+    let results = repository
+        .search(
+            std::slice::from_ref(&store.id),
+            &["reef".into()],
+            &[vec![1.0, 0.1]],
+            Some(2),
+            SearchMode::Semantic,
+            &filtered,
+        )
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].content[0].text, "mountain trail");
+}
+
+async fn assert_recovery(
+    pool: Arc<agentic_core::storage::DbPool>,
+    path: &Path,
+    repository: SqliteVecRepository,
+    store: &VectorStoreObject,
+    attachment: &mut PreparedAttachment,
+    identity: &str,
+    request: &SearchRequest,
+) {
+    // Simulate an interrupted publication by removing the published metadata,
+    // then retry after reopening the repository.
+    sqlx::query("DELETE FROM file_search_attachments WHERE store_id = $1 AND file_id = $2")
+        .bind(&store.id)
+        .bind(&attachment.object.id)
+        .execute(pool.as_ref())
+        .await
+        .unwrap();
+    drop(repository);
+    let reopened = SqliteVecRepository::open(pool, path).await.unwrap();
+    attachment.chunks[0].embedding = Some(vec![-1e-300, 0.0]);
+    reopened.attach(&store.id, identity, attachment).await.unwrap();
+    let results = reopened
+        .search(
+            std::slice::from_ref(&store.id),
+            &["reef".into()],
+            &[vec![-1.0, 0.0]],
+            Some(2),
+            SearchMode::Semantic,
+            request,
+        )
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].content[0].text, "coral reef");
+    assert!(results[0].score > 0.99);
+    assert!(
+        reopened
+            .search(&[], &["reef".into()], &[], Some(2), SearchMode::Semantic, request)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let mismatch = reopened
+        .search(
+            std::slice::from_ref(&store.id),
+            &["reef".into(), "trail".into()],
+            &[vec![-1.0, 0.0]],
+            Some(2),
+            SearchMode::Semantic,
+            request,
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(mismatch, FileSearchError::InvalidRequest(message) if message.contains("one embedding per query"))
+    );
+    reopened
+        .delete(Collection::Attachments, &attachment.object.id, Some(&store.id))
+        .await
+        .unwrap();
+    let results = reopened
+        .search(
+            std::slice::from_ref(&store.id),
+            &["reef".into()],
+            &[vec![-1.0, 0.0]],
+            Some(2),
+            SearchMode::Semantic,
+            request,
+        )
+        .await
+        .unwrap();
+    assert!(results.is_empty());
+    assert!(matches!(
+        reopened.attachment(&store.id, &attachment.object.id).await,
+        Ok(None)
+    ));
+}
+
+async fn assert_orphan_recovery(
+    pool: Arc<agentic_core::storage::DbPool>,
+    path: &Path,
+    index: &sqlx::SqlitePool,
+    orphan_id: i64,
+    store: &VectorStoreObject,
+    file: &FileObject,
+    request: &SearchRequest,
+) {
+    let reopened = SqliteVecRepository::open(pool, path).await.unwrap();
+    let orphan: Option<i64> = sqlx::query_scalar("SELECT id FROM file_search_vec_map WHERE id = $1")
+        .bind(orphan_id)
+        .fetch_optional(index)
+        .await
+        .unwrap();
+    assert!(orphan.is_none(), "recovery must reclaim an orphan immediately");
+    let results = reopened
+        .search(
+            std::slice::from_ref(&store.id),
+            &["result".into()],
+            &[vec![1.0, 0.0]],
+            Some(2),
+            SearchMode::Semantic,
+            request,
+        )
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].file_id, file.id);
+}
+
 #[tokio::test]
 #[ignore = "requires SQLITE_VEC_EXTENSION_PATH pointing to a trusted sqlite-vec loadable extension"]
-#[expect(
-    clippy::too_many_lines,
-    reason = "one integration scenario covers publication, restart, search, and deletion"
-)]
 async fn sqlite_vec_indexes_published_chunks_and_excludes_deleted_rows() {
     let path = PathBuf::from(std::env::var_os("SQLITE_VEC_EXTENSION_PATH").expect("set SQLITE_VEC_EXTENSION_PATH"));
     let directory = tempfile::tempdir().unwrap();
@@ -144,153 +335,13 @@ async fn sqlite_vec_indexes_published_chunks_and_excludes_deleted_rows() {
         search_mode: Some(SearchMode::Semantic),
         ..SearchRequest::default()
     };
-    let results = repository
-        .search(
-            std::slice::from_ref(&store.id),
-            &["reef".into()],
-            &[vec![1e300, 0.0]],
-            Some(2),
-            SearchMode::Semantic,
-            &request,
-        )
-        .await
-        .unwrap();
-    assert_eq!(results.len(), 1);
-    assert_eq!(results[0].content[0].text, "coral reef");
-    assert!(results[0].score > 0.99);
+    assert_semantic_searches(&repository, &store, &request).await;
 
-    let top_one = SearchRequest {
-        max_num_results: Some(1),
-        ..request.clone()
-    };
-    let results = repository
-        .search(
-            std::slice::from_ref(&store.id),
-            &["trail".into()],
-            &[vec![0.1, 1.0]],
-            Some(2),
-            SearchMode::Semantic,
-            &top_one,
-        )
-        .await
-        .unwrap();
-    assert_eq!(results.len(), 1);
-    assert_eq!(results[0].content[0].text, "mountain trail");
-
-    let top_two = SearchRequest {
-        max_num_results: Some(2),
-        ..request.clone()
-    };
-    let results = repository
-        .search(
-            std::slice::from_ref(&store.id),
-            &["reef".into()],
-            &[vec![1.0, 0.1]],
-            Some(2),
-            SearchMode::Semantic,
-            &top_two,
-        )
-        .await
-        .unwrap();
-    assert_eq!(results.len(), 2);
-    assert_eq!(results[0].content[0].text, "coral reef");
-    assert_eq!(results[1].content[0].text, "mountain trail");
-
-    let filtered = SearchRequest {
-        max_num_results: Some(1),
-        filters: Some(SearchFilter::Comparison(ComparisonFilter {
-            operator: ComparisonOperator::Eq,
-            key: "section".into(),
-            value: FilterValue::Scalar(AttributeValue::String("trail".into())),
-        })),
-        ..request.clone()
-    };
-    let results = repository
-        .search(
-            std::slice::from_ref(&store.id),
-            &["reef".into()],
-            &[vec![1.0, 0.1]],
-            Some(2),
-            SearchMode::Semantic,
-            &filtered,
-        )
-        .await
-        .unwrap();
-    assert_eq!(results.len(), 1);
-    assert_eq!(results[0].content[0].text, "mountain trail");
-
-    // Simulate a crash after index staging: leave recent vector rows without
-    // published chunks, then retry after reopening the repository.
-    sqlx::query("DELETE FROM file_search_attachments WHERE store_id = $1 AND file_id = $2")
-        .bind(&store.id)
-        .bind(&file.id)
-        .execute(pool.as_ref())
-        .await
-        .unwrap();
-    drop(repository);
-    let reopened = SqliteVecRepository::open(pool, &path).await.unwrap();
-    attachments[0].chunks[0].embedding = Some(vec![-1e-300, 0.0]);
-    reopened.attach(&store.id, identity, &attachments[0]).await.unwrap();
-    let results = reopened
-        .search(
-            std::slice::from_ref(&store.id),
-            &["reef".into()],
-            &[vec![-1.0, 0.0]],
-            Some(2),
-            SearchMode::Semantic,
-            &request,
-        )
-        .await
-        .unwrap();
-    assert_eq!(results.len(), 1);
-    assert_eq!(results[0].content[0].text, "coral reef");
-    assert!(results[0].score > 0.99);
-    assert!(
-        reopened
-            .search(&[], &["reef".into()], &[], Some(2), SearchMode::Semantic, &request)
-            .await
-            .unwrap()
-            .is_empty()
-    );
-    let mismatch = reopened
-        .search(
-            std::slice::from_ref(&store.id),
-            &["reef".into(), "trail".into()],
-            &[vec![-1.0, 0.0]],
-            Some(2),
-            SearchMode::Semantic,
-            &request,
-        )
-        .await
-        .unwrap_err();
-    assert!(
-        matches!(mismatch, FileSearchError::InvalidRequest(message) if message.contains("one embedding per query"))
-    );
-    reopened
-        .delete(Collection::Attachments, &file.id, Some(&store.id))
-        .await
-        .unwrap();
-    let results = reopened
-        .search(
-            std::slice::from_ref(&store.id),
-            &["reef".into()],
-            &[vec![-1.0, 0.0]],
-            Some(2),
-            SearchMode::Semantic,
-            &request,
-        )
-        .await
-        .unwrap();
-    assert!(results.is_empty());
-    assert!(matches!(reopened.attachment(&store.id, &file.id).await, Ok(None)));
+    assert_recovery(pool, &path, repository, &store, &mut attachments[0], identity, &request).await;
 }
 
 #[tokio::test]
 #[ignore = "requires SQLITE_VEC_EXTENSION_PATH pointing to a trusted sqlite-vec loadable extension"]
-#[expect(
-    clippy::too_many_lines,
-    reason = "one integration scenario covers concurrent publication, orphan visibility, and empty stores"
-)]
 async fn sqlite_vec_fences_concurrent_publication_and_skips_unpublished_rows() {
     let path = PathBuf::from(std::env::var_os("SQLITE_VEC_EXTENSION_PATH").expect("set SQLITE_VEC_EXTENSION_PATH"));
     let directory = tempfile::tempdir().unwrap();
@@ -382,26 +433,7 @@ async fn sqlite_vec_fences_concurrent_publication_and_skips_unpublished_rows() {
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].file_id, file.id);
 
-    sqlx::query("UPDATE file_search_vec_map SET created_at = $1 WHERE id = $2")
-        .bind(chrono::Utc::now().timestamp() - 25 * 60 * 60)
-        .bind(orphan_id)
-        .execute(pool.as_ref())
-        .await
-        .unwrap();
-    let reopened = SqliteVecRepository::open(pool, &path).await.unwrap();
-    let results = reopened
-        .search(
-            std::slice::from_ref(&store.id),
-            &["result".into()],
-            &[vec![1.0, 0.0]],
-            Some(2),
-            SearchMode::Semantic,
-            &request,
-        )
-        .await
-        .unwrap();
-    assert_eq!(results.len(), 1);
-    assert_eq!(results[0].file_id, file.id);
+    assert_orphan_recovery(pool, &path, &index, orphan_id, &store, &file, &request).await;
 }
 
 #[tokio::test]

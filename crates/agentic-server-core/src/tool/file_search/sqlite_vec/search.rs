@@ -8,7 +8,7 @@ use super::{
 };
 use crate::tool::file_search::ranking::{self, SemanticCandidate, SemanticCandidateAccumulator};
 use crate::{
-    storage::file_search::{MAX_CORPUS_BYTES, MAX_CORPUS_CHUNKS},
+    storage::file_search::{MAX_CORPUS_CHUNKS, SQLITE_VEC_MAX_CORPUS_BYTES},
     types::file_search::{FileSearchError, SearchMode, SearchRequest, SearchResult},
 };
 use sqlx::{SqliteConnection, SqlitePool};
@@ -34,7 +34,7 @@ impl SqliteVecRepository {
             return Ok(Vec::new());
         }
         let (count, bytes) = corpus_stats(&self.index, &store_ids).await?;
-        if count > MAX_CORPUS_CHUNKS || bytes > MAX_CORPUS_BYTES {
+        if count > MAX_CORPUS_CHUNKS || bytes > SQLITE_VEC_MAX_CORPUS_BYTES {
             return Err(FileSearchError::Unavailable(
                 "Selected corpus exceeds the exact retrieval capacity; search fewer vector stores or files".into(),
             ));

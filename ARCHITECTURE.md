@@ -1813,6 +1813,13 @@ the upstream reported.
   including a path for a supervisor-managed schema that skips running migrations
   itself and just verifies compatibility. Readiness probes live in `schema/readiness.rs`.
   See [Schema, migrations, and where data goes](#schema-migrations-and-where-data-goes).
+- **`file_search.rs`** — portable file, vector-store, attachment, and chunk
+  persistence. Migration `0010_file_search_vec_map.sql` owns the portable
+  sqlite-vec row map; the optional provider creates per-store `vec0` virtual
+  tables only after loading its trusted SQLite extension. Index staging and
+  metadata publication share one `BEGIN IMMEDIATE` transaction. The default
+  exact-search provider retains a 64 MiB serialized-corpus limit; sqlite-vec
+  admits 256 MiB because normal semantic search reads indexed candidates.
 - **`conversation.rs` (tenant-scoped API)** — conversation and item CRUD. Item ownership is checked through
   the conversation so Responses-persisted items are visible too. Item writes share `lock_in_tx` with
   turn persistence, so concurrent writers get distinct sequence numbers.

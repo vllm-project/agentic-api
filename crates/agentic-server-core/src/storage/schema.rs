@@ -20,8 +20,8 @@ use crate::config::{DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS, PostgresConfig, 
 type DbResult<T> = Result<T, sqlx::Error>;
 
 const POSTGRES_SCHEMA_ADVISORY_LOCK: i64 = 7_194_963_546_799_751;
-const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 47;
-const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 15;
+const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 52;
+const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 17;
 const REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT: i64 = 4;
 const POSTGRES_INTEGER_WIDENING_SQL: &str = "
     ALTER TABLE conversations
@@ -117,7 +117,12 @@ where
                  ('file_search_chunks', 'store_id', 'text', 'NO'), \
                  ('file_search_chunks', 'file_id', 'text', 'NO'), \
                  ('file_search_chunks', 'chunk_index', 'bigint', 'NO'), \
-                 ('file_search_chunks', 'data', 'text', 'NO') \
+                 ('file_search_chunks', 'data', 'text', 'NO'), \
+                 ('file_search_vec_map', 'id', 'integer', 'NO'), \
+                 ('file_search_vec_map', 'store_id', 'text', 'NO'), \
+                 ('file_search_vec_map', 'file_id', 'text', 'NO'), \
+                 ('file_search_vec_map', 'chunk_index', 'bigint', 'NO'), \
+                 ('file_search_vec_map', 'created_at', 'bigint', 'NO') \
          ) \
          SELECT COUNT(*) \
          FROM required \
@@ -164,7 +169,9 @@ where
                  ('file_search_chunks', 'p', 'PRIMARY KEY (store_id, file_id, chunk_index)'), \
                  ('file_search_attachments', 'f', 'FOREIGN KEY (store_id) REFERENCES file_search_stores(id) ON DELETE CASCADE'), \
                  ('file_search_attachments', 'f', 'FOREIGN KEY (file_id) REFERENCES file_search_files(id) ON DELETE CASCADE'), \
-                 ('file_search_chunks', 'f', 'FOREIGN KEY (store_id, file_id) REFERENCES file_search_attachments(store_id, file_id) ON DELETE CASCADE') \
+                 ('file_search_chunks', 'f', 'FOREIGN KEY (store_id, file_id) REFERENCES file_search_attachments(store_id, file_id) ON DELETE CASCADE'), \
+                 ('file_search_vec_map', 'p', 'PRIMARY KEY (id)'), \
+                 ('file_search_vec_map', 'u', 'UNIQUE (store_id, file_id, chunk_index)') \
          ) \
          SELECT COUNT(*) \
          FROM required \
@@ -322,7 +329,7 @@ pub(crate) async fn pin_postgres_persistence_schema(connection: &mut sqlx::AnyCo
          AND table_relation.relkind IN ('r', 'p', 'v', 'm', 'f') \
          AND table_relation.relname IN ('_sqlx_migrations', 'conversations', 'items', 'responses', \
               'file_search_files', 'file_search_blob_cleanup', 'file_search_stores', \
-              'file_search_attachments', 'file_search_chunks') \
+              'file_search_attachments', 'file_search_chunks', 'file_search_vec_map') \
          ORDER BY table_namespace.nspname::text",
     )
     .fetch_all(&mut *connection)
@@ -607,6 +614,10 @@ mod tests {
             .execute(pool.as_ref())
             .await
             .unwrap();
+        sqlx::raw_sql(include_str!("../../migrations/0010_file_search_vec_map.sql"))
+            .execute(pool.as_ref())
+            .await
+            .unwrap();
         verify_persistence_ready(pool.as_ref()).await.unwrap();
         wrapper.ensure_schema_ready_with_marker(true).await.unwrap();
     }
@@ -711,6 +722,7 @@ mod tests {
         for migration in [
             include_str!("../../migrations/0008_file_search.sql"),
             include_str!("../../migrations/0009_typed_item_metadata.sql"),
+            include_str!("../../migrations/0010_file_search_vec_map.sql"),
         ] {
             sqlx::raw_sql(migration).execute(&mut *connection).await.unwrap();
         }
@@ -759,6 +771,7 @@ mod tests {
             include_str!("../../migrations/0007_response_item_public_ids.sql"),
             include_str!("../../migrations/0008_file_search.sql"),
             include_str!("../../migrations/0009_typed_item_metadata.sql"),
+            include_str!("../../migrations/0010_file_search_vec_map.sql"),
         ] {
             sqlx::raw_sql(migration)
                 .execute(&mut *connection)

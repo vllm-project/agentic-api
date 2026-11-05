@@ -10,7 +10,6 @@ use sqlx::{
     SqlitePool,
     sqlite::{SqliteConnectOptions, SqlitePoolOptions},
 };
-use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use super::provider::FileSearchRepository;
@@ -18,8 +17,9 @@ use crate::{
     storage::{
         DbPool,
         file_search::{
-            Collection, FilePublicationFailure, FileSearchStorage, PreparedAttachment, StoredVectorStore, UploadedFile,
-            publish_attachment_sqlite, serialize_chunks, validate_capacity,
+            Collection, FilePublicationFailure, FileSearchStorage, PreparedAttachment, SQLITE_VEC_MAX_CORPUS_BYTES,
+            StoredVectorStore, UploadedFile, publish_attachment_sqlite, serialize_chunks_with_limit,
+            validate_capacity_with_limit,
         },
     },
     types::file_search::{
@@ -38,7 +38,6 @@ mod search;
 pub struct SqliteVecRepository {
     metadata: FileSearchStorage,
     index: SqlitePool,
-    operations: Mutex<()>,
 }
 
 impl SqliteVecRepository {
@@ -77,20 +76,9 @@ impl SqliteVecRepository {
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM file_search_chunks")
             .fetch_one(&index)
             .await?;
-        sqlx::raw_sql(
-            "CREATE TABLE IF NOT EXISTS file_search_vec_map (\
-             id INTEGER PRIMARY KEY AUTOINCREMENT, \
-             store_id TEXT NOT NULL, file_id TEXT NOT NULL, chunk_index INTEGER NOT NULL, \
-             created_at INTEGER NOT NULL, \
-             UNIQUE(store_id, file_id, chunk_index)); \
-             CREATE INDEX IF NOT EXISTS file_search_vec_map_file ON file_search_vec_map(file_id)",
-        )
-        .execute(&index)
-        .await?;
         let repository = Self {
             metadata: FileSearchStorage::new(pool),
             index,
-            operations: Mutex::new(()),
         };
         repository.recover_orphans().await?;
         Ok(repository)
@@ -135,16 +123,15 @@ impl FileSearchRepository for SqliteVecRepository {
         attachments: &'a [PreparedAttachment],
     ) -> BoxFuture<'a, Result<(), FileSearchError>> {
         Box::pin(async move {
-            let _guard = self.operations.lock().await;
             let mut encoded = Vec::with_capacity(attachments.len());
             let mut total_bytes = 0i64;
             for attachment in attachments {
-                let chunks = serialize_chunks(&attachment.chunks).await?;
+                let chunks = serialize_chunks_with_limit(&attachment.chunks, SQLITE_VEC_MAX_CORPUS_BYTES).await?;
                 total_bytes = total_bytes.saturating_add(chunks.1);
-                validate_capacity(total_bytes, 0)?;
+                validate_capacity_with_limit(total_bytes, 0, SQLITE_VEC_MAX_CORPUS_BYTES)?;
                 encoded.push(chunks);
             }
-            let mut tx = self.index.begin().await?;
+            let mut tx = self.index.begin_with("BEGIN IMMEDIATE").await?;
             sqlx::query("INSERT INTO file_search_stores (id, created_at, data, embedding_identity, embedding_dimensions) VALUES ($1, $2, $3, $4, 0)")
                 .bind(&object.id)
                 .bind(object.created_at)
@@ -176,8 +163,8 @@ impl FileSearchRepository for SqliteVecRepository {
         attachment: &'a PreparedAttachment,
     ) -> BoxFuture<'a, Result<(), FileSearchError>> {
         Box::pin(async move {
-            let _guard = self.operations.lock().await;
-            let (chunks, storage_bytes) = serialize_chunks(&attachment.chunks).await?;
+            let (chunks, storage_bytes) =
+                serialize_chunks_with_limit(&attachment.chunks, SQLITE_VEC_MAX_CORPUS_BYTES).await?;
             let store = self.metadata.store(store_id).await?;
             if store.embedding_identity != embedding_identity
                 || (store.embedding_dimensions != 0 && store.embedding_dimensions != attachment.dimensions)
@@ -196,7 +183,7 @@ impl FileSearchRepository for SqliteVecRepository {
                     "File is already attached to this vector store".into(),
                 ));
             }
-            let mut tx = self.index.begin().await?;
+            let mut tx = self.index.begin_with("BEGIN IMMEDIATE").await?;
             self.stage(&mut tx, store_id, std::slice::from_ref(attachment)).await?;
             publish_attachment_sqlite(
                 &mut tx,
@@ -227,7 +214,6 @@ impl FileSearchRepository for SqliteVecRepository {
         store_id: Option<&'a str>,
     ) -> BoxFuture<'a, Result<(), FileSearchError>> {
         Box::pin(async move {
-            let _guard = self.operations.lock().await;
             self.metadata.delete(collection, id, store_id).await?;
             // Metadata deletion is the visibility gate. Orphaned index rows are
             // excluded by the search join even if cleanup is interrupted.
@@ -316,7 +302,6 @@ impl FileSearchRepository for SqliteVecRepository {
     ) -> BoxFuture<'a, Result<Vec<SearchResult>, FileSearchError>> {
         Box::pin(async move {
             if mode == SearchMode::Semantic {
-                let _guard = self.operations.lock().await;
                 self.semantic_search(store_ids, queries, query_embeddings, expected_dimensions, request)
                     .await
             } else {

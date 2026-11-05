@@ -93,10 +93,13 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                          ('file_search_attachments', 'INSERT'), \
                          ('file_search_attachments', 'DELETE'), \
                          ('file_search_chunks', 'SELECT'), \
-                         ('file_search_chunks', 'INSERT') \
+                         ('file_search_chunks', 'INSERT'), \
+                         ('file_search_vec_map', 'SELECT'), \
+                         ('file_search_vec_map', 'INSERT'), \
+                         ('file_search_vec_map', 'DELETE') \
                  ) \
                  SELECT current_setting('transaction_read_only') = 'off' \
-                    AND COUNT(table_relation.oid) = 23 \
+                    AND COUNT(table_relation.oid) = 26 \
                     AND COALESCE(BOOL_AND( \
                         has_table_privilege(current_user, table_relation.oid, required.privilege) \
                     ), false) \
@@ -130,6 +133,7 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                 "SELECT id, created_at, data, embedding_identity, embedding_dimensions FROM file_search_stores LIMIT 0",
                 "SELECT store_id, file_id, created_at, usage_bytes, storage_bytes, data FROM file_search_attachments LIMIT 0",
                 "SELECT store_id, file_id, chunk_index, data FROM file_search_chunks LIMIT 0",
+                "SELECT id, store_id, file_id, chunk_index, created_at FROM file_search_vec_map LIMIT 0",
             ] {
                 sqlx::query(statement).execute(&mut *connection).await?;
             }

@@ -1,22 +1,23 @@
-//! Atomic attachment metadata publication for the SQLite vector provider.
+//! One metadata-publication path instantiated for the portable and SQLite pools.
 
-use sqlx::SqliteConnection;
-
-use super::{PreparedAttachment, validate_capacity};
+use super::{MAX_CORPUS_BYTES, PreparedAttachment, SQLITE_VEC_MAX_CORPUS_BYTES, validate_capacity_with_limit};
+use crate::storage::DbTransaction;
 use crate::types::file_search::FileSearchError;
 
-/// Publishes metadata on the same SQLite connection as a provider-specific
-/// index. Keeping both writes in one transaction fences concurrent replicas.
-pub(crate) async fn publish_attachment_sqlite(
-    connection: &mut SqliteConnection,
+macro_rules! define_publish_attachment {
+    ($name:ident, $connection:ty, $max_bytes:expr, [$($deref:tt)*]) => {
+pub(crate) async fn $name(
+    connection: &mut $connection,
     store_id: &str,
     identity: &str,
     attachment: &PreparedAttachment,
     chunks: &[String],
     storage_bytes: i64,
 ) -> Result<(), FileSearchError> {
+    // The conditional write serializes concurrent ingestions and establishes the
+    // model dimension exactly once; no network work takes place in this transaction.
     let changed = sqlx::query("UPDATE file_search_stores SET embedding_dimensions = $1 WHERE id = $2 AND embedding_identity = $3 AND (embedding_dimensions = 0 OR embedding_dimensions = $1)")
-        .bind(attachment.dimensions).bind(store_id).bind(identity).execute(&mut *connection).await?.rows_affected();
+        .bind(attachment.dimensions).bind(store_id).bind(identity).execute(&mut $($deref)* connection).await?.rows_affected();
     if changed != 1 {
         return Err(FileSearchError::Conflict(
             "Vector store embedding configuration changed or the vector store was deleted".into(),
@@ -26,21 +27,22 @@ pub(crate) async fn publish_attachment_sqlite(
         "SELECT CAST(COALESCE(SUM(storage_bytes), 0) AS BIGINT) FROM file_search_attachments WHERE store_id = $1",
     )
     .bind(store_id)
-    .fetch_one(&mut *connection)
+    .fetch_one(&mut $($deref)* connection)
     .await?;
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM file_search_chunks WHERE store_id = $1")
         .bind(store_id)
-        .fetch_one(&mut *connection)
+        .fetch_one(&mut $($deref)* connection)
         .await?;
-    validate_capacity(
+    validate_capacity_with_limit(
         bytes.saturating_add(storage_bytes),
         count.saturating_add(i64::try_from(chunks.len()).unwrap_or(i64::MAX)),
+        $max_bytes,
     )?;
     let object = &attachment.object;
     let inserted = sqlx::query("INSERT INTO file_search_attachments (store_id, file_id, created_at, usage_bytes, data, storage_bytes) VALUES ($1, $2, $3, $4, $5, $6)")
         .bind(store_id).bind(&object.id).bind(object.created_at).bind(object.usage_bytes).bind(serde_json::to_string(object)?)
         .bind(storage_bytes)
-        .execute(&mut *connection).await;
+        .execute(&mut $($deref)* connection).await;
     if let Err(sqlx::Error::Database(error)) = &inserted {
         if error.is_unique_violation() {
             return Err(FileSearchError::Conflict(
@@ -60,8 +62,14 @@ pub(crate) async fn publish_attachment_sqlite(
             .bind(&object.id)
             .bind(index)
             .bind(data)
-            .execute(&mut *connection)
+            .execute(&mut $($deref)* connection)
             .await?;
     }
     Ok(())
 }
+
+    };
+}
+
+define_publish_attachment!(publish_attachment, DbTransaction<'_>, MAX_CORPUS_BYTES, [* *]);
+define_publish_attachment!(publish_attachment_sqlite, sqlx::SqliteConnection, SQLITE_VEC_MAX_CORPUS_BYTES, [*]);
