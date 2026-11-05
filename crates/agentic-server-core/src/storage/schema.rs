@@ -3,6 +3,7 @@
 mod outdated;
 mod readiness;
 use outdated::recreate_or_reject_outdated;
+use readiness::postgres_sequence_index_ready;
 pub(crate) use readiness::{verify_persistence_ready, verify_persistence_writable};
 
 use std::env;
@@ -206,29 +207,6 @@ where
          WHERE (actual.table_name = 'conversations' AND actual.column_name = 'created_at') \
             OR (actual.table_name = 'items' AND actual.column_name IN ('created_at', 'seq')) \
             OR (actual.table_name = 'responses' AND actual.column_name = 'created_at')",
-    )
-    .fetch_one(executor)
-    .await
-}
-
-async fn postgres_sequence_index_ready<'e, E>(executor: E) -> DbResult<bool>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Any>,
-{
-    sqlx::query_scalar(
-        "SELECT EXISTS ( \
-             SELECT 1 \
-             FROM pg_index index_metadata \
-             JOIN pg_class index_relation ON index_relation.oid = index_metadata.indexrelid \
-             JOIN pg_class table_relation ON table_relation.oid = index_metadata.indrelid \
-             WHERE table_relation.relname = 'items' \
-             AND pg_table_is_visible(table_relation.oid) \
-             AND index_relation.relname = 'idx_items_conversation_id' \
-             AND index_metadata.indisvalid \
-             AND index_metadata.indisready \
-             AND index_metadata.indisunique \
-             AND pg_get_indexdef(index_metadata.indexrelid) LIKE '%(conversation_id, seq)' \
-         )",
     )
     .fetch_one(executor)
     .await

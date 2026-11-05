@@ -3,6 +3,29 @@
 use super::{DatabaseBackend, DbPool, DbResult};
 use crate::storage::models::Item;
 
+pub(super) async fn postgres_sequence_index_ready<'e, E>(executor: E) -> DbResult<bool>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Any>,
+{
+    sqlx::query_scalar(
+        "SELECT EXISTS ( \
+             SELECT 1 \
+             FROM pg_index index_metadata \
+             JOIN pg_class index_relation ON index_relation.oid = index_metadata.indexrelid \
+             JOIN pg_class table_relation ON table_relation.oid = index_metadata.indrelid \
+             WHERE table_relation.relname = 'items' \
+             AND pg_table_is_visible(table_relation.oid) \
+             AND index_relation.relname = 'idx_items_conversation_id' \
+             AND index_metadata.indisvalid \
+             AND index_metadata.indisready \
+             AND index_metadata.indisunique \
+             AND pg_get_indexdef(index_metadata.indexrelid) LIKE '%(conversation_id, seq)' \
+         )",
+    )
+    .fetch_one(executor)
+    .await
+}
+
 pub(crate) async fn verify_persistence_writable(pool: &DbPool) -> DbResult<()> {
     let mut transaction = pool.begin().await?;
     let probe_result = async {
