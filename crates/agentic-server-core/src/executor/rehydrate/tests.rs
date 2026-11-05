@@ -4,7 +4,7 @@ use std::sync::Arc;
 use super::*;
 use crate::executor::modes::{ConversationHandler, ResponseHandler};
 use crate::executor::pending_calls::pending_calls;
-use crate::storage::{ConversationStore, ResponseMetadata, ResponseStore, create_pool_with_schema};
+use crate::storage::{ConversationStore, ResponseCheckpoint, ResponseMetadata, ResponseStore, create_pool_with_schema};
 use crate::types::agent::{AgentIdentity, AgentTurnId};
 use crate::types::agent_tree::{AgentState, StoredAgent, StoredTreeSnapshot};
 use crate::types::conversations::ConversationMetadata;
@@ -378,6 +378,7 @@ async fn inherited_multi_agent_rejects_max_tool_calls() {
     conversation_store
         .persist(
             &conversation.conversation_id,
+            &ResponseCheckpoint::default(),
             "resp_conversation_tree",
             Vec::new(),
             None,
@@ -478,7 +479,7 @@ async fn new_conversation_rehydration_has_no_turn_metadata() -> Result<(), Box<d
         ctx.conversation_id.as_deref(),
         Some(conversation.conversation_id.as_str())
     );
-    assert!(ctx.checkpoint.is_none());
+    assert!(ctx.checkpoint.as_ref().is_some_and(|turn| turn.response_id.is_none()));
     Ok(())
 }
 
@@ -496,6 +497,7 @@ async fn existing_conversation_rehydration_continues_the_latest_turn() -> Result
     conversation_store
         .persist(
             &conversation.conversation_id,
+            &ResponseCheckpoint::default(),
             "resp_prior",
             prior_items,
             None,
@@ -507,7 +509,7 @@ async fn existing_conversation_rehydration_continues_the_latest_turn() -> Result
     let ctx = rehydrate_conversation(request(Some(&conversation.conversation_id), None), &exec_ctx).await?;
 
     assert_eq!(
-        ctx.checkpoint.as_ref().map(|turn| turn.response_id.as_str()),
+        ctx.checkpoint.as_ref().and_then(|turn| turn.response_id.as_deref()),
         Some("resp_prior")
     );
     // The stored turn followed by this request's own input.
@@ -525,6 +527,7 @@ async fn conversation_rehydration_remembers_listed_mcp_servers() -> Result<(), B
     conversation_store
         .persist(
             &conversation.conversation_id,
+            &ResponseCheckpoint::default(),
             "resp_prior",
             vec![InOutItem::Output(OutputItem::McpListTools(McpListTools::new(
                 "mcpl_prior",
@@ -746,6 +749,7 @@ async fn stored_code_interpreter_call_reaches_the_model_as_its_function_call() -
     conversation_store
         .persist(
             &conversation.conversation_id,
+            &ResponseCheckpoint::default(),
             "resp_conversation_projection",
             vec![InOutItem::Output(projection)],
             None,
@@ -806,5 +810,81 @@ async fn previous_response_rehydration_remembers_listed_mcp_servers() -> Result<
             .iter()
             .all(|item| !matches!(item, InOutItem::Input(InputItem::McpListTools(_))))
     );
+    Ok(())
+}
+
+/// Turns that rehydrated the same pending call and both answer it: after the first commits, the second is refused,
+/// so the conversation holds one output and continues. A call the client resubmits with its output is its own.
+#[tokio::test]
+async fn competing_outputs_for_one_pending_call_keep_the_conversation_usable() -> Result<(), Box<dyn std::error::Error>>
+{
+    let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
+    let conversation_store = ConversationStore::new(pool);
+    let conversation = conversation_store
+        .create("default_tenant", &ConversationMetadata::new(), &[])
+        .await?;
+    let id = conversation.conversation_id.as_str();
+    let call: OutputItem = serde_json::from_value(serde_json::json!({
+        "type":"function_call", "id":"fc_weather", "call_id":"call_weather", "name":"get_weather",
+        "arguments":"{}", "status":"completed"
+    }))?;
+    conversation_store
+        .persist(
+            id,
+            &ResponseCheckpoint::default(),
+            "resp_call",
+            vec![InOutItem::Output(call)],
+            None,
+            &ResponseMetadata::default(),
+        )
+        .await?;
+    let exec_ctx = execution_context(conversation_store.clone(), ResponseStore::disabled());
+    let answer = |input: serde_json::Value| {
+        let mut request = request(Some(id), None);
+        request.input = serde_json::from_value(input).unwrap();
+        request
+    };
+    let output = |temperature: u32| serde_json::json!([{"type":"function_call_output", "call_id":"call_weather", "output":temperature.to_string()}]);
+
+    let first = rehydrate_conversation(answer(output(21)), &exec_ctx).await?;
+    let second = rehydrate_conversation(answer(output(5)), &exec_ctx).await?;
+    exec_ctx
+        .conv_handler
+        .persist(first, Vec::new(), None, ResponseMetadata::default())
+        .await?;
+    let error = exec_ctx
+        .conv_handler
+        .persist(second, Vec::new(), None, ResponseMetadata::default())
+        .await
+        .expect_err("the call is already answered");
+    assert!(matches!(error, ExecutorError::ConversationLocked { .. }), "{error}");
+
+    // A turn stored meanwhile does not refuse a call and output resubmitted together.
+    let resubmitted = rehydrate_conversation(
+        answer(serde_json::json!([
+            {"type":"function_call", "call_id":"call_own", "name":"get_weather", "arguments":"{}"},
+            {"type":"function_call_output", "call_id":"call_own", "output":"18"}
+        ])),
+        &exec_ctx,
+    )
+    .await?;
+    let plain = rehydrate_conversation(request(Some(id), None), &exec_ctx).await?;
+    for ctx in [plain, resubmitted] {
+        exec_ctx
+            .conv_handler
+            .persist(ctx, Vec::new(), None, ResponseMetadata::default())
+            .await?;
+    }
+
+    let answers = conversation_store
+        .rehydrate(id)
+        .await?
+        .items
+        .iter()
+        .filter_map(InOutItem::as_input)
+        .filter(|item| item.output_call_id() == Some("call_weather"))
+        .count();
+    assert_eq!(answers, 1);
+    rehydrate_conversation(request(Some(id), None), &exec_ctx).await?;
     Ok(())
 }

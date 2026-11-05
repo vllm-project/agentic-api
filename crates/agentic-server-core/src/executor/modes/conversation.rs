@@ -1,6 +1,8 @@
 //! Conversation storage handler — owns all conversation store operations.
 
-use crate::storage::{ConversationData, ConversationSnapshot, ConversationStore, ResponseMetadata};
+use crate::storage::{
+    ConversationData, ConversationSnapshot, ConversationStore, ResponseCheckpoint, ResponseMetadata, StorageError,
+};
 use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 use crate::types::io::{ItemPage, ListItemsResponse};
@@ -220,17 +222,22 @@ impl ConversationHandler {
             .as_deref()
             .ok_or_else(|| ExecutorError::InvalidRequest("conversation is required for persist".into()))?;
 
+        let no_checkpoint = ResponseCheckpoint::default();
+        let checkpoint = ctx.checkpoint.as_ref().unwrap_or(&no_checkpoint);
         self.store
-            .persist(conversation_id, &ctx.response_id, items, snapshot, metadata)
+            .persist(conversation_id, checkpoint, &ctx.response_id, items, snapshot, metadata)
             .await
-            .map_err(ExecutorError::Storage)
+            .map_err(|error| match error {
+                source @ StorageError::ConversationConflict { .. } => ExecutorError::ConversationLocked { source },
+                other => ExecutorError::Storage(other),
+            })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::{ResponseMetadata, create_pool_with_schema};
+    use crate::storage::{ResponseCheckpoint, ResponseMetadata, create_pool_with_schema};
     use crate::types::io::ResponsesInput;
     use crate::types::io::{InputItem, InputMessageContent};
     use crate::types::request_response::RequestPayload;
@@ -318,7 +325,7 @@ mod tests {
         crate::executor::persist::persist(ctx, input_only, None, &exec).await?;
 
         let snapshot = store.rehydrate(&conversation.conversation_id).await?;
-        let metadata = snapshot.turn_metadata.clone().expect("persisted turn metadata");
+        let metadata = snapshot.checkpoint.metadata.clone();
         assert_eq!(metadata.effective_tool_choice, ToolChoice::Required);
         assert_eq!(snapshot.items.len(), 1);
         Ok(())
@@ -341,6 +348,7 @@ mod tests {
         store
             .persist(
                 &conversation.conversation_id,
+                &ResponseCheckpoint::default(),
                 "resp_competing",
                 competing_items,
                 None,

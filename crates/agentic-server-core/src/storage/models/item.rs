@@ -247,16 +247,6 @@ pub async fn get_by_public_id(pool: &DbPool, id: &str) -> DbResult<Option<Item>>
         .await
 }
 
-/// Collect active item IDs in conversation order while holding the turn's transaction.
-///
-/// # Errors
-/// Returns `DbResult::Err` if the database query fails.
-pub async fn ids_for_conversation_in_tx(tx: &mut DbTransaction<'_>, conversation_id: &str) -> DbResult<Vec<String>> {
-    sqlx::query_scalar("SELECT id FROM items WHERE conversation_id = $1 ORDER BY seq ASC")
-        .bind(conversation_id)
-        .fetch_all(&mut **tx)
-        .await
-}
 /// List a page using keyset pagination with (seq, id) ordering.
 ///
 /// # Errors

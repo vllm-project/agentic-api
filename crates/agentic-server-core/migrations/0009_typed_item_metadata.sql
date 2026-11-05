@@ -1,6 +1,5 @@
 -- Items record their kind in typed `metadata` instead of a hidden key inside `data`, every row carries its public
--- identity, and the unused `reference_id` is removed. A conversation turn appends to whatever the conversation holds
--- when it is stored, as OpenAI does, so the conversation `revision` that rejected stale turns is removed too.
+-- identity, and the unused `reference_id` is removed.
 --
 -- Databases created before this migration hold data in the earlier format: the gateway recreates the default SQLite
 -- database and rejects any other database until it is reset. This migration therefore only runs on an empty
@@ -19,5 +18,3 @@ ALTER TABLE items ADD COLUMN metadata TEXT NOT NULL;
 -- The response exactly as returned, for `GET /v1/responses/{id}`. It has its own column so that continuing a
 -- response decodes only the continuation settings in `metadata`, never the full response.
 ALTER TABLE responses ADD COLUMN snapshot TEXT;
-
-ALTER TABLE conversations DROP COLUMN revision;

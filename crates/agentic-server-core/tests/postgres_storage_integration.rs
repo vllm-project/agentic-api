@@ -6,7 +6,8 @@ use std::time::Duration;
 
 use agentic_core::config::{PostgresConfig, SqliteConfig};
 use agentic_core::storage::{
-    ConversationStore, ResponseMetadata, ResponseStore, create_pool_with_configs, create_pool_with_schema_and_configs,
+    ConversationStore, ResponseCheckpoint, ResponseMetadata, ResponseStore, create_pool_with_configs,
+    create_pool_with_schema_and_configs,
 };
 use agentic_core::types::io::InOutItem;
 use agentic_core::types::io::{InputItem, InputMessage, InputMessageContent};
@@ -287,6 +288,7 @@ async fn postgres_racing_conversation_turns_both_append() {
             store
                 .persist(
                     &conversation_id,
+                    &ResponseCheckpoint::default(),
                     &response_id,
                     items.clone(),
                     None,
@@ -457,7 +459,7 @@ async fn postgres_get_or_create_creates_then_returns_the_existing_conversation()
         .await
         .expect("rehydrate after second use");
     assert_eq!(after.items, before.items);
-    assert!(after.turn_metadata.is_some());
+    assert!(after.checkpoint.response_id.is_some());
     assert_eq!(after.items.len(), 1);
 
     pool.close().await;

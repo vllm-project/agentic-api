@@ -3,13 +3,13 @@
 //! Builds a [`RequestContext`] by loading prior turns from storage and
 //! injecting them into the enriched request before it is forwarded to the LLM.
 
-use super::session::{ResponseCheckpoint, ResponseContinuation, ResponseSession, canonical_session_history};
+use super::session::{ResponseContinuation, ResponseSession, canonical_session_history};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::multi_agent::{CheckpointLimits, ValidatedTreeCheckpoint};
 use crate::executor::pending_calls::first_unanswered_sync_call;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::telemetry::metrics::Stage;
-use crate::storage::{ResponseMetadata, StorageError};
+use crate::storage::{ConversationSnapshot, ResponseCheckpoint, ResponseMetadata, StorageError};
 use crate::tool::ToolError;
 use crate::types::io::InOutItem;
 use crate::types::io::input::is_search_item;
@@ -279,10 +279,12 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
         .await?
         .ok_or_else(missing_previous_response_id)?;
     let checkpoint = ResponseCheckpoint {
-        response_id: stored.response_id,
+        response_id: Some(stored.response_id),
         history: Vec::new(),
         metadata: stored.metadata,
         durable: true,
+        history_item_ids: stored.history_item_ids,
+        requires_latest: false,
     };
     if !restore_agent_tree(ctx, &checkpoint.metadata, exec_ctx.responses_config.max_retained_bytes)? {
         let items = with_request_items(ctx, InOutItem::into_input_items(history));
@@ -315,10 +317,12 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
             .await?
             .ok_or_else(missing_previous_response_id)?;
         let checkpoint = ResponseCheckpoint {
-            response_id: stored.response_id,
+            response_id: Some(stored.response_id),
             history: canonical_session_history(InOutItem::into_input_items(history)),
             metadata: stored.metadata,
             durable: true,
+            history_item_ids: stored.history_item_ids,
+            requires_latest: false,
         };
         let continuation = ctx.continuation.as_ref().ok_or_else(|| {
             ExecutorError::InvalidRequest("session response requires a continuation lease".to_owned())
@@ -331,6 +335,8 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
         history: Vec::new(),
         metadata: parent.metadata.clone(),
         durable: parent.durable,
+        history_item_ids: parent.history_item_ids.clone(),
+        requires_latest: false,
     });
     if !restore_agent_tree(ctx, &parent.metadata, exec_ctx.responses_config.max_retained_bytes)? {
         let items = canonical_session_history(with_request_items(ctx, parent.history.clone()));
@@ -364,21 +370,14 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
         exec_ctx.conv_handler.rehydrate(ctx),
     )?;
     ctx.conversation_id = Some(conv_data.conversation_id);
-    let checkpoint = snapshot.turn_metadata.map(|metadata| ResponseCheckpoint {
-        response_id: snapshot.latest_response_id.unwrap_or_default(),
-        history: Vec::new(),
-        metadata,
-        durable: true,
-    });
-    let restored = match &checkpoint {
-        Some(turn) => restore_agent_tree(ctx, &turn.metadata, exec_ctx.responses_config.max_retained_bytes)?,
-        None => false,
-    };
-    if !restored {
-        let items = with_request_items(ctx, InOutItem::into_input_items(snapshot.items));
-        set_model_input(ctx, items)?;
+    let ConversationSnapshot { items, mut checkpoint } = snapshot;
+    if !restore_agent_tree(ctx, &checkpoint.metadata, exec_ctx.responses_config.max_retained_bytes)? {
+        let history = InOutItem::into_input_items(items);
+        // A turn is admitted only if it answers the history's pending call, so another turn may have answered it first.
+        checkpoint.requires_latest = first_unanswered_sync_call(&history)?.is_some();
+        set_model_input(ctx, with_request_items(ctx, history))?;
     }
-    ctx.checkpoint = checkpoint;
+    ctx.checkpoint = Some(checkpoint);
     Ok(())
 }
 

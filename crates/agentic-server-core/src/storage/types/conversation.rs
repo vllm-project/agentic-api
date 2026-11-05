@@ -2,19 +2,17 @@
 
 use super::super::models::Conversation as StorageDbConversation;
 use super::errors::{StorageError, StoreResult};
-use super::response::ResponseMetadata;
+use super::response::ResponseCheckpoint;
 use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 
-/// Rehydrated conversation items together with the metadata of the latest turn.
-#[derive(Debug, Clone)]
+/// Rehydrated conversation items together with the checkpoint a turn continues.
+#[derive(Debug, Default)]
 pub struct ConversationSnapshot {
     /// Rehydrated input and output items in stored order.
     pub items: Vec<InOutItem>,
-    /// The conversation's latest turn; `None` before the first turn.
-    pub latest_response_id: Option<String>,
-    /// `responses.metadata` of the latest turn; `None` before the first turn.
-    pub turn_metadata: Option<ResponseMetadata>,
+    /// The conversation's latest turn and its history rows.
+    pub checkpoint: ResponseCheckpoint,
 }
 
 /// Domain entity for a stored conversation.

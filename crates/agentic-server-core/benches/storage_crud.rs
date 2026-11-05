@@ -11,7 +11,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use agentic_core::storage::{ConversationStore, DbPool, ResponseMetadata, ResponseStore, create_pool_with_schema};
+use agentic_core::storage::{
+    ConversationStore, DbPool, ResponseCheckpoint, ResponseMetadata, ResponseStore, create_pool_with_schema,
+};
 use agentic_core::types::conversations::ConversationMetadata;
 use agentic_core::types::event::MessageStatus;
 use agentic_core::types::io::{InOutItem, InputItem, InputMessage, InputMessageContent, OutputItem, OutputMessage};
@@ -66,6 +68,7 @@ async fn seed_conversation(store: &ConversationStore, items: usize) -> String {
     store
         .persist(
             &conversation.conversation_id,
+            &ResponseCheckpoint::default(),
             &next_id("resp_"),
             history(items),
             None,
@@ -138,10 +141,12 @@ fn bench_conversation_persist(c: &mut Criterion, rt: &Runtime, store: &Conversat
                 for _ in 0..iters {
                     let id = seed_conversation(store, items).await;
                     let (response_id, new_items) = (next_id("resp_"), turn());
+                    let checkpoint = store.rehydrate(&id).await.expect("rehydrate").checkpoint;
                     let start = Instant::now();
                     store
                         .persist(
                             &id,
+                            &checkpoint,
                             &response_id,
                             black_box(new_items),
                             None,

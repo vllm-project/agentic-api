@@ -283,6 +283,7 @@ fn serialize_sse_frame(frame: &EventFrame) -> ExecutorResult<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::StorageError;
     use crate::tool::ToolError;
 
     fn parse_named_sse_event(chunk: &str) -> (&str, serde_json::Value) {
@@ -399,6 +400,31 @@ mod tests {
             .expect_err("oversized event must be rejected");
         assert!(error.to_string().contains("stream event exceeded"));
         assert!(receiver.try_recv().is_err());
+    }
+
+    #[test]
+    fn executor_conflict_sse_chunk_uses_client_conflict_contract() {
+        let mut accumulator = GatewayStreamAccumulator::new();
+        let error = ExecutorError::Persistence(Box::new(ExecutorError::ConversationLocked {
+            source: StorageError::ConversationConflict {
+                conversation_id: "conv_test".to_owned(),
+            },
+        }));
+        let chunk = accumulator.executor_error_chunk(&error);
+        let (event_name, event) = parse_named_sse_event(&chunk);
+
+        assert_eq!(event_name, "error");
+        assert_eq!(event["type"], "error");
+        assert_eq!(event["status"], 400);
+        assert_eq!(
+            event["error"],
+            serde_json::json!({
+                "message": "conversation changed while the response was being generated; retry the request",
+                "type": "invalid_request_error",
+                "code": "conversation_locked",
+                "param": "conversation"
+            })
+        );
     }
 
     #[test]
