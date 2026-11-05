@@ -6,8 +6,11 @@ mod common;
 use std::collections::BTreeSet;
 
 use agentic_server::app::{AppState, ServerConfig, build_router};
+use axum::body::Body;
 use common::{spawn_mock_llm, test_config, test_state};
+use http::{Request, StatusCode};
 use tokio::net::TcpListener;
+use tower::ServiceExt;
 
 async fn spawn_gateway_with_docs(state: AppState) -> (String, tokio::task::JoinHandle<()>) {
     let config = ServerConfig {
@@ -28,6 +31,24 @@ async fn fetch_spec() -> serde_json::Value {
     let resp = reqwest::get(format!("{gw_url}/openapi.json")).await.unwrap();
     assert_eq!(resp.status(), 200);
     resp.json().await.unwrap()
+}
+
+#[tokio::test]
+async fn openapi_docs_are_not_served_by_default() {
+    let config = ServerConfig {
+        enable_openapi_docs: false,
+        ..ServerConfig::from_env()
+    };
+    let router = build_router(test_state(&test_config("http://127.0.0.1:1")), &config);
+
+    for path in ["/openapi.json", "/swagger-ui/"] {
+        let response = router
+            .clone()
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND, "{path} must be opt-in");
+    }
 }
 
 #[tokio::test]
