@@ -10,4 +10,3 @@ pub use http::{
     translations, update_conversation,
 };
 pub use websocket::responses_ws;
-pub(crate) use websocket::responses_ws_with_auth;

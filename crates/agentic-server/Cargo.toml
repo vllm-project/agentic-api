@@ -84,3 +84,7 @@ workspace = true
 [[bin]]
 name = "agentic"
 path = "src/bin/agentic.rs"
+
+[[example]]
+name = "export_openapi"
+required-features = ["openapi"]

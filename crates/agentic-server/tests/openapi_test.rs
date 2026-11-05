@@ -3,9 +3,14 @@
 
 mod common;
 
+use std::collections::BTreeSet;
+
 use agentic_server::app::{AppState, ServerConfig, build_router};
+use axum::body::Body;
 use common::{spawn_mock_llm, test_config, test_state};
+use http::{Request, StatusCode};
 use tokio::net::TcpListener;
+use tower::ServiceExt;
 
 async fn spawn_gateway_with_docs(state: AppState) -> (String, tokio::task::JoinHandle<()>) {
     let config = ServerConfig {
@@ -26,6 +31,24 @@ async fn fetch_spec() -> serde_json::Value {
     let resp = reqwest::get(format!("{gw_url}/openapi.json")).await.unwrap();
     assert_eq!(resp.status(), 200);
     resp.json().await.unwrap()
+}
+
+#[tokio::test]
+async fn openapi_docs_are_not_served_by_default() {
+    let config = ServerConfig {
+        enable_openapi_docs: false,
+        ..ServerConfig::from_env()
+    };
+    let router = build_router(test_state(&test_config("http://127.0.0.1:1")), &config);
+
+    for path in ["/openapi.json", "/swagger-ui/"] {
+        let response = router
+            .clone()
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND, "{path} must be opt-in");
+    }
 }
 
 #[tokio::test]
@@ -92,6 +115,94 @@ async fn openapi_json_returns_valid_spec() {
         security_schemes.contains_key("bearer_auth"),
         "bearer_auth scheme missing"
     );
+}
+
+#[tokio::test]
+async fn documented_operations_match_the_public_api_and_are_routable() {
+    let (llm_url, _llm) = spawn_mock_llm().await;
+    let (gateway_url, _gateway) = spawn_gateway_with_docs(test_state(&test_config(&llm_url))).await;
+    let spec = reqwest::get(format!("{gateway_url}/openapi.json"))
+        .await
+        .unwrap()
+        .json::<serde_json::Value>()
+        .await
+        .unwrap();
+    let paths = spec["paths"].as_object().expect("paths must be an object");
+    let actual = paths
+        .iter()
+        .flat_map(|(path, item)| {
+            item.as_object().into_iter().flat_map(move |operations| {
+                operations
+                    .keys()
+                    .filter(|method| matches!(method.as_str(), "get" | "post" | "put" | "patch" | "delete"))
+                    .map(move |method| (method.clone(), path.clone()))
+            })
+        })
+        .collect::<BTreeSet<_>>();
+    let expected = [
+        ("get", "/health"),
+        ("get", "/ready"),
+        ("post", "/v1/audio/transcriptions"),
+        ("post", "/v1/audio/translations"),
+        ("post", "/v1/chat/completions"),
+        ("post", "/v1/completions"),
+        ("post", "/v1/conversations"),
+        ("get", "/v1/conversations/{conversation_id}"),
+        ("post", "/v1/conversations/{conversation_id}"),
+        ("delete", "/v1/conversations/{conversation_id}"),
+        ("get", "/v1/conversations/{conversation_id}/items"),
+        ("post", "/v1/conversations/{conversation_id}/items"),
+        ("get", "/v1/conversations/{conversation_id}/items/{item_id}"),
+        ("delete", "/v1/conversations/{conversation_id}/items/{item_id}"),
+        ("post", "/v1/embeddings"),
+        ("post", "/v1/messages"),
+        ("post", "/v1/messages/count_tokens"),
+        ("get", "/v1/models"),
+        ("get", "/v1/models/{model}"),
+        ("get", "/v1/responses"),
+        ("post", "/v1/responses"),
+        ("post", "/v1/responses/compact"),
+        ("get", "/v1/responses/{response_id}"),
+        ("delete", "/v1/responses/{response_id}"),
+        ("get", "/v1/responses/{response_id}/input_items"),
+    ]
+    .into_iter()
+    .map(|(method, path)| (method.to_owned(), path.to_owned()))
+    .collect::<BTreeSet<_>>();
+    assert_eq!(actual, expected, "update the public API inventory when routes change");
+
+    let client = reqwest::Client::new();
+    for path in paths.keys() {
+        let request_path = path
+            .replace("{conversation_id}", "example-conversation")
+            .replace("{item_id}", "example-item")
+            .replace("{response_id}", "example-response")
+            .replace("{model}", "org/example-model");
+        let response = client
+            .request(reqwest::Method::TRACE, format!("{gateway_url}{request_path}"))
+            .bearer_auth("test-key")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 405, "{path} is documented but not routed");
+        let allowed = response
+            .headers()
+            .get("allow")
+            .expect("routed path must report allowed methods")
+            .to_str()
+            .unwrap()
+            .split(',')
+            .map(str::trim)
+            .collect::<BTreeSet<_>>();
+        for (method, operation_path) in &actual {
+            if operation_path == path {
+                assert!(
+                    allowed.contains(method.to_ascii_uppercase().as_str()),
+                    "{method} {path} is not routed"
+                );
+            }
+        }
+    }
 }
 
 #[tokio::test]

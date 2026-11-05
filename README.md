@@ -84,6 +84,11 @@ flowchart LR
 
 See the [API reference](docs/api/index.md) for routing, authentication, and WebSocket details.
 
+The OpenAPI contract is generated from the registered handlers. Export it locally with
+`cargo run -p agentic-server --example export_openapi > openapi.json`; CI checks the route inventory and uploads the
+generated JSON as the `agentic-api-openapi` artifact. The WebSocket operation documents its HTTP upgrade; WebSocket
+message frames are covered by separate tests.
+
 Responses created with `store: true` retain a terminal snapshot for retrieval, including status, usage,
 and this turn's output. Retrieval does not call the upstream model. Unknown IDs return a JSON `404`;
 older records created before snapshot storage (or through history-only APIs) return `409` because their

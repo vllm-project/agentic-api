@@ -51,6 +51,13 @@ pub async fn responses_ws(State(state): State<AppState>, headers: HeaderMap, ws:
     upgrade_responses_ws(state, headers, ws, None, None)
 }
 
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/v1/responses",
+    responses((status = 101, description = "Upgrade to the Responses WebSocket protocol")),
+    security(("bearer_auth" = [])),
+    tag = "responses",
+))]
 pub(crate) async fn responses_ws_with_auth(
     State(state): State<AppState>,
     principal: Option<Extension<AuthenticatedPrincipal>>,
