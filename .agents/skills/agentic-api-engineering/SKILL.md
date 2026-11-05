@@ -42,6 +42,10 @@ Before adding any type, enum variant, method, helper, module, validator, seriali
 - Prefer extending the existing responsible type, enum, or method when that keeps its contract coherent. Explain why
   reuse is insufficient before introducing a new abstraction. A useful new type encodes an invariant, ownership
   boundary, or distinct domain concept; a wrapper around an iterator chain does not justify itself.
+- Before adding an enum, ID type, record, or validation rule, search `types/` and sibling modules for one that already
+  models the concept, and use it. An enum mapped variant by variant onto another enum, a `String` where a validated
+  newtype exists or a second copy of an acceptance rule is duplication; extend the shared
+  type instead. Shared contracts live in `types/`, so an executor-only copy cannot replace them.
 - Do not scatter free functions, string allowlists, per-kind conditionals, or parallel parsers across files to make
   one case pass. Keep one authoritative implementation of the rule. A small free function is acceptable when it has
   a clear module responsibility and no natural existing owner; the objection is ad hoc duplication, not Rust syntax.

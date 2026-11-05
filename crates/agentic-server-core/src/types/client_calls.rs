@@ -58,6 +58,30 @@ pub enum ClientCallKind {
     ToolSearch,
 }
 
+impl ClientCallKind {
+    /// The input item type of a call of this kind.
+    #[must_use]
+    pub const fn call_item_name(self) -> &'static str {
+        match self {
+            Self::Function => "function_call",
+            Self::Custom => "custom_tool_call",
+            Self::Shell => "shell_call",
+            Self::ToolSearch => "tool_search_call",
+        }
+    }
+
+    /// The input item type of an output that answers a call of this kind.
+    #[must_use]
+    pub const fn output_item_name(self) -> &'static str {
+        match self {
+            Self::Function => "function_call_output",
+            Self::Custom => "custom_tool_call_output",
+            Self::Shell => "shell_call_output",
+            Self::ToolSearch => "tool_search_output",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClientCallOwner {
     pub agent_turn: AgentTurnKey,

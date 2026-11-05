@@ -8,6 +8,7 @@ use tokio::sync::Notify;
 
 use super::{CheckpointBudget, CheckpointReservation, ExecutorError, ExecutorResult, SessionState};
 use super::{aggregate_budget_error, lock_state};
+use crate::executor::pending_calls::CallLedger;
 use crate::storage::{ResponseCheckpoint, ResponseMetadata};
 use crate::types::io::InOutItem;
 use crate::types::io::input::{async_records, retain_window};
@@ -50,8 +51,8 @@ impl ResponseCheckpointPin {
     /// # Errors
     /// Rejects malformed call histories or obligation types not qualified for steering.
     pub fn required_steering_input(&self) -> ExecutorResult<Vec<SteeringRequiredInput>> {
-        crate::executor::pending_calls::pending_calls(self.history())?
-            .into_iter()
+        CallLedger::scan(self.history())?
+            .pending()
             .filter(|pending| !pending.async_execution)
             .map(|pending| {
                 pending
