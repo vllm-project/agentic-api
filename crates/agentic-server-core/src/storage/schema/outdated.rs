@@ -225,9 +225,9 @@ mod tests {
         );
     }
 
-    /// SHA-384 checksums of the migrations released on `main`. A database records each applied migration's checksum
-    /// and refuses to start when the file differs, so a released migration must never change; add a new one instead.
-    const RELEASED_MIGRATIONS: [(i64, &str); 9] = [
+    /// SHA-384 checksums of the migrations on `main`. A database records each applied migration's checksum and
+    /// refuses to start when the file differs, so a merged migration must never change; add a new one instead.
+    const MERGED_MIGRATIONS: [(i64, &str); 9] = [
         (
             1,
             "2772d573aa4a5ea9d4de483e959f72569bda372aa8962895fa48627a9e314a2d64ffc4b82329013bf717e63915a418fa",
@@ -267,37 +267,34 @@ mod tests {
     ];
 
     #[test]
-    fn released_migrations_are_unchanged() {
+    fn merged_migrations_are_unchanged() {
         let migrator = sqlx::migrate!("./migrations");
-        for (version, expected) in RELEASED_MIGRATIONS {
+        for (version, expected) in MERGED_MIGRATIONS {
             let migration = migrator
                 .iter()
                 .find(|migration| migration.version == version)
-                .unwrap_or_else(|| panic!("released migration {version} is missing"));
+                .unwrap_or_else(|| panic!("merged migration {version} is missing"));
             let checksum = migration.checksum.iter().fold(String::new(), |mut hex, byte| {
                 let _ = write!(hex, "{byte:02x}");
                 hex
             });
-            assert_eq!(checksum, expected, "released migration {version} was edited");
+            assert_eq!(checksum, expected, "merged migration {version} was edited");
         }
     }
 
     #[tokio::test]
-    async fn database_of_the_latest_release_migrates_and_keeps_its_data() {
+    async fn database_migrated_by_main_upgrades_and_keeps_its_data() {
         let pool = create_pool(Some("sqlite://?mode=memory"))
             .await
             .expect("create database");
         let mut migrator = sqlx::migrate!("./migrations");
-        let latest_release = RELEASED_MIGRATIONS[RELEASED_MIGRATIONS.len() - 1].0;
+        let latest_on_main = MERGED_MIGRATIONS[MERGED_MIGRATIONS.len() - 1].0;
         migrator
             .migrations
             .to_mut()
-            .retain(|migration| migration.version <= latest_release);
-        migrator
-            .run(pool.as_ref())
-            .await
-            .expect("apply the released migrations");
-        sqlx::query("INSERT INTO conversations (id, created_at) VALUES ('conv_released', 0)")
+            .retain(|migration| migration.version <= latest_on_main);
+        migrator.run(pool.as_ref()).await.expect("apply the migrations on main");
+        sqlx::query("INSERT INTO conversations (id, created_at) VALUES ('conv_main', 0)")
             .execute(pool.as_ref())
             .await
             .expect("store a conversation");
@@ -305,7 +302,7 @@ mod tests {
         schema(&pool, false)
             .ensure_schema_ready_with_marker(false)
             .await
-            .expect("migrate a database of the latest release");
+            .expect("upgrade a database migrated by main");
 
         assert_eq!(conversation_count(&pool).await, 1);
         assert!(

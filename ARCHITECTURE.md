@@ -1865,8 +1865,9 @@ the upstream reported.
   than rows (`create`, `get`, `get_or_create`, `rehydrate`, `persist`, and the item CRUD).
   Conversation `rehydrate` is one query; response `rehydrate` reads the response row and then its
   history items. Conversation `persist` locks the conversation and appends the turn after whatever it holds
-  then, as OpenAI does, so a turn never fails because the conversation changed while it ran; writes run in one
-  transaction via
+  then, as OpenAI does. A multi-agent tree is the latest turn's snapshot rather than appended history, so a turn
+  that holds one, or follows one, fails with `conversation_locked` when another turn was stored since it rehydrated;
+  writes run in one transaction via
   `pool.begin()` / `tx.commit()`. **These are not to be called outside `executor/` and `storage/`
   themselves.** The only sanctioned callers are `executor/modes/conversation.rs` and
   `executor/modes/response.rs`, described above. (Integration tests and benches import
