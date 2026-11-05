@@ -7,11 +7,11 @@ use crate::tool::file_search::ranking::{self, SemanticCandidate, SemanticCandida
 use crate::{
     storage::file_search::{
         MAX_CORPUS_CHUNKS, SQLITE_VEC_MAX_CORPUS_BYTES,
-        sqlite_vec_index::{normalized_vector, table_name},
+        sqlite_vec_index::{SqliteVecIndex, normalized_vector, table_name},
     },
     types::file_search::{FileSearchError, SearchMode, SearchRequest, SearchResult},
 };
-use sqlx::{SqliteConnection, SqlitePool};
+use sqlx::SqliteConnection;
 
 const SQLITE_VEC_MAX_K: i64 = 4096;
 
@@ -33,7 +33,7 @@ impl SqliteVecRepository {
         if store_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let (count, bytes) = corpus_stats(self.index.pool(), &store_ids).await?;
+        let (count, bytes) = self.index.corpus_stats(&store_ids).await?;
         if count > MAX_CORPUS_CHUNKS || bytes > SQLITE_VEC_MAX_CORPUS_BYTES {
             return Err(FileSearchError::Unavailable(
                 "Selected corpus exceeds the exact retrieval capacity; search fewer vector stores or files".into(),
@@ -58,7 +58,7 @@ impl SqliteVecRepository {
         let mut stores = Vec::with_capacity(store_ids.len());
         for store_id in &store_ids {
             let table = table_name(store_id)?;
-            let (published_rows, index_rows) = validate_index_rows(&mut tx, store_id, &table).await?;
+            let (published_rows, index_rows) = SqliteVecIndex::validate_index_rows(&mut tx, store_id, &table).await?;
             if index_rows > 0 {
                 stores.push((store_id, table, published_rows, index_rows));
             }
@@ -107,22 +107,6 @@ impl SqliteVecRepository {
     }
 }
 
-async fn corpus_stats(index: &SqlitePool, store_ids: &[String]) -> Result<(i64, i64), FileSearchError> {
-    let placeholders = (1..=store_ids.len())
-        .map(|index| format!("${index}"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let sql = format!(
-        "SELECT COUNT(*), COALESCE(SUM(LENGTH(CAST(data AS BLOB))), 0) \
-         FROM file_search_chunks WHERE store_id IN ({placeholders})"
-    );
-    let mut query = sqlx::query_as::<_, (i64, i64)>(&sql);
-    for store_id in store_ids {
-        query = query.bind(store_id);
-    }
-    Ok(query.fetch_one(index).await?)
-}
-
 async fn fetch_candidates(
     connection: &mut SqliteConnection,
     table: &str,
@@ -136,24 +120,11 @@ async fn fetch_candidates(
     let mut k = i64::try_from(target.saturating_add(1))
         .unwrap_or(i64::MAX)
         .min(index_rows);
-    let sql = format!(
-        "SELECT chunks.data, nearest.distance FROM \
-         (SELECT rowid, distance FROM {table} WHERE embedding MATCH $1 AND k = $2) AS nearest \
-         JOIN file_search_vec_map AS indexed ON indexed.id = nearest.rowid \
-         JOIN file_search_chunks AS chunks ON chunks.store_id = indexed.store_id \
-           AND chunks.file_id = indexed.file_id AND chunks.chunk_index = indexed.chunk_index \
-         WHERE indexed.store_id = $3 ORDER BY nearest.distance"
-    );
     loop {
         if k > SQLITE_VEC_MAX_K {
             return Ok(None);
         }
-        let rows: Vec<(String, Option<f64>)> = sqlx::query_as(&sql)
-            .bind(encoded)
-            .bind(k)
-            .bind(store_id)
-            .fetch_all(&mut *connection)
-            .await?;
+        let rows = SqliteVecIndex::nearest_rows(connection, table, store_id, encoded, k).await?;
         if k == index_rows && i64::try_from(rows.len()).unwrap_or(i64::MAX) != published_rows {
             return Err(FileSearchError::Unavailable(
                 "SQLite vector index is incomplete; recreate this vector store".into(),
@@ -187,47 +158,11 @@ async fn fetch_candidates(
     }
 }
 
-async fn validate_index_rows(
-    connection: &mut SqliteConnection,
-    store_id: &str,
-    table: &str,
-) -> Result<(i64, i64), FileSearchError> {
-    let published_rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM file_search_chunks WHERE store_id = $1")
-        .bind(store_id)
-        .fetch_one(&mut *connection)
-        .await?;
-    let indexed_published_rows: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM file_search_vec_map AS indexed \
-         JOIN file_search_chunks AS chunks ON chunks.store_id = indexed.store_id \
-           AND chunks.file_id = indexed.file_id AND chunks.chunk_index = indexed.chunk_index \
-         WHERE indexed.store_id = $1",
-    )
-    .bind(store_id)
-    .fetch_one(&mut *connection)
-    .await?;
-    let index_rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM file_search_vec_map WHERE store_id = $1")
-        .bind(store_id)
-        .fetch_one(&mut *connection)
-        .await?;
-    if published_rows == 0 && index_rows == 0 {
-        return Ok((0, 0));
-    }
-    let vector_rows: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}"))
-        .fetch_one(&mut *connection)
-        .await?;
-    if indexed_published_rows != published_rows || vector_rows != index_rows {
-        return Err(FileSearchError::Unavailable(
-            "SQLite vector index is incomplete; recreate this vector store".into(),
-        ));
-    }
-    Ok((published_rows, index_rows))
-}
-
 #[cfg(test)]
 mod tests {
     use sqlx::sqlite::SqlitePoolOptions;
 
-    use super::corpus_stats;
+    use crate::storage::file_search::sqlite_vec_index::SqliteVecIndex;
 
     #[tokio::test]
     async fn corpus_stats_counts_utf8_bytes() {
@@ -247,7 +182,10 @@ mod tests {
             .execute(&pool)
             .await
             .unwrap();
-        let (count, bytes) = corpus_stats(&pool, &["vs_unicode".into()]).await.unwrap();
+        let (count, bytes) = SqliteVecIndex::new(pool)
+            .corpus_stats(&["vs_unicode".into()])
+            .await
+            .unwrap();
         assert_eq!(count, 1);
         assert_eq!(bytes, i64::try_from(data.len()).unwrap());
     }

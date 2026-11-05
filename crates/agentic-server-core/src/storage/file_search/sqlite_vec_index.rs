@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use sqlx::SqlitePool;
+use sqlx::{SqliteConnection, SqlitePool};
 
 use super::{Collection, PreparedAttachment};
 use crate::types::file_search::FileSearchError;
@@ -19,6 +19,81 @@ impl SqliteVecIndex {
 
     pub(crate) fn pool(&self) -> &SqlitePool {
         &self.pool
+    }
+
+    pub(crate) async fn corpus_stats(&self, store_ids: &[String]) -> Result<(i64, i64), FileSearchError> {
+        let placeholders = (1..=store_ids.len())
+            .map(|index| format!("${index}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "SELECT COUNT(*), COALESCE(SUM(LENGTH(CAST(data AS BLOB))), 0) \
+             FROM file_search_chunks WHERE store_id IN ({placeholders})"
+        );
+        let mut query = sqlx::query_as::<_, (i64, i64)>(&sql);
+        for store_id in store_ids {
+            query = query.bind(store_id);
+        }
+        Ok(query.fetch_one(&self.pool).await?)
+    }
+
+    pub(crate) async fn nearest_rows(
+        connection: &mut SqliteConnection,
+        table: &str,
+        store_id: &str,
+        encoded: &str,
+        k: i64,
+    ) -> Result<Vec<(String, Option<f64>)>, FileSearchError> {
+        let sql = format!(
+            "SELECT chunks.data, nearest.distance FROM \
+             (SELECT rowid, distance FROM {table} WHERE embedding MATCH $1 AND k = $2) AS nearest \
+             JOIN file_search_vec_map AS indexed ON indexed.id = nearest.rowid \
+             JOIN file_search_chunks AS chunks ON chunks.store_id = indexed.store_id \
+               AND chunks.file_id = indexed.file_id AND chunks.chunk_index = indexed.chunk_index \
+             WHERE indexed.store_id = $3 ORDER BY nearest.distance"
+        );
+        Ok(sqlx::query_as(&sql)
+            .bind(encoded)
+            .bind(k)
+            .bind(store_id)
+            .fetch_all(connection)
+            .await?)
+    }
+
+    pub(crate) async fn validate_index_rows(
+        connection: &mut SqliteConnection,
+        store_id: &str,
+        table: &str,
+    ) -> Result<(i64, i64), FileSearchError> {
+        let published_rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM file_search_chunks WHERE store_id = $1")
+            .bind(store_id)
+            .fetch_one(&mut *connection)
+            .await?;
+        let indexed_published_rows: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM file_search_vec_map AS indexed \
+             JOIN file_search_chunks AS chunks ON chunks.store_id = indexed.store_id \
+               AND chunks.file_id = indexed.file_id AND chunks.chunk_index = indexed.chunk_index \
+             WHERE indexed.store_id = $1",
+        )
+        .bind(store_id)
+        .fetch_one(&mut *connection)
+        .await?;
+        let index_rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM file_search_vec_map WHERE store_id = $1")
+            .bind(store_id)
+            .fetch_one(&mut *connection)
+            .await?;
+        if published_rows == 0 && index_rows == 0 {
+            return Ok((0, 0));
+        }
+        let vector_rows: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}"))
+            .fetch_one(&mut *connection)
+            .await?;
+        if indexed_published_rows != published_rows || vector_rows != index_rows {
+            return Err(FileSearchError::Unavailable(
+                "SQLite vector index is incomplete; recreate this vector store".into(),
+            ));
+        }
+        Ok((published_rows, index_rows))
     }
 
     pub(crate) async fn stage(
