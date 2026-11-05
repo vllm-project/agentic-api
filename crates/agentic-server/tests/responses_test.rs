@@ -40,6 +40,7 @@ use agentic_core::types::io::InOutItem;
 use agentic_core::types::io::{InputItem, ResponsesInput};
 use agentic_server::app::{AppState, DEFAULT_MAX_REQUEST_BODY_SIZE, WebSocketTracker};
 
+use common::persist_turn;
 use common::{spawn_gateway, spawn_mock_llm, test_config, test_state, test_state_with_max_request_body_size};
 
 /// Deliberately tiny ceiling used to exercise the limit without large allocations.
@@ -260,20 +261,19 @@ fn competing_turn_items() -> Vec<InOutItem> {
 }
 
 async fn persist_competing_turn(pool: &Arc<DbPool>, conversation_id: &str) {
-    ConversationStore::new(Arc::clone(pool))
-        .persist(
-            conversation_id,
-            COMPETING_RESPONSE_ID,
-            None,
-            competing_turn_items(),
-            &ResponseMetadata {
-                multi_agent_tree: None,
-                model: "competing-model".to_owned(),
-                ..ResponseMetadata::default()
-            },
-        )
-        .await
-        .expect("competing turn should persist");
+    persist_turn(
+        &ConversationStore::new(Arc::clone(pool)),
+        conversation_id,
+        COMPETING_RESPONSE_ID,
+        competing_turn_items(),
+        &ResponseMetadata {
+            multi_agent_tree: None,
+            model: "competing-model".to_owned(),
+            ..ResponseMetadata::default()
+        },
+    )
+    .await
+    .expect("competing turn should persist");
 }
 
 fn conflict_error() -> serde_json::Value {
@@ -331,14 +331,12 @@ fn gated_sse_chunks() -> (String, String) {
 }
 
 async fn assert_only_competing_turn_persisted(pool: &Arc<DbPool>, conversation_id: &str) {
-    let conversation_store = ConversationStore::new(Arc::clone(pool));
-    assert_eq!(
-        conversation_store
-            .rehydrate(conversation_id)
-            .await
-            .expect("conversation history"),
-        competing_turn_items()
-    );
+    let conversation = ConversationStore::new(Arc::clone(pool))
+        .rehydrate(conversation_id)
+        .await
+        .expect("conversation history");
+    assert_eq!(conversation.items, competing_turn_items());
+    assert_eq!(conversation.version.response_id.as_deref(), Some(COMPETING_RESPONSE_ID));
     let response = ResponseStore::new(Arc::clone(pool))
         .get(COMPETING_RESPONSE_ID)
         .await

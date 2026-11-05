@@ -2,7 +2,6 @@
 mod multi_agent;
 
 use super::*;
-use crate::types::io::InOutItem;
 
 #[test]
 fn normalizes_to_a_closed_function_contract() {
@@ -111,16 +110,6 @@ fn gateway_code_interpreter_ids_match_across_started_and_completed_items() {
         assert!(
             started_output.to_input_item().is_none(),
             "gateway projection must not replay"
-        );
-        let stored = String::try_from(&InOutItem::Output(started_output.clone()))
-            .expect("serialize gateway projection for history");
-        let stored: serde_json::Value = serde_json::from_str(&stored).expect("stored gateway projection");
-        assert_eq!(stored["_agentic_code_interpreter_origin"], "gateway");
-        assert!(
-            serde_json::to_value(&started_output)
-                .expect("public projection serializes")
-                .get("_agentic_code_interpreter_origin")
-                .is_none()
         );
         let OutputItem::CodeInterpreterCall(started) = started_output else {
             panic!("expected code interpreter item");

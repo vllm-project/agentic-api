@@ -40,11 +40,6 @@ impl From<sqlx::Error> for MessageThreadStoreError {
         Self::Storage(StorageError::Database(error))
     }
 }
-impl From<serde_json::Error> for MessageThreadStoreError {
-    fn from(error: serde_json::Error) -> Self {
-        Self::Storage(StorageError::Serialization(error))
-    }
-}
 
 #[derive(Debug, Default)]
 struct Inner {
@@ -99,8 +94,7 @@ impl MessageThreadStore {
             MessageThreadState::InFlight if row.lease_until > now() => return Err(MessageThreadStoreError::InFlight),
             MessageThreadState::Ready | MessageThreadState::InFlight => {}
         }
-        let checkpoint = row.checkpoint.ok_or(MessageThreadStoreError::NotFound)?;
-        Ok(serde_json::from_str(&checkpoint)?)
+        Ok(MessageThreadCheckpoint::try_from(row)?)
     }
 
     /// Atomically reserve a validated parent across all gateway instances.
@@ -145,7 +139,7 @@ impl MessageThreadStore {
         checkpoint: Option<&MessageThreadCheckpoint>,
         mut lease: Option<MessageThreadLease>,
     ) -> Result<(), MessageThreadStoreError> {
-        let encoded = checkpoint.map(serde_json::to_string).transpose()?;
+        let encoded = checkpoint.map(String::try_from).transpose()?;
         if encoded.as_ref().is_some_and(|body| body.len() > MAX_CHECKPOINT_BYTES) {
             return Err(MessageThreadStoreError::TooLarge);
         }

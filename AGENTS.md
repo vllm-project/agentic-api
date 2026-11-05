@@ -156,6 +156,14 @@ into synchronous ingestion [#243](https://github.com/vllm-project/agentic-api/is
 Use [`.agents/skills/executor-architecture-review/SKILL.md`](.agents/skills/executor-architecture-review/SKILL.md) for a focused,
 read-only boundary review while planning or reviewing these changes.
 
+#### Storage change rules
+
+Read [Schema, migrations, and where data goes](ARCHITECTURE.md#schema-migrations-and-where-data-goes) before changing
+the schema, a migration, or what is persisted. Model SQL stays portable across SQLite and PostgreSQL; backend
+differences belong in `storage/pool.rs` and `storage/schema.rs`. Keep `responses.metadata` to what a continuation
+needs, and give data read by another path its own column. Use
+[`.agents/skills/storage-schema-change/SKILL.md`](.agents/skills/storage-schema-change/SKILL.md) as the checklist.
+
 ## Rust Best Practices
 
 - Do not use loose/untyped JSON signatures (`serde_json::Value` and similar) at a public API boundary. Request,

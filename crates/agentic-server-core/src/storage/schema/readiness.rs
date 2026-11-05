@@ -1,6 +1,7 @@
 //! Persistence availability probes.
 
 use super::{DatabaseBackend, DbPool, DbResult};
+use crate::storage::models::Item;
 
 pub(crate) async fn verify_persistence_writable(pool: &DbPool) -> DbResult<()> {
     verify_persistence_ready(pool).await?;
@@ -19,7 +20,16 @@ pub(crate) async fn verify_persistence_writable(pool: &DbPool) -> DbResult<()> {
         crate::storage::models::conversation::lock_in_tx(&mut transaction, &conversation_id).await?;
         crate::storage::models::item::create_in_tx(
             &mut transaction,
-            vec![(item_id.clone(), "{}".to_owned())],
+            vec![Item {
+                id: item_id.clone(),
+                public_id: item_id.clone(),
+                metadata: r#"{"kind":"input"}"#.to_owned(),
+                data: "{}".to_owned(),
+                created_at,
+                conversation_id: None,
+                seq: None,
+                tenant_id: None,
+            }],
             Some(&conversation_id),
         )
         .await
@@ -33,6 +43,7 @@ pub(crate) async fn verify_persistence_writable(pool: &DbPool) -> DbResult<()> {
             Some(&conversation_id),
             None,
             Some(&format!("[\"{item_id}\"]")),
+            None,
             Some("{}"),
         )
         .await?;

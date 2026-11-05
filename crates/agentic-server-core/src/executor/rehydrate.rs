@@ -167,6 +167,7 @@ async fn rehydrate_request(
         response_id,
         conversation_id: None,
         conversation_version: None,
+        checkpoint: None,
         continuation,
     };
 
@@ -275,17 +276,21 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
     if ctx.continuation.is_some() {
         return from_session_response(ctx, exec_ctx).await;
     }
-    let stored = exec_ctx.resp_handler.get(ctx).await.map_err(|error| match error {
-        ExecutorError::Storage(ref source) if source.is_not_found() => StorageError::PreviousResponseNotFound {
-            id: ctx.original_request.previous_response_id.clone().unwrap_or_default(),
-        }
-        .into(),
-        other => other,
-    })?;
-    if restore_agent_tree(ctx, &stored.metadata, exec_ctx.responses_config.max_retained_bytes)? {
+    let (stored, history) = exec_ctx
+        .resp_handler
+        .rehydrate(ctx)
+        .await?
+        .ok_or_else(missing_previous_response_id)?;
+    let checkpoint = ResponseCheckpoint {
+        response_id: stored.response_id,
+        history: Vec::new(),
+        metadata: stored.metadata,
+        durable: true,
+    };
+    if restore_agent_tree(ctx, &checkpoint.metadata, exec_ctx.responses_config.max_retained_bytes)? {
+        ctx.checkpoint = Some(checkpoint);
         return Ok(());
     }
-    let history = exec_ctx.resp_handler.rehydrate(ctx).await?;
 
     let mut items = InOutItem::into_input_items(history);
     items.reserve(ctx.new_input_items.len());
@@ -294,7 +299,8 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
 
     ctx.enriched_request.previous_response_id = None;
     ctx.enriched_request.input = ResponsesInput::from(items);
-    apply_effective_settings(ctx, &stored.metadata);
+    apply_effective_settings(ctx, &checkpoint.metadata);
+    ctx.checkpoint = Some(checkpoint);
     Ok(())
 }
 
@@ -313,18 +319,13 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
             }
             .into());
         }
-        let map_missing = |error| match error {
-            ExecutorError::Storage(ref source) if source.is_not_found() => StorageError::PreviousResponseNotFound {
-                id: previous_id.to_owned(),
-            }
-            .into(),
-            other => other,
-        };
-        let stored = exec_ctx.resp_handler.get(ctx).await.map_err(map_missing)?;
-        let history = exec_ctx.resp_handler.rehydrate(ctx).await.map_err(map_missing)?;
+        let (stored, history) = exec_ctx
+            .resp_handler
+            .rehydrate(ctx)
+            .await?
+            .ok_or_else(missing_previous_response_id)?;
         let checkpoint = ResponseCheckpoint {
             response_id: stored.response_id,
-            conversation_id: stored.conversation_id,
             history: canonical_session_history(InOutItem::into_input_items(history)),
             metadata: stored.metadata,
             durable: true,
@@ -334,6 +335,13 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
         })?;
         std::sync::Arc::new(continuation.retain_parent(checkpoint)?)
     };
+    // The model input holds the parent's history; the turn's checkpoint keeps the rest.
+    ctx.checkpoint = Some(ResponseCheckpoint {
+        response_id: parent.response_id.clone(),
+        history: Vec::new(),
+        metadata: parent.metadata.clone(),
+        durable: parent.durable,
+    });
     if restore_agent_tree(ctx, &parent.metadata, exec_ctx.responses_config.max_retained_bytes)? {
         if let Some(continuation) = ctx.continuation.as_mut() {
             continuation.parent = Some(parent);
@@ -364,6 +372,11 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
     Ok(())
 }
 
+/// Response continuation runs only for a request with `previous_response_id`.
+fn missing_previous_response_id() -> ExecutorError {
+    ExecutorError::InvalidRequest("previous_response_id is required to continue a response".to_owned())
+}
+
 /// Hydrates `ctx` from the conversation store.
 ///
 /// Gets or creates the conversation (depending on `store`) and rehydrates its
@@ -377,17 +390,21 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
                 exec_ctx.conv_handler.get(ctx).await
             }
         },
-        exec_ctx.conv_handler.rehydrate_snapshot(ctx),
+        exec_ctx.conv_handler.rehydrate(ctx),
     )?;
 
-    if let Some(metadata) = exec_ctx
-        .conv_handler
-        .response_metadata_at_version(ctx, &snapshot.version)
-        .await?
-        && restore_agent_tree(ctx, &metadata, exec_ctx.responses_config.max_retained_bytes)?
+    let checkpoint = snapshot.turn_metadata.map(|metadata| ResponseCheckpoint {
+        response_id: snapshot.version.response_id.clone().unwrap_or_default(),
+        history: Vec::new(),
+        metadata,
+        durable: true,
+    });
+    if let Some(turn) = &checkpoint
+        && restore_agent_tree(ctx, &turn.metadata, exec_ctx.responses_config.max_retained_bytes)?
     {
         ctx.conversation_id = Some(conv_data.conversation_id);
         ctx.conversation_version = Some(snapshot.version);
+        ctx.checkpoint = checkpoint;
         return Ok(());
     }
 
@@ -399,6 +416,7 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
     ctx.enriched_request.input = ResponsesInput::from(items);
     ctx.conversation_id = Some(conv_data.conversation_id);
     ctx.conversation_version = Some(snapshot.version);
+    ctx.checkpoint = checkpoint;
     Ok(())
 }
 

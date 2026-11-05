@@ -10,8 +10,8 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use super::{ExecutorError, ExecutorResult, MessagesRequestContext, ParsedMessagesRequest};
-pub(super) use crate::storage::messages::MAX_CHECKPOINT_BYTES;
+use crate::executor::{ExecutorError, ExecutorResult, MessagesRequestContext, ParsedMessagesRequest};
+pub(in crate::executor) use crate::storage::messages::MAX_CHECKPOINT_BYTES;
 use crate::storage::messages::{MessageThreadLease, MessageThreadStore, MessageThreadStoreError};
 use crate::storage::{DbPool, StorageError};
 use crate::types::messages::parameters::RequestField;
@@ -276,14 +276,14 @@ impl PreparedMessagesThread {
 /// Whether a completed upstream round may seed another thread turn. Decide
 /// from the original round before removing calls that the client cannot see.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum ThreadRetention {
+pub(in crate::executor) enum ThreadRetention {
     Discard,
     Ready,
     Paused,
 }
 
 impl ThreadRetention {
-    pub(super) fn for_response(stop_reason: Option<&str>, has_tool_call: bool) -> Self {
+    pub(in crate::executor) fn for_response(stop_reason: Option<&str>, has_tool_call: bool) -> Self {
         match stop_reason {
             Some("pause_turn") => Self::Paused,
             Some("end_turn" | "stop_sequence" | "tool_use") => Self::Ready,
@@ -294,16 +294,16 @@ impl ThreadRetention {
 }
 
 #[derive(Debug)]
-pub(super) struct MessagesThreadTurn {
+pub(in crate::executor) struct MessagesThreadTurn {
     storage: MessageThreadStore,
     lease: Option<MessageThreadLease>,
     owner: MessagesThreadOwner,
     checkpoint: MessageThreadCheckpoint,
-    pub(super) message_id: String,
+    pub(in crate::executor) message_id: String,
 }
 
 impl MessagesThreadTurn {
-    pub(super) async fn complete(
+    pub(in crate::executor) async fn complete(
         mut self,
         history: &Value,
         content: &Value,

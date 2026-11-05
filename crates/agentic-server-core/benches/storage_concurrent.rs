@@ -29,15 +29,31 @@
 //! cargo bench --bench storage_concurrent -- concurrent_conversation_persist
 //! ```
 
+use agentic_core::types::conversations::ConversationMetadata;
 use std::sync::Arc;
 
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group};
 use tokio::runtime::Runtime;
 
+use agentic_core::storage::StoreResult;
 use agentic_core::storage::{ConversationStore, ResponseMetadata, ResponseStore, create_pool_with_schema};
 use agentic_core::types::event::MessageStatus;
 use agentic_core::types::io::InOutItem;
 use agentic_core::types::io::{InputItem, InputMessage, InputMessageContent, OutputItem, OutputMessage};
+
+/// Persist a turn at the conversation's current version, as the executor does after rehydrating.
+async fn persist_turn(
+    store: &ConversationStore,
+    conversation_id: &str,
+    response_id: &str,
+    items: Vec<InOutItem>,
+    metadata: &ResponseMetadata,
+) -> StoreResult<()> {
+    let version = store.rehydrate(conversation_id).await?.version;
+    store
+        .persist(conversation_id, version, response_id, items, None, metadata)
+        .await
+}
 
 static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
@@ -69,7 +85,7 @@ fn make_items() -> Vec<InOutItem> {
     vec![
         InOutItem::Input(input.clone()),
         InOutItem::Output(OutputItem::Message(OutputMessage::new(
-            "msg_123",
+            format!("msg_{}", next_id()),
             MessageStatus::Completed,
         ))),
         InOutItem::Input(input),
@@ -93,7 +109,13 @@ fn bench_concurrent_conversation_persist(c: &mut Criterion, store: &Conversation
                 b.to_async(Runtime::new().unwrap()).iter_batched(
                     || {
                         let store = store.clone();
-                        async move { store.create().await.expect("create conversation").conversation_id }
+                        async move {
+                            store
+                                .create("default_tenant", &ConversationMetadata::new(), &[])
+                                .await
+                                .expect("create conversation")
+                                .conversation_id
+                        }
                     },
                     |setup| {
                         let store = store.clone();
@@ -103,17 +125,13 @@ fn bench_concurrent_conversation_persist(c: &mut Criterion, store: &Conversation
                                 .map(|_| {
                                     let store = store.clone();
                                     let cid = conversation_id.clone();
+                                    // Versioned persists to one conversation conflict by design;
+                                    // concurrent appends share the same sequence allocation.
                                     tokio::spawn(async move {
                                         store
-                                            .persist(
-                                                &cid,
-                                                &next_id(),
-                                                None,
-                                                black_box(make_items()),
-                                                &black_box(make_metadata()),
-                                            )
+                                            .create_items("default_tenant", &cid, black_box(make_items()))
                                             .await
-                                            .expect("concurrent conversation persist failed");
+                                            .expect("concurrent conversation append failed");
                                     })
                                 })
                                 .collect();
@@ -136,11 +154,19 @@ fn bench_concurrent_conversation_rehydrate(c: &mut Criterion, store: &Conversati
     let rt = Runtime::new().unwrap();
 
     let conversation_id = rt.block_on(async {
-        let conv = store.create().await.expect("create conversation");
-        store
-            .persist(&conv.conversation_id, &next_id(), None, make_items(), &make_metadata())
+        let conv = store
+            .create("default_tenant", &ConversationMetadata::new(), &[])
             .await
-            .expect("setup persist");
+            .expect("create conversation");
+        persist_turn(
+            &store,
+            &conv.conversation_id,
+            &next_id(),
+            make_items(),
+            &make_metadata(),
+        )
+        .await
+        .expect("setup persist");
         conv.conversation_id
     });
 
@@ -199,7 +225,13 @@ fn bench_concurrent_conversation_persist_independent(c: &mut Criterion, store: &
                         async move {
                             let mut ids = Vec::with_capacity(concurrency);
                             for _ in 0..concurrency {
-                                ids.push(store.create().await.expect("create conversation").conversation_id);
+                                ids.push(
+                                    store
+                                        .create("default_tenant", &ConversationMetadata::new(), &[])
+                                        .await
+                                        .expect("create conversation")
+                                        .conversation_id,
+                                );
                             }
                             ids
                         }
@@ -213,16 +245,15 @@ fn bench_concurrent_conversation_persist_independent(c: &mut Criterion, store: &
                                 .map(|cid| {
                                     let store = store.clone();
                                     tokio::spawn(async move {
-                                        store
-                                            .persist(
-                                                &cid,
-                                                &next_id(),
-                                                None,
-                                                black_box(make_items()),
-                                                &black_box(make_metadata()),
-                                            )
-                                            .await
-                                            .expect("independent conversation persist failed");
+                                        persist_turn(
+                                            &store,
+                                            &cid,
+                                            &next_id(),
+                                            black_box(make_items()),
+                                            &black_box(make_metadata()),
+                                        )
+                                        .await
+                                        .expect("independent conversation persist failed");
                                     })
                                 })
                                 .collect();
@@ -248,11 +279,19 @@ fn bench_concurrent_conversation_rehydrate_independent(c: &mut Criterion, store:
     let conversation_ids: Vec<String> = rt.block_on(async {
         let mut ids = Vec::with_capacity(max_concurrency);
         for _ in 0..max_concurrency {
-            let conv = store.create().await.expect("create conversation");
-            store
-                .persist(&conv.conversation_id, &next_id(), None, make_items(), &make_metadata())
+            let conv = store
+                .create("default_tenant", &ConversationMetadata::new(), &[])
                 .await
-                .expect("setup persist");
+                .expect("create conversation");
+            persist_turn(
+                &store,
+                &conv.conversation_id,
+                &next_id(),
+                make_items(),
+                &make_metadata(),
+            )
+            .await
+            .expect("setup persist");
             ids.push(conv.conversation_id);
         }
         ids
@@ -316,14 +355,19 @@ fn bench_concurrent_conversation_mixed_read_write(c: &mut Criterion) {
                         let writer_store = ConversationStore::new(writer_pool);
                         let reader_store = ConversationStore::new(reader_pool);
                         let conversation_id = writer_store
-                            .create()
+                            .create("default_tenant", &ConversationMetadata::new(), &[])
                             .await
                             .expect("create conversation")
                             .conversation_id;
-                        writer_store
-                            .persist(&conversation_id, &next_id(), None, make_items(), &make_metadata())
-                            .await
-                            .expect("seed conversation");
+                        persist_turn(
+                            &writer_store,
+                            &conversation_id,
+                            &next_id(),
+                            make_items(),
+                            &make_metadata(),
+                        )
+                        .await
+                        .expect("seed conversation");
                         (Arc::new(writer_store), Arc::new(reader_store), conversation_id)
                     },
                     |setup| async move {
@@ -332,16 +376,15 @@ fn bench_concurrent_conversation_mixed_read_write(c: &mut Criterion) {
                         let writer = {
                             let writer_store = writer_store.clone();
                             tokio::spawn(async move {
-                                writer_store
-                                    .persist(
-                                        &writer_id,
-                                        &next_id(),
-                                        None,
-                                        black_box(make_items()),
-                                        &black_box(make_metadata()),
-                                    )
-                                    .await
-                                    .expect("mixed writer failed");
+                                persist_turn(
+                                    &writer_store,
+                                    &writer_id,
+                                    &next_id(),
+                                    black_box(make_items()),
+                                    &black_box(make_metadata()),
+                                )
+                                .await
+                                .expect("mixed writer failed");
                             })
                         };
 
@@ -397,6 +440,7 @@ fn bench_concurrent_response_persist(c: &mut Criterion, store: &ResponseStore) {
                                                 &response_id,
                                                 None,
                                                 black_box(make_items()),
+                                                None,
                                                 &black_box(make_metadata()),
                                             )
                                             .await
@@ -425,7 +469,7 @@ fn bench_concurrent_response_rehydrate(c: &mut Criterion, store: &ResponseStore)
     let response_id = rt.block_on(async {
         let id = next_id();
         store
-            .persist(&id, None, make_items(), &make_metadata())
+            .persist(&id, None, make_items(), None, &make_metadata())
             .await
             .expect("setup persist");
         id

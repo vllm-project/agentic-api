@@ -1,211 +1,188 @@
-use criterion::{BatchSize, Criterion, black_box, criterion_group};
+//! Storage CRUD latency for the rehydrate and persist paths.
+//!
+//! Each benchmark times one store call and nothing else: histories are seeded before timing starts,
+//! and each persist sample gets a freshly prepared parent or conversation. Benchmarks are
+//! parameterized by history length (items) to show how each read scales.
+//!
+//! Set `BENCH_DATABASE_URL` to run against another database, for example PostgreSQL; the default is a
+//! fresh `SQLite` file in the system temporary directory.
 
-use agentic_core::storage::{ConversationStore, ResponseMetadata, ResponseStore, create_pool_with_schema};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
+
+use agentic_core::storage::{
+    ConversationStore, ConversationVersion, DbPool, ResponseMetadata, ResponseStore, create_pool_with_schema,
+};
+use agentic_core::types::conversations::ConversationMetadata;
 use agentic_core::types::event::MessageStatus;
-use agentic_core::types::io::InOutItem;
-use agentic_core::types::io::{InputItem, InputMessage, InputMessageContent, OutputItem, OutputMessage};
+use agentic_core::types::io::{InOutItem, InputItem, InputMessage, InputMessageContent, OutputItem, OutputMessage};
+use criterion::{BatchSize, BenchmarkId, Criterion, black_box, criterion_group};
+use tokio::runtime::Runtime;
 
-static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// History lengths in items; each turn adds three items.
+const HISTORY_ITEMS: [usize; 3] = [3, 30, 300];
+const TENANT: &str = "default_tenant";
 
-fn next_id() -> String {
-    let count = COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-    format!("id_{count}")
+static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+fn next_id(prefix: &str) -> String {
+    format!("{prefix}{}", COUNTER.fetch_add(1, Ordering::Relaxed))
 }
 
-fn create_test_items() -> Vec<InOutItem> {
-    let input_item = InputItem::Message(InputMessage {
-        role: "user".to_string(),
-        content: InputMessageContent::Text("Test message".to_string()),
-        ..Default::default()
-    });
-
-    let output_msg = OutputMessage::new("msg_123", MessageStatus::Completed);
-
-    vec![
-        InOutItem::Input(input_item.clone()),
-        InOutItem::Output(OutputItem::Message(output_msg)),
-        InOutItem::Input(input_item),
-    ]
+/// One turn: a user message, an assistant message, and a follow-up user message, each with a unique ID.
+fn turn() -> Vec<InOutItem> {
+    let user = || {
+        InOutItem::Input(InputItem::Message(InputMessage {
+            id: Some(next_id("msg_in_")),
+            role: "user".to_owned(),
+            content: InputMessageContent::Text("Test message".to_owned()),
+            ..Default::default()
+        }))
+    };
+    let answer = InOutItem::Output(OutputItem::Message(OutputMessage::new(
+        next_id("msg_out_"),
+        MessageStatus::Completed,
+    )));
+    vec![user(), answer, user()]
 }
 
-fn create_test_metadata() -> ResponseMetadata {
-    ResponseMetadata::default()
+fn history(items: usize) -> Vec<InOutItem> {
+    (0..items.div_ceil(3)).flat_map(|_| turn()).take(items).collect()
 }
 
-fn bench_conversation_persist(c: &mut Criterion, store: &ConversationStore) {
-    use std::sync::{Arc, Mutex};
-    let previous_response_id = Arc::new(Mutex::new(None::<String>));
+async fn seed_response(store: &ResponseStore, items: usize) -> String {
+    let id = next_id("resp_");
+    store
+        .persist(&id, None, history(items), None, &ResponseMetadata::default())
+        .await
+        .expect("seed response");
+    id
+}
 
-    c.bench_function("conversation_persist", |b| {
-        b.to_async(tokio::runtime::Runtime::new().unwrap()).iter_batched(
-            || async {
-                let conversation = store.create().await.expect("failed to create conversation");
-                let new_items = create_test_items();
-                let test_metadata = create_test_metadata();
-                let response_id = next_id();
-                let prev_id = previous_response_id.lock().unwrap().as_deref().map(ToString::to_string);
-                (
-                    conversation.conversation_id.clone(),
-                    new_items,
-                    test_metadata,
-                    response_id,
-                    prev_id,
-                )
-            },
-            |setup| {
-                let previous_response_id = previous_response_id.clone();
-                async move {
-                    let (conversation_id, new_items, test_metadata, response_id, prev_id) = setup.await;
+async fn seed_conversation(store: &ConversationStore, items: usize) -> String {
+    let conversation = store
+        .create(TENANT, &ConversationMetadata::new(), &[])
+        .await
+        .expect("create conversation");
+    store
+        .persist(
+            &conversation.conversation_id,
+            ConversationVersion::default(),
+            &next_id("resp_"),
+            history(items),
+            None,
+            &ResponseMetadata::default(),
+        )
+        .await
+        .expect("seed conversation");
+    conversation.conversation_id
+}
+
+fn bench_response_rehydrate(c: &mut Criterion, rt: &Runtime, store: &ResponseStore) {
+    let mut group = c.benchmark_group("response_rehydrate");
+    for items in HISTORY_ITEMS {
+        let id = rt.block_on(seed_response(store, items));
+        group.bench_with_input(BenchmarkId::from_parameter(items), &id, |b, id| {
+            b.to_async(rt)
+                .iter(|| async { store.rehydrate(black_box(id)).await.expect("rehydrate") });
+        });
+    }
+    group.finish();
+}
+
+fn bench_conversation_rehydrate(c: &mut Criterion, rt: &Runtime, store: &ConversationStore) {
+    let mut group = c.benchmark_group("conversation_rehydrate");
+    for items in HISTORY_ITEMS {
+        let id = rt.block_on(seed_conversation(store, items));
+        group.bench_with_input(BenchmarkId::from_parameter(items), &id, |b, id| {
+            b.to_async(rt)
+                .iter(|| async { store.rehydrate(black_box(id)).await.expect("rehydrate") });
+        });
+    }
+    group.finish();
+}
+
+/// Continue a fixed parent with one new turn; each sample writes a new response ID.
+fn bench_response_persist(c: &mut Criterion, rt: &Runtime, store: &ResponseStore) {
+    let mut group = c.benchmark_group("response_persist");
+    for items in HISTORY_ITEMS {
+        let parent = rt.block_on(seed_response(store, items));
+        group.bench_with_input(BenchmarkId::from_parameter(items), &parent, |b, parent| {
+            b.to_async(rt).iter_batched(
+                || (next_id("resp_"), turn()),
+                |(id, new_items)| async move {
                     store
                         .persist(
-                            &conversation_id,
+                            &id,
+                            Some(parent),
+                            black_box(new_items),
+                            None,
+                            &ResponseMetadata::default(),
+                        )
+                        .await
+                        .expect("persist");
+                },
+                BatchSize::SmallInput,
+            );
+        });
+    }
+    group.finish();
+}
+
+/// Append one turn to a fresh conversation with `items` of history, checking the captured version
+/// as the executor does. Each sample prepares its conversation outside the timed call.
+fn bench_conversation_persist(c: &mut Criterion, rt: &Runtime, store: &ConversationStore) {
+    let mut group = c.benchmark_group("conversation_persist");
+    for items in HISTORY_ITEMS {
+        group.bench_function(BenchmarkId::from_parameter(items), |b| {
+            b.to_async(rt).iter_custom(|iters| async move {
+                let mut elapsed = Duration::ZERO;
+                for _ in 0..iters {
+                    let id = seed_conversation(store, items).await;
+                    let version = store.rehydrate(&id).await.expect("capture version").version;
+                    let (response_id, new_items) = (next_id("resp_"), turn());
+                    let start = Instant::now();
+                    store
+                        .persist(
+                            &id,
+                            version,
                             &response_id,
-                            prev_id.as_deref(),
                             black_box(new_items),
-                            &black_box(test_metadata),
+                            None,
+                            &ResponseMetadata::default(),
                         )
                         .await
-                        .expect("persist failed");
-
-                    *previous_response_id.lock().unwrap() = Some(response_id);
+                        .expect("persist");
+                    elapsed += start.elapsed();
                 }
-            },
-            BatchSize::SmallInput,
-        );
-    });
+                elapsed
+            });
+        });
+    }
+    group.finish();
 }
 
-fn bench_response_persist(c: &mut Criterion, store: &ResponseStore) {
-    use std::sync::{Arc, Mutex};
-    let previous_id = Arc::new(Mutex::new(None::<String>));
-
-    c.bench_function("response_persist", |b| {
-        b.to_async(tokio::runtime::Runtime::new().unwrap()).iter_batched(
-            || {
-                let new_items = create_test_items();
-                let test_metadata = create_test_metadata();
-                let current_id = next_id();
-                let prev_id = previous_id.lock().unwrap().as_deref().map(ToString::to_string);
-                (new_items, test_metadata, current_id, prev_id)
-            },
-            |(new_items, test_metadata, current_id, prev_id)| {
-                let previous_id = previous_id.clone();
-                async move {
-                    store
-                        .persist(
-                            &current_id,
-                            prev_id.as_deref(),
-                            black_box(new_items),
-                            &black_box(test_metadata),
-                        )
-                        .await
-                        .expect("persist failed");
-
-                    *previous_id.lock().unwrap() = Some(current_id);
-                }
-            },
-            BatchSize::SmallInput,
-        );
+fn pool(rt: &Runtime) -> Arc<DbPool> {
+    let url = std::env::var("BENCH_DATABASE_URL").unwrap_or_else(|_| {
+        let path = std::env::temp_dir().join(format!("agentic_storage_crud_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        format!("sqlite://{}?mode=rwc", path.display())
     });
-}
-
-fn bench_conversation_rehydrate(c: &mut Criterion, store: &ConversationStore) {
-    use std::sync::Mutex;
-    let previous_response_id = Mutex::new(None::<String>);
-
-    c.bench_function("conversation_rehydrate", |b| {
-        b.to_async(tokio::runtime::Runtime::new().unwrap()).iter_batched(
-            || async {
-                let conversation = store.create().await.expect("failed to create conversation");
-                let new_items = create_test_items();
-                let test_metadata = create_test_metadata();
-                let response_id = next_id();
-                let prev_id = previous_response_id.lock().unwrap().as_deref().map(ToString::to_string);
-
-                store
-                    .persist(
-                        &conversation.conversation_id,
-                        &response_id,
-                        prev_id.as_deref(),
-                        new_items,
-                        &test_metadata,
-                    )
-                    .await
-                    .expect("setup persist failed");
-
-                *previous_response_id.lock().unwrap() = Some(response_id);
-                conversation.conversation_id.clone()
-            },
-            |setup| async move {
-                let conversation_id = setup.await;
-                store
-                    .rehydrate(&black_box(conversation_id))
-                    .await
-                    .expect("rehydrate failed")
-            },
-            BatchSize::SmallInput,
-        );
-    });
-}
-
-fn bench_response_rehydrate(c: &mut Criterion, store: &ResponseStore) {
-    use std::sync::Mutex;
-    let previous_response_id = Mutex::new(None::<String>);
-
-    c.bench_function("response_rehydrate", |b| {
-        b.to_async(tokio::runtime::Runtime::new().unwrap()).iter_batched(
-            || async {
-                let new_items = create_test_items();
-                let test_metadata = create_test_metadata();
-                let response_id = next_id();
-                let prev_id = previous_response_id.lock().unwrap().as_deref().map(ToString::to_string);
-
-                store
-                    .persist(&response_id, prev_id.as_deref(), new_items, &test_metadata)
-                    .await
-                    .expect("setup persist failed");
-
-                *previous_response_id.lock().unwrap() = Some(response_id.clone());
-                response_id
-            },
-            |setup| async move {
-                let response_id = setup.await;
-                store
-                    .rehydrate(&black_box(response_id))
-                    .await
-                    .expect("rehydrate failed")
-            },
-            BatchSize::SmallInput,
-        );
-    });
+    rt.block_on(create_pool_with_schema(Some(&url)))
+        .expect("create pool with schema")
 }
 
 fn init_benches(c: &mut Criterion) {
-    COUNTER.store(0, std::sync::atomic::Ordering::SeqCst);
+    let rt = Runtime::new().expect("tokio runtime");
+    let pool = pool(&rt);
+    let conversations = ConversationStore::new(Arc::clone(&pool));
+    let responses = ResponseStore::new(pool);
 
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    let pool = rt.block_on(async {
-        create_pool_with_schema(None)
-            .await
-            .expect("failed to create pool with schema")
-    });
-
-    let conversation_store = ConversationStore::new(pool.clone());
-    let response_store = ResponseStore::new(pool.clone());
-
-    bench_conversation_persist(c, &conversation_store);
-    bench_response_persist(c, &response_store);
-    bench_conversation_rehydrate(c, &conversation_store);
-    bench_response_rehydrate(c, &response_store);
-
-    rt.block_on(async {
-        sqlx::query("DELETE FROM items").execute(pool.as_ref()).await.ok();
-        sqlx::query("DELETE FROM responses").execute(pool.as_ref()).await.ok();
-        sqlx::query("DELETE FROM conversations")
-            .execute(pool.as_ref())
-            .await
-            .ok();
-    });
+    bench_response_rehydrate(c, &rt, &responses);
+    bench_conversation_rehydrate(c, &rt, &conversations);
+    bench_response_persist(c, &rt, &responses);
+    bench_conversation_persist(c, &rt, &conversations);
 }
 
 criterion_group!(storage_benches, init_benches);

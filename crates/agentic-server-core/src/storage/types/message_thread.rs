@@ -1,6 +1,8 @@
 //! Typed state of a persisted Messages checkpoint.
 
 use super::StorageError;
+use crate::storage::models::message_thread::MessageThread;
+use crate::types::messages::thread::MessageThreadCheckpoint;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MessageThreadState {
@@ -21,5 +23,24 @@ impl TryFrom<String> for MessageThreadState {
                 "invalid stored Messages thread state".to_owned(),
             )),
         }
+    }
+}
+
+impl TryFrom<MessageThread> for MessageThreadCheckpoint {
+    type Error = StorageError;
+
+    fn try_from(row: MessageThread) -> Result<Self, Self::Error> {
+        let checkpoint = row
+            .checkpoint
+            .ok_or_else(|| StorageError::Validation("stored Messages checkpoint is missing".to_owned()))?;
+        serde_json::from_str(&checkpoint).map_err(StorageError::Serialization)
+    }
+}
+
+impl TryFrom<&MessageThreadCheckpoint> for String {
+    type Error = StorageError;
+
+    fn try_from(checkpoint: &MessageThreadCheckpoint) -> Result<Self, Self::Error> {
+        serde_json::to_string(checkpoint).map_err(StorageError::Serialization)
     }
 }

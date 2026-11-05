@@ -135,7 +135,7 @@ async fn automatic_compaction_is_attributed_and_usage_is_counted_once() {
             let ctx = rehydrate_conversation(continuation, &exec).await.unwrap();
             assert!(ctx.multi_agent_tree.is_none());
             assert!(ctx.enriched_request.input.contains_compaction());
-            assert!(exec.resp_handler.retrieve(&result.id).await.is_err());
+            assert!(exec.resp_handler.get_snapshot(&result.id).await.is_err());
         }
     }
     server.abort();

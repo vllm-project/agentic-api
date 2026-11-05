@@ -137,36 +137,38 @@ persistence tables or SQLx migration history. This prevents an earlier empty sch
 capturing runtime queries. Startup fails instead of guessing when persistence objects exist in more than one
 `search_path` schema. Do not grant untrusted roles `CREATE` on any schema in the gateway role's `search_path`.
 
-The first PostgreSQL startup on this release widens timestamp and sequence columns in place to 64-bit integers. PostgreSQL takes exclusive table locks for these changes, which prevents concurrent writes from being lost but can briefly pause older replicas. It also rebuilds the conversation sequence index as unique, so duplicate non-null `(conversation_id, seq)` values stop the migration instead of leaving conversation order ambiguous. Check for duplicates before the upgrade and resolve them according to the deployment's data-retention policy:
+This release does not read data stored by earlier releases. Before migrating, startup checks whether a database
+migrated by an earlier release holds any conversations, items, or responses. A database without such rows migrates
+normally; one with them is handled as follows:
 
-```sql
-SELECT conversation_id, seq, COUNT(*)
-FROM items
-WHERE conversation_id IS NOT NULL AND seq IS NOT NULL
-GROUP BY conversation_id, seq
-HAVING COUNT(*) > 1;
-```
+- The default SQLite database (`$AGENTIC_API_HOME/agentic_api.db`, used when `DATABASE_URL` is not set) is dropped and
+  recreated at the latest schema. Its stored conversations and responses are discarded, and a warning is logged.
+- Any other database, including PostgreSQL and an explicit SQLite `DATABASE_URL`, is rejected. Startup fails with an
+  error asking the operator to reset the database or configure a new one; the stored data is left unchanged.
 
-For an existing large database, schedule the first upgraded replica during a maintenance window and set the migration timeout for the expected lock, rewrite, and index duration.
+To upgrade a deployment that uses PostgreSQL or an explicit `DATABASE_URL`, stop every replica of the earlier release,
+then either point `DATABASE_URL` at a new empty database or drop all of the gateway's tables (`responses`, `items`,
+`conversations`, `message_threads`, the `file_search_*` tables, and `_sqlx_migrations`), according to the deployment's data-retention
+policy. Back up the database first if its contents must be kept.
 
-Drain replicas running an older release before enabling writes through this release. Older replicas do not take the per-conversation row lock and can allocate duplicate sequence numbers if they write alongside upgraded replicas.
+On a new PostgreSQL database, the first startup applies the migrations and then widens timestamp and sequence columns to
+64-bit integers.
 
 Stored requests now fail if their response or conversation state cannot be persisted. For streaming requests, the gateway sends an error event instead of `response.completed`. Most client responses use the generic message `failed to persist response`; the underlying database error is written only to gateway logs. The exception is an optimistic conversation conflict, which returns status `400`, type `invalid_request_error`, code `conversation_locked`, and param `conversation`. No part of the stale turn is persisted, so the client can retry the request against the conversation's latest state. This prevents clients from receiving a response ID that cannot be continued after a lock timeout or other database failure without exposing database schema or constraint details.
 
 `AGENTIC_API_SCHEMA_READY` keeps schema changes under supervisor control. Startup performs a read-only compatibility
-check and fails if required persistence columns, types, nullability, primary/foreign-key/CHECK constraints, or the conversation
-sequence index are missing, or if persistence integer columns still need widening. The Conversations API also requires
-the `revision` column from migration `0005_conversation_revision.sql`. Every gateway startup requires
-`message_threads` from migration `0009_message_threads.sql`, even when no client uses threads, including its state,
-checkpoint, and lease CHECK constraints and the gateway role's SELECT/INSERT/UPDATE/DELETE privileges.
-Apply all migrations for the release with a DDL-capable migration role before starting the DML-only gateway role.
-The example below assumes migrations 0001–0008 have already been applied and includes 0009 in the same transaction
-as the compatibility upgrades. Run it from the repository root with `psql -v ON_ERROR_STOP=1` so a statement failure
-stops the script:
+check and fails if the database was created by an earlier release, if required persistence columns, types,
+nullability, primary/foreign-key/CHECK constraints, or the conversation sequence index are missing, or if persistence integer
+columns still need widening. Every startup requires `message_threads` from migration `0010_message_threads.sql`,
+including its state/checkpoint/lease CHECK constraints and SELECT/INSERT/UPDATE/DELETE privileges, even when clients
+send no thread requests. Apply the repository migrations through `0009_typed_item_metadata.sql` to an empty schema
+with a DDL-capable migration role, then apply `0010_message_threads.sql` and widen the integer columns in one transaction
+before starting the DML-only gateway role. Run the example below from the repository root with
+`psql -v ON_ERROR_STOP=1` so any statement failure stops the script:
 
 ```sql
 BEGIN;
-ALTER TABLE conversations ADD COLUMN IF NOT EXISTS revision BIGINT NOT NULL DEFAULT 0;
+\i crates/agentic-server-core/migrations/0010_message_threads.sql
 ALTER TABLE conversations
     ALTER COLUMN created_at TYPE BIGINT USING created_at::BIGINT,
     ALTER COLUMN revision TYPE BIGINT USING revision::BIGINT;
@@ -175,9 +177,6 @@ ALTER TABLE items
     ALTER COLUMN seq TYPE BIGINT USING seq::BIGINT;
 ALTER TABLE responses
     ALTER COLUMN created_at TYPE BIGINT USING created_at::BIGINT;
-DROP INDEX IF EXISTS idx_items_conversation_id;
-CREATE UNIQUE INDEX idx_items_conversation_id ON items (conversation_id, seq);
-\i crates/agentic-server-core/migrations/0009_message_threads.sql
 COMMIT;
 ```
 

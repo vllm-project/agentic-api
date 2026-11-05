@@ -6,6 +6,7 @@
 
 mod support;
 
+use agentic_core::types::conversations::ConversationMetadata;
 use std::collections::{HashMap, VecDeque};
 use std::fmt::Write as _;
 use std::fs;
@@ -1610,7 +1611,11 @@ async fn conversation_and_session_continuations_restore_hosted_loads() {
             ])
             .await;
             let context = durable_context(llm_url).await;
-            let conversation = context.conv_handler.create().await.expect("conversation");
+            let conversation = context
+                .conv_handler
+                .create("default_tenant", &ConversationMetadata::new(), &[])
+                .await
+                .expect("conversation");
             let session = ResponseSession::new(
                 NonZeroUsize::new(100).expect("nonzero"),
                 NonZeroUsize::new(100_000).expect("nonzero"),
@@ -2119,7 +2124,11 @@ async fn multi_agent_stores_the_hosted_pair_once() {
     ])
     .await;
     let (context, conversations) = durable_context_with_conversations(llm_url).await;
-    let conversation = context.conv_handler.create().await.expect("conversation");
+    let conversation = context
+        .conv_handler
+        .create("default_tenant", &ConversationMetadata::new(), &[])
+        .await
+        .expect("conversation");
     let payload: RequestPayload = serde_json::from_value(json!({
         "model": "test", "input": "weather?", "store": true, "multi_agent": {"enabled": true},
         "conversation": conversation.conversation_id, "tools": [{"type": "tool_search"}, deferred_weather()]
@@ -2131,10 +2140,10 @@ async fn multi_agent_stores_the_hosted_pair_once() {
         .await
         .expect("conversation items");
     let kinds: Vec<_> = items
+        .items
         .iter()
         .map(|item| {
-            let stored = String::try_from(item).expect("stored item JSON");
-            serde_json::from_str::<Value>(&stored).expect("item")["type"]
+            serde_json::to_value(item).expect("item")["type"]
                 .as_str()
                 .unwrap_or_default()
                 .to_owned()

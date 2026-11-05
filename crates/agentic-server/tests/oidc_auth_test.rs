@@ -1337,10 +1337,8 @@ async fn retrieval_uses_oidc_instead_of_the_configured_upstream_key() {
             "resp_private",
             None,
             Vec::new(),
-            &agentic_core::storage::ResponseMetadata {
-                response_snapshot: Some(Box::new(payload)),
-                ..Default::default()
-            },
+            Some(&payload),
+            &agentic_core::storage::ResponseMetadata::default(),
         )
         .await
         .unwrap();

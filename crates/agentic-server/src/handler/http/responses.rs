@@ -107,7 +107,7 @@ pub async fn compact_response(State(state): State<AppState>, req: Request) -> Re
     tag = "responses",
 ))]
 pub async fn retrieve_response(State(state): State<AppState>, Path(response_id): Path<String>) -> Response {
-    match state.exec_ctx.resp_handler.retrieve(&response_id).await {
+    match state.exec_ctx.resp_handler.get_snapshot(&response_id).await {
         Ok(payload) => axum::Json(payload).into_response(),
         Err(error) => executor_error_response(error),
     }

@@ -447,7 +447,7 @@ async fn prepare(
     if !ctx.enriched_request.input.has_compaction_trigger() {
         validate_reasoning_for_vllm(&ctx.enriched_request.input)?;
     }
-    prepare_request_tools(ctx, &exec.conv_handler, &exec.resp_handler).await
+    prepare_request_tools(ctx)
 }
 
 #[cfg(test)]

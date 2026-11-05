@@ -9,6 +9,7 @@ use crate::storage::{
 };
 use crate::types::agent::{AgentIdentity, AgentTurnId};
 use crate::types::agent_tree::{AgentState, StoredAgent, StoredTreeSnapshot};
+use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 use crate::types::io::MultiAgentConfig;
 use crate::types::io::output::{McpListTools, OutputItem};
@@ -344,7 +345,10 @@ async fn inherited_multi_agent_rejects_max_tool_calls() {
     let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await.unwrap();
     let response_store = ResponseStore::new(pool.clone());
     let conversation_store = ConversationStore::new(pool);
-    let conversation = conversation_store.create().await.unwrap();
+    let conversation = conversation_store
+        .create("default_tenant", &ConversationMetadata::new(), &[])
+        .await
+        .unwrap();
     let metadata = ResponseMetadata {
         multi_agent_tree: Some(StoredTreeSnapshot {
             version: 1,
@@ -370,15 +374,16 @@ async fn inherited_multi_agent_rejects_max_tool_calls() {
         ..Default::default()
     };
     response_store
-        .persist("resp_tree", None, Vec::new(), &metadata)
+        .persist("resp_tree", None, Vec::new(), None, &metadata)
         .await
         .unwrap();
     conversation_store
         .persist(
             &conversation.conversation_id,
+            ConversationVersion::default(),
             "resp_conversation_tree",
-            None,
             Vec::new(),
+            None,
             &metadata,
         )
         .await
@@ -465,7 +470,9 @@ async fn omitted_or_disabled_multi_agent_preserves_rehydration() {
 async fn new_conversation_rehydration_captures_empty_version() -> Result<(), Box<dyn std::error::Error>> {
     let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
     let conversation_store = ConversationStore::new(pool);
-    let conversation = conversation_store.create().await?;
+    let conversation = conversation_store
+        .create("default_tenant", &ConversationMetadata::new(), &[])
+        .await?;
     let exec_ctx = execution_context(conversation_store, ResponseStore::disabled());
 
     let ctx = rehydrate_conversation(request(Some(&conversation.conversation_id), None), &exec_ctx).await?;
@@ -478,7 +485,9 @@ async fn new_conversation_rehydration_captures_empty_version() -> Result<(), Box
 async fn existing_conversation_rehydration_captures_last_response() -> Result<(), Box<dyn std::error::Error>> {
     let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
     let conversation_store = ConversationStore::new(pool);
-    let conversation = conversation_store.create().await?;
+    let conversation = conversation_store
+        .create("default_tenant", &ConversationMetadata::new(), &[])
+        .await?;
     let prior_items = Vec::<InputItem>::from(&ResponsesInput::Text("prior input".into()))
         .into_iter()
         .map(InOutItem::Input)
@@ -486,9 +495,10 @@ async fn existing_conversation_rehydration_captures_last_response() -> Result<()
     conversation_store
         .persist(
             &conversation.conversation_id,
+            ConversationVersion::default(),
             "resp_prior",
-            None,
             prior_items,
+            None,
             &ResponseMetadata::default(),
         )
         .await?;
@@ -511,17 +521,20 @@ async fn existing_conversation_rehydration_captures_last_response() -> Result<()
 async fn conversation_rehydration_remembers_listed_mcp_servers() -> Result<(), Box<dyn std::error::Error>> {
     let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
     let conversation_store = ConversationStore::new(pool);
-    let conversation = conversation_store.create().await?;
+    let conversation = conversation_store
+        .create("default_tenant", &ConversationMetadata::new(), &[])
+        .await?;
     conversation_store
         .persist(
             &conversation.conversation_id,
+            ConversationVersion::default(),
             "resp_prior",
-            None,
             vec![InOutItem::Output(OutputItem::McpListTools(McpListTools::new(
                 "mcpl_prior",
                 "counter",
                 Vec::new(),
             )))],
+            None,
             &ResponseMetadata::default(),
         )
         .await?;
@@ -582,10 +595,8 @@ async fn rehydration_remains_public_until_explicit_tool_search_preparation() {
             if search.execution == crate::types::tools::ToolSearchExecution::Client
     ));
 
-    let (ctx, tool_search_state) =
-        crate::executor::prepare::prepare_request_tools(ctx, &exec_ctx.conv_handler, &exec_ctx.resp_handler)
-            .await
-            .expect("explicit handler preparation accepts the rehydrated request");
+    let (ctx, tool_search_state) = crate::executor::prepare::prepare_request_tools(ctx)
+        .expect("explicit handler preparation accepts the rehydrated request");
 
     assert!(
         tool_search_state
@@ -620,6 +631,7 @@ async fn rehydration_rejects_orphan_tool_search_outputs() {
             "resp_search",
             None,
             vec![InOutItem::Input(orphan)],
+            None,
             &ResponseMetadata::default(),
         )
         .await
@@ -677,6 +689,7 @@ async fn stored_public_search_call_pairs_with_new_output_after_rehydration() {
             "resp_stored_search",
             None,
             vec![InOutItem::Output(stored_call)],
+            None,
             &metadata,
         )
         .await
@@ -699,10 +712,8 @@ async fn stored_public_search_call_pairs_with_new_output_after_rehydration() {
     let ctx = rehydrate_conversation(continuation, &exec_ctx)
         .await
         .expect("stored public call rehydrates before new output");
-    let (ctx, tool_search_state) =
-        crate::executor::prepare::prepare_request_tools(ctx, &exec_ctx.conv_handler, &exec_ctx.resp_handler)
-            .await
-            .expect("stored continuation derives valid tool-search state");
+    let (ctx, tool_search_state) = crate::executor::prepare::prepare_request_tools(ctx)
+        .expect("stored continuation derives valid tool-search state");
 
     let state = tool_search_state
         .as_ref()
@@ -719,12 +730,12 @@ async fn stored_public_search_call_pairs_with_new_output_after_rehydration() {
 }
 
 #[tokio::test]
-async fn native_code_interpreter_call_rehydrates_for_previous_response_and_conversation()
+async fn stored_code_interpreter_call_is_not_replayed_for_previous_response_or_conversation()
 -> Result<(), Box<dyn std::error::Error>> {
-    let native_call: OutputItem = serde_json::from_value(serde_json::json!({
+    let projection: OutputItem = serde_json::from_value(serde_json::json!({
         "type": "code_interpreter_call",
-        "id": "ci_native",
-        "container_id": "cntr_native",
+        "id": "ci_projection",
+        "container_id": "cntr_projection",
         "code": "print(7)",
         "status": "completed",
         "outputs": [{"type": "logs", "logs": "7\n"}]
@@ -735,34 +746,37 @@ async fn native_code_interpreter_call_rehydrates_for_previous_response_and_conve
     let conversation_store = ConversationStore::new(conversation_pool);
     response_store
         .persist(
-            "resp_native",
+            "resp_projection",
             None,
-            vec![InOutItem::Output(native_call.clone())],
+            vec![InOutItem::Output(projection.clone())],
+            None,
             &ResponseMetadata::default(),
         )
         .await?;
-    let conversation = conversation_store.create().await?;
+    let conversation = conversation_store
+        .create("default_tenant", &ConversationMetadata::new(), &[])
+        .await?;
     conversation_store
         .persist(
             &conversation.conversation_id,
-            "resp_conversation_native",
+            ConversationVersion::default(),
+            "resp_conversation_projection",
+            vec![InOutItem::Output(projection)],
             None,
-            vec![InOutItem::Output(native_call)],
             &ResponseMetadata::default(),
         )
         .await?;
     let exec_ctx = execution_context(conversation_store, response_store);
 
     for request in [
-        request(None, Some("resp_native")),
+        request(None, Some("resp_projection")),
         request(Some(&conversation.conversation_id), None),
     ] {
         let ctx = rehydrate_conversation(request, &exec_ctx).await?;
+        // The model saw the gateway's function call, not this public projection.
         let model_input = serde_json::to_value(ctx.enriched_request.input.model_input())?;
-        assert_eq!(model_input[0]["type"], "code_interpreter_call");
-        assert_eq!(model_input[0]["id"], "ci_native");
-        assert_eq!(model_input[0]["outputs"][0]["logs"], "7\n");
-        assert_eq!(model_input[1]["role"], "user");
+        assert_eq!(model_input.as_array().map(Vec::len), Some(1));
+        assert_eq!(model_input[0]["role"], "user");
     }
     Ok(())
 }
@@ -772,7 +786,7 @@ async fn previous_response_rehydration_has_no_conversation_version() -> Result<(
     let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
     let response_store = ResponseStore::new(pool);
     response_store
-        .persist("resp_prior", None, Vec::new(), &ResponseMetadata::default())
+        .persist("resp_prior", None, Vec::new(), None, &ResponseMetadata::default())
         .await?;
     let exec_ctx = execution_context(ConversationStore::disabled(), response_store);
 
@@ -795,6 +809,7 @@ async fn previous_response_rehydration_remembers_listed_mcp_servers() -> Result<
                 "counter",
                 Vec::new(),
             )))],
+            None,
             &ResponseMetadata::default(),
         )
         .await?;

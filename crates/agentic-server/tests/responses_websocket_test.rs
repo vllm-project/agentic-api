@@ -30,7 +30,9 @@ use tokio_util::sync::CancellationToken;
 use agentic_core::config::ResponsesConfig;
 use agentic_core::executor::{ConversationHandler, ExecutionContext, RequestContext, ResponseHandler};
 use agentic_core::proxy::ProxyState;
-use agentic_core::storage::{ConversationStore, DbPool, ResponseMetadata, ResponseStore, create_pool_with_schema};
+use agentic_core::storage::{
+    ConversationStore, DbPool, ResponseData, ResponseMetadata, ResponseStore, create_pool_with_schema,
+};
 use agentic_core::tool::{WebSearchHandler, model_visible_namespace_member_name};
 use agentic_core::types::RequestPayload;
 use agentic_core::types::io::InOutItem;
@@ -39,6 +41,7 @@ use agentic_core::types::tools::ResponsesTool;
 use agentic_server::app::{AppState, DEFAULT_MAX_REQUEST_BODY_SIZE, WebSocketTracker};
 
 use agentic_core::utils::common::{deserialize_from_value, serialize_to_value};
+use common::persist_turn;
 use common::{spawn_gateway, test_config};
 
 mod steering {
@@ -1429,20 +1432,19 @@ fn competing_turn_items() -> Vec<InOutItem> {
 }
 
 async fn persist_competing_turn(pool: &Arc<DbPool>, conversation_id: &str) {
-    ConversationStore::new(Arc::clone(pool))
-        .persist(
-            conversation_id,
-            COMPETING_RESPONSE_ID,
-            None,
-            competing_turn_items(),
-            &ResponseMetadata {
-                multi_agent_tree: None,
-                model: "competing-model".to_owned(),
-                ..ResponseMetadata::default()
-            },
-        )
-        .await
-        .expect("competing turn should persist");
+    persist_turn(
+        &ConversationStore::new(Arc::clone(pool)),
+        conversation_id,
+        COMPETING_RESPONSE_ID,
+        competing_turn_items(),
+        &ResponseMetadata {
+            multi_agent_tree: None,
+            model: "competing-model".to_owned(),
+            ..ResponseMetadata::default()
+        },
+    )
+    .await
+    .expect("competing turn should persist");
 }
 
 async fn assert_conflicting_websocket_turn_not_persisted(
@@ -1450,14 +1452,12 @@ async fn assert_conflicting_websocket_turn_not_persisted(
     conversation_id: &str,
     stale_response_id: &str,
 ) {
-    let conversation_store = ConversationStore::new(Arc::clone(pool));
-    assert_eq!(
-        conversation_store
-            .rehydrate(conversation_id)
-            .await
-            .expect("conversation history"),
-        competing_turn_items()
-    );
+    let conversation = ConversationStore::new(Arc::clone(pool))
+        .rehydrate(conversation_id)
+        .await
+        .expect("conversation history");
+    assert_eq!(conversation.items, competing_turn_items());
+    assert_eq!(conversation.version.response_id.as_deref(), Some(COMPETING_RESPONSE_ID));
     let response_store = ResponseStore::new(Arc::clone(pool));
     let competing = response_store
         .get(COMPETING_RESPONSE_ID)
@@ -2272,6 +2272,7 @@ async fn test_websocket_generate_false_prewarm_redacts_mcp_runtime_credentials()
         response_id: "resp_lookup".to_owned(),
         conversation_id: None,
         conversation_version: None,
+        checkpoint: None,
         continuation: None,
     };
     let stored = fixture
@@ -2281,6 +2282,7 @@ async fn test_websocket_generate_false_prewarm_redacts_mcp_runtime_credentials()
         .get(&lookup_ctx)
         .await
         .expect("stored prewarm response");
+    let stored = ResponseData::try_from(stored).expect("decode prewarm response");
     let tools = stored.metadata.effective_tools.expect("persisted tools");
     let ResponsesTool::Mcp(tool) = &tools[0] else {
         panic!("expected MCP tool");
@@ -2601,20 +2603,19 @@ async fn websocket_empty_prewarm_replaces_compacted_conversation_tool_search_sta
     let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
     let conversation_id = create_conversation(&gateway_url).await;
     let conversation_store = ConversationStore::new(Arc::clone(&fixture.pool));
-    conversation_store
-        .persist(
-            &conversation_id,
-            "resp_before_prewarm",
-            None,
-            vec![InOutItem::Input(InputItem::Compaction(CompactionItem {
-                agent: None,
-                id: Some("cmp_before_prewarm".to_owned()),
-                encrypted_content: "Existing compacted conversation state".to_owned(),
-            }))],
-            &ResponseMetadata::default(),
-        )
-        .await
-        .expect("seed compacted conversation state");
+    persist_turn(
+        &conversation_store,
+        &conversation_id,
+        "resp_before_prewarm",
+        vec![InOutItem::Input(InputItem::Compaction(CompactionItem {
+            agent: None,
+            id: Some("cmp_before_prewarm".to_owned()),
+            encrypted_content: "Existing compacted conversation state".to_owned(),
+        }))],
+        &ResponseMetadata::default(),
+    )
+    .await
+    .expect("seed compacted conversation state");
     let mut ws = connect_responses_ws(&gateway_url).await;
 
     for store in [false, true] {
@@ -3543,7 +3544,8 @@ async fn websocket_generate_false_conversation_conflict_rejects_stale_local_comp
         conversation_store
             .rehydrate(&conversation_id)
             .await
-            .expect("conversation history"),
+            .expect("conversation history")
+            .items,
         competing_turn_items()
     );
     let response_ids = sqlx::query_scalar::<_, String>("SELECT id FROM responses WHERE id != $1 ORDER BY id")
@@ -3781,7 +3783,7 @@ async fn websocket_generate_false_rejects_rehydrated_code_interpreter_before_per
         ..ResponseMetadata::default()
     };
     ResponseStore::new(Arc::clone(&fixture.pool))
-        .persist("resp_parent", None, Vec::new(), &parent_metadata)
+        .persist("resp_parent", None, Vec::new(), None, &parent_metadata)
         .await
         .expect("persist legacy parent response");
 

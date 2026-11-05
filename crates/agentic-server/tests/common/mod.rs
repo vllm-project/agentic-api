@@ -17,6 +17,8 @@ use agentic_core::executor::{ConversationHandler, ExecutionContext, ResponseHand
 use agentic_core::proxy::ProxyState;
 use agentic_core::readiness::llm_readiness_client;
 use agentic_core::storage::{ConversationStore, ResponseStore};
+use agentic_core::storage::{ResponseMetadata, StoreResult};
+use agentic_core::types::io::InOutItem;
 use agentic_server::app::{
     AppState, DEFAULT_MAX_REQUEST_BODY_SIZE, ReadinessTracker, ServerConfig, WebSocketTracker, build_router,
 };
@@ -289,4 +291,19 @@ pub fn shown_blocks(content: &Value) -> Vec<String> {
             }
         })
         .collect()
+}
+
+/// Persist a turn at the conversation's current version, as the executor does after rehydrating.
+#[allow(dead_code)]
+pub async fn persist_turn(
+    store: &ConversationStore,
+    conversation_id: &str,
+    response_id: &str,
+    items: Vec<InOutItem>,
+    metadata: &ResponseMetadata,
+) -> StoreResult<()> {
+    let version = store.rehydrate(conversation_id).await?.version;
+    store
+        .persist(conversation_id, version, response_id, items, None, metadata)
+        .await
 }

@@ -2,7 +2,7 @@
 
 use super::DbResult;
 
-pub(super) const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 53;
+pub(super) const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 55;
 pub(super) const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 19;
 pub(super) const REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT: i64 = 5;
 
@@ -21,7 +21,8 @@ where
                  ('conversations', 'revision', 'integer', 'NO'), \
                  ('items', 'id', 'text', 'NO'), \
                  ('items', 'data', 'text', 'NO'), \
-                 ('items', 'public_id', 'text', 'YES'), \
+                 ('items', 'public_id', 'text', 'NO'), \
+                 ('items', 'metadata', 'text', 'NO'), \
                  ('items', 'created_at', 'integer', 'NO'), \
                  ('items', 'conversation_id', 'text', 'YES'), \
                  ('items', 'seq', 'integer', 'YES'), \
@@ -31,6 +32,7 @@ where
                  ('responses', 'conversation_id', 'text', 'YES'), \
                  ('responses', 'previous_response_id', 'text', 'YES'), \
                  ('responses', 'history_item_ids', 'text', 'YES'), \
+                 ('responses', 'snapshot', 'text', 'YES'), \
                  ('responses', 'metadata', 'text', 'YES'), \
                  ('responses', 'created_at', 'integer', 'NO'), \
                  ('responses', 'tenant_id', 'text', 'YES'), \

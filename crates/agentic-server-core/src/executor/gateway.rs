@@ -1751,7 +1751,6 @@ mod tests {
                 code: "print(6 * 7)".to_owned(),
                 status: CodeInterpreterCallStatus::InProgress,
                 outputs: None,
-                origin: crate::types::io::code_interpreter::CodeInterpreterCallOrigin::Gateway,
             })),
             completed_output: None,
             arguments: None,
@@ -1763,7 +1762,6 @@ mod tests {
             code: "print(6 * 7)".to_owned(),
             status: CodeInterpreterCallStatus::Completed,
             outputs: Some(vec![CodeInterpreterCallOutput::logs("42\n".to_owned())]),
-            origin: crate::types::io::code_interpreter::CodeInterpreterCallOrigin::Gateway,
         });
         let (sender, mut receiver) = mpsc::channel(16);
         let mut relay = StreamRelay::client(sender, RelayLimits::default());
@@ -1813,23 +1811,8 @@ mod tests {
         assert_eq!(events[6]["item"]["code"], "print(6 * 7)");
         assert_eq!(events[6]["item"]["outputs"][0]["logs"], "42\n");
 
-        // Emitting SSE frames must not turn the typed gateway projection into
-        // an upstream-native call when the response is stored for continuation.
-        let stored = String::try_from(&InOutItem::Output(final_item)).expect("store streamed gateway projection");
-        let item = crate::storage::models::item::Item {
-            id: "ci_1".to_owned(),
-            reference_id: None,
-            public_id: None,
-            data: stored,
-            created_at: 0,
-            conversation_id: None,
-            seq: None,
-            tenant_id: None,
-        };
-        let history = vec![item.as_inout().expect("rehydrate streamed projection")];
-        assert!(InOutItem::into_input_items(history).is_empty());
-        let public = serde_json::to_value(item.as_output().expect("public output")).expect("serialize public item");
-        assert!(public.get("_agentic_code_interpreter_origin").is_none());
+        // The streamed public projection is never replayed upstream.
+        assert!(InOutItem::into_input_items(vec![InOutItem::Output(final_item)]).is_empty());
     }
 
     #[tokio::test]

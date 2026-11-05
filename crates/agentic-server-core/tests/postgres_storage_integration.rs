@@ -1,3 +1,6 @@
+mod support;
+
+use agentic_core::types::conversations::ConversationMetadata;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -8,6 +11,7 @@ use agentic_core::storage::{
 };
 use agentic_core::types::io::InOutItem;
 use agentic_core::types::io::{InputItem, InputMessage, InputMessageContent};
+use support::persist_turn;
 use tokio::sync::Barrier;
 use tokio::time::timeout;
 
@@ -17,142 +21,6 @@ fn input_item(text: &str) -> InOutItem {
         content: InputMessageContent::Text(text.to_owned()),
         ..Default::default()
     }))
-}
-
-#[tokio::test]
-#[ignore = "requires TEST_POSTGRES_URL pointing to an isolated PostgreSQL database"]
-#[allow(
-    clippy::too_many_lines,
-    reason = "keeps the complete index migration lifecycle in one integration test"
-)]
-async fn postgres_index_upgrade_preserves_existing_state() {
-    let database_url = std::env::var("TEST_POSTGRES_URL").expect("TEST_POSTGRES_URL must be set");
-    let pool = create_pool_with_configs(Some(&database_url), SqliteConfig::default(), PostgresConfig::default())
-        .await
-        .expect("create PostgreSQL upgrade-test pool");
-    let schema = format!("upgrade_{}", uuid::Uuid::now_v7().simple());
-    let mut connection = pool.acquire().await.expect("acquire PostgreSQL upgrade connection");
-    sqlx::query(&format!("CREATE SCHEMA {schema}"))
-        .execute(&mut *connection)
-        .await
-        .expect("create isolated upgrade schema");
-    sqlx::query(&format!("SET search_path TO {schema}"))
-        .execute(&mut *connection)
-        .await
-        .expect("select isolated upgrade schema");
-    sqlx::raw_sql(include_str!("../migrations/0001_initial.sql"))
-        .execute(&mut *connection)
-        .await
-        .expect("apply initial PostgreSQL schema");
-    sqlx::raw_sql(include_str!("../migrations/0002_add_placeholders.sql"))
-        .execute(&mut *connection)
-        .await
-        .expect("apply placeholder PostgreSQL schema");
-    sqlx::query("INSERT INTO conversations (id, created_at, metadata) VALUES ($1, $2, $3)")
-        .bind("conv_upgrade")
-        .bind(1_704_067_200_i64)
-        .bind("{\"source\":\"upgrade\"}")
-        .execute(&mut *connection)
-        .await
-        .expect("seed conversation");
-    sqlx::query("INSERT INTO items (id, data, created_at, conversation_id, seq) VALUES ($1, $2, $3, $4, $5)")
-        .bind("item_upgrade")
-        .bind("{}")
-        .bind(1_704_067_200_i64)
-        .bind("conv_upgrade")
-        .bind(0_i64)
-        .execute(&mut *connection)
-        .await
-        .expect("seed item");
-    sqlx::query(
-        "INSERT INTO responses \
-         (id, conversation_id, history_item_ids, metadata, created_at) VALUES ($1, $2, $3, $4, $5)",
-    )
-    .bind("resp_upgrade")
-    .bind("conv_upgrade")
-    .bind("[\"item_upgrade\"]")
-    .bind("{\"source\":\"upgrade\"}")
-    .bind(1_704_067_200_i64)
-    .execute(&mut *connection)
-    .await
-    .expect("seed response");
-
-    sqlx::raw_sql(include_str!("../migrations/0003_index_conversation_sequence.sql"))
-        .execute(&mut *connection)
-        .await
-        .expect("apply PostgreSQL composite index migration");
-
-    let linked_state: (i64, String, String) = sqlx::query_as(
-        "SELECT conversations.created_at, items.id, responses.id \
-         FROM conversations \
-         JOIN items ON items.conversation_id = conversations.id \
-         JOIN responses ON responses.conversation_id = conversations.id \
-         WHERE conversations.id = $1",
-    )
-    .bind("conv_upgrade")
-    .fetch_one(&mut *connection)
-    .await
-    .expect("load migrated linked state");
-    assert_eq!(
-        linked_state,
-        (1_704_067_200, "item_upgrade".to_owned(), "resp_upgrade".to_owned())
-    );
-    let recreated_indexes: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM pg_indexes \
-         WHERE schemaname = $1 AND indexname IN ( \
-           'idx_conversations_tenant_id', 'idx_items_conversation_id', \
-           'idx_items_created_at', 'idx_items_tenant_id', \
-           'idx_responses_conversation_id', 'idx_responses_previous_response_id', \
-           'idx_responses_created_at', 'idx_responses_tenant_id' \
-         )",
-    )
-    .bind(&schema)
-    .fetch_one(&mut *connection)
-    .await
-    .expect("inspect recreated PostgreSQL indexes");
-    assert_eq!(recreated_indexes, 8);
-    let conversation_index: String = sqlx::query_scalar(
-        "SELECT indexdef FROM pg_indexes \
-         WHERE schemaname = $1 AND indexname = 'idx_items_conversation_id'",
-    )
-    .bind(&schema)
-    .fetch_one(&mut *connection)
-    .await
-    .expect("inspect conversation sequence index");
-    assert!(conversation_index.contains("(conversation_id, seq)"));
-    let duplicate_sequence_error =
-        sqlx::query("INSERT INTO items (id, data, created_at, conversation_id, seq) VALUES ($1, $2, $3, $4, $5)")
-            .bind("item_duplicate_sequence")
-            .bind("{}")
-            .bind(1_704_067_200_i64)
-            .bind("conv_upgrade")
-            .bind(0_i64)
-            .execute(&mut *connection)
-            .await;
-    assert!(
-        duplicate_sequence_error.is_err(),
-        "conversation sequences must be database-unique"
-    );
-    let foreign_key_error =
-        sqlx::query("INSERT INTO items (id, data, created_at, conversation_id) VALUES ($1, $2, $3, $4)")
-            .bind("item_invalid")
-            .bind("{}")
-            .bind(1_704_067_200_i64)
-            .bind("conv_missing")
-            .execute(&mut *connection)
-            .await;
-    assert!(foreign_key_error.is_err());
-
-    sqlx::query("SET search_path TO public")
-        .execute(&mut *connection)
-        .await
-        .expect("restore public schema");
-    sqlx::query(&format!("DROP SCHEMA {schema} CASCADE"))
-        .execute(&mut *connection)
-        .await
-        .expect("drop isolated upgrade schema");
-    drop(connection);
-    pool.close().await;
 }
 
 #[tokio::test]
@@ -211,24 +79,26 @@ async fn postgres_migrations_and_state_survive_pool_restarts() {
     assert_eq!(stored_future_timestamp, future_timestamp);
 
     ResponseStore::new(first_pool.clone())
-        .persist(&response_id, None, vec![input_item("first turn")], &metadata)
+        .persist(&response_id, None, vec![input_item("first turn")], None, &metadata)
         .await
         .expect("persist first response");
     let first_conversation_store = ConversationStore::new(first_pool.clone());
-    let conversation = first_conversation_store.create().await.expect("create conversation");
-    first_conversation_store
-        .persist(
-            &conversation.conversation_id,
-            &conversation_response_id,
-            None,
-            vec![
-                input_item("conversation turn one"),
-                input_item("conversation turn one follow-up"),
-            ],
-            &metadata,
-        )
+    let conversation = first_conversation_store
+        .create("default_tenant", &ConversationMetadata::new(), &[])
         .await
-        .expect("persist first conversation turn");
+        .expect("create conversation");
+    persist_turn(
+        &first_conversation_store,
+        &conversation.conversation_id,
+        &conversation_response_id,
+        vec![
+            input_item("conversation turn one"),
+            input_item("conversation turn one follow-up"),
+        ],
+        &metadata,
+    )
+    .await
+    .expect("persist first conversation turn");
     first_pool.close().await;
 
     let second_pool =
@@ -241,6 +111,7 @@ async fn postgres_migrations_and_state_survive_pool_restarts() {
             .rehydrate(&response_id)
             .await
             .expect("rehydrate first response after restart")
+            .1
             .len(),
         1
     );
@@ -249,6 +120,7 @@ async fn postgres_migrations_and_state_survive_pool_restarts() {
             &continuation_id,
             Some(&response_id),
             vec![input_item("second turn")],
+            None,
             &metadata,
         )
         .await
@@ -259,19 +131,19 @@ async fn postgres_migrations_and_state_survive_pool_restarts() {
             .rehydrate(&conversation.conversation_id)
             .await
             .expect("rehydrate conversation after restart")
+            .items
             .len(),
         2
     );
-    second_conversation_store
-        .persist(
-            &conversation.conversation_id,
-            &conversation_continuation_id,
-            Some(&conversation_response_id),
-            vec![input_item("conversation turn two")],
-            &metadata,
-        )
-        .await
-        .expect("persist second conversation turn");
+    persist_turn(
+        &second_conversation_store,
+        &conversation.conversation_id,
+        &conversation_continuation_id,
+        vec![input_item("conversation turn two")],
+        &metadata,
+    )
+    .await
+    .expect("persist second conversation turn");
     second_pool.close().await;
 
     let third_pool = create_pool_with_schema_and_configs(Some(&database_url), SqliteConfig::default(), postgres_config)
@@ -282,6 +154,7 @@ async fn postgres_migrations_and_state_survive_pool_restarts() {
             .rehydrate(&continuation_id)
             .await
             .expect("rehydrate continuation after restart")
+            .1
             .len(),
         2
     );
@@ -290,6 +163,7 @@ async fn postgres_migrations_and_state_survive_pool_restarts() {
             .rehydrate(&conversation.conversation_id)
             .await
             .expect("rehydrate full conversation after restart")
+            .items
             .len(),
         3
     );
@@ -317,7 +191,10 @@ async fn postgres_concurrent_conversation_writes_have_contiguous_sequences() {
         .await
         .expect("create independent PostgreSQL pool");
     let conversation_store = ConversationStore::new(first_pool.clone());
-    let conversation = conversation_store.create().await.expect("create conversation");
+    let conversation = conversation_store
+        .create("default_tenant", &ConversationMetadata::new(), &[])
+        .await
+        .expect("create conversation");
     let barrier = Arc::new(Barrier::new(WRITE_COUNT + 1));
     let mut tasks = Vec::with_capacity(WRITE_COUNT);
 
@@ -329,17 +206,16 @@ async fn postgres_concurrent_conversation_writes_have_contiguous_sequences() {
             second_pool.clone()
         };
         let conversation_id = conversation.conversation_id.clone();
+        // Versioned turns to one conversation conflict by design; concurrent appends exercise the
+        // same locked sequence allocation.
         tasks.push(tokio::spawn(async move {
             let store = ConversationStore::new(pool);
-            let response_id = format!("resp_postgres_{}", uuid::Uuid::now_v7());
             barrier.wait().await;
             store
-                .persist(
+                .create_items(
+                    "default_tenant",
                     &conversation_id,
-                    &response_id,
-                    None,
                     vec![input_item(&format!("concurrent turn {index}"))],
-                    &ResponseMetadata::default(),
                 )
                 .await
         }));
@@ -352,10 +228,11 @@ async fn postgres_concurrent_conversation_writes_have_contiguous_sequences() {
             .expect("persist concurrent turn");
     }
 
-    let rows =
-        agentic_core::storage::models::item::get_items_by_conversation(&first_pool, &conversation.conversation_id)
-            .await
-            .expect("load concurrent conversation items");
+    let rows = agentic_core::storage::models::conversation::get_with_items(&first_pool, &conversation.conversation_id)
+        .await
+        .expect("load concurrent conversation items")
+        .expect("conversation exists")
+        .items;
     let sequences = rows
         .iter()
         .map(|row| row.seq.expect("conversation item sequence"))
@@ -391,9 +268,12 @@ async fn postgres_optimistic_conversation_conflict() {
         .await
         .expect("create independent PostgreSQL pool");
     let store = ConversationStore::new(first_pool.clone());
-    let conversation = store.create().await.expect("create conversation");
+    let conversation = store
+        .create("default_tenant", &ConversationMetadata::new(), &[])
+        .await
+        .expect("create conversation");
     let version = store
-        .rehydrate_snapshot(&conversation.conversation_id)
+        .rehydrate(&conversation.conversation_id)
         .await
         .expect("capture conversation version")
         .version;
@@ -409,12 +289,12 @@ async fn postgres_optimistic_conversation_conflict() {
             let items = vec![input_item("writer one input"), input_item("writer one follow-up")];
             barrier.wait().await;
             let result = store
-                .persist_if_version(
+                .persist(
                     &conversation_id,
                     version,
                     &response_id,
-                    None,
                     items.clone(),
+                    None,
                     &ResponseMetadata::default(),
                 )
                 .await;
@@ -430,12 +310,12 @@ async fn postgres_optimistic_conversation_conflict() {
             let items = vec![input_item("writer two input"), input_item("writer two follow-up")];
             barrier.wait().await;
             let result = store
-                .persist_if_version(
+                .persist(
                     &conversation_id,
                     version,
                     &response_id,
-                    None,
                     items.clone(),
+                    None,
                     &ResponseMetadata::default(),
                 )
                 .await;
@@ -469,10 +349,11 @@ async fn postgres_optimistic_conversation_conflict() {
     } else {
         (writer_two_items, writer_one_response_id)
     };
-    let rows =
-        agentic_core::storage::models::item::get_items_by_conversation(&first_pool, &conversation.conversation_id)
-            .await
-            .expect("load winning conversation items");
+    let rows = agentic_core::storage::models::conversation::get_with_items(&first_pool, &conversation.conversation_id)
+        .await
+        .expect("load winning conversation items")
+        .expect("conversation exists")
+        .items;
     let sequences = rows
         .iter()
         .map(|row| row.seq.expect("conversation item sequence"))
@@ -482,7 +363,8 @@ async fn postgres_optimistic_conversation_conflict() {
         store
             .rehydrate(&conversation.conversation_id)
             .await
-            .expect("rehydrate winning conversation items"),
+            .expect("rehydrate winning conversation items")
+            .items,
         winner_items
     );
     let response_error = ResponseStore::new(first_pool.clone())
@@ -515,8 +397,14 @@ async fn postgres_lock_wait_is_bounded_without_blocking_other_conversations() {
         .await
         .expect("create independent PostgreSQL pool");
     let first_store = ConversationStore::new(first_pool.clone());
-    let locked_conversation = first_store.create().await.expect("create locked conversation");
-    let unrelated_conversation = first_store.create().await.expect("create unrelated conversation");
+    let locked_conversation = first_store
+        .create("default_tenant", &ConversationMetadata::new(), &[])
+        .await
+        .expect("create locked conversation");
+    let unrelated_conversation = first_store
+        .create("default_tenant", &ConversationMetadata::new(), &[])
+        .await
+        .expect("create unrelated conversation");
     let mut holding_transaction = first_pool.begin().await.expect("begin lock-holding transaction");
     agentic_core::storage::models::conversation::lock_in_tx(
         &mut holding_transaction,
@@ -528,23 +416,22 @@ async fn postgres_lock_wait_is_bounded_without_blocking_other_conversations() {
     let blocked_store = ConversationStore::new(second_pool.clone());
     let blocked_conversation_id = locked_conversation.conversation_id.clone();
     let mut blocked_write = tokio::spawn(async move {
-        blocked_store
-            .persist(
-                &blocked_conversation_id,
-                &format!("resp_postgres_{}", uuid::Uuid::now_v7()),
-                None,
-                vec![input_item("blocked turn")],
-                &ResponseMetadata::default(),
-            )
-            .await
+        persist_turn(
+            &blocked_store,
+            &blocked_conversation_id,
+            &format!("resp_postgres_{}", uuid::Uuid::now_v7()),
+            vec![input_item("blocked turn")],
+            &ResponseMetadata::default(),
+        )
+        .await
     });
     let unrelated_store = ConversationStore::new(second_pool.clone());
     let unrelated_response_id = format!("resp_postgres_{}", uuid::Uuid::now_v7());
     let unrelated_metadata = ResponseMetadata::default();
-    let unrelated_write = unrelated_store.persist(
+    let unrelated_write = persist_turn(
+        &unrelated_store,
         &unrelated_conversation.conversation_id,
         &unrelated_response_id,
-        None,
         vec![input_item("unrelated turn")],
         &unrelated_metadata,
     );
@@ -590,18 +477,17 @@ async fn postgres_get_or_create_creates_then_returns_the_existing_conversation()
         .await
         .expect("create conversation on first use");
     let response_id = format!("resp_postgres_{}", uuid::Uuid::now_v7());
-    store
-        .persist(
-            &conversation_id,
-            &response_id,
-            None,
-            vec![input_item("first turn")],
-            &ResponseMetadata::default(),
-        )
-        .await
-        .expect("persist turn");
+    persist_turn(
+        &store,
+        &conversation_id,
+        &response_id,
+        vec![input_item("first turn")],
+        &ResponseMetadata::default(),
+    )
+    .await
+    .expect("persist turn");
     let before = store
-        .rehydrate_snapshot(&conversation_id)
+        .rehydrate(&conversation_id)
         .await
         .expect("rehydrate after first turn");
 
@@ -612,7 +498,7 @@ async fn postgres_get_or_create_creates_then_returns_the_existing_conversation()
     assert_eq!(existing.conversation_id, created.conversation_id);
     assert_eq!(existing.created_at, created.created_at);
     let after = store
-        .rehydrate_snapshot(&conversation_id)
+        .rehydrate(&conversation_id)
         .await
         .expect("rehydrate after second use");
     assert_eq!(after.version, before.version);

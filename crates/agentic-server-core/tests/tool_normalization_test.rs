@@ -105,6 +105,7 @@ fn upstream_request_value(payload: RequestPayload, stream: bool) -> Value {
         response_id: "resp_test".to_string(),
         conversation_id: None,
         conversation_version: None,
+        checkpoint: None,
         continuation: None,
     };
     let upstream_request = ctx

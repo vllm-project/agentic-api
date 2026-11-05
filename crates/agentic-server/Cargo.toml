@@ -60,7 +60,7 @@ reqwest = { workspace = true, features = ["json", "stream"] }
 rand = "0.8"
 rsa = "0.9"
 serde_json.workspace = true
-sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "any", "sqlite"] }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "any", "migrate", "sqlite"] }
 serde_yml = "0.0.12"
 serde_yaml = "0.9"
 tokio = { workspace = true, features = ["test-util"] }

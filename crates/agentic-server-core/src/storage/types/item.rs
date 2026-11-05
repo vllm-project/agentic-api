@@ -1,19 +1,18 @@
-//! Domain types for conversation items.
+//! Conversion between stored item rows and history items.
+//!
+//! This is the only place item JSON is read or written. `items.data` holds the item exactly as serde writes it, and
+//! `items.metadata` holds its [`ItemMetadata`].
 
 use std::convert::TryFrom;
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
-use crate::storage::StorageError;
 use crate::storage::models::Item as StorageDbItem;
-use crate::types::io::code_interpreter::CodeInterpreterCallOrigin;
-use crate::types::io::{InOutItem, OutputItem};
+use crate::storage::{StorageError, StoreResult};
+use crate::types::io::InOutItem;
+use crate::utils::common::{utcnow_str, uuid7_str};
 
-pub(crate) const STORED_ITEM_KIND_KEY: &str = "_agentic_item_kind";
-pub(crate) const STORED_CODE_INTERPRETER_ORIGIN_KEY: &str = "_agentic_code_interpreter_origin";
-
-/// Item kind (input vs output) for storage and retrieval.
+/// Item kind (input vs output). Both shapes share item types, so the kind is recorded beside the item.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ItemKind {
@@ -21,21 +20,10 @@ pub enum ItemKind {
     Output,
 }
 
-impl ItemKind {
-    pub(crate) const fn as_str(self) -> &'static str {
-        match self {
-            Self::Input => "input",
-            Self::Output => "output",
-        }
-    }
-
-    pub(crate) fn from_stored_str(value: &str) -> Option<Self> {
-        match value {
-            "input" => Some(Self::Input),
-            "output" => Some(Self::Output),
-            _ => None,
-        }
-    }
+/// Storage metadata kept in `items.metadata`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ItemMetadata {
+    pub kind: ItemKind,
 }
 
 impl InOutItem {
@@ -59,84 +47,261 @@ impl InOutItem {
     }
 }
 
-/// Decode retained history without silently omitting invalid records.
-///
-/// Legacy unmarked items retain the existing input/output discrimination policy.
-/// A malformed known item is an error, not an absent item or a replayable placeholder.
+/// Decode a stored row. A row whose metadata or data does not decode is invalid history; errors never include
+/// stored content.
 impl TryFrom<&StorageDbItem> for InOutItem {
     type Error = StorageError;
 
     fn try_from(row: &StorageDbItem) -> Result<Self, Self::Error> {
-        row.as_inout().ok_or_else(|| StorageError::InvalidHistoryItem {
+        let invalid = |_| StorageError::InvalidHistoryItem {
             item_id: row.id.clone(),
-        })
+        };
+        let metadata: ItemMetadata = serde_json::from_str(&row.metadata).map_err(invalid)?;
+        match metadata.kind {
+            ItemKind::Input => serde_json::from_str(&row.data).map(Self::Input),
+            ItemKind::Output => serde_json::from_str(&row.data).map(Self::Output),
+        }
+        .map_err(invalid)
     }
 }
 
-impl TryFrom<&InOutItem> for String {
-    type Error = StorageError;
+/// Decode a row as the public item returned by the Conversations and input-items APIs.
+///
+/// # Errors
+/// Returns [`StorageError::InvalidHistoryItem`] when the row cannot be decoded.
+pub(in crate::storage) fn decode_public(row: &StorageDbItem) -> StoreResult<InOutItem> {
+    Ok(InOutItem::try_from(row)?.into_public(row.public_id.clone()))
+}
 
-    fn try_from(item: &InOutItem) -> Result<Self, Self::Error> {
-        let (mut value, kind) = match item {
-            InOutItem::Input(input) => (
-                serde_json::to_value(input).map_err(StorageError::Serialization)?,
-                ItemKind::Input,
-            ),
-            InOutItem::Output(output) => (
-                serde_json::to_value(output).map_err(StorageError::Serialization)?,
-                ItemKind::Output,
-            ),
-        };
-
-        if let Some(obj) = value.as_object_mut() {
-            obj.insert(
-                STORED_ITEM_KIND_KEY.to_string(),
-                Value::String(kind.as_str().to_string()),
-            );
-            if matches!(
-                item,
-                InOutItem::Output(OutputItem::CodeInterpreterCall(call))
-                    if call.origin == CodeInterpreterCallOrigin::Gateway
-            ) {
-                obj.insert(
-                    STORED_CODE_INTERPRETER_ORIGIN_KEY.to_owned(),
-                    Value::String("gateway".to_owned()),
-                );
-            }
+/// Encode an item as a new row: a fresh row ID, its public ID (generated with the item's prefix when it has none),
+/// its data and its metadata. `create_in_tx` assigns conversation membership, sequence and tenant.
+///
+/// # Errors
+/// Returns [`StorageError::Validation`] for an empty ID, or a serialization error.
+pub(in crate::storage) fn encode(item: &InOutItem) -> StoreResult<StorageDbItem> {
+    let public_id = match item.id() {
+        Some("") => return Err(StorageError::Validation("item id cannot be an empty string".to_owned())),
+        Some(id) => id.to_owned(),
+        None => {
+            let prefix = match item {
+                InOutItem::Input(input) => input.id_prefix(),
+                InOutItem::Output(output) => output.id_prefix(),
+            };
+            uuid7_str(prefix.unwrap_or("item_"))
         }
-
-        serde_json::to_string(&value).map_err(StorageError::Serialization)
-    }
+    };
+    let (data, kind) = match item {
+        InOutItem::Input(input) => (serde_json::to_string(input)?, ItemKind::Input),
+        InOutItem::Output(output) => (serde_json::to_string(output)?, ItemKind::Output),
+    };
+    Ok(StorageDbItem {
+        id: uuid7_str("item_"),
+        public_id,
+        metadata: serde_json::to_string(&ItemMetadata { kind })?,
+        data,
+        created_at: utcnow_str(),
+        conversation_id: None,
+        seq: None,
+        tenant_id: None,
+    })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::types::io::{InputItem, InputMessage, InputMessageContent};
+    use serde_json::{Value, json};
 
-    #[test]
-    fn test_inout_item_to_string() {
-        let input = InputItem::Message(InputMessage {
-            role: "user".to_string(),
-            content: InputMessageContent::Text("test".to_string()),
-            ..Default::default()
-        });
-        let item = InOutItem::Input(input);
-        let json = String::try_from(&item).expect("serialization failed");
-        assert!(json.contains(STORED_ITEM_KIND_KEY));
-        assert!(json.contains("input"));
-        assert!(json.contains("user"));
-        assert!(json.contains("test"));
+    use super::*;
+    use crate::types::event::MessageStatus;
+    use crate::types::io::{
+        FunctionToolCall, InputItem, InputMessage, InputMessageContent, OutputItem, ReasoningOutput,
+        ReasoningTextContent,
+    };
+
+    /// The row `create_in_tx` stores for an item.
+    fn stored_row(item: &InOutItem) -> StorageDbItem {
+        StorageDbItem {
+            id: "item_row".to_owned(),
+            ..encode(item).expect("encode item")
+        }
+    }
+
+    fn stored(value: Value) -> InOutItem {
+        serde_json::from_value(value).unwrap()
+    }
+
+    fn round_trip(item: &InOutItem) -> InOutItem {
+        InOutItem::try_from(&stored_row(item)).expect("decode stored item")
     }
 
     #[test]
-    fn test_item_kind_serialization() {
-        let kind = ItemKind::Input;
-        let json = serde_json::to_string(&kind).expect("serialization failed");
-        assert_eq!(json, "\"input\"");
+    fn encoding_records_the_kind_and_plain_item_data() {
+        let item = InOutItem::Input(InputItem::Message(InputMessage {
+            role: "user".to_owned(),
+            content: InputMessageContent::Text("test".to_owned()),
+            ..Default::default()
+        }));
+        let row = encode(&item).expect("encode item");
+        assert!(row.id.starts_with("item_"));
+        assert!(row.public_id.starts_with("msg_"));
+        assert_eq!(
+            serde_json::from_str::<Value>(&row.metadata).unwrap(),
+            json!({"kind": "input"})
+        );
+        let data: Value = serde_json::from_str(&row.data).unwrap();
+        assert_eq!(data, json!({"type": "message", "role": "user", "content": "test"}));
+    }
 
-        let kind2 = ItemKind::Output;
-        let json2 = serde_json::to_string(&kind2).expect("serialization failed");
-        assert_eq!(json2, "\"output\"");
+    #[test]
+    fn encoding_keeps_supplied_ids_and_rejects_empty_ids() {
+        let row = encode(&stored(
+            json!({"type":"message", "id":"msg_keep", "role":"user", "content":"x"}),
+        ))
+        .unwrap();
+        assert_eq!(row.public_id, "msg_keep");
+        let error = encode(&stored(
+            json!({"type":"message", "id":"", "role":"user", "content":"x"}),
+        ))
+        .unwrap_err();
+        assert!(error.is_validation());
+    }
+
+    #[test]
+    fn reasoning_round_trips() {
+        let mut reasoning = ReasoningOutput::new("rs_1");
+        reasoning.content.extend([
+            ReasoningTextContent::new("first thought"),
+            ReasoningTextContent::new("second thought"),
+        ]);
+        reasoning
+            .summary
+            .push(crate::types::ReasoningSummaryContent::new("concise summary"));
+        reasoning.encrypted_content = Some(crate::types::OpaqueReasoning::try_from("opaque".to_owned()).unwrap());
+        reasoning.status = Some(crate::types::ReasoningStatus::Completed);
+        let item = InOutItem::Output(OutputItem::Reasoning(reasoning));
+        assert_eq!(round_trip(&item), item);
+    }
+
+    #[test]
+    fn output_items_keep_their_kind() {
+        let call = InOutItem::Output(OutputItem::FunctionCall(FunctionToolCall {
+            async_execution: false,
+            agent: None,
+            id: "fc_1".to_owned(),
+            call_id: "call_1".to_owned(),
+            name: "run".to_owned(),
+            namespace: Some("mcp__shell".to_owned()),
+            arguments: "{\"cmd\":\"pwd\"}".to_owned(),
+            status: MessageStatus::Completed,
+        }));
+        let shell = InOutItem::Output(
+            serde_json::from_value(json!({
+                "type": "shell_call",
+                "id": "sh_1",
+                "call_id": "call_shell",
+                "action": {"commands": ["pwd"], "timeout_ms": 1_000, "max_output_length": 4_096},
+                "status": "completed"
+            }))
+            .expect("shell output item"),
+        );
+        for item in [call, shell, InOutItem::Output(OutputItem::Unknown)] {
+            assert_eq!(round_trip(&item), item);
+        }
+    }
+
+    #[test]
+    fn submitted_gateway_calls_remain_inputs() {
+        for wire in [
+            json!({"type":"web_search_call", "id":"ws_1", "status":"completed", "action":{"type":"search", "query":"weather"}}),
+            json!({"type":"mcp_call", "id":"mcp_1", "server_label":"weather", "name":"forecast", "arguments":"{}", "output":"sunny"}),
+        ] {
+            let input = stored(wire);
+            assert!(matches!(input, InOutItem::Input(_)));
+            assert_eq!(round_trip(&input), input);
+        }
+    }
+
+    #[test]
+    fn rows_with_malformed_metadata_or_data_are_invalid() {
+        let mut row = stored_row(&stored(json!({"type":"message", "role":"user", "content":"x"})));
+        row.metadata = r#"{"kind":"unknown"}"#.to_owned();
+        assert!(matches!(
+            InOutItem::try_from(&row),
+            Err(StorageError::InvalidHistoryItem { .. })
+        ));
+        row.metadata = r#"{"kind":"input"}"#.to_owned();
+        row.data = "not json".to_owned();
+        assert!(matches!(
+            InOutItem::try_from(&row),
+            Err(StorageError::InvalidHistoryItem { item_id }) if item_id == "item_row"
+        ));
+    }
+
+    #[test]
+    fn public_decoding_uses_the_row_public_identity() {
+        let mut row = stored_row(&stored(json!({"type":"message", "role":"user", "content":"hello"})));
+        row.public_id = "msg_public".to_owned();
+        assert_eq!(decode_public(&row).unwrap().id(), Some("msg_public"));
+    }
+
+    #[test]
+    fn supplied_ids_are_validated_by_item_type_without_changing_call_ids() {
+        let cases = [
+            json!({"type":"message", "id":"msg_1", "role":"user", "content":"hello"}),
+            json!({"type":"function_call", "id":"fc_1", "call_id":"call_1", "name":"f", "arguments":"{}"}),
+            json!({"type":"tool_search_call", "id":"tsc_1", "call_id":"call_1", "arguments":{}}),
+            json!({"type":"function_call_output", "id":"fc_1", "call_id":"call_1", "output":"done"}),
+            json!({"type":"custom_tool_call_output", "id":"ctco_1", "call_id":"call_1", "output":"done"}),
+            json!({"type":"shell_call_output", "id":"sho_1", "call_id":"call_1", "output":[]}),
+            json!({"type":"tool_search_output", "id":"tso_1", "call_id":"call_1", "tools":[]}),
+            json!({"type":"custom_tool_call", "id":"ctc_1", "call_id":"call_1", "name":"f", "input":"x"}),
+            json!({"type":"shell_call", "id":"sh_1", "call_id":"call_1", "action":{"commands":["pwd"]}}),
+            json!({"type":"reasoning", "id":"rs_1", "summary":[]}),
+            json!({"type":"mcp_list_tools", "id":"mcpl_1", "server_label":"s", "tools":[]}),
+            json!({"type":"mcp_call", "id":"mcp_1", "server_label":"s", "name":"f", "arguments":"{}"}),
+            json!({"type":"web_search_call", "id":"ws_1", "status":"completed", "action":{"type":"search", "query":"test"}}),
+            json!({"type":"compaction", "id":"cmp_1", "encrypted_content":"opaque"}),
+        ];
+        for mut value in cases {
+            let item = stored(value.clone());
+            item.validate_client_id("items[0].id".into())
+                .expect("matching public ID prefix");
+            value["id"] = json!("wrong_1");
+            let item = stored(value);
+            let error = item.validate_client_id("items[0].id".into()).unwrap_err();
+            assert!(error.is_validation());
+            assert!(matches!(error, StorageError::InvalidItemId { param, .. } if param == "items[0].id"));
+        }
+    }
+
+    #[test]
+    fn optional_ids_are_not_required() {
+        for value in [
+            json!({"type":"message", "role":"user", "content":"hello"}),
+            json!({"type":"function_call", "call_id":"call_1", "name":"f", "arguments":"{}"}),
+            json!({"type":"function_call_output", "call_id":"call_1", "output":"done"}),
+            json!({"type":"shell_call_output", "call_id":"call_1", "output":[]}),
+        ] {
+            stored(value).validate_client_id("items[0].id".into()).unwrap();
+        }
+    }
+
+    #[test]
+    fn invalid_id_reports_its_batch_index_and_rejects_empty_ids() {
+        for id in ["", "item_wrongprefix"] {
+            let items = [
+                stored(json!({"type":"message", "role":"user", "content":"valid"})),
+                stored(json!({"type":"message", "id":id, "role":"user", "content":"invalid"})),
+            ];
+            let error = items
+                .iter()
+                .enumerate()
+                .try_for_each(|(index, item)| item.validate_client_id(format!("items[{index}].id")))
+                .unwrap_err();
+            assert!(matches!(&error, StorageError::InvalidItemId { param, .. } if param == "items[1].id"));
+            assert_eq!(
+                error.to_string(),
+                format!("Invalid 'items[1].id': '{id}'. Expected an ID that begins with 'msg'.")
+            );
+        }
     }
 }

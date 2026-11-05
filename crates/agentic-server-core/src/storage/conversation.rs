@@ -3,16 +3,19 @@
 use std::convert::TryFrom;
 use std::sync::Arc;
 
+use super::models::conversation::ConversationHistory;
 use super::models::{conversation, item, response};
-use super::pool::DbPool;
-use super::types::response::decode_metadata;
+use super::pool::{DbPool, DbTransaction};
+use super::types::conversation::encode_metadata;
+use super::types::item::{decode_public, encode};
+use super::types::response::decode_turn_metadata;
 use super::types::{
     ConversationData, ConversationSnapshot, ConversationVersion, ResponseMetadata, StorageError, StoreResult,
 };
-use crate::storage::{DbTransaction, Item};
 use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 use crate::types::io::ItemOrder;
+use crate::types::request_response::ResponsePayload;
 use crate::utils::common::{serialize_to_string, uuid7_str};
 
 /// Conversation storage operations.
@@ -43,15 +46,30 @@ impl ConversationStore {
         self.pool.as_deref().ok_or(StorageError::NotConfigured)
     }
 
-    /// Creates a new conversation.
+    /// Creates a tenant-owned conversation and its initial items atomically.
     ///
     /// # Errors
-    ///
-    /// Returns error if database query fails.
-    pub async fn create(&self) -> StoreResult<ConversationData> {
-        let pool = self.pool()?;
-        let row = conversation::create(pool, &uuid7_str("conv_")).await?;
-        Ok(row.into())
+    /// Returns an error if an item ID is invalid, or serialization or persistence fails.
+    pub async fn create(
+        &self,
+        tenant_id: &str,
+        metadata: &ConversationMetadata,
+        items: &[InOutItem],
+    ) -> StoreResult<ConversationData> {
+        for (index, item) in items.iter().enumerate() {
+            item.validate_client_id(format!("items[{index}].id"))?;
+        }
+        let items = items.iter().map(encode).collect::<StoreResult<Vec<_>>>()?;
+        let metadata = encode_metadata(metadata)?;
+        let id = uuid7_str("conv_");
+        let mut tx = self.pool()?.begin().await?;
+        let row = conversation::create_in_tx(&mut tx, &id, Some(tenant_id), Some(&metadata)).await?;
+        if !items.is_empty() {
+            item::create_in_tx(&mut tx, items, Some(&id)).await?;
+            conversation::bump_revision_in_tx(&mut tx, &id).await?;
+        }
+        tx.commit().await?;
+        row.try_into()
     }
 
     /// Gets a conversation or creates it if it doesn't exist.
@@ -61,8 +79,7 @@ impl ConversationStore {
     /// Returns error if database query fails.
     pub async fn get_or_create(&self, conversation_id: &str) -> StoreResult<ConversationData> {
         let pool = self.pool()?;
-        let row = conversation::get_or_create(pool, conversation_id).await?;
-        Ok(row.into())
+        conversation::get_or_create(pool, conversation_id).await?.try_into()
     }
 
     /// Gets a conversation by ID.
@@ -72,158 +89,76 @@ impl ConversationStore {
     /// Returns error if conversation not found or database query fails.
     pub async fn get(&self, conversation_id: &str) -> StoreResult<ConversationData> {
         let pool = self.pool()?;
-        let row = conversation::get(pool, conversation_id)
+        conversation::get(pool, conversation_id)
             .await?
-            .ok_or_else(|| StorageError::not_found("Conversation", conversation_id))?;
-        Ok(row.into())
+            .ok_or_else(|| StorageError::not_found("Conversation", conversation_id))?
+            .try_into()
     }
 
-    /// Rehydrates a conversation with all its items.
+    /// Rehydrates a conversation: its items, storage version, and the metadata of the turn at that version.
     ///
     /// # Errors
     ///
-    /// Returns an error if a stored item is invalid or missing its sequence number,
-    /// or if the database query fails.
-    pub async fn rehydrate(&self, conversation_id: &str) -> StoreResult<Vec<InOutItem>> {
-        Ok(self.rehydrate_snapshot(conversation_id).await?.items)
-    }
-
-    /// Rehydrates a conversation with its items and storage version.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if a stored item is invalid or missing its sequence number,
-    /// or if the database query fails.
-    pub async fn rehydrate_snapshot(&self, conversation_id: &str) -> StoreResult<ConversationSnapshot> {
+    /// Returns an error if a stored item is invalid or missing its sequence number, the turn's metadata
+    /// is missing or invalid, or the database query fails.
+    pub async fn rehydrate(&self, conversation_id: &str) -> StoreResult<ConversationSnapshot> {
         let pool = self.pool()?;
-        let snapshot_rows = conversation::get_snapshot(pool, conversation_id).await?;
+        let Some(ConversationHistory {
+            revision,
+            latest_response_id,
+            latest_turn,
+            items: rows,
+        }) = conversation::get_with_items(pool, conversation_id).await?
+        else {
+            return Ok(ConversationSnapshot {
+                items: Vec::new(),
+                version: ConversationVersion::default(),
+                turn_metadata: None,
+            });
+        };
 
         let mut last_sequence = None;
-        for row in &snapshot_rows.items {
+        for row in &rows {
             last_sequence = Some(row.seq.ok_or_else(|| StorageError::InvalidConversationSequence {
                 conversation_id: conversation_id.to_string(),
                 item_id: row.id.clone(),
             })?);
         }
+        let items = rows.iter().map(InOutItem::try_from).collect::<StoreResult<_>>()?;
+        let turn_metadata = match &latest_response_id {
+            None => None,
+            Some(response_id) => decode_turn_metadata(response_id, latest_turn.as_ref())?,
+        };
 
         Ok(ConversationSnapshot {
-            items: snapshot_rows
-                .items
-                .into_iter()
-                .map(|row| InOutItem::try_from(&row))
-                .collect::<StoreResult<_>>()?,
+            items,
             version: ConversationVersion {
                 last_sequence,
-                response_id: snapshot_rows.latest_response_id,
-                revision: snapshot_rows.revision,
+                response_id: latest_response_id,
+                revision,
             },
+            turn_metadata,
         })
     }
 
-    /// Loads metadata from the persisted turn at a captured version.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the captured response is missing, its metadata is invalid,
-    /// or the database lookup fails. Legacy versions without a response return `None`.
-    pub async fn response_metadata_at_version(
-        &self,
-        conversation_id: &str,
-        version: &ConversationVersion,
-    ) -> StoreResult<Option<ResponseMetadata>> {
-        let Some(response_id) = &version.response_id else {
-            return Ok(None);
-        };
-        let pool = self.pool()?;
-        let invalid_metadata = || StorageError::InvalidResponseMetadata {
-            response_id: response_id.clone(),
-        };
-        let response = response::get_conversation_turn(pool, conversation_id, response_id)
-            .await?
-            .ok_or_else(invalid_metadata)?;
-        decode_metadata(&response).map_err(|_| invalid_metadata())
-    }
-
-    /// Persists conversation turn with new items and response metadata.
-    ///
-    /// Creates items in the conversation and stores the associated response record.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`StorageError`] if conversation not found or database operation fails.
-    pub async fn persist(
-        &self,
-        conversation_id: &str,
-        response_id: &str,
-        previous_response_id: Option<&str>,
-        new_items: Vec<InOutItem>,
-        metadata: &ResponseMetadata,
-    ) -> StoreResult<()> {
-        self.persist_impl(
-            conversation_id,
-            None,
-            response_id,
-            previous_response_id,
-            new_items,
-            metadata,
-        )
-        .await
-    }
-
-    /// Persists a conversation turn only if its stored version still matches.
+    /// Persists a conversation turn with its new items, response snapshot and metadata, only if the conversation
+    /// is still at `expected_version`, the version captured when the turn's history was rehydrated.
     ///
     /// # Errors
     ///
     /// Returns [`StorageError`] if the conversation changed, was not found, or a database operation fails.
-    pub async fn persist_if_version(
+    pub async fn persist(
         &self,
         conversation_id: &str,
         expected_version: ConversationVersion,
         response_id: &str,
-        previous_response_id: Option<&str>,
         new_items: Vec<InOutItem>,
-        metadata: &ResponseMetadata,
-    ) -> StoreResult<()> {
-        self.persist_impl(
-            conversation_id,
-            Some(expected_version),
-            response_id,
-            previous_response_id,
-            new_items,
-            metadata,
-        )
-        .await
-    }
-
-    async fn persist_impl(
-        &self,
-        conversation_id: &str,
-        expected_version: Option<ConversationVersion>,
-        response_id: &str,
-        previous_response_id: Option<&str>,
-        new_items: Vec<InOutItem>,
+        snapshot: Option<&ResponsePayload>,
         metadata: &ResponseMetadata,
     ) -> StoreResult<()> {
         let pool = self.pool()?;
-
-        let new_items = new_items
-            .into_iter()
-            .map(|item| {
-                let prefix = match &item {
-                    InOutItem::Input(input) => input.id_prefix(),
-                    InOutItem::Output(output) => output.id_prefix(),
-                };
-                if item.id() == Some("") {
-                    return Err(StorageError::Validation("item id cannot be an empty string".to_owned()));
-                }
-                let id = item
-                    .id()
-                    .map_or_else(|| uuid7_str(prefix.unwrap_or("item_")), str::to_owned);
-                let data = String::try_from(&item)?;
-                Ok((id, data))
-            })
-            .collect::<StoreResult<Vec<_>>>()?;
-
+        let new_items = new_items.iter().map(encode).collect::<StoreResult<Vec<_>>>()?;
+        let snapshot_json = snapshot.map(String::try_from).transpose()?;
         let metadata_json = String::try_from(metadata)?;
 
         let mut tx = pool.begin().await?;
@@ -235,17 +170,15 @@ impl ConversationStore {
             }
             Err(error) => return Err(error.into()),
         };
-        if let Some(expected_version) = expected_version {
-            let current_version = ConversationVersion {
-                last_sequence: item::last_conversation_sequence_in_tx(&mut tx, conversation_id).await?,
-                response_id: locked_conversation.latest_response_id,
-                revision: locked_conversation.revision,
-            };
-            if current_version != expected_version {
-                return Err(StorageError::ConversationConflict {
-                    conversation_id: conversation_id.to_owned(),
-                });
-            }
+        let current_version = ConversationVersion {
+            last_sequence: item::last_conversation_sequence_in_tx(&mut tx, conversation_id).await?,
+            response_id: locked_conversation.latest_response_id,
+            revision: locked_conversation.revision,
+        };
+        if current_version != expected_version {
+            return Err(StorageError::ConversationConflict {
+                conversation_id: conversation_id.to_owned(),
+            });
         }
         item::create_in_tx(&mut tx, new_items, Some(conversation_id)).await?;
         // A response branch must see the conversation as it existed at this turn,
@@ -257,8 +190,10 @@ impl ConversationStore {
             &mut tx,
             response_id,
             Some(conversation_id),
-            previous_response_id,
+            // A conversation turn never continues a previous response.
+            None,
             Some(&history_item_ids_json),
+            snapshot_json.as_deref(),
             Some(&metadata_json),
         )
         .await?;
@@ -269,49 +204,6 @@ impl ConversationStore {
         Ok(())
     }
 
-    /// Create a conversation and its initial items atomically.
-    ///
-    /// # Errors
-    /// Returns an error if serialization or persistence fails.
-    pub async fn create_with_metadata_and_items(
-        &self,
-        tenant_id: Option<&str>,
-        metadata: Option<ConversationMetadata>,
-        initial_items: Vec<InOutItem>,
-    ) -> StoreResult<ConversationData> {
-        for (index, item) in initial_items.iter().enumerate() {
-            item.validate_client_id(format!("items[{index}].id"))?;
-        }
-        let initial_items = initial_items
-            .into_iter()
-            .map(|item| {
-                let prefix = match &item {
-                    InOutItem::Input(input) => input.id_prefix(),
-                    InOutItem::Output(output) => output.id_prefix(),
-                };
-                if item.id() == Some("") {
-                    return Err(StorageError::Validation("item id cannot be an empty string".to_owned()));
-                }
-                let id = item
-                    .id()
-                    .map_or_else(|| uuid7_str(prefix.unwrap_or("item_")), str::to_owned);
-                let data = String::try_from(&item)?;
-                Ok((id, data))
-            })
-            .collect::<StoreResult<Vec<_>>>()?;
-
-        let metadata = metadata.map(|value| serialize_to_string(&value)).transpose()?;
-        let id = uuid7_str("conv_");
-        let mut tx = self.pool()?.begin().await?;
-        let row = conversation::create_in_tx(&mut tx, &id, tenant_id, metadata.as_deref()).await?;
-        if !initial_items.is_empty() {
-            item::create_in_tx(&mut tx, initial_items, Some(&id)).await?;
-            conversation::bump_revision_in_tx(&mut tx, &id).await?;
-        }
-        tx.commit().await?;
-        Ok(row.into())
-    }
-
     /// Retrieve a conversation owned by the tenant.
     ///
     /// # Errors
@@ -319,8 +211,8 @@ impl ConversationStore {
     pub async fn retrieve(&self, tenant_id: &str, id: &str) -> StoreResult<ConversationData> {
         conversation::get_by_tenant(self.pool()?, tenant_id, id)
             .await?
-            .map(Into::into)
-            .ok_or_else(|| StorageError::not_found("Conversation", id))
+            .ok_or_else(|| StorageError::not_found("Conversation", id))?
+            .try_into()
     }
 
     /// Replace metadata on a conversation owned by the tenant.
@@ -333,11 +225,11 @@ impl ConversationStore {
         id: &str,
         metadata: ConversationMetadata,
     ) -> StoreResult<ConversationData> {
-        let metadata = serialize_to_string(&metadata)?;
+        let metadata = encode_metadata(&metadata)?;
         conversation::update_metadata(self.pool()?, tenant_id, id, &metadata)
             .await
-            .map(Into::into)
-            .map_err(|error| conversation_error(error, id))
+            .map_err(|error| conversation_error(error, id))?
+            .try_into()
     }
 
     /// Delete a conversation without deleting items referenced by stored responses.
@@ -357,27 +249,11 @@ impl ConversationStore {
     ///
     /// # Errors
     /// Returns an error if the resource is missing or persistence fails.
-    pub async fn create_items(&self, tenant_id: &str, id: &str, items: Vec<InOutItem>) -> StoreResult<Vec<Item>> {
+    pub async fn create_items(&self, tenant_id: &str, id: &str, items: Vec<InOutItem>) -> StoreResult<Vec<InOutItem>> {
         for (index, item) in items.iter().enumerate() {
             item.validate_client_id(format!("items[{index}].id"))?;
         }
-        let items = items
-            .into_iter()
-            .map(|item| {
-                let prefix = match &item {
-                    InOutItem::Input(input) => input.id_prefix(),
-                    InOutItem::Output(output) => output.id_prefix(),
-                };
-                if item.id() == Some("") {
-                    return Err(StorageError::Validation("item id cannot be an empty string".to_owned()));
-                }
-                let id = item
-                    .id()
-                    .map_or_else(|| uuid7_str(prefix.unwrap_or("item_")), str::to_owned);
-                let data = String::try_from(&item)?;
-                Ok((id, data))
-            })
-            .collect::<StoreResult<Vec<_>>>()?;
+        let items = items.iter().map(encode).collect::<StoreResult<Vec<_>>>()?;
 
         let mut tx = self.pool()?.begin().await?;
         lock_owned(&mut tx, tenant_id, id).await?;
@@ -386,7 +262,7 @@ impl ConversationStore {
             conversation::bump_revision_in_tx(&mut tx, id).await?;
         }
         tx.commit().await?;
-        Ok(rows)
+        rows.iter().map(decode_public).collect()
     }
 
     /// List a page, resolving the cursor within the authorized conversation.
@@ -400,24 +276,34 @@ impl ConversationStore {
         limit: i64,
         after: Option<&str>,
         order: ItemOrder,
-    ) -> StoreResult<Vec<Item>> {
-        self.retrieve(tenant_id, id).await?;
-        item::list_for_conversation(self.pool()?, tenant_id, id, limit, after, order)
-            .await
-            .map_err(|error| match (error, after) {
-                (sqlx::Error::RowNotFound, Some(cursor)) => StorageError::ItemCursorNotFound { id: cursor.to_owned() },
-                (other, _) => other.into(),
-            })
+    ) -> StoreResult<Vec<InOutItem>> {
+        let rows = match item::list_for_conversation(self.pool()?, tenant_id, id, limit, after, order).await {
+            Ok(rows) => rows,
+            Err(sqlx::Error::RowNotFound) => {
+                // A cursor outside the page's conversation; a missing conversation is reported first.
+                self.retrieve(tenant_id, id).await?;
+                return Err(StorageError::ItemCursorNotFound {
+                    id: after.unwrap_or_default().to_owned(),
+                });
+            }
+            Err(error) => return Err(error.into()),
+        };
+        // An empty page comes from an empty conversation or a missing one; only then is the conversation looked up.
+        if rows.is_empty() {
+            self.retrieve(tenant_id, id).await?;
+        }
+        rows.iter().map(decode_public).collect()
     }
 
     /// Retrieve one item belonging to the authorized conversation.
     ///
     /// # Errors
     /// Returns an error if the item is missing or the query fails.
-    pub async fn retrieve_item(&self, tenant_id: &str, id: &str, item_id: &str) -> StoreResult<Item> {
-        item::get_for_conversation(self.pool()?, tenant_id, id, item_id)
+    pub async fn retrieve_item(&self, tenant_id: &str, id: &str, item_id: &str) -> StoreResult<InOutItem> {
+        let row = item::get_for_conversation(self.pool()?, tenant_id, id, item_id)
             .await?
-            .ok_or_else(|| StorageError::not_found("Conversation item", item_id))
+            .ok_or_else(|| StorageError::not_found("Conversation item", item_id))?;
+        decode_public(&row)
     }
 
     /// Remove an item from conversation history and advance the snapshot revision.
@@ -432,7 +318,7 @@ impl ConversationStore {
         }
         conversation::bump_revision_in_tx(&mut tx, id).await?;
         tx.commit().await?;
-        Ok(row.into())
+        row.try_into()
     }
 }
 
