@@ -4,7 +4,6 @@ use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 
 use axum::Router;
 use axum::middleware;
-use axum::routing::{get, post};
 use axum::serve::{ListenerExt as _, TapIo};
 use http::HeaderValue;
 use tokio::net::{TcpListener, TcpStream};
@@ -18,17 +17,13 @@ use agentic_core::executor::ExecutionContext;
 use agentic_core::proxy::ProxyState;
 
 use crate::auth::api_key::require_api_key;
-use crate::auth::{ANTHROPIC_COUNT_TOKENS_PATH, ANTHROPIC_MESSAGES_PATH, OidcAuthenticator, require_oidc};
-use crate::handler::{
-    chat_completions, compact_response, completions, count_tokens, create_conversation, create_item,
-    delete_conversation, delete_item, delete_response, embeddings, health, list_input_items, list_items, messages,
-    models, ready, responses, responses_ws_with_auth, retrieve_conversation, retrieve_item, retrieve_model,
-    retrieve_response, transcriptions, translations, update_conversation,
-};
+use crate::auth::{OidcAuthenticator, require_oidc};
 use crate::model_capabilities::ModelCapabilities;
 use crate::rate_limit::{RateLimitConfig, RateLimiter, enforce_rate_limit};
 use crate::telemetry::http::{HttpMetrics, track_request};
 use crate::telemetry::websocket::WebSocketMetrics;
+#[cfg(feature = "openapi")]
+use utoipa_axum::{router::OpenApiRouter, routes};
 
 /// Default ceiling on serialized inbound request bytes for HTTP bodies and
 /// WebSocket messages.
@@ -342,7 +337,7 @@ pub fn build_router_with_auth(
     server_config: &ServerConfig,
     authenticator: Option<OidcAuthenticator>,
 ) -> Router {
-    let public_routes = Router::new().route("/health", get(health)).route("/ready", get(ready));
+    let public_routes: Router<AppState> = documented_public_routes().into();
     #[cfg(feature = "openapi")]
     let public_routes = if server_config.enable_openapi_docs {
         public_routes.merge(crate::openapi::swagger_ui_router())
@@ -350,44 +345,15 @@ pub fn build_router_with_auth(
         public_routes
     };
     // Retrieval and deletion act on local storage, so they cannot rely on upstream credential validation.
-    let mut retrieval_route = get(retrieve_response).delete(delete_response);
-    let mut input_items_route = get(list_input_items);
+    let mut retrieval_routes: Router<AppState> = documented_retrieval_routes().into();
     if authenticator.is_none()
         && let Some(key) = state.openai_api_key.as_ref().filter(|key| !key.is_empty())
     {
-        retrieval_route = retrieval_route.route_layer(middleware::from_fn_with_state(key.clone(), require_api_key));
-        input_items_route = input_items_route.route_layer(middleware::from_fn_with_state(key.clone(), require_api_key));
+        retrieval_routes = retrieval_routes.route_layer(middleware::from_fn_with_state(key.clone(), require_api_key));
     }
-    let protected_routes = Router::new()
-        .route("/v1/conversations", post(create_conversation))
-        .route(
-            "/v1/conversations/{conversation_id}",
-            get(retrieve_conversation)
-                .post(update_conversation)
-                .delete(delete_conversation),
-        )
-        .route(
-            "/v1/conversations/{conversation_id}/items",
-            post(create_item).get(list_items),
-        )
-        .route(
-            "/v1/conversations/{conversation_id}/items/{item_id}",
-            get(retrieve_item).delete(delete_item),
-        )
-        .route("/v1/chat/completions", post(chat_completions))
-        .route("/v1/completions", post(completions))
-        .route("/v1/embeddings", post(embeddings))
-        .route("/v1/audio/transcriptions", post(transcriptions))
-        .route("/v1/audio/translations", post(translations))
-        .route("/v1/models", get(models))
-        // A wildcard, because model IDs such as `org/name` contain slashes.
-        .route("/v1/models/{*model}", get(retrieve_model))
-        .route(ANTHROPIC_MESSAGES_PATH, post(messages))
-        .route(ANTHROPIC_COUNT_TOKENS_PATH, post(count_tokens))
-        .route("/v1/responses", post(responses).get(responses_ws_with_auth))
-        .route("/v1/responses/compact", post(compact_response))
-        .route("/v1/responses/{response_id}", retrieval_route)
-        .route("/v1/responses/{response_id}/input_items", input_items_route);
+    let protected_routes: Router<AppState> = documented_protected_routes().into();
+    let model_routes: Router<AppState> = documented_model_wildcard_routes().into();
+    let protected_routes = protected_routes.merge(model_routes).merge(retrieval_routes);
     // Layered before authentication, so it runs after it and sees the principal.
     let protected_routes = match server_config.rate_limit {
         Some(config) => protected_routes.route_layer(middleware::from_fn_with_state(
@@ -413,4 +379,105 @@ pub fn build_router_with_auth(
             track_request,
         ))
         .with_state(state)
+}
+
+// The declarations below drive both Axum and OpenAPI. The feature-disabled
+// build uses the same groups to register Axum routes without schema metadata.
+macro_rules! api_route_group {
+    ($name:ident { $($path:expr => [$($method:ident($handler:path)),+ $(,)?]),+ $(,)? }) => {
+        #[cfg(feature = "openapi")]
+        pub(crate) fn $name() -> OpenApiRouter<AppState> {
+            let mut router = OpenApiRouter::new();
+            $(
+                let route = routes!($($handler),+);
+                assert_eq!(route.1.paths.len(), 1, "route group must declare one path");
+                let item = route.1.paths.get($path).expect("route annotation differs from registered path");
+                $(assert!(item.$method.is_some(), "route annotation differs from registered method");)+
+                router = router.routes(route);
+            )+
+            router
+        }
+
+        #[cfg(not(feature = "openapi"))]
+        pub(crate) fn $name() -> Router<AppState> {
+            Router::new()$(.route($path, axum::routing::MethodRouter::new()$(.$method($handler))+))+
+        }
+    };
+}
+
+api_route_group!(documented_public_routes {
+    "/health" => [get(crate::handler::http::models::health)],
+    "/ready" => [get(crate::handler::http::models::ready)],
+});
+
+api_route_group!(documented_protected_routes {
+    "/v1/conversations" => [post(crate::handler::http::conversations::create_conversation)],
+    "/v1/conversations/{conversation_id}" => [
+        get(crate::handler::http::conversations::retrieve_conversation),
+        post(crate::handler::http::conversations::update_conversation),
+        delete(crate::handler::http::conversations::delete_conversation),
+    ],
+    "/v1/conversations/{conversation_id}/items" => [
+        post(crate::handler::http::conversation_items::create_item),
+        get(crate::handler::http::conversation_items::list_items),
+    ],
+    "/v1/conversations/{conversation_id}/items/{item_id}" => [
+        get(crate::handler::http::conversation_items::retrieve_item),
+        delete(crate::handler::http::conversation_items::delete_item),
+    ],
+    "/v1/chat/completions" => [post(crate::handler::http::chat_completions::chat_completions)],
+    "/v1/completions" => [post(crate::handler::http::chat_completions::completions)],
+    "/v1/embeddings" => [post(crate::handler::http::embeddings::embeddings)],
+    "/v1/audio/transcriptions" => [post(crate::handler::http::audio::transcriptions)],
+    "/v1/audio/translations" => [post(crate::handler::http::audio::translations)],
+    "/v1/models" => [get(crate::handler::http::models::models)],
+    "/v1/messages" => [post(crate::handler::http::messages::messages)],
+    "/v1/messages/count_tokens" => [post(crate::handler::http::messages::count_tokens)],
+    "/v1/responses" => [
+        post(crate::handler::http::responses::responses),
+        get(crate::handler::websocket::responses::responses_ws_with_auth),
+    ],
+    "/v1/responses/compact" => [post(crate::handler::http::responses::compact_response)],
+});
+
+api_route_group!(documented_retrieval_routes {
+    "/v1/responses/{response_id}" => [
+        get(crate::handler::http::responses::retrieve_response),
+        delete(crate::handler::http::responses::delete_response),
+    ],
+    "/v1/responses/{response_id}/input_items" => [get(crate::handler::http::responses::list_input_items)],
+});
+
+// Axum needs `{*model}` to capture IDs containing `/`; OpenAPI describes the
+// same parameter as `{model}`. Keep the handler's generated operation and only
+// translate the router path at this boundary.
+#[cfg(feature = "openapi")]
+pub(crate) fn documented_model_wildcard_routes() -> OpenApiRouter<AppState> {
+    let (schemas, mut paths, method_router) = routes!(crate::handler::http::models::retrieve_model);
+    let item = paths
+        .paths
+        .remove("/v1/models/{model}")
+        .expect("model route annotation must match OpenAPI path");
+    paths.paths.insert("/v1/models/{*model}".to_owned(), item);
+    let mut router = OpenApiRouter::new().routes((schemas, paths, method_router));
+    let item = router
+        .get_openapi_mut()
+        .paths
+        .paths
+        .remove("/v1/models/{*model}")
+        .expect("registered model wildcard route must have an operation");
+    router
+        .get_openapi_mut()
+        .paths
+        .paths
+        .insert("/v1/models/{model}".to_owned(), item);
+    router
+}
+
+#[cfg(not(feature = "openapi"))]
+pub(crate) fn documented_model_wildcard_routes() -> Router<AppState> {
+    Router::new().route(
+        "/v1/models/{*model}",
+        axum::routing::get(crate::handler::http::models::retrieve_model),
+    )
 }

@@ -1,4 +1,5 @@
-// Feature-gated OpenAPI spec assembly and Swagger UI router.
+// Feature-gated OpenAPI metadata and Swagger UI router. Paths come from the
+// same annotated handlers used to register the Axum routes in `app`.
 #![cfg(feature = "openapi")]
 
 use agentic_core::types::io::InOutItem;
@@ -10,32 +11,6 @@ use utoipa::OpenApi;
         title = "vLLM Agentic API",
         description = "Stateful agentic layer for vLLM — OpenAI-compatible Responses API and Anthropic-compatible Messages API.",
         license(name = "Apache-2.0"),
-    ),
-    paths(
-        crate::handler::http::audio::transcriptions,
-        crate::handler::http::audio::translations,
-        crate::handler::http::chat_completions::chat_completions,
-        crate::handler::http::chat_completions::completions,
-        crate::handler::http::embeddings::embeddings,
-        crate::handler::http::models::health,
-        crate::handler::http::models::ready,
-        crate::handler::http::models::models,
-        crate::handler::http::models::retrieve_model,
-        crate::handler::http::responses::responses,
-        crate::handler::http::responses::retrieve_response,
-        crate::handler::http::responses::delete_response,
-        crate::handler::http::responses::list_input_items,
-        crate::handler::http::responses::compact_response,
-        crate::handler::http::conversations::create_conversation,
-        crate::handler::http::conversations::retrieve_conversation,
-        crate::handler::http::conversations::update_conversation,
-        crate::handler::http::conversations::delete_conversation,
-        crate::handler::http::conversation_items::create_item,
-        crate::handler::http::conversation_items::list_items,
-        crate::handler::http::conversation_items::retrieve_item,
-        crate::handler::http::conversation_items::delete_item,
-        crate::handler::http::messages::messages,
-        crate::handler::http::messages::count_tokens,
     ),
     components(schemas(
         agentic_core::types::request_response::PromptCacheOptions,
@@ -188,7 +163,20 @@ use utoipa::OpenApi;
         (name = "messages", description = "Anthropic-compatible Messages API"),
     )
 )]
+struct ApiDocBase;
+
 pub struct ApiDoc;
+
+impl OpenApi for ApiDoc {
+    fn openapi() -> utoipa::openapi::OpenApi {
+        let mut spec = ApiDocBase::openapi();
+        spec.merge(crate::app::documented_public_routes().into_openapi());
+        spec.merge(crate::app::documented_protected_routes().into_openapi());
+        spec.merge(crate::app::documented_retrieval_routes().into_openapi());
+        spec.merge(crate::app::documented_model_wildcard_routes().into_openapi());
+        spec
+    }
+}
 
 struct SecurityAddon;
 

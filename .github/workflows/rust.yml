@@ -78,6 +78,18 @@ jobs:
       - name: Run tests
         run: cargo test
 
+      - name: Check routes without OpenAPI feature
+        run: cargo check --locked -p agentic-server --no-default-features
+
+      - name: Export OpenAPI specification
+        run: cargo run --locked -p agentic-server --example export_openapi > "${RUNNER_TEMP}/openapi.json"
+
+      - name: Upload OpenAPI specification
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: agentic-api-openapi
+          path: ${{ runner.temp }}/openapi.json
+
       - name: Test Codex and Claude launcher contracts
         run: bash scripts/tests/agentic-launchers-test.sh
 
