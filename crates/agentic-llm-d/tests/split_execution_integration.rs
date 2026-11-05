@@ -817,12 +817,10 @@ async fn an_inherited_gateway_tool_is_refused() {
     gateway_turn.enriched_request.tools = Some(vec![
         serde_json::from_value(json!({"type": "web_search_preview"})).expect("gateway tool"),
     ]);
-    let id = gateway_turn.response_id.clone();
-    let payload: ResponsePayload = serde_json::from_value(json!({
-        "id": id, "object": "response", "created_at": 1_700_000_000, "model": "test-model",
-        "status": "completed", "output": answer("sure")
-    }))
-    .expect("completed payload");
+    let (payload, gateway_turn) = decode_upstream(gateway_turn, UpstreamBody::Json(&upstream_json("sure")))
+        .await
+        .expect("completed payload");
+    let id = payload.id.clone();
     commit(gateway_turn, payload, &ctx)
         .await
         .expect("the gateway stores turns the split path would refuse");
