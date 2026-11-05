@@ -15,6 +15,7 @@ use crate::types::file_search::{
 mod blob_cleanup;
 mod list;
 mod publication;
+pub(crate) mod sqlite_vec_index;
 
 use publication::publish_attachment;
 pub(crate) use publication::publish_attachment_sqlite;

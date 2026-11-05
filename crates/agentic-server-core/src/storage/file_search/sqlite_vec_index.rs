@@ -2,14 +2,26 @@
 
 use std::collections::HashMap;
 
-use super::SqliteVecRepository;
-use crate::{
-    storage::file_search::{Collection, PreparedAttachment},
-    types::file_search::FileSearchError,
-};
+use sqlx::SqlitePool;
 
-impl SqliteVecRepository {
-    pub(super) async fn stage(
+use super::{Collection, PreparedAttachment};
+use crate::types::file_search::FileSearchError;
+
+/// Extension-backed index persistence; metadata and vec0 rows share SQLite transactions.
+pub(crate) struct SqliteVecIndex {
+    pool: SqlitePool,
+}
+
+impl SqliteVecIndex {
+    pub(crate) fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+
+    pub(crate) fn pool(&self) -> &SqlitePool {
+        &self.pool
+    }
+
+    pub(crate) async fn stage(
         &self,
         connection: &mut sqlx::SqliteConnection,
         store_id: &str,
@@ -84,13 +96,13 @@ impl SqliteVecRepository {
         Ok(())
     }
 
-    pub(super) async fn remove_index_rows(
+    pub(crate) async fn remove_index_rows(
         &self,
         collection: Collection,
         id: &str,
         store_id: Option<&str>,
     ) -> Result<(), FileSearchError> {
-        let mut tx = self.index.begin_with("BEGIN IMMEDIATE").await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let rows: Vec<(i64, String)> = match collection {
             Collection::Files => {
                 sqlx::query_as(
@@ -167,10 +179,10 @@ impl SqliteVecRepository {
         Ok(())
     }
 
-    pub(super) async fn recover_orphans(&self) -> Result<(), FileSearchError> {
+    pub(crate) async fn recover_orphans(&self) -> Result<(), FileSearchError> {
         // Publication and index staging share a transaction. BEGIN IMMEDIATE
         // excludes concurrent writers while orphan candidates are selected.
-        let mut tx = self.index.begin_with("BEGIN IMMEDIATE").await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let rows: Vec<(i64, String)> = sqlx::query_as(
             "SELECT indexed.id, indexed.store_id FROM file_search_vec_map AS indexed \
              LEFT JOIN file_search_chunks AS chunks ON chunks.store_id = indexed.store_id \
@@ -229,7 +241,7 @@ impl SqliteVecRepository {
     }
 }
 
-pub(super) fn table_name(store_id: &str) -> Result<String, FileSearchError> {
+pub(crate) fn table_name(store_id: &str) -> Result<String, FileSearchError> {
     let id = store_id
         .strip_prefix("vs_")
         .ok_or_else(|| FileSearchError::InvalidRequest("Invalid vector store ID".into()))?;
@@ -238,7 +250,7 @@ pub(super) fn table_name(store_id: &str) -> Result<String, FileSearchError> {
     Ok(format!("file_search_vec_{}", id.simple()))
 }
 
-pub(super) fn normalized_vector(vector: &[f64]) -> Result<String, FileSearchError> {
+pub(crate) fn normalized_vector(vector: &[f64]) -> Result<String, FileSearchError> {
     if vector.is_empty() || vector.iter().any(|value| !value.is_finite()) {
         return Err(FileSearchError::ProviderProtocol);
     }

@@ -2,13 +2,13 @@
 
 use std::collections::HashSet;
 
-use super::{
-    SqliteVecRepository,
-    index::{normalized_vector, table_name},
-};
+use super::SqliteVecRepository;
 use crate::tool::file_search::ranking::{self, SemanticCandidate, SemanticCandidateAccumulator};
 use crate::{
-    storage::file_search::{MAX_CORPUS_CHUNKS, SQLITE_VEC_MAX_CORPUS_BYTES},
+    storage::file_search::{
+        MAX_CORPUS_CHUNKS, SQLITE_VEC_MAX_CORPUS_BYTES,
+        sqlite_vec_index::{normalized_vector, table_name},
+    },
     types::file_search::{FileSearchError, SearchMode, SearchRequest, SearchResult},
 };
 use sqlx::{SqliteConnection, SqlitePool};
@@ -33,7 +33,7 @@ impl SqliteVecRepository {
         if store_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let (count, bytes) = corpus_stats(&self.index, &store_ids).await?;
+        let (count, bytes) = corpus_stats(self.index.pool(), &store_ids).await?;
         if count > MAX_CORPUS_CHUNKS || bytes > SQLITE_VEC_MAX_CORPUS_BYTES {
             return Err(FileSearchError::Unavailable(
                 "Selected corpus exceeds the exact retrieval capacity; search fewer vector stores or files".into(),
@@ -54,7 +54,7 @@ impl SqliteVecRepository {
             normalized_vector(vector)?;
         }
         let mut matches = SemanticCandidateAccumulator::default();
-        let mut tx = self.index.begin().await?;
+        let mut tx = self.index.pool().begin().await?;
         let mut stores = Vec::with_capacity(store_ids.len());
         for store_id in &store_ids {
             let table = table_name(store_id)?;

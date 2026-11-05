@@ -1815,9 +1815,10 @@ the upstream reported.
   See [Schema, migrations, and where data goes](#schema-migrations-and-where-data-goes).
 - **`file_search.rs`** — portable file, vector-store, attachment, and chunk
   persistence. Migration `0010_file_search_vec_map.sql` owns the portable
-  sqlite-vec row map; the optional provider creates per-store `vec0` virtual
-  tables only after loading its trusted SQLite extension. Index staging and
-  metadata publication share one `BEGIN IMMEDIATE` transaction. The default
+  sqlite-vec row map; `storage/file_search/sqlite_vec_index.rs` owns per-store
+  `vec0` virtual tables and index operations after the provider loads its trusted
+  SQLite extension. Index staging and metadata publication share one
+  `BEGIN IMMEDIATE` transaction. The default
   exact-search provider retains a 64 MiB serialized-corpus limit; sqlite-vec
   admits 256 MiB because normal semantic search reads indexed candidates.
 - **`conversation.rs` (tenant-scoped API)** — conversation and item CRUD. Item ownership is checked through

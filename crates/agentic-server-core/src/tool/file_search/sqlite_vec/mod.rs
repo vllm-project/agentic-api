@@ -6,10 +6,7 @@
 use std::{path::Path, str::FromStr, sync::Arc};
 
 use futures::future::BoxFuture;
-use sqlx::{
-    SqlitePool,
-    sqlite::{SqliteConnectOptions, SqlitePoolOptions},
-};
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use tokio_util::sync::CancellationToken;
 
 use super::provider::FileSearchRepository;
@@ -19,7 +16,7 @@ use crate::{
         file_search::{
             Collection, FilePublicationFailure, FileSearchStorage, PreparedAttachment, SQLITE_VEC_MAX_CORPUS_BYTES,
             StoredVectorStore, UploadedFile, publish_attachment_sqlite, serialize_chunks_with_limit,
-            validate_capacity_with_limit,
+            sqlite_vec_index::SqliteVecIndex, validate_capacity_with_limit,
         },
     },
     types::file_search::{
@@ -30,14 +27,13 @@ use crate::{
 
 const INDEX_IDENTITY: &str = "sqlite-vec:cosine-f32:v1";
 
-mod index;
 mod search;
 
 /// A `vec0` index backed by the same file-based SQLite database as metadata.
 /// The extension path is deployment-controlled and must name a trusted binary.
 pub struct SqliteVecRepository {
     metadata: FileSearchStorage,
-    index: SqlitePool,
+    index: SqliteVecIndex,
 }
 
 impl SqliteVecRepository {
@@ -78,9 +74,9 @@ impl SqliteVecRepository {
             .await?;
         let repository = Self {
             metadata: FileSearchStorage::new(pool),
-            index,
+            index: SqliteVecIndex::new(index),
         };
-        repository.recover_orphans().await?;
+        repository.index.recover_orphans().await?;
         Ok(repository)
     }
 }
@@ -131,7 +127,7 @@ impl FileSearchRepository for SqliteVecRepository {
                 validate_capacity_with_limit(total_bytes, 0, SQLITE_VEC_MAX_CORPUS_BYTES)?;
                 encoded.push(chunks);
             }
-            let mut tx = self.index.begin_with("BEGIN IMMEDIATE").await?;
+            let mut tx = self.index.pool().begin_with("BEGIN IMMEDIATE").await?;
             sqlx::query("INSERT INTO file_search_stores (id, created_at, data, embedding_identity, embedding_dimensions) VALUES ($1, $2, $3, $4, 0)")
                 .bind(&object.id)
                 .bind(object.created_at)
@@ -139,7 +135,7 @@ impl FileSearchRepository for SqliteVecRepository {
                 .bind(embedding_identity)
                 .execute(&mut *tx)
                 .await?;
-            self.stage(&mut tx, &object.id, attachments).await?;
+            self.index.stage(&mut tx, &object.id, attachments).await?;
             for (attachment, (chunks, storage_bytes)) in attachments.iter().zip(encoded) {
                 publish_attachment_sqlite(
                     &mut tx,
@@ -183,8 +179,10 @@ impl FileSearchRepository for SqliteVecRepository {
                     "File is already attached to this vector store".into(),
                 ));
             }
-            let mut tx = self.index.begin_with("BEGIN IMMEDIATE").await?;
-            self.stage(&mut tx, store_id, std::slice::from_ref(attachment)).await?;
+            let mut tx = self.index.pool().begin_with("BEGIN IMMEDIATE").await?;
+            self.index
+                .stage(&mut tx, store_id, std::slice::from_ref(attachment))
+                .await?;
             publish_attachment_sqlite(
                 &mut tx,
                 store_id,
@@ -217,7 +215,7 @@ impl FileSearchRepository for SqliteVecRepository {
             self.metadata.delete(collection, id, store_id).await?;
             // Metadata deletion is the visibility gate. Orphaned index rows are
             // excluded by the search join even if cleanup is interrupted.
-            if let Err(error) = self.remove_index_rows(collection, id, store_id).await {
+            if let Err(error) = self.index.remove_index_rows(collection, id, store_id).await {
                 tracing::warn!(%error, %id, "sqlite-vec orphan cleanup failed");
             }
             Ok(())
