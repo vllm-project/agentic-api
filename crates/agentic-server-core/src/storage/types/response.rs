@@ -43,8 +43,7 @@ pub struct ResponseCheckpoint {
     /// Whether storage holds its history; a transient (`store: false`) session checkpoint has none.
     pub durable: bool,
     /// The stored history's rows, in order, as rehydration read them. A conversation turn's response stores them
-    /// before its own items. Not counted in a session's retained size: the item limit bounds them.
-    #[serde(skip)]
+    /// before its own items. Counted in a session's retained size, so a durable fallback's rows share its budget.
     pub history_item_ids: Vec<String>,
     /// The turn answers the continued history's pending call, so it must be stored right after the continued turn:
     /// another turn stored since had to answer the same call. Set by rehydration; storage refuses the turn then.
