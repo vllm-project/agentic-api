@@ -98,7 +98,59 @@ impl CallLedger {
     /// rejected. Namespace member calls are represented as `InputItem::FunctionCall`, so they're covered by the plain
     /// function check.
     pub(super) fn scan(items: &[InputItem]) -> ExecutorResult<Self> {
-        scan_calls(items)
+        let mut ledger = Self::default();
+        for (index, item) in items.iter().enumerate() {
+            match item {
+                InputItem::FunctionCall(call) => {
+                    ledger.add_call(
+                        &call.call_id,
+                        ClientCallKind::Function,
+                        call.async_execution,
+                        Some(&call.name),
+                        call.namespace.is_some(),
+                    )?;
+                }
+                InputItem::CustomToolCall(call) => {
+                    ledger.add_call(&call.call_id, ClientCallKind::Custom, call.async_execution, None, false)?;
+                }
+                InputItem::FunctionCallOutput(output) => {
+                    ledger.resolve_call(&output.call_id, ClientCallKind::Function)?;
+                }
+                InputItem::CustomToolCallOutput(output) => {
+                    ledger.resolve_call(&output.call_id, ClientCallKind::Custom)?;
+                }
+                InputItem::ShellCall(call) => {
+                    ledger.add_call(&call.call_id, ClientCallKind::Shell, false, None, false)?;
+                }
+                InputItem::ShellCallOutput(output) => ledger.resolve_call(&output.call_id, ClientCallKind::Shell)?,
+                // A hosted search (no call id) is resolved by the gateway, not the client.
+                InputItem::ToolSearchCall(call) => {
+                    if let Some(call_id) = call.call_id.as_deref() {
+                        ledger.add_call(call_id, ClientCallKind::ToolSearch, false, None, false)?;
+                    }
+                }
+                InputItem::ToolSearchOutput(output) => {
+                    if let Some(call_id) = output.call_id.as_deref() {
+                        ledger.resolve_call(call_id, ClientCallKind::ToolSearch)?;
+                    }
+                }
+                InputItem::Message(_)
+                | InputItem::CodeInterpreterCall(_)
+                | InputItem::Reasoning(_)
+                | InputItem::McpListTools(_)
+                | InputItem::Compaction(_)
+                | InputItem::CompactionTrigger
+                | InputItem::MultiAgentCall(_)
+                | InputItem::MultiAgentCallOutput(_)
+                | InputItem::AgentMessage(_)
+                | InputItem::WebSearchCall(_)
+                | InputItem::McpCall(_) => {}
+            }
+            if ledger.unresolved_sync == 0 {
+                ledger.resolved_prefix = index + 1;
+            }
+        }
+        Ok(ledger)
     }
 
     /// Whether a synchronous call is left without an output, which the client must answer before the conversation can
@@ -215,56 +267,6 @@ impl CallLedger {
             ))),
         }
     }
-}
-
-fn scan_calls(items: &[InputItem]) -> ExecutorResult<CallLedger> {
-    let mut ledger = CallLedger::default();
-    for (index, item) in items.iter().enumerate() {
-        match item {
-            InputItem::FunctionCall(call) => {
-                ledger.add_call(
-                    &call.call_id,
-                    ClientCallKind::Function,
-                    call.async_execution,
-                    Some(&call.name),
-                    call.namespace.is_some(),
-                )?;
-            }
-            InputItem::CustomToolCall(call) => {
-                ledger.add_call(&call.call_id, ClientCallKind::Custom, call.async_execution, None, false)?;
-            }
-            InputItem::FunctionCallOutput(output) => ledger.resolve_call(&output.call_id, ClientCallKind::Function)?,
-            InputItem::CustomToolCallOutput(output) => ledger.resolve_call(&output.call_id, ClientCallKind::Custom)?,
-            InputItem::ShellCall(call) => ledger.add_call(&call.call_id, ClientCallKind::Shell, false, None, false)?,
-            InputItem::ShellCallOutput(output) => ledger.resolve_call(&output.call_id, ClientCallKind::Shell)?,
-            // A hosted search (no call id) is resolved by the gateway, not the client.
-            InputItem::ToolSearchCall(call) => {
-                if let Some(call_id) = call.call_id.as_deref() {
-                    ledger.add_call(call_id, ClientCallKind::ToolSearch, false, None, false)?;
-                }
-            }
-            InputItem::ToolSearchOutput(output) => {
-                if let Some(call_id) = output.call_id.as_deref() {
-                    ledger.resolve_call(call_id, ClientCallKind::ToolSearch)?;
-                }
-            }
-            InputItem::Message(_)
-            | InputItem::CodeInterpreterCall(_)
-            | InputItem::Reasoning(_)
-            | InputItem::McpListTools(_)
-            | InputItem::Compaction(_)
-            | InputItem::CompactionTrigger
-            | InputItem::MultiAgentCall(_)
-            | InputItem::MultiAgentCallOutput(_)
-            | InputItem::AgentMessage(_)
-            | InputItem::WebSearchCall(_)
-            | InputItem::McpCall(_) => {}
-        }
-        if ledger.unresolved_sync == 0 {
-            ledger.resolved_prefix = index + 1;
-        }
-    }
-    Ok(ledger)
 }
 
 #[cfg(test)]
