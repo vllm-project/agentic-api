@@ -1835,8 +1835,8 @@ the upstream reported.
     terminal response exactly as returned, for `GET /v1/responses/{id}`.
   - typed conversation metadata on `ConversationData`.
 
-  `ConversationSnapshot` carries a conversation's items, its version, and the `turn_metadata` of the turn at
-  that version. Store rehydration fails if a row cannot be decoded; response rehydration also rejects missing
+  `ConversationSnapshot` carries a conversation's items and the `ResponseCheckpoint` a turn continues: the latest
+  turn's ID and metadata, and the history rows, which the turn's response stores before its own items. Store rehydration fails if a row cannot be decoded; response rehydration also rejects missing
   referenced rows. It must not silently omit malformed reasoning from a continuation. `TryFrom<Response>`
   rejects malformed history references and effective metadata. Conversation rehydration also rejects a latest
   turn whose response is missing or belongs to another conversation. Storage errors omit parser diagnostics that
@@ -1865,9 +1865,8 @@ the upstream reported.
   than rows (`create`, `get`, `get_or_create`, `rehydrate`, `persist`, and the item CRUD).
   Conversation `rehydrate` is one query; response `rehydrate` reads the response row and then its
   history items. Conversation `persist` locks the conversation and appends the turn after whatever it holds
-  then, as OpenAI does. A multi-agent tree is the latest turn's snapshot rather than appended history, so a turn
-  that holds one, or follows one, fails with `conversation_locked` when another turn was stored since it rehydrated;
-  writes run in one transaction via
+  then, as OpenAI does, so a turn never fails because the conversation changed while it ran; writes run in one
+  transaction via
   `pool.begin()` / `tx.commit()`. **These are not to be called outside `executor/` and `storage/`
   themselves.** The only sanctioned callers are `executor/modes/conversation.rs` and
   `executor/modes/response.rs`, described above. (Integration tests and benches import

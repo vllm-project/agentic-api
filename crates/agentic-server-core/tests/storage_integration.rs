@@ -5,7 +5,7 @@ use agentic_core::storage::{
     ConversationData, ConversationStore, ResponseStore, StoreResult, create_pool_with_schema,
     create_pool_with_schema_and_sqlite_config,
 };
-use agentic_core::storage::{ResponseData, ResponseMetadata, StorageError};
+use agentic_core::storage::{ResponseCheckpoint, ResponseData, ResponseMetadata, StorageError};
 use agentic_core::types::conversations::ConversationMetadata;
 use agentic_core::types::event::MessageStatus;
 use agentic_core::types::io::InOutItem;
@@ -74,7 +74,7 @@ async fn conversation_snapshot_reports_empty_and_last_response() -> Result<(), B
 
     let snapshot = store.rehydrate(&conversation.conversation_id).await?;
     assert!(snapshot.items.is_empty());
-    assert!(snapshot.turn_metadata.is_none());
+    assert!(snapshot.checkpoint.response_id.is_none());
 
     persist_turn(
         &store,
@@ -87,7 +87,7 @@ async fn conversation_snapshot_reports_empty_and_last_response() -> Result<(), B
 
     let snapshot = store.rehydrate(&conversation.conversation_id).await?;
     assert_eq!(snapshot.items.len(), 2);
-    assert!(snapshot.turn_metadata.is_some());
+    assert!(snapshot.checkpoint.response_id.is_some());
     assert_eq!(
         store.rehydrate(&conversation.conversation_id).await?.items,
         snapshot.items
@@ -182,7 +182,7 @@ async fn items_added_before_a_turn_precede_it() -> Result<(), Box<dyn std::error
 
     let item_only = store.rehydrate(&conversation.conversation_id).await?;
     // Adding items records no turn.
-    assert!(item_only.turn_metadata.is_none());
+    assert!(item_only.checkpoint.response_id.is_none());
 
     let turn = create_input_item("turn");
     persist_turn(
@@ -195,7 +195,7 @@ async fn items_added_before_a_turn_precede_it() -> Result<(), Box<dyn std::error
     .await?;
     let recorded = store.rehydrate(&conversation.conversation_id).await?;
     assert_eq!(recorded.items, vec![added, turn]);
-    assert!(recorded.turn_metadata.is_some());
+    assert!(recorded.checkpoint.response_id.is_some());
 
     Ok(())
 }
@@ -210,7 +210,7 @@ async fn first_turn_stores_its_items() -> Result<(), Box<dyn std::error::Error>>
     store
         .persist(
             &conversation.conversation_id,
-            None,
+            &ResponseCheckpoint::default(),
             "resp_first",
             items.clone(),
             None,
@@ -247,10 +247,7 @@ async fn zero_item_turns_record_their_exact_metadata() -> Result<(), Box<dyn std
 
         let snapshot = store.rehydrate(&conversation.conversation_id).await?;
         assert!(snapshot.items.is_empty());
-        assert_eq!(
-            snapshot.turn_metadata.as_ref().map(|metadata| metadata.model.as_str()),
-            Some(model)
-        );
+        assert_eq!(snapshot.checkpoint.metadata.model, model);
     }
 
     Ok(())
@@ -313,7 +310,7 @@ async fn a_turn_changes_only_its_own_conversation() -> Result<(), Box<dyn std::e
     store
         .persist(
             &second.conversation_id,
-            None,
+            &ResponseCheckpoint::default(),
             "resp_second_conversation",
             vec![create_input_item("second conversation")],
             None,
@@ -613,7 +610,7 @@ async fn test_conversation_concurrent_turns() {
             store
                 .persist(
                     &conv_id,
-                    None,
+                    &ResponseCheckpoint::default(),
                     response_id,
                     vec![create_input_item(text)],
                     None,
@@ -998,9 +995,7 @@ async fn test_tool_search_conversation_metadata_matches_snapshot_version() {
     .await
     .expect("persist a newer conversation turn");
     // The snapshot keeps the metadata of the turn it was rehydrated at.
-    let metadata = snapshot
-        .turn_metadata
-        .expect("response metadata accompanies conversation items");
+    let metadata = snapshot.checkpoint.metadata;
     assert_eq!(metadata.model, "latest-model");
     assert_eq!(metadata.tool_search_loaded_tools.as_deref().map(<[_]>::len), Some(1));
 }

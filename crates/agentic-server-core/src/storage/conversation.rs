@@ -9,7 +9,9 @@ use super::pool::{DbPool, DbTransaction};
 use super::types::conversation::encode_metadata;
 use super::types::item::{decode_public, encode};
 use super::types::response::decode_turn_metadata;
-use super::types::{ConversationData, ConversationSnapshot, ResponseMetadata, StorageError, StoreResult};
+use super::types::{
+    ConversationData, ConversationSnapshot, ResponseCheckpoint, ResponseMetadata, StorageError, StoreResult,
+};
 use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 use crate::types::io::ItemOrder;
@@ -90,7 +92,8 @@ impl ConversationStore {
             .try_into()
     }
 
-    /// Rehydrates a conversation: its items and the metadata of its latest turn.
+    /// Rehydrates a conversation: its items and the checkpoint a turn continues (the latest turn's metadata and the
+    /// history rows).
     ///
     /// # Errors
     ///
@@ -104,11 +107,7 @@ impl ConversationStore {
             items: rows,
         }) = conversation::get_with_items(pool, conversation_id).await?
         else {
-            return Ok(ConversationSnapshot {
-                items: Vec::new(),
-                latest_response_id: None,
-                turn_metadata: None,
-            });
+            return Ok(ConversationSnapshot::default());
         };
 
         if let Some(row) = rows.iter().find(|row| row.seq.is_none()) {
@@ -118,31 +117,36 @@ impl ConversationStore {
             });
         }
         let items = rows.iter().map(InOutItem::try_from).collect::<StoreResult<_>>()?;
-        let turn_metadata = match &latest_response_id {
+        let history_item_ids = rows.into_iter().map(|row| row.id).collect();
+        let metadata = match &latest_response_id {
             None => None,
             Some(response_id) => decode_turn_metadata(response_id, latest_turn.as_ref())?,
         };
+        let response_id = metadata.is_some().then_some(latest_response_id).flatten();
 
         Ok(ConversationSnapshot {
             items,
-            latest_response_id,
-            turn_metadata,
+            checkpoint: ResponseCheckpoint {
+                response_id,
+                history: Vec::new(),
+                metadata: metadata.unwrap_or_default(),
+                durable: true,
+                history_item_ids,
+            },
         })
     }
 
     /// Persists a conversation turn: appends its new items after whatever the conversation holds now, as `OpenAI`
-    /// does, and stores the response with its snapshot and metadata as the latest turn. `continued_response_id` is the
-    /// latest turn when this one rehydrated the conversation.
+    /// does, and stores the response with its snapshot and metadata as the latest turn. `checkpoint` is the
+    /// conversation as this turn rehydrated it.
     ///
     /// # Errors
     ///
-    /// Returns [`StorageError::ConversationConflict`] if another turn was stored since `continued_response_id` and
-    /// either turn holds a multi-agent tree, and [`StorageError`] if the conversation was not found or a database
-    /// operation fails.
+    /// Returns [`StorageError`] if the conversation was not found or a database operation fails.
     pub async fn persist(
         &self,
         conversation_id: &str,
-        continued_response_id: Option<&str>,
+        checkpoint: &ResponseCheckpoint,
         response_id: &str,
         new_items: Vec<InOutItem>,
         snapshot: Option<&ResponsePayload>,
@@ -154,23 +158,14 @@ impl ConversationStore {
         let metadata_json = String::try_from(metadata)?;
 
         let mut tx = pool.begin().await?;
-        let conversation = conversation::lock_in_tx(&mut tx, conversation_id)
+        conversation::lock_in_tx(&mut tx, conversation_id)
             .await
             .map_err(|error| conversation_error(error, conversation_id))?;
-        // Items append, but a multi-agent tree is the latest turn's snapshot: storing a turn that holds one, or that
-        // follows one, after another turn was stored would overwrite that turn's tree.
-        let latest_response_id = conversation.latest_response_id.as_deref();
-        if latest_response_id != continued_response_id
-            && (metadata.multi_agent_tree.is_some() || holds_agent_tree(&mut tx, latest_response_id).await?)
-        {
-            return Err(StorageError::ConversationConflict {
-                conversation_id: conversation_id.to_owned(),
-            });
-        }
-        item::create_in_tx(&mut tx, new_items, Some(conversation_id)).await?;
-        // A response branch must see the conversation as it existed at this turn,
-        // including manually added items that may later be detached or deleted.
-        let history_item_ids = item::ids_for_conversation_in_tx(&mut tx, conversation_id).await?;
+        // The response keeps the history the turn continued, as OpenAI does: items added to or removed from the
+        // conversation while the turn ran are not part of it.
+        let mut history_item_ids = checkpoint.history_item_ids.clone();
+        let created = item::create_in_tx(&mut tx, new_items, Some(conversation_id)).await?;
+        history_item_ids.extend(created.into_iter().map(|row| row.id));
         let history_item_ids_json = serialize_to_string(&history_item_ids)?;
 
         response::create_in_tx(
@@ -312,19 +307,6 @@ async fn lock_owned(tx: &mut DbTransaction<'_>, tenant_id: &str, id: &str) -> St
         return Err(StorageError::not_found("Conversation", id));
     }
     Ok(row)
-}
-
-/// Whether the response that committed a conversation's latest turn holds a multi-agent tree.
-async fn holds_agent_tree(tx: &mut DbTransaction<'_>, response_id: Option<&str>) -> StoreResult<bool> {
-    let Some(response_id) = response_id else {
-        return Ok(false);
-    };
-    let metadata = response::get(&mut **tx, response_id)
-        .await?
-        .and_then(|row| row.metadata)
-        .map(|metadata| ResponseMetadata::try_from(metadata.as_str()))
-        .transpose()?;
-    Ok(metadata.is_some_and(|metadata| metadata.multi_agent_tree.is_some()))
 }
 
 fn conversation_error(error: sqlx::Error, id: &str) -> StorageError {

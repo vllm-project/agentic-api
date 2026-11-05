@@ -1,6 +1,7 @@
 //! Domain type for response storage.
 
 use std::convert::TryFrom;
+use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
@@ -8,7 +9,7 @@ use super::super::models::Response as StorageDbResponse;
 use super::super::models::conversation::LatestTurn;
 use super::errors::StorageError;
 use crate::types::agent_tree::StoredTreeSnapshot;
-use crate::types::io::ToolChoice;
+use crate::types::io::{InputItem, ToolChoice};
 use crate::types::request_response::ResponsePayload;
 use crate::types::tools::ResponsesTool;
 use crate::utils::common::serialize_to_string;
@@ -28,6 +29,32 @@ pub struct ResponseMetadata {
     pub tool_search_loaded_tools: Option<Vec<ResponsesTool>>,
     pub effective_tool_choice: ToolChoice,
     pub effective_instructions: Option<String>,
+}
+
+/// The turn a request continues: a stored response, a conversation's latest turn, or a session's parent.
+#[derive(Default, Serialize)]
+pub struct ResponseCheckpoint {
+    /// The response that produced it; `None` for a conversation before its first turn.
+    pub response_id: Option<String>,
+    /// The history items a session keeps in memory; empty when only storage holds them.
+    pub history: Vec<InputItem>,
+    /// The continued turn's metadata.
+    pub metadata: ResponseMetadata,
+    /// Whether storage holds its history; a transient (`store: false`) session checkpoint has none.
+    pub durable: bool,
+    /// The stored history's rows, in order, as rehydration read them. A conversation turn's response stores them
+    /// before its own items. Not counted in a session's retained size: the item limit bounds them.
+    #[serde(skip)]
+    pub history_item_ids: Vec<String>,
+}
+
+impl fmt::Debug for ResponseCheckpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ResponseCheckpoint")
+            .field("response_id", &self.response_id)
+            .field("items", &self.history.len())
+            .finish_non_exhaustive()
+    }
 }
 
 /// Domain entity for a stored LLM response.

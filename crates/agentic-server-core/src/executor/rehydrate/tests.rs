@@ -4,10 +4,9 @@ use std::sync::Arc;
 use super::*;
 use crate::executor::modes::{ConversationHandler, ResponseHandler};
 use crate::executor::pending_calls::pending_calls;
-use crate::storage::{ConversationStore, ResponseMetadata, ResponseStore, create_pool_with_schema};
-use crate::types::agent::{AgentIdentity, AgentTurnId, AgentTurnKey};
-use crate::types::agent_tree::{AgentPhase, AgentState, StoredAgent, StoredClientCall, StoredTreeSnapshot};
-use crate::types::client_calls::{ClientCallId, ClientCallKind, ClientCallOwner};
+use crate::storage::{ConversationStore, ResponseCheckpoint, ResponseMetadata, ResponseStore, create_pool_with_schema};
+use crate::types::agent::{AgentIdentity, AgentTurnId};
+use crate::types::agent_tree::{AgentState, StoredAgent, StoredTreeSnapshot};
 use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 use crate::types::io::MultiAgentConfig;
@@ -379,7 +378,7 @@ async fn inherited_multi_agent_rejects_max_tool_calls() {
     conversation_store
         .persist(
             &conversation.conversation_id,
-            None,
+            &ResponseCheckpoint::default(),
             "resp_conversation_tree",
             Vec::new(),
             None,
@@ -480,7 +479,7 @@ async fn new_conversation_rehydration_has_no_turn_metadata() -> Result<(), Box<d
         ctx.conversation_id.as_deref(),
         Some(conversation.conversation_id.as_str())
     );
-    assert!(ctx.checkpoint.is_none());
+    assert!(ctx.checkpoint.as_ref().is_some_and(|turn| turn.response_id.is_none()));
     Ok(())
 }
 
@@ -498,7 +497,7 @@ async fn existing_conversation_rehydration_continues_the_latest_turn() -> Result
     conversation_store
         .persist(
             &conversation.conversation_id,
-            None,
+            &ResponseCheckpoint::default(),
             "resp_prior",
             prior_items,
             None,
@@ -510,7 +509,7 @@ async fn existing_conversation_rehydration_continues_the_latest_turn() -> Result
     let ctx = rehydrate_conversation(request(Some(&conversation.conversation_id), None), &exec_ctx).await?;
 
     assert_eq!(
-        ctx.checkpoint.as_ref().map(|turn| turn.response_id.as_str()),
+        ctx.checkpoint.as_ref().and_then(|turn| turn.response_id.as_deref()),
         Some("resp_prior")
     );
     // The stored turn followed by this request's own input.
@@ -528,7 +527,7 @@ async fn conversation_rehydration_remembers_listed_mcp_servers() -> Result<(), B
     conversation_store
         .persist(
             &conversation.conversation_id,
-            None,
+            &ResponseCheckpoint::default(),
             "resp_prior",
             vec![InOutItem::Output(OutputItem::McpListTools(McpListTools::new(
                 "mcpl_prior",
@@ -750,7 +749,7 @@ async fn stored_code_interpreter_call_is_not_replayed_for_previous_response_or_c
     conversation_store
         .persist(
             &conversation.conversation_id,
-            None,
+            &ResponseCheckpoint::default(),
             "resp_conversation_projection",
             vec![InOutItem::Output(projection)],
             None,
@@ -806,114 +805,6 @@ async fn previous_response_rehydration_remembers_listed_mcp_servers() -> Result<
         model_items
             .iter()
             .all(|item| !matches!(item, InOutItem::Input(InputItem::McpListTools(_))))
-    );
-    Ok(())
-}
-
-/// A root-only agent tree, waiting for the client's output to `pending_call` when there is one.
-fn agent_tree(pending_call: Option<&str>) -> ResponseMetadata {
-    let turn = AgentTurnId::new();
-    let history = pending_call.map_or_else(Vec::new, |call_id| {
-        serde_json::from_value(serde_json::json!([
-            {"type":"function_call", "call_id":call_id, "name":"lookup", "arguments":"{}"}
-        ]))
-        .unwrap()
-    });
-    let client_calls = pending_call
-        .map(|call_id| StoredClientCall {
-            call_id: ClientCallId::try_from(call_id.to_owned()).unwrap(),
-            owner: ClientCallOwner {
-                agent_turn: AgentTurnKey {
-                    agent: AgentIdentity::root(),
-                    turn,
-                },
-                kind: ClientCallKind::Function,
-                async_execution: false,
-            },
-            resolved: false,
-        })
-        .into_iter()
-        .collect();
-    ResponseMetadata {
-        multi_agent_tree: Some(StoredTreeSnapshot {
-            version: 1,
-            config: MultiAgentConfig {
-                enabled: true,
-                max_concurrent_subagents: Some(3),
-            },
-            agents: vec![StoredAgent {
-                identity: AgentIdentity::root(),
-                parent: None,
-                turn,
-                state: if pending_call.is_some() {
-                    AgentState::Active(AgentPhase::WaitingForClientOutputs)
-                } else {
-                    AgentState::Idle
-                },
-                mailbox: Vec::new(),
-                history,
-                loaded_tools: Vec::new(),
-                last_task: String::new(),
-                final_answer: None,
-                rounds: 0,
-                wait: None,
-            }],
-            client_calls,
-        }),
-        ..Default::default()
-    }
-}
-
-/// Turns that rehydrated the same multi-agent tree: after the first commits, a later turn would replace its tree, so
-/// it is refused, and the first turn's pending client call still continues.
-#[tokio::test]
-async fn overlapping_multi_agent_turns_keep_the_first_turns_pending_call() -> Result<(), Box<dyn std::error::Error>> {
-    let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
-    let conversation_store = ConversationStore::new(pool);
-    let conversation = conversation_store
-        .create("default_tenant", &ConversationMetadata::new(), &[])
-        .await?;
-    let id = conversation.conversation_id.as_str();
-    conversation_store
-        .persist(id, None, "resp_tree", Vec::new(), None, &agent_tree(None))
-        .await?;
-    let exec_ctx = execution_context(conversation_store, ResponseStore::disabled());
-
-    let first = rehydrate_conversation(request(Some(id), None), &exec_ctx).await?;
-    let stale_tree = rehydrate_conversation(request(Some(id), None), &exec_ctx).await?;
-    let plain_turn = rehydrate_conversation(request(Some(id), None), &exec_ctx).await?;
-    let first_response_id = first.response_id.clone();
-    exec_ctx
-        .conv_handler
-        .persist(first, Vec::new(), None, agent_tree(Some("call_first")))
-        .await?;
-    for (ctx, metadata) in [
-        (stale_tree, agent_tree(None)),
-        (plain_turn, ResponseMetadata::default()),
-    ] {
-        let error = exec_ctx
-            .conv_handler
-            .persist(ctx, Vec::new(), None, metadata)
-            .await
-            .expect_err("a turn stored after the first would replace its tree");
-        assert!(matches!(error, ExecutorError::ConversationLocked { .. }), "{error}");
-    }
-
-    // The client answers the first turn's call.
-    let mut continuation = request(Some(id), None);
-    continuation.input = serde_json::from_value(serde_json::json!([
-        {"type":"function_call_output", "call_id":"call_first", "output":"sunny"}
-    ]))?;
-    let ctx = rehydrate_conversation(continuation, &exec_ctx).await?;
-    assert_eq!(
-        ctx.checkpoint.as_ref().map(|turn| turn.response_id.as_str()),
-        Some(first_response_id.as_str())
-    );
-    let tree = ctx.multi_agent_tree.as_ref().expect("the first turn's tree").snapshot();
-    assert!(
-        tree.client_calls
-            .iter()
-            .any(|call| call.call_id.as_str() == "call_first" && !call.resolved)
     );
     Ok(())
 }

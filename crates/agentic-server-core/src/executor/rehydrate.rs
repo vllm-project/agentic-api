@@ -3,13 +3,13 @@
 //! Builds a [`RequestContext`] by loading prior turns from storage and
 //! injecting them into the enriched request before it is forwarded to the LLM.
 
-use super::session::{ResponseCheckpoint, ResponseContinuation, ResponseSession, canonical_session_history};
+use super::session::{ResponseContinuation, ResponseSession, canonical_session_history};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::multi_agent::{CheckpointLimits, ValidatedTreeCheckpoint};
 use crate::executor::pending_calls::first_unanswered_sync_call;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::telemetry::metrics::Stage;
-use crate::storage::{ResponseMetadata, StorageError};
+use crate::storage::{ConversationSnapshot, ResponseCheckpoint, ResponseMetadata, StorageError};
 use crate::tool::ToolError;
 use crate::types::io::InOutItem;
 use crate::types::io::input::is_search_item;
@@ -281,10 +281,11 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
         .await?
         .ok_or_else(missing_previous_response_id)?;
     let checkpoint = ResponseCheckpoint {
-        response_id: stored.response_id,
+        response_id: Some(stored.response_id),
         history: Vec::new(),
         metadata: stored.metadata,
         durable: true,
+        history_item_ids: stored.history_item_ids,
     };
     if restore_agent_tree(ctx, &checkpoint.metadata, exec_ctx.responses_config.max_retained_bytes)? {
         ctx.checkpoint = Some(checkpoint);
@@ -324,10 +325,11 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
             .await?
             .ok_or_else(missing_previous_response_id)?;
         let checkpoint = ResponseCheckpoint {
-            response_id: stored.response_id,
+            response_id: Some(stored.response_id),
             history: canonical_session_history(InOutItem::into_input_items(history)),
             metadata: stored.metadata,
             durable: true,
+            history_item_ids: stored.history_item_ids,
         };
         let continuation = ctx.continuation.as_ref().ok_or_else(|| {
             ExecutorError::InvalidRequest("session response requires a continuation lease".to_owned())
@@ -340,6 +342,7 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
         history: Vec::new(),
         metadata: parent.metadata.clone(),
         durable: parent.durable,
+        history_item_ids: parent.history_item_ids.clone(),
     });
     if restore_agent_tree(ctx, &parent.metadata, exec_ctx.responses_config.max_retained_bytes)? {
         if let Some(continuation) = ctx.continuation.as_mut() {
@@ -392,28 +395,21 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
         exec_ctx.conv_handler.rehydrate(ctx),
     )?;
 
-    let checkpoint = snapshot.turn_metadata.map(|metadata| ResponseCheckpoint {
-        response_id: snapshot.latest_response_id.unwrap_or_default(),
-        history: Vec::new(),
-        metadata,
-        durable: true,
-    });
-    if let Some(turn) = &checkpoint
-        && restore_agent_tree(ctx, &turn.metadata, exec_ctx.responses_config.max_retained_bytes)?
-    {
+    let ConversationSnapshot { items, checkpoint } = snapshot;
+    if restore_agent_tree(ctx, &checkpoint.metadata, exec_ctx.responses_config.max_retained_bytes)? {
         ctx.conversation_id = Some(conv_data.conversation_id);
-        ctx.checkpoint = checkpoint;
+        ctx.checkpoint = Some(checkpoint);
         return Ok(());
     }
 
-    let mut items = InOutItem::into_input_items(snapshot.items);
+    let mut items = InOutItem::into_input_items(items);
     items.reserve(ctx.new_input_items.len());
     items.extend(InOutItem::into_input_items(ctx.new_input_items.clone()));
     reject_unanswered_sync_call(&items)?;
 
     ctx.enriched_request.input = ResponsesInput::from(items);
     ctx.conversation_id = Some(conv_data.conversation_id);
-    ctx.checkpoint = checkpoint;
+    ctx.checkpoint = Some(checkpoint);
     Ok(())
 }
 

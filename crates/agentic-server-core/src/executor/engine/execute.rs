@@ -206,7 +206,7 @@ impl ExecuteRequest {
             .and_then(|continuation| continuation.parent.as_ref());
         if !self.pinned_continuation
             || self.payload.previous_response_id.as_deref() != Some(steer.previous_response_id.as_str())
-            || parent.is_none_or(|parent| parent.response_id != steer.previous_response_id)
+            || parent.is_none_or(|parent| parent.response_id.as_deref() != Some(steer.previous_response_id.as_str()))
         {
             return Err(ExecutorError::InvalidRequest(
                 "steering input requires an explicitly pinned continuation for its parent".into(),

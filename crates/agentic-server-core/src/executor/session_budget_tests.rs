@@ -1,6 +1,7 @@
 //! Aggregate retention is charged per immutable object, not per Arc reference.
 
 use super::*;
+use crate::storage::ResponseCheckpoint;
 use crate::types::io::ResponsesInput;
 use std::sync::atomic::AtomicBool;
 use std::task::{Context, Poll, Wake, Waker};
@@ -210,8 +211,16 @@ fn aggregate_budget_replacement_requires_headroom_without_premature_eviction() {
     ));
     assert_eq!(used(&group), bytes);
     assert_eq!(
-        session.state.lock().unwrap().latest.as_ref().unwrap().response_id,
-        "resp_1"
+        session
+            .state
+            .lock()
+            .unwrap()
+            .latest
+            .as_ref()
+            .unwrap()
+            .response_id
+            .as_deref(),
+        Some("resp_1")
     );
     drop(lease); // Failed fresh root does not reference/evict the old checkpoint.
     session.discard_cached_response("resp_1").unwrap();
@@ -259,7 +268,7 @@ fn aggregate_budget_charges_canonical_durable_fallback_before_inference() {
     let session = group.new_session().unwrap();
     let lease = session.begin(None).unwrap();
     let checkpoint = ResponseCheckpoint {
-        response_id: "durable".to_owned(),
+        response_id: Some("durable".to_owned()),
         history: Vec::from(&ResponsesInput::Text("durable history".to_owned())),
         metadata: ResponseMetadata {
             multi_agent_tree: None,
@@ -267,6 +276,7 @@ fn aggregate_budget_charges_canonical_durable_fallback_before_inference() {
             ..ResponseMetadata::default()
         },
         durable: true,
+        history_item_ids: Vec::new(),
     };
     let expected = serialized_size_up_to(&checkpoint, usize::MAX).unwrap().unwrap();
     let retained = lease.retain_parent(checkpoint).unwrap();

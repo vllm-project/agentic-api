@@ -9,10 +9,12 @@ use crate::executor::gateway::GatewaySchedulerPolicy;
 use crate::executor::messages_server_tools::sealing::{MessagesResultKey, process_result_key};
 use crate::executor::modes::{ConversationHandler, ResponseHandler};
 use crate::executor::multi_agent::ValidatedTreeCheckpoint;
-use crate::executor::session::{ResponseCheckpoint, ResponseContinuation};
+use crate::executor::session::ResponseContinuation;
 use crate::executor::telemetry::ExecutorMetrics;
 use crate::storage::backend::redact_database_urls;
-use crate::storage::{ConversationStore, DatabaseBackend, ResponseStore, create_pool_with_schema_and_configs};
+use crate::storage::{
+    ConversationStore, DatabaseBackend, ResponseCheckpoint, ResponseStore, create_pool_with_schema_and_configs,
+};
 use crate::tool::{GatewayExecutorRegistration, GatewayExecutors};
 use crate::types::io::{InOutItem, ToolChoice};
 use crate::types::messages::GatewayToolMap;

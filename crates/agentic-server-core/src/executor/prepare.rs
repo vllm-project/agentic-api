@@ -57,8 +57,7 @@ fn restored_loaded_tools(ctx: &mut RequestContext) -> Vec<ResponsesTool> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::executor::session::ResponseCheckpoint;
-    use crate::storage::ResponseMetadata;
+    use crate::storage::{ResponseCheckpoint, ResponseMetadata};
     use crate::types::request_response::RequestPayload;
 
     #[test]
@@ -69,13 +68,12 @@ mod tests {
         .unwrap();
         // The session parent as rehydration records it: not durable, history not kept on the checkpoint.
         let checkpoint = ResponseCheckpoint {
-            response_id: "resp_parent".to_owned(),
-            history: Vec::new(),
+            response_id: Some("resp_parent".to_owned()),
             metadata: ResponseMetadata {
                 tool_search_loaded_tools: Some(vec![loaded.clone()]),
                 ..ResponseMetadata::default()
             },
-            durable: false,
+            ..ResponseCheckpoint::default()
         };
         let request: RequestPayload = serde_json::from_value(serde_json::json!({
             "model": "test", "store": false, "previous_response_id": "resp_parent",

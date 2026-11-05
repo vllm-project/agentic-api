@@ -1,6 +1,6 @@
 //! Conversation storage handler — owns all conversation store operations.
 
-use crate::storage::{ConversationData, ConversationSnapshot, ConversationStore, ResponseMetadata, StorageError};
+use crate::storage::{ConversationData, ConversationSnapshot, ConversationStore, ResponseMetadata};
 use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 use crate::types::io::OutputItem;
@@ -229,28 +229,25 @@ impl ConversationHandler {
         new_items.extend(ctx.new_input_items);
         new_items.extend(output_items.into_iter().map(InOutItem::Output));
 
-        let continued_response_id = ctx.checkpoint.as_ref().map(|turn| turn.response_id.as_str());
+        let checkpoint = ctx.checkpoint.unwrap_or_default();
         self.store
             .persist(
                 &conversation_id,
-                continued_response_id,
+                &checkpoint,
                 &ctx.response_id,
                 new_items,
                 snapshot,
                 &metadata,
             )
             .await
-            .map_err(|error| match error {
-                source @ StorageError::ConversationConflict { .. } => ExecutorError::ConversationLocked { source },
-                other => ExecutorError::Storage(other),
-            })
+            .map_err(ExecutorError::Storage)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::{ResponseMetadata, create_pool_with_schema};
+    use crate::storage::{ResponseCheckpoint, ResponseMetadata, create_pool_with_schema};
     use crate::types::io::ResponsesInput;
     use crate::types::io::{InputItem, InputMessageContent};
     use crate::types::request_response::RequestPayload;
@@ -336,7 +333,7 @@ mod tests {
         crate::executor::persist::persist_prepared_turn(ctx, None, vec![], None, &handler, &responses).await?;
 
         let snapshot = store.rehydrate(&conversation.conversation_id).await?;
-        let metadata = snapshot.turn_metadata.clone().expect("persisted turn metadata");
+        let metadata = snapshot.checkpoint.metadata.clone();
         assert_eq!(metadata.effective_tool_choice, ToolChoice::Required);
         assert_eq!(snapshot.items.len(), 1);
         Ok(())
@@ -359,7 +356,7 @@ mod tests {
         store
             .persist(
                 &conversation.conversation_id,
-                None,
+                &ResponseCheckpoint::default(),
                 "resp_competing",
                 competing_items,
                 None,
