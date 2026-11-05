@@ -3,14 +3,15 @@
 //! Builds a [`RequestContext`] by loading prior turns from storage and
 //! injecting them into the enriched request before it is forwarded to the LLM.
 
+use std::convert::identity;
+
 use super::session::{ResponseContinuation, ResponseSession, canonical_session_history};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::multi_agent::{CheckpointLimits, ValidatedTreeCheckpoint};
-use crate::executor::pending_calls::first_unanswered_sync_call;
+use crate::executor::pending_calls::CallLedger;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::telemetry::metrics::Stage;
 use crate::storage::{ConversationSnapshot, ResponseCheckpoint, ResponseMetadata, StorageError};
-use crate::tool::ToolError;
 use crate::types::io::InOutItem;
 use crate::types::io::input::is_search_item;
 use crate::types::io::{InputItem, ResponsesInput, resolve_tool_choice, resolve_tools};
@@ -145,21 +146,10 @@ async fn rehydrate_request(
 fn from_responses(ctx: &mut RequestContext) -> ExecutorResult<()> {
     let items = InOutItem::into_input_items(ctx.new_input_items.clone());
     if items.iter().any(is_search_item) {
-        reject_unanswered_sync_call(&items)?;
+        CallLedger::scan(&items)?.require_answered()?;
     }
     ctx.enriched_request.input = ResponsesInput::from(items);
     Ok(())
-}
-
-/// Refuses a history whose synchronous call has no output yet; the pending-call ledger also rejects a duplicate
-/// call id, an output with no call, and an output for a call of another kind.
-fn reject_unanswered_sync_call(items: &[InputItem]) -> ExecutorResult<()> {
-    match first_unanswered_sync_call(items)? {
-        Some(pending) => Err(ExecutorError::Tool(ToolError::MissingOutput {
-            call_id: pending.call_id,
-        })),
-        None => Ok(()),
-    }
 }
 
 fn validate_multi_agent_request(request: &RequestPayload) -> ExecutorResult<()> {
@@ -211,8 +201,7 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
         .await?
         .ok_or_else(missing_previous_response_id)?;
     if !restore_agent_tree(ctx, &checkpoint.metadata, exec_ctx.responses_config.max_retained_bytes)? {
-        let items = with_request_items(ctx, InOutItem::into_input_items(history));
-        set_model_input(ctx, items)?;
+        set_model_input(ctx, InOutItem::into_input_items(history), identity)?;
         apply_effective_settings(ctx, &checkpoint.metadata);
     }
     ctx.checkpoint = Some(checkpoint);
@@ -247,8 +236,7 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
         std::sync::Arc::new(continuation.retain_parent(checkpoint)?)
     };
     if !restore_agent_tree(ctx, &parent.metadata, exec_ctx.responses_config.max_retained_bytes)? {
-        let items = canonical_session_history(with_request_items(ctx, parent.history.clone()));
-        set_model_input(ctx, items)?;
+        set_model_input(ctx, parent.history.clone(), canonical_session_history)?;
         apply_effective_settings(ctx, &parent.metadata);
     }
     // The model input holds the parent's history; the turn's checkpoint keeps what persistence extends.
@@ -257,6 +245,7 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
         metadata: parent.metadata.clone(),
         durable: parent.durable,
         history_item_ids: parent.history_item_ids.clone(),
+        requires_latest: false,
         history: Vec::new(),
     });
     if let Some(continuation) = ctx.continuation.as_mut() {
@@ -283,28 +272,35 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
         result => result?,
     };
     ctx.conversation_id.clone_from(&ctx.original_request.conversation);
-
-    if !restore_agent_tree(
-        ctx,
-        &snapshot.checkpoint.metadata,
-        exec_ctx.responses_config.max_retained_bytes,
-    )? {
-        let items = with_request_items(ctx, InOutItem::into_input_items(snapshot.items));
-        set_model_input(ctx, items)?;
+    let ConversationSnapshot { items, mut checkpoint } = snapshot;
+    if !restore_agent_tree(ctx, &checkpoint.metadata, exec_ctx.responses_config.max_retained_bytes)? {
+        let history = InOutItem::into_input_items(items);
+        // A turn is admitted only if it answers the history's pending call, so another turn may have answered it first.
+        checkpoint.requires_latest = CallLedger::scan(&history)?.awaits_output();
+        set_model_input(ctx, history, identity)?;
     }
-    ctx.checkpoint = Some(snapshot.checkpoint);
+    // A multi-agent tree is the latest turn's snapshot, not appended history: a multi-agent turn, which continues or
+    // builds one, must be stored right after the turn it continued, or it would replace another turn's tree.
+    checkpoint.requires_latest |= ctx
+        .enriched_request
+        .multi_agent
+        .as_ref()
+        .is_some_and(|config| config.enabled);
+    ctx.checkpoint = Some(checkpoint);
     Ok(())
 }
 
-/// The continued `history` followed by this request's own items.
-fn with_request_items(ctx: &RequestContext, mut history: Vec<InputItem>) -> Vec<InputItem> {
+/// Makes the continued `history` followed by this request's own items the turn's model input, once no synchronous call
+/// in them is left unanswered. `window` keeps what the turn continues: a session keeps the window after the latest
+/// compaction, which this request's items can move.
+fn set_model_input(
+    ctx: &mut RequestContext,
+    mut history: Vec<InputItem>,
+    window: fn(Vec<InputItem>) -> Vec<InputItem>,
+) -> ExecutorResult<()> {
     history.extend(InOutItem::into_input_items(ctx.new_input_items.clone()));
-    history
-}
-
-/// Makes `items` the turn's model input, once no synchronous call in them is left unanswered.
-fn set_model_input(ctx: &mut RequestContext, items: Vec<InputItem>) -> ExecutorResult<()> {
-    reject_unanswered_sync_call(&items)?;
+    let items = window(history);
+    CallLedger::scan(&items)?.require_answered()?;
     ctx.enriched_request.previous_response_id = None;
     ctx.enriched_request.input = ResponsesInput::from(items);
     Ok(())

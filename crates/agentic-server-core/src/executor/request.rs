@@ -235,9 +235,10 @@ impl ExecutionContext {
             .ok_or_else(|| Error::Config("default database URL was not resolved".to_owned()))?;
         let database_backend = DatabaseBackend::from_url(db_url)
             .map_err(|error| Error::Config(format!("invalid DATABASE_URL: {error}")))?;
-        // Only the default database in the Agentic API home is recreated when it holds data from an earlier release.
+        // Only the default database in the Agentic API home is recreated when it holds data from an earlier release;
+        // a configured URL is never recreated, even one naming the same file.
         let sqlite = SqliteConfig {
-            recreate_outdated_schema: default_db_url.is_some() || default_database_url().is_ok_and(|url| url == db_url),
+            recreate_outdated_schema: default_db_url.is_some(),
             ..cfg.sqlite
         };
         let pool = create_pool_with_schema_and_configs(Some(db_url), sqlite, cfg.postgres)

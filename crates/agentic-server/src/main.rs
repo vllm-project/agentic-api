@@ -12,8 +12,7 @@ use agentic_core::config::{
     DEFAULT_POSTGRES_LOCK_TIMEOUT_SECONDS, DEFAULT_POSTGRES_MAX_CONNECTIONS, DEFAULT_POSTGRES_MAX_LIFETIME_SECONDS,
     DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS, DEFAULT_POSTGRES_STATEMENT_TIMEOUT_SECONDS,
     DEFAULT_SQLITE_JOURNAL_SIZE_LIMIT_BYTES, DEFAULT_SQLITE_MAX_CONNECTIONS, DEFAULT_SQLITE_MMAP_SIZE_BYTES,
-    PostgresConfig, SqliteConfig, SqliteTempStore, ToolRuntimeConfig, default_database_url, ensure_agentic_api_home,
-    normalize_base_url,
+    PostgresConfig, SqliteConfig, SqliteTempStore, ToolRuntimeConfig, ensure_agentic_api_home, normalize_base_url,
 };
 use agentic_core::error::Error;
 use agentic_server::auth::OidcConfig;
@@ -431,12 +430,12 @@ fn code_interpreter_config_from_operator_values(
 }
 
 fn build_config(llm_api_base: String, common: &CommonArgs, file: &FileConfig) -> Result<Config, Error> {
-    let db_url = common
-        .db_url
-        .clone()
-        .or_else(|| file.database_url.clone())
-        .map_or_else(default_database_url, Ok)?;
-    let (postgres, sqlite) = database_configs_from_env(&db_url)?;
+    // `None` selects the default SQLite database in the Agentic API home: only it may be recreated at startup.
+    let db_url = common.db_url.clone().or_else(|| file.database_url.clone());
+    let (postgres, sqlite) = match &db_url {
+        Some(url) => database_configs_from_env(url)?,
+        None => (PostgresConfig::default(), sqlite_config_from_env()?),
+    };
     let web_search = resolve_web_search_config(&file.web_search, environment_value)?;
     let web_fetch = resolve_web_fetch_config(&file.web_fetch, environment_value)?;
     let mcp_allowed_hosts = environment_value("AGENTIC_MCP_ALLOWED_HOSTS")
@@ -460,7 +459,7 @@ fn build_config(llm_api_base: String, common: &CommonArgs, file: &FileConfig) ->
         llm_ready_timeout_s: common.llm_ready_timeout_s,
         llm_ready_interval_s: common.llm_ready_interval_s,
         skip_llm_ready_check: common.skip_llm_ready_check,
-        db_url: Some(db_url),
+        db_url,
         postgres,
         sqlite,
         tools: ToolRuntimeConfig {

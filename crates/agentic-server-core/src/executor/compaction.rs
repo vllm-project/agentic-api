@@ -19,7 +19,7 @@ use context::item_has_meaningful_context;
 use summary::completed_summary_text;
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::pending_calls::resolved_prefix_len;
+use crate::executor::pending_calls::CallLedger;
 use crate::executor::persist::{TurnOutput, persist};
 use crate::executor::pipeline::AgentPipeline;
 use crate::executor::prepare::prepare_request_tools;
@@ -254,7 +254,7 @@ pub(crate) async fn maybe_compact_context(
         .as_ref()
         .is_some_and(|config| config.enabled);
     let prefix = if multi_agent {
-        resolved_prefix_len(&items)?
+        CallLedger::scan(&items)?.resolved_prefix_len()
     } else {
         items.len()
     };

@@ -149,8 +149,8 @@ fn bench_conversation_persist(c: &mut Criterion, rt: &Runtime, store: &Conversat
                 let mut elapsed = Duration::ZERO;
                 for _ in 0..iters {
                     let id = seed_conversation(store, items).await;
-                    let checkpoint = store.rehydrate(&id).await.expect("rehydrate").checkpoint;
                     let (response_id, new_items) = (next_id("resp_"), turn());
+                    let checkpoint = store.rehydrate(&id).await.expect("rehydrate").checkpoint;
                     let start = Instant::now();
                     store
                         .persist(

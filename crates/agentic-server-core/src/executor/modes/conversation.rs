@@ -1,6 +1,6 @@
 //! Conversation storage handler — owns all conversation store operations.
 
-use crate::storage::{ConversationData, ConversationSnapshot, ConversationStore, ResponseMetadata};
+use crate::storage::{ConversationData, ConversationSnapshot, ConversationStore, ResponseMetadata, StorageError};
 use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 use crate::types::io::{ItemPage, ListItemsResponse};
@@ -210,7 +210,10 @@ impl ConversationHandler {
         self.store
             .persist(conversation_id, checkpoint, &ctx.response_id, items, snapshot, metadata)
             .await
-            .map_err(ExecutorError::Storage)
+            .map_err(|error| match error {
+                source @ StorageError::ConversationConflict { .. } => ExecutorError::ConversationLocked { source },
+                other => ExecutorError::Storage(other),
+            })
     }
 }
 
