@@ -163,6 +163,7 @@ impl ResponseContinuation {
             metadata,
             durable,
             history_item_ids: Vec::new(),
+            requires_latest: false,
         };
         let (max_items, max_bytes) = {
             let state = lock_state(&self.state)?;

@@ -46,6 +46,10 @@ pub struct ResponseCheckpoint {
     /// before its own items. Not counted in a session's retained size: the item limit bounds them.
     #[serde(skip)]
     pub history_item_ids: Vec<String>,
+    /// The turn answers the continued history's pending call, so it must be stored right after the continued turn:
+    /// another turn stored since had to answer the same call. Set by rehydration; storage refuses the turn then.
+    #[serde(skip)]
+    pub requires_latest: bool,
 }
 
 impl fmt::Debug for ResponseCheckpoint {

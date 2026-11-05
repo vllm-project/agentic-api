@@ -808,3 +808,79 @@ async fn previous_response_rehydration_remembers_listed_mcp_servers() -> Result<
     );
     Ok(())
 }
+
+/// Turns that rehydrated the same pending call and both answer it: after the first commits, the second is refused,
+/// so the conversation holds one output and continues. A call the client resubmits with its output is its own.
+#[tokio::test]
+async fn competing_outputs_for_one_pending_call_keep_the_conversation_usable() -> Result<(), Box<dyn std::error::Error>>
+{
+    let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
+    let conversation_store = ConversationStore::new(pool);
+    let conversation = conversation_store
+        .create("default_tenant", &ConversationMetadata::new(), &[])
+        .await?;
+    let id = conversation.conversation_id.as_str();
+    let call: OutputItem = serde_json::from_value(serde_json::json!({
+        "type":"function_call", "id":"fc_weather", "call_id":"call_weather", "name":"get_weather",
+        "arguments":"{}", "status":"completed"
+    }))?;
+    conversation_store
+        .persist(
+            id,
+            &ResponseCheckpoint::default(),
+            "resp_call",
+            vec![InOutItem::Output(call)],
+            None,
+            &ResponseMetadata::default(),
+        )
+        .await?;
+    let exec_ctx = execution_context(conversation_store.clone(), ResponseStore::disabled());
+    let answer = |input: serde_json::Value| {
+        let mut request = request(Some(id), None);
+        request.input = serde_json::from_value(input).unwrap();
+        request
+    };
+    let output = |temperature: u32| serde_json::json!([{"type":"function_call_output", "call_id":"call_weather", "output":temperature.to_string()}]);
+
+    let first = rehydrate_conversation(answer(output(21)), &exec_ctx).await?;
+    let second = rehydrate_conversation(answer(output(5)), &exec_ctx).await?;
+    exec_ctx
+        .conv_handler
+        .persist(first, Vec::new(), None, ResponseMetadata::default())
+        .await?;
+    let error = exec_ctx
+        .conv_handler
+        .persist(second, Vec::new(), None, ResponseMetadata::default())
+        .await
+        .expect_err("the call is already answered");
+    assert!(matches!(error, ExecutorError::ConversationLocked { .. }), "{error}");
+
+    // A turn stored meanwhile does not refuse a call and output resubmitted together.
+    let resubmitted = rehydrate_conversation(
+        answer(serde_json::json!([
+            {"type":"function_call", "call_id":"call_own", "name":"get_weather", "arguments":"{}"},
+            {"type":"function_call_output", "call_id":"call_own", "output":"18"}
+        ])),
+        &exec_ctx,
+    )
+    .await?;
+    let plain = rehydrate_conversation(request(Some(id), None), &exec_ctx).await?;
+    for ctx in [plain, resubmitted] {
+        exec_ctx
+            .conv_handler
+            .persist(ctx, Vec::new(), None, ResponseMetadata::default())
+            .await?;
+    }
+
+    let answers = conversation_store
+        .rehydrate(id)
+        .await?
+        .items
+        .iter()
+        .filter_map(InOutItem::as_input)
+        .filter(|item| item.output_call_id() == Some("call_weather"))
+        .count();
+    assert_eq!(answers, 1);
+    rehydrate_conversation(request(Some(id), None), &exec_ctx).await?;
+    Ok(())
+}

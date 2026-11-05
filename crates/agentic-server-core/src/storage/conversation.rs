@@ -132,6 +132,7 @@ impl ConversationStore {
                 metadata: metadata.unwrap_or_default(),
                 durable: true,
                 history_item_ids,
+                requires_latest: false,
             },
         })
     }
@@ -142,7 +143,8 @@ impl ConversationStore {
     ///
     /// # Errors
     ///
-    /// Returns [`StorageError`] if the conversation was not found or a database operation fails.
+    /// Returns [`StorageError::ConversationConflict`] if the checkpoint requires the latest turn and another turn was
+    /// stored since, and [`StorageError`] if the conversation was not found or a database operation fails.
     pub async fn persist(
         &self,
         conversation_id: &str,
@@ -158,9 +160,14 @@ impl ConversationStore {
         let metadata_json = String::try_from(metadata)?;
 
         let mut tx = pool.begin().await?;
-        conversation::lock_in_tx(&mut tx, conversation_id)
+        let conversation = conversation::lock_in_tx(&mut tx, conversation_id)
             .await
             .map_err(|error| conversation_error(error, conversation_id))?;
+        if checkpoint.requires_latest && conversation.latest_response_id != checkpoint.response_id {
+            return Err(StorageError::ConversationConflict {
+                conversation_id: conversation_id.to_owned(),
+            });
+        }
         // The response keeps the history the turn continued, as OpenAI does: items added to or removed from the
         // conversation while the turn ran are not part of it.
         let mut history_item_ids = checkpoint.history_item_ids.clone();

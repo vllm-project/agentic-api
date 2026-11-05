@@ -137,6 +137,7 @@ impl DeliveryOutcome {
 pub enum FailureCategory {
     Storage,
     Persistence,
+    ConversationLocked,
     UpstreamStatus,
     UpstreamTransport,
     Network,
@@ -164,6 +165,7 @@ impl FailureCategory {
         match self {
             Self::Storage => "storage",
             Self::Persistence => "persistence",
+            Self::ConversationLocked => "conversation_locked",
             Self::UpstreamStatus => "upstream_status",
             Self::UpstreamTransport => "upstream_transport",
             Self::Network => "network",
@@ -191,6 +193,7 @@ impl From<&ExecutorError> for FailureCategory {
             ExecutorError::Storage(source) if source.is_not_found() => Self::NotFound,
             ExecutorError::Storage(_) => Self::Storage,
             ExecutorError::Persistence(_) => Self::Persistence,
+            ExecutorError::ConversationLocked { .. } => Self::ConversationLocked,
             ExecutorError::LLMRequest { .. } => Self::UpstreamStatus,
             ExecutorError::LLMTransport { .. } => Self::UpstreamTransport,
             ExecutorError::NetworkError(_) => Self::Network,

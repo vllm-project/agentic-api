@@ -286,6 +286,7 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
         metadata: stored.metadata,
         durable: true,
         history_item_ids: stored.history_item_ids,
+        requires_latest: false,
     };
     if restore_agent_tree(ctx, &checkpoint.metadata, exec_ctx.responses_config.max_retained_bytes)? {
         ctx.checkpoint = Some(checkpoint);
@@ -330,6 +331,7 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
             metadata: stored.metadata,
             durable: true,
             history_item_ids: stored.history_item_ids,
+            requires_latest: false,
         };
         let continuation = ctx.continuation.as_ref().ok_or_else(|| {
             ExecutorError::InvalidRequest("session response requires a continuation lease".to_owned())
@@ -343,6 +345,7 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
         metadata: parent.metadata.clone(),
         durable: parent.durable,
         history_item_ids: parent.history_item_ids.clone(),
+        requires_latest: false,
     });
     if restore_agent_tree(ctx, &parent.metadata, exec_ctx.responses_config.max_retained_bytes)? {
         if let Some(continuation) = ctx.continuation.as_mut() {
@@ -395,7 +398,7 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
         exec_ctx.conv_handler.rehydrate(ctx),
     )?;
 
-    let ConversationSnapshot { items, checkpoint } = snapshot;
+    let ConversationSnapshot { items, mut checkpoint } = snapshot;
     if restore_agent_tree(ctx, &checkpoint.metadata, exec_ctx.responses_config.max_retained_bytes)? {
         ctx.conversation_id = Some(conv_data.conversation_id);
         ctx.checkpoint = Some(checkpoint);
@@ -403,6 +406,8 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
     }
 
     let mut items = InOutItem::into_input_items(items);
+    // A turn is admitted only if it answers the history's pending call, so another turn may have answered it first.
+    checkpoint.requires_latest = first_unanswered_sync_call(&items)?.is_some();
     items.reserve(ctx.new_input_items.len());
     items.extend(InOutItem::into_input_items(ctx.new_input_items.clone()));
     reject_unanswered_sync_call(&items)?;

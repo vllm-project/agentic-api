@@ -20,7 +20,8 @@ Modes:
   responses   No conversation created. Chains turns purely via
               previous_response_id. Supports --openai, --vllm, and --gateway backends.
   items       Records flat conversation/item API steps. Select --items-scenario
-              continuation, deletion, branch, pagination, edge-cases, or concurrent-writes.
+              continuation, deletion, branch, pagination, edge-cases, concurrent-writes,
+              or competing-tool-outputs.
 
 Usage:
     python tests/cassettes/record_cassette.py --turns 2 --no-stream --output path/to/cassette.yaml
@@ -441,10 +442,7 @@ def _record_concurrent_writes(client: httpx.Client, proxy_url: str, model: str) 
     Each side request runs after B's first output text delta. Requests are numbered in send order, so B
     precedes its side request in every recording even though the side request completes first.
     """
-    sequence = itertools.count(1)
-    client.event_hooks["request"].append(
-        lambda sent: sent.headers.__setitem__(RECORDING_TURN_HEADER, str(next(sequence)))
-    )
+    _number_requests_in_send_order(client)
 
     def request(method: str, path: str, **kwargs: Any) -> dict:
         return _item_request(client, proxy_url, method, path, **kwargs)
@@ -475,6 +473,115 @@ def _record_concurrent_writes(client: httpx.Client, proxy_url: str, model: str) 
             request("GET", f"/v1/responses/{first['id']}", expected_status=None)
 
 
+def _number_requests_in_send_order(client: httpx.Client) -> None:
+    """Number turns in send order, so a streamed turn precedes the side request sent while it streams."""
+    sequence = itertools.count(1)
+    client.event_hooks["request"].append(
+        lambda sent: sent.headers.__setitem__(RECORDING_TURN_HEADER, str(next(sequence)))
+    )
+
+
+def _observed_turn(
+    client: httpx.Client, proxy_url: str, body: dict, during: Callable[[], None] | None = None
+) -> dict:
+    """Send a Responses call and return its terminal response or error body, so a rejected turn is recorded.
+
+    A streamed call runs `during` once, after its first output text delta; its result keeps the ID from
+    `response.created` even when the stream ends in an error event.
+    """
+    timeout = _http_timeout(proxy_client=True)
+    if not body.get("stream"):
+        result = client.post(f"{proxy_url}/v1/responses", json=body, timeout=timeout).json()
+        print(f"\n[Response]\n{json.dumps(result, indent=2)}\n")
+        return result
+    result: dict = {}
+    created_id = None
+    with client.stream("POST", f"{proxy_url}/v1/responses", json=body, timeout=timeout) as resp:
+        if resp.status_code != 200:
+            return json.loads(resp.read())
+        for line in resp.iter_lines():
+            if not line.startswith("data:") or line == "data: [DONE]":
+                continue
+            print(line)
+            event = json.loads(line[5:].strip())
+            kind = event.get("type")
+            if kind == "response.created":
+                created_id = event["response"]["id"]
+            elif kind in ("response.completed", "response.failed", "response.incomplete"):
+                result = event["response"]
+            elif kind == "error":
+                result = event
+            if during and kind == "response.output_text.delta":
+                during, run = None, during
+                run()
+    if during:
+        raise RuntimeError("stream ended before the first output text delta")
+    if created_id:
+        result.setdefault("id", created_id)
+    return result
+
+
+def _input_items_or_conversation(request: Callable[..., dict], response: dict, items_path: str) -> dict:
+    """List a turn's input items, or the conversation's items when the turn was rejected without an ID."""
+    path = f"/v1/responses/{response['id']}/input_items" if response.get("id") else items_path
+    return request("GET", path, params={"order": "asc"})
+
+
+WEATHER_TOOL = {
+    "type": "function",
+    "name": "get_weather",
+    "description": "Get the current temperature for a city.",
+    "parameters": {
+        "type": "object",
+        "properties": {"city": {"type": "string"}},
+        "required": ["city"],
+        "additionalProperties": False,
+    },
+    "strict": True,
+}
+
+
+def _record_competing_tool_outputs(client: httpx.Client, proxy_url: str, model: str) -> None:
+    """Resolve one pending function call twice: streamed turn B (21) and, while B streams, turn C (5).
+
+    Both turns rehydrate the same pending call before either commits. D then continues the conversation,
+    showing whether both outputs are kept and whether the conversation stays usable.
+    """
+    _number_requests_in_send_order(client)
+    conversation = _create_conversation(client, proxy_url)
+    items_path = f"/v1/conversations/{conversation}/items"
+    ascending = {"order": "asc"}
+
+    def turn(input_items: list[dict], during: Callable[[], None] | None = None, tool_choice: str = "none") -> dict:
+        body = {"model": model, "conversation": conversation, "store": True, "stream": during is not None,
+                "input": input_items, "tools": [WEATHER_TOOL], "tool_choice": tool_choice,
+                "parallel_tool_calls": False}
+        return _observed_turn(client, proxy_url, body, during)
+
+    def output(temperature: int) -> list[dict]:
+        return [{"type": "function_call_output", "call_id": call_id,
+                 "output": json.dumps({"temperature_c": temperature})}]
+
+    def request(method: str, path: str, **kwargs: Any) -> dict:
+        return _item_request(client, proxy_url, method, path, expected_status=None, **kwargs)
+
+    calling = turn([{"role": "user", "content": (
+        "Call get_weather for Paris. After you get the result, count from 1 to 120, one number per line, "
+        "digits only, then state the temperature.")}], tool_choice="required")
+    calls = [item for item in calling.get("output", []) if item.get("type") == "function_call"]
+    if len(calls) != 1:
+        raise RuntimeError(f"expected one get_weather call, got {calling.get('output')}")
+    call_id = calls[0]["call_id"]
+    side: dict = {}
+    streamed = turn(output(21), lambda: side.update(turn(output(5))))
+    request("GET", items_path, params=ascending)
+    inputs = lambda response: _input_items_or_conversation(request, response, items_path)
+    inputs(streamed)
+    inputs(side)
+    inputs(turn([{"role": "user", "content": "What temperature did get_weather report? Reply with only the number."}]))
+
+
+
 def run_items(
     client: httpx.Client, proxy_url: str, model: str, scenario: str, stream: bool,
     *, max_output_tokens: int | None = None,
@@ -491,6 +598,11 @@ def run_items(
         if not stream:
             raise click.UsageError("--items-scenario concurrent-writes streams turn B; use --stream.")
         _record_concurrent_writes(client, proxy_url, model)
+        return
+    if scenario == "competing-tool-outputs":
+        if not stream:
+            raise click.UsageError(f"--items-scenario {scenario} streams turn B; use --stream.")
+        _record_competing_tool_outputs(client, proxy_url, model)
         return
     if scenario == "store-false":
         conv_id = _create_conversation(client, proxy_url)
@@ -2011,7 +2123,7 @@ def run_responses(
 )
 @click.option(
     "--items-scenario",
-    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "concurrent-writes", "store-false", "multi-agent-store-false", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items"]),
+    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "concurrent-writes", "competing-tool-outputs", "store-false", "multi-agent-store-false", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items"]),
     default="continuation",
     help="Fixed Conversation Items or Responses API scenario (for --mode items).",
 )
@@ -2290,7 +2402,8 @@ def main(
                           10 if items_scenario == "pagination" else
                           6 if items_scenario == "branch" else
                           19 if items_scenario == "edge-cases" else
-                          22 if items_scenario == "concurrent-writes" else 5)
+                          22 if items_scenario == "concurrent-writes" else
+                          9 if items_scenario == "competing-tool-outputs" else 5)
         if turns != expected_turns:
             raise click.UsageError(
                 f"--mode items --items-scenario {items_scenario} requires --turns {expected_turns}."

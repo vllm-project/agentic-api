@@ -98,6 +98,7 @@ const KEY_VALUES: &[(&str, &[&str])] = &[
         &[
             "storage",
             "persistence",
+            "conversation_locked",
             "upstream_status",
             "upstream_transport",
             "network",

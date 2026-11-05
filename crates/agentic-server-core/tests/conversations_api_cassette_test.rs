@@ -785,6 +785,65 @@ fn conversation_turn_completes_when_the_conversation_changes_mid_stream() {
     compare_recordings("concurrent-writes", &openai, &gateway);
 }
 
+/// Whether a turn was refused with `conversation_locked`: an `error` event in its stream, or an error body.
+fn refused(turn: &Turn) -> bool {
+    let error = if turn.response.sse.is_some() {
+        sse_events(&turn.response)
+            .into_iter()
+            .find(|event| event["type"] == "error")
+            .map(|event| event["error"].clone())
+    } else {
+        turn.response.body.as_ref().and_then(|body| body.get("error")).cloned()
+    };
+    error.is_some_and(|error| error["code"] == "conversation_locked")
+}
+
+fn listed_items(turn: &Turn) -> &[Value] {
+    turn.response.body.as_ref().expect("list body")["data"]
+        .as_array()
+        .expect("list data")
+}
+
+fn assert_completed(turn: &Turn) {
+    assert_eq!(turn.response.status_code, 200, "{} status", turn.filename);
+    assert_eq!(
+        result_body(&turn.response)["status"],
+        "completed",
+        "{} status",
+        turn.filename
+    );
+}
+
+/// Two turns answer one pending call: streamed turn B (t3) and turn C (t4), sent while B streams. The second to
+/// commit is refused, the conversation (t5) keeps the other answer, and D (t8) continues with it.
+fn check_competing_tool_outputs(cassette: &Cassette) {
+    let turns = &cassette.turns;
+    assert_eq!(turns.len(), 9, "API step count");
+    let (b, c) = (&turns[2], &turns[3]);
+    assert_ne!(refused(b), refused(c), "exactly one answer is refused");
+    let kept = if refused(b) { c } else { b };
+    let kept_output = kept.request.body["input"][0]["output"].as_str().expect("tool output");
+    let outputs: Vec<_> = listed_items(&turns[4])
+        .iter()
+        .filter(|item| item["type"] == "function_call_output")
+        .map(|item| item["output"].as_str().expect("tool output"))
+        .collect();
+    assert_eq!(outputs, [kept_output], "the conversation keeps one answer");
+    assert_completed(&turns[7]);
+    let temperature =
+        serde_json::from_str::<Value>(kept_output).expect("tool output JSON")["temperature_c"].to_string();
+    assert_answer(&turns[7], &temperature);
+}
+
+#[test]
+fn competing_outputs_for_one_call_keep_the_conversation_usable() {
+    let Some((openai, gateway)) = pair("competing-tool-outputs") else {
+        return;
+    };
+    check_competing_tool_outputs(&openai);
+    check_competing_tool_outputs(&gateway);
+}
+
 fn check_edge_case_recording(cassette: &Cassette) {
     let turns = &cassette.turns;
     assert_eq!(turns.len(), 19);

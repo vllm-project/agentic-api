@@ -277,6 +277,7 @@ fn aggregate_budget_charges_canonical_durable_fallback_before_inference() {
         },
         durable: true,
         history_item_ids: Vec::new(),
+        requires_latest: false,
     };
     let expected = serialized_size_up_to(&checkpoint, usize::MAX).unwrap().unwrap();
     let retained = lease.retain_parent(checkpoint).unwrap();
