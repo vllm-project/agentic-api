@@ -210,6 +210,7 @@ async fn first_turn_stores_its_items() -> Result<(), Box<dyn std::error::Error>>
     store
         .persist(
             &conversation.conversation_id,
+            None,
             "resp_first",
             items.clone(),
             None,
@@ -312,6 +313,7 @@ async fn a_turn_changes_only_its_own_conversation() -> Result<(), Box<dyn std::e
     store
         .persist(
             &second.conversation_id,
+            None,
             "resp_second_conversation",
             vec![create_input_item("second conversation")],
             None,
@@ -611,6 +613,7 @@ async fn test_conversation_concurrent_turns() {
             store
                 .persist(
                     &conv_id,
+                    None,
                     response_id,
                     vec![create_input_item(text)],
                     None,

@@ -1,6 +1,6 @@
 //! Conversation storage handler — owns all conversation store operations.
 
-use crate::storage::{ConversationData, ConversationSnapshot, ConversationStore, ResponseMetadata};
+use crate::storage::{ConversationData, ConversationSnapshot, ConversationStore, ResponseMetadata, StorageError};
 use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 use crate::types::io::OutputItem;
@@ -229,10 +229,21 @@ impl ConversationHandler {
         new_items.extend(ctx.new_input_items);
         new_items.extend(output_items.into_iter().map(InOutItem::Output));
 
+        let continued_response_id = ctx.checkpoint.as_ref().map(|turn| turn.response_id.as_str());
         self.store
-            .persist(&conversation_id, &ctx.response_id, new_items, snapshot, &metadata)
+            .persist(
+                &conversation_id,
+                continued_response_id,
+                &ctx.response_id,
+                new_items,
+                snapshot,
+                &metadata,
+            )
             .await
-            .map_err(ExecutorError::Storage)
+            .map_err(|error| match error {
+                source @ StorageError::ConversationConflict { .. } => ExecutorError::ConversationLocked { source },
+                other => ExecutorError::Storage(other),
+            })
     }
 }
 
@@ -348,6 +359,7 @@ mod tests {
         store
             .persist(
                 &conversation.conversation_id,
+                None,
                 "resp_competing",
                 competing_items,
                 None,

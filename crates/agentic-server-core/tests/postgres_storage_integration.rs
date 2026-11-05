@@ -287,6 +287,7 @@ async fn postgres_racing_conversation_turns_both_append() {
             store
                 .persist(
                     &conversation_id,
+                    None,
                     &response_id,
                     items.clone(),
                     None,

@@ -224,4 +224,96 @@ mod tests {
                 .expect("inspect current database")
         );
     }
+
+    /// SHA-384 checksums of the migrations released on `main`. A database records each applied migration's checksum
+    /// and refuses to start when the file differs, so a released migration must never change; add a new one instead.
+    const RELEASED_MIGRATIONS: [(i64, &str); 9] = [
+        (
+            1,
+            "2772d573aa4a5ea9d4de483e959f72569bda372aa8962895fa48627a9e314a2d64ffc4b82329013bf717e63915a418fa",
+        ),
+        (
+            2,
+            "12f48463e3dec09338fbc26dc233477768e9dacbc67fe9aefb67280e8a937a0289e29dab6a2ea68ecb7301a7b5c16667",
+        ),
+        (
+            3,
+            "1f427292f94fad3d1af813e533df6c88273b4a42ac66f87cb67dc471454855e3c4d38854aec37e8e742a36831873c95a",
+        ),
+        (
+            4,
+            "378f9056d06b745f77c0f2f4100fe0485fdddba78cc30ac4320e51dd4620439c674ffcbf90e4b07349f09594ee6ae038",
+        ),
+        (
+            5,
+            "bccfd170c895412d7bc8bd89a0ab911a2147353fc1ffab45acdda5bcfcafbd7f7e7699e218b706104360b73de4277139",
+        ),
+        (
+            6,
+            "9103036e4a06a5cbffa0c83ae98c1dc2faae3e7601d62d9f7487917f6e3aa7de879a4a2f0f60d0163f83481aeb7c3095",
+        ),
+        (
+            7,
+            "8a400ac46c06cf69bd36ad8e0ea9864025cd6816065394b3b288de2e033e40ca19b2d2f516884f1d06d7d73445822d44",
+        ),
+        (
+            8,
+            "17fa35c1de51bc33e6691d43dbecc3222725bbef65f04d28f563a0db6cf1e192f8c97ba163fd4948f90bc84cfc521b5b",
+        ),
+        (
+            9,
+            "f51466c819176147ff190fe513f54ef44cb3002c6fbb4fdce8933325411ff943b6071298bf062a754f8f52c6517f54ce",
+        ),
+    ];
+
+    #[test]
+    fn released_migrations_are_unchanged() {
+        let migrator = sqlx::migrate!("./migrations");
+        for (version, expected) in RELEASED_MIGRATIONS {
+            let migration = migrator
+                .iter()
+                .find(|migration| migration.version == version)
+                .unwrap_or_else(|| panic!("released migration {version} is missing"));
+            let checksum = migration.checksum.iter().fold(String::new(), |mut hex, byte| {
+                let _ = write!(hex, "{byte:02x}");
+                hex
+            });
+            assert_eq!(checksum, expected, "released migration {version} was edited");
+        }
+    }
+
+    #[tokio::test]
+    async fn database_of_the_latest_release_migrates_and_keeps_its_data() {
+        let pool = create_pool(Some("sqlite://?mode=memory"))
+            .await
+            .expect("create database");
+        let mut migrator = sqlx::migrate!("./migrations");
+        let latest_release = RELEASED_MIGRATIONS[RELEASED_MIGRATIONS.len() - 1].0;
+        migrator
+            .migrations
+            .to_mut()
+            .retain(|migration| migration.version <= latest_release);
+        migrator
+            .run(pool.as_ref())
+            .await
+            .expect("apply the released migrations");
+        sqlx::query("INSERT INTO conversations (id, created_at) VALUES ('conv_released', 0)")
+            .execute(pool.as_ref())
+            .await
+            .expect("store a conversation");
+
+        schema(&pool, false)
+            .ensure_schema_ready_with_marker(false)
+            .await
+            .expect("migrate a database of the latest release");
+
+        assert_eq!(conversation_count(&pool).await, 1);
+        assert!(
+            sqlx::query("SELECT revision FROM conversations")
+                .fetch_all(pool.as_ref())
+                .await
+                .is_err(),
+            "the conversation revision is dropped"
+        );
+    }
 }

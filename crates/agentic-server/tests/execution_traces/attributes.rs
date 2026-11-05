@@ -86,6 +86,7 @@ fn enum_values(key: &str) -> Option<&'static [&'static str]> {
         "error.type" => &[
             "storage",
             "persistence",
+            "conversation_locked",
             "upstream_status",
             "upstream_transport",
             "upstream_error",

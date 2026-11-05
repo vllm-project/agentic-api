@@ -773,5 +773,7 @@ pub async fn persist_turn(
     items: Vec<InOutItem>,
     metadata: &ResponseMetadata,
 ) -> StoreResult<()> {
-    store.persist(conversation_id, response_id, items, None, metadata).await
+    store
+        .persist(conversation_id, None, response_id, items, None, metadata)
+        .await
 }

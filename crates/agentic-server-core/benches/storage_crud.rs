@@ -66,6 +66,7 @@ async fn seed_conversation(store: &ConversationStore, items: usize) -> String {
     store
         .persist(
             &conversation.conversation_id,
+            None,
             &next_id("resp_"),
             history(items),
             None,
@@ -142,6 +143,7 @@ fn bench_conversation_persist(c: &mut Criterion, rt: &Runtime, store: &Conversat
                     store
                         .persist(
                             &id,
+                            None,
                             &response_id,
                             black_box(new_items),
                             None,
