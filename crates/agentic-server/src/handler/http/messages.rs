@@ -1,3 +1,4 @@
+use std::error::Error as _;
 use std::sync::Arc;
 
 use axum::extract::{Request, State};
@@ -20,6 +21,7 @@ use super::super::common::{
     convert_response, read_bytes_with_auth, sse_response_with_headers, upstream_error_response,
 };
 use crate::app::AppState;
+use crate::auth::AuthenticatedPrincipal;
 
 async fn proxy_messages(
     state: &AppState,
@@ -124,32 +126,42 @@ pub async fn messages(State(state): State<AppState>, request: Request) -> Respon
         Err(response) => return response,
     };
 
-    let forwarded = upstream_request_headers(&parts.headers, &state.proxy_state.config, ProxyAuth::Anthropic);
-    let principal = parts.extensions.get::<crate::auth::AuthenticatedPrincipal>();
-    let owner = state.exec_ctx.messages_threads.owner(&[
-        principal.map_or(&[], |principal| principal.issuer().as_bytes()),
-        principal.map_or(&[], |principal| principal.subject().as_bytes()),
-        forwarded.get("authorization").map_or(&[], http::HeaderValue::as_bytes),
-        forwarded.get("x-api-key").map_or(&[], http::HeaderValue::as_bytes),
-        forwarded
-            .get("anthropic-workspace-id")
-            .map_or(&[], http::HeaderValue::as_bytes),
-        forwarded
-            .get("anthropic-user-profile-id")
-            .map_or(&[], http::HeaderValue::as_bytes),
-    ]);
-    let betas = parts
-        .headers
-        .get_all("anthropic-beta")
-        .iter()
-        .filter_map(|value| value.to_str().ok())
-        .flat_map(|value| value.split(','))
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_owned)
-        .collect();
-    match state.exec_ctx.messages_threads.prepare(&bytes, owner, betas).await {
-        Ok(Some(prepared)) => {
+    match ParsedMessagesRequest::parse_for_gateway(&bytes, &state.exec_ctx.messages_gateway_tools) {
+        Ok(Some(parsed)) if parsed.is_thread() => {
+            let forwarded = upstream_request_headers(&parts.headers, &state.proxy_state.config, ProxyAuth::Anthropic);
+            let principal = parts.extensions.get::<AuthenticatedPrincipal>();
+            let owner = state.exec_ctx.messages_threads.owner(&[
+                principal.map_or(&[], |principal| principal.issuer().as_bytes()),
+                principal.map_or(&[], |principal| principal.subject().as_bytes()),
+                forwarded.get("authorization").map_or(&[], http::HeaderValue::as_bytes),
+                forwarded.get("x-api-key").map_or(&[], http::HeaderValue::as_bytes),
+                forwarded
+                    .get("anthropic-workspace-id")
+                    .map_or(&[], http::HeaderValue::as_bytes),
+                forwarded
+                    .get("anthropic-user-profile-id")
+                    .map_or(&[], http::HeaderValue::as_bytes),
+            ]);
+            let betas = parts
+                .headers
+                .get_all("anthropic-beta")
+                .iter()
+                .filter_map(|value| value.to_str().ok())
+                .flat_map(|value| value.split(','))
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_owned)
+                .collect();
+            let prepared = match state.exec_ctx.messages_threads.prepare(parsed, owner, betas).await {
+                Ok(prepared) => prepared,
+                Err(error) => {
+                    let status = error.http_status();
+                    if status.is_server_error() {
+                        tracing::error!(%error, source = ?error.source(), "Messages thread failure");
+                    }
+                    return (status, axum::Json(error.into_body())).into_response();
+                }
+            };
             let ctx = match prepared.into_context() {
                 Ok(ctx) => ctx,
                 Err(error) => return messages_error_response(error),
@@ -173,24 +185,10 @@ pub async fn messages(State(state): State<AppState>, request: Request) -> Respon
             }
             return execute_messages(&state, &headers, parts.uri.query(), ctx).await;
         }
-        Err(error) => {
-            let status = error.http_status();
-            if status.is_server_error() {
-                tracing::error!(%error, source = ?std::error::Error::source(&error), "Messages thread failure");
-            }
-            return (status, axum::Json(error.into_body())).into_response();
-        }
-        Ok(None) => {}
-    }
-
-    // Route to the loop only when a gateway-owned tool is declared; everything
-    // else keeps the transparent proxy path.
-    match ParsedMessagesRequest::parse_for_gateway(&bytes, &state.exec_ctx.messages_gateway_tools) {
         Ok(Some(parsed)) => {
             debug!(
                 route = "messages_loop",
                 stream = parsed.stream(),
-                tools = parsed.tools().map_or(0, Vec::len),
                 "routing HTTP messages request"
             );
             let ctx = match MessagesRequestContext::new(parsed) {

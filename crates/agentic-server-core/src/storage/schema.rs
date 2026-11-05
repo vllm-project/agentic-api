@@ -1,6 +1,12 @@
 //! Database schema management and migrations.
 
+mod postgres;
 mod readiness;
+
+use postgres::{
+    postgres_integer_column_compatibility, postgres_required_constraint_count, postgres_required_schema_column_count,
+    postgres_sequence_index_ready, validate_required_postgres_schema, validate_supervisor_schema,
+};
 pub(crate) use readiness::{verify_persistence_ready, verify_persistence_writable};
 
 use std::env;
@@ -18,9 +24,6 @@ use crate::config::DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS;
 type DbResult<T> = Result<T, sqlx::Error>;
 
 const POSTGRES_SCHEMA_ADVISORY_LOCK: i64 = 7_194_963_546_799_751;
-const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 46;
-const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 15;
-const REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT: i64 = 5;
 const POSTGRES_INTEGER_WIDENING_SQL: &str = "
     ALTER TABLE conversations
         ALTER COLUMN created_at TYPE BIGINT USING created_at::BIGINT,
@@ -61,209 +64,6 @@ async fn widen_postgres_integer_columns(connection: &mut sqlx::AnyConnection) ->
             .await?;
     }
     transaction.commit().await
-}
-
-async fn postgres_required_schema_column_count<'e, E>(executor: E) -> DbResult<i64>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Any>,
-{
-    sqlx::query_scalar(
-        "WITH required(table_name, column_name, data_type, is_nullable) AS ( \
-             VALUES \
-                 ('conversations', 'id', 'text', 'NO'), \
-                 ('conversations', 'created_at', 'integer', 'NO'), \
-                 ('conversations', 'tenant_id', 'text', 'YES'), \
-                 ('conversations', 'metadata', 'text', 'YES'), \
-                 ('conversations', 'latest_response_id', 'text', 'YES'), \
-                 ('conversations', 'revision', 'integer', 'NO'), \
-                 ('items', 'id', 'text', 'NO'), \
-                 ('items', 'data', 'text', 'NO'), \
-                 ('items', 'public_id', 'text', 'YES'), \
-                 ('items', 'created_at', 'integer', 'NO'), \
-                 ('items', 'conversation_id', 'text', 'YES'), \
-                 ('items', 'seq', 'integer', 'YES'), \
-                 ('items', 'tenant_id', 'text', 'YES'), \
-                 ('items', 'raw_tokens', 'text', 'YES'), \
-                 ('responses', 'id', 'text', 'NO'), \
-                 ('responses', 'conversation_id', 'text', 'YES'), \
-                 ('responses', 'previous_response_id', 'text', 'YES'), \
-                 ('responses', 'history_item_ids', 'text', 'YES'), \
-                 ('responses', 'metadata', 'text', 'YES'), \
-                 ('responses', 'created_at', 'integer', 'NO'), \
-                 ('responses', 'tenant_id', 'text', 'YES'), \
-                 ('responses', 'raw_tokens', 'text', 'YES'), \
-                 ('file_search_files', 'id', 'text', 'NO'), \
-                 ('file_search_files', 'created_at', 'bigint', 'NO'), \
-                 ('file_search_files', 'data', 'text', 'NO'), \
-                 ('file_search_files', 'content_type', 'text', 'NO'), \
-                 ('file_search_files', 'content_base64', 'text', 'NO'), \
-                 ('file_search_blob_cleanup', 'file_id', 'text', 'NO'), \
-                 ('file_search_blob_cleanup', 'owner_token', 'text', 'NO'), \
-                 ('file_search_blob_cleanup', 'intent', 'text', 'NO'), \
-                 ('file_search_blob_cleanup', 'lease_expires_at', 'bigint', 'NO'), \
-                 ('file_search_stores', 'id', 'text', 'NO'), \
-                 ('file_search_stores', 'created_at', 'bigint', 'NO'), \
-                 ('file_search_stores', 'data', 'text', 'NO'), \
-                 ('file_search_stores', 'embedding_identity', 'text', 'NO'), \
-                 ('file_search_stores', 'embedding_dimensions', 'bigint', 'NO'), \
-                 ('file_search_attachments', 'store_id', 'text', 'NO'), \
-                 ('file_search_attachments', 'file_id', 'text', 'NO'), \
-                 ('file_search_attachments', 'created_at', 'bigint', 'NO'), \
-                 ('file_search_attachments', 'usage_bytes', 'bigint', 'NO'), \
-                 ('file_search_attachments', 'storage_bytes', 'bigint', 'NO'), \
-                 ('file_search_attachments', 'data', 'text', 'NO'), \
-                 ('file_search_chunks', 'store_id', 'text', 'NO'), \
-                 ('file_search_chunks', 'file_id', 'text', 'NO'), \
-                 ('file_search_chunks', 'chunk_index', 'bigint', 'NO'), \
-                 ('file_search_chunks', 'data', 'text', 'NO') \
-         ) \
-         SELECT COUNT(*) \
-         FROM required \
-         JOIN information_schema.columns actual \
-           ON actual.table_name = required.table_name \
-          AND actual.column_name = required.column_name \
-          AND actual.is_nullable = required.is_nullable \
-          AND (actual.data_type = required.data_type \
-               OR (required.data_type = 'integer' AND actual.data_type = 'bigint')) \
-         JOIN pg_class table_relation \
-           ON table_relation.relname = actual.table_name \
-          AND table_relation.relkind IN ('r', 'p') \
-          AND pg_table_is_visible(table_relation.oid) \
-         JOIN pg_namespace table_namespace \
-           ON table_namespace.oid = table_relation.relnamespace \
-          AND table_namespace.nspname = actual.table_schema",
-    )
-    .fetch_one(executor)
-    .await
-}
-
-async fn postgres_required_constraint_count<'e, E>(executor: E) -> DbResult<i64>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Any>,
-{
-    sqlx::query_scalar(
-        "WITH required(table_name, constraint_type, definition) AS ( \
-             VALUES \
-                 ('conversations', 'p', 'PRIMARY KEY (id)'), \
-                 ('items', 'p', 'PRIMARY KEY (id)'), \
-                 ('responses', 'p', 'PRIMARY KEY (id)'), \
-                 ('items', 'f', \
-                  'FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE'), \
-                 ('responses', 'f', \
-                  'FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE SET NULL'), \
-                 ('responses', 'f', \
-                  'FOREIGN KEY (previous_response_id) REFERENCES responses(id) ON DELETE SET NULL'), \
-                 ('conversations', 'f', \
-                  'FOREIGN KEY (latest_response_id) REFERENCES responses(id) ON DELETE SET NULL'), \
-                 ('file_search_files', 'p', 'PRIMARY KEY (id)'), \
-                 ('file_search_blob_cleanup', 'p', 'PRIMARY KEY (file_id)'), \
-                 ('file_search_stores', 'p', 'PRIMARY KEY (id)'), \
-                 ('file_search_attachments', 'p', 'PRIMARY KEY (store_id, file_id)'), \
-                 ('file_search_chunks', 'p', 'PRIMARY KEY (store_id, file_id, chunk_index)'), \
-                 ('file_search_attachments', 'f', 'FOREIGN KEY (store_id) REFERENCES file_search_stores(id) ON DELETE CASCADE'), \
-                 ('file_search_attachments', 'f', 'FOREIGN KEY (file_id) REFERENCES file_search_files(id) ON DELETE CASCADE'), \
-                 ('file_search_chunks', 'f', 'FOREIGN KEY (store_id, file_id) REFERENCES file_search_attachments(store_id, file_id) ON DELETE CASCADE') \
-         ) \
-         SELECT COUNT(*) \
-         FROM required \
-         WHERE EXISTS ( \
-             SELECT 1 \
-             FROM pg_constraint constraint_metadata \
-             JOIN pg_class table_relation ON table_relation.oid = constraint_metadata.conrelid \
-             WHERE table_relation.relname = required.table_name \
-             AND pg_table_is_visible(table_relation.oid) \
-             AND constraint_metadata.contype::text = required.constraint_type \
-             AND pg_get_constraintdef(constraint_metadata.oid) = required.definition \
-         )",
-    )
-    .fetch_one(executor)
-    .await
-}
-
-async fn postgres_integer_column_compatibility<'e, E>(executor: E) -> DbResult<(i64, i64)>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Any>,
-{
-    sqlx::query_as(
-        "SELECT COUNT(*), COUNT(*) FILTER (WHERE actual.data_type <> 'bigint') \
-         FROM information_schema.columns actual \
-         JOIN pg_class table_relation \
-           ON table_relation.relname = actual.table_name \
-          AND table_relation.relkind IN ('r', 'p') \
-          AND pg_table_is_visible(table_relation.oid) \
-         JOIN pg_namespace table_namespace \
-           ON table_namespace.oid = table_relation.relnamespace \
-          AND table_namespace.nspname = actual.table_schema \
-         WHERE (actual.table_name = 'conversations' AND actual.column_name IN ('created_at', 'revision')) \
-            OR (actual.table_name = 'items' AND actual.column_name IN ('created_at', 'seq')) \
-            OR (actual.table_name = 'responses' AND actual.column_name = 'created_at')",
-    )
-    .fetch_one(executor)
-    .await
-}
-
-async fn postgres_sequence_index_ready<'e, E>(executor: E) -> DbResult<bool>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Any>,
-{
-    sqlx::query_scalar(
-        "SELECT EXISTS ( \
-             SELECT 1 \
-             FROM pg_index index_metadata \
-             JOIN pg_class index_relation ON index_relation.oid = index_metadata.indexrelid \
-             JOIN pg_class table_relation ON table_relation.oid = index_metadata.indrelid \
-             WHERE table_relation.relname = 'items' \
-             AND pg_table_is_visible(table_relation.oid) \
-             AND index_relation.relname = 'idx_items_conversation_id' \
-             AND index_metadata.indisvalid \
-             AND index_metadata.indisready \
-             AND index_metadata.indisunique \
-             AND pg_get_indexdef(index_metadata.indexrelid) LIKE '%(conversation_id, seq)' \
-         )",
-    )
-    .fetch_one(executor)
-    .await
-}
-
-fn validate_required_postgres_schema(
-    schema_column_count: i64,
-    constraint_count: i64,
-    integer_column_count: i64,
-    sequence_index_ready: bool,
-) -> DbResult<()> {
-    if schema_column_count == REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT
-        && constraint_count == REQUIRED_POSTGRES_CONSTRAINT_COUNT
-        && integer_column_count == REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT
-        && sequence_index_ready
-    {
-        return Ok(());
-    }
-    Err(sqlx::Error::Configuration(
-        "database schema is missing required PostgreSQL tables, columns, constraints, or indexes".into(),
-    ))
-}
-
-fn validate_supervisor_schema(
-    schema_column_count: i64,
-    constraint_count: i64,
-    integer_column_count: i64,
-    narrow_column_count: i64,
-    sequence_index_ready: bool,
-) -> DbResult<()> {
-    validate_required_postgres_schema(
-        schema_column_count,
-        constraint_count,
-        integer_column_count,
-        sequence_index_ready,
-    )?;
-    if narrow_column_count == 0 {
-        return Ok(());
-    }
-    Err(sqlx::Error::Configuration(
-        "supervisor-managed PostgreSQL schema requires BIGINT compatibility upgrade; \
-         apply the documented ALTER TABLE statements before setting AGENTIC_API_SCHEMA_READY"
-            .into(),
-    ))
 }
 
 async fn verify_supervisor_managed_postgres_schema(
@@ -320,7 +120,7 @@ pub(crate) async fn pin_postgres_persistence_schema(connection: &mut sqlx::AnyCo
          AND table_relation.relkind IN ('r', 'p', 'v', 'm', 'f') \
          AND table_relation.relname IN ('_sqlx_migrations', 'conversations', 'items', 'responses', \
               'file_search_files', 'file_search_blob_cleanup', 'file_search_stores', \
-              'file_search_attachments', 'file_search_chunks') \
+              'file_search_attachments', 'file_search_chunks', 'message_threads') \
          ORDER BY table_namespace.nspname::text",
     )
     .fetch_all(&mut *connection)
@@ -490,6 +290,10 @@ impl<'a> SchemaManager<'a> {
 
 #[cfg(test)]
 mod tests {
+    use super::postgres::{
+        REQUIRED_POSTGRES_CONSTRAINT_COUNT, REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT,
+        REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT,
+    };
     use super::*;
 
     #[test]
@@ -589,6 +393,11 @@ mod tests {
         );
         assert!(!wrapper.schema_ready.load(Ordering::SeqCst));
         sqlx::raw_sql(include_str!("../../migrations/0008_file_search.sql"))
+            .execute(pool.as_ref())
+            .await
+            .unwrap();
+        assert!(verify_persistence_ready(pool.as_ref()).await.is_err());
+        sqlx::raw_sql(include_str!("../../migrations/0009_message_threads.sql"))
             .execute(pool.as_ref())
             .await
             .unwrap();
@@ -697,6 +506,10 @@ mod tests {
             .execute(&mut *connection)
             .await
             .unwrap();
+        sqlx::raw_sql(include_str!("../../migrations/0009_message_threads.sql"))
+            .execute(&mut *connection)
+            .await
+            .unwrap();
         supervisor.ensure_schema_ready_with_marker(true).await.unwrap();
         supervisor.pool.close().await;
         sqlx::query("SET search_path TO public")
@@ -741,6 +554,7 @@ mod tests {
             include_str!("../../migrations/0006_item_references.sql"),
             include_str!("../../migrations/0007_response_item_public_ids.sql"),
             include_str!("../../migrations/0008_file_search.sql"),
+            include_str!("../../migrations/0009_message_threads.sql"),
         ] {
             sqlx::raw_sql(migration)
                 .execute(&mut *connection)
@@ -1103,5 +917,80 @@ mod tests {
             "{error}"
         );
         assert!(!supervisor_schema.schema_ready.load(Ordering::SeqCst));
+    }
+}
+
+#[cfg(test)]
+mod messages_thread_schema_tests {
+    use super::postgres::{
+        REQUIRED_POSTGRES_CONSTRAINT_COUNT, REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT,
+        REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT,
+    };
+    use super::*;
+    use crate::storage::create_pool_with_schema;
+
+    #[tokio::test]
+    #[ignore = "requires TEST_POSTGRES_URL pointing to an isolated PostgreSQL database"]
+    async fn postgres_messages_table_requires_each_constraint_and_lease_column() {
+        let url = env::var("TEST_POSTGRES_URL").unwrap();
+        let pool = create_pool_with_schema(Some(&url)).await.unwrap();
+        let constraints: Vec<String> = sqlx::query_scalar(
+            "SELECT conname::text FROM pg_constraint c JOIN pg_class t ON c.conrelid = t.oid \
+             WHERE t.relname = 'message_threads' AND pg_table_is_visible(t.oid)",
+        )
+        .fetch_all(pool.as_ref())
+        .await
+        .unwrap();
+        assert_eq!(constraints.len(), 4);
+        for constraint in constraints {
+            let mut tx = pool.begin().await.unwrap();
+            sqlx::query(&format!("ALTER TABLE message_threads DROP CONSTRAINT \"{constraint}\""))
+                .execute(&mut *tx)
+                .await
+                .unwrap();
+            let count = postgres_required_constraint_count(&mut *tx).await.unwrap();
+            assert_eq!(count, REQUIRED_POSTGRES_CONSTRAINT_COUNT - 1);
+            assert!(
+                validate_required_postgres_schema(
+                    REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT,
+                    count,
+                    REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT,
+                    true
+                )
+                .is_err()
+            );
+            tx.rollback().await.unwrap();
+        }
+        let mut tx = pool.begin().await.unwrap();
+        sqlx::query("ALTER TABLE message_threads DROP COLUMN lease_until")
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        assert_eq!(
+            postgres_required_schema_column_count(&mut *tx).await.unwrap(),
+            REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT - 1
+        );
+        tx.rollback().await.unwrap();
+        pool.close().await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires TEST_POSTGRES_URL pointing to an isolated PostgreSQL database"]
+    async fn postgres_schema_pin_recognizes_a_messages_only_schema() {
+        let url = env::var("TEST_POSTGRES_URL").unwrap();
+        let pool = create_pool_with_schema(Some(&url)).await.unwrap();
+        let first = format!("empty_{}", uuid::Uuid::now_v7().simple());
+        let second = format!("messages_{}", uuid::Uuid::now_v7().simple());
+        let mut tx = pool.begin().await.unwrap();
+        sqlx::raw_sql(&format!("CREATE SCHEMA {first}; CREATE SCHEMA {second}; CREATE TABLE {second}.message_threads (id TEXT); SET LOCAL search_path TO {first}, {second};"))
+            .execute(&mut *tx).await.unwrap();
+        pin_postgres_persistence_schema(&mut tx).await.unwrap();
+        let schema: String = sqlx::query_scalar("SELECT current_schema()::text")
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+        assert_eq!(schema, second);
+        tx.rollback().await.unwrap();
+        pool.close().await;
     }
 }

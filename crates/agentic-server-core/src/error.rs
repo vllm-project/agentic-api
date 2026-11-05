@@ -19,7 +19,4 @@ pub enum Error {
 
     #[error("{0}")]
     Config(String),
-
-    #[error("failed to initialize Messages thread storage")]
-    MessageThreads(#[source] Box<crate::executor::messages_threads::MessagesThreadError>),
 }

@@ -684,6 +684,10 @@ python crates/agentic-server-core/tests/cassettes/record_messages_tool_choice.py
 ### Stateful Messages threads (vLLM)
 
 `record_messages_threads.py` captures real vLLM inference through the shared recording proxy.
+These are vLLM/gateway captures, not Anthropic reference captures. They verify rehydration and the gateway's
+public JSON/SSE transcript, not exact Anthropic beta behavior. Error envelopes, null-versus-omitted fixed fields,
+paused-turn rejection, and continued-stream IDs are derived from documentation or gateway policy and tested locally;
+they have not been compared with a live Anthropic thread capture.
 The `messages/threads/` set covers text recall and a client-executed `client_echo` call, each over JSON and SSE.
 Every scenario creates a thread, stops the gateway, starts a fresh gateway against the same SQLite file, and
 continues with only the new user message or matching `tool_result`. The client tool returns a local verification

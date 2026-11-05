@@ -56,6 +56,12 @@ async fn infer(State(requests): State<Requests>, headers: HeaderMap, Json(reques
     };
     let mut message = json!({"type":"message","id":"upstream-id","role":"assistant","model":"local-model",
         "content":content,"stop_reason":stop,"usage":{"input_tokens":4,"output_tokens":2}});
+    if request["metadata"]["malformed_block"] == true {
+        message["content"] = json!([{"type":"text","text":"proof","citations":42}]);
+    }
+    if request["metadata"]["missing_stop"] == true {
+        message.as_object_mut().unwrap().remove("stop_reason");
+    }
     if request["metadata"]["missing_content"] == true {
         message["content"] = Value::Null;
     }
@@ -325,6 +331,24 @@ async fn claude_code_continues_with_full_or_inherited_fields_without_changing_th
     }
 }
 
+// Cancellation cleanup is asynchronous; retry only its precise in-flight conflict.
+async fn send_after_lease_release(url: &str, request: &Value) -> reqwest::Response {
+    for _ in 0..100 {
+        let response = send(url, request).await;
+        if response.status() == StatusCode::OK {
+            return response;
+        }
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = response.json::<Value>().await.unwrap();
+        assert_eq!(
+            body["error"]["details"]["error_code"], "thread_continue_in_flight",
+            "{body}"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    panic!("continuation lease was not released");
+}
+
 #[tokio::test]
 async fn invalid_stream_never_publishes_a_checkpoint_and_parent_can_be_retried() {
     for invalid in ["truncate", "null_stop"] {
@@ -338,7 +362,7 @@ async fn invalid_stream_never_publishes_a_checkpoint_and_parent_can_be_retried()
         let response = send(&url, &continuation(&stream_id(&body), false)).await;
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
         next.as_object_mut().unwrap().remove("metadata");
-        assert_eq!(send(&url, &next).await.status(), StatusCode::OK);
+        assert_eq!(send_after_lease_release(&url, &next).await.status(), StatusCode::OK);
         assert_eq!(requests.lock().await.len(), 3);
     }
 }
@@ -650,14 +674,7 @@ async fn failed_delivery_never_emits_or_records_successful_completion() {
             assert!(body.contains("event: error"), "{body}");
             assert!(!body.contains("event: message_stop"), "{body}");
         } else {
-            assert_eq!(
-                response.status(),
-                if missing_content {
-                    StatusCode::BAD_REQUEST
-                } else {
-                    StatusCode::INTERNAL_SERVER_ERROR
-                }
-            );
+            assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
             assert_eq!(response.json::<Value>().await.unwrap()["type"], "error");
         }
         let points = metrics
@@ -665,11 +682,7 @@ async fn failed_delivery_never_emits_or_records_successful_completion() {
                 total(points, "agentic.execution.count", &[]) == 1
             })
             .await;
-        let category = if missing_content {
-            "invalid_request"
-        } else {
-            "persistence"
-        };
+        let category = if missing_content { "stream" } else { "persistence" };
         assert_eq!(
             total(
                 &points,
@@ -686,5 +699,38 @@ async fn failed_delivery_never_emits_or_records_successful_completion() {
             ),
             0
         );
+    }
+}
+
+#[tokio::test]
+async fn malformed_upstream_content_is_a_server_failure_and_does_not_consume_the_parent() {
+    for (invalid, stream) in [
+        ("missing_stop", false),
+        ("missing_content", false),
+        ("malformed_block", false),
+        ("citations", true),
+    ] {
+        let (url, requests, _upstream, _gateway) = setup().await;
+        let first = send(&url, &create(false)).await.json::<Value>().await.unwrap();
+        let mut next = continuation(first["id"].as_str().unwrap(), stream);
+        next["metadata"] = if stream {
+            json!({"citations":[42]})
+        } else {
+            json!({(invalid):true})
+        };
+        let response = send(&url, &next).await;
+        if stream {
+            assert_eq!(response.status(), StatusCode::OK);
+            let body = response.text().await.unwrap();
+            assert!(body.contains("event: error"), "{body}");
+            assert!(body.contains("api_error"), "{body}");
+            assert!(!body.contains("event: message_stop"), "{body}");
+        } else {
+            assert!(response.status().is_server_error());
+            assert_eq!(response.json::<Value>().await.unwrap()["error"]["type"], "api_error");
+        }
+        next.as_object_mut().unwrap().remove("metadata");
+        assert_eq!(send_after_lease_release(&url, &next).await.status(), StatusCode::OK);
+        assert_eq!(requests.lock().await.len(), 3, "the same parent must be retryable");
     }
 }

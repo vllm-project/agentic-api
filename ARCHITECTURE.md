@@ -1800,9 +1800,19 @@ the upstream reported.
 
 `messages_threads.rs` owns local Anthropic message-thread admission, rehydration,
 exclusive continuation reservations, and bounded durable checkpoints.
-`types/messages/thread.rs` defines the independent thread request, lossless message,
-and error contracts; `storage/messages.rs` persists them in the `message_threads`
-table. No Responses items, sessions, or stores are involved. The HTTP
+`ParsedMessagesRequest` decodes the JSON body once and derives the shared typed
+`MessagesRequest` from that tree. Thread admission branches on its typed `thread`
+field; it has no probe decoder or parallel request/history model. The shared
+`ContentBlock` validates known blocks and preserves opaque provider blocks, including
+media and upstream server-tool content. Explicit null and omission remain distinct
+for create-only fields and retained block metadata.
+`types/messages/thread.rs` defines the independent checkpoint, typed fixed-field
+fingerprint, and error contracts. Checkpoints reuse `MessageParam`, `SystemPrompt`,
+and `ToolParam`; MCP fingerprints exclude the authorization token by construction.
+`storage/messages.rs` owns lease policy and cancellation; all thread queries live in
+`storage/models/message_thread.rs`, with row-state conversion in `storage/types/`.
+The common schema verification and readiness paths include `message_threads`, its
+columns, primary key, three CHECK constraints, and backend privileges. No Responses items, sessions, or stores are involved. The HTTP
 adapter supplies an opaque owner derived from credentials, workspace, and verified
 OIDC identity, plus the beta set. Core strips `thread`, restores `system` and `tools`,
 and passes the full conversation to the existing stateless Messages loop.
@@ -1837,7 +1847,8 @@ for the five-minute lifetime, serialized-size budget, and crash recovery rules.
   connection URL, plus URL redaction for safe logging.
 - **`schema.rs`** — migrations and readiness (`PoolWithSchema::ensure_schema_ready`),
   including a path for a supervisor-managed schema that skips running migrations
-  itself and just verifies compatibility. Readiness probes live in `schema/readiness.rs`.
+  itself and just verifies compatibility. The PostgreSQL column/constraint/index contract lives in
+  `schema/postgres.rs`; readiness probes live in `schema/readiness.rs`.
 - **`conversation/api.rs`** — tenant-scoped conversation and item CRUD. Item ownership is checked through
   the conversation so Responses-persisted items are visible too. Item writes share `lock_in_tx` with
   turn persistence; a monotonic conversation revision makes deletions invalidate active snapshots.

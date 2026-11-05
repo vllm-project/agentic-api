@@ -2,6 +2,7 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 use std::time::Duration;
 
+use super::messages_threads::MessagesThreadStore;
 use crate::config::{Config, ResponsesConfig, default_database_url};
 use crate::error::Error;
 use crate::executor::error::{ExecutorError, ExecutorResult};
@@ -108,7 +109,7 @@ pub struct ExecutionContext {
     /// without one, a key generated once per process is used.
     messages_result_key: Option<Arc<MessagesResultKey>>,
     /// Durable Anthropic message threads, independent of Responses objects.
-    pub messages_threads: super::messages_threads::MessagesThreadStore,
+    pub messages_threads: MessagesThreadStore,
     /// Base URL for the LLM backend, e.g. `"http://localhost:8000"`.
     pub llm_base_url: String,
     /// Maximum wait for the next body chunk in a streaming request, including HTTP error bodies.
@@ -153,7 +154,7 @@ impl ExecutionContext {
             gateway_executors,
             messages_gateway_tools: messages_gateway_tools_from_env(),
             messages_result_key: None,
-            messages_threads: super::messages_threads::MessagesThreadStore::default(),
+            messages_threads: MessagesThreadStore::default(),
             llm_base_url,
             streaming_timeout: streaming_timeout_from_env(),
             gateway_scheduler_policy: GatewaySchedulerPolicy::default(),
@@ -213,7 +214,6 @@ impl ExecutionContext {
                 crate::storage::schema::verify_persistence_ready(pool.as_ref())
                     .await
                     .is_ok()
-                    && self.messages_threads.verify_ready().await.is_ok()
             })
             .await,
             Ok(true)
@@ -250,11 +250,7 @@ impl ExecutionContext {
         crate::storage::schema::verify_persistence_writable(pool.as_ref())
             .await
             .map_err(|error| database_open_error(database_backend, &error))?;
-        let messages_threads = super::messages_threads::MessagesThreadStore::new(Arc::clone(&pool));
-        messages_threads
-            .verify_ready()
-            .await
-            .map_err(|error| Error::MessageThreads(Box::new(error)))?;
+        let messages_threads = MessagesThreadStore::new(Arc::clone(&pool));
 
         let conv_handler = ConversationHandler::new(ConversationStore::new(pool.clone()));
         let resp_handler = ResponseHandler::new(ResponseStore::new(pool.clone()));

@@ -4,67 +4,40 @@
 //! part of the retained prompt. Only the reserved, single-line text block is
 //! removed. All other prompt and tool fields must equal their stored values.
 
-use std::collections::BTreeMap;
-
-use serde_json::Value;
-use serde_json::value::RawValue;
-
 use super::MessagesThreadError;
-use crate::types::messages::thread::{CLAUDE_CODE_BETA, MessageThreadErrorCode, ThreadMessagesRequest};
+use crate::types::messages::parameters::RequestField;
+use crate::types::messages::thread::{CLAUDE_CODE_BETA, MessageThreadCheckpoint, MessageThreadErrorCode};
+use crate::types::messages::{MessagesRequest, SystemBlock, SystemPrompt};
 
 pub(super) fn enabled(betas: &[String]) -> bool {
     betas.iter().any(|beta| beta == CLAUDE_CODE_BETA)
 }
 
-pub(super) fn normalize_attribution(
-    parameters: &mut BTreeMap<String, Box<RawValue>>,
-) -> Result<(), MessagesThreadError> {
-    let Some(raw) = parameters.get("system") else {
-        return Ok(());
-    };
-    let mut system: Value = serde_json::from_str(raw.get()).map_err(|error| invalid_json(&error))?;
-    let Some(blocks) = system.as_array_mut() else {
-        return Ok(());
-    };
-    let original_len = blocks.len();
-    blocks.retain(|block| !is_attribution(block));
-    if blocks.len() == original_len {
-        return Ok(());
+pub(super) fn normalize_attribution(system: &mut RequestField<SystemPrompt>) {
+    if let RequestField::Value(SystemPrompt::Blocks(blocks)) = system {
+        let original_len = blocks.len();
+        blocks.retain(|block| !is_attribution(block));
+        if blocks.len() != original_len && blocks.is_empty() {
+            *system = RequestField::Missing;
+        }
     }
-    if blocks.is_empty() {
-        parameters.remove("system");
-    } else {
-        parameters.insert(
-            "system".to_owned(),
-            serde_json::value::to_raw_value(&system).map_err(|error| invalid_json(&error))?,
-        );
-    }
-    Ok(())
 }
 
 pub(super) fn validate_repeated_fields(
-    request: &ThreadMessagesRequest,
-    stored: &BTreeMap<String, Box<RawValue>>,
+    request: &MessagesRequest,
+    stored: &MessageThreadCheckpoint,
 ) -> Result<(), MessagesThreadError> {
+    if request.system.is_null() || request.tools.is_null() {
+        return Err(MessagesThreadError::invalid(
+            "system and tools must not be null on thread continuation",
+        ));
+    }
     let mut changed = Vec::new();
-    for field in ["system", "tools"] {
-        let Some(current) = request.parameters.get(field) else {
-            continue;
-        };
-        let current: Value = serde_json::from_str(current.get()).map_err(|error| invalid_json(&error))?;
-        if current.is_null() {
-            return Err(MessagesThreadError::invalid(format!(
-                "{field} must not be null on thread continuation"
-            )));
-        }
-        let previous = stored
-            .get(field)
-            .map(|raw| serde_json::from_str::<Value>(raw.get()))
-            .transpose()
-            .map_err(|error| invalid_json(&error))?;
-        if previous.as_ref() != Some(&current) {
-            changed.push(field);
-        }
+    if !request.system.is_missing() && request.system.as_ref() != stored.system.as_ref() {
+        changed.push("system");
+    }
+    if !request.tools.is_missing() && request.tools.as_ref() != stored.tools.as_ref() {
+        changed.push("tools");
     }
     if changed.is_empty() {
         Ok(())
@@ -79,16 +52,14 @@ pub(super) fn validate_repeated_fields(
     }
 }
 
-fn is_attribution(block: &Value) -> bool {
-    let Some(object) = block.as_object() else {
-        return false;
-    };
-    if object.len() != 2 || block["type"] != "text" {
+fn is_attribution(block: &SystemBlock) -> bool {
+    if block.kind.as_ref().map(String::as_str) != Some("text")
+        || !block.cache_control.is_missing()
+        || !block.extra.is_empty()
+    {
         return false;
     }
-    let Some(text) = block["text"].as_str() else {
-        return false;
-    };
+    let text = &block.text;
     let Some(metadata) = text.strip_prefix("x-anthropic-billing-header: ") else {
         return false;
     };
@@ -111,8 +82,4 @@ fn is_attribution(block: &Value) -> bool {
         version |= key == "cc_version";
     }
     version
-}
-
-fn invalid_json(error: &serde_json::Error) -> MessagesThreadError {
-    MessagesThreadError::invalid(format!("invalid Claude Code thread field: {error}"))
 }

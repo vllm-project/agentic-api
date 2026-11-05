@@ -307,9 +307,7 @@ async fn deliver(
     if let Some(id) = ctx.thread_message_id() {
         message["id"] = json!(id);
         if message["stop_reason"].as_str().is_none() || !message["content"].is_array() {
-            return Err(ExecutorError::InvalidRequest(
-                "invalid upstream thread message".to_owned(),
-            ));
+            return Err(ExecutorError::StreamError("invalid upstream thread message".to_owned()));
         }
         let stop_reason = message["stop_reason"].as_str().filter(|_| !fallback);
         let has_tool_call = message["content"]

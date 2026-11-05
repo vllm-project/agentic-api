@@ -8,7 +8,8 @@ use std::sync::{Arc, Mutex};
 
 use tokio_util::task::TaskTracker;
 
-use super::models::message_thread::MessageThread;
+use super::models::message_thread;
+use super::types::message_thread::MessageThreadState;
 use super::{DbPool, StorageError};
 use crate::types::messages::thread::{MessageThreadCheckpoint, MessagesThreadOwner};
 
@@ -74,32 +75,6 @@ impl MessageThreadStore {
         self.inner.pool.is_some()
     }
 
-    /// Check the dedicated schema on startup and readiness probes.
-    ///
-    /// # Errors
-    /// Returns a storage error for missing columns or insufficient read access.
-    pub async fn verify_ready(&self) -> Result<(), MessageThreadStoreError> {
-        let mut connection = self.pool()?.acquire().await?;
-        sqlx::query("SELECT message_id, owner_hash, checkpoint, state, lease_token, lease_until, expires_at FROM message_threads LIMIT 0")
-            .execute(&mut *connection).await?;
-        if super::DatabaseBackend::from_connection(&connection) == super::DatabaseBackend::Postgres {
-            let writable: bool = sqlx::query_scalar(
-                "SELECT has_table_privilege(current_user, 'message_threads', 'SELECT') \
-                    AND has_table_privilege(current_user, 'message_threads', 'INSERT') \
-                    AND has_table_privilege(current_user, 'message_threads', 'UPDATE') \
-                    AND has_table_privilege(current_user, 'message_threads', 'DELETE')",
-            )
-            .fetch_one(&mut *connection)
-            .await?;
-            if !writable {
-                return Err(
-                    sqlx::Error::Configuration("Messages thread table is missing required privileges".into()).into(),
-                );
-            }
-        }
-        Ok(())
-    }
-
     fn pool(&self) -> Result<&DbPool, MessageThreadStoreError> {
         self.inner
             .pool
@@ -116,21 +91,13 @@ impl MessageThreadStore {
         owner: &MessagesThreadOwner,
         id: &str,
     ) -> Result<MessageThreadCheckpoint, MessageThreadStoreError> {
-        let row = sqlx::query_as::<_, MessageThread>(
-            "SELECT checkpoint, state, lease_until FROM message_threads \
-             WHERE message_id = $1 AND owner_hash = $2 AND expires_at > $3",
-        )
-        .bind(id)
-        .bind(owner.as_str())
-        .bind(now())
-        .fetch_optional(self.pool()?)
-        .await?
-        .ok_or(MessageThreadStoreError::NotFound)?;
-        match row.state.as_str() {
-            "consumed" => return Err(MessageThreadStoreError::AlreadyContinued),
-            "in_flight" if row.lease_until > now() => return Err(MessageThreadStoreError::InFlight),
-            "ready" | "in_flight" => {}
-            _ => return Err(MessageThreadStoreError::LeaseLost),
+        let row = message_thread::load(self.pool()?, owner, id, now())
+            .await?
+            .ok_or(MessageThreadStoreError::NotFound)?;
+        match row.state {
+            MessageThreadState::Consumed => return Err(MessageThreadStoreError::AlreadyContinued),
+            MessageThreadState::InFlight if row.lease_until > now() => return Err(MessageThreadStoreError::InFlight),
+            MessageThreadState::Ready | MessageThreadState::InFlight => {}
         }
         let checkpoint = row.checkpoint.ok_or(MessageThreadStoreError::NotFound)?;
         Ok(serde_json::from_str(&checkpoint)?)
@@ -146,19 +113,7 @@ impl MessageThreadStore {
         id: String,
     ) -> Result<MessageThreadLease, MessageThreadStoreError> {
         let token = uuid::Uuid::now_v7().to_string();
-        let changed = sqlx::query(
-            "UPDATE message_threads SET state = 'in_flight', lease_token = $1, lease_until = $2 \
-             WHERE message_id = $3 AND owner_hash = $4 AND expires_at > $5 \
-               AND (state = 'ready' OR (state = 'in_flight' AND lease_until <= $5))",
-        )
-        .bind(&token)
-        .bind(now() + LEASE_SECONDS)
-        .bind(&id)
-        .bind(owner.as_str())
-        .bind(now())
-        .execute(self.pool()?)
-        .await?
-        .rows_affected();
+        let changed = message_thread::reserve(self.pool()?, &owner, &id, &token, now(), now() + LEASE_SECONDS).await?;
         if changed != 1 {
             // Resolve the same typed state errors as load, without extending expiry.
             self.load(&owner, &id).await?;
@@ -199,26 +154,14 @@ impl MessageThreadStore {
         }
         let mut tx = self.pool()?.begin().await?;
         if let Some(parent) = &lease {
-            let changed = sqlx::query(
-                "UPDATE message_threads SET state = 'consumed', checkpoint = NULL, lease_token = NULL, lease_until = 0 \
-                 WHERE message_id = $1 AND owner_hash = $2 AND lease_token = $3 AND state = 'in_flight' AND lease_until > $4",
-            ).bind(&parent.id).bind(parent.owner.as_str()).bind(&parent.token).bind(now())
-                .execute(&mut *tx).await?.rows_affected();
+            let changed =
+                message_thread::consume_in_tx(&mut tx, &parent.owner, &parent.id, &parent.token, now()).await?;
             if changed != 1 {
                 return Err(MessageThreadStoreError::LeaseLost);
             }
         }
         if let Some(encoded) = encoded {
-            sqlx::query(
-                "INSERT INTO message_threads (message_id, owner_hash, checkpoint, state, expires_at) \
-                 VALUES ($1, $2, $3, 'ready', $4)",
-            )
-            .bind(id)
-            .bind(owner.as_str())
-            .bind(encoded)
-            .bind(now() + THREAD_TTL_SECONDS)
-            .execute(&mut *tx)
-            .await?;
+            message_thread::create_in_tx(&mut tx, owner, id, &encoded, now() + THREAD_TTL_SECONDS).await?;
         }
         tx.commit().await?;
         if let Some(parent) = &mut lease {
@@ -244,24 +187,9 @@ impl MessageThreadStore {
             .map(|(token, (owner, id))| (token.clone(), owner.clone(), id.clone()))
             .collect();
         for (token, owner, id) in active {
-            sqlx::query(
-                "UPDATE message_threads SET lease_until = $1 WHERE message_id = $2 AND owner_hash = $3 \
-                         AND lease_token = $4 AND state = 'in_flight' AND lease_until > $5",
-            )
-            .bind(now() + LEASE_SECONDS)
-            .bind(id)
-            .bind(owner.as_str())
-            .bind(token)
-            .bind(now())
-            .execute(pool.as_ref())
-            .await?;
+            message_thread::renew(pool.as_ref(), &owner, &id, &token, now(), now() + LEASE_SECONDS).await?;
         }
-        sqlx::query(
-            "DELETE FROM message_threads WHERE expires_at <= $1 AND (state <> 'in_flight' OR lease_until <= $1)",
-        )
-        .bind(now())
-        .execute(pool.as_ref())
-        .await?;
+        message_thread::expire(pool.as_ref(), now()).await?;
         Ok(())
     }
 
@@ -302,14 +230,7 @@ impl Drop for MessageThreadLease {
             return;
         }
         self.store.inner.cleanup.spawn(async move {
-            if let Err(error) = sqlx::query(
-                "UPDATE message_threads SET state = 'ready', lease_token = NULL, lease_until = 0 \
-                 WHERE lease_token = $1 AND state = 'in_flight'",
-            )
-            .bind(token)
-            .execute(pool.as_ref())
-            .await
-            {
+            if let Err(error) = message_thread::release(pool.as_ref(), &token).await {
                 tracing::error!(%error, "failed to release message thread lease; it will expire");
             }
         });

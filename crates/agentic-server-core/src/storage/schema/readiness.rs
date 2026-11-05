@@ -3,6 +3,7 @@
 use super::{DatabaseBackend, DbPool, DbResult};
 
 pub(crate) async fn verify_persistence_writable(pool: &DbPool) -> DbResult<()> {
+    verify_persistence_ready(pool).await?;
     let mut transaction = pool.begin().await?;
     let probe_result = async {
         let suffix = uuid::Uuid::now_v7().simple();
@@ -60,6 +61,10 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
             let ready: bool = sqlx::query_scalar(
                 "WITH required(table_name, privilege) AS ( \
                      VALUES \
+                         ('message_threads', 'SELECT'), \
+                         ('message_threads', 'INSERT'), \
+                         ('message_threads', 'UPDATE'), \
+                         ('message_threads', 'DELETE'), \
                          ('conversations', 'SELECT'), \
                          ('conversations', 'INSERT'), \
                          ('conversations', 'UPDATE'), \
@@ -85,7 +90,7 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                          ('file_search_chunks', 'INSERT') \
                  ) \
                  SELECT current_setting('transaction_read_only') = 'off' \
-                    AND COUNT(table_relation.oid) = 23 \
+                    AND COUNT(table_relation.oid) = 27 \
                     AND COALESCE(BOOL_AND( \
                         has_table_privilege(current_user, table_relation.oid, required.privilege) \
                     ), false) \
@@ -111,6 +116,7 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                 return Err(sqlx::Error::Configuration("SQLite persistence is read-only".into()));
             }
             for statement in [
+                "SELECT message_id, owner_hash, checkpoint, state, lease_token, lease_until, expires_at FROM message_threads LIMIT 0",
                 "SELECT id FROM conversations LIMIT 0",
                 "SELECT id FROM items LIMIT 0",
                 "SELECT id FROM responses LIMIT 0",

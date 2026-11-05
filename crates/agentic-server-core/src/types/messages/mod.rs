@@ -6,6 +6,8 @@
 //! else is a transparent proxy unless `thread` requests local continuation.
 //! These Anthropic wire types are shared by the handler, loop, and tool seam.
 
+pub mod content;
+pub mod parameters;
 pub mod request;
 pub mod server_tools;
 pub mod thread;
@@ -14,8 +16,9 @@ pub mod tool_choice;
 pub mod tool_seam;
 pub mod tools;
 
+pub use content::ContentBlock;
 pub use request::{
-    ContentBlock, GatewayToolResult, MessageContent, MessageParam, MessagesRequest, OutputConfig, ReasoningEffort,
+    GatewayToolResult, MessageContent, MessageParam, MessagesRequest, OutputConfig, ReasoningEffort,
     ReasoningEffortLevel, SystemBlock, SystemPrompt, ToolParam, ToolResultBlock, ToolResultContent,
 };
 pub use server_tools::{

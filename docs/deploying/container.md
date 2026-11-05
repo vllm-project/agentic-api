@@ -154,11 +154,15 @@ Drain replicas running an older release before enabling writes through this rele
 Stored requests now fail if their response or conversation state cannot be persisted. For streaming requests, the gateway sends an error event instead of `response.completed`. Most client responses use the generic message `failed to persist response`; the underlying database error is written only to gateway logs. The exception is an optimistic conversation conflict, which returns status `400`, type `invalid_request_error`, code `conversation_locked`, and param `conversation`. No part of the stale turn is persisted, so the client can retry the request against the conversation's latest state. This prevents clients from receiving a response ID that cannot be continued after a lock timeout or other database failure without exposing database schema or constraint details.
 
 `AGENTIC_API_SCHEMA_READY` keeps schema changes under supervisor control. Startup performs a read-only compatibility
-check and fails if required persistence columns, types, nullability, primary/foreign-key constraints, or the conversation
+check and fails if required persistence columns, types, nullability, primary/foreign-key/CHECK constraints, or the conversation
 sequence index are missing, or if persistence integer columns still need widening. The Conversations API also requires
-the `revision` column from migration `0005_conversation_revision.sql`. Apply this upgrade in one transaction
-with a DDL-capable migration role before starting the DML-only gateway role. When using `psql`, pass
-`-v ON_ERROR_STOP=1` so any statement failure stops the script:
+the `revision` column from migration `0005_conversation_revision.sql`. Every gateway startup requires
+`message_threads` from migration `0009_message_threads.sql`, even when no client uses threads, including its state,
+checkpoint, and lease CHECK constraints and the gateway role's SELECT/INSERT/UPDATE/DELETE privileges.
+Apply all migrations for the release with a DDL-capable migration role before starting the DML-only gateway role.
+The example below assumes migrations 0001–0008 have already been applied and includes 0009 in the same transaction
+as the compatibility upgrades. Run it from the repository root with `psql -v ON_ERROR_STOP=1` so a statement failure
+stops the script:
 
 ```sql
 BEGIN;
@@ -173,6 +177,7 @@ ALTER TABLE responses
     ALTER COLUMN created_at TYPE BIGINT USING created_at::BIGINT;
 DROP INDEX IF EXISTS idx_items_conversation_id;
 CREATE UNIQUE INDEX idx_items_conversation_id ON items (conversation_id, seq);
+\i crates/agentic-server-core/migrations/0009_message_threads.sql
 COMMIT;
 ```
 

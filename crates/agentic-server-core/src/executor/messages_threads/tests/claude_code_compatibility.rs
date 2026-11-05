@@ -5,12 +5,12 @@ use crate::types::messages::thread::CLAUDE_CODE_BETA;
 async fn prepare_cli(store: &MessagesThreadStore, body: &Value) -> Result<PreparedMessagesThread, MessagesThreadError> {
     store
         .prepare(
-            &serde_json::to_vec(body).unwrap(),
+            ParsedMessagesRequest::parse(&serde_json::to_vec(body).unwrap())
+                .map_err(|error| MessagesThreadError::invalid(error.to_string()))?,
             store.owner(&[b"alice"]),
             vec![MESSAGE_THREADS_BETA.to_owned(), CLAUDE_CODE_BETA.to_owned()],
         )
         .await
-        .map(Option::unwrap)
 }
 
 fn attribution(version: &str) -> Value {
@@ -125,7 +125,7 @@ async fn ordinary_threads_keep_create_only_rules_and_literal_system_text() {
 }
 
 #[tokio::test]
-async fn legacy_checkpoints_are_normalized_and_new_checkpoints_do_not_retain_attribution() {
+async fn checkpoints_do_not_retain_attribution() {
     let (store, pool) = new_store().await;
     let create = create_cli();
     let id = start(&store, &create).await;
@@ -135,17 +135,6 @@ async fn legacy_checkpoints_are_normalized_and_new_checkpoints_do_not_retain_att
         .await
         .unwrap();
     assert!(!checkpoint.contains("x-anthropic-billing-header:"));
-    let mut legacy: MessageThreadCheckpoint = serde_json::from_str(&checkpoint).unwrap();
-    legacy.create_only.insert(
-        "system".to_owned(),
-        serde_json::value::to_raw_value(&create["system"]).unwrap(),
-    );
-    sqlx::query("UPDATE message_threads SET checkpoint = $1 WHERE message_id = $2")
-        .bind(serde_json::to_string(&legacy).unwrap())
-        .bind(&id)
-        .execute(pool.as_ref())
-        .await
-        .unwrap();
     let mut next = continuation(&id);
     next["system"] = json!([attribution("rotated")]);
     let mut ctx = prepare_cli(&store, &next).await.unwrap().into_context().unwrap();

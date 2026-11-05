@@ -1,13 +1,12 @@
 //! Run against SQLite by default, or real Postgres with `TEST_POSTGRES_URL`.
 
-use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use agentic_core::storage::messages::{MessageThreadStore, MessageThreadStoreError};
 use agentic_core::storage::{DbPool, create_pool_with_schema};
-use agentic_core::types::messages::thread::{
-    MessageThreadCheckpoint, MessagesThreadOwner, ThreadMessage, ThreadMessageContent, ThreadMessageRole,
-};
+use agentic_core::types::messages::thread::{MessageThreadCheckpoint, MessagesThreadOwner, ThreadFingerprint};
+use agentic_core::types::messages::{MessageContent, MessageParam, MessagesRequest};
 use tokio::sync::Barrier;
 
 struct Database {
@@ -51,13 +50,16 @@ fn owner() -> MessagesThreadOwner {
 }
 fn checkpoint() -> MessageThreadCheckpoint {
     MessageThreadCheckpoint {
-        messages: vec![ThreadMessage {
-            role: ThreadMessageRole::User,
-            content: ThreadMessageContent::Text("durable history 雪".to_owned()),
+        messages: vec![MessageParam {
+            role: "user".to_owned(),
+            content: MessageContent::Text("durable history 雪".to_owned()),
         }],
-        create_only: BTreeMap::new(),
-        fixed: BTreeMap::new(),
-        betas: Vec::new(),
+        system: None,
+        tools: None,
+        fingerprint: ThreadFingerprint::from(
+            &serde_json::from_str::<MessagesRequest>(r#"{"model":"m","max_tokens":1,"messages":[]}"#).unwrap(),
+        ),
+        betas: BTreeSet::new(),
         paused: false,
     }
 }
@@ -79,7 +81,7 @@ async fn checkpoint_survives_pool_and_store_recreation_with_an_independent_objec
     let pool = database.open().await;
     let store = MessageThreadStore::new(Arc::clone(&pool));
     let restored = store.load(&owner(), "msg_first").await.unwrap();
-    assert!(matches!(&restored.messages[0].content, ThreadMessageContent::Text(text) if text == "durable history 雪"));
+    assert!(matches!(&restored.messages[0].content, MessageContent::Text(text) if text == "durable history 雪"));
     let wrong = MessagesThreadOwner::from_components(&[b"issuer", b"bob", b"workspace", b"key"]);
     assert!(matches!(
         store.load(&wrong, "msg_first").await,

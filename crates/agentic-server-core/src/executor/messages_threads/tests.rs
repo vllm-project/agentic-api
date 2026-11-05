@@ -11,12 +11,12 @@ fn request(thread: &Value) -> Value {
 async fn prepare(store: &MessagesThreadStore, value: &Value) -> Result<PreparedMessagesThread, MessagesThreadError> {
     store
         .prepare(
-            &serde_json::to_vec(value).unwrap(),
+            ParsedMessagesRequest::parse(&serde_json::to_vec(value).unwrap())
+                .map_err(|error| MessagesThreadError::invalid(error.to_string()))?,
             store.owner(&[b"alice"]),
             vec![MESSAGE_THREADS_BETA.to_owned()],
         )
         .await
-        .map(Option::unwrap)
 }
 
 async fn finish(store: &MessagesThreadStore, value: &Value, stop: &str, content: &Value) -> String {
@@ -111,7 +111,11 @@ async fn expiry_and_wrong_owner_return_not_found_and_do_not_refresh() {
     assert_eq!(
         code(
             store
-                .prepare(&body, store.owner(&[b"bob"]), vec![MESSAGE_THREADS_BETA.to_owned()])
+                .prepare(
+                    ParsedMessagesRequest::parse(&body).unwrap(),
+                    store.owner(&[b"bob"]),
+                    vec![MESSAGE_THREADS_BETA.to_owned()]
+                )
                 .await
                 .unwrap_err()
         ),
@@ -156,7 +160,7 @@ async fn fixed_fields_beta_set_and_create_only_presence_are_validated_before_res
         code(
             store
                 .prepare(
-                    &body,
+                    ParsedMessagesRequest::parse(&body).unwrap(),
                     store.owner(&[b"alice"]),
                     vec![MESSAGE_THREADS_BETA.to_owned(), "extra".to_owned()]
                 )
@@ -217,12 +221,29 @@ async fn unsupported_context_editing_and_missing_beta_fail_without_inference() {
     let (store, _pool) = new_store().await;
     let mut create = request(&json!({"type":"create"}));
     let body = serde_json::to_vec(&create).unwrap();
-    assert!(store.prepare(&body, store.owner(&[]), Vec::new()).await.is_err());
-    create["context_management"] = json!({"edits":[{"type":"clear_tool_uses_20250919"}]});
-    assert_eq!(
-        code(prepare(&store, &create).await.unwrap_err()),
-        "thread_unsupported_request"
+    assert!(
+        store
+            .prepare(
+                ParsedMessagesRequest::parse(&body).unwrap(),
+                store.owner(&[]),
+                Vec::new()
+            )
+            .await
+            .is_err()
     );
+    for management in [
+        json!({}),
+        json!({"edits":null}),
+        json!({"edits":[{"type":"clear_thinking_20251015"}]}),
+        json!({"edits":[{"type":"clear_thinking_20251015","keep":{"type":"thinking_turns","value":2}}]}),
+        json!({"edits":[{"type":"clear_tool_uses_20250919"}]}),
+    ] {
+        create["context_management"] = management;
+        assert_eq!(
+            code(prepare(&store, &create).await.unwrap_err()),
+            "thread_unsupported_request"
+        );
+    }
     create["context_management"] = json!({"edits":[{"type":"clear_thinking_20251015","keep":"all"}]});
     assert!(prepare(&store, &create).await.is_ok());
 }
@@ -276,4 +297,46 @@ async fn new_store() -> (MessagesThreadStore, Arc<DbPool>) {
         .await
         .unwrap();
     (MessagesThreadStore::new(Arc::clone(&pool)), pool)
+}
+
+#[tokio::test]
+async fn typed_fingerprint_normalizes_null_defaults_and_tracks_fallback_presence() {
+    let (store, pool) = new_store().await;
+    let mut create = request(&json!({"type":"create"}));
+    create["fallbacks"] = json!([{"model":"first-fallback"}]);
+    create["mcp_servers"] =
+        json!([{"type":"url","name":"mcp","url":"https://example.com","authorization_token":"do-not-persist"}]);
+    let id = finish(&store, &create, "end_turn", &json!([])).await;
+    let stored: String = sqlx::query_scalar("SELECT checkpoint FROM message_threads WHERE message_id = $1")
+        .bind(&id)
+        .fetch_one(pool.as_ref())
+        .await
+        .unwrap();
+    assert!(!stored.contains("do-not-persist"));
+    let checkpoint: MessageThreadCheckpoint = serde_json::from_str(&stored).unwrap();
+    assert_eq!(checkpoint.fingerprint.model, "local-model");
+    let mut next = continuation(&id);
+    next["mcp_servers"] = create["mcp_servers"].clone();
+    next["fallbacks"] = json!("default");
+    next["thinking"] = json!({"type":"between_tools"});
+    // Thinking is fixed, so test the new mode separately from this continuation.
+    assert!(serde_json::from_value::<MessagesRequest>(next.clone()).is_ok());
+    next.as_object_mut().unwrap().remove("thinking");
+    for field in [
+        "tool_choice",
+        "thinking",
+        "context_management",
+        "output_config",
+        "cache_control",
+        "container",
+    ] {
+        next[field] = Value::Null;
+    }
+    assert!(prepare(&store, &next).await.is_ok());
+    store.shutdown().await;
+    next.as_object_mut().unwrap().remove("fallbacks");
+    assert_eq!(
+        code(prepare(&store, &next).await.unwrap_err()),
+        "thread_fingerprint_mismatch"
+    );
 }

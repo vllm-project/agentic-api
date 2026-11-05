@@ -1,10 +1,13 @@
 //! Message-thread contracts, independent of the Responses object model.
 
-use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 
-use serde::{Deserialize, Deserializer, Serialize, de::DeserializeOwned};
-use serde_json::Value;
-use serde_json::value::RawValue;
+use super::parameters::{
+    CacheControl, Container, ContainerSkill, ContextManagement, McpServerFingerprint, ThinkingConfig,
+};
+use super::request::{MessageParam, MessagesRequest, OutputConfig, SystemPrompt, ToolParam};
+use super::tool_choice::MessagesToolChoice;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 /// Required beta for Messages thread requests.
@@ -37,17 +40,18 @@ impl MessagesThreadOwner {
 }
 
 /// Persisted Messages-native conversation, separate from Responses items.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MessageThreadCheckpoint {
-    pub messages: Vec<ThreadMessage>,
-    pub create_only: BTreeMap<String, Box<RawValue>>,
-    pub fixed: BTreeMap<String, Value>,
-    pub betas: Vec<String>,
+    pub messages: Vec<MessageParam>,
+    pub system: Option<SystemPrompt>,
+    pub tools: Option<Vec<ToolParam>>,
+    pub fingerprint: ThreadFingerprint,
+    pub betas: BTreeSet<String>,
     pub paused: bool,
 }
 
 /// Start a conversation or append to the latest completed message.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum MessageThreadParam {
@@ -55,95 +59,75 @@ pub enum MessageThreadParam {
     Continue { previous_message_id: String },
 }
 
-/// Lossless message retained by a thread. Content blocks are provider-owned;
-/// their payloads must survive replay, including images and thinking signatures.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ThreadMessage {
-    pub role: ThreadMessageRole,
-    pub content: ThreadMessageContent,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ThreadMessageRole {
-    User,
-    Assistant,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum ThreadMessageContent {
-    Text(String),
-    Blocks(Vec<ThreadContentBlock>),
-}
-
-/// Typed block discriminator with opaque, lossless provider extension fields.
-#[derive(Debug, Clone, Serialize)]
-pub struct ThreadContentBlock {
-    #[serde(rename = "type")]
-    pub kind: String,
-    #[serde(flatten)]
-    pub fields: BTreeMap<String, Box<RawValue>>,
-}
-
-/// Thread request envelope. Inference parameters preserve provider fields
-/// rather than round-tripping through the narrower tool view.
-#[derive(Debug, Clone, Serialize)]
-pub struct ThreadMessagesRequest {
+/// Fixed thread parameters, excluding per-request credentials and container identity.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ThreadFingerprint {
     pub model: String,
-    pub max_tokens: u32,
-    pub messages: Vec<ThreadMessage>,
-    pub thread: MessageThreadParam,
-    #[serde(flatten)]
-    pub parameters: BTreeMap<String, Box<RawValue>>,
+    pub tool_choice: Option<MessagesToolChoice>,
+    pub thinking: Option<ThinkingConfig>,
+    pub mcp_servers: Option<Vec<McpServerFingerprint>>,
+    pub context_management: Option<ContextManagement>,
+    pub output_config: Option<OutputConfig>,
+    pub container_skills: Option<Vec<ContainerSkill>>,
+    pub cache_control: Option<CacheControl>,
+    pub fallbacks: bool,
 }
 
-// serde's flatten/untagged buffering cannot deserialize RawValue directly.
-// Capture extensions through a JSON tree internally, then keep them opaque in
-// the public object model. This also works with from_value during checkpointing.
-impl<'de> Deserialize<'de> for ThreadContentBlock {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let mut fields = BTreeMap::<String, Value>::deserialize(deserializer)?;
-        let kind = take_field::<_, D::Error>(&mut fields, "type")?;
-        Ok(Self {
-            kind,
-            fields: opaque_fields::<D::Error>(fields)?,
-        })
+impl From<&MessagesRequest> for ThreadFingerprint {
+    fn from(request: &MessagesRequest) -> Self {
+        Self {
+            model: request.model.clone(),
+            tool_choice: request.tool_choice.clone(),
+            thinking: request.thinking.clone(),
+            mcp_servers: request
+                .mcp_servers
+                .as_ref()
+                .map(|servers| servers.iter().map(|server| server.configuration.clone()).collect()),
+            context_management: request.context_management.clone(),
+            output_config: request.output_config.clone(),
+            container_skills: match &request.container {
+                Some(Container::Configuration(container)) => container.skills.clone(),
+                Some(Container::Id(_)) | None => None,
+            },
+            cache_control: request.cache_control.clone(),
+            fallbacks: !request.fallbacks.is_missing(),
+        }
     }
 }
 
-impl<'de> Deserialize<'de> for ThreadMessagesRequest {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let mut fields = BTreeMap::<String, Value>::deserialize(deserializer)?;
-        Ok(Self {
-            model: take_field::<_, D::Error>(&mut fields, "model")?,
-            max_tokens: take_field::<_, D::Error>(&mut fields, "max_tokens")?,
-            messages: take_field::<_, D::Error>(&mut fields, "messages")?,
-            thread: take_field::<_, D::Error>(&mut fields, "thread")?,
-            parameters: opaque_fields::<D::Error>(fields)?,
-        })
+impl ThreadFingerprint {
+    /// Field names remain protocol spellings for actionable mismatch errors.
+    pub(crate) fn differing_fields(&self, previous: &Self) -> Vec<&'static str> {
+        let mut fields = Vec::new();
+        if self.model != previous.model {
+            fields.push("model");
+        }
+        if self.tool_choice != previous.tool_choice {
+            fields.push("tool_choice");
+        }
+        if self.thinking != previous.thinking {
+            fields.push("thinking");
+        }
+        if self.mcp_servers != previous.mcp_servers {
+            fields.push("mcp_servers");
+        }
+        if self.context_management != previous.context_management {
+            fields.push("context_management");
+        }
+        if self.output_config != previous.output_config {
+            fields.push("output_config");
+        }
+        if self.container_skills != previous.container_skills {
+            fields.push("container.skills");
+        }
+        if self.cache_control != previous.cache_control {
+            fields.push("cache_control");
+        }
+        if self.fallbacks != previous.fallbacks {
+            fields.push("fallbacks");
+        }
+        fields
     }
-}
-
-fn take_field<T: DeserializeOwned, E: serde::de::Error>(
-    fields: &mut BTreeMap<String, Value>,
-    key: &str,
-) -> Result<T, E> {
-    let value = fields
-        .remove(key)
-        .ok_or_else(|| E::custom(format!("missing field {key}")))?;
-    serde_json::from_value(value).map_err(E::custom)
-}
-
-fn opaque_fields<E: serde::de::Error>(fields: BTreeMap<String, Value>) -> Result<BTreeMap<String, Box<RawValue>>, E> {
-    fields
-        .into_iter()
-        .map(|(key, value)| {
-            serde_json::value::to_raw_value(&value)
-                .map(|value| (key, value))
-                .map_err(E::custom)
-        })
-        .collect()
 }
 
 /// Anthropic-compatible thread error details, used by SDK replay logic.

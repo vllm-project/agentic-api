@@ -792,6 +792,14 @@ curl http://localhost:8080/v1/messages \
        "thread":{"type":"continue","previous_message_id":"msg_REPLACE_ME"}}'
 ```
 
+The contract is implemented from the public Anthropic documentation. The checked-in
+recordings capture vLLM inference and this gateway's public responses; they are not
+reference captures from Anthropic's message-threads beta. Exact error-envelope parity,
+null-versus-omitted fixed-field equivalence, paused-turn rejection, and continued
+stream `message_start` IDs have local regression coverage but no Anthropic reference
+capture. Treating omitted and null optional fixed fields as equal is the gateway's
+current policy pending that reference verification.
+
 The gateway stores thread state in the configured SQLite or PostgreSQL database,
 restores the full conversation for the stateless upstream, and consumes this beta locally. It preserves Messages content, including images, thinking
 signatures, client `tool_use`/`tool_result`, and hidden gateway tool rounds. The
