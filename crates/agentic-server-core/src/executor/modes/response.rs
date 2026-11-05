@@ -273,7 +273,6 @@ mod tests {
             new_input_items: vec![],
             response_id: "resp_test".into(),
             conversation_id: None,
-            conversation_version: None,
             checkpoint: None,
             continuation: None,
         }

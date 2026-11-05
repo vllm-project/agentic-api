@@ -9,11 +9,11 @@ use crate::executor::gateway::GatewaySchedulerPolicy;
 use crate::executor::messages_server_tools::sealing::{MessagesResultKey, process_result_key};
 use crate::executor::modes::{ConversationHandler, ResponseHandler};
 use crate::executor::multi_agent::ValidatedTreeCheckpoint;
-use crate::executor::session::{ResponseCheckpoint, ResponseContinuation};
+use crate::executor::session::ResponseContinuation;
 use crate::executor::telemetry::ExecutorMetrics;
 use crate::storage::backend::redact_database_urls;
 use crate::storage::{
-    ConversationStore, ConversationVersion, DatabaseBackend, ResponseStore, create_pool_with_schema_and_configs,
+    ConversationStore, DatabaseBackend, ResponseCheckpoint, ResponseStore, create_pool_with_schema_and_configs,
 };
 use crate::tool::{GatewayExecutorRegistration, GatewayExecutors};
 use crate::types::io::{InOutItem, ToolChoice};
@@ -44,9 +44,6 @@ pub struct RequestContext {
     pub response_id: String,
     /// Resolved conversation ID. `None` when `store=false` or non-conversational.
     pub conversation_id: Option<String>,
-    /// Conversation version captured with rehydrated history.
-    /// `None` for non-conversation and `previous_response_id` execution.
-    pub conversation_version: Option<ConversationVersion>,
     /// The turn this request continues (a stored response, a conversation's latest turn, or a session parent), as
     /// rehydration read it.
     pub checkpoint: Option<ResponseCheckpoint>,

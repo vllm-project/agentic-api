@@ -122,7 +122,14 @@ async fn foreign_latest_turn_is_not_empty_metadata() -> Result<(), Box<dyn std::
     let other = store
         .create("default_tenant", &ConversationMetadata::new(), &[])
         .await?;
-    assert!(store.rehydrate(&other.conversation_id).await?.turn_metadata.is_none());
+    assert!(
+        store
+            .rehydrate(&other.conversation_id)
+            .await?
+            .checkpoint
+            .response_id
+            .is_none()
+    );
     persist_turn(
         &store,
         &first.conversation_id,
@@ -172,7 +179,8 @@ async fn sql_null_legacy_fields_remain_readable() -> Result<(), Box<dyn std::err
         conversations
             .rehydrate(&conversation.conversation_id)
             .await?
-            .turn_metadata
+            .checkpoint
+            .response_id
             .is_none()
     );
     Ok(())

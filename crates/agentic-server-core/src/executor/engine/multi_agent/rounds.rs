@@ -134,7 +134,6 @@ impl MultiAgentRun {
             new_input_items: Vec::new(),
             response_id: self.payload.id.clone(),
             conversation_id: None,
-            conversation_version: None,
             checkpoint: None,
             continuation: None,
         };

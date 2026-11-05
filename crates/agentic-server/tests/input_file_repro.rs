@@ -658,7 +658,6 @@ fn composed_upstream_request_cannot_bypass_file_validation() {
         new_input_items: Vec::new(),
         response_id: "resp_composed".to_owned(),
         conversation_id: None,
-        conversation_version: None,
         checkpoint: None,
         continuation: None,
     };
