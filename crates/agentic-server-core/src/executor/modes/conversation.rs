@@ -220,9 +220,6 @@ impl ConversationHandler {
         let conversation_id = ctx
             .conversation_id
             .ok_or_else(|| ExecutorError::InvalidRequest("conversation is required for persist".into()))?;
-        let conversation_version = ctx
-            .conversation_version
-            .ok_or_else(|| ExecutorError::InvalidRequest("conversation version is required for persist".into()))?;
 
         let mut new_items = Vec::with_capacity(ctx.new_input_items.len() + output_items.len());
         let output_items: Vec<_> = output_items
@@ -232,10 +229,11 @@ impl ConversationHandler {
         new_items.extend(ctx.new_input_items);
         new_items.extend(output_items.into_iter().map(InOutItem::Output));
 
+        let checkpoint = ctx.checkpoint.unwrap_or_default();
         self.store
             .persist(
                 &conversation_id,
-                conversation_version,
+                &checkpoint,
                 &ctx.response_id,
                 new_items,
                 snapshot,
@@ -252,8 +250,9 @@ impl ConversationHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::{ConversationVersion, ResponseMetadata, create_pool_with_schema};
+    use crate::storage::{ResponseCheckpoint, ResponseMetadata, create_pool_with_schema};
     use crate::types::io::ResponsesInput;
+    use crate::types::io::{InputItem, InputMessageContent};
     use crate::types::request_response::RequestPayload;
 
     fn disabled_handler() -> ConversationHandler {
@@ -275,7 +274,6 @@ mod tests {
             new_input_items: vec![],
             response_id: "resp_test".into(),
             conversation_id: conversation_id.map(str::to_string),
-            conversation_version: None,
             checkpoint: None,
             continuation: None,
         }
@@ -320,32 +318,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn persist_rejects_missing_conversation_version_without_writing() -> Result<(), Box<dyn std::error::Error>> {
-        let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
-        let store = ConversationStore::new(pool);
-        let conversation = store
-            .create("default_tenant", &ConversationMetadata::new(), &[])
-            .await?;
-        let handler = ConversationHandler::new(store.clone());
-        let mut ctx = make_ctx(Some(&conversation.conversation_id));
-        ctx.new_input_items = ctx.original_request.input.clone().into_canonical_items();
-
-        let error = handler
-            .persist(ctx, vec![], None, ResponseMetadata::default())
-            .await
-            .expect_err("missing captured version must reject the turn");
-
-        assert!(matches!(
-            error,
-            ExecutorError::InvalidRequest(message)
-                if message == "conversation version is required for persist"
-        ));
-        assert!(store.rehydrate(&conversation.conversation_id).await?.items.is_empty());
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn persist_records_the_turn_at_the_captured_conversation_version() -> Result<(), Box<dyn std::error::Error>> {
+    async fn persist_records_the_turn_and_its_metadata() -> Result<(), Box<dyn std::error::Error>> {
         use crate::types::io::ToolChoice;
 
         let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
@@ -356,7 +329,6 @@ mod tests {
         let handler = ConversationHandler::new(store.clone());
         let mut ctx = make_ctx(Some(&conversation.conversation_id));
         ctx.new_input_items = ctx.original_request.input.clone().into_canonical_items();
-        ctx.conversation_version = Some(ConversationVersion::default());
         ctx.enriched_request.tool_choice = Some(ToolChoice::Required);
         ctx.relax_tool_choice();
 
@@ -364,24 +336,14 @@ mod tests {
         crate::executor::persist::persist_prepared_turn(ctx, None, vec![], None, &handler, &responses).await?;
 
         let snapshot = store.rehydrate(&conversation.conversation_id).await?;
-        let metadata = snapshot.turn_metadata.clone().expect("persisted turn metadata");
+        let metadata = snapshot.checkpoint.metadata.clone();
         assert_eq!(metadata.effective_tool_choice, ToolChoice::Required);
         assert_eq!(snapshot.items.len(), 1);
-        assert_eq!(
-            snapshot.version,
-            ConversationVersion {
-                response_id: Some("resp_test".to_owned()),
-                revision: 1,
-                last_sequence: Some(0),
-            }
-        );
         Ok(())
     }
 
     #[tokio::test]
-    async fn persist_rejects_a_stale_captured_conversation_version() -> Result<(), Box<dyn std::error::Error>> {
-        use std::error::Error;
-
+    async fn persist_appends_after_a_turn_stored_while_it_ran() -> Result<(), Box<dyn std::error::Error>> {
         let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
         let store = ConversationStore::new(pool);
         let conversation = store
@@ -390,7 +352,6 @@ mod tests {
         let handler = ConversationHandler::new(store.clone());
         let mut ctx = make_ctx(Some(&conversation.conversation_id));
         ctx.new_input_items = ctx.original_request.input.clone().into_canonical_items();
-        ctx.conversation_version = Some(ConversationVersion::default());
         let competing_items = Vec::from(&ResponsesInput::Text("competing input".into()))
             .into_iter()
             .map(InOutItem::Input)
@@ -398,7 +359,7 @@ mod tests {
         store
             .persist(
                 &conversation.conversation_id,
-                ConversationVersion::default(),
+                &ResponseCheckpoint::default(),
                 "resp_competing",
                 competing_items,
                 None,
@@ -406,18 +367,16 @@ mod tests {
             )
             .await?;
 
-        let error = handler
-            .persist(ctx, vec![], None, ResponseMetadata::default())
-            .await
-            .expect_err("stale captured version must reject the turn");
+        // OpenAI stores a turn after whatever the conversation gained while it ran.
+        handler.persist(ctx, vec![], None, ResponseMetadata::default()).await?;
 
-        let source = error.source().expect("conversation conflict source must be retained");
+        let snapshot = store.rehydrate(&conversation.conversation_id).await?;
+        assert_eq!(snapshot.items.len(), 2);
         assert!(matches!(
-            source.downcast_ref::<StorageError>(),
-            Some(StorageError::ConversationConflict { conversation_id })
-                if conversation_id == &conversation.conversation_id
+            &snapshot.items[0],
+            InOutItem::Input(InputItem::Message(message))
+                if matches!(&message.content, InputMessageContent::Text(text) if text == "competing input")
         ));
-        assert!(matches!(error, ExecutorError::ConversationLocked { .. }));
         Ok(())
     }
 }

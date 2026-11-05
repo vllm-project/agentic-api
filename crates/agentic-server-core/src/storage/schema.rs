@@ -27,8 +27,7 @@ type DbResult<T> = Result<T, sqlx::Error>;
 const POSTGRES_SCHEMA_ADVISORY_LOCK: i64 = 7_194_963_546_799_751;
 const POSTGRES_INTEGER_WIDENING_SQL: &str = "
     ALTER TABLE conversations
-        ALTER COLUMN created_at TYPE BIGINT USING created_at::BIGINT,
-        ALTER COLUMN revision TYPE BIGINT USING revision::BIGINT;
+        ALTER COLUMN created_at TYPE BIGINT USING created_at::BIGINT;
     ALTER TABLE items
         ALTER COLUMN created_at TYPE BIGINT USING created_at::BIGINT,
         ALTER COLUMN seq TYPE BIGINT USING seq::BIGINT;
@@ -415,7 +414,11 @@ mod tests {
             .execute(pool.as_ref())
             .await
             .unwrap();
-        sqlx::raw_sql(include_str!("../../migrations/0010_message_threads.sql"))
+        sqlx::raw_sql(include_str!("../../migrations/0010_drop_conversation_revision.sql"))
+            .execute(pool.as_ref())
+            .await
+            .expect("drop conversation revision");
+        sqlx::raw_sql(include_str!("../../migrations/0011_message_threads.sql"))
             .execute(pool.as_ref())
             .await
             .unwrap();
@@ -523,7 +526,8 @@ mod tests {
         for migration in [
             include_str!("../../migrations/0008_file_search.sql"),
             include_str!("../../migrations/0009_typed_item_metadata.sql"),
-            include_str!("../../migrations/0010_message_threads.sql"),
+            include_str!("../../migrations/0010_drop_conversation_revision.sql"),
+            include_str!("../../migrations/0011_message_threads.sql"),
         ] {
             sqlx::raw_sql(migration).execute(&mut *connection).await.unwrap();
         }
@@ -572,7 +576,8 @@ mod tests {
             include_str!("../../migrations/0007_response_item_public_ids.sql"),
             include_str!("../../migrations/0008_file_search.sql"),
             include_str!("../../migrations/0009_typed_item_metadata.sql"),
-            include_str!("../../migrations/0010_message_threads.sql"),
+            include_str!("../../migrations/0010_drop_conversation_revision.sql"),
+            include_str!("../../migrations/0011_message_threads.sql"),
         ] {
             sqlx::raw_sql(migration)
                 .execute(&mut *connection)
@@ -700,7 +705,7 @@ mod tests {
         let bigint_columns: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM information_schema.columns \
              WHERE table_schema = $1 AND data_type = 'bigint' \
-             AND ((table_name = 'conversations' AND column_name IN ('created_at', 'revision')) \
+             AND ((table_name = 'conversations' AND column_name = 'created_at') \
                OR (table_name = 'items' AND column_name IN ('created_at', 'seq')) \
                OR (table_name = 'responses' AND column_name = 'created_at'))",
         )
@@ -823,7 +828,7 @@ mod tests {
         let bigint_columns: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM information_schema.columns \
              WHERE table_schema = $1 AND data_type = 'bigint' \
-             AND ((table_name = 'conversations' AND column_name IN ('created_at', 'revision')) \
+             AND ((table_name = 'conversations' AND column_name = 'created_at') \
                OR (table_name = 'items' AND column_name IN ('created_at', 'seq')) \
                OR (table_name = 'responses' AND column_name = 'created_at'))",
         )

@@ -154,24 +154,23 @@ policy. Back up the database first if its contents must be kept.
 On a new PostgreSQL database, the first startup applies the migrations and then widens timestamp and sequence columns to
 64-bit integers.
 
-Stored requests now fail if their response or conversation state cannot be persisted. For streaming requests, the gateway sends an error event instead of `response.completed`. Most client responses use the generic message `failed to persist response`; the underlying database error is written only to gateway logs. The exception is an optimistic conversation conflict, which returns status `400`, type `invalid_request_error`, code `conversation_locked`, and param `conversation`. No part of the stale turn is persisted, so the client can retry the request against the conversation's latest state. This prevents clients from receiving a response ID that cannot be continued after a lock timeout or other database failure without exposing database schema or constraint details.
+Stored requests now fail if their response or conversation state cannot be persisted. For streaming requests, the gateway sends an error event instead of `response.completed`. Most client responses use the generic message `failed to persist response`; the underlying database error is written only to gateway logs. The exception is a conversation conflict: a turn that answers the conversation's pending tool call is refused when another turn, which had to answer the same call, was stored while it ran, with status `400`, type `invalid_request_error`, code `conversation_locked`, and param `conversation`. No part of the refused turn is persisted, so the client can retry the request against the conversation's latest state. This prevents clients from receiving a response ID that cannot be continued after a lock timeout or other database failure without exposing database schema or constraint details.
 
 `AGENTIC_API_SCHEMA_READY` keeps schema changes under supervisor control. Startup performs a read-only compatibility
 check and fails if the database was created by an earlier release, if required persistence columns, types,
 nullability, primary/foreign-key/CHECK constraints, or the conversation sequence index are missing, or if persistence integer
-columns still need widening. Every startup requires `message_threads` from migration `0010_message_threads.sql`,
+columns still need widening. Every startup requires `message_threads` from migration `0011_message_threads.sql`,
 including its state/checkpoint/lease CHECK constraints and SELECT/INSERT/UPDATE/DELETE privileges, even when clients
-send no thread requests. Apply the repository migrations through `0009_typed_item_metadata.sql` to an empty schema
-with a DDL-capable migration role, then apply `0010_message_threads.sql` and widen the integer columns in one transaction
+send no thread requests. Apply the repository migrations through `0010_drop_conversation_revision.sql` to an empty schema
+with a DDL-capable migration role, then apply `0011_message_threads.sql` and widen the integer columns in one transaction
 before starting the DML-only gateway role. Run the example below from the repository root with
 `psql -v ON_ERROR_STOP=1` so any statement failure stops the script:
 
 ```sql
 BEGIN;
-\i crates/agentic-server-core/migrations/0010_message_threads.sql
+\i crates/agentic-server-core/migrations/0011_message_threads.sql
 ALTER TABLE conversations
-    ALTER COLUMN created_at TYPE BIGINT USING created_at::BIGINT,
-    ALTER COLUMN revision TYPE BIGINT USING revision::BIGINT;
+    ALTER COLUMN created_at TYPE BIGINT USING created_at::BIGINT;
 ALTER TABLE items
     ALTER COLUMN created_at TYPE BIGINT USING created_at::BIGINT,
     ALTER COLUMN seq TYPE BIGINT USING seq::BIGINT;

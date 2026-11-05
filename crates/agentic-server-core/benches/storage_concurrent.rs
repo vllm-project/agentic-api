@@ -49,9 +49,9 @@ async fn persist_turn(
     items: Vec<InOutItem>,
     metadata: &ResponseMetadata,
 ) -> StoreResult<()> {
-    let version = store.rehydrate(conversation_id).await?.version;
+    let checkpoint = store.rehydrate(conversation_id).await?.checkpoint;
     store
-        .persist(conversation_id, version, response_id, items, None, metadata)
+        .persist(conversation_id, &checkpoint, response_id, items, None, metadata)
         .await
 }
 

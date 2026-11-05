@@ -2,9 +2,9 @@
 
 use super::DbResult;
 
-pub(super) const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 55;
+pub(super) const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 54;
 pub(super) const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 19;
-pub(super) const REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT: i64 = 5;
+pub(super) const REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT: i64 = 4;
 
 pub(super) async fn postgres_required_schema_column_count<'e, E>(executor: E) -> DbResult<i64>
 where
@@ -18,7 +18,6 @@ where
                  ('conversations', 'tenant_id', 'text', 'YES'), \
                  ('conversations', 'metadata', 'text', 'YES'), \
                  ('conversations', 'latest_response_id', 'text', 'YES'), \
-                 ('conversations', 'revision', 'integer', 'NO'), \
                  ('items', 'id', 'text', 'NO'), \
                  ('items', 'data', 'text', 'NO'), \
                  ('items', 'public_id', 'text', 'NO'), \
@@ -150,7 +149,7 @@ where
          JOIN pg_namespace table_namespace \
            ON table_namespace.oid = table_relation.relnamespace \
           AND table_namespace.nspname = actual.table_schema \
-         WHERE (actual.table_name = 'conversations' AND actual.column_name IN ('created_at', 'revision')) \
+         WHERE (actual.table_name = 'conversations' AND actual.column_name = 'created_at') \
             OR (actual.table_name = 'items' AND actual.column_name IN ('created_at', 'seq')) \
             OR (actual.table_name = 'responses' AND actual.column_name = 'created_at')",
     )

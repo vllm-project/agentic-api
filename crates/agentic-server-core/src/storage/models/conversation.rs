@@ -27,9 +27,6 @@ pub struct Conversation {
 
     /// Tenant identifier for multi-tenancy isolation.
     pub tenant_id: Option<String>,
-
-    /// Revision incremented for every change to conversation items.
-    pub revision: i64,
 }
 
 /// Get or create a conversation.
@@ -66,8 +63,6 @@ pub async fn get(pool: &DbPool, id: &str) -> DbResult<Option<Conversation>> {
 /// What rehydration reads from a conversation in one statement.
 #[derive(Debug)]
 pub struct ConversationHistory {
-    /// The conversation's revision.
-    pub revision: i64,
     /// The response that committed the latest turn, if any.
     pub latest_response_id: Option<String>,
     /// The latest turn's response row; `None` when there is no turn, or the response is missing or belongs to
@@ -86,15 +81,15 @@ pub struct LatestTurn {
 
 /// Get what rehydration needs from a conversation in one statement.
 ///
-/// Reading the header and the items in one statement keeps the conversation version consistent with
-/// the items. The header row carries the latest turn's `responses.metadata` in the `metadata` column that item
+/// Reading the header and the items in one statement keeps the latest turn consistent with the items. The header
+/// row carries the latest turn's `responses.metadata` in the `metadata` column that item
 /// rows use for their own. Items are ordered here rather than in SQL so the database does not sort item data.
 ///
 /// # Errors
 /// Returns `DbResult::Err` if the database query fails.
 pub async fn get_with_items(pool: &DbPool, id: &str) -> DbResult<Option<ConversationHistory>> {
     let rows = sqlx::query(
-        "SELECT conversations.revision, conversations.latest_response_id, responses.id AS turn_id, \
+        "SELECT conversations.id AS conversation, conversations.latest_response_id, responses.id AS turn_id, \
                 NULL AS id, NULL AS public_id, responses.metadata AS metadata, NULL AS data, \
                 NULL AS created_at, NULL AS conversation_id, NULL AS seq, NULL AS tenant_id \
          FROM conversations \
@@ -113,9 +108,9 @@ pub async fn get_with_items(pool: &DbPool, id: &str) -> DbResult<Option<Conversa
     let mut header = None;
     let mut items = Vec::new();
     for row in &rows {
-        // Only the conversation row has a revision.
-        match row.try_get::<Option<i64>, _>("revision")? {
-            Some(revision) => {
+        // Only the conversation row names the conversation.
+        match row.try_get::<Option<String>, _>("conversation")? {
+            Some(_) => {
                 let latest_turn = row
                     .try_get::<Option<String>, _>("turn_id")?
                     .map(|_| {
@@ -124,17 +119,16 @@ pub async fn get_with_items(pool: &DbPool, id: &str) -> DbResult<Option<Conversa
                         })
                     })
                     .transpose()?;
-                header = Some((revision, row.try_get("latest_response_id")?, latest_turn));
+                header = Some((row.try_get("latest_response_id")?, latest_turn));
             }
             None => items.push(Item::from_row(row)?),
         }
     }
-    let Some((revision, latest_response_id, latest_turn)) = header else {
+    let Some((latest_response_id, latest_turn)) = header else {
         return Ok(None);
     };
     items.sort_unstable_by_key(|item| item.seq);
     Ok(Some(ConversationHistory {
-        revision,
         latest_response_id,
         latest_turn,
         items,
@@ -146,7 +140,7 @@ pub async fn get_with_items(pool: &DbPool, id: &str) -> DbResult<Option<Conversa
 /// `PostgreSQL` takes a row lock without writing the row. `SQLite` uses a no-op
 /// update to acquire its database-wide write lock, which serializes persistence
 /// across all conversations. Both protect sequence allocation when multiple
-/// gateway replicas persist turns concurrently, but with different lock granularity.
+/// gateway replicas store turns or change items concurrently, but with different lock granularity.
 ///
 /// # Errors
 /// Returns `DbResult::Err` if the database query fails or the conversation does not exist.
@@ -250,18 +244,6 @@ pub async fn delete_in_tx(tx: &mut DbTransaction<'_>, conversation_id: &str) -> 
     Ok(())
 }
 
-/// Advance the item revision while holding the conversation lock.
-///
-/// # Errors
-/// Returns an error if the update fails.
-pub async fn bump_revision_in_tx(tx: &mut DbTransaction<'_>, id: &str) -> DbResult<()> {
-    sqlx::query("UPDATE conversations SET revision = revision + 1 WHERE id = $1")
-        .bind(id)
-        .execute(&mut **tx)
-        .await?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -274,7 +256,6 @@ mod tests {
             created_at: 1_704_067_200,
             latest_response_id: None,
             tenant_id: None,
-            revision: 0,
         };
 
         assert_eq!(conversation.id, "conv_1");
