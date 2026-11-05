@@ -227,7 +227,7 @@ async fn assert_orphan_recovery(
     file: &FileObject,
     request: &SearchRequest,
 ) {
-    let reopened = SqliteVecRepository::open(pool, path).await.unwrap();
+    let reopened = SqliteVecRepository::open(Arc::clone(&pool), path).await.unwrap();
     let orphan: Option<i64> = sqlx::query_scalar("SELECT id FROM file_search_vec_map WHERE id = $1")
         .bind(orphan_id)
         .fetch_optional(index)
@@ -247,6 +247,27 @@ async fn assert_orphan_recovery(
         .unwrap();
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].file_id, file.id);
+    // A crash after metadata deletion can leave the per-store virtual table.
+    sqlx::query("DELETE FROM file_search_stores WHERE id = $1")
+        .bind(&store.id)
+        .execute(pool.as_ref())
+        .await
+        .unwrap();
+    drop(reopened);
+    SqliteVecRepository::open(Arc::clone(&pool), path).await.unwrap();
+    let table = format!(
+        "file_search_vec_{}",
+        uuid::Uuid::parse_str(store.id.strip_prefix("vs_").unwrap())
+            .unwrap()
+            .simple()
+    );
+    let remaining: Option<String> =
+        sqlx::query_scalar("SELECT name FROM sqlite_master WHERE type = 'table' AND name = $1")
+            .bind(table)
+            .fetch_optional(pool.as_ref())
+            .await
+            .unwrap();
+    assert!(remaining.is_none(), "recovery must drop orphaned vec0 tables");
 }
 
 #[tokio::test]
