@@ -112,7 +112,7 @@ pub fn prepare_embedded_runtime() -> std::io::Result<()> {
     isolation::prepare()
 }
 
-mod provider;
+pub(crate) mod provider;
 
 use std::future::Future;
 use std::pin::Pin;

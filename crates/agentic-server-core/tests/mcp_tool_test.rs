@@ -1296,7 +1296,7 @@ fn successful_blocking_mcp_call_matches_openai() {
 }
 
 #[tokio::test]
-async fn mcp_input_items_return_stored_call_and_result() {
+async fn mcp_input_items_hold_only_the_public_request_input() {
     let mcp_url = spawn_forecast_mcp().await;
     let fixture = support::TestFixture::new_with_responses(mcp_inference_responses(
         false,
@@ -1318,10 +1318,9 @@ async fn mcp_input_items_return_stored_call_and_result() {
         .await
         .unwrap();
     let page = serde_json::to_value(page).unwrap();
-    assert_eq!(page["data"].as_array().unwrap().len(), 3);
-    assert_eq!(page["data"][0]["type"], "function_call_output");
-    assert_eq!(page["data"][1]["type"], "function_call");
-    assert_eq!(page["data"][2]["type"], "message");
+    // Like OpenAI, the model-facing MCP calls stay out of input items.
+    assert_eq!(page["data"].as_array().unwrap().len(), 1);
+    assert_eq!(page["data"][0]["type"], "message");
     let bodies = fixture.request_bodies().await;
     for kind in ["function_call", "function_call_output"] {
         assert!(

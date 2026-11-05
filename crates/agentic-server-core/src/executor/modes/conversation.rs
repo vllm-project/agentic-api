@@ -1,9 +1,10 @@
 //! Conversation storage handler — owns all conversation store operations.
 
-use crate::storage::{ConversationData, ConversationSnapshot, ConversationStore, ResponseMetadata, StorageError};
+use crate::storage::{
+    ConversationData, ConversationSnapshot, ConversationStore, ResponseCheckpoint, ResponseMetadata, StorageError,
+};
 use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
-use crate::types::io::OutputItem;
 use crate::types::io::{ItemPage, ListItemsResponse};
 use crate::types::request_response::ResponsePayload;
 
@@ -203,42 +204,28 @@ impl ConversationHandler {
             .map_err(ExecutorError::Storage)
     }
 
-    /// Persists one conversation turn: only the new items from this turn, with its snapshot and metadata.
-    ///
-    /// The store tracks sequence numbers and appends, so prior history must not be re-inserted.
+    /// Stores one conversation turn: only its own items, with its snapshot and metadata. The store tracks sequence
+    /// numbers and appends, so prior history is never re-inserted.
     ///
     /// # Errors
     /// Returns `ExecutorError` if `conversation` is absent on the context,
     /// the store is disabled, or the database operation fails.
     pub async fn persist(
         &self,
-        ctx: RequestContext,
-        output_items: Vec<OutputItem>,
+        ctx: &RequestContext,
+        items: Vec<InOutItem>,
         snapshot: Option<&ResponsePayload>,
-        metadata: ResponseMetadata,
+        metadata: &ResponseMetadata,
     ) -> ExecutorResult<()> {
         let conversation_id = ctx
             .conversation_id
+            .as_deref()
             .ok_or_else(|| ExecutorError::InvalidRequest("conversation is required for persist".into()))?;
 
-        let mut new_items = Vec::with_capacity(ctx.new_input_items.len() + output_items.len());
-        let output_items: Vec<_> = output_items
-            .into_iter()
-            .filter(|item| !item.is_already_in_history(&ctx.new_input_items))
-            .collect();
-        new_items.extend(ctx.new_input_items);
-        new_items.extend(output_items.into_iter().map(InOutItem::Output));
-
-        let checkpoint = ctx.checkpoint.unwrap_or_default();
+        let no_checkpoint = ResponseCheckpoint::default();
+        let checkpoint = ctx.checkpoint.as_ref().unwrap_or(&no_checkpoint);
         self.store
-            .persist(
-                &conversation_id,
-                &checkpoint,
-                &ctx.response_id,
-                new_items,
-                snapshot,
-                &metadata,
-            )
+            .persist(conversation_id, checkpoint, &ctx.response_id, items, snapshot, metadata)
             .await
             .map_err(|error| match error {
                 source @ StorageError::ConversationConflict { .. } => ExecutorError::ConversationLocked { source },
@@ -312,7 +299,7 @@ mod tests {
     #[tokio::test]
     async fn test_persist_missing_conv_id_returns_error() {
         let result = disabled_handler()
-            .persist(make_ctx(None), vec![], None, ResponseMetadata::default())
+            .persist(&make_ctx(None), vec![], None, &ResponseMetadata::default())
             .await;
         assert!(result.is_err());
     }
@@ -333,7 +320,9 @@ mod tests {
         ctx.relax_tool_choice();
 
         let responses = crate::executor::ResponseHandler::new(crate::storage::ResponseStore::disabled());
-        crate::executor::persist::persist_prepared_turn(ctx, None, vec![], None, &handler, &responses).await?;
+        let exec = crate::executor::ExecutionContext::new(handler, responses, std::sync::Arc::default(), String::new());
+        let input_only = crate::executor::persist::TurnOutput::Empty;
+        crate::executor::persist::persist(ctx, input_only, None, &exec).await?;
 
         let snapshot = store.rehydrate(&conversation.conversation_id).await?;
         let metadata = snapshot.checkpoint.metadata.clone();
@@ -368,7 +357,9 @@ mod tests {
             .await?;
 
         // OpenAI stores a turn after whatever the conversation gained while it ran.
-        handler.persist(ctx, vec![], None, ResponseMetadata::default()).await?;
+        handler
+            .persist(&ctx, ctx.new_input_items.clone(), None, &ResponseMetadata::default())
+            .await?;
 
         let snapshot = store.rehydrate(&conversation.conversation_id).await?;
         assert_eq!(snapshot.items.len(), 2);

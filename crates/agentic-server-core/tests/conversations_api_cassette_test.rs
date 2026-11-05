@@ -844,6 +844,26 @@ fn competing_outputs_for_one_call_keep_the_conversation_usable() {
     check_competing_tool_outputs(&gateway);
 }
 
+/// Multi-agent turns B (streamed, t3) and C (t4, leaving a `get_weather` call pending) continue the same tree. C
+/// commits first, so B, which would replace C's tree, is refused; D (t6) answers C's call.
+fn check_overlapping_multi_agent(cassette: &Cassette) {
+    let turns = &cassette.turns;
+    assert_eq!(turns.len(), 7, "API step count");
+    assert!(refused(&turns[2]), "B, stored after C, is refused");
+    assert!(!refused(&turns[3]), "C commits");
+    assert_completed(&turns[5]);
+    assert!(response_text(&turns[5]).contains('7'), "D reports C's tool output");
+}
+
+#[test]
+fn overlapping_multi_agent_turns_keep_the_first_turns_pending_call() {
+    let Some((openai, gateway)) = pair("overlapping-multi-agent") else {
+        return;
+    };
+    check_overlapping_multi_agent(&openai);
+    check_overlapping_multi_agent(&gateway);
+}
+
 fn check_edge_case_recording(cassette: &Cassette) {
     let turns = &cassette.turns;
     assert_eq!(turns.len(), 19);

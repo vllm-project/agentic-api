@@ -10,6 +10,7 @@ pub mod reasoning;
 pub mod shell;
 pub mod tools;
 pub mod usage;
+pub mod web_search;
 
 pub use code_interpreter::{
     CodeInterpreterCall, CodeInterpreterCallOutput, CodeInterpreterCallStatus, CodeInterpreterCallStreamEvent,

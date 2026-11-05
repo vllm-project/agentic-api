@@ -1,5 +1,5 @@
 use super::*;
-use crate::types::io::ResponsesInput;
+use crate::types::io::{OutputItem, ResponsesInput};
 use crate::utils::common::deserialize_from_value;
 use serde_json::json;
 
@@ -465,7 +465,7 @@ fn compaction_replacement_preserves_mcp_discovery_without_old_context() {
 }
 
 #[test]
-fn recorded_rounds_are_not_duplicated_and_mcp_discovery_is_retained() {
+fn compacted_outputs_are_dropped_except_discovery_and_async_calls() {
     let session = session(10, 10_000);
     let mut lease = session.begin(None).unwrap();
     let message: OutputItem = serde_json::from_value(json!({
@@ -476,13 +476,18 @@ fn recorded_rounds_are_not_duplicated_and_mcp_discovery_is_retained() {
         "type":"mcp_list_tools", "id":"mcp_1", "server_label":"counter", "tools":[]
     }))
     .unwrap();
+    let async_call: OutputItem = serde_json::from_value(json!({
+        "type":"function_call", "id":"fc_1", "call_id":"call_1", "name":"lookup", "arguments":"{}",
+        "status":"completed", "async":true
+    }))
+    .unwrap();
     assert!(lease.retains_output(0, &message));
-    lease.mark_outputs_recorded(2);
+    lease.mark_outputs_compacted(3);
     assert!(!lease.retains_output(1, &message));
-    assert!(lease.retains_output(2, &message));
-    lease.mark_history_replaced();
-    lease.mark_outputs_recorded(4);
-    assert!(!lease.retains_output(2, &message));
-    assert!(lease.retains_output(4, &message));
+    assert!(lease.retains_output(3, &message));
     assert!(lease.retains_output(0, &discovery));
+    assert!(
+        lease.retains_output(2, &async_call),
+        "an open async call's output arrives in a later request"
+    );
 }

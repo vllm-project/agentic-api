@@ -21,7 +21,7 @@ Modes:
               previous_response_id. Supports --openai, --vllm, and --gateway backends.
   items       Records flat conversation/item API steps. Select --items-scenario
               continuation, deletion, branch, pagination, edge-cases, concurrent-writes,
-              or competing-tool-outputs.
+              competing-tool-outputs, or overlapping-multi-agent.
 
 Usage:
     python tests/cassettes/record_cassette.py --turns 2 --no-stream --output path/to/cassette.yaml
@@ -582,6 +582,48 @@ def _record_competing_tool_outputs(client: httpx.Client, proxy_url: str, model: 
 
 
 
+def _record_overlapping_multi_agent(client: httpx.Client, proxy_url: str, model: str) -> None:
+    """Overlap two multi-agent turns that continue the same tree: streamed turn B (t3) and, while B streams, turn C
+    (t4), which leaves a get_weather call pending. Both rehydrate the tree before either commits.
+
+    D (t6) answers C's call, showing whether the turn that committed first keeps its pending call when B finishes
+    after it.
+    """
+    _number_requests_in_send_order(client)
+    # Only the Responses API accepts the multi-agent beta; the Conversations API rejects it as unknown.
+    client.event_hooks["request"].append(
+        lambda sent: sent.headers.__setitem__("OpenAI-Beta", "responses_multi_agent=v1")
+        if sent.url.path == "/v1/responses" else None
+    )
+    conversation = _create_conversation(client, proxy_url)
+    items_path = f"/v1/conversations/{conversation}/items"
+    ascending = {"order": "asc"}
+
+    def turn(input_items: list[dict], during: Callable[[], None] | None = None, tool_choice: str = "none") -> dict:
+        body = {"model": model, "conversation": conversation, "store": True, "stream": during is not None,
+                "input": input_items, "tools": [WEATHER_TOOL], "tool_choice": tool_choice,
+                "parallel_tool_calls": False, "multi_agent": {"enabled": True}}
+        return _observed_turn(client, proxy_url, body, during)
+
+    def user(text: str) -> list[dict]:
+        return [{"role": "user", "content": text}]
+
+    def request(method: str, path: str, **kwargs: Any) -> dict:
+        return _item_request(client, proxy_url, method, path, expected_status=None, **kwargs)
+
+    turn(user("Remember the word APRICOT. Reply with only OK."))
+    side: dict = {}
+    turn(user("Count from 1 to 120, one number per line, digits only."),
+         lambda: side.update(turn(user("Call get_weather for Paris."), tool_choice="required")))
+    request("GET", items_path, params=ascending)
+    calls = [item for item in side.get("output", []) if item.get("type") == "function_call"]
+    if len(calls) != 1:
+        raise RuntimeError(f"expected one get_weather call from turn C, got {side}")
+    turn([{"type": "function_call_output", "call_id": calls[0]["call_id"],
+           "output": json.dumps({"temperature_c": 7})}])
+    request("GET", items_path, params=ascending)
+
+
 def run_items(
     client: httpx.Client, proxy_url: str, model: str, scenario: str, stream: bool,
     *, max_output_tokens: int | None = None,
@@ -599,10 +641,14 @@ def run_items(
             raise click.UsageError("--items-scenario concurrent-writes streams turn B; use --stream.")
         _record_concurrent_writes(client, proxy_url, model)
         return
-    if scenario == "competing-tool-outputs":
+    if scenario in ("competing-tool-outputs", "overlapping-multi-agent"):
         if not stream:
             raise click.UsageError(f"--items-scenario {scenario} streams turn B; use --stream.")
-        _record_competing_tool_outputs(client, proxy_url, model)
+        record = {
+            "competing-tool-outputs": _record_competing_tool_outputs,
+            "overlapping-multi-agent": _record_overlapping_multi_agent,
+        }[scenario]
+        record(client, proxy_url, model)
         return
     if scenario == "store-false":
         conv_id = _create_conversation(client, proxy_url)
@@ -2123,7 +2169,7 @@ def run_responses(
 )
 @click.option(
     "--items-scenario",
-    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "concurrent-writes", "competing-tool-outputs", "store-false", "multi-agent-store-false", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items"]),
+    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "concurrent-writes", "competing-tool-outputs", "overlapping-multi-agent", "store-false", "multi-agent-store-false", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items"]),
     default="continuation",
     help="Fixed Conversation Items or Responses API scenario (for --mode items).",
 )
@@ -2403,7 +2449,8 @@ def main(
                           6 if items_scenario == "branch" else
                           19 if items_scenario == "edge-cases" else
                           22 if items_scenario == "concurrent-writes" else
-                          9 if items_scenario == "competing-tool-outputs" else 5)
+                          9 if items_scenario == "competing-tool-outputs" else
+                          7 if items_scenario == "overlapping-multi-agent" else 5)
         if turns != expected_turns:
             raise click.UsageError(
                 f"--mode items --items-scenario {items_scenario} requires --turns {expected_turns}."

@@ -2,14 +2,12 @@ mod admission;
 #[cfg(test)]
 #[path = "gateway/admission_tests.rs"]
 mod admission_tests;
-pub(super) mod history;
 mod lifecycle;
 mod policy;
 mod public_output;
 mod timing;
 
 pub(crate) use admission::BuiltInToolCallBudget;
-pub(super) use history::{append_gateway_calls_to_new_input, append_gateway_results, append_output_items_to_input};
 use lifecycle::emit_calls_in_order;
 pub(super) use lifecycle::{
     emit_gateway_completed_events, emit_gateway_start_events, emit_response_start_events, relay_round_events,
@@ -56,8 +54,8 @@ const GATEWAY_TOOL_TIMEOUT: Duration = Duration::from_secs(60);
 #[derive(Clone)]
 pub(super) struct GatewayCallResult {
     pub(super) item_index: usize,
-    /// Recorded as the turn's history and appended for the model's next round; the upstream projection lowers any
-    /// public record among them.
+    /// Appended for the model's next round only; history takes the call's public output item instead. The upstream
+    /// projection lowers any public record among them.
     pub(super) input: Vec<InputItem>,
     pub(super) public_output: Option<OutputItem>,
     /// A second public item at the next output index (a hosted `tool_search_output`).
@@ -1811,8 +1809,11 @@ mod tests {
         assert_eq!(events[6]["item"]["code"], "print(6 * 7)");
         assert_eq!(events[6]["item"]["outputs"][0]["logs"], "42\n");
 
-        // The streamed public projection is never replayed upstream.
-        assert!(InOutItem::into_input_items(vec![InOutItem::Output(final_item)]).is_empty());
+        // History keeps the public projection; the upstream projection lowers it to the model's function call.
+        assert!(matches!(
+            InOutItem::into_input_items(vec![InOutItem::Output(final_item)]).as_slice(),
+            [InputItem::CodeInterpreterCall(call)] if call.id == "ci_1"
+        ));
     }
 
     #[tokio::test]

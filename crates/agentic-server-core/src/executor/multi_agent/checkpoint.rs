@@ -2,9 +2,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::pending_calls::{CallKind, pending_calls};
+use crate::executor::pending_calls::{CallLedger, PendingCall};
 use crate::types::agent_tree::{AgentPhase, AgentState, StoredTreeSnapshot};
-use crate::types::client_calls::ClientCallKind;
 use crate::types::io::InputItem;
 use crate::utils::common::serialized_size_up_to;
 
@@ -70,9 +69,9 @@ impl ValidatedTreeCheckpoint {
             ) {
                 return Err(invalid("checkpoint contains live work"));
             }
-            let calls = pending_calls(&agent.history)?;
+            let calls: Vec<PendingCall> = CallLedger::scan(&agent.history)?.pending().collect();
             if let Some(wait) = &agent.wait
-                && (!calls.iter().any(|call| call.call_id == wait.call_id)
+                && (!calls.iter().any(|call| call.call_id.as_str() == wait.call_id)
                     || !agent.history.iter().any(|item| {
                         matches!(item, InputItem::FunctionCall(call)
                         if call.call_id == wait.call_id && call.name == "wait_agent")
@@ -81,16 +80,14 @@ impl ValidatedTreeCheckpoint {
                 return Err(invalid("checkpoint wait has no matching collaboration call"));
             }
             for call in calls {
-                if agent.wait.as_ref().is_some_and(|wait| wait.call_id == call.call_id) {
+                if agent
+                    .wait
+                    .as_ref()
+                    .is_some_and(|wait| wait.call_id == call.call_id.as_str())
+                {
                     continue;
                 }
-                let kind = match call.kind {
-                    CallKind::Function => ClientCallKind::Function,
-                    CallKind::Shell => ClientCallKind::Shell,
-                    CallKind::Custom => ClientCallKind::Custom,
-                    CallKind::ToolSearch => ClientCallKind::ToolSearch,
-                };
-                unresolved.insert((agent.identity.clone(), call.call_id), kind);
+                unresolved.insert((agent.identity.clone(), call.call_id), call.kind);
             }
             agents.insert(agent.identity.clone());
         }
@@ -104,7 +101,7 @@ impl ValidatedTreeCheckpoint {
             if !ids.insert(&call.call_id) || !agents.contains(&call.owner.agent_turn.agent) {
                 return Err(invalid("duplicate client call or unknown owner"));
             }
-            let kind = unresolved.remove(&(call.owner.agent_turn.agent.clone(), call.call_id.as_str().to_owned()));
+            let kind = unresolved.remove(&(call.owner.agent_turn.agent.clone(), call.call_id.clone()));
             if (!call.resolved && kind != Some(call.owner.kind)) || (call.resolved && kind.is_some()) {
                 return Err(invalid("client-call checkpoint disagrees with canonical history"));
             }

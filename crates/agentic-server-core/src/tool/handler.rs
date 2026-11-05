@@ -89,7 +89,7 @@ impl GatewayToolEventPlan {
 }
 
 /// A gateway call's result that its tool knows when the call is planned, so the call is never executed. Its items are
-/// the turn's history and the model's next input alike; the upstream projection lowers them for the model.
+/// the model's next input; the upstream projection lowers them for the model.
 #[derive(Debug, Clone)]
 pub(crate) enum PlannedResult {
     /// A hosted search: its completed public call, and the output that follows it at the next output index.
@@ -135,7 +135,7 @@ impl PlannedResult {
         }
     }
 
-    /// The items recorded as history and appended for the model's next round.
+    /// The items appended for the model's next round.
     pub(crate) fn input_items(&self) -> Vec<InputItem> {
         match self {
             Self::SearchPair {

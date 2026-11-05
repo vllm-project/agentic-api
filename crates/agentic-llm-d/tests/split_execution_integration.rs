@@ -7,7 +7,7 @@ use std::sync::Arc;
 use agentic_core::executor::request::RequestContext;
 use agentic_core::executor::{
     ConversationHandler, ExecutionContext, ExecutorError, ExecutorResult, ResponseHandler, UpstreamBody, commit,
-    decode_upstream, persist_turn, rehydrate_conversation, upstream_request,
+    decode_upstream, rehydrate_conversation, upstream_request,
 };
 use agentic_core::storage::{ConversationStore, ResponseStore, create_pool_with_schema};
 use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
@@ -817,15 +817,13 @@ async fn an_inherited_gateway_tool_is_refused() {
     gateway_turn.enriched_request.tools = Some(vec![
         serde_json::from_value(json!({"type": "web_search_preview"})).expect("gateway tool"),
     ]);
-    let id = gateway_turn.response_id.clone();
-    persist_turn(
-        gateway_turn,
-        serde_json::from_value(answer("sure")).expect("output items"),
-        &ctx.conv_handler,
-        &ctx.resp_handler,
-    )
-    .await
-    .expect("the gateway stores turns the split path would refuse");
+    let (payload, gateway_turn) = decode_upstream(gateway_turn, UpstreamBody::Json(&upstream_json("sure")))
+        .await
+        .expect("completed payload");
+    let id = payload.id.clone();
+    commit(gateway_turn, payload, &ctx)
+        .await
+        .expect("the gateway stores turns the split path would refuse");
 
     let error = hydrate(request("and then?", Some(&id)), &ctx)
         .await

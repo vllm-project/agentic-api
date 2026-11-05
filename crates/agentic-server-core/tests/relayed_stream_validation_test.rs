@@ -307,7 +307,7 @@ async fn strict_relay_decoder_preserves_web_search_item_id_fallback() {
     }
 }
 
-const RECORDED_UPSTREAM_INCOMPATIBILITIES: [(&str, &str, usize, usize); 3] = [
+const RECORDED_UPSTREAM_INCOMPATIBILITIES: [(&str, &str, usize, usize); 5] = [
     (
         "store_false/multi-agent-store-false-model-dependencies-streaming.yaml",
         "invalid request: upstream stream event does not match its active output item: inconsistent item ID, output_index, or kind",
@@ -324,6 +324,19 @@ const RECORDED_UPSTREAM_INCOMPATIBILITIES: [(&str, &str, usize, usize); 3] = [
     // no terminal response event.
     (
         "conversations/conversations-competing-tool-outputs-openai.yaml",
+        "invalid request: upstream stream ended without a terminal event",
+        1,
+        0,
+    ),
+    // OpenAI, and the gateway, refuse the streamed multi-agent turn B the same way after turn C committed.
+    (
+        "conversations/conversations-overlapping-multi-agent-openai.yaml",
+        "invalid request: upstream stream ended without a terminal event",
+        1,
+        0,
+    ),
+    (
+        "conversations/conversations-overlapping-multi-agent-gateway.yaml",
         "invalid request: upstream stream ended without a terminal event",
         1,
         0,

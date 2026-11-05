@@ -133,9 +133,8 @@ fn test_into_input_items_preserves_shell_calls() {
     };
 
     let inputs = InOutItem::into_input_items(vec![InOutItem::Output(OutputItem::ShellCall(call))]);
-    assert!(
-        matches!(inputs.as_slice(), [InputItem::FunctionCall(call)] if call.call_id == "call_shell" && call.name == "shell")
-    );
+    // Tool items keep their public type; only the upstream projection lowers them.
+    assert!(matches!(inputs.as_slice(), [InputItem::ShellCall(call)] if call.call_id == "call_shell"));
 }
 
 #[test]

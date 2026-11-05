@@ -2,7 +2,7 @@
 use crate::executor::compaction::{compact_items, estimate_history_tokens};
 use crate::executor::error::ExecutorResult;
 use crate::executor::inference::UpstreamHeaders;
-use crate::executor::pending_calls::resolved_prefix_len;
+use crate::executor::pending_calls::CallLedger;
 use crate::executor::request::ExecutionContext;
 use crate::types::agent::AgentIdentity;
 use crate::types::io::input::async_records;
@@ -61,14 +61,11 @@ impl CompactionPlan {
         history: &[InputItem],
         request: &RequestPayload,
     ) -> ExecutorResult<Option<Self>> {
-        let end = resolved_prefix_len(history)?;
-        if end == 0 {
-            return Ok(None);
-        }
-        Ok(Some(Self {
+        let prefix = &history[..CallLedger::scan(history)?.resolved_prefix_len()];
+        Ok((!prefix.is_empty()).then(|| Self {
             agent: agent.clone(),
             generation,
-            prefix: history[..end].to_vec(),
+            prefix: prefix.to_vec(),
             request: RequestPayload {
                 model: request.model.clone(),
                 instructions: request.instructions.clone(),

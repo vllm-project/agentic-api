@@ -6,12 +6,13 @@
 use std::collections::HashMap;
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::modes::{ConversationHandler, ResponseHandler};
+use crate::executor::modes::ResponseHandler;
 use crate::executor::multi_agent::ValidatedTreeCheckpoint;
 use crate::executor::prepare::prepare_request_tools;
 use crate::executor::request::{ExecutionContext, RequestContext};
-use crate::executor::telemetry::metrics::{ExecutorMetrics, Stage};
-use crate::storage::ResponseMetadata;
+use crate::executor::session::ResponseContinuation;
+use crate::executor::telemetry::metrics::Stage;
+use crate::storage::{ResponseMetadata, StorageError};
 use crate::tool::{ToolSearchMetadata, ToolSearchState};
 use crate::types::event::ResponseStatus;
 use crate::types::io::InOutItem;
@@ -19,6 +20,16 @@ use crate::types::io::OutputItem;
 use crate::types::io::input::model_items;
 use crate::types::request_response::ResponsePayload;
 use tracing::error;
+
+/// What a finished turn stores beside its input items.
+pub(crate) enum TurnOutput<'a> {
+    /// A generated response: its public output, and its snapshot when the request is stored.
+    Response(&'a ResponsePayload),
+    /// A turn that generated no output, such as an empty session turn.
+    Empty,
+    /// A standalone compaction's window: stored whatever `store` says, so `previous_response_id` can continue it.
+    Compaction,
+}
 
 /// Decides whether a completed turn reaches the storage handlers.
 ///
@@ -31,23 +42,45 @@ pub(crate) fn should_persist(ctx: &RequestContext) -> bool {
     ctx.original_request.store || (ctx.continuation.is_some() && ctx.original_request.conversation.is_none())
 }
 
-/// Persist when the request asked for it; only an attempted write is timed
-/// as a `persist` stage.
-pub(crate) async fn persist_if_needed(
-    payload: ResponsePayload,
+/// Persists one finished turn: the only path from a turn to the storage handlers. A turn that is not stored, or a
+/// response that did not complete, is returned unstored; only a write that reached storage is timed as the
+/// `persist` stage.
+///
+/// # Errors
+/// For a generated response, [`ExecutorError::Conflict`] and [`ExecutorError::PayloadTooLarge`] as they are and any
+/// other failure logged and returned as [`ExecutorError::Persistence`]; for any other turn, the failure as it is.
+pub(crate) async fn persist(
     ctx: RequestContext,
+    output: TurnOutput<'_>,
     tool_search_metadata: Option<ToolSearchMetadata>,
-    conv_handler: ConversationHandler,
-    resp_handler: ResponseHandler,
-    metrics: &ExecutorMetrics,
+    exec_ctx: &ExecutionContext,
 ) -> ExecutorResult<()> {
-    if !should_persist(&ctx) {
+    if !matches!(output, TurnOutput::Compaction) && !should_persist(&ctx) {
         return Ok(());
     }
-    let timer = metrics.stage(Stage::Persist);
-    let persisted = persist_prepared_response(payload, ctx, tool_search_metadata, conv_handler, resp_handler).await;
-    timer.finish_result(&persisted);
+    if let TurnOutput::Response(payload) = output
+        && (payload.id.is_empty()
+            || !matches!(
+                payload.status.parse::<ResponseStatus>().unwrap_or_default(),
+                ResponseStatus::Completed | ResponseStatus::Incomplete
+            ))
+    {
+        return Ok(());
+    }
+    let compaction = matches!(output, TurnOutput::Compaction);
+    let generated = matches!(output, TurnOutput::Response(_));
+    let timer = exec_ctx.metrics.stage(Stage::Persist);
+    let persisted = Box::pin(write_turn(ctx, output, tool_search_metadata, exec_ctx)).await;
+    match &persisted {
+        // Without storage nothing was written, so there is no stage to time.
+        Err(ExecutorError::Storage(StorageError::NotConfigured)) => timer.discard(),
+        result => timer.finish_result(result),
+    }
     match persisted {
+        // A compaction still returns its window without storage; only continuing it later needs a store.
+        Err(ExecutorError::Storage(StorageError::NotConfigured)) if compaction => Ok(()),
+        // A turn that generated nothing reports the failure to its caller as it is, such as a parent that is gone.
+        Err(error) if !generated => Err(error),
         Err(error @ (ExecutorError::Conflict(_) | ExecutorError::PayloadTooLarge(_))) => Err(error),
         Err(source) => {
             error!(error = ?source, "failed to persist response");
@@ -57,117 +90,81 @@ pub(crate) async fn persist_if_needed(
     }
 }
 
-/// Step 3 — Persist the completed response to storage.
-///
-/// Applies the same storage policy as [`execute`](crate::executor::execute): a
-/// no-session `store: false` context is returned unstored. Also skipped if
-/// [`ResponseStatus`] is not `Completed`/`Incomplete` or `payload.id` is empty.
-/// Routes explicit `conversation_id` requests to [`ConversationHandler`] and
-/// all other requests, including `previous_response_id` continuations, to [`ResponseHandler`].
+/// Persists a turn that generated no output, such as an empty session turn, after preparing its tools.
 ///
 /// # Errors
-/// Returns [`ExecutorError`] if the storage operation fails.
-pub async fn persist_response(
-    payload: ResponsePayload,
-    ctx: RequestContext,
-    conv_handler: ConversationHandler,
-    resp_handler: ResponseHandler,
-) -> ExecutorResult<()> {
-    // Use typed enum — no hardcoded status strings.
-    if !should_persist(&ctx)
-        || !matches!(
-            payload.status.parse::<ResponseStatus>().unwrap_or_default(),
-            ResponseStatus::Completed | ResponseStatus::Incomplete
-        )
-        || payload.id.is_empty()
-    {
-        return Ok(());
-    }
-
-    let (ctx, tool_search_state) = prepare_request_tools(ctx)?;
-    let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);
-    persist_prepared_response(payload, ctx, tool_search_metadata, conv_handler, resp_handler).await
-}
-
-async fn persist_prepared_response(
-    payload: ResponsePayload,
-    ctx: RequestContext,
-    tool_search_metadata: Option<ToolSearchMetadata>,
-    conv_handler: ConversationHandler,
-    resp_handler: ResponseHandler,
-) -> ExecutorResult<()> {
-    if !matches!(
-        payload.status.parse::<ResponseStatus>().unwrap_or_default(),
-        ResponseStatus::Completed | ResponseStatus::Incomplete
-    ) || payload.id.is_empty()
-    {
-        return Ok(());
-    }
-
-    let (output_items, snapshot) = if ctx.original_request.store {
-        (payload.output.clone(), Some(Box::new(payload)))
-    } else {
-        (payload.output, None)
-    };
-    persist_prepared_turn(
-        ctx,
-        tool_search_metadata,
-        output_items,
-        snapshot,
-        &conv_handler,
-        &resp_handler,
-    )
-    .await
-}
-
-/// Persists one completed turn with the handler selected by its explicit conversation discriminator.
-///
-/// Applies the same storage policy as [`persist_response`]: a no-session
-/// `store: false` context is returned unstored, while a session context always
-/// reaches its handler so the connection-local checkpoint is published.
-///
-/// # Errors
-/// Returns [`ExecutorError`] if the selected storage operation fails.
-pub async fn persist_turn(
-    ctx: RequestContext,
-    output_items: Vec<OutputItem>,
-    conv_handler: &ConversationHandler,
-    resp_handler: &ResponseHandler,
-) -> ExecutorResult<()> {
+/// As [`persist`], or an error preparing the request's tools.
+pub async fn persist_turn(ctx: RequestContext, exec_ctx: &ExecutionContext) -> ExecutorResult<()> {
     if !should_persist(&ctx) {
         return Ok(());
     }
     let (ctx, tool_search_state) = prepare_request_tools(ctx)?;
     let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);
-    persist_prepared_turn(
-        ctx,
-        tool_search_metadata,
-        output_items,
-        None,
-        conv_handler,
-        resp_handler,
-    )
-    .await
+    persist(ctx, TurnOutput::Empty, tool_search_metadata, exec_ctx).await
 }
 
 #[tracing::instrument(name = "agentic.persist", skip_all, fields(
     agentic.persist.destination = if ctx.original_request.conversation.is_some() { "conversation" } else { "response" }
 ))]
-pub(crate) async fn persist_prepared_turn(
+async fn write_turn(
     mut ctx: RequestContext,
+    output: TurnOutput<'_>,
     tool_search_metadata: Option<ToolSearchMetadata>,
-    output_items: Vec<OutputItem>,
-    snapshot: Option<Box<ResponsePayload>>,
-    conv_handler: &ConversationHandler,
-    resp_handler: &ResponseHandler,
+    exec_ctx: &ExecutionContext,
 ) -> ExecutorResult<()> {
     let metadata = prepare_metadata(&mut ctx, tool_search_metadata);
-    let snapshot = snapshot.as_deref();
+    let (output_items, snapshot) = match output {
+        TurnOutput::Response(payload) => (payload.output.as_slice(), ctx.original_request.store.then_some(payload)),
+        TurnOutput::Empty | TurnOutput::Compaction => (&[][..], None),
+    };
     if ctx.original_request.conversation.is_some() {
-        Box::pin(conv_handler.persist(ctx, output_items, snapshot, metadata)).await
-    } else {
-        Box::pin(resp_handler.persist(ctx, output_items, snapshot, metadata)).await
+        let items = turn_items(&mut ctx, output_items, None);
+        return exec_ctx.conv_handler.persist(&ctx, items, snapshot, &metadata).await;
     }
+
+    // A session turn publishes a connection-local checkpoint; it is durable only when the request is stored.
+    let continuation = ctx.continuation.take();
+    let durable = continuation.is_none() || ctx.original_request.store;
+    let mut items = turn_items(&mut ctx, output_items, continuation.as_ref());
+    let checkpoint = continuation
+        .as_ref()
+        .map(|lease| lease.checkpoint(ctx.response_id.clone(), &metadata, &items, durable))
+        .transpose()?;
+    let transient_parent = continuation
+        .as_ref()
+        .filter(|lease| lease.parent.as_ref().is_some_and(|parent| !parent.durable));
+    // A stored child of a transient parent stores the parent's full history: there is no stored parent to extend.
+    if let Some(lease) = transient_parent {
+        ctx.original_request.previous_response_id = None;
+        if durable {
+            items.splice(0..0, lease.parent_items().cloned().map(InOutItem::Input));
+        }
+    }
+    if durable {
+        exec_ctx.resp_handler.persist(&ctx, items, snapshot, &metadata).await?;
+    }
+    if let Some((lease, checkpoint)) = continuation.zip(checkpoint) {
+        lease.publish(checkpoint)?;
+    }
+    Ok(())
+}
+
+/// The turn's own history: the request's items, then its public output, less any output an in-turn session
+/// compaction already absorbed ([`ResponseContinuation::retains_output`]).
+fn turn_items(
+    ctx: &mut RequestContext,
+    output_items: &[OutputItem],
+    continuation: Option<&ResponseContinuation>,
+) -> Vec<InOutItem> {
+    let mut items = std::mem::take(&mut ctx.new_input_items);
+    items.extend(
+        output_items
+            .iter()
+            .enumerate()
+            .filter(|(index, item)| continuation.is_none_or(|lease| lease.retains_output(*index, item)))
+            .map(|(_, item)| InOutItem::Output(item.clone())),
+    );
+    items
 }
 
 /// The metadata this turn stores for its continuation: the effective settings, the tool-search state, and the
@@ -180,7 +177,7 @@ fn prepare_metadata(ctx: &mut RequestContext, tool_search_metadata: Option<ToolS
     ResponseMetadata {
         multi_agent_tree: ctx.multi_agent_tree.take().map(ValidatedTreeCheckpoint::into_snapshot),
         model: std::mem::take(&mut ctx.enriched_request.model),
-        previous_response_id: ctx.original_request.previous_response_id.take(),
+        previous_response_id: ctx.original_request.previous_response_id.clone(),
         effective_tools,
         tool_search_loaded_tools,
         effective_tool_choice: ctx
@@ -222,15 +219,7 @@ pub async fn commit(
         validate_output_call_ids(&ctx, &payload.output, &exec_ctx.resp_handler).await?;
     }
 
-    Box::pin(persist_if_needed(
-        payload.clone(),
-        ctx,
-        None,
-        exec_ctx.conv_handler.clone(),
-        exec_ctx.resp_handler.clone(),
-        &exec_ctx.metrics,
-    ))
-    .await?;
+    Box::pin(persist(ctx, TurnOutput::Response(&payload), None, exec_ctx)).await?;
     Ok(payload)
 }
 

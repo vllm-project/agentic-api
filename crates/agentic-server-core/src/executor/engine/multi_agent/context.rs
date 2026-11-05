@@ -5,7 +5,6 @@ use std::{collections::HashSet, num::NonZeroUsize};
 use super::super::agent_turn::AgentTurn;
 use crate::executor::{
     error::{ExecutorError, ExecutorResult},
-    gateway::append_output_items_to_input,
     multi_agent::{
         AgentPhase, AgentRegistry, AgentState, CheckpointLimits, ClientCallError, PendingClientCalls, RegistryLimits,
         ValidatedTreeCheckpoint,
@@ -312,7 +311,10 @@ pub(super) async fn prepare_agent(
     let mut execution = turn.execution_state();
     let discovery = execution.take_discovery_output(&parent.enriched_request.input);
     // Later agents reuse this response's discovery without inheriting another agent's conversation.
-    append_output_items_to_input(&mut parent.enriched_request.input, &discovery);
+    parent
+        .enriched_request
+        .input
+        .extend(discovery.iter().filter_map(OutputItem::to_input_item));
     stored
         .history
         .extend(discovery.iter().filter_map(OutputItem::to_input_item));
