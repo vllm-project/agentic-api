@@ -1,6 +1,8 @@
 //! Database schema management and migrations.
 
+mod outdated;
 mod readiness;
+use outdated::recreate_or_reject_outdated;
 pub(crate) use readiness::{verify_persistence_ready, verify_persistence_writable};
 
 use std::env;
@@ -13,18 +15,17 @@ use tracing::{debug, info};
 
 use super::backend::{DatabaseBackend, configure_postgres_timeouts};
 use super::pool::DbPool;
-use crate::config::DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS;
+use crate::config::{DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS, PostgresConfig, SqliteConfig};
 
 type DbResult<T> = Result<T, sqlx::Error>;
 
 const POSTGRES_SCHEMA_ADVISORY_LOCK: i64 = 7_194_963_546_799_751;
-const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 22;
-const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 7;
-const REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT: i64 = 5;
+const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 47;
+const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 15;
+const REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT: i64 = 4;
 const POSTGRES_INTEGER_WIDENING_SQL: &str = "
     ALTER TABLE conversations
-        ALTER COLUMN created_at TYPE BIGINT USING created_at::BIGINT,
-        ALTER COLUMN revision TYPE BIGINT USING revision::BIGINT;
+        ALTER COLUMN created_at TYPE BIGINT USING created_at::BIGINT;
     ALTER TABLE items
         ALTER COLUMN created_at TYPE BIGINT USING created_at::BIGINT,
         ALTER COLUMN seq TYPE BIGINT USING seq::BIGINT;
@@ -75,10 +76,10 @@ where
                  ('conversations', 'tenant_id', 'text', 'YES'), \
                  ('conversations', 'metadata', 'text', 'YES'), \
                  ('conversations', 'latest_response_id', 'text', 'YES'), \
-                 ('conversations', 'revision', 'integer', 'NO'), \
                  ('items', 'id', 'text', 'NO'), \
                  ('items', 'data', 'text', 'NO'), \
-                 ('items', 'public_id', 'text', 'YES'), \
+                 ('items', 'public_id', 'text', 'NO'), \
+                 ('items', 'metadata', 'text', 'NO'), \
                  ('items', 'created_at', 'integer', 'NO'), \
                  ('items', 'conversation_id', 'text', 'YES'), \
                  ('items', 'seq', 'integer', 'YES'), \
@@ -88,10 +89,35 @@ where
                  ('responses', 'conversation_id', 'text', 'YES'), \
                  ('responses', 'previous_response_id', 'text', 'YES'), \
                  ('responses', 'history_item_ids', 'text', 'YES'), \
+                 ('responses', 'snapshot', 'text', 'YES'), \
                  ('responses', 'metadata', 'text', 'YES'), \
                  ('responses', 'created_at', 'integer', 'NO'), \
                  ('responses', 'tenant_id', 'text', 'YES'), \
-                 ('responses', 'raw_tokens', 'text', 'YES') \
+                 ('responses', 'raw_tokens', 'text', 'YES'), \
+                 ('file_search_files', 'id', 'text', 'NO'), \
+                 ('file_search_files', 'created_at', 'bigint', 'NO'), \
+                 ('file_search_files', 'data', 'text', 'NO'), \
+                 ('file_search_files', 'content_type', 'text', 'NO'), \
+                 ('file_search_files', 'content_base64', 'text', 'NO'), \
+                 ('file_search_blob_cleanup', 'file_id', 'text', 'NO'), \
+                 ('file_search_blob_cleanup', 'owner_token', 'text', 'NO'), \
+                 ('file_search_blob_cleanup', 'intent', 'text', 'NO'), \
+                 ('file_search_blob_cleanup', 'lease_expires_at', 'bigint', 'NO'), \
+                 ('file_search_stores', 'id', 'text', 'NO'), \
+                 ('file_search_stores', 'created_at', 'bigint', 'NO'), \
+                 ('file_search_stores', 'data', 'text', 'NO'), \
+                 ('file_search_stores', 'embedding_identity', 'text', 'NO'), \
+                 ('file_search_stores', 'embedding_dimensions', 'bigint', 'NO'), \
+                 ('file_search_attachments', 'store_id', 'text', 'NO'), \
+                 ('file_search_attachments', 'file_id', 'text', 'NO'), \
+                 ('file_search_attachments', 'created_at', 'bigint', 'NO'), \
+                 ('file_search_attachments', 'usage_bytes', 'bigint', 'NO'), \
+                 ('file_search_attachments', 'storage_bytes', 'bigint', 'NO'), \
+                 ('file_search_attachments', 'data', 'text', 'NO'), \
+                 ('file_search_chunks', 'store_id', 'text', 'NO'), \
+                 ('file_search_chunks', 'file_id', 'text', 'NO'), \
+                 ('file_search_chunks', 'chunk_index', 'bigint', 'NO'), \
+                 ('file_search_chunks', 'data', 'text', 'NO') \
          ) \
          SELECT COUNT(*) \
          FROM required \
@@ -130,7 +156,15 @@ where
                  ('responses', 'f', \
                   'FOREIGN KEY (previous_response_id) REFERENCES responses(id) ON DELETE SET NULL'), \
                  ('conversations', 'f', \
-                  'FOREIGN KEY (latest_response_id) REFERENCES responses(id) ON DELETE SET NULL') \
+                  'FOREIGN KEY (latest_response_id) REFERENCES responses(id) ON DELETE SET NULL'), \
+                 ('file_search_files', 'p', 'PRIMARY KEY (id)'), \
+                 ('file_search_blob_cleanup', 'p', 'PRIMARY KEY (file_id)'), \
+                 ('file_search_stores', 'p', 'PRIMARY KEY (id)'), \
+                 ('file_search_attachments', 'p', 'PRIMARY KEY (store_id, file_id)'), \
+                 ('file_search_chunks', 'p', 'PRIMARY KEY (store_id, file_id, chunk_index)'), \
+                 ('file_search_attachments', 'f', 'FOREIGN KEY (store_id) REFERENCES file_search_stores(id) ON DELETE CASCADE'), \
+                 ('file_search_attachments', 'f', 'FOREIGN KEY (file_id) REFERENCES file_search_files(id) ON DELETE CASCADE'), \
+                 ('file_search_chunks', 'f', 'FOREIGN KEY (store_id, file_id) REFERENCES file_search_attachments(store_id, file_id) ON DELETE CASCADE') \
          ) \
          SELECT COUNT(*) \
          FROM required \
@@ -162,7 +196,7 @@ where
          JOIN pg_namespace table_namespace \
            ON table_namespace.oid = table_relation.relnamespace \
           AND table_namespace.nspname = actual.table_schema \
-         WHERE (actual.table_name = 'conversations' AND actual.column_name IN ('created_at', 'revision')) \
+         WHERE (actual.table_name = 'conversations' AND actual.column_name = 'created_at') \
             OR (actual.table_name = 'items' AND actual.column_name IN ('created_at', 'seq')) \
             OR (actual.table_name = 'responses' AND actual.column_name = 'created_at')",
     )
@@ -286,7 +320,9 @@ pub(crate) async fn pin_postgres_persistence_schema(connection: &mut sqlx::AnyCo
          JOIN pg_namespace table_namespace ON table_namespace.oid = table_relation.relnamespace \
          WHERE table_namespace.nspname = ANY(current_schemas(false)) \
          AND table_relation.relkind IN ('r', 'p', 'v', 'm', 'f') \
-         AND table_relation.relname IN ('_sqlx_migrations', 'conversations', 'items', 'responses') \
+         AND table_relation.relname IN ('_sqlx_migrations', 'conversations', 'items', 'responses', \
+              'file_search_files', 'file_search_blob_cleanup', 'file_search_stores', \
+              'file_search_attachments', 'file_search_chunks') \
          ORDER BY table_namespace.nspname::text",
     )
     .fetch_all(&mut *connection)
@@ -361,22 +397,24 @@ pub struct PoolWithSchema {
     pool: Arc<DbPool>,
     schema_ready: AtomicBool,
     postgres_migration_timeout: Duration,
+    recreate_outdated_sqlite: bool,
 }
 
 impl PoolWithSchema {
-    /// Creates a new pool with schema tracking.
+    /// Creates a new pool with schema tracking and default database settings.
     #[must_use]
     pub fn new(pool: Arc<DbPool>) -> Self {
-        Self::with_postgres_migration_timeout(pool, Duration::from_secs(DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS))
+        Self::configured(pool, &PostgresConfig::default(), &SqliteConfig::default())
     }
 
-    /// Creates a new pool with schema tracking and a `PostgreSQL` migration timeout.
+    /// Creates a new pool with schema tracking and the given database settings.
     #[must_use]
-    pub fn with_postgres_migration_timeout(pool: Arc<DbPool>, postgres_migration_timeout: Duration) -> Self {
+    pub fn configured(pool: Arc<DbPool>, postgres: &PostgresConfig, sqlite: &SqliteConfig) -> Self {
         Self {
             pool,
             schema_ready: AtomicBool::new(false),
-            postgres_migration_timeout,
+            postgres_migration_timeout: postgres.migration_timeout,
+            recreate_outdated_sqlite: sqlite.recreate_outdated_schema,
         }
     }
 
@@ -406,9 +444,12 @@ impl PoolWithSchema {
             return Ok(());
         }
 
+        let recreate_outdated = self.recreate_outdated_sqlite && !supervisor_managed;
+        recreate_or_reject_outdated(&mut *self.pool.acquire().await?, recreate_outdated).await?;
         if supervisor_managed {
             debug!("[schema] Migrations skipped — marked ready by supervisor.");
             verify_supervisor_managed_postgres_schema(self.pool.as_ref(), self.postgres_migration_timeout).await?;
+            verify_persistence_ready(self.pool.as_ref()).await?;
             self.schema_ready.store(true, Ordering::SeqCst);
             return Ok(());
         }
@@ -443,6 +484,7 @@ impl<'a> SchemaManager<'a> {
     /// Returns a [`sqlx::Error`] if migrations fail.
     pub async fn run_migrations(&self) -> DbResult<()> {
         debug!("[schema] Running migrations...");
+        recreate_or_reject_outdated(&mut *self.pool.acquire().await?, false).await?;
         run_embedded_migrations(
             self.pool,
             Duration::from_secs(DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS),
@@ -456,6 +498,14 @@ impl<'a> SchemaManager<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn supervisor_pool_with_schema(pool: Arc<DbPool>) -> PoolWithSchema {
+        let postgres = PostgresConfig {
+            migration_timeout: Duration::from_secs(5),
+            ..PostgresConfig::default()
+        };
+        PoolWithSchema::configured(pool, &postgres, &SqliteConfig::default())
+    }
 
     #[test]
     fn migration_errors_preserve_their_type_and_source() {
@@ -528,6 +578,40 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn file_search_readiness_and_supervisor_marker_require_new_tables() {
+        let pool = crate::storage::pool::create_pool(Some("sqlite::memory:"))
+            .await
+            .unwrap();
+        for migration in [
+            include_str!("../../migrations/0001_initial.sql"),
+            include_str!("../../migrations/0002_add_placeholders.sql"),
+            include_str!("../../migrations/0003_index_conversation_sequence.sql"),
+            include_str!("../../migrations/0004_link_conversation_latest_response.sql"),
+            include_str!("../../migrations/0005_conversation_revision.sql"),
+            include_str!("../../migrations/0006_item_references.sql"),
+            include_str!("../../migrations/0007_response_item_public_ids.sql"),
+        ] {
+            sqlx::raw_sql(migration).execute(pool.as_ref()).await.unwrap();
+        }
+        assert!(
+            verify_persistence_ready(pool.as_ref()).await.is_err(),
+            "file search tables must be ready before accepting requests"
+        );
+        let wrapper = PoolWithSchema::new(pool.clone());
+        assert!(
+            wrapper.ensure_schema_ready_with_marker(true).await.is_err(),
+            "a supervisor marker cannot conceal missing file search migrations"
+        );
+        assert!(!wrapper.schema_ready.load(Ordering::SeqCst));
+        sqlx::raw_sql(include_str!("../../migrations/0008_file_search.sql"))
+            .execute(pool.as_ref())
+            .await
+            .unwrap();
+        verify_persistence_ready(pool.as_ref()).await.unwrap();
+        wrapper.ensure_schema_ready_with_marker(true).await.unwrap();
+    }
+
+    #[tokio::test]
     async fn test_pool_with_schema_ready() {
         let pool = crate::storage::pool::create_pool(Some("sqlite://?mode=memory"))
             .await
@@ -576,6 +660,76 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "requires TEST_POSTGRES_URL pointing to an isolated PostgreSQL database"]
+    async fn postgres_supervisor_requires_file_search_migration() {
+        let database_url = std::env::var("TEST_POSTGRES_URL").expect("TEST_POSTGRES_URL must be set");
+        let pool = crate::storage::pool::create_pool(Some(&database_url)).await.unwrap();
+        let schema = format!("file_search_upgrade_{}", uuid::Uuid::now_v7().simple());
+        let mut connection = pool.acquire().await.unwrap();
+        sqlx::query(&format!("CREATE SCHEMA {schema}"))
+            .execute(&mut *connection)
+            .await
+            .unwrap();
+        sqlx::query("SELECT set_config('search_path', $1, false)")
+            .bind(&schema)
+            .execute(&mut *connection)
+            .await
+            .unwrap();
+        for migration in [
+            include_str!("../../migrations/0001_initial.sql"),
+            include_str!("../../migrations/0002_add_placeholders.sql"),
+            include_str!("../../migrations/0003_index_conversation_sequence.sql"),
+            include_str!("../../migrations/0004_link_conversation_latest_response.sql"),
+            include_str!("../../migrations/0005_conversation_revision.sql"),
+            include_str!("../../migrations/0006_item_references.sql"),
+            include_str!("../../migrations/0007_response_item_public_ids.sql"),
+        ] {
+            sqlx::raw_sql(migration).execute(&mut *connection).await.unwrap();
+        }
+        sqlx::raw_sql(POSTGRES_INTEGER_WIDENING_SQL)
+            .execute(&mut *connection)
+            .await
+            .unwrap();
+        let selected_schema = schema.clone();
+        let supervisor_pool = sqlx::any::AnyPoolOptions::new()
+            .max_connections(1)
+            .after_connect(move |connection, _| {
+                let schema = selected_schema.clone();
+                Box::pin(async move {
+                    sqlx::query("SELECT set_config('search_path', $1, false)")
+                        .bind(schema)
+                        .execute(connection)
+                        .await?;
+                    Ok(())
+                })
+            })
+            .connect(&database_url)
+            .await
+            .unwrap();
+        let supervisor = PoolWithSchema::new(Arc::new(supervisor_pool));
+        assert!(supervisor.ensure_schema_ready_with_marker(true).await.is_err());
+        assert!(!supervisor.schema_ready.load(Ordering::SeqCst));
+        for migration in [
+            include_str!("../../migrations/0008_file_search.sql"),
+            include_str!("../../migrations/0009_typed_item_metadata.sql"),
+        ] {
+            sqlx::raw_sql(migration).execute(&mut *connection).await.unwrap();
+        }
+        supervisor.ensure_schema_ready_with_marker(true).await.unwrap();
+        supervisor.pool.close().await;
+        sqlx::query("SET search_path TO public")
+            .execute(&mut *connection)
+            .await
+            .unwrap();
+        sqlx::query(&format!("DROP SCHEMA {schema} CASCADE"))
+            .execute(&mut *connection)
+            .await
+            .unwrap();
+        drop(connection);
+        pool.close().await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires TEST_POSTGRES_URL pointing to an isolated PostgreSQL database"]
     #[allow(
         clippy::too_many_lines,
         reason = "keeps the complete migration lifecycle in one integration test"
@@ -603,6 +757,8 @@ mod tests {
             include_str!("../../migrations/0005_conversation_revision.sql"),
             include_str!("../../migrations/0006_item_references.sql"),
             include_str!("../../migrations/0007_response_item_public_ids.sql"),
+            include_str!("../../migrations/0008_file_search.sql"),
+            include_str!("../../migrations/0009_typed_item_metadata.sql"),
         ] {
             sqlx::raw_sql(migration)
                 .execute(&mut *connection)
@@ -616,27 +772,33 @@ mod tests {
             .execute(&mut *connection)
             .await
             .expect("seed conversation");
-        sqlx::query("INSERT INTO items (id, data, created_at, conversation_id, seq) VALUES ($1, $2, $3, $4, $5)")
-            .bind("item_upgrade")
-            .bind("{}")
-            .bind(1_704_067_200_i64)
-            .bind("conv_upgrade")
-            .bind(0_i64)
-            .execute(&mut *connection)
-            .await
-            .expect("seed item");
         sqlx::query(
-            "INSERT INTO responses \
-             (id, conversation_id, history_item_ids, metadata, created_at) VALUES ($1, $2, $3, $4, $5)",
+            "INSERT INTO items (id, public_id, metadata, data, created_at, conversation_id, seq) \
+             VALUES ($1, $1, $2, $3, $4, $5, $6)",
         )
-        .bind("resp_upgrade")
-        .bind("conv_upgrade")
-        .bind("[\"item_upgrade\"]")
-        .bind("{\"source\":\"upgrade\"}")
+        .bind("item_upgrade")
+        .bind(r#"{"kind":"input"}"#)
+        .bind("{}")
         .bind(1_704_067_200_i64)
+        .bind("conv_upgrade")
+        .bind(0_i64)
         .execute(&mut *connection)
         .await
-        .expect("seed response");
+        .expect("seed item");
+        sqlx::query("INSERT INTO responses (id, history_item_ids, metadata, created_at) VALUES ($1, $2, $3, $4)")
+            .bind("resp_upgrade")
+            .bind("[\"item_upgrade\"]")
+            .bind("{\"source\":\"upgrade\"}")
+            .bind(1_704_067_200_i64)
+            .execute(&mut *connection)
+            .await
+            .expect("seed response");
+        sqlx::query("UPDATE conversations SET latest_response_id = $1 WHERE id = $2")
+            .bind("resp_upgrade")
+            .bind("conv_upgrade")
+            .execute(&mut *connection)
+            .await
+            .expect("link the conversation's latest response");
 
         let schema_column_count = postgres_required_schema_column_count(&mut *connection)
             .await
@@ -682,8 +844,7 @@ mod tests {
             .connect(&database_url)
             .await
             .expect("create supervisor-managed PostgreSQL pool");
-        let supervisor_schema =
-            PoolWithSchema::with_postgres_migration_timeout(Arc::new(supervisor_pool), Duration::from_secs(5));
+        let supervisor_schema = supervisor_pool_with_schema(Arc::new(supervisor_pool));
         let supervisor_error = supervisor_schema
             .ensure_schema_ready_with_marker(true)
             .await
@@ -711,7 +872,7 @@ mod tests {
             "SELECT conversations.created_at, items.id, responses.id \
              FROM conversations \
              JOIN items ON items.conversation_id = conversations.id \
-             JOIN responses ON responses.conversation_id = conversations.id \
+             JOIN responses ON responses.id = conversations.latest_response_id \
              WHERE conversations.id = $1",
         )
         .bind("conv_upgrade")
@@ -725,7 +886,7 @@ mod tests {
         let bigint_columns: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM information_schema.columns \
              WHERE table_schema = $1 AND data_type = 'bigint' \
-             AND ((table_name = 'conversations' AND column_name IN ('created_at', 'revision')) \
+             AND ((table_name = 'conversations' AND column_name = 'created_at') \
                OR (table_name = 'items' AND column_name IN ('created_at', 'seq')) \
                OR (table_name = 'responses' AND column_name = 'created_at'))",
         )
@@ -744,26 +905,28 @@ mod tests {
             )
             .is_ok()
         );
-        let foreign_key_error =
-            sqlx::query("INSERT INTO items (id, data, created_at, conversation_id) VALUES ($1, $2, $3, $4)")
-                .bind("item_invalid")
-                .bind("{}")
-                .bind(future_timestamp)
-                .bind("conv_missing")
-                .execute(&mut *connection)
-                .await;
+        let foreign_key_error = sqlx::query(
+            "INSERT INTO items (id, public_id, metadata, data, created_at, conversation_id) \
+                 VALUES ($1, $1, $2, $3, $4, $5)",
+        )
+        .bind("item_invalid")
+        .bind(r#"{"kind":"input"}"#)
+        .bind("{}")
+        .bind(future_timestamp)
+        .bind("conv_missing")
+        .execute(&mut *connection)
+        .await;
         assert!(foreign_key_error.is_err());
 
         sqlx::raw_sql(
             "ALTER TABLE items DROP CONSTRAINT items_conversation_id_fkey; \
-             ALTER TABLE responses ADD CONSTRAINT responses_conversation_id_duplicate_fkey \
-             FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE SET NULL;",
+             ALTER TABLE responses ADD CONSTRAINT responses_previous_response_id_duplicate_fkey \
+             FOREIGN KEY (previous_response_id) REFERENCES responses(id) ON DELETE SET NULL;",
         )
         .execute(&mut *connection)
         .await
         .expect("replace one required foreign key with a duplicate");
-        let invalid_constraint_schema =
-            PoolWithSchema::with_postgres_migration_timeout(supervisor_schema.pool.clone(), Duration::from_secs(5));
+        let invalid_constraint_schema = supervisor_pool_with_schema(supervisor_schema.pool.clone());
         let constraint_error = invalid_constraint_schema
             .ensure_schema_ready_with_marker(true)
             .await
@@ -846,7 +1009,7 @@ mod tests {
         let bigint_columns: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM information_schema.columns \
              WHERE table_schema = $1 AND data_type = 'bigint' \
-             AND ((table_name = 'conversations' AND column_name IN ('created_at', 'revision')) \
+             AND ((table_name = 'conversations' AND column_name = 'created_at') \
                OR (table_name = 'items' AND column_name IN ('created_at', 'seq')) \
                OR (table_name = 'responses' AND column_name = 'created_at'))",
         )
@@ -946,8 +1109,7 @@ mod tests {
             .connect(&database_url)
             .await
             .expect("create supervisor-managed PostgreSQL pool");
-        let supervisor_schema =
-            PoolWithSchema::with_postgres_migration_timeout(Arc::new(supervisor_pool), Duration::from_secs(5));
+        let supervisor_schema = supervisor_pool_with_schema(Arc::new(supervisor_pool));
 
         let validation_result = supervisor_schema.ensure_schema_ready_with_marker(true).await;
         supervisor_schema.pool.close().await;

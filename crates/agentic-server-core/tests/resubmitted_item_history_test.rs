@@ -9,7 +9,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use agentic_core::executor::ExecuteRequest;
-use agentic_core::storage::ResponseStore;
+use agentic_core::storage::{ResponseData, ResponseStore};
 use agentic_core::types::io::InOutItem;
 use agentic_core::types::request_response::ResponsePayload;
 use serde_json::{Value, json};
@@ -141,7 +141,7 @@ async fn recorded_continuation_keeps_history(cassette_name: &str) {
     );
 
     // Stored history keeps the recorded public IDs, roles, and content in order.
-    let history = stored(&store.rehydrate(&second.id).await.expect("rehydrate continuation"));
+    let history = stored(&store.rehydrate(&second.id).await.expect("rehydrate continuation").1);
     assert_eq!(
         ids(&history),
         ids(&first_output)
@@ -161,7 +161,11 @@ async fn recorded_continuation_keeps_history(cassette_name: &str) {
     );
 
     // Each stored occurrence has a private row ID; public IDs stay stable for clients.
-    let response = store.get(&second.id).await.expect("read response row");
+    let response = store
+        .get(&second.id)
+        .await
+        .and_then(ResponseData::try_from)
+        .expect("read response row");
     assert_eq!(response.history_item_ids.len(), 4);
     assert_eq!(
         response.history_item_ids.iter().collect::<HashSet<_>>().len(),
@@ -217,7 +221,7 @@ async fn resubmitted_output_items_keep_every_occurrence(cassette_name: &str) {
     assert_eq!(second.status, "completed", "resubmitted history must persist");
 
     let second_output = serde_json::to_value(&second.output).expect("serialize second output");
-    let history = stored(&store.rehydrate(&second.id).await.expect("rehydrate resubmission"));
+    let history = stored(&store.rehydrate(&second.id).await.expect("rehydrate resubmission").1);
     assert_eq!(
         ids(&history),
         ids(&first_output)
@@ -237,7 +241,11 @@ async fn resubmitted_output_items_keep_every_occurrence(cassette_name: &str) {
         ]
     );
 
-    let response = store.get(&second.id).await.expect("read response row");
+    let response = store
+        .get(&second.id)
+        .await
+        .and_then(ResponseData::try_from)
+        .expect("read response row");
     assert_eq!(response.history_item_ids.len(), 4);
     assert_eq!(
         response.history_item_ids.iter().collect::<HashSet<_>>().len(),

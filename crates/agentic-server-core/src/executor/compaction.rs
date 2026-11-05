@@ -198,7 +198,7 @@ async fn summarize_items(
         new_input_items: Vec::new(),
         response_id: uuid7_str("resp_"),
         conversation_id: None,
-        conversation_version: None,
+        checkpoint: None,
         continuation: None,
     };
     let mut agent = AgentPipeline::new(ctx, None, StreamRelay::detached());
@@ -341,8 +341,7 @@ pub async fn compact_response(
             "/responses/compact is not supported with multi_agent".into(),
         ));
     }
-    let (mut ctx, tool_search_state) =
-        prepare_request_tools(ctx, &exec_ctx.conv_handler, &exec_ctx.resp_handler).await?;
+    let (mut ctx, tool_search_state) = prepare_request_tools(ctx)?;
     let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);
     let input = std::mem::replace(&mut ctx.enriched_request.input, ResponsesInput::Items(Vec::new()));
     // The returned window keeps every open async call, in its public form, so a client replaying it
@@ -366,7 +365,8 @@ pub async fn compact_response(
     let mut history_calls = if from_history.is_empty() {
         HashMap::new()
     } else {
-        public_calls(exec_ctx.resp_handler.rehydrate(&ctx).await?, &from_history)
+        let history = exec_ctx.resp_handler.rehydrate(&ctx).await?;
+        public_calls(history.map(|(_, items)| items).unwrap_or_default(), &from_history)
     };
     let (compacted, usage, service_tier) = compact_items_with_trigger(
         &ctx.enriched_request,
@@ -504,7 +504,7 @@ mod tests {
             new_input_items: Vec::new(),
             response_id: "resp_test".to_owned(),
             conversation_id: None,
-            conversation_version: None,
+            checkpoint: None,
             continuation: None,
         }
     }
@@ -1293,7 +1293,7 @@ mod tests {
         let response = compact_response(compact_request(), &exec_ctx, None)
             .await
             .expect("compaction succeeds");
-        let history = response_store
+        let (_, history) = response_store
             .rehydrate(&response.id)
             .await
             .expect("compaction checkpoint can be rehydrated");
@@ -1315,13 +1315,13 @@ mod tests {
                 "resp_previous",
                 None,
                 vec![InOutItem::Input(user_message("remember banana"))],
+                None,
                 &ResponseMetadata {
                     multi_agent_tree: None,
                     model: "test-model".to_owned(),
                     previous_response_id: None,
                     effective_tools: None,
                     tool_search_loaded_tools: None,
-                    response_snapshot: None,
                     effective_tool_choice: crate::ToolChoice::Auto,
                     effective_instructions: None,
                 },
@@ -1338,7 +1338,7 @@ mod tests {
         let response = compact_response(request, &exec_ctx, None)
             .await
             .expect("previous response compacts");
-        let history = response_store
+        let (_, history) = response_store
             .rehydrate(&response.id)
             .await
             .expect("compacted continuation rehydrates");

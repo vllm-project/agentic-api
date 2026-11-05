@@ -2,17 +2,18 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::config::{Config, ResponsesConfig, default_database_url};
+use crate::config::{Config, ResponsesConfig, SqliteConfig, default_database_url};
 use crate::error::Error;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway::GatewaySchedulerPolicy;
 use crate::executor::messages_server_tools::sealing::{MessagesResultKey, process_result_key};
 use crate::executor::modes::{ConversationHandler, ResponseHandler};
 use crate::executor::multi_agent::ValidatedTreeCheckpoint;
+use crate::executor::session::ResponseContinuation;
 use crate::executor::telemetry::ExecutorMetrics;
 use crate::storage::backend::redact_database_urls;
 use crate::storage::{
-    ConversationStore, ConversationVersion, DatabaseBackend, ResponseStore, create_pool_with_schema_and_configs,
+    ConversationStore, DatabaseBackend, ResponseCheckpoint, ResponseStore, create_pool_with_schema_and_configs,
 };
 use crate::tool::{GatewayExecutorRegistration, GatewayExecutors};
 use crate::types::io::{InOutItem, ToolChoice};
@@ -43,11 +44,11 @@ pub struct RequestContext {
     pub response_id: String,
     /// Resolved conversation ID. `None` when `store=false` or non-conversational.
     pub conversation_id: Option<String>,
-    /// Conversation version captured with rehydrated history.
-    /// `None` for non-conversation and `previous_response_id` execution.
-    pub conversation_version: Option<ConversationVersion>,
+    /// The turn this request continues (a stored response, a conversation's latest turn, or a session parent), as
+    /// rehydration read it.
+    pub checkpoint: Option<ResponseCheckpoint>,
     /// Optional transient-session lease and canonical parent snapshot. Never serialized.
-    pub continuation: Option<super::session::ResponseContinuation>,
+    pub continuation: Option<ResponseContinuation>,
 }
 
 impl RequestContext {
@@ -235,7 +236,13 @@ impl ExecutionContext {
             .ok_or_else(|| Error::Config("default database URL was not resolved".to_owned()))?;
         let database_backend = DatabaseBackend::from_url(db_url)
             .map_err(|error| Error::Config(format!("invalid DATABASE_URL: {error}")))?;
-        let pool = create_pool_with_schema_and_configs(Some(db_url), cfg.sqlite, cfg.postgres)
+        // Only the default database in the Agentic API home is recreated when it holds data from an earlier release;
+        // a configured URL is never recreated, even one naming the same file.
+        let sqlite = SqliteConfig {
+            recreate_outdated_schema: default_db_url.is_some(),
+            ..cfg.sqlite
+        };
+        let pool = create_pool_with_schema_and_configs(Some(db_url), sqlite, cfg.postgres)
             .await
             .map_err(|error| database_open_error(database_backend, &error))?;
         crate::storage::schema::verify_persistence_writable(pool.as_ref())

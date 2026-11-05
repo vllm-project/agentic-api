@@ -1,0 +1,375 @@
+//! Local blobs addressed exclusively by generated file IDs.
+//!
+//! A complete, synced staging file is linked atomically to its final key before
+//! SQL metadata publication. Callers retain ownership of cleanup through commit.
+
+use std::{
+    io,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
+
+use tokio::{
+    fs,
+    io::{AsyncReadExt, AsyncWriteExt},
+    sync::OnceCell,
+};
+use tokio_util::sync::CancellationToken;
+
+use crate::types::file_search::{FileSearchError, cancelled_upload_error, validate_file_id};
+
+/// Blob storage on a local filesystem or a shared persistent volume.
+#[derive(Clone)]
+pub struct LocalFiles {
+    directory: PathBuf,
+    missing_directories: Arc<OnceCell<Vec<PathBuf>>>,
+    directory_ready: Arc<OnceCell<()>>,
+    #[cfg(all(test, unix))]
+    directory_syncs: std::sync::Arc<std::sync::Mutex<Vec<PathBuf>>>,
+}
+
+impl LocalFiles {
+    /// Creates a local blob store rooted at an absolute directory.
+    ///
+    /// # Errors
+    /// Returns invalid-request when the directory is not absolute.
+    pub fn new(directory: PathBuf) -> Result<Self, FileSearchError> {
+        if !directory.is_absolute() {
+            return Err(FileSearchError::InvalidRequest(
+                "files_storage_dir must be an absolute path".into(),
+            ));
+        }
+        Ok(Self {
+            directory,
+            missing_directories: Arc::default(),
+            directory_ready: Arc::default(),
+            #[cfg(all(test, unix))]
+            directory_syncs: std::sync::Arc::default(),
+        })
+    }
+
+    fn path(&self, id: &str) -> Result<PathBuf, FileSearchError> {
+        validate_file_id(id)?;
+        Ok(self.directory.join(id))
+    }
+
+    pub(crate) async fn publish(
+        &self,
+        id: &str,
+        bytes: &[u8],
+        cancelled: &CancellationToken,
+    ) -> Result<(), FileSearchError> {
+        let destination = self.path(id)?;
+        let temporary = self.directory.join(format!(".upload-{id}"));
+        self.ensure_directory().await?;
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        options.mode(0o660).custom_flags(libc::O_NOFOLLOW);
+        let mut file = options
+            .open(&temporary)
+            .await
+            .map_err(|source| io_error("staging creation", source))?;
+        let written = async {
+            for chunk in bytes.chunks(64 * 1024) {
+                if cancelled.is_cancelled() {
+                    return Err(cancelled_upload_error());
+                }
+                file.write_all(chunk)
+                    .await
+                    .map_err(|source| io_error("write", source))?;
+            }
+            file.flush().await.map_err(|source| io_error("flush", source))?;
+            file.sync_all().await.map_err(|source| io_error("sync", source))?;
+            Ok(())
+        }
+        .await;
+        // Tokio may have a buffered write in flight when cancellation was observed.
+        // Finish it before unlinking so cleanup also works on Windows.
+        let flushed = file.flush().await.map_err(|source| io_error("flush", source));
+        drop(file);
+        if let Err(error) = written.and(flushed) {
+            remove_if_present(&temporary).await?;
+            return Err(error);
+        }
+        if cancelled.is_cancelled() {
+            remove_if_present(&temporary).await?;
+            return Err(cancelled_upload_error());
+        }
+        // A hard link gives atomic create-if-absent semantics without overwriting
+        // another blob on the same filesystem. No caller-controlled path is used.
+        if let Err(source) = fs::hard_link(&temporary, &destination).await {
+            remove_if_present(&temporary).await?;
+            return Err(io_error("publication", source));
+        }
+        if let Err(error) = remove_if_present(&temporary).await {
+            remove_if_present(&destination).await?;
+            return Err(error);
+        }
+        if let Err(error) = self.sync_directory().await {
+            remove_if_present(&destination).await?;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    pub(crate) async fn read(
+        &self,
+        id: &str,
+        expected_bytes: i64,
+        max_bytes: usize,
+    ) -> Result<Vec<u8>, FileSearchError> {
+        let path = self.path(id)?;
+        let metadata = fs::symlink_metadata(&path)
+            .await
+            .map_err(|source| io_error("read", source))?;
+        if !metadata.file_type().is_file() {
+            return Err(io_error(
+                "read",
+                io::Error::new(io::ErrorKind::InvalidData, "blob is not a regular file"),
+            ));
+        }
+        let mut options = fs::OpenOptions::new();
+        options.read(true);
+        #[cfg(unix)]
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+        let file = options.open(path).await.map_err(|source| io_error("read", source))?;
+        let metadata = file.metadata().await.map_err(|source| io_error("read", source))?;
+        let expected = u64::try_from(expected_bytes)
+            .map_err(|_| io_error("read", io::Error::new(io::ErrorKind::InvalidData, "invalid blob size")))?;
+        if !metadata.is_file() || metadata.len() > max_bytes as u64 || metadata.len() != expected {
+            return Err(io_error(
+                "read",
+                io::Error::new(io::ErrorKind::InvalidData, "blob size mismatch or limit exceeded"),
+            ));
+        }
+        let mut bytes = Vec::new();
+        file.take(max_bytes as u64 + 1)
+            .read_to_end(&mut bytes)
+            .await
+            .map_err(|source| io_error("read", source))?;
+        if bytes.len() > max_bytes || bytes.len() as u64 != expected {
+            return Err(io_error(
+                "read",
+                io::Error::new(io::ErrorKind::InvalidData, "blob size changed while reading"),
+            ));
+        }
+        Ok(bytes)
+    }
+
+    pub(crate) async fn remove(&self, id: &str) -> Result<(), FileSearchError> {
+        let destination = self.path(id)?;
+        remove_if_present(&destination).await?;
+        remove_if_present(&self.directory.join(format!(".upload-{id}"))).await?;
+        match self.sync_directory().await {
+            Err(FileSearchError::FileStorage { source, .. }) if source.kind() == io::ErrorKind::NotFound => Ok(()),
+            result => result,
+        }
+    }
+
+    async fn ensure_directory(&self) -> Result<(), FileSearchError> {
+        self.directory_ready
+            .get_or_try_init(|| async {
+                // Remember the plan across retries: a failed parent sync must not
+                // turn a directory we just created into an assumed durable base.
+                let missing = self
+                    .missing_directories
+                    .get_or_try_init(|| async {
+                        let mut missing = Vec::new();
+                        let mut current = self.directory.as_path();
+                        loop {
+                            match fs::metadata(current).await {
+                                Ok(metadata) if metadata.is_dir() => break,
+                                Ok(_) => {
+                                    return Err(io_error(
+                                        "directory inspection",
+                                        io::Error::new(
+                                            io::ErrorKind::NotADirectory,
+                                            "storage ancestor is not a directory",
+                                        ),
+                                    ));
+                                }
+                                Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                                    missing.push(current.to_owned());
+                                    current = current
+                                        .parent()
+                                        .ok_or_else(|| io_error("directory inspection", error))?;
+                                }
+                                Err(error) => return Err(io_error("directory inspection", error)),
+                            }
+                        }
+                        Ok(missing)
+                    })
+                    .await?;
+                // An existing ancestor is the deployment's durable base. We do not
+                // open higher ancestors, which may legitimately be execute-only.
+                for directory in missing.iter().rev() {
+                    let mut builder = fs::DirBuilder::new();
+                    #[cfg(unix)]
+                    builder.mode(0o770);
+                    match builder.create(directory).await {
+                        Ok(()) => (),
+                        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                            if !fs::metadata(directory)
+                                .await
+                                .map_err(|source| io_error("directory inspection", source))?
+                                .is_dir()
+                            {
+                                return Err(io_error("directory creation", error));
+                            }
+                        }
+                        Err(error) => return Err(io_error("directory creation", error)),
+                    }
+                    // Also sync when another creator won mkdir, before declaring
+                    // this initialization complete to concurrent local uploads.
+                    let parent = directory.parent().ok_or_else(|| {
+                        io_error(
+                            "directory creation",
+                            io::Error::new(io::ErrorKind::InvalidInput, "storage directory has no parent"),
+                        )
+                    })?;
+                    self.sync_directory_path(parent).await?;
+                }
+                Ok(())
+            })
+            .await?;
+        Ok(())
+    }
+
+    async fn sync_directory(&self) -> Result<(), FileSearchError> {
+        self.sync_directory_path(&self.directory).await
+    }
+
+    async fn sync_directory_path(&self, directory: &Path) -> Result<(), FileSearchError> {
+        #[cfg(unix)]
+        fs::File::open(directory)
+            .await
+            .map_err(|source| io_error("directory sync", source))?
+            .sync_all()
+            .await
+            .map_err(|source| io_error("directory sync", source))?;
+        #[cfg(all(test, unix))]
+        self.directory_syncs.lock().unwrap().push(directory.to_owned());
+        Ok(())
+    }
+}
+
+async fn remove_if_present(path: &Path) -> Result<(), FileSearchError> {
+    match fs::remove_file(path).await {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(source) => Err(io_error("cleanup", source)),
+    }
+}
+
+fn io_error(operation: &'static str, source: io::Error) -> FileSearchError {
+    FileSearchError::FileStorage { operation, source }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn remove_is_idempotent_before_lazy_directory_creation() {
+        let base = tempfile::tempdir().unwrap();
+        let directory = base.path().join("not-created").join("files");
+        let files = LocalFiles::new(directory.clone()).unwrap();
+        files.remove(&format!("file-{}", uuid::Uuid::now_v7())).await.unwrap();
+        assert!(!directory.exists());
+    }
+
+    #[tokio::test]
+    async fn remove_reclaims_interrupted_staging_files_for_the_id() {
+        let base = tempfile::tempdir().unwrap();
+        let id = format!("file-{}", uuid::Uuid::now_v7());
+        let other = format!("file-{}", uuid::Uuid::now_v7());
+        let stage = base.path().join(format!(".upload-{id}"));
+        let other_stage = base.path().join(format!(".upload-{other}"));
+        fs::write(&stage, b"interrupted").await.unwrap();
+        fs::write(&other_stage, b"active other upload").await.unwrap();
+        LocalFiles::new(base.path().to_owned())
+            .unwrap()
+            .remove(&id)
+            .await
+            .unwrap();
+        assert!(!stage.exists());
+        assert!(other_stage.exists());
+    }
+
+    #[tokio::test]
+    async fn first_upload_syncs_new_directory_entries_before_publishing() {
+        let base = tempfile::tempdir().unwrap();
+        let parent = base.path().join("new-parent");
+        let directory = parent.join("files");
+        let files = LocalFiles::new(directory.clone()).unwrap();
+        files
+            .publish(
+                &format!("file-{}", uuid::Uuid::now_v7()),
+                b"durable",
+                &CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        let synced = files.directory_syncs.lock().unwrap();
+        assert!(
+            synced.contains(&base.path().to_owned()),
+            "the new parent's directory entry must be synced"
+        );
+        assert!(
+            synced.contains(&parent),
+            "the new storage directory's entry must be synced"
+        );
+        assert!(synced.contains(&directory), "the blob's directory entry must be synced");
+    }
+
+    #[tokio::test]
+    async fn directory_creation_races_still_sync_parent_entries() {
+        let base = tempfile::tempdir().unwrap();
+        let parent = base.path().join("new-parent");
+        let directory = parent.join("files");
+        let files = LocalFiles::new(directory.clone()).unwrap();
+        files
+            .missing_directories
+            .set(vec![directory.clone(), parent.clone()])
+            .unwrap();
+        // Another creator wins after discovery and before our mkdir calls.
+        fs::create_dir_all(&directory).await.unwrap();
+        files
+            .publish(
+                &format!("file-{}", uuid::Uuid::now_v7()),
+                b"race",
+                &CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        let synced = files.directory_syncs.lock().unwrap();
+        assert!(synced.contains(&base.path().to_owned()));
+        assert!(synced.contains(&parent));
+    }
+
+    #[tokio::test]
+    async fn existing_storage_does_not_require_read_access_to_higher_ancestors() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let base = tempfile::tempdir().unwrap();
+        let ancestor = base.path().join("execute-only");
+        let directory = ancestor.join("files");
+        fs::create_dir_all(&directory).await.unwrap();
+        fs::set_permissions(&ancestor, std::fs::Permissions::from_mode(0o111))
+            .await
+            .unwrap();
+        let files = LocalFiles::new(directory).unwrap();
+        let result = files
+            .publish(
+                &format!("file-{}", uuid::Uuid::now_v7()),
+                b"accessible",
+                &CancellationToken::new(),
+            )
+            .await;
+        fs::set_permissions(&ancestor, std::fs::Permissions::from_mode(0o700))
+            .await
+            .unwrap();
+        result.unwrap();
+        assert!(!files.directory_syncs.lock().unwrap().contains(&ancestor));
+    }
+}

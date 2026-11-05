@@ -1,6 +1,5 @@
 //! Immutable parent checkpoints and serial execution lease publication.
 
-use std::fmt;
 use std::ops::Deref;
 use std::sync::{Arc, Mutex, Weak};
 
@@ -9,7 +8,7 @@ use tokio::sync::Notify;
 
 use super::{CheckpointBudget, CheckpointReservation, ExecutorError, ExecutorResult, SessionState};
 use super::{aggregate_budget_error, lock_state};
-use crate::storage::ResponseMetadata;
+use crate::storage::{ResponseCheckpoint, ResponseMetadata};
 use crate::types::io::InOutItem;
 use crate::types::io::input::{async_records, retain_window};
 use crate::types::io::{InputItem, OutputItem};
@@ -34,7 +33,7 @@ pub struct ResponseCheckpointPin {
 impl ResponseCheckpointPin {
     #[must_use]
     pub fn response_id(&self) -> &str {
-        &self.checkpoint.response_id
+        self.checkpoint.response_id.as_deref().unwrap_or_default()
     }
 
     /// Canonical input items for validating a continuation before acquiring an
@@ -81,23 +80,6 @@ pub struct ResponseContinuation {
     pub(super) history_replaced: bool,
     pub(super) recorded_output_count: usize,
     pub(super) finished: bool,
-}
-
-#[derive(Serialize)]
-pub(crate) struct ResponseCheckpoint {
-    pub response_id: String,
-    pub conversation_id: Option<String>,
-    pub history: Vec<InputItem>,
-    pub metadata: ResponseMetadata,
-    pub durable: bool,
-}
-
-impl fmt::Debug for ResponseCheckpoint {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ResponseCheckpoint")
-            .field("items", &self.history.len())
-            .finish_non_exhaustive()
-    }
 }
 
 /// An immutable checkpoint paired with its lifetime charge. Keeping the fields
@@ -163,7 +145,6 @@ impl ResponseContinuation {
     pub(crate) fn checkpoint(
         &self,
         response_id: String,
-        conversation_id: Option<String>,
         metadata: &ResponseMetadata,
         new_items: &[InOutItem],
         durable: bool,
@@ -177,11 +158,12 @@ impl ResponseContinuation {
             }
         }
         let checkpoint = ResponseCheckpoint {
-            response_id,
-            conversation_id,
+            response_id: Some(response_id),
             history: canonical_session_history(history),
             metadata,
             durable,
+            history_item_ids: Vec::new(),
+            requires_latest: false,
         };
         let (max_items, max_bytes) = {
             let state = lock_state(&self.state)?;

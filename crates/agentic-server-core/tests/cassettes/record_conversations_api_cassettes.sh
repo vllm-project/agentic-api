@@ -2,7 +2,7 @@
 # Record short, flat Conversation Items API sequences against OpenAI and a gateway.
 # Each filename: tN is one HTTP request in execution order.
 # CONVERSATIONS_RECORD_SET=all|openai|gateway (default: all)
-# CONVERSATIONS_SCENARIO=all|edge-cases|continuation|continuation-stream|deletion|deletion-stream|branch|branch-stream|pagination|pagination-stream
+# CONVERSATIONS_SCENARIO=all|edge-cases|concurrent-writes|competing-tool-outputs|continuation|continuation-stream|deletion|deletion-stream|branch|branch-stream|pagination|pagination-stream
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,7 +19,7 @@ case "$RECORD_SET" in
     *) echo "CONVERSATIONS_RECORD_SET must be all, openai, or gateway" >&2; exit 2 ;;
 esac
 case "$SCENARIO" in
-    all|edge-cases|continuation|continuation-stream|deletion|deletion-stream|branch|branch-stream|pagination|pagination-stream) ;;
+    all|edge-cases|concurrent-writes|competing-tool-outputs|continuation|continuation-stream|deletion|deletion-stream|branch|branch-stream|pagination|pagination-stream) ;;
     *) echo "Invalid CONVERSATIONS_SCENARIO: $SCENARIO" >&2; exit 2 ;;
 esac
 if [[ "$RECORD_SET" != gateway && -z "${OPENAI_API_KEY:-}" ]]; then
@@ -34,6 +34,8 @@ record() {
     if [[ "$mode" == branch ]]; then turns=6; fi
     if [[ "$mode" == pagination ]]; then turns=10; fi
     if [[ "$mode" == edge-cases ]]; then turns=19; fi
+    if [[ "$mode" == concurrent-writes ]]; then turns=22; fi
+    if [[ "$mode" == competing-tool-outputs ]]; then turns=9; fi
     local destination="$CASSETTES_DIR/conversations-${scenario}-${provider}.yaml"
     local backend_args=()
     if [[ "$provider" == openai ]]; then
@@ -44,7 +46,7 @@ record() {
     echo "Recording $provider/$scenario -> $destination"
     "$PYTHON_BIN" "$SCRIPT_DIR/record_cassette.py" \
         --mode items --items-scenario "$mode" --turns "$turns" \
-        --model "$model" "${backend_args[@]}" \
+        --model "$model" "${backend_args[@]}" --proxy-port "${RECORDER_PROXY_PORT:-7070}" \
         --output "$destination" "${@:5}"
     "$PYTHON_BIN" - "$destination" "$mode" "$scenario" <<'CASSETTE_CHECK'
 import sys
@@ -54,13 +56,59 @@ from yaml import safe_load
 cassette = safe_load(Path(sys.argv[1]).read_text())
 mode, scenario = sys.argv[2:]
 turns = cassette["turns"]
-expected = 10 if mode == "pagination" else 6 if mode == "branch" else 19 if mode == "edge-cases" else 5
+expected = {"pagination": 10, "branch": 6, "edge-cases": 19, "concurrent-writes": 22,
+            "competing-tool-outputs": 9}.get(mode, 5)
 assert list(cassette) == ["turns"], "cassette must be one flat turns list"
 assert len(turns) == expected
 assert [turn["filename"] for turn in turns] == [f"t{i}" for i in range(1, expected + 1)]
 assert all("status_code" in turn["response"] for turn in turns)
 requests = [turn["request"] for turn in turns]
 assert (requests[0]["method"], requests[0]["path"]) == ("POST", "/v1/conversations")
+if mode == "concurrent-writes":
+    # Three fresh conversations; each side request is sent, and numbered, after streamed turn B starts.
+    import json
+    labels, routes = {}, []
+    for index, turn in enumerate(turns, 1):
+        request, response = turn["request"], turn["response"]
+        path = request["path"]
+        for value, label in labels.items():
+            path = path.replace(value, label)
+        query = "&".join(f"{key}={value}" for key, value in request["query_params"].items())
+        routes.append(f'{request["method"]} {path}' + (f"?{query}" if query else ""))
+        if path == "/v1/conversations":
+            labels[response["body"]["id"]] = "{conv}"
+        elif path == "/v1/responses" and "sse" in response:
+            created = next(json.loads(line[6:]) for line in response["sse"] if '"response.created"' in line)
+            labels[created["response"]["id"]] = f"{{t{index}}}"
+        elif path == "/v1/responses":
+            labels[response["body"]["id"]] = f"{{t{index}}}"
+        elif request["query_params"].get("limit") == "1":
+            labels[response["body"]["data"][0]["id"]] = "{item}"
+    items, asc = "/v1/conversations/{conv}/items", "?order=asc"
+    assert routes == [
+        "POST /v1/conversations", "POST /v1/responses", "POST /v1/responses", f"POST {items}",
+        f"GET /v1/responses/{{t3}}/input_items{asc}", f"GET {items}{asc}",
+        "POST /v1/conversations", "POST /v1/responses", f"GET {items}?limit=1&order=asc", "POST /v1/responses",
+        f"DELETE {items}/{{item}}", f"GET /v1/responses/{{t10}}/input_items{asc}", f"GET {items}{asc}",
+        "POST /v1/conversations", "POST /v1/responses", "POST /v1/responses", "DELETE /v1/responses/{t15}",
+        f"GET /v1/responses/{{t16}}/input_items{asc}", f"GET {items}{asc}", "POST /v1/responses",
+        f"GET /v1/responses/{{t20}}/input_items{asc}", "GET /v1/responses/{t15}",
+    ], routes
+    streamed = [index for index, turn in enumerate(turns, 1) if turn["request"]["body"].get("stream")]
+    assert streamed == [3, 10, 16], streamed
+    sys.exit(0)
+if mode == "competing-tool-outputs":
+    # One conversation: turn A, streamed turn B, side turn C sent after B starts, two listings, follow-up D.
+    routes = [(request["method"], request["path"].split("/")[2]) for request in requests]
+    responses = ("POST", "responses")
+    assert routes[1:4] == [responses] * 3, routes
+    assert routes[4] == ("GET", "conversations") and routes[7] == responses, routes
+    assert all(method == "GET" for method, _ in routes[5:7] + routes[8:9]), routes
+    call_ids = {request["body"]["input"][0]["call_id"] for request in requests[2:4]}
+    assert len(call_ids) == 1, call_ids
+    streamed = [index for index, turn in enumerate(turns, 1) if turn["request"]["body"].get("stream")]
+    assert streamed == [3], streamed
+    sys.exit(0)
 if mode == "edge-cases":
     for start, kind, prefix in ((0, "message", "item_wrongprefix_"),
                                 (3, "function_call", "msg_wrongprefix_")):
@@ -157,4 +205,9 @@ for provider in openai gateway; do
     if [[ "$SCENARIO" == all || "$SCENARIO" == edge-cases ]]; then
         record "$provider" edge-cases edge-cases "$model" --no-stream
     fi
+    for mode in concurrent-writes competing-tool-outputs; do
+        if [[ "$SCENARIO" == all || "$SCENARIO" == "$mode" ]]; then
+            record "$provider" "$mode" "$mode" "$model" --stream
+        fi
+    done
 done

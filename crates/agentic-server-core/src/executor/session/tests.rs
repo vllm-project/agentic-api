@@ -11,7 +11,7 @@ pub(super) fn new_checkpoint(lease: &ResponseContinuation, id: &str) -> Retained
     let input = ResponsesInput::Text("private prompt".to_owned());
     let items = Vec::from(&input).into_iter().map(InOutItem::Input).collect::<Vec<_>>();
     lease
-        .checkpoint(id.to_owned(), None, &ResponseMetadata::default(), &items, false)
+        .checkpoint(id.to_owned(), &ResponseMetadata::default(), &items, false)
         .unwrap()
 }
 
@@ -154,7 +154,7 @@ fn grouped_members_inherit_item_and_byte_budgets() {
             .map(InOutItem::Input)
             .collect::<Vec<_>>();
         assert!(matches!(
-            lease.checkpoint("resp_1".to_owned(), None, &ResponseMetadata::default(), &input, false),
+            lease.checkpoint("resp_1".to_owned(), &ResponseMetadata::default(), &input, false),
             Err(ExecutorError::PayloadTooLarge(_))
         ));
     }
@@ -332,7 +332,6 @@ fn item_budget_is_enforced_on_the_complete_history() {
     assert!(matches!(
         lease.checkpoint(
             "resp_2".to_owned(),
-            None,
             &ResponseMetadata::default(),
             &[InOutItem::Input(input)],
             false
@@ -357,7 +356,7 @@ fn byte_budget_includes_metadata_and_exact_boundary() {
         ..ResponseMetadata::default()
     };
     assert!(matches!(
-        lease.checkpoint("resp_1".to_owned(), None, &metadata, &[], false),
+        lease.checkpoint("resp_1".to_owned(), &metadata, &[], false),
         Err(ExecutorError::PayloadTooLarge(_))
     ));
 }
@@ -383,7 +382,7 @@ fn canonical_items_and_sanitized_mcp_metadata_are_retained() {
     }))
     .unwrap();
     let checkpoint = lease
-        .checkpoint("resp_1".to_owned(), None, &metadata, &[InOutItem::Input(input)], false)
+        .checkpoint("resp_1".to_owned(), &metadata, &[InOutItem::Input(input)], false)
         .unwrap();
     let serialized = serde_json::to_value(&checkpoint).unwrap();
     assert_eq!(serialized["history"][0]["content"].as_array().unwrap().len(), 2);
@@ -415,7 +414,7 @@ fn steering_requirements_use_pinned_parent_custom_tool_metadata() {
     .unwrap();
     let items = history.into_iter().map(InOutItem::Input).collect::<Vec<_>>();
     let checkpoint = lease
-        .checkpoint("resp_parent".to_owned(), None, &metadata, &items, false)
+        .checkpoint("resp_parent".to_owned(), &metadata, &items, false)
         .unwrap();
     lease.publish(checkpoint).unwrap();
     let pin = session.pin_response("resp_parent").unwrap().unwrap();
@@ -441,7 +440,7 @@ fn compaction_replacement_preserves_mcp_discovery_without_old_context() {
     .map(InOutItem::Input)
     .collect::<Vec<_>>();
     let parent = lease
-        .checkpoint("resp_1".to_owned(), None, &ResponseMetadata::default(), &items, false)
+        .checkpoint("resp_1".to_owned(), &ResponseMetadata::default(), &items, false)
         .unwrap();
     lease.publish(parent).unwrap();
     let mut lease = session.begin(Some("resp_1")).unwrap();
@@ -453,7 +452,7 @@ fn compaction_replacement_preserves_mcp_discovery_without_old_context() {
     .unwrap();
     let items = compacted.into_iter().map(InOutItem::Input).collect::<Vec<_>>();
     let checkpoint = lease
-        .checkpoint("resp_2".to_owned(), None, &ResponseMetadata::default(), &items, false)
+        .checkpoint("resp_2".to_owned(), &ResponseMetadata::default(), &items, false)
         .unwrap();
     assert_eq!(checkpoint.history.len(), 3);
     assert!(matches!(checkpoint.history[0], InputItem::McpListTools(_)));

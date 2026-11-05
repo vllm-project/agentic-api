@@ -4,19 +4,23 @@
 #[allow(dead_code)]
 mod common;
 
+use agentic_core::types::conversations::ConversationMetadata;
 use std::fmt::Write as _;
 use std::sync::Arc;
 use std::time::Duration;
 
 use agentic_core::executor::{ConversationHandler, ExecutionContext, ResponseHandler};
 use agentic_core::storage::pool::DbPool;
-use agentic_core::storage::{ConversationStore, ResponseMetadata, ResponseStore, create_pool_with_schema};
+use agentic_core::storage::{
+    ConversationStore, ResponseData, ResponseMetadata, ResponseStore, create_pool_with_schema,
+};
 use agentic_core::types::RequestPayload;
 use agentic_core::types::io::InOutItem;
 use axum::Router;
 use axum::body::Bytes;
 use axum::response::IntoResponse;
 use axum::routing::post;
+use common::persist_turn;
 use futures::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
@@ -193,20 +197,26 @@ impl Fixture {
         let response_store = ResponseStore::new(Arc::clone(&self.pool));
         let reference = if conversation {
             let store = ConversationStore::new(Arc::clone(&self.pool));
-            let data = store.create().await.expect("create conversation");
-            store
-                .persist(&data.conversation_id, response_id, None, vec![placeholder], &metadata)
+            let data = store
+                .create("default_tenant", &ConversationMetadata::new(), &[])
+                .await
+                .expect("create conversation");
+            persist_turn(&store, &data.conversation_id, response_id, vec![placeholder], &metadata)
                 .await
                 .expect("persist conversation fixture");
             json!({"conversation_id":data.conversation_id})
         } else {
             response_store
-                .persist(response_id, None, vec![placeholder], &metadata)
+                .persist(response_id, None, vec![placeholder], None, &metadata)
                 .await
                 .expect("persist response fixture");
             json!({"previous_response_id":response_id})
         };
-        let stored = response_store.get(response_id).await.expect("stored response");
+        let stored = response_store
+            .get(response_id)
+            .await
+            .and_then(ResponseData::try_from)
+            .expect("stored response");
         assert_eq!(stored.history_item_ids.len(), 1);
         // Install exact wire JSON independently of typed parsing. This preserves
         // the file even on the old baseline, which would deserialize it as Unknown.
@@ -648,7 +658,7 @@ fn composed_upstream_request_cannot_bypass_file_validation() {
         new_input_items: Vec::new(),
         response_id: "resp_composed".to_owned(),
         conversation_id: None,
-        conversation_version: None,
+        checkpoint: None,
         continuation: None,
     };
     for stream in [false, true] {

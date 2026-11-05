@@ -1,6 +1,7 @@
 //! Persistence availability probes.
 
 use super::{DatabaseBackend, DbPool, DbResult};
+use crate::storage::models::Item;
 
 pub(crate) async fn verify_persistence_writable(pool: &DbPool) -> DbResult<()> {
     let mut transaction = pool.begin().await?;
@@ -18,7 +19,16 @@ pub(crate) async fn verify_persistence_writable(pool: &DbPool) -> DbResult<()> {
         crate::storage::models::conversation::lock_in_tx(&mut transaction, &conversation_id).await?;
         crate::storage::models::item::create_in_tx(
             &mut transaction,
-            vec![(item_id.clone(), "{}".to_owned())],
+            vec![Item {
+                id: item_id.clone(),
+                public_id: item_id.clone(),
+                metadata: r#"{"kind":"input"}"#.to_owned(),
+                data: "{}".to_owned(),
+                created_at,
+                conversation_id: None,
+                seq: None,
+                tenant_id: None,
+            }],
             Some(&conversation_id),
         )
         .await
@@ -32,6 +42,7 @@ pub(crate) async fn verify_persistence_writable(pool: &DbPool) -> DbResult<()> {
             Some(&conversation_id),
             None,
             Some(&format!("[\"{item_id}\"]")),
+            None,
             Some("{}"),
         )
         .await?;
@@ -66,10 +77,26 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                          ('items', 'SELECT'), \
                          ('items', 'INSERT'), \
                          ('responses', 'SELECT'), \
-                         ('responses', 'INSERT') \
+                         ('responses', 'INSERT'), \
+                         ('file_search_files', 'SELECT'), \
+                         ('file_search_files', 'INSERT'), \
+                         ('file_search_files', 'DELETE'), \
+                         ('file_search_blob_cleanup', 'SELECT'), \
+                         ('file_search_blob_cleanup', 'INSERT'), \
+                         ('file_search_blob_cleanup', 'UPDATE'), \
+                         ('file_search_blob_cleanup', 'DELETE'), \
+                         ('file_search_stores', 'SELECT'), \
+                         ('file_search_stores', 'INSERT'), \
+                         ('file_search_stores', 'UPDATE'), \
+                         ('file_search_stores', 'DELETE'), \
+                         ('file_search_attachments', 'SELECT'), \
+                         ('file_search_attachments', 'INSERT'), \
+                         ('file_search_attachments', 'DELETE'), \
+                         ('file_search_chunks', 'SELECT'), \
+                         ('file_search_chunks', 'INSERT') \
                  ) \
                  SELECT current_setting('transaction_read_only') = 'off' \
-                    AND COUNT(table_relation.oid) = 7 \
+                    AND COUNT(table_relation.oid) = 23 \
                     AND COALESCE(BOOL_AND( \
                         has_table_privilege(current_user, table_relation.oid, required.privilege) \
                     ), false) \
@@ -98,6 +125,11 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                 "SELECT id FROM conversations LIMIT 0",
                 "SELECT id FROM items LIMIT 0",
                 "SELECT id FROM responses LIMIT 0",
+                "SELECT id, created_at, data, content_type, content_base64 FROM file_search_files LIMIT 0",
+                "SELECT file_id, owner_token, intent, lease_expires_at FROM file_search_blob_cleanup LIMIT 0",
+                "SELECT id, created_at, data, embedding_identity, embedding_dimensions FROM file_search_stores LIMIT 0",
+                "SELECT store_id, file_id, created_at, usage_bytes, storage_bytes, data FROM file_search_attachments LIMIT 0",
+                "SELECT store_id, file_id, chunk_index, data FROM file_search_chunks LIMIT 0",
             ] {
                 sqlx::query(statement).execute(&mut *connection).await?;
             }

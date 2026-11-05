@@ -133,7 +133,7 @@ async fn retrieval_preserves_each_turn_and_rejects_unstored_or_legacy_ids() {
     }
     let store = ResponseStore::new(Arc::new(exec.storage_pool().unwrap().clone()));
     store
-        .persist("resp_legacy", None, Vec::new(), &ResponseMetadata::default())
+        .persist("resp_legacy", None, Vec::new(), None, &ResponseMetadata::default())
         .await
         .unwrap();
     let legacy = client

@@ -475,32 +475,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn code_interpreter_input_cannot_set_internal_origin() {
-        let input: InputItem = serde_json::from_value(serde_json::json!({
-            "type": "code_interpreter_call",
-            "id": "ci_native",
-            "container_id": "cntr_native",
-            "code": "print(7)",
-            "status": "completed",
-            "outputs": [{"type": "logs", "logs": "7\n"}],
-            "_agentic_code_interpreter_origin": "gateway"
-        }))
-        .expect("code interpreter replay input");
-        let InputItem::CodeInterpreterCall(call) = &input else {
-            panic!("expected code interpreter call");
-        };
-        assert_eq!(
-            call.origin,
-            super::super::code_interpreter::CodeInterpreterCallOrigin::Upstream
-        );
-        let model_input =
-            serde_json::to_value(ResponsesInput::from(vec![input]).model_input()).expect("model input serializes");
-        assert_eq!(model_input[0]["type"], "code_interpreter_call");
-        assert_eq!(model_input[0]["code"], "print(7)");
-        assert!(model_input[0].get("_agentic_code_interpreter_origin").is_none());
-    }
-
-    #[test]
     fn assistant_phase_survives_input_parsing_and_model_projection() {
         for (phase, expected) in [
             (None, None),

@@ -29,7 +29,7 @@ fn request_context() -> RequestContext {
         new_input_items: Vec::new(),
         response_id: "resp_reserved".to_owned(),
         conversation_id: None,
-        conversation_version: None,
+        checkpoint: None,
         continuation: None,
     }
 }
@@ -307,7 +307,7 @@ async fn strict_relay_decoder_preserves_web_search_item_id_fallback() {
     }
 }
 
-const RECORDED_UPSTREAM_INCOMPATIBILITIES: [(&str, &str, usize, usize); 2] = [
+const RECORDED_UPSTREAM_INCOMPATIBILITIES: [(&str, &str, usize, usize); 3] = [
     (
         "store_false/multi-agent-store-false-model-dependencies-streaming.yaml",
         "invalid request: upstream stream event does not match its active output item: inconsistent item ID, output_index, or kind",
@@ -317,6 +317,14 @@ const RECORDED_UPSTREAM_INCOMPATIBILITIES: [(&str, &str, usize, usize); 2] = [
     (
         "store_false/multi-agent-store-false-openai-reference-code-interpreter-gpt-5.6-sol-streaming.yaml",
         "invalid request: upstream stream event does not match its active output item: inconsistent item ID, output_index, or kind",
+        1,
+        0,
+    ),
+    // OpenAI refused the streamed turn B with a `conversation_locked` error event after its output, so the stream has
+    // no terminal response event.
+    (
+        "conversations/conversations-competing-tool-outputs-openai.yaml",
+        "invalid request: upstream stream ended without a terminal event",
         1,
         0,
     ),

@@ -34,7 +34,7 @@ mod response_budget;
 mod upstream;
 
 pub use compaction::compact_response;
-pub use engine::{BoxStream, ExecuteRequest, create_conversation, execute, prepare_non_generating_turn};
+pub use engine::{BoxStream, ExecuteRequest, execute, prepare_non_generating_turn};
 pub use error::{ExecutorError, ExecutorResult, ResourceLimit};
 pub use inference::call_inference;
 pub use messages_connector::prepare_messages_count_tokens;

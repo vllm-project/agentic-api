@@ -865,10 +865,6 @@ async fn the_wire_context_round_trips_into_an_equal_context() {
 
     let wire = serde_json::to_string(&SplitContext::from(live)).expect("serialize");
     assert!(!wire.contains("enriched_request"), "already in flight as the request");
-    assert!(
-        !wire.contains("conversation_version"),
-        "conversation mode does not split"
-    );
 
     let back = RequestContext::from(serde_json::from_str::<SplitContext>(&wire).expect("deserialize"));
     assert_eq!(back.response_id, id);
@@ -876,10 +872,6 @@ async fn the_wire_context_round_trips_into_an_equal_context() {
     assert!(
         back.enriched_request.previous_response_id.is_none(),
         "upstream stays stateless"
-    );
-    assert!(
-        back.conversation_version.is_none(),
-        "never resumed with a stale version"
     );
 }
 
