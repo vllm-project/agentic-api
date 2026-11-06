@@ -90,6 +90,11 @@ pub enum ExecutorError {
         serde_json::Error,
     ),
 
+    /// The upstream supplied invalid typed content. Keep parser diagnostics as
+    /// a source without reporting a backend defect as a client request error.
+    #[error("upstream returned invalid Messages content")]
+    UpstreamProtocol(#[source] serde_json::Error),
+
     /// A general stream processing error with a human-readable message.
     ///
     /// Used for non-network stream failures (e.g. worker thread panic).

@@ -11,6 +11,7 @@ mod messages_request;
 mod messages_round;
 mod messages_server_tools;
 pub mod messages_stream;
+pub use modes::messages_threads;
 mod messages_tools;
 mod messages_usage;
 pub mod modes;

@@ -1,4 +1,4 @@
-use std::future::Future;
+use std::future::{Future, IntoFuture};
 use std::net::SocketAddr;
 use std::num::NonZeroUsize;
 use std::pin::Pin;
@@ -95,20 +95,41 @@ async fn serve_gateway(
     };
     let shutdown_token = state.shutdown_token.clone();
     let websocket_tracker = state.websocket_tracker.clone();
+    let messages_threads = state.exec_ctx.messages_threads.clone();
+    let shutdown_on_error = shutdown_token.clone();
     let router = build_router_with_auth(state, &server_config, authenticator);
     let listener = TcpListener::bind(&addr).await?;
     let addr = listener.local_addr()?;
     info!("gateway listening on {addr}");
     // Rate limiting tells callers apart by peer address when OIDC is off.
-    axum::serve(
+    let server = axum::serve(
         gateway_listener(listener),
         router.into_make_service_with_connect_info::<SocketAddr>(),
     )
     .with_graceful_shutdown(async move {
         shutdown_token.cancelled().await;
     })
-    .await?;
+    .into_future();
+    tokio::pin!(server);
+    let maintenance = async {
+        let mut expiry = tokio::time::interval(Duration::from_secs(10));
+        loop {
+            expiry.tick().await;
+            if let Err(error) = messages_threads.maintain().await {
+                tracing::error!(%error, "Messages thread maintenance failed");
+            }
+        }
+    };
+    let result = tokio::select! {
+        result = &mut server => result,
+        () = maintenance => Ok(()),
+    };
+    if result.is_err() {
+        shutdown_on_error.cancel();
+    }
     websocket_tracker.wait_until_idle().await;
+    messages_threads.shutdown().await;
+    result?;
     Ok(())
 }
 

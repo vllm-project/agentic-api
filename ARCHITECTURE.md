@@ -1733,16 +1733,16 @@ reachable only through the raw body, never the typed view.
 matching a returned gateway call result) to `auto`. The first round retains the
 client's selector; later rounds can answer from the tool result or choose another
 tool. Parallel-use settings and extension fields remain intact. Rounds containing
-client-executed function tools return before this mutation, and Messages does not
-persist this state.
+client-executed function tools return before this mutation. Threaded requests retain
+the resulting conversation in the independent Messages database store.
 
 `MessagesToolChoice` models `auto`, `any`, `tool` with a non-empty name, and
 `none` as an exhaustive enum. It retains parallel-use settings and flattened
 extension fields. The context performs fulfillment checks and transitions using
 that enum, then serializes the changed selector into the raw body. Malformed
 gateway-tool requests return HTTP 400 before inference; a parse failure cannot
-bypass validation by falling back to the proxy. Requests without gateway tools
-retain the transparent proxy contract and upstream validation.
+bypass validation by falling back to the proxy. Requests without gateway tools or
+`thread` retain the transparent proxy contract and upstream validation.
 
 vLLM can label a completed, explicitly named tool call `end_turn`. The shared
 request context accepts that stop only when the selected gateway tool appears in
@@ -1802,6 +1802,47 @@ round that omits `usage` still reports the hidden rounds' counters. `usage.serve
 adds the gateway's successful native searches (one per query) and fetches to the counters
 the upstream reported.
 
+`modes/messages_threads.rs` owns local Anthropic message-thread admission, rehydration,
+exclusive continuation reservations, and bounded durable checkpoints.
+`ParsedMessagesRequest` decodes the JSON body once and derives the shared typed
+`MessagesRequest` from that tree. Thread admission branches on its typed `thread`
+field; it has no probe decoder or parallel request/history model. The shared
+`ContentBlock` validates known blocks and preserves opaque provider blocks, including
+media and upstream server-tool content. Explicit null and omission remain distinct
+for create-only fields and retained block metadata.
+`types/messages/thread.rs` defines the independent checkpoint, typed fixed-field
+fingerprint, and error contracts. Checkpoints reuse `MessageParam`, `SystemPrompt`,
+and `ToolParam`; MCP fingerprints exclude the authorization token by construction.
+`storage/messages.rs` owns lease policy and cancellation; all thread queries live in
+`storage/models/message_thread.rs`, with row-state and checkpoint-column conversions in `storage/types/`.
+The Messages mode owns production access to the store; `executor::messages_threads` reexports that mode.
+The common schema verification and readiness paths include `message_threads`, its
+columns, primary key, three CHECK constraints, and backend privileges. No Responses items, sessions, or stores are involved. The HTTP
+adapter supplies an opaque owner derived from credentials, workspace, and verified
+OIDC identity, plus the beta set. Core strips `thread`, restores `system` and `tools`,
+and passes the full conversation to the existing stateless Messages loop.
+`modes/messages_threads/claude_code.rs` handles the explicit `claude-code-20250219`
+compatibility extension: it removes reserved billing attribution before retaining
+the prompt, permits unchanged repeated prompt/tool fields, and rejects mutations
+before reserving the parent. This shares the same checkpoint and execution path
+as ordinary Messages threads.
+
+`messages_stream/ingestion.rs` validates Messages SSE events and fills the existing
+`MessagesStreamAccumulator`; `messages_stream/blocks.rs` assembles content blocks.
+The streaming runner uses its completed round to publish the thread
+checkpoint before emitting the public terminal. The existing block assembler also
+retains streamed citation deltas. Both loops decide retention from the unfiltered
+round, so hiding a truncated tool call cannot make it continuable; fallback status
+is retained across every inference round. JSON execution success is recorded only
+after checkpoint publication succeeds. It adds no second SSE parser,
+channel, or ingestion worker. Publication consumes the parent's token-fenced lease
+and inserts the child's checkpoint in one database transaction. Dropping an unfinished
+reservation schedules a lease release in a `TaskTracker`; shutdown joins these
+cleanup operations. A stale lease cannot publish a child or release its replacement.
+The serving future polls expiry and renews active leases every ten seconds without
+holding a database transaction across inference. See [the API guide](docs/api/index.md#messages)
+for the five-minute lifetime, serialized-size budget, and crash recovery rules.
+
 ### `storage/` — persistence
 
 - **`pool.rs`** — `DbPool = sqlx::Pool<sqlx::Any>`, driver-agnostic across SQLite and
@@ -1811,7 +1852,8 @@ the upstream reported.
   connection URL, plus URL redaction for safe logging.
 - **`schema.rs`** — migrations and readiness (`PoolWithSchema::ensure_schema_ready`),
   including a path for a supervisor-managed schema that skips running migrations
-  itself and just verifies compatibility. Readiness probes live in `schema/readiness.rs`.
+  itself and just verifies compatibility. The PostgreSQL column/constraint/index contract lives in
+  `schema/postgres.rs`; readiness probes live in `schema/readiness.rs`.
   See [Schema, migrations, and where data goes](#schema-migrations-and-where-data-goes).
 - **`file_search.rs`** — portable file, vector-store, attachment, and chunk
   persistence. Migration `0011_file_search_vec_map.sql` owns the portable

@@ -196,6 +196,7 @@ impl From<&ExecutorError> for FailureCategory {
             ExecutorError::ConversationLocked { .. } => Self::ConversationLocked,
             ExecutorError::LLMRequest { .. } => Self::UpstreamStatus,
             ExecutorError::LLMTransport { .. } => Self::UpstreamTransport,
+            ExecutorError::UpstreamProtocol(_) => Self::UpstreamError,
             ExecutorError::NetworkError(_) => Self::Network,
             ExecutorError::JsonError(_) | ExecutorError::ParseError(_) => Self::Parse,
             ExecutorError::StreamError(_) => Self::Stream,

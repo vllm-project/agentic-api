@@ -148,7 +148,7 @@ normally; one with them is handled as follows:
 
 To upgrade a deployment that uses PostgreSQL or an explicit `DATABASE_URL`, stop every replica of the earlier release,
 then either point `DATABASE_URL` at a new empty database or drop all of the gateway's tables (`responses`, `items`,
-`conversations`, the `file_search_*` tables, and `_sqlx_migrations`), according to the deployment's data-retention
+`conversations`, `message_threads`, the `file_search_*` tables, and `_sqlx_migrations`), according to the deployment's data-retention
 policy. Back up the database first if its contents must be kept.
 
 On a new PostgreSQL database, the first startup applies the migrations and then widens timestamp and sequence columns to
@@ -158,13 +158,17 @@ Stored requests now fail if their response or conversation state cannot be persi
 
 `AGENTIC_API_SCHEMA_READY` keeps schema changes under supervisor control. Startup performs a read-only compatibility
 check and fails if the database was created by an earlier release, if required persistence columns, types,
-nullability, primary/foreign-key constraints, or the conversation sequence index are missing, or if persistence integer
-columns still need widening. Apply the repository migrations to an empty schema with a DDL-capable migration role, then
-widen the integer columns in one transaction before starting the DML-only gateway role. When using `psql`, pass
-`-v ON_ERROR_STOP=1` so any statement failure stops the script:
+nullability, primary/foreign-key/CHECK constraints, or the conversation sequence index are missing, or if persistence integer
+columns still need widening. Every startup requires `message_threads` from migration `0012_message_threads.sql`,
+including its state/checkpoint/lease CHECK constraints and SELECT/INSERT/UPDATE/DELETE privileges, even when clients
+send no thread requests. Apply the repository migrations through `0011_file_search_vec_map.sql` to an empty schema
+with a DDL-capable migration role, then apply `0012_message_threads.sql` and widen the integer columns in one transaction
+before starting the DML-only gateway role. Run the example below from the repository root with
+`psql -v ON_ERROR_STOP=1` so any statement failure stops the script:
 
 ```sql
 BEGIN;
+\i crates/agentic-server-core/migrations/0012_message_threads.sql
 ALTER TABLE conversations
     ALTER COLUMN created_at TYPE BIGINT USING created_at::BIGINT;
 ALTER TABLE items

@@ -16,6 +16,7 @@ pub mod schema;
 pub mod models;
 
 // Response storage operations
+pub mod messages;
 pub mod response;
 
 // Conversation storage operations

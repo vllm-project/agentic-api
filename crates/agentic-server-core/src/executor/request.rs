@@ -2,6 +2,7 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 use std::time::Duration;
 
+use super::messages_threads::MessagesThreadStore;
 use crate::config::{Config, ResponsesConfig, SqliteConfig, default_database_url};
 use crate::error::Error;
 use crate::executor::error::{ExecutorError, ExecutorResult};
@@ -108,6 +109,8 @@ pub struct ExecutionContext {
     /// The operator's key for search results returned to Messages clients;
     /// without one, a key generated once per process is used.
     messages_result_key: Option<Arc<MessagesResultKey>>,
+    /// Durable Anthropic message threads, independent of Responses objects.
+    pub messages_threads: MessagesThreadStore,
     /// Base URL for the LLM backend, e.g. `"http://localhost:8000"`.
     pub llm_base_url: String,
     /// Maximum wait for the next body chunk in a streaming request, including HTTP error bodies.
@@ -152,6 +155,7 @@ impl ExecutionContext {
             gateway_executors,
             messages_gateway_tools: messages_gateway_tools_from_env(),
             messages_result_key: None,
+            messages_threads: MessagesThreadStore::default(),
             llm_base_url,
             streaming_timeout: streaming_timeout_from_env(),
             gateway_scheduler_policy: GatewaySchedulerPolicy::default(),
@@ -207,8 +211,13 @@ impl ExecutionContext {
             return true;
         };
         matches!(
-            tokio::time::timeout(timeout, crate::storage::schema::verify_persistence_ready(pool.as_ref())).await,
-            Ok(Ok(()))
+            tokio::time::timeout(timeout, async {
+                crate::storage::schema::verify_persistence_ready(pool.as_ref())
+                    .await
+                    .is_ok()
+            })
+            .await,
+            Ok(true)
         )
     }
 
@@ -248,6 +257,7 @@ impl ExecutionContext {
         crate::storage::schema::verify_persistence_writable(pool.as_ref())
             .await
             .map_err(|error| database_open_error(database_backend, &error))?;
+        let messages_threads = MessagesThreadStore::new(Arc::clone(&pool));
 
         let conv_handler = ConversationHandler::new(ConversationStore::new(pool.clone()));
         let resp_handler = ResponseHandler::new(ResponseStore::new(pool.clone()));
@@ -269,6 +279,7 @@ impl ExecutionContext {
                 .map_err(|error| Error::Config(error.to_string()))?
                 .map(Arc::new),
             llm_base_url: cfg.llm_api_base.clone(),
+            messages_threads,
             streaming_timeout: streaming_timeout_from_env(),
             gateway_scheduler_policy: GatewaySchedulerPolicy::new(cfg.tools.max_concurrent_gateway_calls),
             responses_config: cfg.responses,
@@ -337,6 +348,7 @@ mod tests {
     use std::time::Duration;
 
     use super::{DEFAULT_STREAMING_TIMEOUT, ExecutionContext, database_open_error, parse_streaming_timeout};
+    use crate::executor::messages_threads::MessagesThreadStore;
     use crate::executor::{ConversationHandler, ResponseHandler};
     use crate::storage::{ConversationStore, DatabaseBackend, ResponseStore, create_pool_with_schema};
 
@@ -418,6 +430,7 @@ mod tests {
             Arc::new(reqwest::Client::new()),
             "http://localhost:8000".to_owned(),
         );
+        context.messages_threads = MessagesThreadStore::new(Arc::clone(&pool));
         context.storage_pool = Some(pool.clone());
 
         assert!(!context.storage_ready(Duration::from_millis(10)).await);
@@ -436,6 +449,7 @@ mod tests {
             Arc::new(reqwest::Client::new()),
             "http://localhost:8000".to_owned(),
         );
+        context.messages_threads = MessagesThreadStore::new(Arc::clone(&pool));
         context.storage_pool = Some(pool.clone());
         assert!(context.storage_ready(Duration::from_secs(1)).await);
 
@@ -458,6 +472,7 @@ mod tests {
             Arc::new(reqwest::Client::new()),
             "http://localhost:8000".to_owned(),
         );
+        context.messages_threads = MessagesThreadStore::new(Arc::clone(&pool));
         context.storage_pool = Some(pool.clone());
         assert!(context.storage_ready(Duration::from_secs(1)).await);
 
