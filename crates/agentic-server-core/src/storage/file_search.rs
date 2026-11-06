@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sqlx::FromRow;
 use tokio_util::sync::CancellationToken;
 
-use super::{DbPool, DbTransaction};
+use super::DbPool;
 use crate::types::file_search::{
     FileObject, FileSearchError, ListOrder, ListParams, VectorStoreFileObject, VectorStoreObject,
     cancelled_upload_error,
@@ -14,9 +14,16 @@ use crate::types::file_search::{
 
 mod blob_cleanup;
 mod list;
+mod publication;
+pub(crate) mod sqlite_vec_index;
 
-const MAX_CORPUS_BYTES: i64 = 64 * 1024 * 1024;
-const MAX_CORPUS_CHUNKS: i64 = 10_000;
+use publication::publish_attachment;
+pub(crate) use publication::publish_attachment_sqlite;
+
+pub(crate) const MAX_CORPUS_BYTES: i64 = 64 * 1024 * 1024;
+// The indexed provider does not load every vector into memory for normal search.
+pub(crate) const SQLITE_VEC_MAX_CORPUS_BYTES: i64 = 256 * 1024 * 1024;
+pub(crate) const MAX_CORPUS_CHUNKS: i64 = 10_000;
 
 /// The default SQL-backed file metadata and exact chunk repository.
 #[derive(Clone)]
@@ -39,6 +46,7 @@ pub enum StoredFileContent {
 }
 
 /// Whether a failed metadata publication permits deleting the uploaded blob.
+#[derive(Debug)]
 pub enum FilePublicationFailure {
     SafeToRemove(FileSearchError),
     // A lost connection during COMMIT can leave the outcome unknown. Keeping
@@ -365,7 +373,12 @@ impl FileSearchStorage {
     }
 
     /// Streaming row decoding bounds corpus memory before deserializing vectors.
-    pub(crate) async fn chunks(&self, store_ids: &[String]) -> Result<Vec<StoredChunk>, FileSearchError> {
+    /// The repository passes its own admission limit for exact search.
+    pub(crate) async fn chunks_with_limit(
+        &self,
+        store_ids: &[String],
+        max_bytes: i64,
+    ) -> Result<Vec<StoredChunk>, FileSearchError> {
         use futures::TryStreamExt;
         let placeholders = (1..=store_ids.len())
             .map(|index| format!("${index}"))
@@ -383,7 +396,7 @@ impl FileSearchStorage {
         let mut total_bytes = 0usize;
         while let Some(data) = rows.try_next().await? {
             total_bytes = total_bytes.saturating_add(data.len());
-            if i64::try_from(total_bytes).unwrap_or(i64::MAX) > MAX_CORPUS_BYTES
+            if i64::try_from(total_bytes).unwrap_or(i64::MAX) > max_bytes
                 || i64::try_from(chunks.len()).unwrap_or(i64::MAX) >= MAX_CORPUS_CHUNKS
             {
                 return Err(FileSearchError::Unavailable(
@@ -396,22 +409,34 @@ impl FileSearchStorage {
     }
 }
 
-fn validate_capacity(bytes: i64, chunks: i64) -> Result<(), FileSearchError> {
-    if bytes > MAX_CORPUS_BYTES || chunks > MAX_CORPUS_CHUNKS {
-        return Err(FileSearchError::InvalidRequest(
-            "Vector store exceeds 64 MiB of serialized chunks or 10000 chunks; reduce file size or use another vector store".into(),
-        ));
+pub(crate) fn validate_capacity(bytes: i64, chunks: i64) -> Result<(), FileSearchError> {
+    validate_capacity_with_limit(bytes, chunks, MAX_CORPUS_BYTES)
+}
+
+pub(crate) fn validate_capacity_with_limit(bytes: i64, chunks: i64, max_bytes: i64) -> Result<(), FileSearchError> {
+    if bytes > max_bytes || chunks > MAX_CORPUS_CHUNKS {
+        return Err(FileSearchError::InvalidRequest(format!(
+            "Vector store exceeds {} MiB of serialized chunks or 10000 chunks; reduce file size or use another vector store",
+            max_bytes / (1024 * 1024)
+        )));
     }
     Ok(())
 }
 
-async fn serialize_chunks(chunks: &[StoredChunk]) -> Result<(Vec<String>, i64), FileSearchError> {
+pub(crate) async fn serialize_chunks(chunks: &[StoredChunk]) -> Result<(Vec<String>, i64), FileSearchError> {
+    serialize_chunks_with_limit(chunks, MAX_CORPUS_BYTES).await
+}
+
+pub(crate) async fn serialize_chunks_with_limit(
+    chunks: &[StoredChunk],
+    max_bytes: i64,
+) -> Result<(Vec<String>, i64), FileSearchError> {
     let mut encoded = Vec::with_capacity(chunks.len());
     let mut bytes = 0i64;
     for (index, chunk) in chunks.iter().enumerate() {
         let data = serde_json::to_string(chunk)?;
         bytes = bytes.saturating_add(i64::try_from(data.len()).unwrap_or(i64::MAX));
-        validate_capacity(bytes, i64::try_from(index + 1).unwrap_or(i64::MAX))?;
+        validate_capacity_with_limit(bytes, i64::try_from(index + 1).unwrap_or(i64::MAX), max_bytes)?;
         encoded.push(data);
         // Each chunk is bounded. Yield between small groups so cancellation and
         // other requests remain responsive while preparing a large publication.
@@ -420,67 +445,6 @@ async fn serialize_chunks(chunks: &[StoredChunk]) -> Result<(Vec<String>, i64), 
         }
     }
     Ok((encoded, bytes))
-}
-
-async fn publish_attachment(
-    tx: &mut DbTransaction<'_>,
-    store_id: &str,
-    identity: &str,
-    attachment: &PreparedAttachment,
-    chunks: &[String],
-    storage_bytes: i64,
-) -> Result<(), FileSearchError> {
-    // The conditional write serializes concurrent ingestions and establishes the
-    // model dimension exactly once; no network work takes place in this transaction.
-    let changed = sqlx::query("UPDATE file_search_stores SET embedding_dimensions = $1 WHERE id = $2 AND embedding_identity = $3 AND (embedding_dimensions = 0 OR embedding_dimensions = $1)")
-        .bind(attachment.dimensions).bind(store_id).bind(identity).execute(&mut **tx).await?.rows_affected();
-    if changed != 1 {
-        return Err(FileSearchError::Conflict(
-            "Vector store embedding configuration changed or the vector store was deleted".into(),
-        ));
-    }
-    let bytes: i64 = sqlx::query_scalar(
-        "SELECT CAST(COALESCE(SUM(storage_bytes), 0) AS BIGINT) FROM file_search_attachments WHERE store_id = $1",
-    )
-    .bind(store_id)
-    .fetch_one(&mut **tx)
-    .await?;
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM file_search_chunks WHERE store_id = $1")
-        .bind(store_id)
-        .fetch_one(&mut **tx)
-        .await?;
-    validate_capacity(
-        bytes.saturating_add(storage_bytes),
-        count.saturating_add(i64::try_from(chunks.len()).unwrap_or(i64::MAX)),
-    )?;
-    let object = &attachment.object;
-    let inserted = sqlx::query("INSERT INTO file_search_attachments (store_id, file_id, created_at, usage_bytes, data, storage_bytes) VALUES ($1, $2, $3, $4, $5, $6)")
-        .bind(store_id).bind(&object.id).bind(object.created_at).bind(object.usage_bytes).bind(serde_json::to_string(object)?)
-        .bind(storage_bytes)
-        .execute(&mut **tx).await;
-    if let Err(sqlx::Error::Database(error)) = &inserted {
-        if error.is_unique_violation() {
-            return Err(FileSearchError::Conflict(
-                "File is already attached to this vector store".into(),
-            ));
-        }
-        if error.is_foreign_key_violation() {
-            return Err(FileSearchError::NotFound("File was deleted during ingestion".into()));
-        }
-    }
-    inserted?;
-    for (chunk, data) in attachment.chunks.iter().zip(chunks) {
-        let index =
-            i64::try_from(chunk.chunk_index).map_err(|_| FileSearchError::InvalidRequest("Too many chunks".into()))?;
-        sqlx::query("INSERT INTO file_search_chunks (store_id, file_id, chunk_index, data) VALUES ($1, $2, $3, $4)")
-            .bind(store_id)
-            .bind(&object.id)
-            .bind(index)
-            .bind(data)
-            .execute(&mut **tx)
-            .await?;
-    }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -529,7 +493,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn serialized_embedding_capacity_is_checked_before_publication() {
+    async fn large_serialized_embedding_is_published_within_capacity() {
         let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
         let files = tempfile::tempdir().unwrap();
         let service = FileSearchService::new(
@@ -545,20 +509,21 @@ mod tests {
             .create_vector_store(CreateVectorStoreRequest::default())
             .await
             .unwrap();
-        let attachment = prepared(&service, &store.id, 1024, 4096).await;
+        let attachment = prepared(&service, &store.id, 512, 4096).await;
         let storage = FileSearchStorage::new(pool);
-        assert!(matches!(
-            storage.attach(&store.id, "keyword:cl100k_base:v1", &attachment).await,
-            Err(FileSearchError::InvalidRequest(_))
-        ));
-        assert!(
+        storage
+            .attach(&store.id, "keyword:cl100k_base:v1", &attachment)
+            .await
+            .unwrap();
+        assert_eq!(
             storage
-                .chunks(std::slice::from_ref(&store.id))
+                .chunks_with_limit(std::slice::from_ref(&store.id), MAX_CORPUS_BYTES)
                 .await
                 .unwrap()
-                .is_empty()
+                .len(),
+            512
         );
-        assert_eq!(service.get_vector_store(&store.id).await.unwrap().file_counts.total, 0);
+        assert_eq!(service.get_vector_store(&store.id).await.unwrap().file_counts.total, 1);
     }
 
     #[tokio::test]
@@ -595,7 +560,11 @@ mod tests {
             Err(FileSearchError::InvalidRequest(_))
         ));
         assert_eq!(
-            storage.chunks(std::slice::from_ref(&store.id)).await.unwrap().len(),
+            storage
+                .chunks_with_limit(std::slice::from_ref(&store.id), MAX_CORPUS_BYTES)
+                .await
+                .unwrap()
+                .len(),
             10000
         );
         assert_eq!(service.get_vector_store(&store.id).await.unwrap().file_counts.total, 5);
@@ -630,7 +599,11 @@ mod tests {
             Err(FileSearchError::InvalidRequest(_))
         ));
         assert_eq!(
-            storage.chunks(std::slice::from_ref(&store.id)).await.unwrap().len(),
+            storage
+                .chunks_with_limit(std::slice::from_ref(&store.id), MAX_CORPUS_BYTES)
+                .await
+                .unwrap()
+                .len(),
             512
         );
         assert_eq!(service.get_vector_store(&store.id).await.unwrap().file_counts.total, 1);

@@ -1,10 +1,12 @@
 //! Exact cosine, BM25, and normalized reciprocal-rank fusion over a bounded corpus.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, hash_map::Entry};
+
+use serde::Deserialize;
 
 use crate::{
     storage::file_search::StoredChunk,
-    types::file_search::{SearchContent, SearchMode, SearchRequest, SearchResult},
+    types::file_search::{FileAttributes, SearchContent, SearchMode, SearchRequest, SearchResult},
 };
 
 pub(super) fn rank(
@@ -99,6 +101,79 @@ pub(super) fn rank(
             }
         })
         .collect()
+}
+
+/// Native vector search only needs display fields. Ignoring the serialized
+/// embedding avoids retaining it for every candidate and query.
+#[derive(Deserialize)]
+pub(super) struct SemanticCandidate {
+    pub(super) file_id: String,
+    filename: String,
+    chunk_index: usize,
+    pub(super) text: String,
+    attributes: FileAttributes,
+}
+
+/// Keeps one best-scoring result per file and text as native queries complete.
+#[derive(Default)]
+pub(super) struct SemanticCandidateAccumulator {
+    best: HashMap<(String, String), (SemanticCandidate, f64)>,
+}
+
+impl SemanticCandidateAccumulator {
+    pub(super) fn extend(&mut self, candidates: Vec<(SemanticCandidate, f64)>, request: &SearchRequest) {
+        let threshold = request
+            .ranking_options
+            .as_ref()
+            .and_then(|options| options.score_threshold)
+            .unwrap_or(0.0);
+        for (chunk, score) in candidates {
+            if score <= 0.0
+                || score < threshold
+                || !request
+                    .filters
+                    .as_ref()
+                    .is_none_or(|filter| filter.matches(&chunk.attributes))
+            {
+                continue;
+            }
+            let key = (chunk.file_id.clone(), chunk.text.clone());
+            match self.best.entry(key) {
+                Entry::Vacant(entry) => {
+                    entry.insert((chunk, score));
+                }
+                Entry::Occupied(mut entry) => {
+                    if score > entry.get().1 {
+                        entry.insert((chunk, score));
+                    }
+                }
+            }
+        }
+    }
+
+    pub(super) fn finish(self, request: &SearchRequest) -> Vec<SearchResult> {
+        let mut matches: Vec<_> = self.best.into_values().collect();
+        matches.sort_by(|(left, left_score), (right, right_score)| {
+            right_score
+                .total_cmp(left_score)
+                .then_with(|| left.file_id.cmp(&right.file_id))
+                .then_with(|| left.chunk_index.cmp(&right.chunk_index))
+        });
+        matches.truncate(request.max_num_results.unwrap_or(10));
+        matches
+            .into_iter()
+            .map(|(chunk, score)| SearchResult {
+                file_id: chunk.file_id,
+                filename: chunk.filename,
+                score,
+                attributes: chunk.attributes,
+                content: vec![SearchContent {
+                    type_: "text".into(),
+                    text: chunk.text,
+                }],
+            })
+            .collect()
+    }
 }
 
 fn cosine(left: &[f64], right: &[f64]) -> f64 {
@@ -202,7 +277,8 @@ fn fuse(semantic: &[f64], keyword: &[f64], embedding_weight: f64, text_weight: f
 
 #[cfg(test)]
 mod tests {
-    use super::cosine;
+    use super::{SemanticCandidate, SemanticCandidateAccumulator, cosine};
+    use crate::types::file_search::SearchRequest;
 
     #[test]
     fn cosine_is_stable_for_finite_vectors_of_extreme_magnitude() {
@@ -210,5 +286,28 @@ mod tests {
             assert!((cosine(&[scale, 0.0], &[scale, 0.0]) - 1.0).abs() < f64::EPSILON);
             assert!(cosine(&[scale, 0.0], &[0.0, scale]).abs() < f64::EPSILON);
         }
+    }
+
+    #[test]
+    fn native_candidates_drop_embeddings_and_keep_the_best_duplicate() {
+        let data = serde_json::json!({
+            "file_id": "file_1",
+            "filename": "reef.txt",
+            "chunk_index": 0,
+            "text": "coral reef",
+            "embedding": vec![1.0; 4096],
+            "attributes": {}
+        });
+        let first: SemanticCandidate = serde_json::from_value(data.clone()).unwrap();
+        let second: SemanticCandidate = serde_json::from_value(data).unwrap();
+        let request = SearchRequest::default();
+        let mut candidates = SemanticCandidateAccumulator::default();
+        candidates.extend(vec![(first, 0.4)], &request);
+        candidates.extend(vec![(second, 0.9)], &request);
+        assert_eq!(candidates.best.len(), 1);
+        let results = candidates.finish(&request);
+        assert_eq!(results.len(), 1);
+        assert!((results[0].score - 0.9).abs() < f64::EPSILON);
+        assert_eq!(results[0].content[0].text, "coral reef");
     }
 }
