@@ -1,3 +1,5 @@
+#[path = "responses/capability_contract.rs"]
+mod capability_contract;
 mod common;
 #[path = "../../agentic-server-core/tests/support/multi_agent_contract.rs"]
 pub mod multi_agent_contract;
