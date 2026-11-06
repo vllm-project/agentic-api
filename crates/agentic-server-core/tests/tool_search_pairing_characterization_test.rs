@@ -146,14 +146,6 @@ fn config(message: &str) -> Answer {
     }
 }
 
-fn invalid(message: &str) -> Answer {
-    Answer::Rejected {
-        code: "invalid_request_error",
-        param: None,
-        message: format!("invalid request: {message}"),
-    }
-}
-
 fn on_input(message: &str) -> Answer {
     Answer::Rejected {
         code: "invalid_request_error",
