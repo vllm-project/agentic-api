@@ -144,7 +144,7 @@ async fn write_turn(
     Ok(())
 }
 
-/// The turn's own history: the request's items, then its public output, less any output an in-turn session
+/// The turn's own history: its input items, then its public output, less any output an in-turn session
 /// compaction already absorbed ([`ResponseContinuation::retains_output`]).
 fn turn_items(
     ctx: &mut RequestContext,

@@ -38,8 +38,8 @@ pub struct RequestContext {
     /// Enriched request with rehydrated conversation history injected into `.input`.
     /// This is the request forwarded to the LLM.
     pub enriched_request: RequestPayload,
-    /// This turn's own input items, in their public form, for persistence. An in-turn compaction can replace them with
-    /// its window; persistence then appends the turn's public output.
+    /// This turn's input items and model-facing file-search context for persistence. An in-turn compaction can replace
+    /// them with its window; persistence then appends the turn's public output.
     pub new_input_items: Vec<InOutItem>,
     /// Our generated response ID (uuid7 with "resp_" prefix).
     pub response_id: String,
