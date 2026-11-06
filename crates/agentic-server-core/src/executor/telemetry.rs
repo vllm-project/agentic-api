@@ -81,8 +81,7 @@ impl Route {
     }
 }
 
-/// Terminal state of the execution itself, independent of whether the client
-/// received it.
+/// Terminal state of execution, independent of client delivery.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExecutionOutcome {
     /// The response reached a terminal `completed` status.
@@ -111,8 +110,7 @@ impl ExecutionOutcome {
 /// Whether the transport was handed everything the execution produced.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeliveryOutcome {
-    /// The payload, or the terminal streamed frame, was handed to the
-    /// transport. Whether the transport wrote it is the transport's span.
+    /// The payload or terminal frame was handed off; the transport records the write.
     Delivered,
     /// The stream was dropped before its terminal frame.
     Disconnected,
