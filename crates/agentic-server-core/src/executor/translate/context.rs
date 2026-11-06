@@ -5,7 +5,7 @@ use crate::tool::{NamespaceMap, ToolType};
 use crate::types::event::ResponseStatus;
 use crate::types::io::MultiAgentAction;
 use crate::types::io::ToolChoice;
-use crate::types::io::{FunctionToolCall, OutputItem, OutputMessage};
+use crate::types::io::{FunctionToolCall, OutputItem, OutputMessage, ReasoningOutput};
 use crate::types::request_response::{RequestPayload, ResponsePayload, StandardResponseFields};
 use crate::types::tools::ResponsesTool;
 use serde_json::{Map, Value, json};
@@ -213,6 +213,9 @@ impl TranslationContext {
             if let OutputItem::Message(message) = item {
                 OutputMessage::normalize_public_id(&mut message.id);
             }
+            if let OutputItem::Reasoning(reasoning) = item {
+                ReasoningOutput::normalize_public_id(&mut reasoning.id);
+            }
             if let OutputItem::FunctionCall(call) = item
                 && self.is_client_function(&call.name)
             {
@@ -300,6 +303,9 @@ fn normalize_output_item(item: &mut Value, context: &TranslationContext) {
         return;
     };
     if item.get("type").and_then(Value::as_str) == Some("reasoning") {
+        if let Some(Value::String(id)) = item.get_mut("id") {
+            ReasoningOutput::normalize_public_id(id);
+        }
         for field in ["content", "summary"] {
             if item.get(field).is_some_and(Value::is_null) {
                 item.insert(field.to_owned(), json!([]));

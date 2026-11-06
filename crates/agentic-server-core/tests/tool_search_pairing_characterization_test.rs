@@ -189,6 +189,7 @@ fn client_cases() -> Vec<Case> {
             direct: duplicate_item("tsc_a"),
             continuation: duplicate_item("tsc_a"),
         },
+        // OpenAI accepts a repeated client call_id, as for function calls.
         Case {
             name: "duplicate client call_id",
             input: json!([
@@ -198,8 +199,8 @@ fn client_cases() -> Vec<Case> {
                 client_output("call_1", "completed")
             ]),
             tools: client_tools(),
-            direct: invalid("duplicate call_id 'call_1' in tool_search_call"),
-            continuation: invalid("duplicate call_id 'call_1' in tool_search_call"),
+            direct: Answer::Ok,
+            continuation: Answer::Ok,
         },
         Case {
             name: "duplicate client output",
@@ -209,8 +210,9 @@ fn client_cases() -> Vec<Case> {
                 client_output("call_1", "completed")
             ]),
             tools: client_tools(),
-            direct: invalid("tool_search_output references call_id 'call_1' without a pending call"),
-            continuation: invalid("tool_search_output references call_id 'call_1' without a pending call"),
+            // OpenAI accepts a further output for an answered call.
+            direct: Answer::Ok,
+            continuation: Answer::Ok,
         },
         Case {
             name: "client output without its call",

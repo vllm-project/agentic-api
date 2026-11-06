@@ -4,7 +4,9 @@ use thiserror::Error;
 
 use crate::types::client_calls::ClientCallId;
 use crate::types::event::MessageStatus;
-use crate::types::io::{FunctionToolCall, InOutItem, InputItem, OutputItem, OutputMessage, ShellCallStatus};
+use crate::types::io::{
+    FunctionToolCall, InOutItem, InputItem, OutputItem, OutputMessage, ReasoningOutput, ShellCallStatus,
+};
 
 /// A client-supplied item `OpenAI` refuses, named by its parameter path and worded as `OpenAI` words it.
 #[derive(Debug, Error)]
@@ -49,6 +51,16 @@ impl OutputMessage {
     pub(crate) fn normalize_public_id(id: &mut String) {
         if !id.is_empty() && !id.starts_with("msg_") {
             id.insert_str(0, "msg_");
+        }
+    }
+}
+
+impl ReasoningOutput {
+    /// Make a nonempty provider reasoning ID valid for public history reuse, as for a message: `OpenAI` refuses a
+    /// replayed reasoning item whose ID does not begin with `rs_`.
+    pub(crate) fn normalize_public_id(id: &mut String) {
+        if !id.is_empty() && !id.starts_with("rs_") {
+            id.insert_str(0, "rs_");
         }
     }
 }
