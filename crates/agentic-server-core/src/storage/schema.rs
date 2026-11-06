@@ -3,6 +3,7 @@
 mod outdated;
 mod readiness;
 use outdated::recreate_or_reject_outdated;
+use readiness::postgres_sequence_index_ready;
 pub(crate) use readiness::{verify_persistence_ready, verify_persistence_writable};
 
 use std::env;
@@ -20,8 +21,8 @@ use crate::config::{DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS, PostgresConfig, 
 type DbResult<T> = Result<T, sqlx::Error>;
 
 const POSTGRES_SCHEMA_ADVISORY_LOCK: i64 = 7_194_963_546_799_751;
-const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 47;
-const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 15;
+const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 52;
+const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 17;
 const REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT: i64 = 4;
 const POSTGRES_INTEGER_WIDENING_SQL: &str = "
     ALTER TABLE conversations
@@ -117,7 +118,12 @@ where
                  ('file_search_chunks', 'store_id', 'text', 'NO'), \
                  ('file_search_chunks', 'file_id', 'text', 'NO'), \
                  ('file_search_chunks', 'chunk_index', 'bigint', 'NO'), \
-                 ('file_search_chunks', 'data', 'text', 'NO') \
+                 ('file_search_chunks', 'data', 'text', 'NO'), \
+                 ('file_search_vec_map', 'id', 'integer', 'NO'), \
+                 ('file_search_vec_map', 'store_id', 'text', 'NO'), \
+                 ('file_search_vec_map', 'file_id', 'text', 'NO'), \
+                 ('file_search_vec_map', 'chunk_index', 'bigint', 'NO'), \
+                 ('file_search_vec_map', 'created_at', 'bigint', 'NO') \
          ) \
          SELECT COUNT(*) \
          FROM required \
@@ -164,7 +170,9 @@ where
                  ('file_search_chunks', 'p', 'PRIMARY KEY (store_id, file_id, chunk_index)'), \
                  ('file_search_attachments', 'f', 'FOREIGN KEY (store_id) REFERENCES file_search_stores(id) ON DELETE CASCADE'), \
                  ('file_search_attachments', 'f', 'FOREIGN KEY (file_id) REFERENCES file_search_files(id) ON DELETE CASCADE'), \
-                 ('file_search_chunks', 'f', 'FOREIGN KEY (store_id, file_id) REFERENCES file_search_attachments(store_id, file_id) ON DELETE CASCADE') \
+                 ('file_search_chunks', 'f', 'FOREIGN KEY (store_id, file_id) REFERENCES file_search_attachments(store_id, file_id) ON DELETE CASCADE'), \
+                 ('file_search_vec_map', 'p', 'PRIMARY KEY (id)'), \
+                 ('file_search_vec_map', 'u', 'UNIQUE (store_id, file_id, chunk_index)') \
          ) \
          SELECT COUNT(*) \
          FROM required \
@@ -199,29 +207,6 @@ where
          WHERE (actual.table_name = 'conversations' AND actual.column_name = 'created_at') \
             OR (actual.table_name = 'items' AND actual.column_name IN ('created_at', 'seq')) \
             OR (actual.table_name = 'responses' AND actual.column_name = 'created_at')",
-    )
-    .fetch_one(executor)
-    .await
-}
-
-async fn postgres_sequence_index_ready<'e, E>(executor: E) -> DbResult<bool>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Any>,
-{
-    sqlx::query_scalar(
-        "SELECT EXISTS ( \
-             SELECT 1 \
-             FROM pg_index index_metadata \
-             JOIN pg_class index_relation ON index_relation.oid = index_metadata.indexrelid \
-             JOIN pg_class table_relation ON table_relation.oid = index_metadata.indrelid \
-             WHERE table_relation.relname = 'items' \
-             AND pg_table_is_visible(table_relation.oid) \
-             AND index_relation.relname = 'idx_items_conversation_id' \
-             AND index_metadata.indisvalid \
-             AND index_metadata.indisready \
-             AND index_metadata.indisunique \
-             AND pg_get_indexdef(index_metadata.indexrelid) LIKE '%(conversation_id, seq)' \
-         )",
     )
     .fetch_one(executor)
     .await
@@ -322,7 +307,7 @@ pub(crate) async fn pin_postgres_persistence_schema(connection: &mut sqlx::AnyCo
          AND table_relation.relkind IN ('r', 'p', 'v', 'm', 'f') \
          AND table_relation.relname IN ('_sqlx_migrations', 'conversations', 'items', 'responses', \
               'file_search_files', 'file_search_blob_cleanup', 'file_search_stores', \
-              'file_search_attachments', 'file_search_chunks') \
+              'file_search_attachments', 'file_search_chunks', 'file_search_vec_map') \
          ORDER BY table_namespace.nspname::text",
     )
     .fetch_all(&mut *connection)
@@ -607,6 +592,10 @@ mod tests {
             .execute(pool.as_ref())
             .await
             .unwrap();
+        sqlx::raw_sql(include_str!("../../migrations/0011_file_search_vec_map.sql"))
+            .execute(pool.as_ref())
+            .await
+            .unwrap();
         verify_persistence_ready(pool.as_ref()).await.unwrap();
         wrapper.ensure_schema_ready_with_marker(true).await.unwrap();
     }
@@ -711,6 +700,7 @@ mod tests {
         for migration in [
             include_str!("../../migrations/0008_file_search.sql"),
             include_str!("../../migrations/0009_typed_item_metadata.sql"),
+            include_str!("../../migrations/0011_file_search_vec_map.sql"),
         ] {
             sqlx::raw_sql(migration).execute(&mut *connection).await.unwrap();
         }
@@ -759,6 +749,7 @@ mod tests {
             include_str!("../../migrations/0007_response_item_public_ids.sql"),
             include_str!("../../migrations/0008_file_search.sql"),
             include_str!("../../migrations/0009_typed_item_metadata.sql"),
+            include_str!("../../migrations/0011_file_search_vec_map.sql"),
         ] {
             sqlx::raw_sql(migration)
                 .execute(&mut *connection)

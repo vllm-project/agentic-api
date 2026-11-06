@@ -78,6 +78,17 @@ jobs:
       - name: Run tests
         run: cargo test
 
+      - name: Verify SQLite vector provider
+        run: |
+          curl --fail --location --silent --show-error \
+            "https://github.com/asg017/sqlite-vec/releases/download/v0.1.9/sqlite-vec-0.1.9-loadable-linux-x86_64.tar.gz" \
+            --output "${RUNNER_TEMP}/sqlite-vec.tar.gz"
+          echo "b959baa1d8dc88861b1edb337b8587178cdcb12d60b4998f9d10b6a82052d5d7  ${RUNNER_TEMP}/sqlite-vec.tar.gz" \
+            | sha256sum --check
+          tar --extract --gzip --file "${RUNNER_TEMP}/sqlite-vec.tar.gz" --directory "${RUNNER_TEMP}" vec0.so
+          SQLITE_VEC_EXTENSION_PATH="${RUNNER_TEMP}/vec0.so" \
+            cargo test -p agentic-server-core --test sqlite_vec_repository -- --ignored
+
       - name: Test Codex and Claude launcher contracts
         run: bash scripts/tests/agentic-launchers-test.sh
 
