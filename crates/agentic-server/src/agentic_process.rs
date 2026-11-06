@@ -1,9 +1,13 @@
 mod catalog;
+mod harness;
 
 pub use catalog::resolve_model;
 #[cfg(test)]
 use catalog::{CATALOG_MODEL_GRACE, CatalogBudget, MAX_CATALOG_BYTES, catalog_selection};
 use catalog::{CodexModelSelection, resolve_codex_selection};
+#[cfg(test)]
+use harness::{build_harness_command, harness_launch_args};
+use harness::{harness_environment, prepare_attached_harness_environment, spawn_harness, validate_claude_passthrough};
 
 use std::{ffi::OsString, path::Path, time::Duration};
 
@@ -13,7 +17,6 @@ use tokio::time::{Instant, sleep};
 
 use crate::{
     agentic_cli::{CommonOptions, Harness, HarnessOptions, SourceOptions},
-    agentic_harness::HarnessEnv,
     agentic_output::redact_url,
 };
 
@@ -24,7 +27,6 @@ use crate::{
 pub const DEFAULT_CLAUDE_EFFORT: &str = "medium";
 const CLAUDE_EFFORT_ENV: &str = "AGENTIC_CLAUDE_EFFORT";
 const PLACEHOLDER_MODEL: &str = "agentic-api";
-const CLAUDE_TOOLS: &str = "Bash,Edit,Read,WebSearch";
 /// Readiness budget for a gateway the launcher did not start.
 const ATTACHED_GATEWAY_TIMEOUT: Duration = Duration::from_secs(30);
 /// Readiness poll interval for a gateway the launcher did not start.
@@ -78,66 +80,6 @@ pub fn claude_effort() -> String {
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| DEFAULT_CLAUDE_EFFORT.to_owned())
-}
-
-const fn harness_binary_names(harness: Harness) -> (&'static str, &'static str) {
-    match harness {
-        Harness::Codex => ("codex", "AGENTIC_CODEX_BIN"),
-        Harness::Claude => ("claude", "AGENTIC_CLAUDE_BIN"),
-    }
-}
-
-fn harness_binary(harness: Harness) -> OsString {
-    let (binary_name, override_name) = harness_binary_names(harness);
-    std::env::var_os(override_name).unwrap_or_else(|| binary_name.into())
-}
-
-fn harness_launch_args(
-    harness: crate::agentic_cli::Harness,
-    yolo: bool,
-    claude_effort: &str,
-    managed: &[String],
-    passthrough: &[String],
-) -> Vec<String> {
-    let mut args = Vec::with_capacity(managed.len() + passthrough.len() + 3);
-    match harness {
-        crate::agentic_cli::Harness::Codex => {
-            if yolo {
-                args.push("--dangerously-bypass-approvals-and-sandbox".to_owned());
-            }
-        }
-        crate::agentic_cli::Harness::Claude => {
-            if yolo {
-                args.push("--dangerously-skip-permissions".to_owned());
-            }
-            args.extend([
-                "--model".to_owned(),
-                crate::agentic_harness::CLAUDE_CANONICAL_MODEL.to_owned(),
-                "--tools".to_owned(),
-                CLAUDE_TOOLS.to_owned(),
-                "--setting-sources".to_owned(),
-                "user".to_owned(),
-            ]);
-            args.extend(["--effort".to_owned(), claude_effort.to_owned()]);
-        }
-    }
-    args.extend_from_slice(managed);
-    args.extend_from_slice(passthrough);
-    args
-}
-
-fn validate_claude_passthrough(passthrough: &[String]) -> Result<(), Error> {
-    const MANAGED_FLAGS: [&str; 4] = ["--model", "--settings", "--setting-sources", "--bare"];
-    if let Some(argument) = passthrough.iter().find(|argument| {
-        MANAGED_FLAGS
-            .iter()
-            .any(|flag| argument.as_str() == *flag || argument.starts_with(&format!("{flag}=")))
-    }) {
-        return Err(Error::Config(format!(
-            "Claude Code argument {argument} cannot be forwarded because Agentic API manages model and setting isolation"
-        )));
-    }
-    Ok(())
 }
 
 /// Wait until the gateway is live and, unless skipped, its upstream is ready.
@@ -328,113 +270,6 @@ fn start_server(
     server.stdout(std::process::Stdio::inherit());
     server.stderr(std::process::Stdio::inherit());
     Ok(server.spawn()?)
-}
-
-fn harness_environment(
-    harness_model: &HarnessModel,
-    gateway_url: &str,
-    options: &HarnessOptions,
-    session_root: &Path,
-    claude_state_root: &Path,
-) -> Result<HarnessEnv, Error> {
-    let inherited_auth_token = std::env::var("ANTHROPIC_AUTH_TOKEN")
-        .ok()
-        .filter(|value| !value.trim().is_empty());
-    let mut environment = match harness_model {
-        HarnessModel::Codex(selection) => crate::agentic_harness::prepare_codex_home(
-            session_root,
-            gateway_url,
-            &selection.model,
-            &selection.capabilities,
-            options.common.api_key.as_deref(),
-        )
-        .map_err(Error::from),
-        HarnessModel::Claude(model) => crate::agentic_harness::prepare_claude_home_with_state(
-            session_root,
-            claude_state_root,
-            gateway_url,
-            model,
-            inherited_auth_token.as_deref(),
-            options.common.api_key.as_deref(),
-        )
-        .map_err(Error::from),
-    }?;
-    if matches!(harness_model, HarnessModel::Claude(_)) {
-        // Claude Code gives CLAUDE_CODE_EFFORT_LEVEL precedence over --effort, so set both
-        // to keep an inherited `high` from reaching the Qwen chat template.
-        environment
-            .environment
-            .insert("CLAUDE_CODE_EFFORT_LEVEL".to_owned(), claude_effort());
-    }
-    Ok(environment)
-}
-
-fn spawn_harness(
-    harness: crate::agentic_cli::Harness,
-    yolo: bool,
-    passthrough: &[String],
-    harness_env: &crate::agentic_harness::HarnessEnv,
-) -> Result<tokio::process::Child, Error> {
-    let (binary_name, override_name) = harness_binary_names(harness);
-    let binary = harness_binary(harness);
-    let mut harness_command = build_harness_command(&binary, harness, yolo, passthrough, harness_env);
-    harness_command
-        .spawn()
-        .map_err(|error| Error::Config(format!("failed to launch {binary_name} ({override_name}): {error}")))
-}
-
-fn build_harness_command(
-    binary: &std::ffi::OsStr,
-    harness: crate::agentic_cli::Harness,
-    yolo: bool,
-    passthrough: &[String],
-    harness_env: &crate::agentic_harness::HarnessEnv,
-) -> tokio::process::Command {
-    let mut harness_command = tokio::process::Command::new(binary);
-    harness_command.kill_on_drop(true);
-    harness_command.args(harness_launch_args(
-        harness,
-        yolo,
-        &claude_effort(),
-        &harness_env.arguments,
-        passthrough,
-    ));
-    for name in &harness_env.environment_remove {
-        harness_command.env_remove(name);
-    }
-    harness_command.envs(&harness_env.environment);
-    harness_command.stdin(std::process::Stdio::inherit());
-    harness_command.stdout(std::process::Stdio::inherit());
-    harness_command.stderr(std::process::Stdio::inherit());
-    harness_command
-}
-
-fn prepare_attached_harness_environment(
-    harness_model: &HarnessModel,
-    session_root: &Path,
-    claude_state_root: &Path,
-    gateway_url: &str,
-    api_key: Option<&str>,
-) -> Result<HarnessEnv, Error> {
-    match harness_model {
-        HarnessModel::Codex(selection) => crate::agentic_harness::prepare_codex_home(
-            session_root,
-            gateway_url,
-            &selection.model,
-            &selection.capabilities,
-            api_key,
-        )
-        .map_err(Error::from),
-        HarnessModel::Claude(model) => crate::agentic_harness::prepare_claude_home_with_state(
-            session_root,
-            claude_state_root,
-            gateway_url,
-            model,
-            None,
-            api_key,
-        )
-        .map_err(Error::from),
-    }
 }
 
 /// Launch a coding harness against an already-running Agentic API gateway.
