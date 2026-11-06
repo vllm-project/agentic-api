@@ -592,7 +592,7 @@ mod tests {
             .execute(pool.as_ref())
             .await
             .unwrap();
-        sqlx::raw_sql(include_str!("../../migrations/0010_file_search_vec_map.sql"))
+        sqlx::raw_sql(include_str!("../../migrations/0011_file_search_vec_map.sql"))
             .execute(pool.as_ref())
             .await
             .unwrap();
@@ -700,7 +700,7 @@ mod tests {
         for migration in [
             include_str!("../../migrations/0008_file_search.sql"),
             include_str!("../../migrations/0009_typed_item_metadata.sql"),
-            include_str!("../../migrations/0010_file_search_vec_map.sql"),
+            include_str!("../../migrations/0011_file_search_vec_map.sql"),
         ] {
             sqlx::raw_sql(migration).execute(&mut *connection).await.unwrap();
         }
@@ -749,7 +749,7 @@ mod tests {
             include_str!("../../migrations/0007_response_item_public_ids.sql"),
             include_str!("../../migrations/0008_file_search.sql"),
             include_str!("../../migrations/0009_typed_item_metadata.sql"),
-            include_str!("../../migrations/0010_file_search_vec_map.sql"),
+            include_str!("../../migrations/0011_file_search_vec_map.sql"),
         ] {
             sqlx::raw_sql(migration)
                 .execute(&mut *connection)

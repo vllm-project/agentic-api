@@ -1814,7 +1814,7 @@ the upstream reported.
   itself and just verifies compatibility. Readiness probes live in `schema/readiness.rs`.
   See [Schema, migrations, and where data goes](#schema-migrations-and-where-data-goes).
 - **`file_search.rs`** — portable file, vector-store, attachment, and chunk
-  persistence. Migration `0010_file_search_vec_map.sql` owns the portable
+  persistence. Migration `0011_file_search_vec_map.sql` owns the portable
   sqlite-vec row map; `storage/file_search/sqlite_vec_index.rs` owns per-store
   `vec0` virtual tables and index operations after the provider loads its trusted
   SQLite extension. Index staging and metadata publication share one
