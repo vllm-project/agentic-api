@@ -466,10 +466,10 @@ fn build_config(llm_api_base: String, common: &CommonArgs, file: &FileConfig) ->
         tools: ToolRuntimeConfig {
             file_search: FileSearchConfig {
                 sqlite_vec_extension_path: std::env::var_os("AGENTIC_FILE_SEARCH_SQLITE_VEC_EXTENSION_PATH")
-                    .map(std::path::PathBuf::from)
+                    .map(PathBuf::from)
                     .or_else(|| file.file_search.sqlite_vec_extension_path.clone()),
                 files_storage_dir: std::env::var_os("AGENTIC_FILES_STORAGE_DIR")
-                    .map(std::path::PathBuf::from)
+                    .map(PathBuf::from)
                     .or_else(|| file.files.storage_dir.clone()),
                 embedding_base_url: environment_value("AGENTIC_FILE_SEARCH_EMBEDDING_BASE_URL")
                     .or_else(|| file.file_search.embedding_base_url.clone()),

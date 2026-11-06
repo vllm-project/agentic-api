@@ -812,6 +812,7 @@ mod tests {
             serde_json::json!({"type": "mcp", "server_label": "s"}),
             serde_json::json!({"type": "web_search_preview"}),
             serde_json::json!({"type": "file_search"}),
+            serde_json::json!({"type": "file_search", "vector_store_ids": ["vs_abc"]}),
             serde_json::json!({"type": "code_interpreter", "container": {"type": "auto"}}),
             serde_json::json!({"type": "shell", "environment": {"type": "local"}}),
             serde_json::json!({"type": "namespace", "name": "ns", "tools": []}),

@@ -161,17 +161,17 @@ async fn local_file_search_routes_require_the_configured_api_key() {
 async fn local_file_search_routes_enforce_the_configured_body_limit() {
     let server = gateway_with(None, NonZeroUsize::new(256)).await;
     let client = reqwest::Client::new();
-    assert_eq!(
-        client
-            .post(format!("{}/v1/files", server.url))
-            .header("content-type", "multipart/form-data; boundary=upload")
-            .body(multipart("large.txt", &"x".repeat(300)))
-            .send()
-            .await
-            .unwrap()
-            .status(),
-        StatusCode::PAYLOAD_TOO_LARGE
-    );
+    let oversized_file = client
+        .post(format!("{}/v1/files", server.url))
+        .header("content-type", "multipart/form-data; boundary=upload")
+        .body(multipart("large.txt", &"x".repeat(300)))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(oversized_file.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    let oversized_file: Value = oversized_file.json().await.unwrap();
+    assert_eq!(oversized_file["error"]["type"], "invalid_request_error");
+    assert_eq!(oversized_file["error"]["code"], "body_too_large");
     assert_eq!(
         client
             .post(format!("{}/v1/vector_stores", server.url))
