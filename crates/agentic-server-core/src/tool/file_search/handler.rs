@@ -10,7 +10,7 @@ use crate::tool::declaration::ToolDeclaration;
 use crate::tool::handler::MAX_GATEWAY_TOOL_OUTPUT_BYTES;
 use crate::tool::ownership::GatewayBinding;
 use crate::tool::registry::{ToolEntry, ToolType};
-use crate::tool::{GatewayExecutor, GatewayToolEventPlan, ToolError, ToolHandler, ToolOutput};
+use crate::tool::{GatewayExecutor, ToolError, ToolHandler, ToolOutput};
 use crate::types::file_search::{SearchQuery, SearchRequest, SearchResult};
 use crate::types::io::output::{
     FileCitation, FileSearchCall, FileSearchCallResult, FunctionToolCall, GatewayCallStatus, OutputMessageContent,
@@ -162,18 +162,14 @@ impl GatewayExecutor for FileSearchHandler {
         true
     }
 
-    fn plan_gateway_events(
-        &self,
-        call: &FunctionToolCall,
-        _params: &FileSearchExecutionParams,
-    ) -> GatewayToolEventPlan {
-        GatewayToolEventPlan::new(Some(OutputItem::FileSearchCall(FileSearchCall {
+    fn started_output(&self, call: &FunctionToolCall, _params: &FileSearchExecutionParams) -> Option<OutputItem> {
+        Some(OutputItem::FileSearchCall(FileSearchCall {
             agent: call.agent.clone(),
             id: public_call_id(call),
             status: GatewayCallStatus::InProgress.into(),
             queries: parse_arguments(&call.arguments).map_or_else(|_| Vec::new(), |args| args.queries),
             results: None,
-        })))
+        }))
     }
 
     fn public_output(

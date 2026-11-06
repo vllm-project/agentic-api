@@ -44,7 +44,9 @@ impl GatewayExecutor for CountingSearch {
     type ExecutionParams = WebSearchToolParam;
 
     fn started_output(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> Option<OutputItem> {
-        web_search::started_output_item(call)
+        (self.hide_call_id != Some(call.call_id.as_str()))
+            .then(|| web_search::started_output_item(call))
+            .flatten()
     }
 
     fn public_output(
@@ -71,14 +73,6 @@ impl GatewayExecutor for CountingSearch {
 
     fn supports_parallel_execution(&self) -> bool {
         true
-    }
-
-    fn plan_gateway_events(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> GatewayToolEventPlan {
-        GatewayToolEventPlan::new(
-            (self.hide_call_id != Some(call.call_id.as_str()))
-                .then(|| crate::tool::web_search::started_output_item(call))
-                .flatten(),
-        )
     }
 }
 
