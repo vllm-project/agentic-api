@@ -6,6 +6,11 @@ All notable changes to Agentic API are documented here.
 
 ### Added
 
+- Added one tenant-scoped session id on `/v1/messages` and `/v1/messages/count_tokens` (#159).
+  `x-claude-code-session-id` and `X-Session-ID` must agree or the request fails with HTTP 400 before any upstream
+  call. The gateway forwards `X-Session-ID`, which vLLM reads as the request's `session_id`, set to a SHA-256 of the
+  verified OIDC principal (or the default tenant) and the client's id, so a client's own `X-Session-ID` no longer
+  reaches the upstream unchanged.
 - Returned the native web search and web fetch calls the gateway runs on `/v1/messages` to the client, as Anthropic
   returns them (part of #409): each executed call is a `server_tool_use` block (id `srvtoolu_gw_<upstream id>`)
   followed by its `web_search_tool_result` or `web_fetch_tool_result`, over JSON and SSE, and
