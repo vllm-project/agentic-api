@@ -2,8 +2,8 @@
 
 use super::DbResult;
 
-pub(super) const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 54;
-pub(super) const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 19;
+pub(super) const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 59;
+pub(super) const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 21;
 pub(super) const REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT: i64 = 4;
 
 pub(super) async fn postgres_required_schema_column_count<'e, E>(executor: E) -> DbResult<i64>
@@ -60,6 +60,11 @@ where
                  ('file_search_chunks', 'file_id', 'text', 'NO'), \
                  ('file_search_chunks', 'chunk_index', 'bigint', 'NO'), \
                  ('file_search_chunks', 'data', 'text', 'NO'), \
+                 ('file_search_vec_map', 'id', 'integer', 'NO'), \
+                 ('file_search_vec_map', 'store_id', 'text', 'NO'), \
+                 ('file_search_vec_map', 'file_id', 'text', 'NO'), \
+                 ('file_search_vec_map', 'chunk_index', 'bigint', 'NO'), \
+                 ('file_search_vec_map', 'created_at', 'bigint', 'NO'), \
                  ('message_threads', 'message_id', 'text', 'NO'), \
                  ('message_threads', 'owner_hash', 'text', 'NO'), \
                  ('message_threads', 'checkpoint', 'text', 'YES'), \
@@ -95,6 +100,8 @@ where
     sqlx::query_scalar(
         "WITH required(table_name, constraint_type, definition) AS ( \
              VALUES \
+                 ('file_search_vec_map', 'p', 'PRIMARY KEY (id)'), \
+                 ('file_search_vec_map', 'u', 'UNIQUE (store_id, file_id, chunk_index)'), \
                  ('message_threads', 'p', 'PRIMARY KEY (message_id)'), \
                  ('message_threads', 'c', 'CHECK ((state = ANY (ARRAY[''ready''::text, ''in_flight''::text, ''consumed''::text])))'), \
                  ('message_threads', 'c', 'CHECK ((((state = ''consumed''::text) AND (checkpoint IS NULL)) OR ((state <> ''consumed''::text) AND (checkpoint IS NOT NULL))))'), \
@@ -152,29 +159,6 @@ where
          WHERE (actual.table_name = 'conversations' AND actual.column_name = 'created_at') \
             OR (actual.table_name = 'items' AND actual.column_name IN ('created_at', 'seq')) \
             OR (actual.table_name = 'responses' AND actual.column_name = 'created_at')",
-    )
-    .fetch_one(executor)
-    .await
-}
-
-pub(super) async fn postgres_sequence_index_ready<'e, E>(executor: E) -> DbResult<bool>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Any>,
-{
-    sqlx::query_scalar(
-        "SELECT EXISTS ( \
-             SELECT 1 \
-             FROM pg_index index_metadata \
-             JOIN pg_class index_relation ON index_relation.oid = index_metadata.indexrelid \
-             JOIN pg_class table_relation ON table_relation.oid = index_metadata.indrelid \
-             WHERE table_relation.relname = 'items' \
-             AND pg_table_is_visible(table_relation.oid) \
-             AND index_relation.relname = 'idx_items_conversation_id' \
-             AND index_metadata.indisvalid \
-             AND index_metadata.indisready \
-             AND index_metadata.indisunique \
-             AND pg_get_indexdef(index_metadata.indexrelid) LIKE '%(conversation_id, seq)' \
-         )",
     )
     .fetch_one(executor)
     .await

@@ -159,16 +159,16 @@ Stored requests now fail if their response or conversation state cannot be persi
 `AGENTIC_API_SCHEMA_READY` keeps schema changes under supervisor control. Startup performs a read-only compatibility
 check and fails if the database was created by an earlier release, if required persistence columns, types,
 nullability, primary/foreign-key/CHECK constraints, or the conversation sequence index are missing, or if persistence integer
-columns still need widening. Every startup requires `message_threads` from migration `0011_message_threads.sql`,
+columns still need widening. Every startup requires `message_threads` from migration `0012_message_threads.sql`,
 including its state/checkpoint/lease CHECK constraints and SELECT/INSERT/UPDATE/DELETE privileges, even when clients
-send no thread requests. Apply the repository migrations through `0010_drop_conversation_revision.sql` to an empty schema
-with a DDL-capable migration role, then apply `0011_message_threads.sql` and widen the integer columns in one transaction
+send no thread requests. Apply the repository migrations through `0011_file_search_vec_map.sql` to an empty schema
+with a DDL-capable migration role, then apply `0012_message_threads.sql` and widen the integer columns in one transaction
 before starting the DML-only gateway role. Run the example below from the repository root with
 `psql -v ON_ERROR_STOP=1` so any statement failure stops the script:
 
 ```sql
 BEGIN;
-\i crates/agentic-server-core/migrations/0011_message_threads.sql
+\i crates/agentic-server-core/migrations/0012_message_threads.sql
 ALTER TABLE conversations
     ALTER COLUMN created_at TYPE BIGINT USING created_at::BIGINT;
 ALTER TABLE items

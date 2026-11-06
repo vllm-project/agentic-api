@@ -6,8 +6,9 @@ mod readiness;
 use outdated::recreate_or_reject_outdated;
 use postgres::{
     postgres_integer_column_compatibility, postgres_required_constraint_count, postgres_required_schema_column_count,
-    postgres_sequence_index_ready, validate_required_postgres_schema, validate_supervisor_schema,
+    validate_required_postgres_schema, validate_supervisor_schema,
 };
+use readiness::postgres_sequence_index_ready;
 pub(crate) use readiness::{verify_persistence_ready, verify_persistence_writable};
 
 use std::env;
@@ -120,7 +121,7 @@ pub(crate) async fn pin_postgres_persistence_schema(connection: &mut sqlx::AnyCo
          AND table_relation.relkind IN ('r', 'p', 'v', 'm', 'f') \
          AND table_relation.relname IN ('_sqlx_migrations', 'conversations', 'items', 'responses', \
               'file_search_files', 'file_search_blob_cleanup', 'file_search_stores', \
-              'file_search_attachments', 'file_search_chunks', 'message_threads') \
+              'file_search_attachments', 'file_search_chunks', 'file_search_vec_map', 'message_threads') \
          ORDER BY table_namespace.nspname::text",
     )
     .fetch_all(&mut *connection)
@@ -418,7 +419,11 @@ mod tests {
             .execute(pool.as_ref())
             .await
             .expect("drop conversation revision");
-        sqlx::raw_sql(include_str!("../../migrations/0011_message_threads.sql"))
+        sqlx::raw_sql(include_str!("../../migrations/0011_file_search_vec_map.sql"))
+            .execute(pool.as_ref())
+            .await
+            .unwrap();
+        sqlx::raw_sql(include_str!("../../migrations/0012_message_threads.sql"))
             .execute(pool.as_ref())
             .await
             .unwrap();
@@ -527,7 +532,8 @@ mod tests {
             include_str!("../../migrations/0008_file_search.sql"),
             include_str!("../../migrations/0009_typed_item_metadata.sql"),
             include_str!("../../migrations/0010_drop_conversation_revision.sql"),
-            include_str!("../../migrations/0011_message_threads.sql"),
+            include_str!("../../migrations/0011_file_search_vec_map.sql"),
+            include_str!("../../migrations/0012_message_threads.sql"),
         ] {
             sqlx::raw_sql(migration).execute(&mut *connection).await.unwrap();
         }
@@ -577,7 +583,8 @@ mod tests {
             include_str!("../../migrations/0008_file_search.sql"),
             include_str!("../../migrations/0009_typed_item_metadata.sql"),
             include_str!("../../migrations/0010_drop_conversation_revision.sql"),
-            include_str!("../../migrations/0011_message_threads.sql"),
+            include_str!("../../migrations/0011_file_search_vec_map.sql"),
+            include_str!("../../migrations/0012_message_threads.sql"),
         ] {
             sqlx::raw_sql(migration)
                 .execute(&mut *connection)
