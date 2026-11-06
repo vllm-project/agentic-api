@@ -30,7 +30,7 @@ use super::gateway::{
     compaction_event_plans, emit_gateway_completed_events, emit_gateway_start_events, emit_response_start_events,
 };
 use crate::executor::error::ExecutorResult;
-use crate::executor::persist::persist_if_needed;
+use crate::executor::persist::{TurnOutput, persist};
 use crate::executor::pipeline::AgentPipeline;
 use crate::executor::relay::StreamRelay;
 use crate::executor::request::{ExecutionContext, RequestContext};
@@ -268,15 +268,11 @@ async fn run_blocking(
         Box::pin(run_until_gateway_tools_complete(&mut agent, exec_ctx, auth, false)).await?;
     let (ctx, _) = agent.into_parts();
 
-    let ch = exec_ctx.conv_handler.clone();
-    let rh = exec_ctx.resp_handler.clone();
-    Box::pin(persist_if_needed(
-        payload.clone(),
+    Box::pin(persist(
         ctx,
+        TurnOutput::Response(&payload),
         tool_search_metadata,
-        ch,
-        rh,
-        &exec_ctx.metrics,
+        exec_ctx,
     ))
     .await?;
 

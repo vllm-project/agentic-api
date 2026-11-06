@@ -23,17 +23,25 @@ impl ClientCallId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// The rule for every client `call_id`: it must not be empty. Repeated IDs are valid, as on `OpenAI`.
+    ///
+    /// # Errors
+    /// [`EmptyClientCallId`] for an empty `call_id`.
+    pub fn validate(call_id: &str) -> Result<(), EmptyClientCallId> {
+        if call_id.is_empty() {
+            Err(EmptyClientCallId)
+        } else {
+            Ok(())
+        }
+    }
 }
 
 impl TryFrom<String> for ClientCallId {
     type Error = EmptyClientCallId;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        if value.is_empty() {
-            Err(EmptyClientCallId)
-        } else {
-            Ok(Self(value))
-        }
+        Self::validate(&value).map(|()| Self(value))
     }
 }
 
@@ -56,6 +64,30 @@ pub enum ClientCallKind {
     Shell,
     Custom,
     ToolSearch,
+}
+
+impl ClientCallKind {
+    /// The input item type of a call of this kind.
+    #[must_use]
+    pub const fn call_item_name(self) -> &'static str {
+        match self {
+            Self::Function => "function_call",
+            Self::Custom => "custom_tool_call",
+            Self::Shell => "shell_call",
+            Self::ToolSearch => "tool_search_call",
+        }
+    }
+
+    /// The input item type of an output that answers a call of this kind.
+    #[must_use]
+    pub const fn output_item_name(self) -> &'static str {
+        match self {
+            Self::Function => "function_call_output",
+            Self::Custom => "custom_tool_call_output",
+            Self::Shell => "shell_call_output",
+            Self::ToolSearch => "tool_search_output",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

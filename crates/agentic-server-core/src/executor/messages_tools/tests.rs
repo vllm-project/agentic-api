@@ -23,8 +23,11 @@ use crate::executor::{
     run_messages_loop, run_messages_stream,
 };
 use crate::storage::{ConversationStore, ResponseStore, create_pool_with_schema};
+use crate::tool::web_search;
 use crate::tool::{GatewayExecutor, ToolError, ToolHandler, ToolOutput, ToolRegistry, ToolType, registry_tools};
 use crate::types::io::FunctionTool;
+use crate::types::io::OutputItem;
+use crate::types::io::output::{FunctionToolCall, GatewayCallStatus};
 use crate::types::messages::GatewayToolMap;
 use crate::types::tools::WebSearchToolParam;
 
@@ -74,6 +77,20 @@ impl ToolHandler for Probe {
 
 impl GatewayExecutor for Probe {
     type ExecutionParams = WebSearchToolParam;
+
+    fn started_output(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> Option<OutputItem> {
+        web_search::started_output_item(call)
+    }
+
+    fn public_output(
+        &self,
+        call: &FunctionToolCall,
+        output: &ToolOutput,
+        status: GatewayCallStatus,
+        _params: &WebSearchToolParam,
+    ) -> Option<OutputItem> {
+        web_search::output_item(call, output, status.into())
+    }
 
     fn supports_parallel_execution(&self) -> bool {
         self.parallel

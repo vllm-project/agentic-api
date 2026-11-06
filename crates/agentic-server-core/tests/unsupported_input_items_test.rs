@@ -96,7 +96,10 @@ fn gateway_call_input_preserves_typed_payloads_in_canonical_history() {
     );
     assert_eq!(serde_json::to_value(payload.input.model_input()).unwrap(), wire);
     let model_input = json!([
-        wire[0],
+        {"type":"function_call","call_id":"ws_1","name":"web_search",
+            "arguments":"{\"queries\":[\"weather\"]}","status":"completed"},
+        {"type":"function_call_output","call_id":"ws_1","status":"completed",
+            "output":"{\"query\":\"weather\",\"queries\":[\"weather\"],\"results\":{\"web\":[{\"url\":\"https://example.com\",\"title\":\"Forecast\"}],\"news\":[]}}"},
         {"type":"function_call","call_id":"mcp_1","name":"mcp__weather__forecast",
             "arguments":"{}","status":"completed"},
         {"type":"function_call_output","call_id":"mcp_1","output":"sunny","status":"completed"}

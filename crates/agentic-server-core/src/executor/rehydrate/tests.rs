@@ -3,16 +3,22 @@ use std::sync::Arc;
 
 use super::*;
 use crate::executor::modes::{ConversationHandler, ResponseHandler};
-use crate::executor::pending_calls::pending_calls;
+use crate::executor::pending_calls::{CallLedger, PendingCall};
 use crate::storage::{ConversationStore, ResponseCheckpoint, ResponseMetadata, ResponseStore, create_pool_with_schema};
-use crate::types::agent::{AgentIdentity, AgentTurnId};
-use crate::types::agent_tree::{AgentState, StoredAgent, StoredTreeSnapshot};
+use crate::tool::ToolError;
+use crate::types::agent::{AgentIdentity, AgentTurnId, AgentTurnKey};
+use crate::types::agent_tree::{AgentPhase, AgentState, StoredAgent, StoredClientCall, StoredTreeSnapshot};
+use crate::types::client_calls::{ClientCallId, ClientCallKind, ClientCallOwner};
 use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 use crate::types::io::MultiAgentConfig;
 use crate::types::io::output::{McpListTools, OutputItem};
 use crate::types::request_response::{MaxToolCalls, RequestPayload};
 use std::num::NonZeroU64;
+
+fn pending_calls(items: &[InputItem]) -> ExecutorResult<Vec<PendingCall>> {
+    CallLedger::scan(items).map(|ledger| ledger.pending().collect())
+}
 
 #[test]
 fn session_history_without_compaction_is_unchanged() {
@@ -77,7 +83,7 @@ fn restored_session_uses_the_latest_window_and_preserves_live_pending_calls() {
     assert_eq!(serialized[3]["id"], "cmp_new");
     let pending = pending_calls(&history).unwrap();
     assert_eq!(pending.len(), 1);
-    assert_eq!(pending[0].call_id, "live");
+    assert_eq!(pending[0].call_id.as_str(), "live");
 }
 
 fn reasoning_item(content: &[&str], encrypted_content: Option<&str>) -> InputItem {
@@ -720,8 +726,8 @@ async fn stored_public_search_call_pairs_with_new_output_after_rehydration() {
 }
 
 #[tokio::test]
-async fn stored_code_interpreter_call_is_not_replayed_for_previous_response_or_conversation()
--> Result<(), Box<dyn std::error::Error>> {
+async fn stored_code_interpreter_call_reaches_the_model_as_its_function_call() -> Result<(), Box<dyn std::error::Error>>
+{
     let projection: OutputItem = serde_json::from_value(serde_json::json!({
         "type": "code_interpreter_call",
         "id": "ci_projection",
@@ -763,10 +769,14 @@ async fn stored_code_interpreter_call_is_not_replayed_for_previous_response_or_c
         request(Some(&conversation.conversation_id), None),
     ] {
         let ctx = rehydrate_conversation(request, &exec_ctx).await?;
-        // The model saw the gateway's function call, not this public projection.
-        let model_input = serde_json::to_value(ctx.enriched_request.input.model_input())?;
-        assert_eq!(model_input.as_array().map(Vec::len), Some(1));
-        assert_eq!(model_input[0]["role"], "user");
+        // History keeps the public item; the upstream projection lowers it to the call the model made.
+        let model_input = serde_json::to_value(ctx.enriched_request.input.normalized_model_input(&[])?)?;
+        assert_eq!(model_input.as_array().map(Vec::len), Some(3));
+        assert_eq!(model_input[0]["type"], "function_call");
+        assert_eq!(model_input[0]["name"], "code_interpreter");
+        assert_eq!(model_input[0]["call_id"], "ci_projection");
+        assert_eq!(model_input[1]["type"], "function_call_output");
+        assert_eq!(model_input[2]["role"], "user");
     }
     Ok(())
 }
@@ -846,11 +856,21 @@ async fn competing_outputs_for_one_pending_call_keep_the_conversation_usable() -
     let second = rehydrate_conversation(answer(output(5)), &exec_ctx).await?;
     exec_ctx
         .conv_handler
-        .persist(first, Vec::new(), None, ResponseMetadata::default())
+        .persist(
+            &first,
+            first.new_input_items.clone(),
+            None,
+            &ResponseMetadata::default(),
+        )
         .await?;
     let error = exec_ctx
         .conv_handler
-        .persist(second, Vec::new(), None, ResponseMetadata::default())
+        .persist(
+            &second,
+            second.new_input_items.clone(),
+            None,
+            &ResponseMetadata::default(),
+        )
         .await
         .expect_err("the call is already answered");
     assert!(matches!(error, ExecutorError::ConversationLocked { .. }), "{error}");
@@ -868,7 +888,7 @@ async fn competing_outputs_for_one_pending_call_keep_the_conversation_usable() -
     for ctx in [plain, resubmitted] {
         exec_ctx
             .conv_handler
-            .persist(ctx, Vec::new(), None, ResponseMetadata::default())
+            .persist(&ctx, ctx.new_input_items.clone(), None, &ResponseMetadata::default())
             .await?;
     }
 
@@ -882,5 +902,125 @@ async fn competing_outputs_for_one_pending_call_keep_the_conversation_usable() -
         .count();
     assert_eq!(answers, 1);
     rehydrate_conversation(request(Some(id), None), &exec_ctx).await?;
+    Ok(())
+}
+
+/// A root-only agent tree, waiting for the client's output to `pending_call` when there is one.
+fn agent_tree(pending_call: Option<&str>) -> ResponseMetadata {
+    let turn = AgentTurnId::new();
+    let history = pending_call.map_or_else(Vec::new, |call_id| {
+        serde_json::from_value(serde_json::json!([
+            {"type":"function_call", "call_id":call_id, "name":"lookup", "arguments":"{}"}
+        ]))
+        .unwrap()
+    });
+    let client_calls = pending_call
+        .map(|call_id| StoredClientCall {
+            call_id: ClientCallId::try_from(call_id.to_owned()).unwrap(),
+            owner: ClientCallOwner {
+                agent_turn: AgentTurnKey {
+                    agent: AgentIdentity::root(),
+                    turn,
+                },
+                kind: ClientCallKind::Function,
+                async_execution: false,
+            },
+            resolved: false,
+        })
+        .into_iter()
+        .collect();
+    ResponseMetadata {
+        multi_agent_tree: Some(StoredTreeSnapshot {
+            version: 1,
+            config: MultiAgentConfig {
+                enabled: true,
+                max_concurrent_subagents: Some(3),
+            },
+            agents: vec![StoredAgent {
+                identity: AgentIdentity::root(),
+                parent: None,
+                turn,
+                state: if pending_call.is_some() {
+                    AgentState::Active(AgentPhase::WaitingForClientOutputs)
+                } else {
+                    AgentState::Idle
+                },
+                mailbox: Vec::new(),
+                history,
+                loaded_tools: Vec::new(),
+                last_task: String::new(),
+                final_answer: None,
+                rounds: 0,
+                wait: None,
+            }],
+            client_calls,
+        }),
+        ..Default::default()
+    }
+}
+
+/// Turns that rehydrated the same multi-agent tree: after the first commits, a later turn would replace its tree, so
+/// it is refused, and the first turn's pending client call still continues.
+#[tokio::test]
+async fn overlapping_multi_agent_turns_keep_the_first_turns_pending_call() -> Result<(), Box<dyn std::error::Error>> {
+    let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
+    let conversation_store = ConversationStore::new(pool);
+    let conversation = conversation_store
+        .create("default_tenant", &ConversationMetadata::new(), &[])
+        .await?;
+    let id = conversation.conversation_id.as_str();
+    conversation_store
+        .persist(
+            id,
+            &ResponseCheckpoint::default(),
+            "resp_tree",
+            Vec::new(),
+            None,
+            &agent_tree(None),
+        )
+        .await?;
+    let exec_ctx = execution_context(conversation_store, ResponseStore::disabled());
+
+    let first = rehydrate_conversation(request(Some(id), None), &exec_ctx).await?;
+    let stale_tree = rehydrate_conversation(request(Some(id), None), &exec_ctx).await?;
+    let plain_turn = rehydrate_conversation(request(Some(id), None), &exec_ctx).await?;
+    let first_response_id = first.response_id.clone();
+    exec_ctx
+        .conv_handler
+        .persist(
+            &first,
+            first.new_input_items.clone(),
+            None,
+            &agent_tree(Some("call_first")),
+        )
+        .await?;
+    for (ctx, metadata) in [
+        (stale_tree, agent_tree(None)),
+        (plain_turn, ResponseMetadata::default()),
+    ] {
+        let error = exec_ctx
+            .conv_handler
+            .persist(&ctx, ctx.new_input_items.clone(), None, &metadata)
+            .await
+            .expect_err("a turn stored after the first would replace its tree");
+        assert!(matches!(error, ExecutorError::ConversationLocked { .. }), "{error}");
+    }
+
+    // The client answers the first turn's call.
+    let mut continuation = request(Some(id), None);
+    continuation.input = serde_json::from_value(serde_json::json!([
+        {"type":"function_call_output", "call_id":"call_first", "output":"sunny"}
+    ]))?;
+    let ctx = rehydrate_conversation(continuation, &exec_ctx).await?;
+    assert_eq!(
+        ctx.checkpoint.as_ref().and_then(|turn| turn.response_id.as_deref()),
+        Some(first_response_id.as_str())
+    );
+    let tree = ctx.multi_agent_tree.as_ref().expect("the first turn's tree").snapshot();
+    assert!(
+        tree.client_calls
+            .iter()
+            .any(|call| call.call_id.as_str() == "call_first" && !call.resolved)
+    );
     Ok(())
 }

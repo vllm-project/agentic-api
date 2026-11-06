@@ -1,6 +1,8 @@
 use std::future::Future;
 use std::pin::Pin;
 
+use super::registry::ToolType;
+
 use crate::types::io::input::hosted_search_output_text;
 use crate::types::io::output::{FunctionToolCall, GatewayCallStatus, OutputItem};
 use crate::types::io::{FunctionTool, InputItem, InputToolSearchCall, ToolSearchCall, ToolSearchOutputMessage};
@@ -89,7 +91,7 @@ impl GatewayToolEventPlan {
 }
 
 /// A gateway call's result that its tool knows when the call is planned, so the call is never executed. Its items are
-/// the turn's history and the model's next input alike; the upstream projection lowers them for the model.
+/// the model's next input; the upstream projection lowers them for the model.
 #[derive(Debug, Clone)]
 pub(crate) enum PlannedResult {
     /// A hosted search: its completed public call, and the output that follows it at the next output index.
@@ -135,7 +137,7 @@ impl PlannedResult {
         }
     }
 
-    /// The items recorded as history and appended for the model's next round.
+    /// The items appended for the model's next round.
     pub(crate) fn input_items(&self) -> Vec<InputItem> {
         match self {
             Self::SearchPair {
@@ -187,7 +189,7 @@ pub trait ToolHandler: Send + Sync {
     type ToolParams: Send + Sync;
 
     #[must_use]
-    fn tool_type(&self) -> super::registry::ToolType;
+    fn tool_type(&self) -> ToolType;
 
     /// Validate the typed tool declaration parameters.
     ///
@@ -249,26 +251,19 @@ pub trait GatewayExecutor: ToolHandler + 'static {
     /// Plans the typed public lifecycle for one gateway call.
     ///
     /// The returned plan must not assign protocol indexes or construct SSE
-    /// frames. Defaults to an empty lifecycle for tools that have no public
-    /// gateway-specific call item.
+    /// frames. Defaults to the handler's [`Self::started_output`].
     #[must_use]
     fn plan_gateway_events(&self, call: &FunctionToolCall, params: &Self::ExecutionParams) -> GatewayToolEventPlan {
         GatewayToolEventPlan::new(self.started_output(call, params))
     }
 
-    /// The placeholder output item shown while this call is in progress.
-    ///
-    /// Kept as the compatibility hook for existing gateway executors;
-    /// implementations that need richer planning should override
-    /// [`Self::plan_gateway_events`] instead.
+    /// The item shown while this call is in progress: the start of its public item.
     #[must_use]
-    fn started_output(&self, call: &FunctionToolCall, params: &Self::ExecutionParams) -> Option<OutputItem> {
-        let _ = (call, params);
-        None
-    }
+    fn started_output(&self, call: &FunctionToolCall, params: &Self::ExecutionParams) -> Option<OutputItem>;
 
-    /// The public output item for a completed or failed call.
-    /// Defaults to `None` (no gateway-specific shape).
+    /// The public item for a completed or failed call: what the client receives and history stores in place of the
+    /// model-facing call and its output. A handler returns `None` only for a tool with no Responses item (`web_fetch`,
+    /// which Messages answers with its own result blocks).
     #[must_use]
     fn public_output(
         &self,
@@ -276,10 +271,7 @@ pub trait GatewayExecutor: ToolHandler + 'static {
         output: &ToolOutput,
         status: GatewayCallStatus,
         params: &Self::ExecutionParams,
-    ) -> Option<OutputItem> {
-        let _ = (call, output, status, params);
-        None
-    }
+    ) -> Option<OutputItem>;
 }
 
 #[cfg(test)]

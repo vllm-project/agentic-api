@@ -47,7 +47,7 @@ pub use messages_server_tools::replay::replay_server_tool_blocks;
 pub use messages_server_tools::sealing::{MESSAGES_RESULT_KEY_ENV, MessagesResultKey, MessagesResultKeyError};
 pub use messages_stream::run_messages_stream;
 pub use modes::{ConversationHandler, ResponseHandler};
-pub use persist::{commit, persist_response, persist_turn};
+pub use persist::{commit, persist_turn};
 pub use rehydrate::{rehydrate_conversation, rehydrate_in_session};
 pub use request::ExecutionContext;
 pub use request::RequestContext;

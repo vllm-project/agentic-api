@@ -589,6 +589,9 @@ mod tests {
     use crate::tool::executors::GatewayExecutorRegistration;
     use crate::tool::mcp::{McpDiscoveredHandler, McpHandler};
     use crate::tool::responses_declarations;
+    use crate::tool::web_search;
+    use crate::types::io::OutputItem;
+    use crate::types::io::output::GatewayCallStatus;
     use crate::types::io::output::McpListTool;
     use crate::types::io::{InputItem, ResponsesInput};
     use crate::types::tools::{McpDiscoveredToolParam, ResponsesTool};
@@ -1110,6 +1113,20 @@ mod tests {
 
         impl GatewayExecutor for Refusing {
             type ExecutionParams = WebSearchToolParam;
+
+            fn started_output(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> Option<OutputItem> {
+                web_search::started_output_item(call)
+            }
+
+            fn public_output(
+                &self,
+                call: &FunctionToolCall,
+                output: &ToolOutput,
+                status: GatewayCallStatus,
+                _params: &WebSearchToolParam,
+            ) -> Option<OutputItem> {
+                web_search::output_item(call, output, status.into())
+            }
 
             fn execute(
                 &self,

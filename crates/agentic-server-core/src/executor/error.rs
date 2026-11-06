@@ -3,6 +3,7 @@ use thiserror::Error;
 
 use crate::StorageError;
 use crate::tool::ToolError;
+use crate::types::io::ClientItemError;
 use crate::types::io::input::InputValidationError;
 use crate::types::io::output::McpListTools;
 use crate::types::request_response::{
@@ -116,6 +117,10 @@ pub enum ExecutorError {
     #[error("invalid request: {0}")]
     InvalidInput(#[from] InputValidationError),
 
+    /// A client-supplied item `OpenAI` refuses.
+    #[error(transparent)]
+    ClientItem(#[from] ClientItemError),
+
     /// The request's `max_tool_calls` is not an integer of at least one.
     #[error(transparent)]
     InvalidMaxToolCalls(#[from] MaxToolCallsError),
@@ -207,6 +212,7 @@ impl ExecutorError {
             )
             | Self::InvalidRequest(_)
             | Self::InvalidInput(_)
+            | Self::ClientItem(_)
             | Self::InvalidPromptCacheOptions(_)
             | Self::InvalidMaxToolCalls(_)
             | Self::UnsupportedValue { .. }
@@ -246,6 +252,7 @@ impl ExecutorError {
             )
             | Self::InvalidRequest(_)
             | Self::InvalidInput(_)
+            | Self::ClientItem(_)
             | Self::InvalidPromptCacheOptions(_)
             | Self::InvalidMaxToolCalls(_)
             | Self::UnsupportedValue { .. }
@@ -283,7 +290,7 @@ impl ExecutorError {
             Self::ConversationLocked { .. } => "conversation_locked",
             Self::Storage(StorageError::PreviousResponseNotFound { .. }) => "previous_response_not_found",
             Self::Conflict(_) => "response_already_stored",
-            Self::Storage(StorageError::InvalidItemId { .. }) => "invalid_value",
+            Self::ClientItem(error) => error.code(),
             Self::Storage(StorageError::ItemAlreadyInConversation) => "item_already_in_conversation",
             Self::PayloadTooLarge(_) => "body_too_large",
             Self::ResourceLimitExceeded { .. } => "response_resource_limit_exceeded",
@@ -301,9 +308,8 @@ impl ExecutorError {
     #[must_use]
     pub fn error_param(&self) -> Option<&str> {
         match self.client_visible_error() {
-            Self::Storage(StorageError::InvalidItemId { param, .. })
-            | Self::Tool(ToolError::UnknownParameter { param })
-            | Self::UnsupportedValue { param, .. } => Some(param),
+            Self::ClientItem(error) => Some(error.param()),
+            Self::Tool(ToolError::UnknownParameter { param }) | Self::UnsupportedValue { param, .. } => Some(param),
             Self::Storage(StorageError::ItemAlreadyInConversation) => Some("items"),
             Self::Storage(StorageError::ItemCursorNotFound { .. }) => Some("after"),
             Self::ConversationLocked { .. } => Some("conversation"),
@@ -322,8 +328,7 @@ impl ExecutorError {
     pub fn error_message(&self) -> String {
         match self.client_visible_error() {
             Self::Storage(
-                error @ (StorageError::InvalidItemId { .. }
-                | StorageError::ItemAlreadyInConversation
+                error @ (StorageError::ItemAlreadyInConversation
                 | StorageError::ItemCursorNotFound { .. }
                 | StorageError::ResponseNotFound { .. }
                 | StorageError::PreviousResponseNotFound { .. }),

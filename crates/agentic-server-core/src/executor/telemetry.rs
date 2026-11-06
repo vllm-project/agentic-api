@@ -203,6 +203,7 @@ impl From<&ExecutorError> for FailureCategory {
             ExecutorError::NotFound { .. } => Self::NotFound,
             ExecutorError::InvalidRequest(_)
             | ExecutorError::InvalidInput(_)
+            | ExecutorError::ClientItem(_)
             | ExecutorError::InvalidMaxToolCalls(_)
             | ExecutorError::InvalidPromptCacheOptions(_)
             | ExecutorError::UnsupportedValue { .. }
