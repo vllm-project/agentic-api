@@ -974,6 +974,23 @@ mod tests {
         validate("MessagesRequest", &msg_with_config);
         let _: agentic_core::types::messages::MessagesRequest =
             serde_json::from_value(msg_with_config).expect("serde must accept output_config");
+
+        for thinking in [
+            serde_json::json!({"type":"enabled", "budget_tokens":1024}),
+            serde_json::json!({"type":"provider_future", "extension":{"value":null}}),
+        ] {
+            for cache_type in ["ephemeral", "provider_future"] {
+                let message = serde_json::json!({
+                    "model":"m", "max_tokens":64,
+                    "messages":[{"role":"user", "content":"hello"}],
+                    "thinking":thinking,
+                    "cache_control":{"type":cache_type, "extension":true}
+                });
+                validate("MessagesRequest", &message);
+                let _: agentic_core::types::messages::MessagesRequest =
+                    serde_json::from_value(message).expect("serde must accept provider parameters");
+            }
+        }
     }
 
     #[test]

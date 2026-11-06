@@ -13,6 +13,7 @@ use crate::executor::multi_agent::ValidatedTreeCheckpoint;
 use crate::executor::session::ResponseContinuation;
 use crate::executor::telemetry::ExecutorMetrics;
 use crate::storage::backend::redact_database_urls;
+use crate::storage::schema::verify_persistence_ready;
 use crate::storage::{
     ConversationStore, DatabaseBackend, ResponseCheckpoint, ResponseStore, create_pool_with_schema_and_configs,
 };
@@ -211,13 +212,8 @@ impl ExecutionContext {
             return true;
         };
         matches!(
-            tokio::time::timeout(timeout, async {
-                crate::storage::schema::verify_persistence_ready(pool.as_ref())
-                    .await
-                    .is_ok()
-            })
-            .await,
-            Ok(true)
+            tokio::time::timeout(timeout, verify_persistence_ready(pool.as_ref())).await,
+            Ok(Ok(()))
         )
     }
 

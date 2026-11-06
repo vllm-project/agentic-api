@@ -3,6 +3,14 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 use std::collections::HashMap;
+#[cfg(feature = "openapi")]
+use utoipa::{
+    PartialSchema, ToSchema,
+    openapi::{
+        ObjectBuilder, RefOr,
+        schema::{AnyOfBuilder, Schema, Type},
+    },
+};
 
 /// Create-only fields distinguish omission from an explicit null on continuation.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -53,10 +61,32 @@ impl<T: Serialize> Serialize for RequestField<T> {
     }
 }
 
+/// Known thinking parameters validate their payload; future provider types retain all fields.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum ThinkingConfig {
+    Known(KnownThinkingConfig),
+    Other(ProviderThinkingConfig),
+}
+
+impl<'de> Deserialize<'de> for ThinkingConfig {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = Value::deserialize(deserializer)?;
+        // A malformed known type must not fall through to the opaque provider form.
+        let known = KnownThinkingConfig::deserialize(&value).map_err(serde::de::Error::custom)?;
+        match known {
+            KnownThinkingConfig::Unknown => ProviderThinkingConfig::deserialize(value)
+                .map(Self::Other)
+                .map_err(serde::de::Error::custom),
+            known => Ok(Self::Known(known)),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum ThinkingConfig {
+pub enum KnownThinkingConfig {
     Enabled {
         budget_tokens: u32,
         #[serde(flatten)]
@@ -74,6 +104,18 @@ pub enum ThinkingConfig {
         #[serde(flatten)]
         extra: HashMap<String, Value>,
     },
+    #[serde(other)]
+    Unknown,
+}
+
+/// A provider thinking configuration the gateway forwards without interpreting.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct ProviderThinkingConfig {
+    #[serde(rename = "type")]
+    pub kind: String,
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -86,11 +128,13 @@ pub struct CacheControl {
     #[serde(flatten)]
     pub extra: HashMap<String, Value>,
 }
+/// Known cache-control types stay typed; future spellings are preserved verbatim.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum CacheControlKind {
     Ephemeral,
+    #[serde(untagged)]
+    Other(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -239,3 +283,27 @@ pub struct ThinkingTurns {
 pub enum ThinkingTurnsKind {
     ThinkingTurns,
 }
+
+#[cfg(feature = "openapi")]
+impl PartialSchema for ThinkingConfig {
+    fn schema() -> RefOr<Schema> {
+        AnyOfBuilder::new()
+            .item(KnownThinkingConfig::schema())
+            .item(ProviderThinkingConfig::schema())
+            .into()
+    }
+}
+#[cfg(feature = "openapi")]
+impl ToSchema for ThinkingConfig {}
+
+#[cfg(feature = "openapi")]
+impl PartialSchema for CacheControlKind {
+    fn schema() -> RefOr<Schema> {
+        ObjectBuilder::new().schema_type(Type::String).into()
+    }
+}
+#[cfg(feature = "openapi")]
+impl ToSchema for CacheControlKind {}
+
+#[cfg(test)]
+mod tests;
