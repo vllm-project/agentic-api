@@ -16,7 +16,7 @@ use super::custom::{CustomHandler, CustomToolMap, insert_custom_entry};
 use super::declaration::ToolDeclaration;
 use super::executors::GatewayExecutors;
 use super::function::insert_function_entry;
-use super::mcp::registry::insert_discovered_mcp_entry;
+use super::mcp::registry::{apply_messages_config, insert_discovered_mcp_entry};
 use super::normalize::code_interpreter_unavailable_error;
 use super::ownership::{GatewayBinding, ToolOwnership};
 use super::shell::insert_shell_entry;
@@ -315,7 +315,7 @@ impl ToolRegistry {
                 ToolDeclaration::Mcp(p) => {
                     let _materialization_guard = acquire_materialization().await;
                     let listing = history.and_then(|input| McpHandler::reusable_listing(input, p));
-                    let tool_set = match executors.mcp_server_tools(p, listing).await {
+                    let mut tool_set = match executors.mcp_server_tools(p, listing).await {
                         Ok(tool_set) => tool_set,
                         // Config errors mean the declaration is invalid; the client can fix it.
                         Err(error @ ToolError::Config(_)) => return Err(error.into()),
@@ -329,6 +329,7 @@ impl ToolRegistry {
                             continue;
                         }
                     };
+                    apply_messages_config(&mut tool_set, p);
                     let handlers = tool_set.discovered_handlers;
                     discovered_mcp_tools = discovered_mcp_tools.checked_add(handlers.len()).ok_or_else(|| {
                         E::from(ToolError::Execution(

@@ -5,8 +5,11 @@
 
 use std::collections::HashMap;
 
+use super::mcp::MessagesMcpToolset;
+use serde::de::{Error as _, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_json::Value;
+use serde_json::{Map, Value};
+use std::fmt;
 
 mod versions;
 
@@ -23,6 +26,7 @@ pub enum ToolParam {
     WebSearch(MessagesNativeTool),
     WebFetch(MessagesNativeTool),
     Provider(MessagesProviderTool),
+    McpToolset(MessagesMcpToolset),
 }
 
 /// A recognized native tool declaration with its original protocol version.
@@ -68,17 +72,18 @@ pub struct MessagesProviderTool {
 
 impl ToolParam {
     #[must_use]
-    pub fn fields(&self) -> &MessagesToolFields {
+    pub fn fields(&self) -> Option<&MessagesToolFields> {
         match self {
-            Self::Function(fields) => fields,
-            Self::WebSearch(tool) | Self::WebFetch(tool) => &tool.fields,
-            Self::Provider(tool) => &tool.fields,
+            Self::Function(fields) => Some(fields),
+            Self::WebSearch(tool) | Self::WebFetch(tool) => Some(&tool.fields),
+            Self::Provider(tool) => Some(&tool.fields),
+            Self::McpToolset(_) => None,
         }
     }
 
     #[must_use]
-    pub fn name(&self) -> &str {
-        &self.fields().name
+    pub fn name(&self) -> Option<&str> {
+        self.fields().map(|fields| fields.name.as_str())
     }
 
     #[must_use]
@@ -87,23 +92,84 @@ impl ToolParam {
             Self::Function(_) => None,
             Self::WebSearch(tool) | Self::WebFetch(tool) => Some(tool.version.type_name),
             Self::Provider(tool) => Some(&tool.tool_type),
+            Self::McpToolset(_) => Some("mcp_toolset"),
         }
     }
 }
 
-// Dispatch on the discriminator explicitly: an untagged enum with a permissive
-// fallback could otherwise accept a malformed known declaration as another kind.
-#[derive(Deserialize)]
-struct WireTool {
-    #[serde(rename = "type", default)]
-    tool_type: Option<String>,
-    #[serde(flatten)]
-    fields: MessagesToolFields,
+/// The exact upstream-hosted search declarations supported by this connector.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum HostedToolSearchVersion {
+    Regex20251119,
+    Bm25_20251119,
+}
+
+impl HostedToolSearchVersion {
+    pub(crate) fn from_declaration(tool: &ToolParam) -> Option<Self> {
+        match (tool.tool_type(), tool.name()) {
+            (Some("tool_search_tool_regex_20251119"), Some("tool_search_tool_regex")) => Some(Self::Regex20251119),
+            (Some("tool_search_tool_bm25_20251119"), Some("tool_search_tool_bm25")) => Some(Self::Bm25_20251119),
+            _ => None,
+        }
+    }
+}
+
+impl ToolParam {
+    pub(crate) fn is_hosted_tool_search(&self) -> bool {
+        HostedToolSearchVersion::from_declaration(self).is_some()
+    }
+}
+
+// Inspect the discriminator before decoding its fields: an MCP toolset has no
+// function name, and malformed known declarations must never enter the fallback.
+struct DeclarationFields;
+
+impl<'de> Visitor<'de> for DeclarationFields {
+    type Value = Map<String, Value>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a Messages tool declaration")
+    }
+
+    fn visit_map<M: MapAccess<'de>>(self, mut access: M) -> Result<Self::Value, M::Error> {
+        let mut fields = Map::new();
+        while let Some((key, value)) = access.next_entry::<String, Value>()? {
+            if fields.contains_key(&key)
+                && matches!(
+                    key.as_str(),
+                    "type"
+                        | "name"
+                        | "description"
+                        | "input_schema"
+                        | "mcp_server_name"
+                        | "default_config"
+                        | "configs"
+                        | "cache_control"
+                )
+            {
+                return Err(M::Error::custom(format!("duplicate tool declaration field `{key}`")));
+            }
+            fields.insert(key, value);
+        }
+        Ok(fields)
+    }
 }
 
 impl<'de> Deserialize<'de> for ToolParam {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let WireTool { tool_type, fields } = WireTool::deserialize(deserializer)?;
+        let mut fields = deserializer.deserialize_map(DeclarationFields)?;
+        let tool_type: Option<String> = fields
+            .remove("type")
+            .map(serde_json::from_value::<Option<String>>)
+            .transpose()
+            .map_err(D::Error::custom)?
+            .flatten();
+        if tool_type.as_deref() == Some("mcp_toolset") {
+            return serde_json::from_value(Value::Object(fields))
+                .map(Self::McpToolset)
+                .map_err(D::Error::custom);
+        }
+        let fields = serde_json::from_value(Value::Object(fields)).map_err(D::Error::custom)?;
         Ok(match tool_type {
             None => Self::Function(fields),
             Some(tool_type) => {
@@ -128,25 +194,43 @@ impl Serialize for ToolParam {
             #[serde(flatten)]
             fields: &'a MessagesToolFields,
         }
-        WireToolRef {
-            tool_type: self.tool_type(),
-            fields: self.fields(),
+        match self {
+            Self::McpToolset(toolset) => {
+                #[derive(Serialize)]
+                struct McpWire<'a> {
+                    #[serde(rename = "type")]
+                    kind: &'static str,
+                    #[serde(flatten)]
+                    fields: &'a MessagesMcpToolset,
+                }
+                McpWire {
+                    kind: "mcp_toolset",
+                    fields: toolset,
+                }
+                .serialize(serializer)
+            }
+            Self::Function(fields)
+            | Self::WebSearch(MessagesNativeTool { fields, .. })
+            | Self::WebFetch(MessagesNativeTool { fields, .. })
+            | Self::Provider(MessagesProviderTool { fields, .. }) => WireToolRef {
+                tool_type: self.tool_type(),
+                fields,
+            }
+            .serialize(serializer),
         }
-        .serialize(serializer)
     }
 }
 
-// Keep the published schema's acceptance surface: named tools may omit type or
-// use any provider discriminator. This refactor does not enable new tool kinds.
+// Preserve the named-tool acceptance surface and add the separate MCP toolset shape.
 #[cfg(feature = "openapi")]
 impl utoipa::PartialSchema for ToolParam {
     fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
         use utoipa::openapi::{
             ObjectBuilder,
-            schema::{AdditionalProperties, SchemaType, Type},
+            schema::{AdditionalProperties, AnyOfBuilder, SchemaType, Type},
         };
         let optional_string = || ObjectBuilder::new().schema_type(SchemaType::from_iter([Type::String, Type::Null]));
-        ObjectBuilder::new()
+        let named = ObjectBuilder::new()
             .schema_type(SchemaType::new(Type::Object))
             .description(Some(
                 "A function tool, a supported native web tool, or an opaque provider tool.",
@@ -155,8 +239,43 @@ impl utoipa::PartialSchema for ToolParam {
             .required("name")
             .property("description", optional_string())
             .property("input_schema", ObjectBuilder::new().schema_type(SchemaType::AnyValue))
-            .property("type", optional_string())
-            .additional_properties(Some(AdditionalProperties::FreeForm(true)))
+            .property("type", optional_string().pattern(Some("^(?!mcp_toolset$)")))
+            .additional_properties(Some(AdditionalProperties::FreeForm(true)));
+        AnyOfBuilder::new()
+            .item(named)
+            .item(
+                ObjectBuilder::new()
+                    .schema_type(SchemaType::new(Type::Object))
+                    .property(
+                        "type",
+                        ObjectBuilder::new()
+                            .schema_type(SchemaType::new(Type::String))
+                            .enum_values(Some(["mcp_toolset"])),
+                    )
+                    .required("type")
+                    .property(
+                        "mcp_server_name",
+                        ObjectBuilder::new().schema_type(SchemaType::new(Type::String)),
+                    )
+                    .required("mcp_server_name")
+                    .property(
+                        "default_config",
+                        AnyOfBuilder::new()
+                            .item(utoipa::openapi::Ref::from_schema_name("McpToolConfig"))
+                            .item(ObjectBuilder::new().schema_type(SchemaType::new(Type::Null))),
+                    )
+                    .property(
+                        "configs",
+                        AnyOfBuilder::new()
+                            .item(
+                                ObjectBuilder::new().additional_properties(Some(AdditionalProperties::RefOr(
+                                    utoipa::openapi::Ref::from_schema_name("McpToolConfig").into(),
+                                ))),
+                            )
+                            .item(ObjectBuilder::new().schema_type(SchemaType::new(Type::Null))),
+                    )
+                    .additional_properties(Some(AdditionalProperties::FreeForm(true))),
+            )
             .into()
     }
 }

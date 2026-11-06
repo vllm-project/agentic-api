@@ -39,13 +39,14 @@ use crate::executor::inference::{BoxStream, response_lines, send_request};
 use crate::executor::messages_context::MessagesRequestContext;
 use crate::executor::messages_round::{MessagesRoundDecision, decide_round};
 use crate::executor::messages_server_tools::{NativeServerTools, ServerToolView};
-use crate::executor::messages_tools::{execute_gateway_calls, request_gateway_map};
+use crate::executor::messages_tools::{execute_gateway_calls, request_gateway_map, resume_pending_mcp};
 use crate::executor::messages_usage::MessagesUsageTotals;
 use crate::executor::request::ExecutionContext;
 use crate::executor::telemetry::metrics::{Stage, StageTimer};
 use crate::executor::telemetry::{Api, ExecutionSpan, FailureCategory, InstrumentedStream, Route};
 use crate::proxy::processed_response_headers;
 use crate::tool::ToolRegistry;
+use crate::types::messages::GatewayToolResult;
 use crate::types::messages::tool_call::MessagesToolCall;
 use crate::types::messages::tool_seam;
 
@@ -78,6 +79,29 @@ pub async fn run_messages_stream(
         execution.not_delivered();
         return Err(error);
     }
+    let key = exec_ctx.messages_result_key()?;
+    let view = ServerToolView {
+        native: ctx.native_server_tools(),
+        key,
+    };
+    let gateway_map = request_gateway_map(ctx.gateway_tools_or(&exec_ctx.messages_gateway_tools), &registry);
+    let resumed = match resume_pending_mcp(
+        &mut ctx,
+        &registry,
+        &gateway_map,
+        view,
+        &exec_ctx.gateway_scheduler_policy,
+        &exec_ctx.metrics,
+    )
+    .await
+    {
+        Ok(results) => results,
+        Err(error) => {
+            execution.failed(&error);
+            execution.not_delivered();
+            return Err(error);
+        }
+    };
     // Send the first upstream request before the handler commits an HTTP 200,
     // so initial vLLM errors retain their original status and body.
     let opened = open_round(&ctx, &exec_ctx, &upstream, 0).instrument(span.clone()).await;
@@ -91,7 +115,7 @@ pub async fn run_messages_stream(
     };
     let response_headers = processed_response_headers(first_round.response.headers());
     let clock = execution.clock().clone();
-    let body = messages_stream_body(ctx, registry, exec_ctx, upstream, first_round, execution);
+    let body = messages_stream_body(ctx, registry, exec_ctx, upstream, first_round, execution, resumed);
     Ok(MessagesResponse {
         body: Box::pin(InstrumentedStream::delivering(body, span, clock)),
         headers: response_headers,
@@ -151,16 +175,13 @@ fn messages_stream_body(
     upstream: MessagesUpstream,
     first_round: OpenRound,
     mut execution: ExecutionSpan,
+    resumed: Vec<GatewayToolResult>,
 ) -> BoxStream {
     Box::pin(stream! {
         // The key was resolved before the stream opened; this cannot fail.
         let Ok(key) = exec_ctx.messages_result_key() else { return };
         let view = ServerToolView { native: ctx.native_server_tools(), key };
-        let mut acc = MessagesStreamAccumulator {
-            gateway_map: request_gateway_map(&exec_ctx.messages_gateway_tools, &registry),
-            native: view.native,
-            ..Default::default()
-        };
+        let mut acc = MessagesStreamAccumulator::for_request(&ctx, &registry, &exec_ctx, resumed);
         let mut prepared_response = Some(first_round);
         let clock = execution.clock().clone();
         let mut rounds = exec_ctx.metrics.rounds(Api::Messages);
@@ -205,6 +226,10 @@ fn messages_stream_body(
                     clock.client_event(text);
                     yield out;
                 }
+                for (out, text) in acc.release_pending_results() {
+                    clock.client_event(text);
+                    yield out;
+                }
                 if acc.has_error() {
                     stage.finish(Some(acc.failure_category()));
                     execution.failed_with(acc.failure_category());
@@ -239,7 +264,7 @@ fn messages_stream_body(
                 }
             }
             // The round runs its calls: show them before they execute.
-            for (out, text) in acc.release_held(true) {
+            for (out, text) in acc.release_held(true, true) {
                 clock.client_event(text);
                 yield out;
             }
@@ -288,7 +313,7 @@ async fn execute_round(
         &exec_ctx.metrics,
     )
     .await;
-    let (results, tool_results) = acc.record_executed(executed);
+    let (results, tool_results) = acc.record_executed(executed, &assistant_content);
     ctx.append_round(&assistant_content, tool_results)?;
     Ok(results)
 }
@@ -344,9 +369,26 @@ struct MessagesStreamAccumulator {
     native: NativeServerTools,
     /// Events held since this round's first native call, in arrival order.
     held: Vec<Value>,
+    /// Results of prior mixed-round MCP calls, shown after `message_start`.
+    pending_mcp_results: Vec<GatewayToolResult>,
 }
 
 impl MessagesStreamAccumulator {
+    /// Initialize the request's matching ownership, native projection and resumed outputs.
+    fn for_request(
+        ctx: &MessagesRequestContext,
+        registry: &ToolRegistry,
+        exec_ctx: &ExecutionContext,
+        resumed: Vec<GatewayToolResult>,
+    ) -> Self {
+        Self {
+            gateway_map: request_gateway_map(ctx.gateway_tools_or(&exec_ctx.messages_gateway_tools), registry),
+            pending_mcp_results: resumed,
+            native: ctx.native_server_tools(),
+            ..Self::default()
+        }
+    }
+
     fn begin_round(&mut self) {
         self.index_map.clear();
         self.suppressed_indices.clear();

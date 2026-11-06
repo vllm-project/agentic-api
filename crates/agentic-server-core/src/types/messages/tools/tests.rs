@@ -164,3 +164,55 @@ fn duplicate_known_fields_remain_invalid() {
         assert!(serde_json::from_str::<ToolParam>(body).is_err(), "{body}");
     }
 }
+
+#[test]
+fn mcp_toolsets_have_typed_configuration_without_a_function_name() {
+    let value = json!({"type":"mcp_toolset", "mcp_server_name":"example",
+        "default_config":{"enabled":false, "defer_loading":true},
+        "configs":{"echo":{"enabled":true, "defer_loading":false}},
+        "cache_control":{"type":"ephemeral"}, "future":{"keep":true}});
+    let tool: ToolParam = serde_json::from_value(value.clone()).unwrap();
+    assert!(matches!(tool, ToolParam::McpToolset(_)));
+    assert_eq!(tool.name(), None);
+    assert_eq!(tool.tool_type(), Some("mcp_toolset"));
+    assert_eq!(serde_json::to_value(tool).unwrap(), value);
+}
+
+#[test]
+fn malformed_mcp_toolsets_cannot_fall_through_to_provider_tools() {
+    for value in [
+        json!({"type":"mcp_toolset", "name":"not_a_function"}),
+        json!({"type":"mcp_toolset", "mcp_server_name":42}),
+        json!({"type":"mcp_toolset", "mcp_server_name":"s", "default_config":{"enabled":"yes"}}),
+        json!({"type":"mcp_toolset", "mcp_server_name":"s", "configs":{"echo":{"defer_loading":1}}}),
+    ] {
+        assert!(serde_json::from_value::<ToolParam>(value.clone()).is_err(), "{value}");
+    }
+}
+
+#[test]
+fn hosted_search_capabilities_require_an_exact_version_and_matching_name() {
+    for (kind, name) in [
+        ("tool_search_tool_regex_20251119", "tool_search_tool_regex"),
+        ("tool_search_tool_bm25_20251119", "tool_search_tool_bm25"),
+    ] {
+        let tool: ToolParam = serde_json::from_value(json!({"type":kind,"name":name})).unwrap();
+        assert!(tool.is_hosted_tool_search());
+        let wrong: ToolParam = serde_json::from_value(json!({"type":kind,"name":"other"})).unwrap();
+        assert!(!wrong.is_hosted_tool_search());
+    }
+    let unknown: ToolParam = serde_json::from_value(json!({
+        "type":"tool_search_tool_regex_20251120","name":"tool_search_tool_regex"
+    }))
+    .unwrap();
+    assert!(!unknown.is_hosted_tool_search());
+    assert!(matches!(unknown, ToolParam::Provider(_)));
+}
+
+#[test]
+fn mcp_toolset_preserves_an_opaque_name_extension() {
+    let value = json!({"type":"mcp_toolset", "mcp_server_name":"s", "name":"provider_extension"});
+    let tool: ToolParam = serde_json::from_value(value.clone()).unwrap();
+    assert!(matches!(tool, ToolParam::McpToolset(_)));
+    assert_eq!(serde_json::to_value(tool).unwrap(), value);
+}
