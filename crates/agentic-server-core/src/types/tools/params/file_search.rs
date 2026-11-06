@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct FileSearchToolParam {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vector_store_ids: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_num_results: Option<usize>,

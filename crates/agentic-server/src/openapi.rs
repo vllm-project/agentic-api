@@ -55,6 +55,7 @@ use utoipa::OpenApi;
         FileUploadRequest,
         agentic_core::types::io::FileSearchCall,
         agentic_core::types::io::FileSearchCallResult,
+        agentic_core::types::io::FileSearchCallStatus,
         agentic_core::types::io::FileCitation,
         agentic_core::types::request_response::PromptCacheOptions,
         agentic_core::types::request_response::PromptCacheMode,
@@ -532,6 +533,8 @@ mod tests {
             "VectorStoreObject",
             "SearchResult",
             "FileSearchCall",
+            "FileSearchCallResult",
+            "FileSearchCallStatus",
             "FileCitation",
         ] {
             assert!(schemas[name].is_object(), "missing file search schema {name}");

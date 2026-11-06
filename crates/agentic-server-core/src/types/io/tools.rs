@@ -54,6 +54,11 @@ impl Serialize for AllowedTool {
         S: Serializer,
     {
         let built_in = self.type_.as_str() == "file_search";
+        if built_in && self.name.as_str() != "file_search" {
+            return Err(serde::ser::Error::custom(
+                "file_search selector has a noncanonical name",
+            ));
+        }
         let mut map = serializer.serialize_map(Some(if built_in { 1 } else { 2 }))?;
         map.serialize_entry("type", &self.type_)?;
         if !built_in {
@@ -475,6 +480,15 @@ mod tests {
             serde_json::to_value(choice.normalized_for_upstream()).unwrap(),
             serde_json::json!({"type":"allowed_tools","mode":"required","tools":[{"type":"function","name":"file_search"},{"type":"function","name":"weather"}]})
         );
+    }
+
+    #[test]
+    fn file_search_allowed_selector_rejects_noncanonical_internal_name() {
+        let selector = AllowedTool {
+            type_: NonEmptyToolName::try_from("file_search").unwrap(),
+            name: NonEmptyToolName::try_from("other").unwrap(),
+        };
+        assert!(serde_json::to_value(selector).is_err());
     }
 
     #[test]

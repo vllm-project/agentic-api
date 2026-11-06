@@ -914,6 +914,15 @@ mod tests {
     }
 
     #[test]
+    fn responses_tool_file_search_omits_absent_vector_store_ids() {
+        let tool: ResponsesTool = serde_json::from_value(serde_json::json!({"type": "file_search"})).unwrap();
+        assert_eq!(
+            serde_json::to_value(tool).unwrap(),
+            serde_json::json!({"type": "file_search"})
+        );
+    }
+
+    #[test]
     fn file_search_preserves_typed_options_and_rejects_unsupported_fields() {
         let wire = serde_json::json!({
             "type": "file_search", "vector_store_ids": ["vs_1"], "max_num_results": 3,

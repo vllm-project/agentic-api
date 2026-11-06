@@ -2807,6 +2807,25 @@ fn file_search_lifecycle_preserves_typed_output() {
 }
 
 #[test]
+fn file_search_incomplete_done_closes_the_item() {
+    let call = serde_json::json!({"type":"file_search_call","id":"fs_1","status":"incomplete","queries":["policy"]});
+    let mut acc = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Strict);
+    for frame in [
+        serde_json::json!({"type":"response.created","response":{"id":"resp_1","status":"in_progress"}}),
+        serde_json::json!({"type":"response.in_progress","response":{"id":"resp_1","status":"in_progress"}}),
+        serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"type":"file_search_call","id":"fs_1","status":"in_progress","queries":["policy"]}}),
+        serde_json::json!({"type":"response.file_search_call.in_progress","output_index":0,"item_id":"fs_1"}),
+        serde_json::json!({"type":"response.file_search_call.searching","output_index":0,"item_id":"fs_1"}),
+        serde_json::json!({"type":"response.output_item.done","output_index":0,"item":call}),
+        serde_json::json!({"type":"response.incomplete","response":{"id":"resp_1","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"}}}),
+    ] {
+        acc.process_line(SseLine::parse(&format!("data: {frame}"))).unwrap();
+    }
+    let output = serde_json::to_value(acc.finalize("test", None, None).output).unwrap();
+    assert_eq!(output, serde_json::json!([call]));
+}
+
+#[test]
 fn file_search_done_only_is_preserved_leniently_and_rejected_strictly() {
     let call = serde_json::json!({"type":"file_search_call","id":"fs_1","status":"completed","queries":["policy"],"results":[]});
     let lines = [

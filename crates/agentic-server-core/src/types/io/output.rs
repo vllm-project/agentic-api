@@ -1,7 +1,7 @@
 mod apply_done;
 mod file_search;
 mod history;
-pub use file_search::{FileCitation, FileSearchCall, FileSearchCallResult};
+pub use file_search::{FileCitation, FileSearchCall, FileSearchCallResult, FileSearchCallStatus};
 pub(crate) mod tool_search_call;
 mod web_search_status;
 pub use apply_done::ApplyDone;

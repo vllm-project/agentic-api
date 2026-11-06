@@ -27,7 +27,7 @@ use crate::types::event::MessageStatus;
 use crate::types::io::output::McpListTools;
 use crate::types::io::{
     ApplyDone, CodeInterpreterCall, CodeInterpreterCallStatus, CompactionItem, CustomToolCall, FileSearchCall,
-    FunctionToolCall, GatewayCallStatus, McpCall, McpCallStatus, MultiAgentCall, MultiAgentCallOutput, OutputItem,
+    FileSearchCallStatus, FunctionToolCall, McpCall, McpCallStatus, MultiAgentCall, MultiAgentCallOutput, OutputItem,
     OutputMessage, ReasoningOutput, ReasoningStatus, ShellCall, ShellCallStatus, ToolSearchCall, WebSearchCall,
     WebSearchCallStatus,
 };
@@ -353,7 +353,10 @@ impl ActiveItem {
                     | CodeInterpreterCallStatus::Incomplete
             ),
             (Self::FileSearchCall { .. }, Some(OutputItem::FileSearchCall(done))) => {
-                matches!(done.status, GatewayCallStatus::Completed | GatewayCallStatus::Failed)
+                matches!(
+                    done.status,
+                    FileSearchCallStatus::Completed | FileSearchCallStatus::Incomplete | FileSearchCallStatus::Failed
+                )
             }
             (Self::WebSearchCall { .. }, Some(OutputItem::WebSearchCall(done))) => {
                 matches!(
