@@ -693,8 +693,16 @@ goes through it, so it lowers the public records the model never read (search it
   `InOutItem::into_input_items` uses the existing output-to-input conversion and
   client-tool lowering for model history. Storage row markers and legacy decoding
   remain in `storage/`; there is no separate conversation-item enum.
+  `InOutItem::admit_all` (`item/item_id.rs`) is the one check every item a client sends passes, whatever its kind,
+  called once per endpoint that accepts items: Responses `input` in `ResponseHandler::resolve_input_items`, and
+  Conversations `items` in `ConversationHandler::create` and `create_items`. As on `OpenAI`, an item's ID must
+  begin with its kind's prefix, and a call or an output needs a non-empty `call_id` (`ClientCallId::validate`,
+  the same rule the pending-call ledger applies) while repeated ones are accepted. A refusal is a `ClientItemError` with `OpenAI`'s code (`invalid_value`, `empty_string`), parameter
+  (`input[N].id`, `items[N].call_id`) and message. Storage does not validate items, and upstream output is
+  not admitted: an empty `call_id` in stored history is refused by the ledger when a turn continues it.
   Item retrieval and listing return `InOutItem` directly. `into_public` assigns the
-  storage identity and expands shorthand messages on the returned item;
+  storage identity, gives an omitted status `OpenAI`'s value (a function call `in_progress`, an output
+  `completed`) and expands shorthand messages on the returned item;
   serialization uses the item types themselves, without an item-response wrapper.
   `ResponsesInput::input_items` uses `InOutItem::as_input` to borrow submitted input
   items and project outputs. The existing compaction-window selection accepts these
@@ -832,15 +840,15 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   call sequence. A request without stored history runs the same check when its input
   replays search items, since the ledger owns how client search calls and outputs pair;
   tool search keeps only the rules it alone sees (item ids, hosted pairs, output status).
-  Every call and call output must have a non-empty `call_id`; call IDs
-  must be unique across the sequence; and each output must resolve a call of the same
-  item kind. An output whose `call_id` matches no call is rejected with the `OpenAI`
-  unknown-call error; a second output for a resolved synchronous call or a
-  function/custom kind mismatch is an invalid request rather than evidence that the
-  call was resolved. Valid unresolved calls remain ordered by their original emission,
+  Every call and call output must have a non-empty `call_id`, and each output must resolve
+  an earlier call of the same item kind. As on `OpenAI` (the `call-ids` cassettes), a
+  `call_id` may repeat: a repeated call adds nothing, a call is answered once any output for
+  its `call_id` follows it, and further outputs are accepted. An output whose `call_id`
+  matches no call is rejected with the `OpenAI` unknown-call error; a function/custom kind
+  mismatch is an invalid request. Valid unresolved calls remain ordered by their original emission,
   and the first unresolved synchronous client-executed call produces the existing
   missing-output error. An async call (`async: true` on the call item) may stay
-  unresolved and accepts repeated outputs; it ends neither the resolved prefix used by
+  unresolved; it ends neither the resolved prefix used by
   compaction nor the continuation. A compaction window (`model_items`,
   `canonical_session_history`) shows the model an async call that was still open at its
   checkpoint. Retained histories (`retain_window`, a session whose history compaction
@@ -1414,7 +1422,7 @@ declarations, custom/namespace shapes, tool choice, and tool-search metadata.
 Nonempty provider message IDs without the public `msg` prefix receive `msg_` during
 translation. Message events and final JSON/SSE snapshots use the same public ID;
 ingestion retains the provider's original identity for lifecycle validation. Client
-message-ID validation remains strict, so returned history can be submitted unchanged.
+item-ID validation (`InOutItem::admit`) remains strict, so returned history can be submitted unchanged.
 Output-text `logprobs` use the existing nullable-vector deserializer: missing and
 null values become an empty vector and serialize as `[]`. Wire normalization uses
 the same default so content parts agree with item and terminal snapshots;

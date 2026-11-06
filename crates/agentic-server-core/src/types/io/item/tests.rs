@@ -231,15 +231,22 @@ fn item_resource_has_one_id_and_flattened_content() {
     assert!(actual.get("item").is_none());
 }
 
+/// Recorded `OpenAI` behavior: a function call listed without a stored status is `in_progress`; a stored one is kept.
 #[test]
-fn function_call_history_status_is_preserved() {
-    for wire in [
-        json!({"type":"function_call","call_id":"call_1","name":"lookup","arguments":"{}"}),
-        json!({"type":"function_call","call_id":"call_1","name":"lookup","arguments":"{}","status":"completed"}),
+fn function_call_history_status_gets_openai_default() {
+    for (wire, status) in [
+        (
+            json!({"type":"function_call","call_id":"call_1","name":"lookup","arguments":"{}"}),
+            "in_progress",
+        ),
+        (
+            json!({"type":"function_call","call_id":"call_1","name":"lookup","arguments":"{}","status":"completed"}),
+            "completed",
+        ),
     ] {
-        let item: InOutItem = serde_json::from_value(wire.clone()).unwrap();
+        let item: InOutItem = serde_json::from_value(wire).unwrap();
         let public = serde_json::to_value(item.into_public("fc_history".into())).unwrap();
-        assert_eq!(public.get("status"), wire.get("status"));
+        assert_eq!(public["status"], status);
         assert_eq!(public["call_id"], "call_1");
     }
 }

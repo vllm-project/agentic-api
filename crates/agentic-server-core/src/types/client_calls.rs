@@ -23,17 +23,25 @@ impl ClientCallId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// The rule for every client `call_id`: it must not be empty. Repeated IDs are valid, as on `OpenAI`.
+    ///
+    /// # Errors
+    /// [`EmptyClientCallId`] for an empty `call_id`.
+    pub fn validate(call_id: &str) -> Result<(), EmptyClientCallId> {
+        if call_id.is_empty() {
+            Err(EmptyClientCallId)
+        } else {
+            Ok(())
+        }
+    }
 }
 
 impl TryFrom<String> for ClientCallId {
     type Error = EmptyClientCallId;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        if value.is_empty() {
-            Err(EmptyClientCallId)
-        } else {
-            Ok(Self(value))
-        }
+        Self::validate(&value).map(|()| Self(value))
     }
 }
 

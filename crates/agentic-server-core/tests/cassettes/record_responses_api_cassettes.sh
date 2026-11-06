@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Record flat Responses API cassettes with the existing Python recorder.
-# RESPONSES_RECORD_SET=all|openai|gateway; RESPONSES_SCENARIO=all|lifecycle|pagination|edge-cases|conversation|replayed-items|tool-items.
+# RESPONSES_RECORD_SET=all|openai|gateway; RESPONSES_SCENARIO=all|lifecycle|pagination|edge-cases|conversation|replayed-items|tool-items|call-ids.
 # RESPONSES_STREAM_MODE=nonstreaming|streaming|both (default: nonstreaming).
 set -euo pipefail
 
@@ -24,8 +24,8 @@ case "$RECORD_SET" in
     *) echo "RESPONSES_RECORD_SET must be all, openai, or gateway" >&2; exit 2 ;;
 esac
 case "$SCENARIO" in
-    all|lifecycle|pagination|edge-cases|conversation|replayed-items|tool-items) ;;
-    *) echo "RESPONSES_SCENARIO must be all, lifecycle, pagination, edge-cases, conversation, replayed-items, or tool-items" >&2; exit 2 ;;
+    all|lifecycle|pagination|edge-cases|conversation|replayed-items|tool-items|call-ids) ;;
+    *) echo "RESPONSES_SCENARIO must be all, lifecycle, pagination, edge-cases, conversation, replayed-items, tool-items, or call-ids" >&2; exit 2 ;;
 esac
 case "$STREAM_MODE" in
     nonstreaming|streaming|both) ;;
@@ -52,6 +52,7 @@ record() {
         conversation) turns=19; mode=response-conversation ;;
         replayed-items) turns=14; mode=response-replayed-items ;;
         tool-items) turns=48; mode=response-tool-items; read_timeout="${HTTP_READ_TIMEOUT:-900}" ;;
+        call-ids) turns=17; mode=response-call-ids ;;
     esac
     local suffix="" stream_flag=--no-stream
     if [[ "$transport" == streaming ]]; then suffix="-stream"; stream_flag=--stream; fi
@@ -81,7 +82,12 @@ path, scenario, count = Path(sys.argv[1]), sys.argv[2], int(sys.argv[3])
 cassette = safe_load(path.read_text())
 assert list(cassette) == ["turns"], "cassette must have one flat turns list"
 turns = cassette["turns"]
-assert len(turns) >= 5 if scenario == "tool-items" else len(turns) == count
+if scenario == "tool-items":
+    assert len(turns) >= 5
+elif scenario == "call-ids":
+    assert 12 <= len(turns) <= count, "conversation follow-ups run only after a successful creation"
+else:
+    assert len(turns) == count
 assert [turn["filename"] for turn in turns] == [f"t{i}" for i in range(1, len(turns) + 1)]
 for turn in turns:
     assert set(turn) == {"filename", "request", "response"}
@@ -112,6 +118,11 @@ elif scenario == "conversation":
 elif scenario == "replayed-items":
     assert sum(turn["request"]["method"] == "POST" for turn in turns) == 5
     assert any(len(turn["request"]["body"].get("input", [])) == 3 for turn in turns)
+elif scenario == "call-ids":
+    cases = [turn["request"]["headers"]["x-run-id"] for turn in turns]
+    assert cases[:9] == ["A", "A2", "B", "D", "H", "C0", "C1", "C2", "C3"], cases
+    assert {"E0", "F0", "G0"} <= set(cases), cases
+    assert all(turn["request"]["body"].get("stream") is not True for turn in turns)
 elif scenario == "tool-items":
     created_ids = set()
     first_tools = set()
@@ -142,11 +153,11 @@ CASSETTE_CHECK
 for provider in openai gateway; do
     if [[ "$RECORD_SET" != all && "$RECORD_SET" != "$provider" ]]; then continue; fi
     if [[ "$provider" == openai ]]; then model="$OPENAI_MODEL"; else model="$GATEWAY_MODEL"; fi
-    for scenario in lifecycle pagination edge-cases conversation replayed-items tool-items; do
+    for scenario in lifecycle pagination edge-cases conversation replayed-items tool-items call-ids; do
         if [[ "$SCENARIO" != all && "$SCENARIO" != "$scenario" ]]; then continue; fi
-        # Source tool scenarios use JSON. Capture tool-items once even
-        # when both transports are selected.
-        if [[ "$scenario" == tool-items ]]; then
+        # Source tool scenarios and call-id admission probes use JSON. Capture
+        # them once even when both transports are selected.
+        if [[ "$scenario" == tool-items || "$scenario" == call-ids ]]; then
             record "$provider" "$scenario" "$model" nonstreaming
             continue
         fi

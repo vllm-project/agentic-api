@@ -662,15 +662,15 @@ async fn session_commit_accepts_a_new_call_without_reading_disabled_storage() {
 }
 
 #[tokio::test]
-async fn session_continuation_rejects_a_call_id_the_pinned_history_already_used() {
+async fn session_continuation_accepts_a_call_id_the_pinned_history_already_used() {
     let exec = execution();
     let session = session();
     let parent = parent_with_call(&exec, &session).await;
     let ctx = resolved_continuation(&exec, &session, &parent).await;
     let payload = response(&ctx, json!([function_call("call_first")]));
-    // As on the gateway path, the repeated call is stored and refused when a turn continues it.
+    // As on OpenAI, a call_id may repeat: the turn is stored and a turn answering it continues.
     let repeated = commit(ctx, payload, &exec).await.expect("the turn is stored").id;
-    let error = rehydrate_in_session(
+    let next = rehydrate_in_session(
         request(
             Some(&repeated),
             json!([
@@ -681,11 +681,9 @@ async fn session_continuation_rejects_a_call_id_the_pinned_history_already_used(
         &session,
     )
     .await
-    .unwrap_err();
-    assert!(
-        matches!(&error, ExecutorError::InvalidRequest(message) if message.contains("duplicate call_id")),
-        "must reject the repeated call, not fail on a database lookup: {error:?}"
-    );
+    .expect("a repeated call_id continues without reading disabled storage");
+    let history = serde_json::to_value(&next.enriched_request.input).unwrap();
+    assert_eq!(history.as_array().unwrap().len(), 5);
 }
 
 #[tokio::test]

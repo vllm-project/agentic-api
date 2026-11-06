@@ -1,6 +1,7 @@
 //! Shared input/output history items for Responses, Conversations, and storage.
 
 mod item_id;
+pub use item_id::ClientItemError;
 
 use std::borrow::Cow;
 use std::str::FromStr;
@@ -62,11 +63,12 @@ impl From<OutputItem> for InOutItem {
 }
 
 impl InOutItem {
-    /// Assign the stored public identity and expand shorthand message content.
-    /// This consumes the returned copy; retained model history is not modified.
+    /// Assign the stored public identity, give an omitted call or output status the one `OpenAI` returns, and expand
+    /// shorthand message content. This consumes the returned copy; retained model history is not modified.
     #[must_use]
     pub(crate) fn into_public(mut self, id: String) -> Self {
         self.set_id(id);
+        self.complete_omitted_status();
         if let Self::Input(InputItem::Message(message)) = &mut self {
             message.status.get_or_insert(MessageStatus::Completed);
             if let InputMessageContent::Text(text) = &mut message.content {

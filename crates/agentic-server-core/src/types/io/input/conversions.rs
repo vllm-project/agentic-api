@@ -199,18 +199,7 @@ impl ResponsesInput {
         match self {
             Self::Items(mut items) => {
                 for item in &mut items {
-                    match item {
-                        InOutItem::Input(InputItem::FunctionCallOutput(output)) => {
-                            output.status.get_or_insert(MessageStatus::Completed);
-                        }
-                        InOutItem::Input(InputItem::CustomToolCallOutput(output)) => {
-                            output.status.get_or_insert(MessageStatus::Completed);
-                        }
-                        InOutItem::Input(InputItem::ShellCallOutput(output)) => {
-                            output.status.get_or_insert(ShellCallStatus::Completed);
-                        }
-                        _ => {}
-                    }
+                    item.complete_omitted_status();
                 }
                 items
             }

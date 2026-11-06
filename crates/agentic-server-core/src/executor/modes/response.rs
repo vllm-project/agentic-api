@@ -3,8 +3,7 @@
 use std::collections::HashSet;
 
 use crate::storage::{DbResponse, ResponseData, ResponseMetadata, ResponseStore, StorageError};
-use crate::types::io::OutputItem;
-use crate::types::io::{InOutItem, InputItem};
+use crate::types::io::InOutItem;
 use crate::types::io::{ItemOrder, ItemPage, ListItemsResponse};
 use crate::types::request_response::ResponsePayload;
 
@@ -48,8 +47,9 @@ impl ResponseHandler {
 
     /// Resolve client references without overwriting the stored item with supplied content.
     pub(crate) async fn resolve_input_items(&self, items: &mut [InOutItem]) -> ExecutorResult<()> {
+        InOutItem::admit_all(items, "input")?;
         let mut seen = HashSet::new();
-        for (index, item) in items.iter_mut().enumerate() {
+        for item in items.iter_mut() {
             let Some(id) = item.id() else { continue };
             if !seen.insert(id.to_owned()) {
                 return Err(ExecutorError::UnsupportedValue {
@@ -59,13 +59,6 @@ impl ResponseHandler {
                         "Duplicate item found with id {id}. Remove duplicate items from your input and try again."
                     ),
                 });
-            }
-            // Validate message identities at admission, never while persisting upstream outputs.
-            if matches!(
-                item,
-                InOutItem::Input(InputItem::Message(_)) | InOutItem::Output(OutputItem::Message(_))
-            ) {
-                item.validate_client_id(format!("input[{index}].id"))?;
             }
             if let Some(stored) = self.store.get_input_item(id).await? {
                 *item = stored.into_replayed_input();

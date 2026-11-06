@@ -70,6 +70,7 @@ impl ConversationHandler {
                 "a conversation accepts at most 20 initial items".into(),
             ));
         }
+        InOutItem::admit_all(items, "items")?;
         self.store
             .create(tenant_id, metadata, items)
             .await
@@ -144,6 +145,7 @@ impl ConversationHandler {
                 "items must contain between 1 and 20 items".into(),
             ));
         }
+        InOutItem::admit_all(&items, "items")?;
 
         self.store
             .create_items(tenant_id, conversation_id, items)
