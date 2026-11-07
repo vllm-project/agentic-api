@@ -53,6 +53,10 @@ use utoipa::OpenApi;
     ),
     components(schemas(
         FileUploadRequest,
+        agentic_core::types::io::FileSearchCall,
+        agentic_core::types::io::FileSearchCallResult,
+        agentic_core::types::io::FileSearchCallStatus,
+        agentic_core::types::io::FileCitation,
         agentic_core::types::request_response::PromptCacheOptions,
         agentic_core::types::request_response::PromptCacheMode,
         agentic_core::types::request_response::PromptCacheTtl,
@@ -524,7 +528,15 @@ mod tests {
                 .any(|param| param["name"] == "limit" && param["in"] == "query")
         );
         let schemas = &spec["components"]["schemas"];
-        for name in ["FileObject", "VectorStoreObject", "SearchResult"] {
+        for name in [
+            "FileObject",
+            "VectorStoreObject",
+            "SearchResult",
+            "FileSearchCall",
+            "FileSearchCallResult",
+            "FileSearchCallStatus",
+            "FileCitation",
+        ] {
             assert!(schemas[name].is_object(), "missing file search schema {name}");
         }
     }
@@ -982,6 +994,11 @@ mod tests {
         validate("ResponsesTool", &ns_tool);
         let _: agentic_core::types::tools::ResponsesTool =
             serde_json::from_value(ns_tool).expect("serde must accept namespace with tools");
+
+        validate(
+            "ResponsesTool",
+            &serde_json::json!({"type": "file_search", "vector_store_ids": ["vs_abc"]}),
+        );
 
         // -- InputItem: structured custom tool output --
         let structured_output = serde_json::json!({

@@ -146,6 +146,7 @@ impl OutputItem {
             // An unset ID decodes as empty: the item has none.
             Self::CustomToolCall(item) => Some(item.id.as_str()).filter(|id| !id.is_empty()),
             Self::ShellCall(item) => item.id.as_deref(),
+            Self::FileSearchCall(item) => Some(&item.id),
             Self::WebSearchCall(item) => Some(&item.id),
             Self::McpCall(item) => Some(&item.id),
             Self::McpListTools(item) => Some(&item.id),
@@ -170,6 +171,7 @@ impl OutputItem {
             Self::ToolSearchOutput(_) => Some("tso_"),
             Self::CustomToolCall(_) => Some("ctc_"),
             Self::ShellCall(_) => Some("sh_"),
+            Self::FileSearchCall(_) => Some("fs_"),
             Self::WebSearchCall(_) => Some("ws_"),
             Self::McpCall(_) => Some("mcp_"),
             Self::McpListTools(_) => Some("mcpl_"),
@@ -285,6 +287,7 @@ impl InOutItem {
                 OutputItem::ToolSearchCall(item) => item.id = id,
                 OutputItem::ToolSearchOutput(item) => item.id = Some(id),
                 OutputItem::CustomToolCall(item) => item.id = id,
+                OutputItem::FileSearchCall(item) => item.id = id,
                 OutputItem::WebSearchCall(item) => item.id = id,
                 OutputItem::McpCall(item) => item.id = id,
                 OutputItem::McpListTools(item) => item.id = id,

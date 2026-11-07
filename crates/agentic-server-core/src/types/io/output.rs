@@ -1,4 +1,7 @@
 mod apply_done;
+mod file_search;
+mod history;
+pub use file_search::{FileCitation, FileSearchCall, FileSearchCallResult, FileSearchCallStatus};
 pub(crate) mod tool_search_call;
 mod web_search_status;
 pub use apply_done::ApplyDone;
@@ -18,9 +21,9 @@ use crate::utils::common::{deserialize_from_value_opt, deserialize_nullable_vec}
 use crate::utils::uuid7_str;
 
 use super::code_interpreter::CodeInterpreterCall;
-use super::input::{
-    CompactionItem, InputFunctionToolCall, InputItem, InputTextContent, InputToolSearchCall, ToolSearchOutputMessage,
-};
+#[cfg(test)]
+use super::input::InputFunctionToolCall;
+use super::input::{CompactionItem, InputTextContent, ToolSearchOutputMessage};
 use super::multi_agent::{AgentAttribution, AgentMessage, MultiAgentCall, MultiAgentCallOutput};
 pub use super::reasoning::ReasoningTextContent;
 use super::reasoning::{OpaqueReasoning, ReasoningStatus, ReasoningSummaryContent};
@@ -885,6 +888,8 @@ pub enum OutputItem {
     CustomToolCall(CustomToolCall),
     #[serde(rename = "shell_call")]
     ShellCall(ShellCall),
+    #[serde(rename = "file_search_call")]
+    FileSearchCall(FileSearchCall),
     #[serde(rename = "web_search_call")]
     WebSearchCall(WebSearchCall),
     #[serde(rename = "mcp_call")]
@@ -930,6 +935,7 @@ impl utoipa::PartialSchema for OutputItem {
             .item(tagged("tool_search_output", "ToolSearchOutputMessage"))
             .item(tagged("custom_tool_call", "CustomToolCall"))
             .item(tagged("shell_call", "ShellCall"))
+            .item(tagged("file_search_call", "FileSearchCall"))
             .item(tagged("web_search_call", "WebSearchCall"))
             .item(tagged("mcp_call", "McpCall"))
             .item(tagged("mcp_list_tools", "McpListTools"))
@@ -962,6 +968,7 @@ impl OutputItem {
             Self::ToolSearchOutput(item) => item.agent.as_ref(),
             Self::CustomToolCall(item) => item.agent.as_ref(),
             Self::ShellCall(item) => item.agent.as_ref(),
+            Self::FileSearchCall(item) => item.agent.as_ref(),
             Self::WebSearchCall(item) => item.agent.as_ref(),
             Self::McpCall(item) => item.agent.as_ref(),
             Self::McpListTools(item) => item.agent.as_ref(),
@@ -984,6 +991,7 @@ impl OutputItem {
             Self::ToolSearchOutput(item) => &mut item.agent,
             Self::CustomToolCall(item) => &mut item.agent,
             Self::ShellCall(item) => &mut item.agent,
+            Self::FileSearchCall(item) => &mut item.agent,
             Self::WebSearchCall(item) => &mut item.agent,
             Self::McpCall(item) => &mut item.agent,
             Self::McpListTools(item) => &mut item.agent,
@@ -1005,6 +1013,7 @@ impl OutputItem {
             | Self::ShellCall(_)
             | Self::Message(_)
             | Self::CodeInterpreterCall(_)
+            | Self::FileSearchCall(_)
             | Self::WebSearchCall(_)
             | Self::McpCall(_)
             | Self::McpListTools(_)
@@ -1028,6 +1037,7 @@ impl OutputItem {
             Self::Message(_)
             | Self::ToolSearchOutput(_)
             | Self::CodeInterpreterCall(_)
+            | Self::FileSearchCall(_)
             | Self::WebSearchCall(_)
             | Self::McpCall(_)
             | Self::McpListTools(_)
@@ -1037,32 +1047,6 @@ impl OutputItem {
             | Self::MultiAgentCallOutput(_)
             | Self::AgentMessage(_)
             | Self::Unknown { .. } => false,
-        }
-    }
-
-    /// Shapes a stored output item as continuation input.
-    /// Tool items keep their public types; `ResponsesInput::normalized_model_input` lowers them
-    /// to function calls for the model. MCP list metadata is retained here and removed by
-    /// `ResponsesInput::model_input`.
-    #[must_use]
-    pub fn to_input_item(&self) -> Option<InputItem> {
-        match self {
-            Self::Message(message) => Some(InputItem::Message(message.clone().into())),
-            Self::Reasoning(reasoning) => Some(InputItem::Reasoning(reasoning.clone())),
-            Self::FunctionCall(call) => Some(InputItem::FunctionCall(InputFunctionToolCall::from(call.clone()))),
-            Self::ToolSearchCall(call) => InputToolSearchCall::try_from(call).ok().map(InputItem::ToolSearchCall),
-            Self::ToolSearchOutput(output) => Some(InputItem::ToolSearchOutput(output.clone())),
-            Self::CustomToolCall(call) => Some(InputItem::CustomToolCall(call.clone())),
-            Self::ShellCall(call) => Some(InputItem::ShellCall(call.clone())),
-            Self::WebSearchCall(call) => Some(InputItem::WebSearchCall(call.clone())),
-            Self::McpCall(call) => Some(InputItem::McpCall(call.clone())),
-            Self::CodeInterpreterCall(call) => Some(InputItem::CodeInterpreterCall(call.clone())),
-            Self::McpListTools(list_tools) => Some(InputItem::McpListTools(list_tools.clone())),
-            Self::Compaction(item) => Some(InputItem::Compaction(item.clone())),
-            Self::MultiAgentCall(item) => Some(InputItem::MultiAgentCall(item.clone().into())),
-            Self::MultiAgentCallOutput(item) => Some(InputItem::MultiAgentCallOutput(item.clone().into())),
-            Self::AgentMessage(item) => Some(InputItem::AgentMessage(item.clone().into())),
-            Self::Unknown { .. } => None,
         }
     }
 }
@@ -1285,6 +1269,20 @@ mod tests {
                 "content": [{"type": "output_text", "text": "The parser handles errors correctly.", "annotations": [], "logprobs": []}]
             })
         );
+    }
+
+    #[test]
+    fn file_search_call_preserves_retrieved_identifiers() {
+        let wire = serde_json::json!({
+            "type": "file_search_call", "id": "fs_1", "status": "completed",
+            "queries": ["policy"], "results": [{"file_id": "file_1", "filename": "policy.txt",
+                "score": 0.9, "attributes": {}, "text": "Policy text"}]
+        });
+        let item: OutputItem = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(item.id(), Some("fs_1"));
+        assert_eq!(serde_json::to_value(&item).unwrap(), wire);
+        assert!(!item.requires_client_action(&ToolRegistry::default()));
+        assert!(item.to_input_item().is_none());
     }
 
     #[test]
