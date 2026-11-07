@@ -17,7 +17,7 @@ use crate::storage::schema::verify_persistence_ready;
 use crate::storage::{
     ConversationStore, DatabaseBackend, ResponseCheckpoint, ResponseStore, create_pool_with_schema_and_configs,
 };
-use crate::tool::{GatewayExecutorRegistration, GatewayExecutors};
+use crate::tool::{GatewayExecutorRegistration, GatewayExecutors, file_search::FileSearchService};
 use crate::types::io::{InOutItem, ToolChoice};
 use crate::types::messages::GatewayToolMap;
 use crate::types::request_response::{RequestPayload, ResponsePayload};
@@ -99,6 +99,8 @@ impl RequestContext {
 /// rather than stored here, keeping this context purely shared and immutable.
 #[derive(Clone, Debug)]
 pub struct ExecutionContext {
+    /// Shared in-tree file ingestion and retrieval, available when persistence is configured.
+    pub file_search: Option<FileSearchService>,
     pub conv_handler: ConversationHandler,
     pub resp_handler: ResponseHandler,
     pub client: Arc<reqwest::Client>,
@@ -149,6 +151,7 @@ impl ExecutionContext {
     ) -> Self {
         let gateway_executors = GatewayExecutors::from_env(Arc::clone(&client));
         Self {
+            file_search: None,
             conv_handler,
             resp_handler,
             client,
@@ -182,6 +185,13 @@ impl ExecutionContext {
     #[must_use]
     pub fn with_gateway_executor(mut self, executor: impl Into<GatewayExecutorRegistration>) -> Self {
         self.gateway_executors.insert(executor);
+        self
+    }
+
+    /// Installs a file search service for the Files and vector-store APIs.
+    #[must_use]
+    pub fn with_file_search_service(mut self, service: FileSearchService) -> Self {
+        self.file_search = Some(service);
         self
     }
 
@@ -259,7 +269,22 @@ impl ExecutionContext {
         let client = Arc::new(reqwest::Client::new());
         let gateway_executors = GatewayExecutors::from_config(Arc::clone(&client), &cfg.tools)
             .map_err(|error| Error::Config(format!("failed to validate configured gateway tool policies: {error}")))?;
+        let file_search =
+            FileSearchService::configured(Arc::clone(&pool), Arc::clone(&client), cfg.tools.file_search.clone())
+                .await
+                .map_err(|error| {
+                    tracing::error!(
+                        error = ?error,
+                        sqlite_vec_extension_path = ?cfg.tools.file_search.sqlite_vec_extension_path,
+                        "file search initialization failed"
+                    );
+                    Error::Config(error.public_message())
+                })?;
+        if let Err(error) = file_search.reconcile_blob_cleanup().await {
+            tracing::warn!(%error, "file blob reconciliation will retry while the gateway runs");
+        }
         Ok(Self {
+            file_search: Some(file_search),
             conv_handler,
             resp_handler,
             client,
