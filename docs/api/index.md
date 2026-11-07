@@ -1,7 +1,7 @@
 # API Reference
 
-See [Files, vector stores, and file search](file-search.md) for document ingestion
-and retrieval through the HTTP API.
+See [Files, vector stores, and file search](file-search.md) for document ingestion,
+retrieval, and the Responses `file_search` built-in tool.
 
 ## Authentication
 
