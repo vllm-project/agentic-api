@@ -57,6 +57,8 @@ All notable changes to Agentic API are documented here.
   and the gateway reports that 3xx as a failed `web_search_call` rather than following it out of the configured
   instance. Each SearXNG `metadata[]` entry carries `"provider": "searxng"`. Concurrency inherits
   `max_concurrent_gateway_calls`.
+- Added Keenable as a selectable `web_search` provider with `AGENTIC_WEB_SEARCH_PROVIDER=keenable`. It works without
+  an API key through Keenable's public endpoint; `KEENABLE_API_KEY` switches to the keyed endpoint.
 - Added Serply as a selectable `web_search` provider with `AGENTIC_WEB_SEARCH_PROVIDER=serply` and `SERPLY_API_KEY`
   (#381). `language` maps to Google's `hl` plus the `lr=lang_xx` result-language restrict where Google supports one.
 - Added Claude's native `web_fetch_20250910` server tool as a gateway-executed tool on `/v1/messages` and
