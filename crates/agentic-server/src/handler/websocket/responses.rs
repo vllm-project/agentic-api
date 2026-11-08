@@ -265,10 +265,9 @@ async fn handle_ws_request(request: WsRequest, mut context: RequestExecution<'_>
     } = request;
     let mut execution = telemetry::dispatch(execution, state);
 
-    if let Err(error) =
-        payload.validate_prompt_cache_options(state.exec_ctx.responses_config.prompt_cache_options_supported)
-    {
-        let result = Err(WsError::from(agentic_core::executor::ExecutorError::from(error)));
+    // Reject before a session continuation can acquire and consume its parent checkpoint.
+    if let Err(error) = state.exec_ctx.validate_response_capabilities(&payload) {
+        let result = Err(WsError::from(error));
         telemetry::finish_local(&mut execution, &result);
         return result;
     }

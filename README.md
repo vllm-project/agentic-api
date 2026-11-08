@@ -332,6 +332,12 @@ max_upstream_sse_line_bytes = 16777216
 # Defaults to 16 MiB (16777216).
 max_stream_event_bytes = 16777216
 
+# Optional Responses admission policy for this exact served model ID.
+[responses.models."gpt-6-astra"]
+sampling_supported = false
+logprobs_supported = false
+reasoning_efforts = ["low", "medium", "high", "xhigh", "max"]
+
 [models."Qwen/Qwen3-VL-8B-Instruct"]
 # Input modalities to advertise for this served model ID.
 # Accepted values are "text" and "text" + "image"; text is always required.
@@ -370,6 +376,13 @@ catalog advertises them. A model without the setting keeps `["low", "medium", "h
 unchanged. Levels use the shared effort vocabulary (`low`, `medium`, `high`, `xhigh`, and `max`); unknown level names,
 empty lists, and repeated levels are rejected at startup with the offending file and line. Each level's Codex-facing
 description comes from a fixed per-level table rather than from the configuration file.
+
+`[responses.models."<served-model-id>"]` controls Responses request admission for the exact model ID.
+Omit fields to leave those controls to the upstream, subject to the typed request parser and the deployment
+default for `prompt_cache_options`. A model's `prompt_cache_options_supported` value takes precedence over
+`[responses] prompt_cache_options_supported`. The default is `false` unless configured. See
+[model capability policies](docs/api/index.md#model-capability-policies)
+for cache retention, service-tier restrictions, and rejection behavior.
 
 `max_request_body_size_bytes` bounds the serialized request the gateway accepts on `/v1/responses`,
 `/v1/responses/compact`, `/v1/conversations`, the Anthropic Messages endpoints, the Responses WebSocket, and the

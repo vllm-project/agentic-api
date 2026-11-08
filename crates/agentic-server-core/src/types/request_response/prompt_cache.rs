@@ -74,7 +74,7 @@ fn present_value<'de, D: Deserializer<'de>, T: Deserialize<'de>>(deserializer: D
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum PromptCacheOptionsError {
     #[error(
-        "prompt_cache_options is not enabled for this upstream; configure responses.prompt_cache_options_supported only after verifying the mode/TTL contract for every served model"
+        "prompt_cache_options is not enabled for this model; verify the upstream mode/TTL contract before enabling it in responses.models or through the deployment-wide responses.prompt_cache_options_supported setting"
     )]
     Unsupported,
 }

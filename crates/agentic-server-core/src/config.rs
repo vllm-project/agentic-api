@@ -37,6 +37,7 @@ pub use responses::{
     DEFAULT_MAX_RETAINED_RESPONSE_BYTES, DEFAULT_MAX_STREAM_EVENT_BYTES, DEFAULT_MAX_UPSTREAM_JSON_BYTES,
     DEFAULT_MAX_UPSTREAM_SSE_LINE_BYTES, MAX_RETAINED_RESPONSE_BYTES_ENV, MAX_STREAM_EVENT_BYTES_ENV,
     MAX_UPSTREAM_JSON_BYTES_ENV, MAX_UPSTREAM_SSE_LINE_BYTES_ENV, MIN_WIRE_HEADROOM_BYTES, ResponsesConfig,
+    ResponsesModelPolicy,
 };
 
 /// Conservative operator-owned defaults for the opt-in code interpreter.
@@ -847,19 +848,19 @@ mod tests {
     #[test]
     fn responses_config_validation() {
         let valid = ResponsesConfig {
-            prompt_cache_options_supported: false,
             max_retained_bytes: 1024 * 1024,
             max_upstream_json_bytes: 2 * 1024 * 1024,
             max_upstream_sse_line_bytes: 2 * 1024 * 1024,
             max_stream_event_bytes: 2 * 1024 * 1024,
+            ..ResponsesConfig::default()
         };
         assert!(valid.validate().is_ok());
 
-        let mut invalid_stream = valid;
+        let mut invalid_stream = valid.clone();
         invalid_stream.max_stream_event_bytes = 1024 * 1024;
         assert!(invalid_stream.validate().is_err());
 
-        let mut invalid_sse = valid;
+        let mut invalid_sse = valid.clone();
         invalid_sse.max_upstream_sse_line_bytes = 1024 * 1024;
         assert!(invalid_sse.validate().is_err());
 
@@ -869,11 +870,11 @@ mod tests {
 
         // For 4 MiB retained, 64 KiB is not enough headroom (requires 25% = 1 MiB)
         let borderline = ResponsesConfig {
-            prompt_cache_options_supported: false,
             max_retained_bytes: 4 * 1024 * 1024,
             max_upstream_json_bytes: 4 * 1024 * 1024 + 64 * 1024,
             max_upstream_sse_line_bytes: 5 * 1024 * 1024,
             max_stream_event_bytes: 5 * 1024 * 1024,
+            ..ResponsesConfig::default()
         };
         assert!(borderline.validate().is_err());
     }

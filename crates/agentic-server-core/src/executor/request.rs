@@ -307,7 +307,7 @@ impl ExecutionContext {
             messages_threads,
             streaming_timeout: streaming_timeout_from_env(),
             gateway_scheduler_policy: GatewaySchedulerPolicy::new(cfg.tools.max_concurrent_gateway_calls),
-            responses_config: cfg.responses,
+            responses_config: cfg.responses.clone(),
             metrics: ExecutorMetrics::from_global(),
             storage_pool: Some(pool),
         })

@@ -152,7 +152,7 @@ async fn summarize_items(
     exec_ctx: &ExecutionContext,
     auth: Option<&UpstreamHeaders>,
 ) -> ExecutorResult<(Vec<InputItem>, ResponseUsage, Option<String>)> {
-    request.validate_prompt_cache_options(exec_ctx.responses_config.prompt_cache_options_supported)?;
+    exec_ctx.validate_response_capabilities(request)?;
     let original_items = Vec::from(input);
     if !original_items.iter().any(item_has_meaningful_context) {
         return Err(ExecutorError::InvalidRequest(
