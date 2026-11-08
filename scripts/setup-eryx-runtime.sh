@@ -10,7 +10,8 @@ Usage:
 
 The script installs the eryx-precompile version matching Cargo.lock when needed,
 then downloads and precompiles the platform-specific runtime into Eryx's user
-cache. Set ERYX_PRECOMPILE_BIN to use a specific eryx-precompile executable.
+cache. Runtime setup is attempted up to three times. Set ERYX_PRECOMPILE_BIN
+to use a specific eryx-precompile executable.
 EOF
 }
 
@@ -88,6 +89,18 @@ if [[ "$installed_version" != "$eryx_version" ]]; then
 fi
 
 echo "Preparing the Eryx $eryx_version runtime for this platform"
-"$precompile_bin" setup
+for attempt in 1 2 3; do
+  if "$precompile_bin" setup; then
+    break
+  else
+    setup_status=$?
+  fi
+  if (( attempt == 3 )); then
+    echo "error: Eryx runtime setup failed after $attempt attempts" >&2
+    exit "$setup_status"
+  fi
+  echo "warning: Eryx runtime setup attempt $attempt failed; retrying in 2 seconds" >&2
+  sleep 2
+done
 echo "Eryx runtime ready; build with:"
 echo "  cargo build --release -p agentic-server --features embedded-code-interpreter"

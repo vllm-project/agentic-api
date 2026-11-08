@@ -1,12 +1,12 @@
 //! Response CRUD uses existing history rows and foreign-key behavior.
 
-mod support;
+use super::test_support as support;
 
 use agentic_core::types::conversations::ConversationMetadata;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use agentic_core::storage::models::{conversation as conversation_model, response as response_model};
+use crate::storage::models::{conversation as conversation_model, response as response_model};
 use agentic_core::storage::{
     ConversationStore, DbPool, ResponseMetadata, ResponseStore, StorageError, create_pool_with_schema,
 };

@@ -74,6 +74,9 @@ jobs:
       - name: Run clippy
         run: cargo clippy --all-targets -- -D warnings
 
+      - name: Verify SQLite history contracts and SQL budgets
+        run: cargo test --locked -p agentic-server-core --test storage_contract_test
+
       # Includes Dynamo and SGLang cassette replays; no separate provider jobs are needed.
       - name: Run tests
         run: cargo test
@@ -89,6 +92,24 @@ jobs:
         with:
           name: agentic-api-openapi
           path: ${{ runner.temp }}/openapi.json
+
+      - name: Test file APIs with the OpenAI Python client
+        run: |
+          python3 -m venv "${RUNNER_TEMP}/openai-file-client"
+          "${RUNNER_TEMP}/openai-file-client/bin/python" -m pip install --disable-pip-version-check openai==3.8.0
+          cargo build --locked -p agentic-server --bin agentic-server
+          "${RUNNER_TEMP}/openai-file-client/bin/python" scripts/tests/openai-file-search-client-test.py
+
+      - name: Verify SQLite vector provider
+        run: |
+          curl --fail --location --silent --show-error \
+            "https://github.com/asg017/sqlite-vec/releases/download/v0.1.9/sqlite-vec-0.1.9-loadable-linux-x86_64.tar.gz" \
+            --output "${RUNNER_TEMP}/sqlite-vec.tar.gz"
+          echo "b959baa1d8dc88861b1edb337b8587178cdcb12d60b4998f9d10b6a82052d5d7  ${RUNNER_TEMP}/sqlite-vec.tar.gz" \
+            | sha256sum --check
+          tar --extract --gzip --file "${RUNNER_TEMP}/sqlite-vec.tar.gz" --directory "${RUNNER_TEMP}" vec0.so
+          SQLITE_VEC_EXTENSION_PATH="${RUNNER_TEMP}/vec0.so" \
+            cargo test -p agentic-server-core --test sqlite_vec_repository -- --ignored
 
       - name: Test Codex and Claude launcher contracts
         run: bash scripts/tests/agentic-launchers-test.sh
@@ -283,7 +304,22 @@ jobs:
           cargo test -p agentic-server-core --lib storage::schema::tests:: -- --ignored --test-threads=1
 
       - name: Verify PostgreSQL migrations and restart persistence
-        run: cargo test -p agentic-server-core --test postgres_storage_integration -- --ignored --test-threads=1
+        run: cargo test -p agentic-server-core --lib storage::postgres_storage_integration -- --ignored --test-threads=1
+
+      - name: Verify PostgreSQL history contracts and SQL budgets
+        run: cargo test --locked -p agentic-server-core --test storage_contract_test
+
+      - name: Verify Messages thread persistence and concurrent gateway instances
+        run: cargo test -p agentic-server-core --test messages_thread_storage_test
+
+      - name: Verify Messages HTTP thread continuations and gateway restart
+        run: cargo test -p agentic-server --test messages_threads_test --test messages_threads_cassette_test
+
+      - name: Verify PostgreSQL file search persistence
+        run: cargo test -p agentic-server-core --test file_search_service postgres_file_search -- --ignored --test-threads=1
+
+      - name: Verify bounded PDF ingestion
+        run: cargo test -p agentic-server-core --features file-search-pdf --test file_search_service pdf
 
       - name: Verify PostgreSQL conversation CRUD and tenant isolation
         run: cargo test -p agentic-server-core --test postgres_tenant_isolation_test -- --ignored --test-threads=1

@@ -1,0 +1,76 @@
+name: Storage performance
+
+on:
+  pull_request:
+    paths:
+      - 'crates/agentic-server-core/src/storage/**'
+      - 'crates/agentic-server-core/src/executor/**'
+      - 'crates/agentic-server-core/src/types/**'
+      - 'crates/agentic-server-core/benches/**'
+      - 'crates/agentic-server-core/Cargo.toml'
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - '.github/workflows/storage-performance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: storage-performance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  storage-performance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: '0'
+      BASE_SHA: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/storage-performance
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: 1.98.1
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          cache-bin: false
+
+      - name: Measure the PR base
+        run: |
+          git worktree add --detach "${RUNNER_TEMP}/storage-base" "$BASE_SHA"
+          cargo bench --locked --manifest-path "${RUNNER_TEMP}/storage-base/Cargo.toml" \
+            -p agentic-server-core --bench benches -- \
+            '^(response|conversation)_(rehydrate|persist)/' \
+            --warm-up-time 1 --measurement-time 2 --sample-size 20 --save-baseline pr-base
+
+      - name: Compare the PR with its base on the same runner
+        run: |
+          set -o pipefail
+          cargo bench --locked -p agentic-server-core --bench benches -- \
+            '^(response|conversation)_(rehydrate|persist)/' \
+            --warm-up-time 1 --measurement-time 2 --sample-size 20 \
+            --noise-threshold 0.20 --significance-level 0.01 --baseline pr-base \
+            2>&1 | tee "${RUNNER_TEMP}/storage-performance.txt"
+          if grep -q 'regressed' "${RUNNER_TEMP}/storage-performance.txt"; then
+            echo '::warning::Criterion reported a storage regression. Review the comparison artifact and confirm it on a stable performance runner.'
+          fi
+          echo 'Storage latency comparison is available in the storage-performance artifact. SQL budgets are enforced separately in Rust CI.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload comparison and measurements
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: storage-performance
+          path: |
+            ${{ runner.temp }}/storage-performance.txt
+            ${{ env.CARGO_TARGET_DIR }}/criterion

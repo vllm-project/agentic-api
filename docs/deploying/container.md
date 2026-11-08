@@ -49,6 +49,8 @@ The image starts `agentic-server` in standalone mode. At minimum, set `LLM_API_B
 | `GATEWAY_PORT` | `9000` | Listen port |
 | `DATABASE_URL` | `$AGENTIC_API_HOME/agentic_api.db` | SQLite or PostgreSQL persistence URL |
 | `AGENTIC_API_HOME` | `/var/lib/agentic-api` | User configuration and default local-state directory |
+| `AGENTIC_FILES_STORAGE_DIR` | `$AGENTIC_API_HOME/files` | Local file bytes; mount persistent writable storage when using the Files API |
+| `AGENTIC_FILE_SEARCH_SQLITE_VEC_EXTENSION_PATH` | unset | Trusted sqlite-vec loadable extension for semantic search with a file-backed SQLite database |
 | `AGENTIC_MAX_REQUEST_BODY_SIZE_BYTES` | `10485760` | Maximum serialized request size for HTTP bodies and WebSocket messages; must be greater than zero |
 | `POSTGRES_MAX_CONNECTIONS` | `10` | Maximum PostgreSQL connections per gateway replica |
 | `POSTGRES_ACQUIRE_TIMEOUT_SECONDS` | `30` | Maximum wait for a PostgreSQL pool connection |
@@ -148,26 +150,38 @@ normally; one with them is handled as follows:
 
 To upgrade a deployment that uses PostgreSQL or an explicit `DATABASE_URL`, stop every replica of the earlier release,
 then either point `DATABASE_URL` at a new empty database or drop all of the gateway's tables (`responses`, `items`,
-`conversations`, the `file_search_*` tables, and `_sqlx_migrations`), according to the deployment's data-retention
+`conversations`, `message_threads`, the `file_search_*` tables, and `_sqlx_migrations`), according to the deployment's data-retention
 policy. Back up the database first if its contents must be kept.
 
 On a new PostgreSQL database, the first startup applies the migrations and then widens timestamp and sequence columns to
 64-bit integers.
 
-Stored requests now fail if their response or conversation state cannot be persisted. For streaming requests, the gateway sends an error event instead of `response.completed`. Most client responses use the generic message `failed to persist response`; the underlying database error is written only to gateway logs. The exception is an optimistic conversation conflict, which returns status `400`, type `invalid_request_error`, code `conversation_locked`, and param `conversation`. No part of the stale turn is persisted, so the client can retry the request against the conversation's latest state. This prevents clients from receiving a response ID that cannot be continued after a lock timeout or other database failure without exposing database schema or constraint details.
+Stored requests now fail if their response or conversation state cannot be persisted. For streaming requests, the gateway sends an error event instead of `response.completed`. Most client responses use the generic message `failed to persist response`; the underlying database error is written only to gateway logs. The exception is a conversation conflict: a turn that answers the conversation's pending tool call is refused when another turn, which had to answer the same call, was stored while it ran, with status `400`, type `invalid_request_error`, code `conversation_locked`, and param `conversation`. No part of the refused turn is persisted, so the client can retry the request against the conversation's latest state. This prevents clients from receiving a response ID that cannot be continued after a lock timeout or other database failure without exposing database schema or constraint details.
+
+The file search migration (`0008_file_search.sql`) adds four tables for files,
+vector stores, attachments, and chunks. Supervisor-managed deployments must apply
+this migration and grant the runtime role `SELECT`, `INSERT`, `UPDATE`, and `DELETE`
+on the new tables before starting the upgraded gateway. File metadata and
+embeddings use the same database as conversation state. Uploaded bytes use the
+local filesystem configured by `AGENTIC_FILES_STORAGE_DIR`. Mount persistent
+writable storage for the Files API, including PostgreSQL deployments. Replicas
+serving the same files must share that directory. See [file search](../api/file-search.md).
 
 `AGENTIC_API_SCHEMA_READY` keeps schema changes under supervisor control. Startup performs a read-only compatibility
 check and fails if the database was created by an earlier release, if required persistence columns, types,
-nullability, primary/foreign-key constraints, or the conversation sequence index are missing, or if persistence integer
-columns still need widening. Apply the repository migrations to an empty schema with a DDL-capable migration role, then
-widen the integer columns in one transaction before starting the DML-only gateway role. When using `psql`, pass
-`-v ON_ERROR_STOP=1` so any statement failure stops the script:
+nullability, primary/foreign-key/CHECK constraints, or the conversation sequence index are missing, or if persistence integer
+columns still need widening. Every startup requires `message_threads` from migration `0012_message_threads.sql`,
+including its state/checkpoint/lease CHECK constraints and SELECT/INSERT/UPDATE/DELETE privileges, even when clients
+send no thread requests. Apply the repository migrations through `0011_file_search_vec_map.sql` to an empty schema
+with a DDL-capable migration role, then apply `0012_message_threads.sql` and widen the integer columns in one transaction
+before starting the DML-only gateway role. Run the example below from the repository root with
+`psql -v ON_ERROR_STOP=1` so any statement failure stops the script:
 
 ```sql
 BEGIN;
+\i crates/agentic-server-core/migrations/0012_message_threads.sql
 ALTER TABLE conversations
-    ALTER COLUMN created_at TYPE BIGINT USING created_at::BIGINT,
-    ALTER COLUMN revision TYPE BIGINT USING revision::BIGINT;
+    ALTER COLUMN created_at TYPE BIGINT USING created_at::BIGINT;
 ALTER TABLE items
     ALTER COLUMN created_at TYPE BIGINT USING created_at::BIGINT,
     ALTER COLUMN seq TYPE BIGINT USING seq::BIGINT;
@@ -198,7 +212,7 @@ On `SIGTERM`, the gateway stops accepting connections and gives in-flight reques
 
 The image defaults to UID `10001` and GID `0`. Its working directory is setgid and the entrypoint uses a group-cooperative umask, so new SQLite files remain writable when OpenShift replaces the UID while retaining the group-0 permission model. Do not set a fixed `runAsUser` when the cluster assigns arbitrary UIDs.
 
-A volume mounted at `/var/lib/agentic-api` hides the ownership and mode stored in the image. For SQLite, configure the storage class or pod-level `fsGroup` so the mounted directory is writable by a supplemental group assigned to the container. The example below uses group 0 to match the image; if the cluster assigns a different permitted supplemental group, use that group and ensure the volume root is group-writable and setgid. PostgreSQL deployments do not need this pod-level filesystem setting.
+A volume mounted at `/var/lib/agentic-api` hides the ownership and mode stored in the image. For SQLite or local file storage, configure the storage class or pod-level `fsGroup` so the mounted directory is writable by a supplemental group assigned to the container. The example below uses group 0 to match the image; if the cluster assigns a different permitted supplemental group, use that group and ensure the volume root is group-writable and setgid. PostgreSQL deployments that do not use the Files API do not need this pod-level filesystem setting.
 
 Volumes initialized by an older image may contain SQLite files without group-write permission. Before rotating to an arbitrary UID, repair those volumes once as an administrator with `chmod -R g+rwX /var/lib/agentic-api`.
 
@@ -218,7 +232,7 @@ spec:
           type: RuntimeDefault
 ```
 
-Mount writable storage at `/var/lib/agentic-api` only when using SQLite. PostgreSQL deployments do not need a persistent filesystem for the gateway.
+Mount persistent writable storage at `/var/lib/agentic-api` when using SQLite or the Files API. With PostgreSQL, the file volume can instead be mounted at `AGENTIC_FILES_STORAGE_DIR`; replicas accessing the same files must share it. Back up that directory together with the database.
 
 For a replicated PostgreSQL deployment, use the
 [Kubernetes manifests and operational guide](kubernetes.md).

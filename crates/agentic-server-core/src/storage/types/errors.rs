@@ -70,14 +70,6 @@ pub enum StorageError {
     #[error("Item already in conversation")]
     ItemAlreadyInConversation,
 
-    /// A supplied conversation item ID does not match its item type.
-    #[error("Invalid '{param}': '{id}'. Expected an ID that begins with '{prefix}'.")]
-    InvalidItemId {
-        param: String,
-        id: String,
-        prefix: &'static str,
-    },
-
     /// Serialization or deserialization of data failed.
     ///
     /// Wraps `serde_json::Error` and automatically converts from it via `#[from]`.
@@ -149,10 +141,7 @@ impl StorageError {
     /// Returns `true` if this error is a validation error.
     #[must_use]
     pub fn is_validation(&self) -> bool {
-        matches!(
-            self,
-            Self::Validation(_) | Self::InvalidItemId { .. } | Self::ItemAlreadyInConversation
-        )
+        matches!(self, Self::Validation(_) | Self::ItemAlreadyInConversation)
     }
 }
 

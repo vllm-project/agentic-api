@@ -10,6 +10,7 @@ repository.workspace = true
 [features]
 default = ["openapi"]
 openapi = ["agentic-core/openapi", "dep:utoipa", "dep:utoipa-axum", "dep:utoipa-swagger-ui"]
+file-search-pdf = ["agentic-core/file-search-pdf"]
 # Forward the opt-in Eryx interpreter capability to the core request boundary.
 # The operator must provision a matching runtime.cwasm while building and then
 # explicitly enable the executor at runtime.
@@ -22,7 +23,7 @@ utoipa = { workspace = true, optional = true }
 utoipa-axum = { workspace = true, optional = true }
 utoipa-swagger-ui = { workspace = true, optional = true }
 agentic-core.workspace = true
-axum.workspace = true
+axum = { workspace = true, features = ["multipart"] }
 bytes.workspace = true
 clap.workspace = true
 either.workspace = true

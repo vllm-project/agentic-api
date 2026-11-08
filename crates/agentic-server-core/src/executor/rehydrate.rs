@@ -3,14 +3,15 @@
 //! Builds a [`RequestContext`] by loading prior turns from storage and
 //! injecting them into the enriched request before it is forwarded to the LLM.
 
-use super::session::{ResponseCheckpoint, ResponseContinuation, ResponseSession, canonical_session_history};
+use std::convert::identity;
+
+use super::session::{ResponseContinuation, ResponseSession, canonical_session_history};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::multi_agent::{CheckpointLimits, ValidatedTreeCheckpoint};
-use crate::executor::pending_calls::first_unanswered_sync_call;
+use crate::executor::pending_calls::CallLedger;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::telemetry::metrics::Stage;
-use crate::storage::{ResponseMetadata, StorageError};
-use crate::tool::ToolError;
+use crate::storage::{ConversationSnapshot, ResponseCheckpoint, ResponseMetadata, StorageError};
 use crate::types::io::InOutItem;
 use crate::types::io::input::is_search_item;
 use crate::types::io::{
@@ -166,7 +167,6 @@ async fn rehydrate_request(
         new_input_items,
         response_id,
         conversation_id: None,
-        conversation_version: None,
         checkpoint: None,
         continuation,
     };
@@ -214,21 +214,10 @@ async fn rehydrate_request(
 fn from_responses(ctx: &mut RequestContext) -> ExecutorResult<()> {
     let items = InOutItem::into_input_items(ctx.new_input_items.clone());
     if items.iter().any(is_search_item) {
-        reject_unanswered_sync_call(&items)?;
+        CallLedger::scan(&items)?.require_answered()?;
     }
     ctx.enriched_request.input = ResponsesInput::from(items);
     Ok(())
-}
-
-/// Refuses a history whose synchronous call has no output yet; the pending-call ledger also rejects a duplicate
-/// call id, an output with no call, and an output for a call of another kind.
-fn reject_unanswered_sync_call(items: &[InputItem]) -> ExecutorResult<()> {
-    match first_unanswered_sync_call(items)? {
-        Some(pending) => Err(ExecutorError::Tool(ToolError::MissingOutput {
-            call_id: pending.call_id,
-        })),
-        None => Ok(()),
-    }
 }
 
 fn validate_multi_agent_request(request: &RequestPayload) -> ExecutorResult<()> {
@@ -268,10 +257,8 @@ fn validate_multi_agent_request(request: &RequestPayload) -> ExecutorResult<()> 
 
 /// Hydrates `ctx` from the previous response chain.
 ///
-/// Loads the stored response, rehydrates its history items, resolves effective
-/// tools and tool choice from the stored metadata, and prepends the history to
-/// the enriched request input. The new response is independent of any conversation
-/// associated with its parent.
+/// Loads the stored response and its history, inherits its effective settings, and continues its history with this
+/// request's items. The new response is independent of any conversation associated with its parent.
 async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) -> ExecutorResult<()> {
     if ctx.continuation.is_some() {
         return from_session_response(ctx, exec_ctx).await;
@@ -282,28 +269,22 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
         .await?
         .ok_or_else(missing_previous_response_id)?;
     let checkpoint = ResponseCheckpoint {
-        response_id: stored.response_id,
+        response_id: Some(stored.response_id),
         history: Vec::new(),
         metadata: stored.metadata,
         durable: true,
+        history_item_ids: stored.history_item_ids,
+        requires_latest: false,
     };
-    if restore_agent_tree(ctx, &checkpoint.metadata, exec_ctx.responses_config.max_retained_bytes)? {
-        ctx.checkpoint = Some(checkpoint);
-        return Ok(());
+    if !restore_agent_tree(ctx, &checkpoint.metadata, exec_ctx.responses_config.max_retained_bytes)? {
+        set_model_input(ctx, InOutItem::into_input_items(history), identity)?;
+        apply_effective_settings(ctx, &checkpoint.metadata);
     }
-
-    let mut items = InOutItem::into_input_items(history);
-    items.reserve(ctx.new_input_items.len());
-    items.extend(InOutItem::into_input_items(ctx.new_input_items.clone()));
-    reject_unanswered_sync_call(&items)?;
-
-    ctx.enriched_request.previous_response_id = None;
-    ctx.enriched_request.input = ResponsesInput::from(items);
-    apply_effective_settings(ctx, &checkpoint.metadata);
     ctx.checkpoint = Some(checkpoint);
     Ok(())
 }
 
+/// Hydrates `ctx` from the session's retained parent, loading and retaining a stored parent on first use.
 async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) -> ExecutorResult<()> {
     let cached = ctx
         .continuation
@@ -325,10 +306,12 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
             .await?
             .ok_or_else(missing_previous_response_id)?;
         let checkpoint = ResponseCheckpoint {
-            response_id: stored.response_id,
+            response_id: Some(stored.response_id),
             history: canonical_session_history(InOutItem::into_input_items(history)),
             metadata: stored.metadata,
             durable: true,
+            history_item_ids: stored.history_item_ids,
+            requires_latest: false,
         };
         let continuation = ctx.continuation.as_ref().ok_or_else(|| {
             ExecutorError::InvalidRequest("session response requires a continuation lease".to_owned())
@@ -341,31 +324,13 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
         history: Vec::new(),
         metadata: parent.metadata.clone(),
         durable: parent.durable,
+        history_item_ids: parent.history_item_ids.clone(),
+        requires_latest: false,
     });
-    if restore_agent_tree(ctx, &parent.metadata, exec_ctx.responses_config.max_retained_bytes)? {
-        if let Some(continuation) = ctx.continuation.as_mut() {
-            continuation.parent = Some(parent);
-        }
-        return Ok(());
+    if !restore_agent_tree(ctx, &parent.metadata, exec_ctx.responses_config.max_retained_bytes)? {
+        set_model_input(ctx, parent.history.clone(), canonical_session_history)?;
+        apply_effective_settings(ctx, &parent.metadata);
     }
-    let mut items = parent.history.clone();
-    // Match durable rehydration: lower custom/shell call outputs only in the
-    // inference copy. new_input_items retains their public wire types.
-    items.extend(InOutItem::into_input_items(ctx.new_input_items.clone()));
-    let items = canonical_session_history(items);
-    reject_unanswered_sync_call(&items)?;
-    ctx.enriched_request.previous_response_id = None;
-    ctx.enriched_request.input = ResponsesInput::from(items);
-    ctx.enriched_request.tools = resolve_tools(
-        ctx.original_request.tools.as_deref(),
-        parent.metadata.effective_tools.as_deref(),
-        ctx.original_request.tools.is_some(),
-    );
-    ctx.enriched_request.tool_choice = Some(resolve_tool_choice(
-        ctx.original_request.tool_choice.as_ref(),
-        &parent.metadata.effective_tool_choice,
-        ctx.original_request.tool_choice.is_some() || ctx.original_request.tools.is_some(),
-    ));
     if let Some(continuation) = ctx.continuation.as_mut() {
         continuation.parent = Some(parent);
     }
@@ -379,8 +344,8 @@ fn missing_previous_response_id() -> ExecutorError {
 
 /// Hydrates `ctx` from the conversation store.
 ///
-/// Gets or creates the conversation (depending on `store`) and rehydrates its
-/// history in parallel, then prepends the history items to the enriched request input.
+/// Gets or creates the conversation (depending on `store`) and rehydrates its history in parallel, then continues
+/// that history with this request's items. A conversation turn does not inherit the stored settings.
 async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) -> ExecutorResult<()> {
     let (conv_data, snapshot) = tokio::try_join!(
         async {
@@ -392,31 +357,38 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
         },
         exec_ctx.conv_handler.rehydrate(ctx),
     )?;
-
-    let checkpoint = snapshot.turn_metadata.map(|metadata| ResponseCheckpoint {
-        response_id: snapshot.version.response_id.clone().unwrap_or_default(),
-        history: Vec::new(),
-        metadata,
-        durable: true,
-    });
-    if let Some(turn) = &checkpoint
-        && restore_agent_tree(ctx, &turn.metadata, exec_ctx.responses_config.max_retained_bytes)?
-    {
-        ctx.conversation_id = Some(conv_data.conversation_id);
-        ctx.conversation_version = Some(snapshot.version);
-        ctx.checkpoint = checkpoint;
-        return Ok(());
-    }
-
-    let mut items = InOutItem::into_input_items(snapshot.items);
-    items.reserve(ctx.new_input_items.len());
-    items.extend(InOutItem::into_input_items(ctx.new_input_items.clone()));
-    reject_unanswered_sync_call(&items)?;
-
-    ctx.enriched_request.input = ResponsesInput::from(items);
     ctx.conversation_id = Some(conv_data.conversation_id);
-    ctx.conversation_version = Some(snapshot.version);
-    ctx.checkpoint = checkpoint;
+    let ConversationSnapshot { items, mut checkpoint } = snapshot;
+    if !restore_agent_tree(ctx, &checkpoint.metadata, exec_ctx.responses_config.max_retained_bytes)? {
+        let history = InOutItem::into_input_items(items);
+        // A turn is admitted only if it answers the history's pending call, so another turn may have answered it first.
+        checkpoint.requires_latest = CallLedger::scan(&history)?.awaits_output();
+        set_model_input(ctx, history, identity)?;
+    }
+    // A multi-agent tree is the latest turn's snapshot, not appended history: a multi-agent turn, which continues or
+    // builds one, must be stored right after the turn it continued, or it would replace another turn's tree.
+    checkpoint.requires_latest |= ctx
+        .enriched_request
+        .multi_agent
+        .as_ref()
+        .is_some_and(|config| config.enabled);
+    ctx.checkpoint = Some(checkpoint);
+    Ok(())
+}
+
+/// Makes the continued `history` followed by this request's own items the turn's model input, once no synchronous call
+/// in them is left unanswered. `window` keeps what the turn continues: a session keeps the window after the latest
+/// compaction, which this request's items can move.
+fn set_model_input(
+    ctx: &mut RequestContext,
+    mut history: Vec<InputItem>,
+    window: fn(Vec<InputItem>) -> Vec<InputItem>,
+) -> ExecutorResult<()> {
+    history.extend(InOutItem::into_input_items(ctx.new_input_items.clone()));
+    let items = window(history);
+    CallLedger::scan(&items)?.require_answered()?;
+    ctx.enriched_request.previous_response_id = None;
+    ctx.enriched_request.input = ResponsesInput::from(items);
     Ok(())
 }
 

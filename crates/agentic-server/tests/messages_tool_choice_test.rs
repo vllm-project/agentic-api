@@ -234,7 +234,7 @@ fn assert_upstream_rounds(rounds: &[Value], expected_request: &Value) {
 }
 
 async fn check_choice(choice: Option<Value>, stream: bool, search_fails: bool, wanted_searches: usize, mixed: bool) {
-    check_choice_with_stop(choice, stream, search_fails, wanted_searches, mixed, "tool_use").await;
+    check_choice_with_stop(choice, stream, search_fails, wanted_searches, mixed, "tool_use", None).await;
 }
 
 async fn check_choice_with_stop(
@@ -244,6 +244,7 @@ async fn check_choice_with_stop(
     wanted_searches: usize,
     mixed: bool,
     tool_stop_reason: &'static str,
+    provider_parameters: Option<Value>,
 ) {
     let upstream = Upstream {
         requests: Arc::default(),
@@ -283,6 +284,12 @@ async fn check_choice_with_stop(
                  {"name":"client_echo", "input_schema":{"type":"object"}}]});
     if let Some(choice) = &choice {
         request["tool_choice"] = choice.clone();
+    }
+    if let Some(parameters) = provider_parameters {
+        request
+            .as_object_mut()
+            .unwrap()
+            .extend(parameters.as_object().unwrap().clone());
     }
     let mut expected_request = request.clone();
     assert!(normalize_native_web_search_for_upstream(&mut expected_request).unwrap());
@@ -391,6 +398,7 @@ async fn named_choice_end_turn_executes_the_selected_gateway_call() {
             1,
             false,
             "end_turn",
+            None,
         )
         .await;
     }
@@ -407,6 +415,7 @@ async fn named_choice_end_turn_preserves_client_tool_ownership() {
                 1,
                 mixed,
                 "end_turn",
+                None,
             )
             .await;
         }
@@ -425,6 +434,7 @@ async fn client_tool_truncation_and_other_stops_are_preserved() {
                     1,
                     mixed,
                     reason,
+                    None,
                 )
                 .await;
             }
@@ -512,6 +522,27 @@ async fn fulfilled_choice_still_allows_another_search() {
             false,
             2,
             false,
+        )
+        .await;
+    }
+}
+
+#[tokio::test]
+async fn gateway_tools_preserve_future_thinking_and_cache_control_types() {
+    for stream in [false, true] {
+        check_choice_with_stop(
+            Some(json!({"type":"tool", "name":"web_search"})),
+            stream,
+            false,
+            1,
+            false,
+            "tool_use",
+            Some(json!({
+                "thinking":{"type":"provider_future", "options":{"value":null}},
+                "cache_control":{"type":"provider_future", "scope":"request"},
+                "system":[{"type":"text", "text":"preserve", "cache_control":{"type":"provider_future", "scope":"system"}}],
+                "messages":[{"role":"user", "content":[{"type":"text", "text":"Search for proof", "cache_control":{"type":"provider_future", "scope":"block"}}]}]
+            })),
         )
         .await;
     }

@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use agentic_core::executor::{ConversationHandler, ExecuteRequest, ExecutionContext, ResponseHandler};
-use agentic_core::storage::{ConversationStore, DbPool, ResponseData, ResponseStore, create_pool_with_schema};
+use agentic_core::storage::{ConversationStore, DbPool, ResponseStore, create_pool_with_schema};
 use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
 use axum::Router;
 use axum::body::Bytes;
@@ -183,11 +183,7 @@ async fn multi_agent_history_holds_the_public_search_pair() {
     .await;
     let (context, responses, _) = durable_context(llm_url).await;
     let response = run(multi_agent_request(&json!("weather?")), &context).await;
-    let stored = responses
-        .get(&response.id)
-        .await
-        .and_then(ResponseData::try_from)
-        .expect("stored response");
+    let stored = responses.get(&response.id).await.expect("stored response");
     let tree = stored.metadata.multi_agent_tree.expect("multi-agent tree");
     let history = serde_json::to_value(&tree.agents[0].history).expect("history JSON");
     let types: Vec<_> = history

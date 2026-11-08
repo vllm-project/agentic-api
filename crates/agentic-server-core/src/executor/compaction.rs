@@ -7,22 +7,20 @@ mod context;
 mod summary;
 
 pub(crate) use carry_over::CompactionCarryOver;
-use carry_over::public_calls;
 
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use either::Either;
 
-use super::telemetry::FailureCategory;
 use super::telemetry::metrics::Stage;
 use super::telemetry::stages::CompactionTrigger;
 use context::item_has_meaningful_context;
 use summary::completed_summary_text;
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::pending_calls::resolved_prefix_len;
-use crate::executor::persist::persist_prepared_turn;
+use crate::executor::pending_calls::CallLedger;
+use crate::executor::persist::{TurnOutput, persist};
 use crate::executor::pipeline::AgentPipeline;
 use crate::executor::prepare::prepare_request_tools;
 use crate::executor::rehydrate::rehydrate_conversation;
@@ -198,7 +196,6 @@ async fn summarize_items(
         new_input_items: Vec::new(),
         response_id: uuid7_str("resp_"),
         conversation_id: None,
-        conversation_version: None,
         checkpoint: None,
         continuation: None,
     };
@@ -257,7 +254,7 @@ pub(crate) async fn maybe_compact_context(
         .as_ref()
         .is_some_and(|config| config.enabled);
     let prefix = if multi_agent {
-        resolved_prefix_len(&items)?
+        CallLedger::scan(&items)?.resolved_prefix_len()
     } else {
         items.len()
     };
@@ -355,20 +352,6 @@ pub async fn compact_response(
         ctx.new_input_items.iter().filter_map(InOutItem::as_input),
         &[],
     );
-    // A history call's public identity comes from what was stored, not from the tools this request
-    // declares: the model input above lowered it, and the declarations may have changed since.
-    // History is read again only when an open call came from it.
-    let from_history: HashSet<&str> = open_calls
-        .iter()
-        .filter_map(InputItem::call_id)
-        .filter(|call_id| !ctx.new_input_items.iter().any(|own| own.call_id() == Some(call_id)))
-        .collect();
-    let mut history_calls = if from_history.is_empty() {
-        HashMap::new()
-    } else {
-        let history = exec_ctx.resp_handler.rehydrate(&ctx).await?;
-        public_calls(history.map(|(_, items)| items).unwrap_or_default(), &from_history)
-    };
     let (compacted, usage, service_tier) = compact_items_with_trigger(
         &ctx.enriched_request,
         input,
@@ -377,42 +360,13 @@ pub async fn compact_response(
         CompactionTrigger::Explicit,
     )
     .await?;
-    // A call this request supplied is already public; a call from history takes its stored form.
-    let public_call = |item: InputItem| -> InputItem {
-        let public = item.call_id().and_then(|call_id| {
-            ctx.new_input_items
-                .iter()
-                .filter_map(InOutItem::as_input)
-                .find(|own| own.call_id() == Some(call_id))
-                .map(Cow::into_owned)
-                .or_else(|| history_calls.remove(call_id))
-        });
-        public.unwrap_or(item)
-    };
+    // Rehydrated history and this request's items are both public, so the open calls are as the client saw them.
     let mut output = compacted.clone();
-    output.extend(open_calls.into_iter().map(public_call));
+    output.extend(open_calls);
 
     let response_id = ctx.response_id.clone();
     ctx.new_input_items = carried.insert_into(compacted).into_iter().map(Into::into).collect();
-    let timer = exec_ctx.metrics.stage(Stage::Persist);
-    match persist_prepared_turn(
-        ctx,
-        tool_search_metadata,
-        Vec::new(),
-        None,
-        &exec_ctx.conv_handler,
-        &exec_ctx.resp_handler,
-    )
-    .await
-    {
-        Ok(()) => timer.finish(None),
-        // Without storage nothing was written, so there is no stage to time.
-        Err(ExecutorError::Storage(crate::StorageError::NotConfigured)) => timer.discard(),
-        Err(error) => {
-            timer.finish(Some(FailureCategory::from(&error)));
-            return Err(error);
-        }
-    }
+    Box::pin(persist(ctx, TurnOutput::Compaction, tool_search_metadata, exec_ctx)).await?;
 
     Ok(CompactedResponse {
         service_tier,
@@ -505,7 +459,6 @@ mod tests {
             new_input_items: Vec::new(),
             response_id: "resp_test".to_owned(),
             conversation_id: None,
-            conversation_version: None,
             checkpoint: None,
             continuation: None,
         }

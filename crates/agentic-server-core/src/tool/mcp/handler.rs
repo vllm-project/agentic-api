@@ -10,7 +10,7 @@ use serde_json::Value;
 
 use crate::tool::declaration::ToolDeclaration;
 use crate::tool::handler::MAX_GATEWAY_TOOL_OUTPUT_BYTES;
-use crate::tool::{GatewayExecutor, GatewayToolEventPlan, ToolError, ToolHandler, ToolOutput, ToolType};
+use crate::tool::{GatewayExecutor, ToolError, ToolHandler, ToolOutput, ToolType};
 use crate::types::io::input::internal_mcp_tool_name;
 use crate::types::io::output::{
     FunctionToolCall, GatewayCallStatus, McpCall, McpCallError, McpCallStatus, McpListTool, McpListTools, OutputItem,
@@ -361,8 +361,8 @@ impl GatewayExecutor for McpHandler {
         true
     }
 
-    fn plan_gateway_events(&self, call: &FunctionToolCall, params: &McpDiscoveredToolParam) -> GatewayToolEventPlan {
-        GatewayToolEventPlan::new(Some(started_output_item(call, &params.server_label, &params.tool_name)))
+    fn started_output(&self, call: &FunctionToolCall, params: &McpDiscoveredToolParam) -> Option<OutputItem> {
+        Some(started_output_item(call, &params.server_label, &params.tool_name))
     }
 
     fn public_output(

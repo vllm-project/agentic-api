@@ -192,9 +192,7 @@ async fn bare_provider_function_ids_are_public_without_changing_call_identity() 
             assert_eq!(call.async_execution, asynchronous);
             let mut history: Vec<InOutItem> =
                 serde_json::from_value(serde_json::to_value(response.output).unwrap()).unwrap();
-            for (index, item) in history.iter().enumerate() {
-                item.validate_client_id(format!("input[{index}].id")).unwrap();
-            }
+            InOutItem::admit_all(&history, "input").unwrap();
             ResponseHandler::new(ResponseStore::disabled())
                 .resolve_input_items(&mut history)
                 .await

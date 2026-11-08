@@ -7,11 +7,10 @@ use std::sync::Arc;
 use super::models::{Response as DbResponse, item, response};
 use super::pool::DbPool;
 use super::types::item::{decode_public, encode};
-use super::types::response::snapshot_output_count;
+use super::types::response::{encode_history, snapshot_output_count};
 use super::types::{ResponseData, ResponseMetadata, StorageError, StoreResult};
 use crate::types::io::InOutItem;
 use crate::types::request_response::ResponsePayload;
-use crate::utils::common::serialize_to_string;
 
 /// Response storage operations.
 #[derive(Clone, Debug)]
@@ -47,12 +46,17 @@ impl ResponseStore {
         self.pool.as_deref().ok_or(StorageError::NotConfigured)
     }
 
-    /// Retrieves the stored row of a response by ID; [`ResponseData::try_from`] decodes it.
+    /// Retrieves typed continuation metadata and history references, without decoding the retrieval snapshot.
     ///
     /// # Errors
     ///
-    /// Returns an error if the response is missing, the database query fails, or the store is disabled.
-    pub async fn get(&self, response_id: &str) -> StoreResult<DbResponse> {
+    /// Returns an error if the response is missing, its metadata or history references are invalid, the database query
+    /// fails, or the store is disabled.
+    pub async fn get(&self, response_id: &str) -> StoreResult<ResponseData> {
+        self.get_row(response_id).await?.try_into()
+    }
+
+    async fn get_row(&self, response_id: &str) -> StoreResult<DbResponse> {
         response::get(self.pool()?, response_id)
             .await?
             .ok_or_else(|| StorageError::ResponseNotFound {
@@ -68,7 +72,7 @@ impl ResponseStore {
     /// Returns an error if the response is missing, the snapshot is invalid, the database query fails, or the
     /// store is disabled.
     pub async fn get_snapshot(&self, response_id: &str) -> StoreResult<Option<ResponsePayload>> {
-        self.get(response_id)
+        self.get_row(response_id)
             .await?
             .snapshot
             .as_deref()
@@ -112,7 +116,7 @@ impl ResponseStore {
     /// # Errors
     /// Returns an error for a missing response, missing or invalid history, unavailable storage, or query failure.
     pub async fn get_input_items(&self, response_id: &str) -> StoreResult<Option<Vec<InOutItem>>> {
-        let row = self.get(response_id).await?;
+        let row = self.get_row(response_id).await?;
         let Some(output_count) = row.snapshot.as_deref().map(snapshot_output_count).transpose()? else {
             return Ok(None);
         };
@@ -124,8 +128,7 @@ impl ResponseStore {
             .map(decode_public)
             .collect::<StoreResult<Vec<_>>>()?;
         // Both persistence paths append public outputs after the turn's inputs. Bound the suffix by the snapshot's
-        // output count so an inherited output remains input even when a turn supplies no new items. Session
-        // execution can already have recorded some outputs as canonical input history.
+        // output count so an inherited output remains input even when a turn supplies no new items.
         for _ in 0..output_count {
             if !items.last().is_some_and(|item| matches!(item, InOutItem::Output(_))) {
                 break;
@@ -142,7 +145,7 @@ impl ResponseStore {
     /// Returns an error if the response or a history item is missing or invalid, the database query
     /// fails, or the store is disabled.
     pub async fn rehydrate(&self, response_id: &str) -> StoreResult<(ResponseData, Vec<InOutItem>)> {
-        let response = ResponseData::try_from(self.get(response_id).await?)?;
+        let response = self.get(response_id).await?;
         let items = self
             .history(&response)
             .await?
@@ -185,7 +188,7 @@ impl ResponseStore {
         let pool = self.pool()?;
 
         let mut item_ids: Vec<String> = match previous_response_id {
-            Some(prev_id) => ResponseData::try_from(self.get(prev_id).await?)?.history_item_ids,
+            Some(prev_id) => self.get(prev_id).await?.history_item_ids,
             None => Vec::new(),
         };
         let new_items = new_items.iter().map(encode).collect::<StoreResult<Vec<_>>>()?;
@@ -197,7 +200,7 @@ impl ResponseStore {
         // History rows get their own row IDs, so repeated public IDs keep every position.
         let created = item::create_in_tx(&mut tx, new_items, None).await?;
         item_ids.extend(created.into_iter().map(|item| item.id));
-        let history_item_ids_json = serialize_to_string(&item_ids)?;
+        let history_item_ids_json = encode_history(&item_ids)?;
 
         response::create_in_tx(
             &mut tx,
@@ -221,7 +224,9 @@ mod tests {
     use super::*;
     use crate::storage::create_pool_with_schema;
     use crate::types::event::MessageStatus;
-    use crate::types::io::{CodeInterpreterCall, CodeInterpreterCallStatus, InputItem, OutputItem, OutputMessage};
+    use crate::types::io::{
+        CodeInterpreterCall, CodeInterpreterCallStatus, InputItem, OutputItem, OutputMessage, ResponsesInput,
+    };
     use serde_json::Value;
 
     /// A retrievable response without output, so its input items are its whole history.
@@ -300,7 +305,7 @@ mod tests {
             .await
             .expect("serialize code interpreter response history");
 
-        let response = ResponseData::try_from(store.get("resp_items").await.unwrap()).unwrap();
+        let response = store.get("resp_items").await.unwrap();
         let rows = store.history(&response).await.unwrap();
         assert_eq!(rows[0].public_id, "ci_public");
         let data: Value = serde_json::from_str(&rows[0].data).expect("stored output JSON");
@@ -309,24 +314,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn code_interpreter_history_replays_the_function_call_not_the_public_projection() {
+    async fn code_interpreter_history_keeps_the_public_item_and_lowers_it_upstream() {
         let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await.unwrap();
         let store = ResponseStore::new(pool);
-        let gateway_call: InputItem = serde_json::from_value(serde_json::json!({
-            "type": "function_call",
-            "id": "fc_gateway",
-            "call_id": "call_gateway",
-            "name": "code_interpreter",
-            "arguments": "{\"code\":\"print(42)\"}",
-            "status": "completed"
-        }))
-        .expect("gateway model-facing call");
-        let gateway_result: InputItem = serde_json::from_value(serde_json::json!({
-            "type": "function_call_output",
-            "call_id": "call_gateway",
-            "output": "42"
-        }))
-        .expect("gateway model-facing output");
         let projection: OutputItem = serde_json::from_value(serde_json::json!({
             "type": "code_interpreter_call",
             "id": "ci_gateway",
@@ -340,11 +330,7 @@ mod tests {
             .persist(
                 "resp_items",
                 None,
-                vec![
-                    InOutItem::Input(gateway_call),
-                    InOutItem::Input(gateway_result),
-                    InOutItem::Output(projection.clone()),
-                ],
+                vec![InOutItem::Output(projection.clone())],
                 None,
                 &ResponseMetadata::default(),
             )
@@ -352,11 +338,13 @@ mod tests {
             .expect("serialize response history");
 
         let (_, history) = store.rehydrate("resp_items").await.unwrap();
-        assert_eq!(history[2], InOutItem::Output(projection));
-        let inputs = InOutItem::into_input_items(history);
-        assert_eq!(inputs.len(), 2);
-        assert!(matches!(&inputs[0], InputItem::FunctionCall(call) if call.call_id == "call_gateway"));
-        assert!(matches!(&inputs[1], InputItem::FunctionCallOutput(output) if output.call_id == "call_gateway"));
+        assert_eq!(history, vec![InOutItem::Output(projection)]);
+        let inputs = ResponsesInput::from(InOutItem::into_input_items(history));
+        let model = Vec::<InputItem>::from(inputs.normalized_model_input(&[]).unwrap());
+        assert!(
+            matches!(&model[..], [InputItem::FunctionCall(call), InputItem::FunctionCallOutput(output)]
+            if call.name == "code_interpreter" && call.call_id == "ci_gateway" && output.call_id == "ci_gateway")
+        );
     }
 
     #[tokio::test]

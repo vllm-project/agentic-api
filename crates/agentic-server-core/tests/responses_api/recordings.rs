@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::panic::catch_unwind;
 use std::slice;
 
-use super::{cassette, compare_items, error_metadata, item_signature, terminal};
+use super::{cassette, compare_items, counterpart, error_metadata, item_signature, terminal};
 use serde_json::{Value, json};
 
 const SCENARIOS: [&str; 5] = [
@@ -14,6 +14,14 @@ const SCENARIOS: [&str; 5] = [
     "conversation",
     "replayed-items",
 ];
+
+/// Suites recorded for both providers: each scenario in JSON and SSE, plus the JSON-only call-id probes.
+fn paired_recordings() -> impl Iterator<Item = String> {
+    SCENARIOS
+        .into_iter()
+        .flat_map(|scenario| ["", "-stream"].map(|suffix| format!("{scenario}{suffix}")))
+        .chain(["call-ids".to_owned()])
+}
 
 fn items(turns: &[Value], turn: usize) -> Vec<Value> {
     terminal(&turns[turn - 1]["response"])["data"]
@@ -185,54 +193,52 @@ fn generated_ids(turns: &[Value]) -> HashSet<String> {
 #[test]
 fn recorded_management_contract_matches_openai() {
     let mut differences = Vec::new();
-    for scenario in SCENARIOS {
-        for suffix in ["", "-stream"] {
-            let name = format!("{scenario}{suffix}");
-            let a = cassette(&name, "openai").expect("OpenAI recording");
-            let b = cassette(&name, "gateway").expect("gateway recording");
-            assert_eq!(a.len(), b.len(), "{name}: turn count");
-            let a_generated = generated_ids(&a);
-            let b_generated = generated_ids(&b);
-            for (index, (left, right)) in a.iter().zip(&b).enumerate() {
-                let location = format!("{name} t{}", index + 1);
-                assert_eq!(
-                    left["request"]["method"], right["request"]["method"],
-                    "{location}: method"
-                );
-                assert_eq!(
-                    left["response"]["status_code"], right["response"]["status_code"],
-                    "{location}: HTTP status"
-                );
-                if left["response"]["status_code"] != 200 {
-                    continue;
-                }
-                let l = terminal(&left["response"]);
-                let r = terminal(&right["response"]);
-                for field in ["object", "status", "deleted", "has_more"] {
-                    assert_eq!(l[field], r[field], "{location}: {field}");
-                }
-                // Stateless creation is passed through on this branch; its upstream payload
-                // may omit `store`. Storage behavior is checked by the subsequent CRUD calls.
-                if left["request"]["body"]["store"] != false {
-                    assert_eq!(l["store"], r["store"], "{location}: store");
-                }
-                // Different models can emit different numbers of reasoning/output items.
-                // Each recording's complete pages (including those items) are checked above;
-                // client-supplied items must still match across providers exactly.
-                let client_items = |body: &Value, generated: &HashSet<String>| -> Vec<Value> {
-                    body["data"]
-                        .as_array()
-                        .into_iter()
-                        .flatten()
-                        .filter(|item| !item["id"].as_str().is_some_and(|id| generated.contains(id)))
-                        .map(item_signature)
-                        .collect()
-                };
-                let lc = client_items(&l, &a_generated);
-                let rc = client_items(&r, &b_generated);
-                if lc != rc {
-                    differences.push(format!("{location}: client items\nOpenAI: {lc:?}\ngateway: {rc:?}"));
-                }
+    for name in paired_recordings() {
+        let a = cassette(&name, "openai").expect("OpenAI recording");
+        let b = cassette(&name, "gateway").expect("gateway recording");
+        assert_eq!(a.len(), b.len(), "{name}: turn count");
+        let a_generated = generated_ids(&a);
+        let b_generated = generated_ids(&b);
+        for (index, left) in a.iter().enumerate() {
+            let right = counterpart(&b, index, left);
+            let location = format!("{name} t{}", index + 1);
+            assert_eq!(
+                left["request"]["method"], right["request"]["method"],
+                "{location}: method"
+            );
+            assert_eq!(
+                left["response"]["status_code"], right["response"]["status_code"],
+                "{location}: HTTP status"
+            );
+            if left["response"]["status_code"] != 200 {
+                continue;
+            }
+            let l = terminal(&left["response"]);
+            let r = terminal(&right["response"]);
+            for field in ["object", "status", "deleted", "has_more"] {
+                assert_eq!(l[field], r[field], "{location}: {field}");
+            }
+            // Stateless creation is passed through on this branch; its upstream payload
+            // may omit `store`. Storage behavior is checked by the subsequent CRUD calls.
+            if left["request"]["body"]["store"] != false {
+                assert_eq!(l["store"], r["store"], "{location}: store");
+            }
+            // Different models can emit different numbers of reasoning/output items.
+            // Each recording's complete pages (including those items) are checked above;
+            // client-supplied items must still match across providers exactly.
+            let client_items = |body: &Value, generated: &HashSet<String>| -> Vec<Value> {
+                body["data"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter(|item| !item["id"].as_str().is_some_and(|id| generated.contains(id)))
+                    .map(item_signature)
+                    .collect()
+            };
+            let lc = client_items(&l, &a_generated);
+            let rc = client_items(&r, &b_generated);
+            if lc != rc {
+                differences.push(format!("{location}: client items\nOpenAI: {lc:?}\ngateway: {rc:?}"));
             }
         }
     }
@@ -242,21 +248,19 @@ fn recorded_management_contract_matches_openai() {
 #[test]
 fn recorded_error_metadata_matches_openai() {
     let mut differences = Vec::new();
-    for scenario in SCENARIOS {
-        for suffix in ["", "-stream"] {
-            let name = format!("{scenario}{suffix}");
-            let a = cassette(&name, "openai").expect("OpenAI recording");
-            let b = cassette(&name, "gateway").expect("gateway recording");
-            assert_eq!(a.len(), b.len());
-            for (index, (left, right)) in a.iter().zip(&b).enumerate() {
-                if left["response"]["status_code"].as_u64().unwrap() < 400 {
-                    continue;
-                }
-                let expected = error_metadata(&terminal(&left["response"]));
-                let actual = error_metadata(&terminal(&right["response"]));
-                if expected != actual {
-                    differences.push(format!("{name} t{}: OpenAI {expected}; gateway {actual}", index + 1));
-                }
+    for name in paired_recordings() {
+        let a = cassette(&name, "openai").expect("OpenAI recording");
+        let b = cassette(&name, "gateway").expect("gateway recording");
+        assert_eq!(a.len(), b.len());
+        for (index, left) in a.iter().enumerate() {
+            let right = counterpart(&b, index, left);
+            if left["response"]["status_code"].as_u64().unwrap() < 400 {
+                continue;
+            }
+            let expected = error_metadata(&terminal(&left["response"]));
+            let actual = error_metadata(&terminal(&right["response"]));
+            if expected != actual {
+                differences.push(format!("{name} t{}: OpenAI {expected}; gateway {actual}", index + 1));
             }
         }
     }

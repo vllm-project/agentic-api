@@ -1,15 +1,15 @@
 //! Storage-level conversation and item regressions using the existing tables directly.
 
-mod support;
+use super::test_support as support;
 
 use agentic_core::types::conversations::ConversationMetadata;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use agentic_core::storage::models::{
-    conversation as conversation_model, item as item_model, response as response_model,
-};
-use agentic_core::storage::{ConversationStore, Item, ResponseMetadata, ResponseStore, create_pool_with_schema};
+use crate::storage::models::Item;
+use crate::storage::models::{conversation as conversation_model, item as item_model, response as response_model};
+use agentic_core::executor::{ConversationHandler, ExecutorError};
+use agentic_core::storage::{ConversationStore, ResponseMetadata, ResponseStore, create_pool_with_schema};
 use agentic_core::types::io::InOutItem;
 use agentic_core::types::io::ItemOrder;
 use serde_json::json;
@@ -143,7 +143,7 @@ async fn regression_cursor_follows_sequence() {
 }
 
 #[tokio::test]
-async fn regression_delete_invalidates_version() {
+async fn regression_turn_after_an_item_deletion_appends() {
     let store = test_store().await;
     let conv = store
         .create(
@@ -153,7 +153,6 @@ async fn regression_delete_invalidates_version() {
         )
         .await
         .unwrap();
-    let snapshot = store.rehydrate(&conv.conversation_id).await.unwrap();
     let items = store
         .list_items("default_tenant", &conv.conversation_id, 100, None, ItemOrder::Asc)
         .await
@@ -162,23 +161,19 @@ async fn regression_delete_invalidates_version() {
         .delete_item("default_tenant", &conv.conversation_id, items[0].id().unwrap())
         .await
         .unwrap();
-    let result = store
-        .persist(
-            &conv.conversation_id,
-            snapshot.version,
-            "resp_stale",
-            vec![regression_message("based on deleted history")],
-            None,
-            &ResponseMetadata::default(),
-        )
-        .await;
-    assert!(
-        matches!(
-            result,
-            Err(agentic_core::storage::StorageError::ConversationConflict { .. })
-        ),
-        "{result:?}"
-    );
+    // OpenAI stores a turn that ran while an item was deleted after the remaining items.
+    persist_turn(
+        &store,
+        &conv.conversation_id,
+        "resp_after_deletion",
+        vec![regression_message("based on deleted history")],
+        &ResponseMetadata::default(),
+    )
+    .await
+    .unwrap();
+    let snapshot = store.rehydrate(&conv.conversation_id).await.unwrap();
+    assert_eq!(snapshot.items.len(), 2);
+    assert_eq!(snapshot.items[1], regression_message("based on deleted history"));
 }
 
 #[tokio::test]
@@ -226,20 +221,19 @@ async fn insert_with_ids(
         })
         .collect();
     let mut tx = pool.begin().await?;
-    agentic_core::storage::models::conversation::lock_in_tx(&mut tx, id).await?;
+    crate::storage::models::conversation::lock_in_tx(&mut tx, id).await?;
     item_model::create_in_tx(&mut tx, items, Some(id)).await?;
     tx.commit().await?;
     Ok(())
 }
 
 #[tokio::test]
-async fn deletion_preserves_stored_response_history_and_invalidates_empty_snapshot() {
+async fn deletion_preserves_stored_response_history() {
     let store = test_store().await;
     let conv = store
         .create("default_tenant", &ConversationMetadata::new(), &[])
         .await
         .unwrap();
-    let empty = store.rehydrate(&conv.conversation_id).await.unwrap();
     let inputs = vec![regression_message("keep response history")];
     persist_turn(
         &store,
@@ -258,20 +252,6 @@ async fn deletion_preserves_stored_response_history_and_invalidates_empty_snapsh
         .delete_item("default_tenant", &conv.conversation_id, rows[0].id().unwrap())
         .await
         .unwrap();
-    let result = store
-        .persist(
-            &conv.conversation_id,
-            empty.version,
-            "resp_stale_empty",
-            vec![],
-            None,
-            &ResponseMetadata::default(),
-        )
-        .await;
-    assert!(matches!(
-        result,
-        Err(agentic_core::storage::StorageError::ConversationConflict { .. })
-    ));
     let response_store = ResponseStore::new(Arc::new(store.pool().unwrap().clone()));
     assert_eq!(response_store.rehydrate("resp_kept").await.unwrap().1, inputs);
     persist_turn(
@@ -383,10 +363,9 @@ async fn item_operations_reject_another_tenant_and_another_conversations_cursor(
 
 #[tokio::test]
 async fn regression_invalid_item_id_rejects_entire_batch_before_writing() {
-    use agentic_core::storage::StorageError;
-
     let store = test_store().await;
-    let conversation = store
+    let handler = ConversationHandler::new(store.clone());
+    let conversation = handler
         .create("default_tenant", &ConversationMetadata::new(), &[])
         .await
         .unwrap();
@@ -396,7 +375,7 @@ async fn regression_invalid_item_id_rejects_entire_batch_before_writing() {
         }))
         .unwrap(),
     );
-    let error = store
+    let error = handler
         .create_items(
             "default_tenant",
             &conversation.conversation_id,
@@ -404,7 +383,7 @@ async fn regression_invalid_item_id_rejects_entire_batch_before_writing() {
         )
         .await
         .unwrap_err();
-    assert!(matches!(error, StorageError::InvalidItemId { param, .. } if param == "items[1].id"));
+    assert!(matches!(&error, ExecutorError::ClientItem(error) if error.param() == "items[1].id"));
     assert!(
         store
             .rehydrate(&conversation.conversation_id)
@@ -413,11 +392,11 @@ async fn regression_invalid_item_id_rejects_entire_batch_before_writing() {
             .items
             .is_empty()
     );
-    let error = store
+    let error = handler
         .create("default_tenant", &ConversationMetadata::new(), &[invalid])
         .await
         .unwrap_err();
-    assert!(matches!(error, StorageError::InvalidItemId { param, .. } if param == "items[0].id"));
+    assert!(matches!(&error, ExecutorError::ClientItem(error) if error.param() == "items[0].id"));
 }
 
 fn message_with_id(id: &str, text: &str) -> InOutItem {
@@ -532,11 +511,9 @@ async fn regression_concurrent_insert_checks_membership_under_the_conversation_l
         snapshot.items.iter().map(InOutItem::id).collect::<Vec<_>>(),
         created.iter().map(InOutItem::id).collect::<Vec<_>>()
     );
-    assert_eq!(snapshot.version.last_sequence, Some(0));
-    assert_eq!(snapshot.version.revision, 1);
 }
 
-#[path = "conversations/item_references.rs"]
+#[path = "../../../tests/conversations/item_references.rs"]
 mod item_references;
 
 #[tokio::test]

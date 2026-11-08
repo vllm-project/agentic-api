@@ -140,6 +140,20 @@ async fn documented_operations_match_the_public_api_and_are_routable() {
         })
         .collect::<BTreeSet<_>>();
     let expected = [
+        ("get", "/v1/files"),
+        ("post", "/v1/files"),
+        ("get", "/v1/files/{file_id}"),
+        ("delete", "/v1/files/{file_id}"),
+        ("get", "/v1/files/{file_id}/content"),
+        ("get", "/v1/vector_stores"),
+        ("post", "/v1/vector_stores"),
+        ("get", "/v1/vector_stores/{store_id}"),
+        ("delete", "/v1/vector_stores/{store_id}"),
+        ("get", "/v1/vector_stores/{store_id}/files"),
+        ("post", "/v1/vector_stores/{store_id}/files"),
+        ("get", "/v1/vector_stores/{store_id}/files/{file_id}"),
+        ("delete", "/v1/vector_stores/{store_id}/files/{file_id}"),
+        ("post", "/v1/vector_stores/{store_id}/search"),
         ("get", "/health"),
         ("get", "/ready"),
         ("post", "/v1/audio/transcriptions"),
@@ -177,7 +191,9 @@ async fn documented_operations_match_the_public_api_and_are_routable() {
             .replace("{conversation_id}", "example-conversation")
             .replace("{item_id}", "example-item")
             .replace("{response_id}", "example-response")
-            .replace("{model}", "org/example-model");
+            .replace("{model}", "org/example-model")
+            .replace("{file_id}", "file_example")
+            .replace("{store_id}", "vs_example");
         let response = client
             .request(reqwest::Method::TRACE, format!("{gateway_url}{request_path}"))
             .bearer_auth("test-key")

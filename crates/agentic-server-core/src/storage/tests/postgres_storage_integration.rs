@@ -1,4 +1,4 @@
-mod support;
+use super::test_support as support;
 
 use agentic_core::types::conversations::ConversationMetadata;
 use std::sync::Arc;
@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use agentic_core::config::{PostgresConfig, SqliteConfig};
 use agentic_core::storage::{
-    ConversationStore, ResponseMetadata, ResponseStore, StorageError, create_pool_with_configs,
+    ConversationStore, ResponseCheckpoint, ResponseMetadata, ResponseStore, create_pool_with_configs,
     create_pool_with_schema_and_configs,
 };
 use agentic_core::types::io::InOutItem;
@@ -228,7 +228,7 @@ async fn postgres_concurrent_conversation_writes_have_contiguous_sequences() {
             .expect("persist concurrent turn");
     }
 
-    let rows = agentic_core::storage::models::conversation::get_with_items(&first_pool, &conversation.conversation_id)
+    let rows = crate::storage::models::conversation::get_with_items(&first_pool, &conversation.conversation_id)
         .await
         .expect("load concurrent conversation items")
         .expect("conversation exists")
@@ -250,7 +250,7 @@ async fn postgres_concurrent_conversation_writes_have_contiguous_sequences() {
     clippy::too_many_lines,
     reason = "keeps the complete two-pool race and persistence assertions in one integration test"
 )]
-async fn postgres_optimistic_conversation_conflict() {
+async fn postgres_racing_conversation_turns_both_append() {
     let database_url = std::env::var("TEST_POSTGRES_URL").expect("TEST_POSTGRES_URL must be set");
     let postgres_config = PostgresConfig {
         max_connections: 2,
@@ -272,106 +272,63 @@ async fn postgres_optimistic_conversation_conflict() {
         .create("default_tenant", &ConversationMetadata::new(), &[])
         .await
         .expect("create conversation");
-    let version = store
-        .rehydrate(&conversation.conversation_id)
-        .await
-        .expect("capture conversation version")
-        .version;
     let barrier = Arc::new(Barrier::new(2));
 
-    let writer_one = {
-        let store = ConversationStore::new(first_pool.clone());
+    let writer = |pool: &Arc<_>, name: &'static str| {
+        let store = ConversationStore::new(Arc::clone(pool));
         let conversation_id = conversation.conversation_id.clone();
         let barrier = Arc::clone(&barrier);
-        let version = version.clone();
         tokio::spawn(async move {
             let response_id = format!("resp_postgres_{}", uuid::Uuid::now_v7());
-            let items = vec![input_item("writer one input"), input_item("writer one follow-up")];
+            let items = vec![
+                input_item(&format!("{name} input")),
+                input_item(&format!("{name} follow-up")),
+            ];
             barrier.wait().await;
-            let result = store
+            store
                 .persist(
                     &conversation_id,
-                    version,
+                    &ResponseCheckpoint::default(),
                     &response_id,
                     items.clone(),
                     None,
                     &ResponseMetadata::default(),
                 )
-                .await;
-            (result, response_id, items)
+                .await
+                .map(|()| (response_id, items))
         })
     };
-    let writer_two = {
-        let store = ConversationStore::new(second_pool.clone());
-        let conversation_id = conversation.conversation_id.clone();
-        let barrier = Arc::clone(&barrier);
-        tokio::spawn(async move {
-            let response_id = format!("resp_postgres_{}", uuid::Uuid::now_v7());
-            let items = vec![input_item("writer two input"), input_item("writer two follow-up")];
-            barrier.wait().await;
-            let result = store
-                .persist(
-                    &conversation_id,
-                    version,
-                    &response_id,
-                    items.clone(),
-                    None,
-                    &ResponseMetadata::default(),
-                )
-                .await;
-            (result, response_id, items)
-        })
-    };
-
-    let (writer_one_result, writer_one_response_id, writer_one_items) =
-        writer_one.await.expect("join first checked write");
-    let (writer_two_result, writer_two_response_id, writer_two_items) =
-        writer_two.await.expect("join second checked write");
-
-    assert_eq!(
-        usize::from(writer_one_result.is_ok()) + usize::from(writer_two_result.is_ok()),
-        1
-    );
-    assert_eq!(
-        usize::from(matches!(
-            &writer_one_result,
-            Err(StorageError::ConversationConflict { conversation_id })
-                if conversation_id == conversation.conversation_id.as_str()
-        )) + usize::from(matches!(
-            &writer_two_result,
-            Err(StorageError::ConversationConflict { conversation_id })
-                if conversation_id == conversation.conversation_id.as_str()
-        )),
-        1
-    );
-    let (winner_items, losing_response_id) = if writer_one_result.is_ok() {
-        (writer_one_items, writer_two_response_id)
-    } else {
-        (writer_two_items, writer_one_response_id)
-    };
-    let rows = agentic_core::storage::models::conversation::get_with_items(&first_pool, &conversation.conversation_id)
+    let (writer_one, writer_two) = (writer(&first_pool, "writer one"), writer(&second_pool, "writer two"));
+    let (one_response_id, one_items) = writer_one
         .await
-        .expect("load winning conversation items")
+        .expect("join first write")
+        .expect("first turn persists");
+    let (two_response_id, two_items) = writer_two
+        .await
+        .expect("join second write")
+        .expect("second turn persists");
+
+    // As on OpenAI, both turns commit; the row lock gives each a contiguous run of sequence numbers.
+    let rows = crate::storage::models::conversation::get_with_items(&first_pool, &conversation.conversation_id)
+        .await
+        .expect("load conversation items")
         .expect("conversation exists")
         .items;
     let sequences = rows
         .iter()
         .map(|row| row.seq.expect("conversation item sequence"))
         .collect::<Vec<_>>();
-    assert_eq!(sequences, vec![0, 1]);
-    assert_eq!(
-        store
-            .rehydrate(&conversation.conversation_id)
-            .await
-            .expect("rehydrate winning conversation items")
-            .items,
-        winner_items
-    );
-    let response_error = ResponseStore::new(first_pool.clone())
-        .get(&losing_response_id)
+    assert_eq!(sequences, vec![0, 1, 2, 3]);
+    let items = store
+        .rehydrate(&conversation.conversation_id)
         .await
-        .expect_err("the losing response must not be stored");
-    assert!(response_error.is_not_found());
+        .expect("rehydrate conversation items")
+        .items;
+    assert!(items == [one_items.clone(), two_items.clone()].concat() || items == [two_items, one_items].concat());
+    let responses = ResponseStore::new(first_pool.clone());
+    for response_id in [one_response_id, two_response_id] {
+        responses.get(&response_id).await.expect("both turns are stored");
+    }
 
     first_pool.close().await;
     second_pool.close().await;
@@ -406,12 +363,9 @@ async fn postgres_lock_wait_is_bounded_without_blocking_other_conversations() {
         .await
         .expect("create unrelated conversation");
     let mut holding_transaction = first_pool.begin().await.expect("begin lock-holding transaction");
-    agentic_core::storage::models::conversation::lock_in_tx(
-        &mut holding_transaction,
-        &locked_conversation.conversation_id,
-    )
-    .await
-    .expect("hold conversation row lock");
+    crate::storage::models::conversation::lock_in_tx(&mut holding_transaction, &locked_conversation.conversation_id)
+        .await
+        .expect("hold conversation row lock");
 
     let blocked_store = ConversationStore::new(second_pool.clone());
     let blocked_conversation_id = locked_conversation.conversation_id.clone();
@@ -501,8 +455,8 @@ async fn postgres_get_or_create_creates_then_returns_the_existing_conversation()
         .rehydrate(&conversation_id)
         .await
         .expect("rehydrate after second use");
-    assert_eq!(after.version, before.version);
-    assert_eq!(after.version.response_id.as_deref(), Some(response_id.as_str()));
+    assert_eq!(after.items, before.items);
+    assert!(after.checkpoint.response_id.is_some());
     assert_eq!(after.items.len(), 1);
 
     pool.close().await;

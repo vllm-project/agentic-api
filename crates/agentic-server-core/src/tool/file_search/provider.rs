@@ -5,7 +5,8 @@ use futures::future::BoxFuture;
 use tokio_util::sync::CancellationToken;
 
 use crate::storage::file_search::{
-    Collection, FilePublicationFailure, FileSearchStorage, PreparedAttachment, StoredVectorStore, UploadedFile,
+    Collection, FilePublicationFailure, FileSearchStorage, MAX_CORPUS_BYTES, PreparedAttachment, StoredVectorStore,
+    UploadedFile,
 };
 use crate::storage::local_files::LocalFiles;
 use crate::types::file_search::{
@@ -353,36 +354,62 @@ impl FileSearchRepository for FileSearchStorage {
         mode: SearchMode,
         request: &'a SearchRequest,
     ) -> BoxFuture<'a, Result<Vec<SearchResult>, FileSearchError>> {
-        Box::pin(async move {
-            let chunks = self.chunks(store_ids).await?;
-            if mode != SearchMode::Keyword {
-                if !chunks.is_empty() && query_embeddings.len() != queries.len() {
-                    return Err(FileSearchError::Unavailable(
-                        "Indexed content changed during search; retry the request".into(),
-                    ));
-                }
-                let mut dimension = expected_dimensions;
-                for chunk in &chunks {
-                    let vector = chunk.embedding.as_ref().ok_or_else(|| {
-                        FileSearchError::Unavailable("Stored embeddings are missing; recreate this vector store".into())
-                    })?;
-                    if dimension.is_some_and(|expected| expected != vector.len())
-                        || vector.is_empty()
-                        || vector.iter().any(|value| !value.is_finite())
-                    {
-                        return Err(FileSearchError::Unavailable(
-                            "Stored embeddings are incompatible; recreate this vector store".into(),
-                        ));
-                    }
-                    dimension = Some(vector.len());
-                }
-            }
-            let queries = queries.to_vec();
-            let vectors = query_embeddings.to_vec();
-            let request = request.clone();
-            tokio::task::spawn_blocking(move || super::ranking::rank(chunks, &queries, &vectors, mode, &request))
-                .await
-                .map_err(Into::into)
-        })
+        Box::pin(exact_search(
+            self,
+            store_ids,
+            queries,
+            query_embeddings,
+            request,
+            ExactSearchOptions {
+                expected_dimensions,
+                mode,
+                max_bytes: MAX_CORPUS_BYTES,
+            },
+        ))
     }
+}
+
+pub(super) struct ExactSearchOptions {
+    pub(super) expected_dimensions: Option<usize>,
+    pub(super) mode: SearchMode,
+    pub(super) max_bytes: i64,
+}
+
+pub(super) async fn exact_search(
+    storage: &FileSearchStorage,
+    store_ids: &[String],
+    queries: &[String],
+    query_embeddings: &[Vec<f64>],
+    request: &SearchRequest,
+    options: ExactSearchOptions,
+) -> Result<Vec<SearchResult>, FileSearchError> {
+    let chunks = storage.chunks_with_limit(store_ids, options.max_bytes).await?;
+    if options.mode != SearchMode::Keyword {
+        if !chunks.is_empty() && query_embeddings.len() != queries.len() {
+            return Err(FileSearchError::Unavailable(
+                "Indexed content changed during search; retry the request".into(),
+            ));
+        }
+        let mut dimension = options.expected_dimensions;
+        for chunk in &chunks {
+            let vector = chunk.embedding.as_ref().ok_or_else(|| {
+                FileSearchError::Unavailable("Stored embeddings are missing; recreate this vector store".into())
+            })?;
+            if dimension.is_some_and(|expected| expected != vector.len())
+                || vector.is_empty()
+                || vector.iter().any(|value| !value.is_finite())
+            {
+                return Err(FileSearchError::Unavailable(
+                    "Stored embeddings are incompatible; recreate this vector store".into(),
+                ));
+            }
+            dimension = Some(vector.len());
+        }
+    }
+    let queries = queries.to_vec();
+    let vectors = query_embeddings.to_vec();
+    let request = request.clone();
+    tokio::task::spawn_blocking(move || super::ranking::rank(chunks, &queries, &vectors, options.mode, &request))
+        .await
+        .map_err(Into::into)
 }

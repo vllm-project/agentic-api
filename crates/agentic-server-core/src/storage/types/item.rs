@@ -26,27 +26,6 @@ pub struct ItemMetadata {
     pub kind: ItemKind,
 }
 
-impl InOutItem {
-    /// Validate a client-supplied public identity before item creation.
-    /// Persistence itself also accepts provider-assigned IDs with different prefixes.
-    pub(crate) fn validate_client_id(&self, param: String) -> Result<(), StorageError> {
-        let (id, prefix) = match self {
-            Self::Input(item) => (item.id(), item.id_prefix()),
-            Self::Output(item) => (item.id(), item.id_prefix()),
-        };
-        if let (Some(id), Some(prefix)) = (id, prefix)
-            && !id.starts_with(prefix)
-        {
-            return Err(StorageError::InvalidItemId {
-                param,
-                id: id.to_owned(),
-                prefix: prefix.trim_end_matches('_'),
-            });
-        }
-        Ok(())
-    }
-}
-
 /// Decode a stored row. A row whose metadata or data does not decode is invalid history; errors never include
 /// stored content.
 impl TryFrom<&StorageDbItem> for InOutItem {
@@ -241,67 +220,5 @@ mod tests {
         let mut row = stored_row(&stored(json!({"type":"message", "role":"user", "content":"hello"})));
         row.public_id = "msg_public".to_owned();
         assert_eq!(decode_public(&row).unwrap().id(), Some("msg_public"));
-    }
-
-    #[test]
-    fn supplied_ids_are_validated_by_item_type_without_changing_call_ids() {
-        let cases = [
-            json!({"type":"message", "id":"msg_1", "role":"user", "content":"hello"}),
-            json!({"type":"function_call", "id":"fc_1", "call_id":"call_1", "name":"f", "arguments":"{}"}),
-            json!({"type":"tool_search_call", "id":"tsc_1", "call_id":"call_1", "arguments":{}}),
-            json!({"type":"function_call_output", "id":"fc_1", "call_id":"call_1", "output":"done"}),
-            json!({"type":"custom_tool_call_output", "id":"ctco_1", "call_id":"call_1", "output":"done"}),
-            json!({"type":"shell_call_output", "id":"sho_1", "call_id":"call_1", "output":[]}),
-            json!({"type":"tool_search_output", "id":"tso_1", "call_id":"call_1", "tools":[]}),
-            json!({"type":"custom_tool_call", "id":"ctc_1", "call_id":"call_1", "name":"f", "input":"x"}),
-            json!({"type":"shell_call", "id":"sh_1", "call_id":"call_1", "action":{"commands":["pwd"]}}),
-            json!({"type":"reasoning", "id":"rs_1", "summary":[]}),
-            json!({"type":"mcp_list_tools", "id":"mcpl_1", "server_label":"s", "tools":[]}),
-            json!({"type":"mcp_call", "id":"mcp_1", "server_label":"s", "name":"f", "arguments":"{}"}),
-            json!({"type":"web_search_call", "id":"ws_1", "status":"completed", "action":{"type":"search", "query":"test"}}),
-            json!({"type":"compaction", "id":"cmp_1", "encrypted_content":"opaque"}),
-        ];
-        for mut value in cases {
-            let item = stored(value.clone());
-            item.validate_client_id("items[0].id".into())
-                .expect("matching public ID prefix");
-            value["id"] = json!("wrong_1");
-            let item = stored(value);
-            let error = item.validate_client_id("items[0].id".into()).unwrap_err();
-            assert!(error.is_validation());
-            assert!(matches!(error, StorageError::InvalidItemId { param, .. } if param == "items[0].id"));
-        }
-    }
-
-    #[test]
-    fn optional_ids_are_not_required() {
-        for value in [
-            json!({"type":"message", "role":"user", "content":"hello"}),
-            json!({"type":"function_call", "call_id":"call_1", "name":"f", "arguments":"{}"}),
-            json!({"type":"function_call_output", "call_id":"call_1", "output":"done"}),
-            json!({"type":"shell_call_output", "call_id":"call_1", "output":[]}),
-        ] {
-            stored(value).validate_client_id("items[0].id".into()).unwrap();
-        }
-    }
-
-    #[test]
-    fn invalid_id_reports_its_batch_index_and_rejects_empty_ids() {
-        for id in ["", "item_wrongprefix"] {
-            let items = [
-                stored(json!({"type":"message", "role":"user", "content":"valid"})),
-                stored(json!({"type":"message", "id":id, "role":"user", "content":"invalid"})),
-            ];
-            let error = items
-                .iter()
-                .enumerate()
-                .try_for_each(|(index, item)| item.validate_client_id(format!("items[{index}].id")))
-                .unwrap_err();
-            assert!(matches!(&error, StorageError::InvalidItemId { param, .. } if param == "items[1].id"));
-            assert_eq!(
-                error.to_string(),
-                format!("Invalid 'items[1].id': '{id}'. Expected an ID that begins with 'msg'.")
-            );
-        }
     }
 }

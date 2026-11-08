@@ -765,7 +765,7 @@ pub fn query_params_as_json(uri: &axum::http::Uri) -> serde_json::Value {
     serde_json::Value::Object(params)
 }
 
-/// Persist a turn at the conversation's current version, as the executor does after rehydrating.
+/// Persist a turn without a response snapshot.
 pub async fn persist_turn(
     store: &ConversationStore,
     conversation_id: &str,
@@ -773,8 +773,8 @@ pub async fn persist_turn(
     items: Vec<InOutItem>,
     metadata: &ResponseMetadata,
 ) -> StoreResult<()> {
-    let version = store.rehydrate(conversation_id).await?.version;
+    let checkpoint = store.rehydrate(conversation_id).await?.checkpoint;
     store
-        .persist(conversation_id, version, response_id, items, None, metadata)
+        .persist(conversation_id, &checkpoint, response_id, items, None, metadata)
         .await
 }

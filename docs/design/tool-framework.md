@@ -346,21 +346,23 @@ pub trait GatewayExecutor: ToolHandler + 'static {
         call: &FunctionToolCall,
         params: &Self::ExecutionParams,
     ) -> GatewayToolEventPlan;
+    fn started_output(&self, call: &FunctionToolCall, params: &Self::ExecutionParams) -> Option<OutputItem>;
     fn public_output(
         &self,
         call: &FunctionToolCall,
         output: &ToolOutput,
         status: GatewayCallStatus,
         params: &Self::ExecutionParams,
-    ) -> Option<OutputItem> { None }
+    ) -> Option<OutputItem>;
 }
 ```
 
 Adding a gateway tool type = implement both traits + register. A client-owned
 type (like `CodexNamespace`) implements only `ToolHandler`. Registration wraps a
 gateway executor in `GatewayBinding`, including a same-tool semaphore when the
-handler does not opt into parallel execution. Lifecycle shaping remains handler-owned
-through `started_output` and `public_output`.
+handler does not opt into parallel execution. Lifecycle shaping remains handler-owned:
+every handler implements `started_output` and `public_output`, so every gateway
+call has a public item.
 
 > **Drift from proposal:** (1) trait split `ToolHandler` / `GatewayExecutor`;
 > (2) `Pin<Box<dyn Future>>` instead of `#[async_trait]`, for `dyn`

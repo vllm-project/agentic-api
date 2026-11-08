@@ -16,7 +16,9 @@ use serde_json::{Map, Value};
 use super::sealing::MessagesResultKey;
 use super::{ReplayFailure, replayed_tool_result, upstream_tool_use_id};
 use crate::executor::{ExecutorError, ExecutorResult};
-use crate::types::messages::{ContentBlock, GatewayToolResult, ServerToolResultBlock, ServerToolUseBlock};
+use crate::types::messages::content::KnownContentBlock;
+use crate::types::messages::parameters::RequestField;
+use crate::types::messages::{GatewayToolResult, ServerToolResultBlock, ServerToolUseBlock};
 
 /// A content block the gateway made.
 enum GatewayBlock {
@@ -253,10 +255,12 @@ impl Replay<'_> {
 
 /// The `tool_use` block the upstream produced for a gateway call.
 fn tool_use(call: &ServerToolUseBlock) -> ExecutorResult<Value> {
-    serde_json::to_value(ContentBlock::ToolUse {
+    serde_json::to_value(KnownContentBlock::ToolUse {
         id: upstream_tool_use_id(&call.id).unwrap_or_default().to_owned(),
         name: call.name.clone(),
-        input: call.input.clone(),
+        input: RequestField::Value(call.input.clone()),
+        cache_control: RequestField::Missing,
+        extra: HashMap::new(),
     })
     .map_err(ExecutorError::JsonError)
 }

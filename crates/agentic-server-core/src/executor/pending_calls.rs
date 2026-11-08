@@ -16,45 +16,17 @@ use std::borrow::Cow;
 
 use super::{ExecutorError, ExecutorResult};
 use crate::tool::{ToolError, shell::SHELL_FUNCTION_NAME};
-use crate::types::client_calls::ClientCallId;
+use crate::types::client_calls::{ClientCallId, ClientCallKind};
 use crate::types::io::InputItem;
 use crate::types::tools::{ResponsesTool, ToolSearchExecution};
 use crate::types::websocket::SteeringRequiredInput;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum CallKind {
-    Function,
-    Custom,
-    Shell,
-    ToolSearch,
-}
-
-impl CallKind {
-    const fn call_item_name(self) -> &'static str {
-        match self {
-            Self::Function => "function_call",
-            Self::Custom => "custom_tool_call",
-            Self::Shell => "shell_call",
-            Self::ToolSearch => "tool_search_call",
-        }
-    }
-
-    const fn output_item_name(self) -> &'static str {
-        match self {
-            Self::Function => "function_call_output",
-            Self::Custom => "custom_tool_call_output",
-            Self::Shell => "shell_call_output",
-            Self::ToolSearch => "tool_search_output",
-        }
-    }
-}
 
 /// A client-owned call (plain `function`, Codex `namespace` member, or
 /// `custom` tool) with no later matching output in the same item sequence.
 #[derive(Debug)]
 pub(super) struct PendingCall {
-    pub(super) call_id: String,
-    pub(super) kind: CallKind,
+    pub(super) call_id: ClientCallId,
+    pub(super) kind: ClientCallKind,
     function_name: Option<String>,
     namespaced: bool,
     /// The call is async: the conversation may continue without its output.
@@ -65,91 +37,151 @@ impl PendingCall {
     /// Canonical history normalizes public custom and shell calls into functions. Restore
     /// only their output kind from the same parent's public tool declarations;
     /// namespace members remain functions even when their member name matches.
-    /// Unsupported or incomplete records retain their original identity. This
+    /// A function call recorded without its name retains its original identity. This
     /// projection neither admits steering nor accepts tool outputs.
-    pub(super) fn into_steering_required_input(
-        mut self,
-        tools: &[ResponsesTool],
-    ) -> Result<SteeringRequiredInput, Self> {
-        let Ok(call_id) = ClientCallId::try_from(std::mem::take(&mut self.call_id)) else {
-            // ClientCallId rejects only an empty ID; taking it leaves that
-            // rejected record unchanged and avoids cloning successful IDs.
-            return Err(self);
-        };
+    pub(super) fn into_steering_required_input(self, tools: &[ResponsesTool]) -> Result<SteeringRequiredInput, Self> {
+        let call_id = self.call_id;
         match self.kind {
-            CallKind::Function => {
-                if let Some(name) = self.function_name.take() {
-                    if !self.namespaced {
-                        for tool in tools {
-                            match tool {
-                                ResponsesTool::Shell(_) if name == SHELL_FUNCTION_NAME => {
-                                    return Ok(SteeringRequiredInput::Shell { call_id });
-                                }
-                                ResponsesTool::Custom(declaration) if declaration.name.as_str() == name => {
-                                    return Ok(SteeringRequiredInput::Custom { call_id });
-                                }
-                                _ => {}
+            ClientCallKind::Function => {
+                let Some(name) = self.function_name else {
+                    return Err(Self {
+                        call_id,
+                        function_name: None,
+                        ..self
+                    });
+                };
+                if !self.namespaced {
+                    for tool in tools {
+                        match tool {
+                            ResponsesTool::Shell(_) if name == SHELL_FUNCTION_NAME => {
+                                return Ok(SteeringRequiredInput::Shell { call_id });
                             }
+                            ResponsesTool::Custom(declaration) if declaration.name.as_str() == name => {
+                                return Ok(SteeringRequiredInput::Custom { call_id });
+                            }
+                            _ => {}
                         }
                     }
-                    return Ok(SteeringRequiredInput::Function { call_id, name });
                 }
+                Ok(SteeringRequiredInput::Function { call_id, name })
             }
-            CallKind::Custom => return Ok(SteeringRequiredInput::Custom { call_id }),
-            CallKind::Shell => return Ok(SteeringRequiredInput::Shell { call_id }),
-            CallKind::ToolSearch => {
-                return Ok(SteeringRequiredInput::ToolSearch {
-                    call_id,
-                    execution: ToolSearchExecution::Client,
-                });
-            }
+            ClientCallKind::Custom => Ok(SteeringRequiredInput::Custom { call_id }),
+            ClientCallKind::Shell => Ok(SteeringRequiredInput::Shell { call_id }),
+            ClientCallKind::ToolSearch => Ok(SteeringRequiredInput::ToolSearch {
+                call_id,
+                execution: ToolSearchExecution::Client,
+            }),
         }
-        self.call_id = call_id.into();
-        Err(self)
     }
-}
-
-/// Scans `items` in order and returns every call left unresolved, in emission
-/// order. Calls and outputs must have non-empty IDs and the same kind. A
-/// synchronous call takes exactly one output; an async call accepts repeated
-/// outputs. An output whose `call_id` matches no call is rejected. Namespace
-/// member calls are represented as `InputItem::FunctionCall`, so they're
-/// covered by the plain function check.
-pub(super) fn pending_calls(items: &[InputItem]) -> ExecutorResult<Vec<PendingCall>> {
-    scan_calls(items).map(|ledger| ledger.pending().collect())
-}
-
-/// The first synchronous call left unresolved, which the client must answer
-/// before the conversation can continue. Pending async calls do not count.
-pub(super) fn first_unanswered_sync_call(items: &[InputItem]) -> ExecutorResult<Option<PendingCall>> {
-    scan_calls(items).map(|ledger| ledger.pending().find(|call| !call.async_execution))
-}
-
-/// Largest prefix whose synchronous calls all have matching outputs inside it.
-/// Pending async calls do not end the prefix; see [`open_async_calls`](crate::types::io::input::open_async_calls).
-pub(super) fn resolved_prefix_len(items: &[InputItem]) -> ExecutorResult<usize> {
-    scan_calls(items).map(|ledger| ledger.resolved_prefix)
 }
 
 #[derive(Debug)]
 struct CallRecord {
-    kind: CallKind,
+    kind: ClientCallKind,
     function_name: Option<String>,
     namespaced: bool,
     async_execution: bool,
     resolved: bool,
 }
 
-/// Every call seen so far, in emission order, with its resolution state.
+/// Every call in an item sequence, in emission order, with its resolution state.
 #[derive(Debug, Default)]
-struct CallLedger {
-    calls: IndexMap<String, CallRecord>,
+pub(super) struct CallLedger {
+    calls: IndexMap<ClientCallId, CallRecord>,
     unresolved_sync: usize,
     resolved_prefix: usize,
 }
 
 impl CallLedger {
-    fn pending(self) -> impl Iterator<Item = PendingCall> {
+    /// Scans `items` in order. Calls and outputs must have non-empty IDs, and an output must match an earlier call of
+    /// the same kind. As on `OpenAI`, a `call_id` may repeat: a repeated call adds nothing, a call is answered once any
+    /// output for its `call_id` follows it, and further outputs are accepted. Namespace member calls are represented
+    /// as `InputItem::FunctionCall`, so they're covered by the plain function check.
+    pub(super) fn scan(items: &[InputItem]) -> ExecutorResult<Self> {
+        let mut ledger = Self::default();
+        for (index, item) in items.iter().enumerate() {
+            match item {
+                InputItem::FunctionCall(call) => {
+                    ledger.add_call(
+                        &call.call_id,
+                        ClientCallKind::Function,
+                        call.async_execution,
+                        Some(&call.name),
+                        call.namespace.is_some(),
+                    )?;
+                }
+                InputItem::CustomToolCall(call) => {
+                    ledger.add_call(&call.call_id, ClientCallKind::Custom, call.async_execution, None, false)?;
+                }
+                InputItem::FunctionCallOutput(output) => {
+                    ledger.resolve_call(&output.call_id, ClientCallKind::Function)?;
+                }
+                InputItem::CustomToolCallOutput(output) => {
+                    ledger.resolve_call(&output.call_id, ClientCallKind::Custom)?;
+                }
+                InputItem::ShellCall(call) => {
+                    ledger.add_call(&call.call_id, ClientCallKind::Shell, false, None, false)?;
+                }
+                InputItem::ShellCallOutput(output) => ledger.resolve_call(&output.call_id, ClientCallKind::Shell)?,
+                // A hosted search (no call id) is resolved by the gateway, not the client.
+                InputItem::ToolSearchCall(call) => {
+                    if let Some(call_id) = call.call_id.as_deref() {
+                        ledger.add_call(call_id, ClientCallKind::ToolSearch, false, None, false)?;
+                    }
+                }
+                InputItem::ToolSearchOutput(output) => {
+                    if let Some(call_id) = output.call_id.as_deref() {
+                        ledger.resolve_call(call_id, ClientCallKind::ToolSearch)?;
+                    }
+                }
+                InputItem::Message(_)
+                | InputItem::CodeInterpreterCall(_)
+                | InputItem::Reasoning(_)
+                | InputItem::McpListTools(_)
+                | InputItem::Compaction(_)
+                | InputItem::CompactionTrigger
+                | InputItem::MultiAgentCall(_)
+                | InputItem::MultiAgentCallOutput(_)
+                | InputItem::AgentMessage(_)
+                | InputItem::WebSearchCall(_)
+                | InputItem::McpCall(_) => {}
+            }
+            if ledger.unresolved_sync == 0 {
+                ledger.resolved_prefix = index + 1;
+            }
+        }
+        Ok(ledger)
+    }
+
+    /// Whether a synchronous call is left without an output, which the client must answer before the conversation can
+    /// continue. Pending async calls do not count.
+    pub(super) fn awaits_output(&self) -> bool {
+        self.unresolved_sync > 0
+    }
+
+    /// Refuses a sequence whose synchronous call has no output yet, naming the first such call.
+    pub(super) fn require_answered(&self) -> ExecutorResult<()> {
+        match self
+            .calls
+            .iter()
+            .find(|(_, record)| !record.resolved && !record.async_execution)
+        {
+            Some((call_id, _)) => Err(ToolError::MissingOutput {
+                call_id: call_id.as_str().to_owned(),
+            }
+            .into()),
+            None => Ok(()),
+        }
+    }
+
+    /// Largest prefix whose synchronous calls all have matching outputs inside it.
+    /// Pending async calls do not end the prefix; see [`open_async_calls`](crate::types::io::input::open_async_calls).
+    pub(super) fn resolved_prefix_len(&self) -> usize {
+        self.resolved_prefix
+    }
+
+    /// Every call left unresolved, in emission order.
+    pub(super) fn pending(self) -> impl Iterator<Item = PendingCall> {
         self.calls
             .into_iter()
             .filter(|(_, record)| !record.resolved)
@@ -165,25 +197,22 @@ impl CallLedger {
     fn add_call(
         &mut self,
         call_id: &str,
-        kind: CallKind,
+        kind: ClientCallKind,
         async_execution: bool,
         function_name: Option<&str>,
         namespaced: bool,
     ) -> ExecutorResult<()> {
-        if call_id.is_empty() {
+        let Ok(call_id) = ClientCallId::try_from(call_id.to_owned()) else {
             return Err(ExecutorError::InvalidRequest(format!(
                 "{} call_id must not be empty",
                 kind.call_item_name()
             )));
-        }
-        if self.calls.contains_key(call_id) {
-            return Err(ExecutorError::InvalidRequest(format!(
-                "duplicate call_id '{call_id}' in {}",
-                kind.call_item_name()
-            )));
+        };
+        if self.calls.contains_key(&call_id) {
+            return Ok(());
         }
         self.calls.insert(
-            call_id.to_owned(),
+            call_id,
             CallRecord {
                 kind,
                 function_name: function_name.map(str::to_owned),
@@ -198,7 +227,7 @@ impl CallLedger {
         Ok(())
     }
 
-    fn resolve_call(&mut self, call_id: &str, output_kind: CallKind) -> ExecutorResult<()> {
+    fn resolve_call(&mut self, call_id: &str, output_kind: ClientCallKind) -> ExecutorResult<()> {
         if call_id.is_empty() {
             return Err(ExecutorError::InvalidRequest(format!(
                 "{} call_id must not be empty",
@@ -218,72 +247,15 @@ impl CallLedger {
                 record.kind.call_item_name()
             )));
         }
-        match (record.resolved, record.async_execution) {
-            (false, async_execution) => {
-                record.resolved = true;
-                if !async_execution {
-                    self.unresolved_sync -= 1;
-                }
-                Ok(())
+        // OpenAI accepts repeated and conflicting outputs for a call.
+        if !record.resolved {
+            record.resolved = true;
+            if !record.async_execution {
+                self.unresolved_sync -= 1;
             }
-            // OpenAI accepts repeated and conflicting outputs for an async call.
-            (true, true) => Ok(()),
-            (true, false) => Err(ExecutorError::InvalidRequest(format!(
-                "{} references call_id '{call_id}' without a pending call",
-                output_kind.output_item_name()
-            ))),
         }
+        Ok(())
     }
-}
-
-fn scan_calls(items: &[InputItem]) -> ExecutorResult<CallLedger> {
-    let mut ledger = CallLedger::default();
-    for (index, item) in items.iter().enumerate() {
-        match item {
-            InputItem::FunctionCall(call) => {
-                ledger.add_call(
-                    &call.call_id,
-                    CallKind::Function,
-                    call.async_execution,
-                    Some(&call.name),
-                    call.namespace.is_some(),
-                )?;
-            }
-            InputItem::CustomToolCall(call) => {
-                ledger.add_call(&call.call_id, CallKind::Custom, call.async_execution, None, false)?;
-            }
-            InputItem::FunctionCallOutput(output) => ledger.resolve_call(&output.call_id, CallKind::Function)?,
-            InputItem::CustomToolCallOutput(output) => ledger.resolve_call(&output.call_id, CallKind::Custom)?,
-            InputItem::ShellCall(call) => ledger.add_call(&call.call_id, CallKind::Shell, false, None, false)?,
-            InputItem::ShellCallOutput(output) => ledger.resolve_call(&output.call_id, CallKind::Shell)?,
-            // A hosted search (no call id) is resolved by the gateway, not the client.
-            InputItem::ToolSearchCall(call) => {
-                if let Some(call_id) = call.call_id.as_deref() {
-                    ledger.add_call(call_id, CallKind::ToolSearch, false, None, false)?;
-                }
-            }
-            InputItem::ToolSearchOutput(output) => {
-                if let Some(call_id) = output.call_id.as_deref() {
-                    ledger.resolve_call(call_id, CallKind::ToolSearch)?;
-                }
-            }
-            InputItem::Message(_)
-            | InputItem::CodeInterpreterCall(_)
-            | InputItem::Reasoning(_)
-            | InputItem::McpListTools(_)
-            | InputItem::Compaction(_)
-            | InputItem::CompactionTrigger
-            | InputItem::MultiAgentCall(_)
-            | InputItem::MultiAgentCallOutput(_)
-            | InputItem::AgentMessage(_)
-            | InputItem::WebSearchCall(_)
-            | InputItem::McpCall(_) => {}
-        }
-        if ledger.unresolved_sync == 0 {
-            ledger.resolved_prefix = index + 1;
-        }
-    }
-    Ok(ledger)
 }
 
 #[cfg(test)]
@@ -292,6 +264,14 @@ mod tests {
 
     use super::*;
     use crate::types::io::input::{async_records, open_async_call_ids};
+
+    fn pending_calls(items: &[InputItem]) -> ExecutorResult<Vec<PendingCall>> {
+        CallLedger::scan(items).map(|ledger| ledger.pending().collect())
+    }
+
+    fn resolved_prefix_len(items: &[InputItem]) -> ExecutorResult<usize> {
+        CallLedger::scan(items).map(|ledger| ledger.resolved_prefix_len())
+    }
 
     #[test]
     fn compaction_prefix_never_splits_interleaved_calls_and_outputs() {
@@ -403,7 +383,7 @@ mod tests {
         ];
         let pending = pending_calls(&items).expect("valid partial call/output sequence");
         assert_eq!(pending.len(), 1);
-        assert_eq!(pending[0].call_id, "call_2");
+        assert_eq!(pending[0].call_id.as_str(), "call_2");
     }
 
     #[test]
@@ -411,7 +391,7 @@ mod tests {
         let items = vec![custom_tool_call("call_1")];
         let pending = pending_calls(&items).expect("valid unresolved custom call");
         assert_eq!(pending.len(), 1);
-        assert_eq!(pending[0].call_id, "call_1");
+        assert_eq!(pending[0].call_id.as_str(), "call_1");
     }
 
     #[test]
@@ -544,30 +524,24 @@ mod tests {
         items.push(function_call_output("custom"));
         let pending = pending_calls(&items).unwrap();
         assert_eq!(pending.len(), 2);
-        assert_eq!(pending[0].call_id, "weather");
-        assert_eq!(pending[1].call_id, "namespace");
+        assert_eq!(pending[0].call_id.as_str(), "weather");
+        assert_eq!(pending[1].call_id.as_str(), "namespace");
     }
 
     #[test]
-    fn steering_conversion_returns_incomplete_records_without_inventing_fields() {
-        for (kind, call_id, function_name) in [
-            (CallKind::Function, "missing-name", None),
-            (CallKind::Function, "", Some("get_weather")),
-            (CallKind::Custom, "", None),
-        ] {
-            let rejected = PendingCall {
-                async_execution: false,
-                call_id: call_id.to_owned(),
-                kind,
-                function_name: function_name.map(str::to_owned),
-                namespaced: false,
-            }
-            .into_steering_required_input(&[])
-            .unwrap_err();
-            assert_eq!(rejected.kind, kind);
-            assert_eq!(rejected.call_id, call_id);
-            assert_eq!(rejected.function_name.as_deref(), function_name);
+    fn steering_conversion_returns_a_function_call_without_its_name_unchanged() {
+        let rejected = PendingCall {
+            async_execution: false,
+            call_id: ClientCallId::try_from("missing-name".to_owned()).unwrap(),
+            kind: ClientCallKind::Function,
+            function_name: None,
+            namespaced: false,
         }
+        .into_steering_required_input(&[])
+        .unwrap_err();
+        assert_eq!(rejected.kind, ClientCallKind::Function);
+        assert_eq!(rejected.call_id.as_str(), "missing-name");
+        assert_eq!(rejected.function_name, None);
     }
 
     #[test]
@@ -634,7 +608,7 @@ mod tests {
                         let histories = if output_type == "tool_search_output" {
                             vec![&input]
                         } else {
-                            vec![&input, normalized.as_ref()]
+                            vec![&input, &normalized]
                         };
                         for history in histories {
                             let required =
@@ -673,30 +647,46 @@ mod tests {
     }
 
     #[test]
-    fn empty_and_duplicate_call_ids_are_rejected() {
+    fn empty_call_ids_are_rejected() {
         assert_invalid(&[function_call("")], "function_call call_id must not be empty");
         assert_invalid(&[custom_tool_call("")], "custom_tool_call call_id must not be empty");
         assert_invalid(&[shell_call("")], "shell_call call_id must not be empty");
-        assert_invalid(
-            &[
+    }
+
+    /// Recorded `OpenAI` behavior: a `call_id` may repeat across calls and outputs; one output answers it.
+    #[test]
+    fn repeated_call_ids_are_accepted() {
+        for items in [
+            vec![
                 function_call("call_1"),
                 function_call("call_1"),
                 function_call_output("call_1"),
             ],
-            "duplicate call_id 'call_1'",
-        );
-        assert_invalid(
-            &[
+            vec![
                 function_call("call_1"),
                 function_call_output("call_1"),
-                custom_tool_call("call_1"),
+                function_call("call_1"),
             ],
-            "duplicate call_id 'call_1'",
-        );
+            vec![
+                function_call("call_1"),
+                function_call_output("call_1"),
+                function_call_output("call_1"),
+            ],
+            vec![
+                function_call("call_1"),
+                function_call_output("call_1"),
+                function_call("call_1"),
+                function_call_output("call_1"),
+            ],
+        ] {
+            let ledger = CallLedger::scan(&items).unwrap();
+            assert!(!ledger.awaits_output());
+            ledger.require_answered().unwrap();
+        }
     }
 
     #[test]
-    fn outputs_must_resolve_exactly_one_call_of_the_same_kind() {
+    fn outputs_must_resolve_an_earlier_call_of_the_same_kind() {
         assert_invalid(
             &[function_call_output("")],
             "function_call_output call_id must not be empty",
@@ -705,14 +695,6 @@ mod tests {
         assert_invalid(
             &[function_call_output("call_1")],
             "No tool call found for function call output with call_id call_1.",
-        );
-        assert_invalid(
-            &[
-                function_call("call_1"),
-                function_call_output("call_1"),
-                function_call_output("call_1"),
-            ],
-            "without a pending call",
         );
         assert_invalid(
             &[function_call("call_1"), custom_tool_call_output("call_1")],
@@ -747,12 +729,18 @@ mod tests {
         let pending = pending_calls(&items).unwrap();
         assert_eq!(pending.len(), 2);
         assert!(pending.iter().all(|call| call.async_execution));
-        assert!(first_unanswered_sync_call(&items).unwrap().is_none());
+        let ledger = CallLedger::scan(&items).unwrap();
+        assert!(!ledger.awaits_output());
+        ledger.require_answered().unwrap();
 
         let mut with_sync = items;
         with_sync.push(function_call("call_sync"));
-        let unanswered = first_unanswered_sync_call(&with_sync).unwrap().expect("sync call");
-        assert_eq!(unanswered.call_id, "call_sync");
+        let ledger = CallLedger::scan(&with_sync).unwrap();
+        assert!(ledger.awaits_output());
+        assert!(matches!(
+            ledger.require_answered(),
+            Err(ExecutorError::Tool(ToolError::MissingOutput { call_id })) if call_id == "call_sync"
+        ));
     }
 
     /// Recorded `OpenAI` behavior: repeated and conflicting outputs for an async call are accepted.
