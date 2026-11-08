@@ -28,7 +28,8 @@ use crate::executor::telemetry::metrics::Stage;
 use crate::executor::upstream::{fetch_blocking_payload, fetch_stream_payload};
 use crate::executor::{inference::UpstreamHeaders, relay::Release};
 use crate::tool::{ToolRegistry, mcp, record_discovered_mcp_tools, responses_declarations};
-use crate::types::io::{OutputItem, ResponsesInput};
+use crate::types::io::input::InputFunctionToolCall;
+use crate::types::io::{InOutItem, InputItem, OutputItem, ResponsesInput};
 use crate::types::request_response::ResponsePayload;
 
 /// Outcome of inspecting one inference round's output, deciding whether the
@@ -65,6 +66,12 @@ pub(super) async fn build_tool_registry(
     history: Option<&ResponsesInput>,
 ) -> ExecutorResult<ToolRegistry> {
     let mut executors = exec_ctx.gateway_executors.request_scoped();
+    executors.include_file_search_results = agent
+        .request
+        .original_request
+        .include
+        .as_ref()
+        .is_some_and(|include| include.iter().any(|field| field == "file_search_call.results"));
     let history = history.unwrap_or(&agent.request.enriched_request.input);
     let mut registry: ToolRegistry = match agent.request.enriched_request.tools.as_mut() {
         Some(tools) => {
@@ -314,7 +321,7 @@ impl<'a> AgentTurn<'a> {
             self.append_round_input(&current_output, &payload.output, multi_agent);
         }
         let hosted_loads = hosted_search::hosted_search_loads(&gateway_results);
-        self.record_gateway_results(gateway_results);
+        self.record_gateway_results(&current_output, gateway_results);
         // Loads persist with the response whatever this round decided.
         self.load_hosted_tools(&hosted_loads).await?;
         Ok(RoundResult { payload, decision })
@@ -394,11 +401,26 @@ impl<'a> AgentTurn<'a> {
         }
     }
 
-    /// Gives the model each gateway call's result for the next round. History takes the response's public output
-    /// instead, which is what the client receives.
-    fn record_gateway_results(&mut self, results: Vec<GatewayCallResult>) {
-        let model_input = results.into_iter().flat_map(|result| result.input);
-        self.pipeline.request.enriched_request.input.extend(model_input);
+    /// Give the model each built-in tool's output. File-search calls and their outputs also stay in item history so
+    /// a later turn can use the same retrieved context, even when the public item omits `results`.
+    fn record_gateway_results(&mut self, output: &[OutputItem], results: Vec<GatewayCallResult>) {
+        for result in results {
+            if matches!(&result.public_output, Some(OutputItem::FileSearchCall(_)))
+                && let Some(OutputItem::FunctionCall(call)) = output.get(result.item_index)
+            {
+                self.pipeline
+                    .request
+                    .new_input_items
+                    .push(InOutItem::Input(InputItem::FunctionCall(InputFunctionToolCall::from(
+                        call.clone(),
+                    ))));
+                self.pipeline
+                    .request
+                    .new_input_items
+                    .extend(result.input.iter().cloned().map(InOutItem::Input));
+            }
+            self.pipeline.request.enriched_request.input.extend(result.input);
+        }
     }
 
     async fn execute_round_output(
