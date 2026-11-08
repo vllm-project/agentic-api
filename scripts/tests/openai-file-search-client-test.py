@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise Files and vector-store routes through the official OpenAI client."""
+"""Exercise Files, vector stores, and Responses citations with the official OpenAI client."""
 
 from __future__ import annotations
 
@@ -12,8 +12,10 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+import warnings
 
 from openai import OpenAI
+from file_search_citation_fixtures import citation_upstream, exercise_citations
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -44,7 +46,8 @@ def run() -> None:
     if not SERVER.is_file():
         raise AssertionError(f"build the gateway first: cargo build -p agentic-server --bin agentic-server ({SERVER})")
 
-    with tempfile.TemporaryDirectory(prefix="agentic-openai-file-search-") as directory:
+    with tempfile.TemporaryDirectory(prefix="agentic-openai-file-search-") as directory, \
+            citation_upstream(Path(directory)) as (upstream_url, upstream_state):
         root = Path(directory)
         database = root / "gateway.db"
         database.touch()
@@ -60,7 +63,7 @@ def run() -> None:
         )
         command = [
             str(SERVER),
-            "--llm-api-base", "http://127.0.0.1:1",
+            "--llm-api-base", upstream_url,
             "--gateway-host", "127.0.0.1",
             "--gateway-port", str(port),
             "--db-url", f"sqlite://{database}",
@@ -104,6 +107,13 @@ def run() -> None:
                     assert client.files.retrieve(file.id).id == file.id
                     assert client.vector_stores.delete(store.id).deleted
                     assert client.files.delete(file.id).deleted
+
+                    # The synthetic future kind deliberately exceeds the SDK's annotation union.
+                    # Verify its preserved fields and accept only the corresponding SDK warnings.
+                    with warnings.catch_warnings(record=True) as sdk_warnings:
+                        warnings.simplefilter("always")
+                        exercise_citations(client, upstream_state)
+                    assert all("future_citation" in str(warning.message) for warning in sdk_warnings), sdk_warnings
             except Exception as error:
                 raise AssertionError(f"OpenAI client integration failed: {error}\ngateway log:\n{log.read_text()}") from error
             finally:

@@ -206,6 +206,9 @@ Answers may include `【file-id】` citation markers. Valid markers produce type
 is annotated only when the model cites a retrieved file. Streaming keeps text
 deltas and final text identical, and includes annotations on completed content
 parts, output items, and the terminal response.
+Citation validation applies to gateway-owned `file_search` execution. Native upstream
+annotations are preserved when the gateway does not own that tool, including when a
+client function happens to be named `file_search`.
 
 ## Manage stored data
 

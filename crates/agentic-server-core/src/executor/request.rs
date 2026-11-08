@@ -289,7 +289,7 @@ impl ExecutionContext {
             tracing::warn!(%error, "file blob reconciliation will retry while the gateway runs");
         }
         Ok(Self {
-            file_search: Some(file_search),
+            file_search: None,
             conv_handler,
             resp_handler,
             client,
@@ -310,7 +310,8 @@ impl ExecutionContext {
             responses_config: cfg.responses,
             metrics: ExecutorMetrics::from_global(),
             storage_pool: Some(pool),
-        })
+        }
+        .with_file_search_service(file_search))
     }
 }
 
