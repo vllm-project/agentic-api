@@ -6,6 +6,7 @@
 //! the logical retained size of output items and steering input. Ingestion
 //! charges growth incrementally and reconciles against this measurement at
 //! completion, so a new variable-sized field is added in exactly one place.
+mod annotation;
 mod client_outputs;
 mod file_search;
 mod input;
@@ -853,7 +854,7 @@ mod tests {
     fn retained_accounting_covers_annotations_compaction_and_nested_arguments() {
         let annotation = serde_json::json!({"type": "url_citation", "url": "https://example.com", "title": "x"});
         let mut part = OutputTextContent::new("body");
-        part.annotations = Some(vec![annotation.clone()]);
+        part.annotations = Some(vec![crate::types::io::OutputAnnotation::Other(annotation.clone())]);
         let mut message = OutputMessage::new("msg_1", crate::types::event::MessageStatus::Completed);
         message.content = vec![part.into()];
         assert_eq!(

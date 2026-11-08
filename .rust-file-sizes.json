@@ -3,7 +3,7 @@
   "baseline": {
     "crates/agentic-server-core/src/tool/registry.rs": 515,
     "crates/agentic-server-core/src/tool/tool_search.rs": 1078,
-    "crates/agentic-server-core/src/types/io/output.rs": 1051,
+    "crates/agentic-server-core/src/types/io/output.rs": 1044,
     "crates/agentic-server-core/src/types/tools/params.rs": 537,
     "crates/agentic-server/src/agentic_process.rs": 557,
     "crates/agentic-server/src/auth.rs": 727

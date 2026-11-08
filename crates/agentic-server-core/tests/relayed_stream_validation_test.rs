@@ -9,7 +9,7 @@ use agentic_core::events::{EventPayload, SSEItemType, normalize_sse_line};
 use agentic_core::executor::accumulator::ResponseAccumulator;
 use agentic_core::executor::request::RequestContext;
 use agentic_core::executor::{UpstreamBody, decode_upstream};
-use agentic_core::types::io::OutputItem;
+use agentic_core::types::io::{OutputAnnotation, OutputItem, OutputMessageContent};
 use agentic_core::types::request_response::RequestPayload;
 use multi_agent_contract::RecordedSession;
 use serde_json::json;
@@ -58,6 +58,16 @@ async fn strict_relay_decoder_preserves_public_file_citations_in_json_and_sse() 
         let (payload, _) = decode_upstream(request_context(), body)
             .await
             .expect("valid public response");
+        let OutputItem::Message(message) = &payload.output[0] else {
+            panic!("expected assistant message");
+        };
+        let OutputMessageContent::OutputText(text) = &message.content[0] else {
+            panic!("expected output text");
+        };
+        assert!(matches!(
+            text.annotations.as_deref(),
+            Some([OutputAnnotation::FileCitation(_)])
+        ));
         let output = serde_json::to_value(payload.output).expect("typed output");
         assert_eq!(output[0]["content"][0]["annotations"], annotations);
     }

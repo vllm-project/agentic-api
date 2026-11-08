@@ -13,8 +13,8 @@ use crate::tool::registry::{ToolEntry, ToolType};
 use crate::tool::{GatewayExecutor, ToolError, ToolHandler, ToolOutput};
 use crate::types::file_search::{SearchQuery, SearchRequest, SearchResult};
 use crate::types::io::output::{
-    FileCitation, FileSearchCall, FileSearchCallResult, FunctionToolCall, GatewayCallStatus, OutputMessageContent,
-    OutputTextContent,
+    FileCitation, FileSearchCall, FileSearchCallResult, FunctionToolCall, GatewayCallStatus, OutputAnnotation,
+    OutputMessageContent, OutputTextContent,
 };
 use crate::types::io::{FunctionTool, OutputItem};
 use crate::types::tools::FileSearchToolParam;
@@ -239,16 +239,18 @@ pub(crate) struct FileSearchToolOutput {
 impl From<SearchResult> for FileSearchCallResult {
     fn from(result: SearchResult) -> Self {
         Self {
-            file_id: result.file_id,
-            filename: result.filename,
-            score: result.score,
-            attributes: result.attributes,
-            text: result
-                .content
-                .into_iter()
-                .map(|content| content.text)
-                .collect::<Vec<_>>()
-                .join("\n"),
+            file_id: Some(result.file_id),
+            filename: Some(result.filename),
+            score: Some(result.score),
+            attributes: Some(result.attributes),
+            text: Some(
+                result
+                    .content
+                    .into_iter()
+                    .map(|content| content.text)
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            ),
         }
     }
 }
@@ -287,7 +289,9 @@ impl FileSearchCitations {
             return;
         };
         for result in output.retrieved_passages {
-            self.files.insert(result.file_id, result.filename);
+            if let (Some(file_id), Some(filename)) = (result.file_id, result.filename) {
+                self.files.insert(file_id, filename);
+            }
         }
     }
 
@@ -317,19 +321,19 @@ impl FileSearchCitations {
         let mut citations = Vec::<FileCitation>::new();
         let annotations = content.annotations.get_or_insert_with(Vec::new);
         annotations.retain(|annotation| {
-            if annotation.get("type").and_then(serde_json::Value::as_str) != Some("file_citation") {
-                return true;
-            }
-            if let Ok(mut citation) = serde_json::from_value::<FileCitation>(annotation.clone())
-                && let Some(filename) = self
+            if let OutputAnnotation::FileCitation(citation) = annotation {
+                if let Some(filename) = self
                     .files
                     .get(&citation.file_id)
                     .filter(|_| citation.index <= text_length)
-            {
-                citation.filename.clone_from(filename);
-                citations.push(citation);
+                {
+                    let mut citation = citation.clone();
+                    citation.filename.clone_from(filename);
+                    citations.push(citation);
+                }
+                return false;
             }
-            false
+            true
         });
         let mut marker = None;
         for (index, (offset, character)) in content.text.char_indices().enumerate() {
@@ -354,11 +358,7 @@ impl FileSearchCitations {
         }
         citations.sort_by(|left, right| (left.index, &left.file_id).cmp(&(right.index, &right.file_id)));
         citations.dedup_by(|left, right| left.index == right.index && left.file_id == right.file_id);
-        annotations.extend(
-            citations
-                .into_iter()
-                .filter_map(|citation| serde_json::to_value(citation).ok()),
-        );
+        annotations.extend(citations.into_iter().map(OutputAnnotation::FileCitation));
     }
 
     pub(crate) fn restore_output(&self, item: &mut OutputItem) {
@@ -379,7 +379,14 @@ impl FileSearchCitations {
             return;
         };
         self.annotate(&mut content);
-        part["annotations"] = serde_json::Value::Array(content.annotations.unwrap_or_default());
+        part["annotations"] = serde_json::Value::Array(
+            content
+                .annotations
+                .unwrap_or_default()
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+        );
     }
 
     fn restore_item(&self, item: &mut serde_json::Value) {
@@ -455,8 +462,9 @@ mod tests {
                 serde_json::from_str::<FileSearchToolOutput>(&output.output)
                     .unwrap()
                     .retrieved_passages[0]
-                    .text,
-                "Evidence"
+                    .text
+                    .as_deref(),
+                Some("Evidence")
             );
         }
     }
@@ -500,10 +508,8 @@ mod tests {
             crate::types::io::output::OutputTextContent::new("é Evidence 【file_1】; unknown 【file_missing】.");
         citations.annotate(&mut content);
         assert_eq!(
-            content.annotations,
-            Some(vec![
-                serde_json::json!({"type": "file_citation", "file_id": "file_1", "filename": "policy.txt", "index": 11})
-            ])
+            serde_json::to_value(&content.annotations).unwrap(),
+            serde_json::json!([{"type": "file_citation", "file_id": "file_1", "filename": "policy.txt", "index": 11}])
         );
         citations.annotate(&mut content);
         assert_eq!(content.annotations.as_ref().map(Vec::len), Some(1));

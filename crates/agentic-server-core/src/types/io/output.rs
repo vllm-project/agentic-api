@@ -1,6 +1,9 @@
+mod annotation;
 mod apply_done;
 mod file_search;
 mod history;
+mod text;
+pub use annotation::OutputAnnotation;
 pub use file_search::{FileCitation, FileSearchCall, FileSearchCallResult, FileSearchCallStatus};
 pub(crate) mod tool_search_call;
 mod web_search_status;
@@ -35,7 +38,7 @@ use super::shell::ShellCall;
 pub struct OutputTextContent {
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub annotations: Option<Vec<Value>>,
+    pub annotations: Option<Vec<OutputAnnotation>>,
     #[serde(default, deserialize_with = "deserialize_nullable_vec")]
     pub logprobs: Vec<OutputTextLogprob>,
 }
@@ -55,16 +58,6 @@ pub struct OutputTextLogprob {
     pub bytes: Vec<u8>,
     pub logprob: f64,
     pub top_logprobs: Vec<TopLogprob>,
-}
-
-impl OutputTextContent {
-    pub fn new(text: impl Into<String>) -> Self {
-        Self {
-            text: text.into(),
-            annotations: Some(vec![]),
-            logprobs: Vec::new(),
-        }
-    }
 }
 
 /// Public messages include assistant output and forked user input.

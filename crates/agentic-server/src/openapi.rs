@@ -57,6 +57,7 @@ use utoipa::OpenApi;
         agentic_core::types::io::FileSearchCallResult,
         agentic_core::types::io::FileSearchCallStatus,
         agentic_core::types::io::FileCitation,
+        agentic_core::types::io::OutputAnnotation,
         agentic_core::types::request_response::PromptCacheOptions,
         agentic_core::types::request_response::PromptCacheMode,
         agentic_core::types::request_response::PromptCacheTtl,
@@ -536,9 +537,22 @@ mod tests {
             "FileSearchCallResult",
             "FileSearchCallStatus",
             "FileCitation",
+            "OutputAnnotation",
         ] {
             assert!(schemas[name].is_object(), "missing file search schema {name}");
         }
+        assert!(
+            schemas["OutputAnnotation"]
+                .to_string()
+                .contains("#/components/schemas/FileCitation"),
+            "output annotations must expose typed file citations"
+        );
+        assert!(
+            schemas["OutputTextContent"]
+                .to_string()
+                .contains("#/components/schemas/OutputAnnotation"),
+            "output text annotations must reference the typed annotation schema"
+        );
     }
 
     #[test]

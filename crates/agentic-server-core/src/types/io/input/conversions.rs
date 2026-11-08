@@ -88,7 +88,10 @@ impl From<OutputMessageContent> for InputContent {
             OutputMessageContent::OutputText(part) => {
                 let mut text = InputTextContent::new(part.text);
                 if let Some(annotations) = part.annotations {
-                    text.extra.insert("annotations".into(), Value::Array(annotations));
+                    text.extra.insert(
+                        "annotations".into(),
+                        Value::Array(annotations.into_iter().map(Into::into).collect()),
+                    );
                 }
                 // These fixed structs contain only JSON-compatible values and string keys.
                 text.extra.insert(
