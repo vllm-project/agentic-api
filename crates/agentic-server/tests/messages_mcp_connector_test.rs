@@ -5,10 +5,15 @@
 mod common;
 #[path = "messages_mcp_connector/fixture.rs"]
 mod fixture;
+#[path = "common/messages_database.rs"]
+mod messages_database;
 
 use std::sync::{Arc, Mutex};
 
+use agentic_core::executor::messages_threads::MessagesThreadStore;
+use agentic_core::storage::create_pool_with_schema;
 use agentic_core::tool::mcp::client::test_support::with_root_certificate;
+use agentic_core::types::messages::thread::MESSAGE_THREADS_BETA;
 use agentic_server::app::{ServerConfig, build_router};
 use axum::Router;
 use axum::body::Body;
@@ -29,16 +34,16 @@ fn request(url: &str, stream: bool, mode: &str) -> Value {
 }
 
 async fn post(router: &Router, path: &str, body: &Value) -> (StatusCode, String) {
+    let mut request = http::Request::post(path)
+        .header(http::header::CONTENT_TYPE, "application/json")
+        .header("x-api-key", "test-key")
+        .header("anthropic-beta", "mcp-client-2025-11-20");
+    if body.get("thread").is_some() {
+        request = request.header("anthropic-beta", MESSAGE_THREADS_BETA);
+    }
     let response = router
         .clone()
-        .oneshot(
-            http::Request::post(path)
-                .header(http::header::CONTENT_TYPE, "application/json")
-                .header("x-api-key", "test-key")
-                .header("anthropic-beta", "mcp-client-2025-11-20")
-                .body(Body::from(body.to_string()))
-                .unwrap(),
-        )
+        .oneshot(request.body(Body::from(body.to_string())).unwrap())
         .await
         .unwrap();
     let status = response.status();
@@ -673,6 +678,79 @@ async fn call_count(mcp: &fixture::HttpsMcp) -> usize {
         .iter()
         .filter(|entry| entry["method"] == "tools/call")
         .count()
+}
+
+fn message_id(response: &str, stream: bool) -> Value {
+    if stream {
+        response
+            .lines()
+            .filter_map(|line| line.strip_prefix("data: "))
+            .map(|line| serde_json::from_str::<Value>(line).unwrap())
+            .find(|event| event["type"] == "message_start")
+            .unwrap()["message"]["id"]
+            .clone()
+    } else {
+        serde_json::from_str::<Value>(response).unwrap()["id"].clone()
+    }
+}
+
+#[tokio::test]
+async fn thread_continuation_replays_pending_mcp_from_its_checkpoint() {
+    let mcp = fixture::HttpsMcp::start().await;
+    let (url, requests, task) = fixture::inference().await;
+    let (database_url, _database) = messages_database::database().await;
+    let pool = create_pool_with_schema(Some(&database_url)).await.unwrap();
+    let mut state = common::test_state(&common::test_config(&url));
+    Arc::make_mut(&mut state.exec_ctx).messages_threads = MessagesThreadStore::new(pool);
+    let router = build_router(state, &ServerConfig::from_env());
+    for stream in [false, true] {
+        let mut create = request(&mcp.url, stream, "mixed");
+        create["thread"] = json!({"type":"create"});
+        create["tools"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"name":"client_echo","input_schema":{"type":"object"}}));
+        let before_calls = call_count(&mcp).await;
+        let (status, response) = trusted_post(&router, "/v1/messages", &create, &mcp.certificate).await;
+        assert_eq!(status, StatusCode::OK, "{response}");
+        assert_eq!(
+            response_content(&response, stream, "tool_use")[0]["type"],
+            "mcp_tool_use"
+        );
+        assert_eq!(call_count(&mcp).await, before_calls);
+
+        let mut next = json!({"model":"mixed","max_tokens":128,"stream":!stream,
+            "thread":{"type":"continue","previous_message_id":message_id(&response, stream)},
+            "mcp_servers":create["mcp_servers"],
+            "messages":[{"role":"user","content":[{"type":"tool_result","tool_use_id":"client","content":"client output"}]}]});
+        let (status, response) = trusted_post(&router, "/v1/messages", &next, &mcp.certificate).await;
+        assert_eq!(status, StatusCode::OK, "{response}");
+        let content = response_content(&response, !stream, "end_turn");
+        assert_eq!(content[0]["type"], "mcp_tool_result");
+        assert_eq!(content[0]["tool_use_id"], "call");
+        assert_eq!(
+            content[0]["content"][0]["text"],
+            format!("fixture output: {}", fixture::MIXED_TEXT)
+        );
+        assert_eq!(call_count(&mcp).await, before_calls + 1);
+
+        next["thread"]["previous_message_id"] = message_id(&response, !stream);
+        next["messages"] = json!([{"role":"user","content":"continue"}]);
+        let (status, response) = trusted_post(&router, "/v1/messages", &next, &mcp.certificate).await;
+        assert_eq!(status, StatusCode::OK, "{response}");
+        assert_eq!(response_content(&response, !stream, "end_turn")[0]["type"], "text");
+        assert_eq!(call_count(&mcp).await, before_calls + 1);
+    }
+    let captured = requests.lock().await;
+    assert_eq!(captured.len(), 6);
+    assert!(
+        captured
+            .iter()
+            .all(|request| request.get("thread").is_none() && request.get("mcp_servers").is_none())
+    );
+    task.abort();
+    let _ = task.await;
+    mcp.stop().await;
 }
 
 #[tokio::test]

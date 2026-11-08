@@ -1,7 +1,8 @@
 //! Adapt Messages connector declarations to protocol-neutral tools.
 use crate::tool::{ToolDeclaration, ToolError};
 use crate::types::messages::ToolParam;
-use crate::types::messages::mcp::{McpToolsetConfig, MessagesMcpServer};
+use crate::types::messages::mcp::McpToolsetConfig;
+use crate::types::messages::parameters::McpServer;
 use crate::types::tools::McpToolParam;
 use std::collections::HashSet;
 
@@ -9,15 +10,21 @@ use std::collections::HashSet;
 ///
 /// # Errors
 /// Rejects ambiguous server identities and missing or duplicate toolsets before I/O.
-pub fn connector_tools(servers: &[MessagesMcpServer], tools: &[ToolParam]) -> Result<Vec<ToolDeclaration>, ToolError> {
+pub fn connector_tools(servers: &[McpServer], tools: &[ToolParam]) -> Result<Vec<ToolDeclaration>, ToolError> {
     let mut names = HashSet::new();
     for server in servers {
-        if server.name.is_empty() || !names.insert(server.name.as_str()) {
+        let config = &server.configuration;
+        if config.name.is_empty() || !names.insert(config.name.as_str()) {
             return Err(ToolError::Config(
                 "MCP server names must be non-empty and unique".to_owned(),
             ));
         }
-        if !server.url.starts_with("https://") {
+        if config.kind != "url" {
+            return Err(ToolError::Config(
+                "Messages MCP connector requires URL servers".to_owned(),
+            ));
+        }
+        if !config.url.starts_with("https://") {
             return Err(ToolError::Config("Messages MCP server URLs must use HTTPS".to_owned()));
         }
     }
@@ -30,16 +37,17 @@ pub fn connector_tools(servers: &[MessagesMcpServer], tools: &[ToolParam]) -> Re
         let server = tool.mcp_server_name.as_str();
         let server = servers
             .iter()
-            .find(|candidate| candidate.name == server)
+            .find(|candidate| candidate.configuration.name == server)
             .ok_or_else(|| ToolError::Config("mcp_toolset must reference a declared MCP server".to_owned()))?;
-        if !used.insert(server.name.as_str()) {
+        let config = &server.configuration;
+        if !used.insert(config.name.as_str()) {
             return Err(ToolError::Config(
                 "each MCP server must have exactly one mcp_toolset".to_owned(),
             ));
         }
         resolved.push(ToolDeclaration::Mcp(McpToolParam {
-            server_label: server.name.clone(),
-            server_url: Some(server.url.clone()),
+            server_label: config.name.clone(),
+            server_url: Some(config.url.clone()),
             authorization: server.authorization_token.clone(),
             connector_id: None,
             server_description: None,

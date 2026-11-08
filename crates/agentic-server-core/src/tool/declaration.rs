@@ -282,7 +282,10 @@ mod tests {
     use crate::types::tools::McpDiscoveredToolParam;
 
     fn tools_of(json_req: Value) -> Option<Vec<ToolParam>> {
-        serde_json::from_value::<MessagesRequest>(json_req).unwrap().tools
+        serde_json::from_value::<MessagesRequest>(json_req)
+            .unwrap()
+            .tools
+            .into_option()
     }
 
     fn wire(tools: Value) -> Vec<ResponsesTool> {

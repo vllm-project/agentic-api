@@ -1,6 +1,6 @@
 //! Connector acceptance checks with a deterministic MCP protocol fixture and mock inference.
 use super::*;
-use crate::executor::messages_connector::normalize_replayed_mcp;
+use crate::executor::messages_connector::{normalize_connector, normalize_replayed_mcp};
 use crate::executor::messages_server_tools::{ClientToolResult, NativeServerTools};
 use crate::executor::{
     ConversationHandler, ExecutionContext, MessagesUpstream, ResponseHandler, run_messages_loop, run_messages_stream,

@@ -8,24 +8,31 @@
 
 use std::collections::HashMap;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::IgnoredAny};
 use serde_json::Value;
 
+use super::content::{ContentBlock, KnownContentBlock};
+use super::parameters::{
+    CacheControl, CompactionConfig, Container, ContextManagement, Fallbacks, McpServer, RequestField, ThinkingConfig,
+};
+use super::thread::MessageThreadParam;
 use super::tool_choice::MessagesToolChoice;
 
 /// Top-level Anthropic Messages request body.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct MessagesRequest {
     pub model: String,
     pub max_tokens: u32,
     pub messages: Vec<MessageParam>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub system: Option<SystemPrompt>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tools: Option<Vec<ToolParam>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mcp_servers: Option<Vec<super::mcp::MessagesMcpServer>>,
+    pub thread: Option<MessageThreadParam>,
+    #[serde(default, skip_serializing_if = "RequestField::is_missing")]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<SystemPrompt>))]
+    pub system: RequestField<SystemPrompt>,
+    #[serde(default, skip_serializing_if = "RequestField::is_missing")]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<Vec<ToolParam>>))]
+    pub tools: RequestField<Vec<ToolParam>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<MessagesToolChoice>,
     #[serde(default)]
@@ -37,6 +44,21 @@ pub struct MessagesRequest {
     /// Anthropic `output_config` (reasoning effort and related settings).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output_config: Option<OutputConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<ThinkingConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compaction: Option<CompactionConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp_servers: Option<Vec<McpServer>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_management: Option<ContextManagement>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_control: Option<CacheControl>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub container: Option<Container>,
+    #[serde(default, skip_serializing_if = "RequestField::is_missing")]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<Fallbacks>))]
+    pub fallbacks: RequestField<Fallbacks>,
     /// Any other top-level field (e.g. `metadata`, `stop_sequences`) preserved verbatim.
     #[serde(flatten)]
     pub extra: HashMap<String, Value>,
@@ -47,9 +69,11 @@ pub struct MessagesRequest {
 #[derive(Deserialize)]
 pub(crate) struct MessagesToolDeclarations {
     #[serde(default)]
-    pub mcp_servers: Option<Vec<super::mcp::MessagesMcpServer>>,
+    pub mcp_servers: Option<Vec<McpServer>>,
     #[serde(default)]
     pub tools: Option<Vec<ToolParam>>,
+    #[serde(default)]
+    pub thread: Option<IgnoredAny>,
 }
 
 /// Anthropic `output_config` object. Unmodeled keys are preserved via `extra`.
@@ -138,7 +162,7 @@ impl ReasoningEffort {
 }
 
 /// Anthropic `system` accepts either a bare string or an array of text blocks.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum SystemPrompt {
     Text(String),
@@ -176,15 +200,23 @@ impl SystemPrompt {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct SystemBlock {
+    #[serde(rename = "type", default, skip_serializing_if = "RequestField::is_missing")]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<String>))]
+    pub kind: RequestField<String>,
+    #[serde(default, skip_serializing_if = "RequestField::is_missing")]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<CacheControl>))]
+    pub cache_control: RequestField<CacheControl>,
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
     #[serde(default)]
     pub text: String,
 }
 
 /// One entry in the `messages` array.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct MessageParam {
     pub role: String,
@@ -192,7 +224,7 @@ pub struct MessageParam {
 }
 
 /// Anthropic message content is either a bare string or an array of blocks.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum MessageContent {
     Text(String),
@@ -206,7 +238,7 @@ impl MessageContent {
             Self::Blocks(blocks) => blocks.iter().any(|block| {
                 matches!(
                     block,
-                    ContentBlock::McpToolUse { .. } | ContentBlock::McpToolResult { .. }
+                    ContentBlock::Known(KnownContentBlock::McpToolUse { .. } | KnownContentBlock::McpToolResult { .. })
                 )
             }),
         }
@@ -233,52 +265,9 @@ impl utoipa::ToSchema for MessageContent {
     }
 }
 
-/// A content block inside a message. Internally tagged by `type`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ContentBlock {
-    Text {
-        #[serde(default)]
-        text: String,
-    },
-    Thinking {
-        #[serde(default)]
-        thinking: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        signature: Option<String>,
-    },
-    ToolUse {
-        id: String,
-        name: String,
-        #[serde(default)]
-        input: Value,
-    },
-    McpToolUse {
-        id: String,
-        name: String,
-        server_name: String,
-        input: Value,
-    },
-    McpToolResult {
-        tool_use_id: String,
-        #[serde(default)]
-        is_error: bool,
-        #[serde(default)]
-        content: ToolResultContent,
-    },
-    ToolResult {
-        tool_use_id: String,
-        #[serde(default)]
-        content: ToolResultContent,
-    },
-    /// Any block type the gateway does not model — dropped on the way in.
-    #[serde(other)]
-    Unknown,
-}
-
 /// A gateway-generated Anthropic `tool_result` block.
 ///
-/// Unlike [`ContentBlock::ToolResult`], this models the narrower schema emitted
+/// Unlike [`super::content::KnownContentBlock::ToolResult`], this models the narrower schema emitted
 /// by the gateway: textual content and an explicit success/error marker. Keeping
 /// this typed until the upstream request is assembled prevents locally generated
 /// blocks from silently omitting or misspelling required fields.
@@ -311,89 +300,11 @@ enum GatewayToolResultKind {
 
 /// `tool_result.content` may be a plain string or an array of blocks (Anthropic
 /// allows both). Normalised to a single string by [`ToolResultContent::to_text`].
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ToolResultContent {
     Text(String),
     Blocks(Vec<ToolResultBlock>),
-}
-
-#[cfg(feature = "openapi")]
-impl utoipa::PartialSchema for ContentBlock {
-    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
-        use utoipa::openapi::{
-            ObjectBuilder,
-            schema::{OneOfBuilder, SchemaType, Type},
-        };
-
-        let str_type = || ObjectBuilder::new().schema_type(SchemaType::new(Type::String));
-
-        OneOfBuilder::new()
-            .discriminator(Some(utoipa::openapi::schema::Discriminator::new("type")))
-            .item(
-                ObjectBuilder::new()
-                    .property("type", str_type().enum_values(Some(["text"])))
-                    .required("type")
-                    .property("text", str_type()),
-            )
-            .item(
-                ObjectBuilder::new()
-                    .property("type", str_type().enum_values(Some(["thinking"])))
-                    .required("type")
-                    .property("thinking", str_type())
-                    .property("signature", str_type()),
-            )
-            .item(
-                ObjectBuilder::new()
-                    .property("type", str_type().enum_values(Some(["tool_use"])))
-                    .required("type")
-                    .property("id", str_type())
-                    .required("id")
-                    .property("name", str_type())
-                    .required("name")
-                    .property("input", ObjectBuilder::new()),
-            )
-            .item(
-                ObjectBuilder::new()
-                    .property("type", str_type().enum_values(Some(["tool_result"])))
-                    .required("type")
-                    .property("tool_use_id", str_type())
-                    .required("tool_use_id")
-                    .property("content", utoipa::openapi::Ref::from_schema_name("ToolResultContent")),
-            )
-            .item(
-                ObjectBuilder::new()
-                    .property("type", str_type().enum_values(Some(["mcp_tool_use"])))
-                    .required("type")
-                    .property("id", str_type())
-                    .required("id")
-                    .property("name", str_type())
-                    .required("name")
-                    .property("server_name", str_type())
-                    .required("server_name")
-                    .property("input", ObjectBuilder::new())
-                    .required("input"),
-            )
-            .item(
-                ObjectBuilder::new()
-                    .property("type", str_type().enum_values(Some(["mcp_tool_result"])))
-                    .required("type")
-                    .property("tool_use_id", str_type())
-                    .required("tool_use_id")
-                    .property(
-                        "is_error",
-                        ObjectBuilder::new().schema_type(SchemaType::new(Type::Boolean)),
-                    )
-                    .property("content", utoipa::openapi::Ref::from_schema_name("ToolResultContent")),
-            )
-            .into()
-    }
-}
-#[cfg(feature = "openapi")]
-impl utoipa::ToSchema for ContentBlock {
-    fn name() -> std::borrow::Cow<'static, str> {
-        std::borrow::Cow::Borrowed("ContentBlock")
-    }
 }
 
 #[cfg(feature = "openapi")]
@@ -430,18 +341,27 @@ impl ToolResultContent {
             Self::Text(text) => text.clone(),
             Self::Blocks(blocks) => blocks
                 .iter()
-                .filter_map(|b| b.text.as_deref())
+                .filter_map(|b| b.text.as_ref().map(String::as_str))
                 .collect::<Vec<_>>()
                 .join(""),
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ToolResultBlock {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub text: Option<String>,
+    #[serde(rename = "type", default, skip_serializing_if = "RequestField::is_missing")]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<String>))]
+    pub kind: RequestField<String>,
+    #[serde(default, skip_serializing_if = "RequestField::is_missing")]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<CacheControl>))]
+    pub cache_control: RequestField<CacheControl>,
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
+    #[serde(default, skip_serializing_if = "RequestField::is_missing")]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<String>))]
+    pub text: RequestField<String>,
 }
 
 // Preserve the existing import path for callers of the Messages wire types.

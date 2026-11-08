@@ -21,11 +21,13 @@ use tracing::Instrument as _;
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::inference::fetch_response_json_with_headers;
+use crate::executor::messages_connector::mixed_mcp_continuation;
 use crate::executor::messages_context::MessagesRequestContext;
 use crate::executor::messages_round::{MessagesRoundDecision, decide_round};
 use crate::executor::messages_server_tools::{NativeServerTools, ServerToolView, client_tool_result};
+use crate::executor::messages_threads::ThreadRetention;
 use crate::executor::messages_tools::{ExecutedCall, execute_gateway_calls, request_gateway_map, resume_pending_mcp};
-use crate::executor::messages_usage::MessagesUsageTotals;
+use crate::executor::messages_usage::{MessagesUsageTotals, has_fallback};
 use crate::executor::request::ExecutionContext;
 use crate::executor::telemetry::metrics::{ExecutorMetrics, Stage};
 use crate::executor::telemetry::{Api, ExecutionSpan, FailureCategory, Route};
@@ -99,9 +101,12 @@ pub async fn run_messages_loop(
         .instrument(span)
         .await;
     match &result {
-        // Every `Ok` path inside states its own execution outcome; the
-        // payload is now the handler's to send.
-        Ok(_) => execution.delivered(),
+        // Checkpoint publication has succeeded before execution can complete.
+        // Error bodies already recorded their failure inside the loop.
+        Ok(response) => {
+            execution.completed_with_stop_reason(response.body["stop_reason"].as_str());
+            execution.delivered();
+        }
         Err(error) => {
             execution.failed(error);
             execution.not_delivered();
@@ -161,6 +166,7 @@ async fn run_messages_loop_traced(
         // A reply that is not a JSON object is refused like malformed JSON.
         let message = Value::Object(deserialize_from_str(&resp_text).map_err(ExecutorError::JsonError)?);
         record_message_usage(&exec_ctx.metrics, message.get("usage"));
+        turn.fallback |= has_fallback(message.get("usage"));
 
         // Any error body from upstream is surfaced verbatim (handler maps it to
         // the Anthropic error envelope).
@@ -172,22 +178,12 @@ async fn run_messages_loop_traced(
             });
         }
 
-        let content = message.get("content").and_then(Value::as_array);
+        let content = message["content"].as_array().map_or(&[][..], Vec::as_slice);
         let stop_reason = message.get("stop_reason").and_then(Value::as_str);
 
         // Split the assistant turn into gateway-owned tool_use vs everything the
         // client should see. A client-owned tool_use means we cannot continue
         // the loop server-side — return the turn to the client (edge E7).
-        let Some(content) = content else {
-            execution.completed_with_stop_reason(stop_reason);
-            return deliver(
-                message,
-                turn,
-                &gateway_map,
-                MessagesRoundDecision::Finish,
-                response_headers,
-            );
-        };
         let mut gateway_calls: Vec<&Value> = Vec::new();
         let mut has_client_tool_use = false;
         for block in content {
@@ -210,8 +206,7 @@ async fn run_messages_loop_traced(
         match decision {
             MessagesRoundDecision::ContinueGateway => {}
             MessagesRoundDecision::ReturnClient | MessagesRoundDecision::Finish => {
-                execution.completed_with_stop_reason(stop_reason);
-                return deliver(message, turn, &gateway_map, decision, response_headers);
+                return deliver(message, turn, &gateway_map, decision, response_headers, &mut ctx).await;
             }
         }
         // Pure gateway-tool round: execute the calls, then feed the model's FULL
@@ -260,6 +255,7 @@ fn round_budget_error() -> MessagesResponse<Value> {
 struct ClientTurn {
     shown: Vec<Value>,
     usage: MessagesUsageTotals,
+    fallback: bool,
 }
 
 impl ClientTurn {
@@ -307,19 +303,22 @@ fn record_message_usage(metrics: &ExecutorMetrics, usage: Option<&Value>) {
 /// Assemble the terminal client message and its accumulated usage.
 /// Unexecuted native calls stay hidden. MCP calls with complete object arguments
 /// remain public without results, including truncated rounds. A normal mixed
-/// round must not publish invalid pending arguments for a later execution.
-/// A final bare string remains a text block after earlier shown rounds.
-fn deliver(
+/// round must preserve valid pending calls for a later continuation.
+async fn deliver(
     mut message: Value,
     turn: ClientTurn,
     gateway_map: &tool_seam::GatewayToolMap,
     decision: MessagesRoundDecision,
     headers: http::HeaderMap,
+    ctx: &mut MessagesRequestContext,
 ) -> ExecutorResult<MessagesResponse<Value>> {
     let stop_reason = message.get("stop_reason").and_then(Value::as_str);
-    let require_valid_pending =
-        decision == MessagesRoundDecision::ReturnClient && matches!(stop_reason, Some("tool_use" | "end_turn"));
-    let ClientTurn { mut shown, mut usage } = turn;
+    let require_valid_pending = mixed_mcp_continuation(decision == MessagesRoundDecision::ReturnClient, stop_reason);
+    let ClientTurn {
+        mut shown,
+        mut usage,
+        fallback,
+    } = turn;
     let visible = match message.get("content") {
         Some(Value::Array(content)) => {
             if require_valid_pending
@@ -344,6 +343,20 @@ fn deliver(
     let visible_stop = decision.visible_stop_reason(stop_reason);
     if visible_stop != stop_reason {
         message["stop_reason"] = json!(visible_stop);
+    }
+    if let Some(id) = ctx.thread_message_id() {
+        let Some((content, stop)) = message["content"].as_array().zip(message["stop_reason"].as_str()) else {
+            return Err(ExecutorError::StreamError("invalid upstream thread message".to_owned()));
+        };
+        let has_tool_call = content.iter().any(|block| block["type"] == "tool_use");
+        let retention = ThreadRetention::for_response((!fallback).then_some(stop), has_tool_call);
+        let retained = if require_valid_pending {
+            Value::Array(visible.clone().unwrap_or_default())
+        } else {
+            Value::Array(tool_seam::strip_gateway_tool_use(content, gateway_map))
+        };
+        message["id"] = json!(id);
+        ctx.complete_thread(&retained, retention).await?;
     }
     if let (Some(visible), Some(fields)) = (visible, message.as_object_mut()) {
         shown.extend(visible);
@@ -377,10 +390,11 @@ fn tool_uses(gateway_calls: &[&Value]) -> Vec<MessagesToolCall> {
 mod terminal_tests {
     use super::*;
 
-    #[test]
-    fn mixed_terminal_rejects_invalid_mcp_arguments_but_preserves_truncation() {
+    #[tokio::test]
+    async fn mixed_terminal_rejects_invalid_mcp_arguments_but_preserves_truncation() {
         let mut map = tool_seam::GatewayToolMap::default();
         map.insert_mcp("mcp_echo".to_owned(), "server".to_owned(), "echo".to_owned());
+        let mut ctx = MessagesRequestContext::from_value(json!({"model":"m", "max_tokens":1, "messages":[]})).unwrap();
         for reason in ["tool_use", "end_turn", "max_tokens"] {
             for input in [json!({"text":"hello"}), json!(["invalid"]), Value::Null] {
                 let valid = input.is_object();
@@ -394,7 +408,9 @@ mod terminal_tests {
                     &map,
                     MessagesRoundDecision::ReturnClient,
                     http::HeaderMap::new(),
-                );
+                    &mut ctx,
+                )
+                .await;
                 if !valid && reason != "max_tokens" {
                     assert!(matches!(result, Err(ExecutorError::InvalidRequest(_))));
                     continue;

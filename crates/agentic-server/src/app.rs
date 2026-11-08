@@ -19,6 +19,7 @@ use agentic_core::proxy::ProxyState;
 
 use crate::auth::api_key::require_api_key;
 use crate::auth::{ANTHROPIC_COUNT_TOKENS_PATH, ANTHROPIC_MESSAGES_PATH, OidcAuthenticator, require_oidc};
+use crate::handler::http::file_search;
 use crate::handler::{
     chat_completions, compact_response, completions, count_tokens, create_conversation, create_item,
     delete_conversation, delete_item, delete_response, embeddings, health, list_input_items, list_items, messages,
@@ -358,7 +359,15 @@ pub fn build_router_with_auth(
         retrieval_route = retrieval_route.route_layer(middleware::from_fn_with_state(key.clone(), require_api_key));
         input_items_route = input_items_route.route_layer(middleware::from_fn_with_state(key.clone(), require_api_key));
     }
+    let mut file_search_routes = file_search::router(state.max_request_body_size.get());
+    if authenticator.is_none()
+        && let Some(key) = state.openai_api_key.as_ref().filter(|key| !key.is_empty())
+    {
+        file_search_routes =
+            file_search_routes.route_layer(middleware::from_fn_with_state(key.clone(), require_api_key));
+    }
     let protected_routes = Router::new()
+        .merge(file_search_routes)
         .route("/v1/conversations", post(create_conversation))
         .route(
             "/v1/conversations/{conversation_id}",

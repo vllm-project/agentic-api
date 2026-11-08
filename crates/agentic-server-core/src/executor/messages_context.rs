@@ -1,74 +1,43 @@
 //! Per-request context for the Anthropic Messages gateway tool loops.
 //!
-//! The Messages loops are a pass-through, not a transform: the client's request
-//! is forwarded to vLLM `/v1/messages` essentially untouched, and only `tools`
-//! and connector declarations, `stream`/`messages`/`tool_choice` are rewritten. That rules out a typed
-//! round-trip through [`MessagesRequest`] as the upstream body — `ContentBlock`
-//! carries a `#[serde(other)] Unknown` catch-all, and several block types model
-//! only the fields the gateway reads, so re-serializing would silently drop
-//! `cache_control`, `is_error`, and every unmodeled block (`image`,
-//! `redacted_thinking`, future provider extensions).
-//!
-//! This context retains the request data needed by the loop:
-//!
-//! * `raw` — the JSON body actually sent upstream. It
-//!   is the source of truth for `messages` and `system`, preserving unmodeled
-//!   history blocks and extension fields.
-//! * `typed` — the client's `tools`, `mcp_servers`, `stream`, and `model`, retained for
-//!   safe field access in routing and the loops. The parsed message history,
-//!   system prompt, and other fields are dropped before the loop begins.
-//! * `tool_choice` — the current typed selector. Fulfillment and transitions
-//!   use exhaustive enum matches; each transition updates the raw selector.
-//!
-//! The two are **not** kept byte-identical, and must not be confused: `typed` is
-//! what the client sent, `raw` is what the gateway sends upstream. They diverge
-//! wherever the gateway rewrites the body for upstream — today
-//! `normalize_native_server_tools` rewriting a native web-search or web-fetch
-//! declaration, of any supported version, into the ordinary function-tool shape
-//! vLLM accepts. Accordingly,
-//! only the fields the loops never mutate are exposed off `typed`
-//! ([`tools`](MessagesRequestContext::tools),
-//! [`stream`](MessagesRequestContext::stream),
-//! [`model`](MessagesRequestContext::model)); `messages` and `system` are
-//! deliberately unreachable through it, so a stale typed view can never be read
-//! back after a round is appended.
+//! The shared decoder validates one typed request from a single JSON tree. The
+//! raw projection retains exact extension shapes for pass-through and tool-loop
+//! normalization; the typed view owns admission, fingerprints, and durable history.
+//! After admission, only immutable routing fields remain in the typed loop view.
 
 mod continuation;
+mod registry;
 
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
-use super::messages_connector::{
-    has_mcp_state, normalize_connector, normalize_replayed_mcp, pending_mcp_calls, validate_connector_discovery,
-};
-use super::messages_tools::request_gateway_map;
+use super::messages_connector::{has_mcp_state, normalize_replayed_mcp};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::messages_request::{ServerToolBudgets, normalize_native_server_tools};
 use crate::executor::messages_server_tools::NativeServerTools;
 use crate::executor::messages_server_tools::replay::replay_server_tool_blocks;
 use crate::executor::messages_server_tools::sealing::MessagesResultKey;
-use crate::tool::mcp::messages::connector_tools;
-use crate::tool::{GatewayExecutors, ToolRegistry, registry_tools};
-use crate::types::messages::mcp::{MessagesMcpServer, PendingMcpCall};
+use crate::executor::messages_threads::{MessagesThreadTurn, ThreadRetention};
+use crate::types::messages::mcp::PendingMcpCall;
+use crate::types::messages::parameters::McpServer;
 use crate::types::messages::request::MessagesToolDeclarations;
 use crate::types::messages::{
     GatewayToolMap, GatewayToolResult, MessagesRequest, MessagesToolChoice, ToolParam, has_gateway_tool,
 };
 use crate::utils::common::serialize_to_string;
 
-/// A Messages request parsed together with the exact immutable body bytes it
-/// came from.
+/// A typed Messages request paired with its lossless raw projection.
 ///
-/// Private fields make independently pairing typed data and raw bytes
+/// Private fields make independently pairing typed data and raw data
 /// impossible through the public API. The handler uses the typed view for
 /// routing, then consumes this value to build a [`MessagesRequestContext`] only
 /// when the request needs the gateway tool loop.
-pub struct ParsedMessagesRequest<'a> {
-    typed: MessagesRequest,
-    body: &'a [u8],
+pub struct ParsedMessagesRequest {
+    pub(super) typed: MessagesRequest,
+    pub(super) raw: Value,
 }
 
-impl std::fmt::Debug for ParsedMessagesRequest<'_> {
+impl std::fmt::Debug for ParsedMessagesRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ParsedMessagesRequest")
             .field("model", &self.typed.model)
@@ -77,26 +46,28 @@ impl std::fmt::Debug for ParsedMessagesRequest<'_> {
     }
 }
 
-impl<'a> ParsedMessagesRequest<'a> {
-    /// Parse a Messages request while retaining the exact bytes it came from.
+impl ParsedMessagesRequest {
+    /// Decode the body once, deriving the typed view from the retained tree.
     ///
     /// # Errors
     /// Returns [`ExecutorError::JsonError`] if `body` is not a well-formed
     /// Messages request.
-    pub fn parse(body: &'a [u8]) -> ExecutorResult<Self> {
-        let typed = serde_json::from_slice(body).map_err(ExecutorError::JsonError)?;
-        Ok(Self { typed, body })
+    pub fn parse(body: &[u8]) -> ExecutorResult<Self> {
+        let raw = serde_json::from_slice(body).map_err(ExecutorError::JsonError)?;
+        let typed = MessagesRequest::deserialize(&raw).map_err(ExecutorError::JsonError)?;
+        Ok(Self { typed, raw })
     }
 
     /// Parse requests handled by the gateway; preserve the transparent proxy
-    /// contract for requests without gateway-executed tools.
+    /// contract for requests without threads or gateway-executed tools.
     ///
     /// # Errors
-    /// Returns the parse error if a gateway-tool request fails validation.
-    pub fn parse_for_gateway(body: &'a [u8], gateway_map: &GatewayToolMap) -> ExecutorResult<Option<Self>> {
+    /// Returns the parse error if a thread or gateway-tool request fails validation.
+    pub fn parse_for_gateway(body: &[u8], gateway_map: &GatewayToolMap) -> ExecutorResult<Option<Self>> {
         match Self::parse(body) {
-            Ok(parsed) => Ok((parsed.typed.mcp_servers.is_some()
+            Ok(parsed) => Ok((parsed.is_thread()
                 || has_gateway_tool(parsed.tools(), gateway_map)
+                || parsed.typed.mcp_servers.is_some()
                 || parsed
                     .typed
                     .messages
@@ -107,7 +78,7 @@ impl<'a> ParsedMessagesRequest<'a> {
                 let declares_connector = serde_json::from_slice::<Value>(body).is_ok_and(|raw| has_mcp_state(&raw));
                 let declares_gateway_tool =
                     serde_json::from_slice::<MessagesToolDeclarations>(body).is_ok_and(|request| {
-                        request.mcp_servers.is_some() || has_gateway_tool(request.tools.as_ref(), gateway_map)
+                        request.thread.is_some() || has_gateway_tool(request.tools.as_ref(), gateway_map)
                     });
                 if declares_connector || declares_gateway_tool {
                     Err(error)
@@ -116,6 +87,34 @@ impl<'a> ParsedMessagesRequest<'a> {
                 }
             }
         }
+    }
+
+    /// Whether this request uses the locally implemented thread protocol.
+    #[must_use]
+    pub fn is_thread(&self) -> bool {
+        self.typed.thread.is_some()
+    }
+
+    /// Refresh only the fields changed by typed thread admission. Other provider
+    /// parameters keep their original raw representation for upstream forwarding.
+    pub(super) fn project_thread_history(&mut self) -> ExecutorResult<()> {
+        let object = self
+            .raw
+            .as_object_mut()
+            .ok_or_else(|| ExecutorError::InvalidRequest("expected Messages object".to_owned()))?;
+        object.remove("thread");
+        object.insert("messages".to_owned(), serde_json::to_value(&self.typed.messages)?);
+        if let Some(system) = self.typed.system.as_ref() {
+            object.insert("system".to_owned(), serde_json::to_value(system)?);
+        } else {
+            object.remove("system");
+        }
+        if let Some(tools) = self.typed.tools.as_ref() {
+            object.insert("tools".to_owned(), serde_json::to_value(tools)?);
+        } else {
+            object.remove("tools");
+        }
+        Ok(())
     }
 
     /// The tools declared by the client, before upstream normalization.
@@ -136,7 +135,7 @@ struct MessagesTypedState {
     model: String,
     tools: Option<Vec<ToolParam>>,
     stream: bool,
-    mcp_servers: Option<Vec<MessagesMcpServer>>,
+    mcp_servers: Option<Vec<McpServer>>,
 }
 
 impl From<MessagesRequest> for MessagesTypedState {
@@ -150,7 +149,7 @@ impl From<MessagesRequest> for MessagesTypedState {
         } = request;
         Self {
             model,
-            tools,
+            tools: tools.into_option(),
             stream,
             mcp_servers,
         }
@@ -160,6 +159,7 @@ impl From<MessagesRequest> for MessagesTypedState {
 /// One `/v1/messages` request, in both the typed and raw views the gateway tool
 /// loops need. See the module docs for why both exist.
 pub struct MessagesRequestContext {
+    pub(super) thread: Option<MessagesThreadTurn>,
     /// The only typed request fields needed after routing.
     typed: MessagesTypedState,
     /// Current upstream selection policy; updated together with `raw`.
@@ -213,7 +213,7 @@ impl MessagesRequestContext {
     /// Build the context from a validated typed/raw request pair.
     ///
     /// Consuming [`ParsedMessagesRequest`] guarantees both views derive from the
-    /// same immutable input. Only the fields required after routing are retained
+    /// same decoded input. Only the fields required after routing are retained
     /// from the typed view; the owned message history and system prompt are
     /// dropped before this function returns.
     ///
@@ -226,9 +226,8 @@ impl MessagesRequestContext {
     /// Returns [`ExecutorError::JsonError`] if `body` is not valid JSON, or
     /// [`ExecutorError::InvalidRequest`] if it carries an unsupported or invalid
     /// native web search or web fetch declaration.
-    pub fn new(parsed: ParsedMessagesRequest<'_>) -> ExecutorResult<Self> {
-        let raw = serde_json::from_slice(parsed.body).map_err(ExecutorError::JsonError)?;
-        Self::from_parts(parsed.typed, raw)
+    pub fn new(parsed: ParsedMessagesRequest) -> ExecutorResult<Self> {
+        Self::from_parts(parsed.typed, parsed.raw)
     }
 
     /// Build the context from a raw JSON body alone, deriving the typed view
@@ -250,6 +249,7 @@ impl MessagesRequestContext {
     fn from_parts(mut typed: MessagesRequest, mut raw: Value) -> ExecutorResult<Self> {
         let budgets = normalize_native_server_tools(&mut raw)?;
         Ok(Self {
+            thread: None,
             tool_choice: typed.tool_choice.take(),
             native: NativeServerTools::from_declarations(typed.tools.as_ref()),
             typed: typed.into(),
@@ -268,46 +268,6 @@ impl MessagesRequestContext {
     #[must_use]
     pub fn tools(&self) -> Option<&Vec<ToolParam>> {
         self.typed.tools.as_ref()
-    }
-
-    /// Discover connector tools through the shared typed registry and normalize the upstream view.
-    ///
-    /// # Errors
-    /// Returns validation, discovery-budget, or serialization errors before inference begins.
-    pub async fn prepare_registry(
-        &mut self,
-        map: &GatewayToolMap,
-        executors: &mut GatewayExecutors,
-    ) -> ExecutorResult<ToolRegistry> {
-        let mut tools = registry_tools(self.tools(), map);
-        tools.extend(connector_tools(
-            self.typed.mcp_servers.as_deref().unwrap_or_default(),
-            self.typed.tools.as_deref().unwrap_or_default(),
-        )?);
-        let registry = ToolRegistry::build_with_handlers(&mut tools, executors).await?;
-        validate_connector_discovery(&registry)?;
-        let mut pending = pending_mcp_calls(&self.raw, &request_gateway_map(map, &registry))?;
-        let mut gateway_tools = map.clone();
-        normalize_connector(&mut self.raw, &tools, &mut gateway_tools)?;
-        for call in &mut pending {
-            let name = gateway_tools
-                .mcp_internal_name(&call.server_name, &call.name)
-                .filter(|name| registry.lookup(name).is_some_and(|entry| entry.ownership.is_gateway()))
-                .ok_or_else(|| {
-                    ExecutorError::InvalidRequest(
-                        "pending MCP tool must remain enabled in the continuation request".to_owned(),
-                    )
-                })?;
-            call.name = name.to_owned();
-        }
-        self.pending_mcp = pending;
-        self.gateway_tools = Some(gateway_tools);
-        Ok(registry)
-    }
-
-    #[must_use]
-    pub fn gateway_tools_or<'a>(&'a self, fallback: &'a GatewayToolMap) -> &'a GatewayToolMap {
-        self.gateway_tools.as_ref().unwrap_or(fallback)
     }
 
     /// Whether the client asked for a streaming response.
@@ -337,6 +297,17 @@ impl MessagesRequestContext {
         replay_server_tool_blocks(&mut self.raw, key)?;
         if let Some(map) = &self.gateway_tools {
             normalize_replayed_mcp(&mut self.raw, map)?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn thread_message_id(&self) -> Option<&str> {
+        self.thread.as_ref().map(|turn| turn.message_id.as_str())
+    }
+
+    pub(super) async fn complete_thread(&mut self, content: &Value, retention: ThreadRetention) -> ExecutorResult<()> {
+        if let Some(turn) = self.thread.take() {
+            turn.complete(&self.raw["messages"], content, retention).await?;
         }
         Ok(())
     }
@@ -712,7 +683,7 @@ mod tests {
 
     #[test]
     fn unmodeled_blocks_and_cache_control_survive_in_the_raw_body() {
-        // The reason the raw view exists: a typed round-trip would drop these.
+        // The raw projection preserves the client body before loop normalization.
         let body = json!({
             "model": "m", "max_tokens": 8,
             "system": [{"type": "text", "text": "s", "cache_control": {"type": "ephemeral", "ttl": "1h"}}],
@@ -849,3 +820,48 @@ mod tests {
 
 #[cfg(test)]
 mod connector_tests;
+
+#[cfg(test)]
+mod thread_routing_regressions {
+    use super::*;
+
+    #[test]
+    fn null_thread_preserves_the_proxy_routing_contract_on_a_typed_parse_failure() {
+        let mut request =
+            json!({"model":"m","max_tokens":1,"messages":[],"thread":null,"thinking":{"type":"future-provider-mode"}});
+        assert!(
+            ParsedMessagesRequest::parse_for_gateway(
+                &serde_json::to_vec(&request).unwrap(),
+                &GatewayToolMap::default()
+            )
+            .unwrap()
+            .is_none()
+        );
+        request["thread"] = json!({"type":"invalid"});
+        assert!(
+            ParsedMessagesRequest::parse_for_gateway(
+                &serde_json::to_vec(&request).unwrap(),
+                &GatewayToolMap::default()
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn ordinary_gateway_requests_preserve_supported_thinking_edit_forms() {
+        for edit in [
+            json!({"type":"clear_thinking_20251015"}),
+            json!({"type":"clear_thinking_20251015","keep":{"type":"thinking_turns","value":2}}),
+        ] {
+            let request = json!({"model":"m","max_tokens":1,"messages":[],"tools":[{"name":"web_search"}],"context_management":{"edits":[edit]}});
+            let parsed = ParsedMessagesRequest::parse_for_gateway(
+                &serde_json::to_vec(&request).unwrap(),
+                &GatewayToolMap::default(),
+            )
+            .unwrap()
+            .unwrap();
+            let ctx = MessagesRequestContext::new(parsed).unwrap();
+            assert_eq!(ctx.raw["context_management"], request["context_management"]);
+        }
+    }
+}

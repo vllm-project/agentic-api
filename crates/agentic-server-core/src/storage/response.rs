@@ -124,8 +124,7 @@ impl ResponseStore {
             .map(decode_public)
             .collect::<StoreResult<Vec<_>>>()?;
         // Both persistence paths append public outputs after the turn's inputs. Bound the suffix by the snapshot's
-        // output count so an inherited output remains input even when a turn supplies no new items. Session
-        // execution can already have recorded some outputs as canonical input history.
+        // output count so an inherited output remains input even when a turn supplies no new items.
         for _ in 0..output_count {
             if !items.last().is_some_and(|item| matches!(item, InOutItem::Output(_))) {
                 break;
@@ -221,7 +220,9 @@ mod tests {
     use super::*;
     use crate::storage::create_pool_with_schema;
     use crate::types::event::MessageStatus;
-    use crate::types::io::{CodeInterpreterCall, CodeInterpreterCallStatus, InputItem, OutputItem, OutputMessage};
+    use crate::types::io::{
+        CodeInterpreterCall, CodeInterpreterCallStatus, InputItem, OutputItem, OutputMessage, ResponsesInput,
+    };
     use serde_json::Value;
 
     /// A retrievable response without output, so its input items are its whole history.
@@ -309,24 +310,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn code_interpreter_history_replays_the_function_call_not_the_public_projection() {
+    async fn code_interpreter_history_keeps_the_public_item_and_lowers_it_upstream() {
         let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await.unwrap();
         let store = ResponseStore::new(pool);
-        let gateway_call: InputItem = serde_json::from_value(serde_json::json!({
-            "type": "function_call",
-            "id": "fc_gateway",
-            "call_id": "call_gateway",
-            "name": "code_interpreter",
-            "arguments": "{\"code\":\"print(42)\"}",
-            "status": "completed"
-        }))
-        .expect("gateway model-facing call");
-        let gateway_result: InputItem = serde_json::from_value(serde_json::json!({
-            "type": "function_call_output",
-            "call_id": "call_gateway",
-            "output": "42"
-        }))
-        .expect("gateway model-facing output");
         let projection: OutputItem = serde_json::from_value(serde_json::json!({
             "type": "code_interpreter_call",
             "id": "ci_gateway",
@@ -340,11 +326,7 @@ mod tests {
             .persist(
                 "resp_items",
                 None,
-                vec![
-                    InOutItem::Input(gateway_call),
-                    InOutItem::Input(gateway_result),
-                    InOutItem::Output(projection.clone()),
-                ],
+                vec![InOutItem::Output(projection.clone())],
                 None,
                 &ResponseMetadata::default(),
             )
@@ -352,11 +334,13 @@ mod tests {
             .expect("serialize response history");
 
         let (_, history) = store.rehydrate("resp_items").await.unwrap();
-        assert_eq!(history[2], InOutItem::Output(projection));
-        let inputs = InOutItem::into_input_items(history);
-        assert_eq!(inputs.len(), 2);
-        assert!(matches!(&inputs[0], InputItem::FunctionCall(call) if call.call_id == "call_gateway"));
-        assert!(matches!(&inputs[1], InputItem::FunctionCallOutput(output) if output.call_id == "call_gateway"));
+        assert_eq!(history, vec![InOutItem::Output(projection)]);
+        let inputs = ResponsesInput::from(InOutItem::into_input_items(history));
+        let model = Vec::<InputItem>::from(inputs.normalized_model_input(&[]).unwrap());
+        assert!(
+            matches!(&model[..], [InputItem::FunctionCall(call), InputItem::FunctionCallOutput(output)]
+            if call.name == "code_interpreter" && call.call_id == "ci_gateway" && output.call_id == "ci_gateway")
+        );
     }
 
     #[tokio::test]

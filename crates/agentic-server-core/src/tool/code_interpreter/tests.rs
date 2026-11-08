@@ -108,8 +108,11 @@ fn gateway_code_interpreter_ids_match_across_started_and_completed_items() {
             None,
         );
         assert!(
-            started_output.to_input_item().is_none(),
-            "gateway projection must not replay"
+            matches!(
+                started_output.to_input_item(),
+                Some(crate::types::io::InputItem::CodeInterpreterCall(_))
+            ),
+            "history replays the public projection, which the upstream projection lowers"
         );
         let OutputItem::CodeInterpreterCall(started) = started_output else {
             panic!("expected code interpreter item");

@@ -28,6 +28,16 @@ impl BufferedBlock {
             Some("text_delta") => append_str(&mut self.block, "text", delta.get("text")),
             Some("thinking_delta") => append_str(&mut self.block, "thinking", delta.get("thinking")),
             Some("signature_delta") => append_str(&mut self.block, "signature", delta.get("signature")),
+            Some("citations_delta") => {
+                if let Some(citation) = delta.get("citation") {
+                    if self.block["citations"].is_null() {
+                        self.block["citations"] = json!([]);
+                    }
+                    if let Some(citations) = self.block["citations"].as_array_mut() {
+                        citations.push(citation.clone());
+                    }
+                }
+            }
             Some("input_json_delta") => {
                 if let Some(partial) = delta.get("partial_json").and_then(Value::as_str) {
                     self.input_json.push_str(partial);

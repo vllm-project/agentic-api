@@ -18,10 +18,12 @@ use agentic_core::executor::{
 use agentic_core::storage::{
     ConversationStore, ResponseMetadata, ResponseStore, StorageError, create_pool_with_schema,
 };
+use agentic_core::tool::web_search;
 use agentic_core::tool::{GatewayExecutor, ToolError, ToolHandler, ToolOutput, ToolType};
 use agentic_core::types::io::FunctionTool;
 use agentic_core::types::io::InOutItem;
-use agentic_core::types::io::output::{FunctionToolCall, GatewayCallStatus, OutputItem, WebSearchCall};
+use agentic_core::types::io::OutputItem;
+use agentic_core::types::io::output::{FunctionToolCall, GatewayCallStatus};
 use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
 use agentic_core::types::tools::WebSearchToolParam;
 use axum::{Json, Router, routing::post};
@@ -60,6 +62,20 @@ impl ToolHandler for LocalSearch {
 impl GatewayExecutor for LocalSearch {
     type ExecutionParams = WebSearchToolParam;
 
+    fn started_output(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> Option<OutputItem> {
+        web_search::started_output_item(call)
+    }
+
+    fn public_output(
+        &self,
+        call: &FunctionToolCall,
+        output: &ToolOutput,
+        status: GatewayCallStatus,
+        _params: &WebSearchToolParam,
+    ) -> Option<OutputItem> {
+        web_search::output_item(call, output, status.into())
+    }
+
     fn execute(
         &self,
         call_id: &str,
@@ -70,24 +86,6 @@ impl GatewayExecutor for LocalSearch {
         self.calls.fetch_add(1, Ordering::Relaxed);
         let call_id = call_id.to_owned();
         Box::pin(async move { Ok(ToolOutput::success(call_id, "local search result")) })
-    }
-
-    fn public_output(
-        &self,
-        call: &FunctionToolCall,
-        _output: &ToolOutput,
-        status: GatewayCallStatus,
-        _params: &WebSearchToolParam,
-    ) -> Option<OutputItem> {
-        Some(OutputItem::WebSearchCall(
-            WebSearchCall::try_new(
-                format!("ws_{}", call.id.strip_prefix("fc_").unwrap_or(&call.id)),
-                status.into(),
-                vec!["local".to_owned()],
-                Vec::new(),
-            )
-            .unwrap(),
-        ))
     }
 }
 
@@ -664,17 +662,28 @@ async fn session_commit_accepts_a_new_call_without_reading_disabled_storage() {
 }
 
 #[tokio::test]
-async fn session_commit_rejects_reused_call_id_against_pinned_history() {
+async fn session_continuation_accepts_a_call_id_the_pinned_history_already_used() {
     let exec = execution();
     let session = session();
     let parent = parent_with_call(&exec, &session).await;
     let ctx = resolved_continuation(&exec, &session, &parent).await;
     let payload = response(&ctx, json!([function_call("call_first")]));
-    let error = commit(ctx, payload, &exec).await.unwrap_err();
-    assert!(
-        matches!(&error, ExecutorError::InvalidRequest(message) if message.contains("continued history")),
-        "must reject the repeated call, not fail on a database lookup: {error:?}"
-    );
+    // As on OpenAI, a call_id may repeat: the turn is stored and a turn answering it continues.
+    let repeated = commit(ctx, payload, &exec).await.expect("the turn is stored").id;
+    let next = rehydrate_in_session(
+        request(
+            Some(&repeated),
+            json!([
+                {"type": "function_call_output", "call_id": "call_first", "output": "rainy"}
+            ]),
+        ),
+        &exec,
+        &session,
+    )
+    .await
+    .expect("a repeated call_id continues without reading disabled storage");
+    let history = serde_json::to_value(&next.enriched_request.input).unwrap();
+    assert_eq!(history.as_array().unwrap().len(), 5);
 }
 
 #[tokio::test]
@@ -1357,19 +1366,18 @@ async fn session_tool_round_preserves_reasoning_message_call_output_order() {
                 json!("message"),
                 json!("reasoning"),
                 json!("message"),
-                json!("function_call"),
-                json!("function_call_output"),
+                json!("web_search_call"),
                 json!("message"),
                 json!("message")
             ],
             "canonical continuation must preserve inference-round order: {history}"
         );
         assert!(history[2].to_string().contains("intermediate answer"));
-        assert!(history[5].to_string().contains("final answer"));
+        assert!(history[4].to_string().contains("final answer"));
         if store_durable {
             let durable = InOutItem::into_input_items(store.rehydrate(&result.id).await.unwrap().1);
             let durable = serde_json::to_value(durable).unwrap();
-            assert_eq!(durable, Value::Array(history.as_array().unwrap()[..6].to_vec()));
+            assert_eq!(durable, Value::Array(history.as_array().unwrap()[..5].to_vec()));
         }
         model.close().await;
     }
@@ -1406,13 +1414,12 @@ async fn session_mixed_tool_round_records_calls_once_before_client_continuation(
     .await
     .expect("the client call is retained exactly once despite the mixed round");
     let history = serde_json::to_value(&next.enriched_request.input).unwrap();
-    assert_eq!(history.as_array().unwrap().len(), 6);
+    assert_eq!(history.as_array().unwrap().len(), 5);
     assert!(history[1].to_string().contains("before the calls"));
-    assert_eq!(history[2]["call_id"], "call_search");
+    assert_eq!(history[2]["type"], "web_search_call");
     assert_eq!(history[3]["call_id"], "client");
     assert_eq!(history[4]["type"], "function_call_output");
-    assert_eq!(history[4]["call_id"], "call_search");
-    assert_eq!(history[5]["call_id"], "client");
+    assert_eq!(history[4]["call_id"], "client");
     model.close().await;
 }
 
@@ -1434,13 +1441,11 @@ async fn session_round_limit_retains_the_final_call_output_in_order() {
         .expect("round exhaustion must not leave an unanswered built-in call");
     let history = serde_json::to_value(&next.enriched_request.input).unwrap();
     let items = history.as_array().unwrap();
-    assert_eq!(items.len(), 32);
-    for (round, items) in items[1..31].as_chunks::<3>().0.iter().enumerate() {
+    assert_eq!(items.len(), 22);
+    for (round, items) in items[1..21].as_chunks::<2>().0.iter().enumerate() {
         assert_eq!(items[0]["type"], "message");
-        assert_eq!(items[1]["type"], "function_call");
-        assert_eq!(items[2]["type"], "function_call_output");
-        assert_eq!(items[1]["call_id"], format!("call_round_{round}"));
-        assert_eq!(items[2]["call_id"], items[1]["call_id"]);
+        assert_eq!(items[1]["type"], "web_search_call");
+        assert_eq!(items[1]["id"], format!("ws_round_{round}"));
     }
     model.close().await;
 }

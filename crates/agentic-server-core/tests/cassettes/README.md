@@ -49,6 +49,7 @@ than assuming that OpenAI and the gateway accept the same requests.
 | `edge-cases` | 23 | Unstored/missing IDs; missing parent; invalid, repeated and out-of-range query parameters; unknown and repeated includes; repeated deletion. |
 | `conversation` | 19 | Responses attached to a conversation, manual item insertion/deletion, snapshots before and after mutations, response deletion, conversation deletion. |
 | `replayed-items` | 14 | Generated-ID reuse, two copies of an ID with different content, wrong-prefix IDs, function call/output history without public item IDs, seed immutability after probes. |
+| `call-ids` | Up to 17 | Function call history whose `call_id` repeats in one input (two calls and outputs, two calls and one output, one call and two outputs, a call repeated after its output) or is empty; `previous_response_id` continuations that repeat a stored turn's forced call or send its output twice, plus a normal control; conversations created with a repeated or empty `call_id`, or appended to with a reused one, then a turn. Each request names its case in `x-run-id`; a conversation's follow-ups run only after it is created. JSON only. |
 | `tool-items` | 48 plus additional pages | Replay existing parallel builtin/client/mixed tools, shell, code interpreter, tool search, and the multi-agent review task; inspect complete input pages after each response and a final continuation. |
 
 From the worktree root, with an inference server already running:
@@ -141,7 +142,8 @@ other management scenarios default to 300 seconds.
 Repeated query values are retained as arrays in `request.query_params`; a single
 value remains a string. No observed response body or status is rewritten.
 
-The Rust tests require the five original suites for both providers in JSON and streaming mode.
+The Rust tests require the five original suites for both providers in JSON and streaming mode,
+plus the JSON-only `call-ids` suite, whose turns are paired across providers by their `x-run-id` case.
 They assert the recordings directly, then replay every management request through
 a local gateway process with only inference mocked. `RESPONSES_GATEWAY_BIN` can
 select an explicitly built binary; otherwise the tests use `agentic-server` from
@@ -150,12 +152,11 @@ the OpenAI reference. Log probabilities are excluded from item comparisons.
 The lifecycle suite also checks that the continuation retains the surviving child's
 history and new user message after parent deletion, and inspects the live gateway's
 upstream request to ensure the deleted parent's user message is not sent to inference.
-Client-supplied function-call status defaults remain deferred: OpenAI lists an
-omitted call status as `in_progress`; these comparisons tolerate its absence while
-checking other values. Function, custom, and shell result types retain their IDs
+Listed items get OpenAI's omitted statuses: a client function call is
+`in_progress` and a result is `completed`. Comparisons with recordings made
+before that tolerate their absence while checking other values. Function, custom, and shell result types retain their IDs
 and statuses. Stored results use `fc_`, `ctco_`, and `sho_` IDs respectively.
-Request input conversion fills omitted result statuses as `completed` before
-persistence, without changing explicit statuses or call execution states.
+Explicit statuses are kept.
 Gateway-created function results receive their identity and completed status at
 creation. Input-item listings return stored items without classifying gateway call/result
 pairs by their projected IDs. The gateway tool capture predates removal of that
@@ -680,6 +681,40 @@ python -m pip install anthropic==1.5.0
 python crates/agentic-server-core/tests/cassettes/record_messages_tool_choice.py \
     --binary target/debug/agentic-server --vllm http://localhost:8000 --client-tool
 ```
+
+### Stateful Messages threads (vLLM)
+
+`record_messages_threads.py` captures real vLLM inference through the shared recording proxy.
+These are vLLM/gateway captures, not Anthropic reference captures. They verify rehydration and the gateway's
+public JSON/SSE transcript, not exact Anthropic beta behavior. Error envelopes, null-versus-omitted fixed fields,
+paused-turn rejection, and continued-stream IDs are derived from documentation or gateway policy and tested locally;
+they have not been compared with a live Anthropic thread capture.
+The `messages/threads/` set covers text recall and a client-executed `client_echo` call, each over JSON and SSE.
+Every scenario creates a thread, stops the gateway, starts a fresh gateway against the same SQLite file, and
+continues with only the new user message or matching `tool_result`. The client tool returns a local verification
+string; all model responses come from vLLM. A JSON companion stores the actual public requests and responses;
+the YAML stores the stateless upstream requests and original model responses. The complete set is staged and
+validated before replacing fixtures.
+
+Recorded with vLLM `0.29.1rc1.dev391+g90531daf6`, `Qwen/Qwen3.8-27B-FP8` revision
+`017b9c7af6b5689d5dd426a76e0bc077eb5ca20a`, and an NVIDIA GB10. Reproduce from the repository root:
+
+```bash
+vllm serve Qwen/Qwen3.8-27B-FP8 --revision 017b9c7af6b5689d5dd426a76e0bc077eb5ca20a \
+  --host 127.0.0.1 --port 8000 --tool-call-parser qwen3_coder --enable-auto-tool-choice \
+  --reasoning-parser qwen3 --generation-config vllm --enforce-eager \
+  --max-model-len 4096 --max-num-seqs 4 --gpu-memory-utilization 0.5
+cargo build -p agentic-server --bin agentic-server
+python crates/agentic-server-core/tests/cassettes/record_messages_threads.py \
+  --binary target/debug/agentic-server --vllm http://127.0.0.1:8000 --model Qwen/Qwen3.8-27B-FP8
+cargo test -p agentic-server --test messages_threads_cassette_test
+```
+
+The replay test compares complete upstream bodies and public JSON/SSE events, normalizing only generated public
+message IDs. It repeats the database restart with SQLite or an isolated database under `TEST_POSTGRES_URL`,
+checks owner isolation and rejection of an already-consumed parent without extra inference, and verifies that
+Messages does not write Responses, items, or conversations. No provider is contacted during replay.
+Pass `--database-url` with an isolated PostgreSQL database to exercise the live recording flow on PostgreSQL too.
 
 ### Text-only (OpenAI)
 

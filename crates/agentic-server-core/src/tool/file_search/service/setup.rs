@@ -1,13 +1,15 @@
 //! Construction of the default and injected file-search providers.
 
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use tokio::sync::Semaphore;
 
 use super::FileSearchService;
 use crate::{
+    config::agentic_api_home,
     storage::{DbPool, file_search::FileSearchStorage, local_files::LocalFiles},
     tool::file_search::{
+        SqliteVecRepository,
         embeddings::Embeddings,
         provider::{FileBlobStore, FileSearchRepository},
     },
@@ -15,6 +17,22 @@ use crate::{
 };
 
 impl FileSearchService {
+    /// Builds the configured SQL or sqlite-vec provider and local blob store.
+    ///
+    /// # Errors
+    /// Returns an error if the trusted extension cannot be loaded or providers cannot initialize.
+    pub async fn configured(
+        pool: Arc<DbPool>,
+        client: Arc<reqwest::Client>,
+        config: FileSearchConfig,
+    ) -> Result<Self, FileSearchError> {
+        let storage: Arc<dyn FileSearchRepository> = match &config.sqlite_vec_extension_path {
+            Some(extension_path) => Arc::new(SqliteVecRepository::open(pool, extension_path).await?),
+            None => Arc::new(FileSearchStorage::new(pool)),
+        };
+        Self::with_local_files(storage, client, &config)
+    }
+
     /// Creates a service; no embeddings configuration selects keyword retrieval.
     ///
     /// # Errors
@@ -28,18 +46,16 @@ impl FileSearchService {
         client: Arc<reqwest::Client>,
         config: FileSearchConfig,
     ) -> Result<Self, FileSearchError> {
-        let directory = match &config.files_storage_dir {
-            Some(directory) => directory.clone(),
-            None => crate::config::agentic_api_home()
-                .map_err(|error| FileSearchError::Configuration(Box::new(error)))?
-                .join("files"),
-        };
-        Self::with_providers(
-            Arc::new(FileSearchStorage::new(pool)),
-            Arc::new(LocalFiles::new(directory)?),
-            client,
-            &config,
-        )
+        Self::with_local_files(Arc::new(FileSearchStorage::new(pool)), client, &config)
+    }
+
+    fn with_local_files(
+        storage: Arc<dyn FileSearchRepository>,
+        client: Arc<reqwest::Client>,
+        config: &FileSearchConfig,
+    ) -> Result<Self, FileSearchError> {
+        let directory = files_storage_dir(config)?;
+        Self::with_providers(storage, Arc::new(LocalFiles::new(directory)?), client, config)
     }
 
     /// Constructs the service with caller-supplied metadata/index and blob
@@ -68,6 +84,17 @@ impl FileSearchService {
             workers: Arc::new(Semaphore::new(4)),
         })
     }
+}
+
+fn files_storage_dir(config: &FileSearchConfig) -> Result<PathBuf, FileSearchError> {
+    config.files_storage_dir.clone().map_or_else(
+        || {
+            agentic_api_home()
+                .map(|home| home.join("files"))
+                .map_err(|error| FileSearchError::Configuration(Box::new(error)))
+        },
+        Ok,
+    )
 }
 
 pub(super) fn scoped_identity(index: Option<&str>, embedding: &str) -> String {

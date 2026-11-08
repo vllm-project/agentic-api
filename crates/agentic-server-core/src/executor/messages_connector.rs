@@ -4,6 +4,7 @@ use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::messages_request::normalize_native_server_tools;
 use crate::tool::mcp::messages::connector_tools;
 use crate::tool::{GatewayExecutors, ToolDeclaration, ToolError, ToolRegistry, registry_tools};
+use crate::types::messages::parameters::RequestField;
 use crate::types::messages::request::MessagesToolDeclarations;
 use crate::types::messages::tools::MessagesToolFields;
 use crate::types::messages::{GatewayToolMap, ToolParam};
@@ -62,6 +63,11 @@ pub(super) fn has_mcp_state(raw: &Value) -> bool {
                 })
             })
         })
+}
+
+/// A completed mixed call stop can grant a continuation after client results.
+pub(super) fn mixed_mcp_continuation(has_client_call: bool, stop_reason: Option<&str>) -> bool {
+    has_client_call && matches!(stop_reason, Some("tool_use" | "end_turn"))
 }
 
 pub(super) fn validate_connector_discovery(registry: &ToolRegistry) -> ExecutorResult<()> {
@@ -138,8 +144,14 @@ pub(super) fn normalize_connector(
             .ok_or_else(|| ExecutorError::InvalidRequest("MCP toolset has no discovered declaration".to_owned()))?;
         // One toolset breakpoint belongs at the end of its enabled catalog,
         // keeping surrounding client tools and other toolsets in their original order.
-        let first = expanded.len();
-        for discovered in &param.discovered_tools {
+        let last = param.discovered_tools.len().checked_sub(1);
+        let mut cache_control = declaration.cache_control;
+        if last.is_none() && cache_control.as_ref().is_some() {
+            return Err(ExecutorError::InvalidRequest(
+                "cache_control on an empty MCP toolset has no upstream cache boundary".to_owned(),
+            ));
+        }
+        for (index, discovered) in param.discovered_tools.iter().enumerate() {
             if !names.insert(discovered.internal_name.clone()) {
                 return Err(ExecutorError::InvalidRequest(
                     "discovered MCP name conflicts with a declared Messages tool".to_owned(),
@@ -165,22 +177,16 @@ pub(super) fn normalize_connector(
             }
             let tool = ToolParam::Function(MessagesToolFields {
                 name: discovered.internal_name.clone(),
+                cache_control: if Some(index) == last {
+                    std::mem::take(&mut cache_control)
+                } else {
+                    RequestField::Missing
+                },
                 description: discovered.tool.description.as_deref().map(str::to_owned),
                 input_schema: Some(Value::Object(discovered.tool.input_schema.as_ref().clone())),
                 extra,
             });
             expanded.push(serialize_to_value(&tool).map_err(ExecutorError::JsonError)?);
-        }
-        if let Some(cache_control) = declaration.cache_control {
-            let last = expanded
-                .get_mut(first..)
-                .and_then(|tools| tools.last_mut())
-                .ok_or_else(|| {
-                    ExecutorError::InvalidRequest(
-                        "cache_control on an empty MCP toolset has no upstream cache boundary".to_owned(),
-                    )
-                })?;
-            last["cache_control"] = cache_control;
         }
     }
     *upstream_tools = expanded;

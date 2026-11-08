@@ -1,44 +1,14 @@
 //! Typed Messages MCP connector declarations and public content projections.
 
 use std::collections::HashMap;
-use std::fmt;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use super::GatewayToolResult;
+use super::parameters::{CacheControl, RequestField};
 
-#[derive(Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct MessagesMcpServer {
-    #[serde(rename = "type")]
-    pub kind: MessagesMcpServerType,
-    pub url: String,
-    pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub authorization_token: Option<String>,
-}
-
-impl fmt::Debug for MessagesMcpServer {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("MessagesMcpServer")
-            .field("name", &self.name)
-            .field(
-                "authorization_token",
-                &self.authorization_token.as_ref().map(|_| "[REDACTED]"),
-            )
-            .finish_non_exhaustive()
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[serde(rename_all = "snake_case")]
-pub enum MessagesMcpServerType {
-    Url,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct McpToolConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -70,7 +40,7 @@ impl McpToolsetConfig {
 }
 
 /// A supported MCP toolset declaration. It deliberately has no function name.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct MessagesMcpToolset {
     pub mcp_server_name: String,
@@ -78,8 +48,9 @@ pub struct MessagesMcpToolset {
     pub default_config: Option<McpToolConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub configs: Option<HashMap<String, McpToolConfig>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cache_control: Option<Value>,
+    #[serde(default, skip_serializing_if = "RequestField::is_missing")]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<CacheControl>))]
+    pub cache_control: RequestField<CacheControl>,
     #[serde(flatten)]
     pub extra: HashMap<String, Value>,
 }
@@ -159,6 +130,7 @@ mod tests {
     use super::*;
     use crate::tool::mcp::messages::connector_tools;
     use crate::types::messages::ToolParam;
+    use crate::types::messages::parameters::McpServer;
     use serde_json::json;
 
     #[test]
@@ -183,7 +155,7 @@ mod tests {
 
     #[test]
     fn connector_rejects_ambiguous_and_unused_servers() {
-        let server: MessagesMcpServer =
+        let server: McpServer =
             serde_json::from_value(json!({"type":"url", "name":"s", "url":"https://example.com/mcp"})).unwrap();
         let tool: ToolParam = serde_json::from_value(json!({"type":"mcp_toolset", "mcp_server_name":"s"})).unwrap();
         assert!(connector_tools(std::slice::from_ref(&server), std::slice::from_ref(&tool)).is_ok());
@@ -192,7 +164,7 @@ mod tests {
         assert!(connector_tools(std::slice::from_ref(&server), &[]).is_err());
         assert!(connector_tools(&[], std::slice::from_ref(&tool)).is_err());
         let mut invalid = server;
-        invalid.url = "http://example.com/mcp".to_owned();
+        invalid.configuration.url = "http://example.com/mcp".to_owned();
         assert!(connector_tools(&[invalid], &[tool]).is_err());
     }
 }

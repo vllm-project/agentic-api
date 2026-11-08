@@ -7,7 +7,7 @@ use crate::executor::{
     gateway_accumulator::STREAM_EVENT_BUFFER,
     inference::BoxStream,
     multi_agent::RunControl,
-    persist::persist_if_needed,
+    persist::{TurnOutput, persist},
     pipeline::AgentPipeline,
     relay::{RelayLimits, StreamRelay},
     request::{ExecutionContext, RequestContext},
@@ -208,12 +208,12 @@ impl ResponseRunOwner {
         };
         sink.validate_terminal(&payload)?;
         let status = payload.status.clone();
-        let terminal = payload.clone();
+        let terminal = payload;
         let (ctx, _) = pipeline.into_parts();
         tokio::select! {
             biased;
             () = cancellation.cancelled() => return Err(ExecutorError::StreamError("response cancelled before commit".into())),
-            result = persist_if_needed(payload, ctx, metadata, exec.conv_handler.clone(), exec.resp_handler.clone(), &exec.metrics) => result?,
+            result = Box::pin(persist(ctx, TurnOutput::Response(&terminal), metadata, exec)) => result?,
         }
         tokio::select! {
             () = cancellation.cancelled() => return Err(ExecutorError::StreamError("response delivery cancelled".into())),

@@ -282,7 +282,7 @@ async fn stateless_partial_namespace_discovery_reaches_forked_children() {
         for name in ["weather", "timezone", "echo"] {
             history.push(
                 serde_json::from_value(json!({
-                    "type":"mcp_list_tools", "id":format!("mcp_list_{name}"),
+                    "type":"mcp_list_tools", "id":format!("mcpl_{name}"),
                     "server_label":"docs", "tools":[], "agent":{"agent_name":format!("/root/{name}")}
                 }))
                 .unwrap(),

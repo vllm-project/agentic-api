@@ -12,7 +12,7 @@ use crate::executor::gateway_accumulator::{
 use crate::executor::inference::UpstreamHeaders;
 use crate::executor::inference::{BoxStream, DONE_MARKER};
 use crate::executor::multi_agent::RunControlReceiver;
-use crate::executor::persist::persist_if_needed;
+use crate::executor::persist::{TurnOutput, persist};
 use crate::executor::pipeline::AgentPipeline;
 use crate::executor::relay::{RelayLimits, StreamRelay};
 use crate::executor::request::{ExecutionContext, RequestContext};
@@ -248,15 +248,11 @@ async fn completed_stream_chunk(
         }
     };
     let status = payload.status.clone();
-    let ch = exec_ctx.conv_handler.clone();
-    let rh = exec_ctx.resp_handler.clone();
-    match Box::pin(persist_if_needed(
-        payload,
+    match Box::pin(persist(
         ctx,
+        TurnOutput::Response(&payload),
         tool_search_metadata,
-        ch,
-        rh,
-        &exec_ctx.metrics,
+        exec_ctx,
     ))
     .await
     {

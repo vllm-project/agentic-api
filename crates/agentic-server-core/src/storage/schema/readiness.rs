@@ -3,7 +3,31 @@
 use super::{DatabaseBackend, DbPool, DbResult};
 use crate::storage::models::Item;
 
+pub(super) async fn postgres_sequence_index_ready<'e, E>(executor: E) -> DbResult<bool>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Any>,
+{
+    sqlx::query_scalar(
+        "SELECT EXISTS ( \
+             SELECT 1 \
+             FROM pg_index index_metadata \
+             JOIN pg_class index_relation ON index_relation.oid = index_metadata.indexrelid \
+             JOIN pg_class table_relation ON table_relation.oid = index_metadata.indrelid \
+             WHERE table_relation.relname = 'items' \
+             AND pg_table_is_visible(table_relation.oid) \
+             AND index_relation.relname = 'idx_items_conversation_id' \
+             AND index_metadata.indisvalid \
+             AND index_metadata.indisready \
+             AND index_metadata.indisunique \
+             AND pg_get_indexdef(index_metadata.indexrelid) LIKE '%(conversation_id, seq)' \
+         )",
+    )
+    .fetch_one(executor)
+    .await
+}
+
 pub(crate) async fn verify_persistence_writable(pool: &DbPool) -> DbResult<()> {
+    verify_persistence_ready(pool).await?;
     let mut transaction = pool.begin().await?;
     let probe_result = async {
         let suffix = uuid::Uuid::now_v7().simple();
@@ -71,6 +95,10 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
             let ready: bool = sqlx::query_scalar(
                 "WITH required(table_name, privilege) AS ( \
                      VALUES \
+                         ('message_threads', 'SELECT'), \
+                         ('message_threads', 'INSERT'), \
+                         ('message_threads', 'UPDATE'), \
+                         ('message_threads', 'DELETE'), \
                          ('conversations', 'SELECT'), \
                          ('conversations', 'INSERT'), \
                          ('conversations', 'UPDATE'), \
@@ -93,10 +121,13 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                          ('file_search_attachments', 'INSERT'), \
                          ('file_search_attachments', 'DELETE'), \
                          ('file_search_chunks', 'SELECT'), \
-                         ('file_search_chunks', 'INSERT') \
+                         ('file_search_chunks', 'INSERT'), \
+                         ('file_search_vec_map', 'SELECT'), \
+                         ('file_search_vec_map', 'INSERT'), \
+                         ('file_search_vec_map', 'DELETE') \
                  ) \
                  SELECT current_setting('transaction_read_only') = 'off' \
-                    AND COUNT(table_relation.oid) = 23 \
+                    AND COUNT(table_relation.oid) = 30 \
                     AND COALESCE(BOOL_AND( \
                         has_table_privilege(current_user, table_relation.oid, required.privilege) \
                     ), false) \
@@ -122,6 +153,7 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                 return Err(sqlx::Error::Configuration("SQLite persistence is read-only".into()));
             }
             for statement in [
+                "SELECT message_id, owner_hash, checkpoint, state, lease_token, lease_until, expires_at FROM message_threads LIMIT 0",
                 "SELECT id FROM conversations LIMIT 0",
                 "SELECT id FROM items LIMIT 0",
                 "SELECT id FROM responses LIMIT 0",
@@ -130,6 +162,7 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                 "SELECT id, created_at, data, embedding_identity, embedding_dimensions FROM file_search_stores LIMIT 0",
                 "SELECT store_id, file_id, created_at, usage_bytes, storage_bytes, data FROM file_search_attachments LIMIT 0",
                 "SELECT store_id, file_id, chunk_index, data FROM file_search_chunks LIMIT 0",
+                "SELECT id, store_id, file_id, chunk_index, created_at FROM file_search_vec_map LIMIT 0",
             ] {
                 sqlx::query(statement).execute(&mut *connection).await?;
             }

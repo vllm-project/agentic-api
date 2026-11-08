@@ -565,10 +565,13 @@ mod steering {
             requests[1]["input"].to_string().matches("STEER_AFTER_SEARCH").count(),
             1
         );
-        for index in 0..2 {
-            assert!(input.iter().any(
-                |item| item["type"] == "function_call_output" && item["call_id"] == format!("call_search_{index}")
-            ));
+        // The successor's model input lowers each stored web_search_call under its public ID.
+        for call in output {
+            assert!(
+                input
+                    .iter()
+                    .any(|item| item["type"] == "function_call_output" && item["call_id"] == call["id"])
+            );
         }
         assert_eq!(search.request_bodies().await.len(), 2);
     }

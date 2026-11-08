@@ -3,6 +3,7 @@
 pub mod conversation;
 pub mod errors;
 pub mod item;
+pub mod message_thread;
 pub mod response;
 
 pub use conversation::{ConversationData, ConversationSnapshot};

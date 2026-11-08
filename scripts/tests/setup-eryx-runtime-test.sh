@@ -16,6 +16,18 @@ case "${1:-}" in
     echo "eryx-precompile ${FAKE_ERYX_VERSION:?}"
     ;;
   setup)
+    if [[ -n "${FAKE_ERYX_ATTEMPT_FILE:-}" ]]; then
+      attempt=0
+      if [[ -f "$FAKE_ERYX_ATTEMPT_FILE" ]]; then
+        read -r attempt <"$FAKE_ERYX_ATTEMPT_FILE"
+      fi
+      attempt=$((attempt + 1))
+      echo "$attempt" >"$FAKE_ERYX_ATTEMPT_FILE"
+      if (( attempt <= ${FAKE_ERYX_FAILURES:-0} )); then
+        echo 'simulated runtime download failure' >&2
+        exit 17
+      fi
+    fi
     : >"${FAKE_ERYX_SETUP_MARKER:?}"
     ;;
   *)
@@ -141,4 +153,47 @@ for installer in install binstall; do
 
   test -f "$install_marker"
   grep -q "^${installer} .*--root ${install_root} .*--version =${eryx_version} eryx-precompile" "$installer_log"
+done
+
+# Retry transient setup failures, but never report a permanently failing setup as ready.
+cat >"${shadow_dir}/sleep" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"${FAKE_SLEEP_LOG:?}"
+EOF
+chmod +x "${shadow_dir}/sleep"
+
+for failures in 0 2 3; do
+  attempt_file="${test_root}/attempts-${failures}"
+  sleep_log="${test_root}/sleeps-${failures}"
+  retry_marker="${test_root}/retry-ready-${failures}"
+  status=0
+  env \
+    PATH="${shadow_dir}:/usr/bin:/bin" \
+    ERYX_PRECOMPILE_BIN="$fake_precompiler" \
+    FAKE_ERYX_VERSION="$eryx_version" \
+    FAKE_ERYX_SETUP_MARKER="$retry_marker" \
+    FAKE_ERYX_ATTEMPT_FILE="$attempt_file" \
+    FAKE_ERYX_FAILURES="$failures" \
+    FAKE_SLEEP_LOG="$sleep_log" \
+    "${repository_root}/scripts/setup-eryx-runtime.sh" >"${test_root}/retry-${failures}.out" 2>&1 || status=$?
+
+  if (( failures == 0 )); then
+    test "$(cat "$attempt_file")" = 1
+    test ! -e "$sleep_log"
+  else
+    test "$(cat "$attempt_file")" = 3
+    test "$(wc -l <"$sleep_log")" -eq 2
+  fi
+  if (( failures < 3 )); then
+    test "$status" -eq 0
+    test -f "$retry_marker"
+    grep -q 'Eryx runtime ready' "${test_root}/retry-${failures}.out"
+  else
+    test "$status" -eq 17
+    test ! -e "$retry_marker"
+    if grep -q 'Eryx runtime ready' "${test_root}/retry-${failures}.out"; then
+      echo 'setup script reported a failed runtime as ready' >&2
+      exit 1
+    fi
+  fi
 done

@@ -4,6 +4,9 @@ use serde_json::Value;
 
 use super::{BufferedBlock, MessagesStreamAccumulator, RoundState, error_sse, sse};
 use crate::events::{ClassifiedSseLine, SseLine};
+use crate::executor::messages_connector::mixed_mcp_continuation;
+use crate::executor::messages_threads::MAX_CHECKPOINT_BYTES;
+use crate::executor::messages_usage::has_fallback;
 use crate::utils::common::deserialize_from_str;
 
 /// One client SSE frame and whether it carries output text.
@@ -13,6 +16,12 @@ impl MessagesStreamAccumulator {
     /// Translate one upstream SSE line into zero or more client SSE lines.
     pub(super) fn push(&mut self, line: &str) -> Vec<String> {
         self.pushed_text = false;
+        if self.thread_message_id.is_some() {
+            self.thread_bytes = self.thread_bytes.saturating_add(line.len());
+            if self.thread_bytes > MAX_CHECKPOINT_BYTES {
+                return self.fail("Messages thread stream exceeds the storage limit");
+            }
+        }
         let ClassifiedSseLine::Data(data) = SseLine::parse(line) else {
             return Vec::new();
         };
@@ -58,6 +67,7 @@ impl MessagesStreamAccumulator {
             Some("content_block_stop") => self.on_block_stop(&mut event),
             Some("message_delta") => {
                 // Buffer as the (possibly) final terminal; suppress mid-loop.
+                self.fallback |= has_fallback(event.get("usage"));
                 self.usage.observe(event.get("usage"));
                 self.final_message_delta = Some(event);
                 Vec::new()
@@ -67,19 +77,23 @@ impl MessagesStreamAccumulator {
                 vec![sse("error", &event)]
             }
             Some("message_stop") => {
+                if self.thread_message_id.is_some() && self.stop_reason().is_none() {
+                    return self.fail("upstream thread stream ended without a stop reason");
+                }
                 if self.blocks.values().any(|block| !block.closed) {
                     self.round_state = RoundState::Failed;
                     return vec![error_sse("upstream Messages stream ended with open content blocks")];
                 }
                 // A pending mixed-round call must retain valid arguments for replay.
                 // Never publish the history-only empty fallback as a new executable call.
-                let pending_mcp =
-                    self.has_client_tool_use && matches!(self.stop_reason(), Some("tool_use" | "end_turn"));
+                let pending_mcp = mixed_mcp_continuation(self.has_client_tool_use, self.stop_reason());
                 if pending_mcp
                     && self.blocks.values_mut().any(|block| {
-                        self.gateway_map
-                            .mcp_identity(block.block["name"].as_str().unwrap_or_default())
-                            .is_some()
+                        block.is_gateway_tool
+                            && self
+                                .gateway_map
+                                .mcp_identity(block.block["name"].as_str().unwrap_or_default())
+                                .is_some()
                             && block.input().is_err()
                     })
                 {
@@ -107,13 +121,18 @@ impl MessagesStreamAccumulator {
             return self.fail("invalid identifier in upstream Messages stream");
         }
         self.round_started = true;
+        self.fallback |= has_fallback(event["message"].get("usage"));
         // Later rounds' message_start is suppressed, but its usage still counts.
         self.usage.observe(event["message"].get("usage"));
         if self.message_started {
             return Vec::new();
         }
         self.message_started = true;
-        vec![sse("message_start", event)]
+        let mut event = event.clone();
+        if let Some(id) = &self.thread_message_id {
+            event["message"]["id"] = Value::String(id.clone());
+        }
+        vec![sse("message_start", &event)]
     }
 
     fn on_block_start(&mut self, event: &mut Value) -> Vec<String> {
@@ -144,8 +163,9 @@ impl MessagesStreamAccumulator {
             BufferedBlock {
                 closed: false,
                 block: event["content_block"].clone(),
-                input_json: event["content_block"]["input"]
-                    .as_object()
+                input_json: (block_type == "tool_use")
+                    .then(|| event["content_block"]["input"].as_object())
+                    .flatten()
                     .filter(|input| !input.is_empty())
                     .map_or_else(String::new, |input| Value::Object(input.clone()).to_string()),
                 is_gateway_tool,
@@ -317,6 +337,17 @@ mod tests {
                 None => assert!(call.input.is_err()),
             }
         }
+    }
+
+    #[test]
+    fn upstream_server_tool_history_uses_streamed_arguments() {
+        let mut acc = MessagesStreamAccumulator::default();
+        acc.push(r#"data: {"type":"message_start","message":{"id":"m"}}"#);
+        acc.push(r#"data: {"type":"content_block_start","index":0,"content_block":{"type":"server_tool_use","id":"s","name":"web_search","input":{"query":"start"}}}"#);
+        acc.push(r#"data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\"query\":\"delta\"}"}}"#);
+        acc.push(r#"data: {"type":"content_block_stop","index":0}"#);
+        let content = acc.terminal_content().unwrap();
+        assert_eq!(content[0]["input"], json!({"query":"delta"}));
     }
 
     #[test]

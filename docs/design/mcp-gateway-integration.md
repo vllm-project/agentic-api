@@ -276,6 +276,11 @@ is disabled or removed; replay does not grant execution permission. Hosted searc
 are dropped during replay. `/v1/messages/count_tokens` uses the same declaration discovery
 and replay normalization, without executing tool calls.
 
+For a [Messages thread](../api/index.md#messages) with an MCP toolset, the checkpoint retains the
+pending calls. Send the matching client `tool_result` blocks in the continuation without replaying
+the assistant message. Keep the MCP server configuration on every request and supply its current
+authorization token. The checkpoint excludes that token.
+
 This implements the 2025 connector shape described in the
 [Anthropic MCP connector documentation](https://platform.claude.com/docs/en/agents-and-tools/mcp-connector).
 Pinned tool lists and `mcp_tool_listing` blocks from the newer `mcp-client-2026-09-15` beta are outside this surface.

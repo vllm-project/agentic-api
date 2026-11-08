@@ -323,7 +323,10 @@ mod tests {
     use crate::types::messages::request::MessagesRequest;
 
     fn tools_of(json_req: Value) -> Option<Vec<ToolParam>> {
-        serde_json::from_value::<MessagesRequest>(json_req).unwrap().tools
+        serde_json::from_value::<MessagesRequest>(json_req)
+            .unwrap()
+            .tools
+            .into_option()
     }
 
     /// Default map: only the built-in `web_search` executor, no aliases.
