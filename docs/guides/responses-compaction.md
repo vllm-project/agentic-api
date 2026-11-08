@@ -134,8 +134,8 @@ is decoded again on each continuation. The file counts toward the request body l
 
 Every other message file is rejected with HTTP 400 `invalid_request_error` (or the equivalent WebSocket error)
 before inference and before anything is stored. The message gives the reason without echoing the file: `file_id`
-(this gateway has no Files API), `file_url` (the gateway does not fetch files), a missing `file_data`, a non-text
-file such as a PDF, a data URL that is not base64-encoded, invalid base64, or content that is not valid UTF-8.
+(file IDs cannot be used in Responses input), `file_url` (the gateway does not fetch files), a missing `file_data`,
+a non-text file such as a PDF, a data URL that is not base64-encoded, invalid base64, or content that is not valid UTF-8.
 Extract text from PDFs and other documents client-side and send it as `input_text`, or send pages as
 `input_image`. The same validation applies to files restored from response/conversation history, explicit and
 automatic compaction, `compaction_trigger`, and WebSocket `generate: false` requests.

@@ -42,20 +42,14 @@ use crate::types::io::output::{FunctionToolCall, GatewayCallStatus};
 use crate::types::io::{InputItem, OutputItem};
 use crate::utils::common::serialize_to_string;
 
-/// Per-call wall-clock budget. A tool exceeding this yields an error output fed
-/// back to the model (never a whole-request failure). `Duration::ZERO` disables
-/// the timeout — for providers that manage their own.
-///
-/// Note: this bounds a single call, not the whole request. Worst-case request
-/// latency scales with rounds and fan-out; an outer request-level deadline
-/// would be the place to cap total time end-to-end.
+/// Per-call budget; expiry yields a model-facing error. `Duration::ZERO` disables it.
+/// Total request latency can span multiple rounds and calls.
 const GATEWAY_TOOL_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Clone)]
 pub(super) struct GatewayCallResult {
     pub(super) item_index: usize,
-    /// Appended for the model's next round only; history takes the call's public output item instead. The upstream
-    /// projection lowers any public record among them.
+    /// Model-facing continuation items; history retains the public output instead.
     pub(super) input: Vec<InputItem>,
     pub(super) public_output: Option<OutputItem>,
     /// A second public item at the next output index (a hosted `tool_search_output`).
@@ -462,6 +456,10 @@ impl GatewayScheduler {
         };
         let (output, status) = match dispatched {
             Ok(output) => (output, GatewayCallStatus::Completed),
+            Err(ToolError::FileSearch(error)) => (
+                execution_error_output(&call, &error.public_message())?,
+                GatewayCallStatus::Failed,
+            ),
             Err(ToolError::Execution(message) | ToolError::Config(message)) => {
                 (execution_error_output(&call, &message)?, GatewayCallStatus::Failed)
             }
@@ -1272,10 +1270,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn scheduler_omits_a_gateway_tool_without_handler_from_public_output() {
+    async fn scheduler_retains_event_slot_for_failed_file_search() {
         let file_search: ResponsesTool = serde_json::from_value(serde_json::json!({
-            "type": "file_search",
-            "vector_store_ids": ["vs_test"]
+            "type": "file_search", "vector_store_ids": ["vs_1"]
         }))
         .expect("file_search tool param");
         let web_search: ResponsesTool =
@@ -1288,6 +1285,7 @@ mod tests {
 
         let mut file_search_call = web_search_call("call_file");
         file_search_call.name = "file_search".to_owned();
+        file_search_call.arguments = r#"{"queries":["policy"]}"#.to_owned();
         let mut search_call = web_search_call("call_web");
         search_call.arguments = r#"{"query":"weather"}"#.to_owned();
         let output_items = [
@@ -1298,20 +1296,17 @@ mod tests {
 
         {
             let plans = scheduler.event_plans().collect::<Vec<_>>();
-            assert_eq!(plans.len(), 2, "every gateway-owned call is scheduled");
-            assert!(plans[0].started_output.is_none());
-            assert_eq!(plans[1].output_index, 7, "the unhandled call takes no public position");
+            assert_eq!(plans.len(), 2, "every gateway-owned call needs one scheduled slot");
+            assert_eq!(plans[0].output_index, 7);
+            assert!(matches!(plans[0].started_output, Some(OutputItem::FileSearchCall(_))));
+            assert_eq!(plans[1].output_index, 8);
             assert!(matches!(plans[1].started_output, Some(OutputItem::WebSearchCall(_))));
         }
 
         let results = scheduler.execute().await.expect("all scheduled slots complete");
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].item_index, 0);
-        assert!(results[0].public_output.is_none());
-        assert!(
-            results[0].omitted,
-            "the unhandled call leaves the public output and history"
-        );
+        assert!(matches!(results[0].public_output, Some(OutputItem::FileSearchCall(_))));
         assert_eq!(results[1].item_index, 1);
         assert!(matches!(results[1].public_output, Some(OutputItem::WebSearchCall(_))));
 
@@ -1328,11 +1323,15 @@ mod tests {
             .map(|event| parse_named_sse_event(&event.content))
             .collect::<Vec<_>>();
         assert!(!events.is_empty());
-        assert!(events.iter().all(|event| event["output_index"] == 7));
+        assert!(
+            events
+                .iter()
+                .all(|event| event["output_index"] == 7 || event["output_index"] == 8)
+        );
         assert!(events.iter().all(|event| {
             event["item"]["type"]
                 .as_str()
-                .is_none_or(|type_| type_ == "web_search_call")
+                .is_none_or(|type_| type_ == "file_search_call" || type_ == "web_search_call")
         }));
     }
 

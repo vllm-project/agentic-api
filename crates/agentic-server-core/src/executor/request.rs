@@ -38,8 +38,8 @@ pub struct RequestContext {
     /// Enriched request with rehydrated conversation history injected into `.input`.
     /// This is the request forwarded to the LLM.
     pub enriched_request: RequestPayload,
-    /// This turn's own input items, in their public form, for persistence. An in-turn compaction can replace them with
-    /// its window; persistence then appends the turn's public output.
+    /// This turn's input items and model-facing file-search context for persistence. An in-turn compaction can replace
+    /// them with its window; persistence then appends the turn's public output.
     pub new_input_items: Vec<InOutItem>,
     /// Our generated response ID (uuid7 with "resp_" prefix).
     pub response_id: String,
@@ -188,9 +188,14 @@ impl ExecutionContext {
         self
     }
 
-    /// Installs a file search service for the Files and vector-store APIs.
+    /// Installs one file search service for both the Files API and the
+    /// gateway-executed built-in tool.
     #[must_use]
     pub fn with_file_search_service(mut self, service: FileSearchService) -> Self {
+        self.gateway_executors
+            .insert(GatewayExecutorRegistration::FileSearch(Arc::new(
+                crate::tool::file_search::FileSearchHandler::new(service.clone()),
+            )));
         self.file_search = Some(service);
         self
     }
