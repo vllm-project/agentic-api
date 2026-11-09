@@ -1,6 +1,5 @@
 //! Immutable parent checkpoints and serial execution lease publication.
 
-use std::fmt;
 use std::ops::Deref;
 use std::sync::{Arc, Mutex, Weak};
 
@@ -9,7 +8,8 @@ use tokio::sync::Notify;
 
 use super::{CheckpointBudget, CheckpointReservation, ExecutorError, ExecutorResult, SessionState};
 use super::{aggregate_budget_error, lock_state};
-use crate::storage::ResponseMetadata;
+use crate::executor::pending_calls::CallLedger;
+use crate::storage::{ResponseCheckpoint, ResponseMetadata};
 use crate::types::io::InOutItem;
 use crate::types::io::input::{async_records, retain_window};
 use crate::types::io::{InputItem, OutputItem};
@@ -34,7 +34,7 @@ pub struct ResponseCheckpointPin {
 impl ResponseCheckpointPin {
     #[must_use]
     pub fn response_id(&self) -> &str {
-        &self.checkpoint.response_id
+        self.checkpoint.response_id.as_deref().unwrap_or_default()
     }
 
     /// Canonical input items for validating a continuation before acquiring an
@@ -51,8 +51,8 @@ impl ResponseCheckpointPin {
     /// # Errors
     /// Rejects malformed call histories or obligation types not qualified for steering.
     pub fn required_steering_input(&self) -> ExecutorResult<Vec<SteeringRequiredInput>> {
-        crate::executor::pending_calls::pending_calls(self.history())?
-            .into_iter()
+        CallLedger::scan(self.history())?
+            .pending()
             .filter(|pending| !pending.async_execution)
             .map(|pending| {
                 pending
@@ -79,25 +79,8 @@ pub struct ResponseContinuation {
     pub(crate) parent: Option<Arc<RetainedCheckpoint>>,
     pub(super) budget: Option<Arc<CheckpointBudget>>,
     pub(super) history_replaced: bool,
-    pub(super) recorded_output_count: usize,
+    pub(super) compacted_output_count: usize,
     pub(super) finished: bool,
-}
-
-#[derive(Serialize)]
-pub(crate) struct ResponseCheckpoint {
-    pub response_id: String,
-    pub conversation_id: Option<String>,
-    pub history: Vec<InputItem>,
-    pub metadata: ResponseMetadata,
-    pub durable: bool,
-}
-
-impl fmt::Debug for ResponseCheckpoint {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ResponseCheckpoint")
-            .field("items", &self.history.len())
-            .finish_non_exhaustive()
-    }
 }
 
 /// An immutable checkpoint paired with its lifetime charge. Keeping the fields
@@ -133,15 +116,16 @@ impl ResponseContinuation {
         self.history_replaced = true;
     }
 
-    /// The loop has recorded these outputs in canonical inference-round order.
-    /// Public output remains complete, but persistence must not append it again.
-    pub(crate) fn mark_outputs_recorded(&mut self, output_count: usize) {
-        self.recorded_output_count = output_count;
+    /// An in-turn compaction summarized the turn's first `output_count` outputs; persistence must not store them.
+    pub(crate) fn mark_outputs_compacted(&mut self, output_count: usize) {
+        self.compacted_output_count = output_count;
     }
 
+    /// Whether persistence stores this output. A compaction's summary stands for the outputs it absorbed, except MCP
+    /// discovery, which later turns need to know which servers were listed, and async calls, whose outputs arrive
+    /// in a later request.
     pub(crate) fn retains_output(&self, index: usize, item: &OutputItem) -> bool {
-        (index >= self.recorded_output_count && !item.is_recorded_as_history())
-            || matches!(item, OutputItem::McpListTools(_))
+        index >= self.compacted_output_count || matches!(item, OutputItem::McpListTools(_)) || item.is_async_call()
     }
 
     /// Retain orchestration records across compaction without restoring the old
@@ -163,7 +147,6 @@ impl ResponseContinuation {
     pub(crate) fn checkpoint(
         &self,
         response_id: String,
-        conversation_id: Option<String>,
         metadata: &ResponseMetadata,
         new_items: &[InOutItem],
         durable: bool,
@@ -177,11 +160,12 @@ impl ResponseContinuation {
             }
         }
         let checkpoint = ResponseCheckpoint {
-            response_id,
-            conversation_id,
+            response_id: Some(response_id),
             history: canonical_session_history(history),
             metadata,
             durable,
+            history_item_ids: Vec::new(),
+            requires_latest: false,
         };
         let (max_items, max_bytes) = {
             let state = lock_state(&self.state)?;

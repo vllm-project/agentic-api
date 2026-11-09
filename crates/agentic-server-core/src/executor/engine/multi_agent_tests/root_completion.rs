@@ -363,7 +363,7 @@ async fn stateless_interrupt_retains_inflight_boundary_without_restarting_child(
                     "the capture must contain post-interrupt boundary output"
                 );
                 let boundary_id = first.output[boundary].id().unwrap().to_owned();
-                assert!(exec.resp_handler.retrieve(&first.id).await.is_err());
+                assert!(exec.resp_handler.get_snapshot(&first.id).await.is_err());
                 history.extend(first.output.into_iter().map(InOutItem::Output));
                 if client_call {
                     history.push(
@@ -404,7 +404,7 @@ async fn stateless_interrupt_retains_inflight_boundary_without_restarting_child(
                         .all(|item| item.agent().is_none_or(|agent| agent.agent_name == "/root"))
                 );
                 assert_eq!(child_rounds.load(Ordering::SeqCst), 1);
-                assert!(exec.resp_handler.retrieve(&completed.id).await.is_err());
+                assert!(exec.resp_handler.get_snapshot(&completed.id).await.is_err());
             };
             let result = tokio::time::timeout(Duration::from_secs(10), work).await;
             server.abort();

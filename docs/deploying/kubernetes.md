@@ -5,6 +5,15 @@ against managed PostgreSQL and an external OpenAI-compatible inference service. 
 portable base does not choose an identity provider or expose an Ingress. Enable the gateway's native OIDC validation
 or put an authenticated application boundary in front of it before allowing traffic from outside the cluster.
 
+## Local Files API storage
+
+The base deployment uses PostgreSQL for API metadata and a read-only container
+filesystem. To use the Files API, add a persistent writable volume and set
+`AGENTIC_FILES_STORAGE_DIR` to its mount path. The default two replicas must share
+that volume; otherwise, use a single replica with persistent local storage.
+Back up uploaded bytes together with the database. See the
+[Files and vector stores API guide](../api/file-search.md).
+
 ## Prepare the image and configuration
 
 Build and publish the production image described in the [container guide](container.md). The base uses
@@ -271,19 +280,13 @@ By default, every new pod applies the embedded SQLx migrations before starting t
 locking serializes concurrent migration attempts, and a failed migration keeps the pod out of service. Keep migrations
 backward-compatible with the previous gateway version so a rolling update can run old and new replicas together.
 
-The first upgrade from a release that used 32-bit timestamp and sequence columns is an exception: do not use the base
-rolling strategy for that upgrade. Older replicas do not take the per-conversation row lock and can allocate duplicate
-sequence values while an upgraded replica is serving. During a maintenance window:
+Upgrading from a release before this one is an exception: this release rejects a database created by an earlier
+release instead of migrating it, so old and new replicas cannot share a database. During a maintenance window:
 
 1. stop or drain inbound writers, scale every older gateway replica to zero, and verify that no old pod remains;
-2. run the duplicate `(conversation_id, seq)` query in the
-   [PostgreSQL upgrade notes](container.md#postgresql-production-settings), resolving any rows according to the
-   deployment's data-retention policy;
-3. apply the compatibility migration with a dedicated migration role, or start exactly one upgraded replica and wait
-   for its embedded migration to finish;
-4. verify that the integer columns and unique conversation-sequence index are present; and
-5. start the upgraded Deployment, restore the desired replica count, and reopen inbound traffic only after `/ready`
-   succeeds.
+2. back up the database if its contents must be kept, then point `DATABASE_URL` at a new empty database or drop the
+   persistence tables as described in the [PostgreSQL notes](container.md#postgresql-production-settings);
+3. start the upgraded Deployment and reopen inbound traffic only after `/ready` succeeds.
 
 Ordinary rolling updates are appropriate only after every migration in the target release has been verified as
 expand/contract compatible with the previously deployed gateway.

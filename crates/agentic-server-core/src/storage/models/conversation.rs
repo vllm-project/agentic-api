@@ -1,5 +1,7 @@
 //! Conversation context and history.
 
+use sqlx::{FromRow, Row};
+
 use super::super::pool::{DbPool, DbResult, DbTransaction};
 use super::item::Item;
 use crate::storage::backend::DatabaseBackend;
@@ -25,41 +27,6 @@ pub struct Conversation {
 
     /// Tenant identifier for multi-tenancy isolation.
     pub tenant_id: Option<String>,
-
-    /// Revision incremented for every change to conversation items.
-    pub revision: i64,
-}
-
-#[derive(Debug, sqlx::FromRow)]
-struct ConversationSnapshotRow {
-    revision: i64,
-    latest_response_id: Option<String>,
-    item_id: Option<String>,
-    item_reference_id: Option<String>,
-    item_public_id: Option<String>,
-    item_data: Option<String>,
-    item_created_at: Option<i64>,
-    item_conversation_id: Option<String>,
-    item_sequence: Option<i64>,
-}
-
-/// Item rows and the latest persisted response captured by one database statement.
-#[derive(Debug)]
-pub struct ConversationSnapshotRows {
-    pub revision: i64,
-    pub latest_response_id: Option<String>,
-    pub items: Vec<Item>,
-}
-
-/// Create a new conversation.
-///
-/// # Errors
-/// Returns `DbResult::Err` if the database insertion fails.
-pub async fn create(pool: &DbPool, id: &str) -> DbResult<Conversation> {
-    let mut tx = pool.begin().await?;
-    let row = create_in_tx(&mut tx, id, None, None).await?;
-    tx.commit().await?;
-    Ok(row)
 }
 
 /// Get or create a conversation.
@@ -93,61 +60,79 @@ pub async fn get(pool: &DbPool, id: &str) -> DbResult<Option<Conversation>> {
         .await
 }
 
-/// Get conversation items and the latest response pointer in one consistent snapshot.
+/// What rehydration reads from a conversation in one statement.
+#[derive(Debug)]
+pub struct ConversationHistory {
+    /// The response that committed the latest turn, if any.
+    pub latest_response_id: Option<String>,
+    /// The latest turn's response row; `None` when there is no turn, or the response is missing or belongs to
+    /// another conversation.
+    pub latest_turn: Option<LatestTurn>,
+    /// The conversation's items in sequence order.
+    pub items: Vec<Item>,
+}
+
+/// The `responses` row that committed a conversation's latest turn, as far as rehydration reads it.
+#[derive(Debug)]
+pub struct LatestTurn {
+    /// Its `metadata` column.
+    pub metadata: Option<String>,
+}
+
+/// Get what rehydration needs from a conversation in one statement.
+///
+/// Reading the header and the items in one statement keeps the latest turn consistent with the items. The header
+/// row carries the latest turn's `responses.metadata` in the `metadata` column that item
+/// rows use for their own. Items are ordered here rather than in SQL so the database does not sort item data.
 ///
 /// # Errors
-/// Returns `DbResult::Err` if the database query fails or a joined item row is malformed.
-pub async fn get_snapshot(pool: &DbPool, id: &str) -> DbResult<ConversationSnapshotRows> {
-    let rows = sqlx::query_as::<_, ConversationSnapshotRow>(
-        "SELECT conversations.latest_response_id, conversations.revision, \
-                items.id AS item_id, items.reference_id AS item_reference_id, \
-                items.public_id AS item_public_id, items.data AS item_data, \
-                items.created_at AS item_created_at, \
-                items.conversation_id AS item_conversation_id, \
-                items.seq AS item_sequence \
+/// Returns `DbResult::Err` if the database query fails.
+pub async fn get_with_items(pool: &DbPool, id: &str) -> DbResult<Option<ConversationHistory>> {
+    let rows = sqlx::query(
+        "SELECT conversations.id AS conversation, conversations.latest_response_id, responses.id AS turn_id, \
+                NULL AS id, NULL AS public_id, responses.metadata AS metadata, NULL AS data, \
+                NULL AS created_at, NULL AS conversation_id, NULL AS seq, NULL AS tenant_id \
          FROM conversations \
-         LEFT JOIN items ON items.conversation_id = conversations.id \
+         LEFT JOIN responses ON responses.id = conversations.latest_response_id \
+             AND responses.conversation_id = conversations.id \
          WHERE conversations.id = $1 \
-         ORDER BY items.seq ASC",
+         UNION ALL \
+         SELECT NULL, NULL, NULL, \
+                items.id, items.public_id, items.metadata, items.data, \
+                items.created_at, items.conversation_id, items.seq, items.tenant_id \
+         FROM items WHERE items.conversation_id = $1",
     )
     .bind(id)
     .fetch_all(pool)
     .await?;
-
-    let revision = rows.first().map_or(0, |row| row.revision);
-    let latest_response_id = rows.first().and_then(|row| row.latest_response_id.clone());
-    let mut items = Vec::with_capacity(rows.len());
-    for row in rows {
-        match (
-            row.item_id,
-            row.item_data,
-            row.item_created_at,
-            row.item_conversation_id,
-        ) {
-            (Some(id), Some(data), Some(created_at), Some(conversation_id)) => items.push(Item {
-                id,
-                data,
-                created_at,
-                conversation_id: Some(conversation_id),
-                seq: row.item_sequence,
-                tenant_id: None,
-                reference_id: row.item_reference_id,
-                public_id: row.item_public_id,
-            }),
-            (None, None, None, None) => {}
-            _ => {
-                return Err(sqlx::Error::Protocol(
-                    "conversation snapshot contains a partial item row".to_owned(),
-                ));
+    let mut header = None;
+    let mut items = Vec::new();
+    for row in &rows {
+        // Only the conversation row names the conversation.
+        match row.try_get::<Option<String>, _>("conversation")? {
+            Some(_) => {
+                let latest_turn = row
+                    .try_get::<Option<String>, _>("turn_id")?
+                    .map(|_| {
+                        Ok::<_, sqlx::Error>(LatestTurn {
+                            metadata: row.try_get("metadata")?,
+                        })
+                    })
+                    .transpose()?;
+                header = Some((row.try_get("latest_response_id")?, latest_turn));
             }
+            None => items.push(Item::from_row(row)?),
         }
     }
-
-    Ok(ConversationSnapshotRows {
-        revision,
+    let Some((latest_response_id, latest_turn)) = header else {
+        return Ok(None);
+    };
+    items.sort_unstable_by_key(|item| item.seq);
+    Ok(Some(ConversationHistory {
         latest_response_id,
+        latest_turn,
         items,
-    })
+    }))
 }
 
 /// Locks an existing conversation for the lifetime of the transaction.
@@ -155,7 +140,7 @@ pub async fn get_snapshot(pool: &DbPool, id: &str) -> DbResult<ConversationSnaps
 /// `PostgreSQL` takes a row lock without writing the row. `SQLite` uses a no-op
 /// update to acquire its database-wide write lock, which serializes persistence
 /// across all conversations. Both protect sequence allocation when multiple
-/// gateway replicas persist turns concurrently, but with different lock granularity.
+/// gateway replicas store turns or change items concurrently, but with different lock granularity.
 ///
 /// # Errors
 /// Returns `DbResult::Err` if the database query fails or the conversation does not exist.
@@ -259,18 +244,6 @@ pub async fn delete_in_tx(tx: &mut DbTransaction<'_>, conversation_id: &str) -> 
     Ok(())
 }
 
-/// Advance the item revision while holding the conversation lock.
-///
-/// # Errors
-/// Returns an error if the update fails.
-pub async fn bump_revision_in_tx(tx: &mut DbTransaction<'_>, id: &str) -> DbResult<()> {
-    sqlx::query("UPDATE conversations SET revision = revision + 1 WHERE id = $1")
-        .bind(id)
-        .execute(&mut **tx)
-        .await?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -283,7 +256,6 @@ mod tests {
             created_at: 1_704_067_200,
             latest_response_id: None,
             tenant_id: None,
-            revision: 0,
         };
 
         assert_eq!(conversation.id, "conv_1");

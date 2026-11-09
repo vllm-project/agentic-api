@@ -11,17 +11,17 @@ use crate::tool::ToolError;
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub(super) enum ExecutionStatus {
+pub(crate) enum ExecutionStatus {
     Completed,
     Failed,
     Incomplete,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub(super) struct ExecutionOutput {
-    pub(super) status: ExecutionStatus,
-    pub(super) stdout: String,
-    pub(super) stderr: String,
+pub(crate) struct ExecutionOutput {
+    pub(crate) status: ExecutionStatus,
+    pub(crate) stdout: String,
+    pub(crate) stderr: String,
 }
 
 /// Cancellation is installed after backend startup; a request can be dropped

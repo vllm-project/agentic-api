@@ -12,9 +12,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use agentic_core::executor::{ConversationHandler, ExecuteRequest, ExecutionContext, ResponseHandler};
 use agentic_core::storage::{ConversationStore, ResponseStore, create_pool_with_schema};
+use agentic_core::tool::web_search;
 use agentic_core::tool::{
     GatewayExecutor, ToolError, ToolHandler, ToolOutput, ToolType, model_visible_namespace_member_name,
 };
+use agentic_core::types::io::output::{FunctionToolCall, GatewayCallStatus};
 use agentic_core::types::io::{FunctionTool, OutputItem};
 use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
 use agentic_core::types::tools::WebSearchToolParam;
@@ -51,6 +53,20 @@ impl ToolHandler for CountingWebSearch {
 
 impl GatewayExecutor for CountingWebSearch {
     type ExecutionParams = WebSearchToolParam;
+
+    fn started_output(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> Option<OutputItem> {
+        web_search::started_output_item(call)
+    }
+
+    fn public_output(
+        &self,
+        call: &FunctionToolCall,
+        output: &ToolOutput,
+        status: GatewayCallStatus,
+        _params: &WebSearchToolParam,
+    ) -> Option<OutputItem> {
+        web_search::output_item(call, output, status.into())
+    }
 
     fn execute(
         &self,

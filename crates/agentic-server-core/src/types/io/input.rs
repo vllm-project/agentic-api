@@ -481,32 +481,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn code_interpreter_input_cannot_set_internal_origin() {
-        let input: InputItem = serde_json::from_value(serde_json::json!({
-            "type": "code_interpreter_call",
-            "id": "ci_native",
-            "container_id": "cntr_native",
-            "code": "print(7)",
-            "status": "completed",
-            "outputs": [{"type": "logs", "logs": "7\n"}],
-            "_agentic_code_interpreter_origin": "gateway"
-        }))
-        .expect("code interpreter replay input");
-        let InputItem::CodeInterpreterCall(call) = &input else {
-            panic!("expected code interpreter call");
-        };
-        assert_eq!(
-            call.origin,
-            super::super::code_interpreter::CodeInterpreterCallOrigin::Upstream
-        );
-        let model_input =
-            serde_json::to_value(ResponsesInput::from(vec![input]).model_input()).expect("model input serializes");
-        assert_eq!(model_input[0]["type"], "code_interpreter_call");
-        assert_eq!(model_input[0]["code"], "print(7)");
-        assert!(model_input[0].get("_agentic_code_interpreter_origin").is_none());
-    }
-
-    #[test]
     fn assistant_phase_survives_input_parsing_and_model_projection() {
         for (phase, expected) in [
             (None, None),
@@ -1127,7 +1101,7 @@ mod tests {
     }
 
     #[test]
-    fn custom_items_convert_to_function_history() {
+    fn custom_items_stay_public_until_the_upstream_projection() {
         let input: ResponsesInput = serde_json::from_value(serde_json::json!([
             {
                 "type": "custom_tool_call",
@@ -1146,11 +1120,14 @@ mod tests {
         .expect("custom history");
 
         let canonical_value = serde_json::to_value(Vec::<InputItem>::from(&input)).expect("canonical items");
-        assert_eq!(canonical_value[0]["type"], "function_call");
-        assert_eq!(canonical_value[0]["id"], "fc_1");
-        assert_eq!(canonical_value[0]["arguments"], r#"{"input":"hello"}"#);
-        assert_eq!(canonical_value[1]["type"], "function_call_output");
-        assert_eq!(canonical_value[1]["output"], "done");
+        assert_eq!(canonical_value[0]["type"], "custom_tool_call");
+        assert_eq!(canonical_value[1]["type"], "custom_tool_call_output");
+        let model_value = serde_json::to_value(input.normalized_model_input(&[]).expect("model input")).unwrap();
+        assert_eq!(model_value[0]["type"], "function_call");
+        assert_eq!(model_value[0]["id"], "fc_1");
+        assert_eq!(model_value[0]["arguments"], r#"{"input":"hello"}"#);
+        assert_eq!(model_value[1]["type"], "function_call_output");
+        assert_eq!(model_value[1]["output"], "done");
 
         let public_value = serde_json::to_value(input).expect("public input");
         assert_eq!(public_value[0]["type"], "custom_tool_call");
@@ -1189,10 +1166,9 @@ mod tests {
 
         let borrowed = serde_json::to_value(Vec::<InputItem>::from(&input)).unwrap();
         let owned = serde_json::to_value(Vec::<InputItem>::from(input.clone())).unwrap();
-        let prepared = ResponsesInput::from(Vec::from(&input));
-        let model = serde_json::to_value(prepared.model_input()).unwrap();
         assert_eq!(borrowed, owned);
-        assert_eq!(borrowed, model);
+        assert_eq!(borrowed[0]["type"], "shell_call");
+        let model = serde_json::to_value(input.normalized_model_input(&[]).unwrap()).unwrap();
         assert_eq!(model[0]["type"], "function_call");
         assert_eq!(model[0]["id"], "fc_1");
         assert_eq!(model[0]["name"], "shell");
@@ -1267,7 +1243,11 @@ mod borrowed_history_tests {
             public.as_slice(),
             [InputItem::CustomToolCall(_), InputItem::ShellCall(_)]
         ));
-        let model = Vec::<InputItem>::from(&input);
+        assert!(matches!(
+            Vec::<InputItem>::from(&input).as_slice(),
+            [InputItem::CustomToolCall(_), InputItem::ShellCall(_)]
+        ));
+        let model = Vec::<InputItem>::from(input.normalized_model_input(&[]).unwrap());
         assert!(matches!(
             model.as_slice(),
             [InputItem::FunctionCall(_), InputItem::FunctionCall(_)]

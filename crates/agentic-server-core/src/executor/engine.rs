@@ -30,7 +30,7 @@ use super::gateway::{
     compaction_event_plans, emit_gateway_completed_events, emit_gateway_start_events, emit_response_start_events,
 };
 use crate::executor::error::ExecutorResult;
-use crate::executor::persist::persist_if_needed;
+use crate::executor::persist::{TurnOutput, persist};
 use crate::executor::pipeline::AgentPipeline;
 use crate::executor::relay::StreamRelay;
 use crate::executor::request::{ExecutionContext, RequestContext};
@@ -268,31 +268,15 @@ async fn run_blocking(
         Box::pin(run_until_gateway_tools_complete(&mut agent, exec_ctx, auth, false)).await?;
     let (ctx, _) = agent.into_parts();
 
-    let ch = exec_ctx.conv_handler.clone();
-    let rh = exec_ctx.resp_handler.clone();
-    Box::pin(persist_if_needed(
-        payload.clone(),
+    Box::pin(persist(
         ctx,
+        TurnOutput::Response(&payload),
         tool_search_metadata,
-        ch,
-        rh,
-        &exec_ctx.metrics,
+        exec_ctx,
     ))
     .await?;
 
     Ok(payload)
-}
-
-/// Create a new conversation and return its data.
-///
-/// Exposes the conversation-creation step as a standalone function so callers
-/// (e.g. `agentic-server`, Praxis filters, or tests) can pre-create a
-/// conversation before submitting response turns.
-///
-/// # Errors
-/// Returns [`crate::executor::error::ExecutorError`] if the conversation store is unavailable.
-pub async fn create_conversation(exec_ctx: &ExecutionContext) -> ExecutorResult<crate::ConversationData> {
-    exec_ctx.conv_handler.create().await
 }
 
 #[cfg(test)]
@@ -453,7 +437,7 @@ mod tests {
             new_input_items: Vec::new(),
             response_id: "resp_test".to_owned(),
             conversation_id: None,
-            conversation_version: None,
+            checkpoint: None,
             continuation: None,
         };
         let mut exec_ctx = ExecutionContext::new(
@@ -517,7 +501,7 @@ mod tests {
             new_input_items: Vec::new(),
             response_id: "resp_mcp".to_owned(),
             conversation_id: None,
-            conversation_version: None,
+            checkpoint: None,
             continuation: None,
         };
         let plain_payload: RequestPayload = serde_json::from_value(serde_json::json!({
@@ -533,7 +517,7 @@ mod tests {
             new_input_items: Vec::new(),
             response_id: "resp_plain".to_owned(),
             conversation_id: None,
-            conversation_version: None,
+            checkpoint: None,
             continuation: None,
         };
         let mut exec_ctx = ExecutionContext::new(
@@ -621,7 +605,7 @@ mod tests {
             new_input_items: Vec::new(),
             response_id: "resp_discovery".to_owned(),
             conversation_id: None,
-            conversation_version: None,
+            checkpoint: None,
             continuation: None,
         };
         let mut exec_ctx = ExecutionContext::new(
@@ -762,7 +746,7 @@ mod tests {
             panic!("non-streaming trigger request must return a payload");
         };
 
-        let history = response_store
+        let (_, history) = response_store
             .rehydrate(&response.id)
             .await
             .expect("compaction trigger response rehydrates");

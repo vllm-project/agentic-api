@@ -30,7 +30,9 @@ use tokio_util::sync::CancellationToken;
 use agentic_core::config::ResponsesConfig;
 use agentic_core::executor::{ConversationHandler, ExecutionContext, RequestContext, ResponseHandler};
 use agentic_core::proxy::ProxyState;
-use agentic_core::storage::{ConversationStore, DbPool, ResponseMetadata, ResponseStore, create_pool_with_schema};
+use agentic_core::storage::{
+    ConversationStore, DbPool, ResponseData, ResponseMetadata, ResponseStore, create_pool_with_schema,
+};
 use agentic_core::tool::{WebSearchHandler, model_visible_namespace_member_name};
 use agentic_core::types::RequestPayload;
 use agentic_core::types::io::InOutItem;
@@ -39,6 +41,7 @@ use agentic_core::types::tools::ResponsesTool;
 use agentic_server::app::{AppState, DEFAULT_MAX_REQUEST_BODY_SIZE, WebSocketTracker};
 
 use agentic_core::utils::common::{deserialize_from_value, serialize_to_value};
+use common::persist_turn;
 use common::{spawn_gateway, test_config};
 
 mod steering {
@@ -562,10 +565,13 @@ mod steering {
             requests[1]["input"].to_string().matches("STEER_AFTER_SEARCH").count(),
             1
         );
-        for index in 0..2 {
-            assert!(input.iter().any(
-                |item| item["type"] == "function_call_output" && item["call_id"] == format!("call_search_{index}")
-            ));
+        // The successor's model input lowers each stored web_search_call under its public ID.
+        for call in output {
+            assert!(
+                input
+                    .iter()
+                    .any(|item| item["type"] == "function_call_output" && item["call_id"] == call["id"])
+            );
         }
         assert_eq!(search.request_bodies().await.len(), 2);
     }
@@ -1405,7 +1411,6 @@ async fn storage_backed_state_with(
 const SMALL_REQUEST_SIZE_LIMIT: std::num::NonZeroUsize = std::num::NonZeroUsize::new(500).expect("nonzero");
 
 const COMPETING_RESPONSE_ID: &str = "resp_competing";
-const CONFLICT_MESSAGE: &str = "conversation changed while the response was being generated; retry the request";
 
 async fn create_conversation(gateway_url: &str) -> String {
     let response = reqwest::Client::new()
@@ -1429,51 +1434,39 @@ fn competing_turn_items() -> Vec<InOutItem> {
 }
 
 async fn persist_competing_turn(pool: &Arc<DbPool>, conversation_id: &str) {
-    ConversationStore::new(Arc::clone(pool))
-        .persist(
-            conversation_id,
-            COMPETING_RESPONSE_ID,
-            None,
-            competing_turn_items(),
-            &ResponseMetadata {
-                multi_agent_tree: None,
-                model: "competing-model".to_owned(),
-                ..ResponseMetadata::default()
-            },
-        )
-        .await
-        .expect("competing turn should persist");
+    persist_turn(
+        &ConversationStore::new(Arc::clone(pool)),
+        conversation_id,
+        COMPETING_RESPONSE_ID,
+        competing_turn_items(),
+        &ResponseMetadata {
+            multi_agent_tree: None,
+            model: "competing-model".to_owned(),
+            ..ResponseMetadata::default()
+        },
+    )
+    .await
+    .expect("competing turn should persist");
 }
 
-async fn assert_conflicting_websocket_turn_not_persisted(
-    pool: &Arc<DbPool>,
-    conversation_id: &str,
-    stale_response_id: &str,
-) {
-    let conversation_store = ConversationStore::new(Arc::clone(pool));
-    assert_eq!(
-        conversation_store
-            .rehydrate(conversation_id)
-            .await
-            .expect("conversation history"),
-        competing_turn_items()
+/// A turn that ran while a competing turn was stored is appended after it, as `OpenAI` does.
+async fn assert_turn_appended_after_competing_turn(pool: &Arc<DbPool>, conversation_id: &str, response_id: &str) {
+    let items = ConversationStore::new(Arc::clone(pool))
+        .rehydrate(conversation_id)
+        .await
+        .expect("conversation history")
+        .items;
+    let competing = competing_turn_items();
+    assert_eq!(items[..competing.len()], competing[..]);
+    assert!(
+        items.len() > competing.len(),
+        "the later turn's items follow the competing turn"
     );
-    let response_store = ResponseStore::new(Arc::clone(pool));
-    let competing = response_store
-        .get(COMPETING_RESPONSE_ID)
+    let response = ResponseStore::new(Arc::clone(pool))
+        .get(response_id)
         .await
-        .expect("competing response should remain");
-    assert_eq!(competing.conversation_id.as_deref(), Some(conversation_id));
-    let error = response_store
-        .get(stale_response_id)
-        .await
-        .expect_err("rejected response must not be persisted");
-    assert!(error.is_not_found(), "expected missing response, got {error}");
-    let item_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM items")
-        .fetch_one(pool.as_ref())
-        .await
-        .expect("stored item count");
-    assert_eq!(item_count, 1, "rejected turn must not leave orphaned items");
+        .expect("the later turn is stored");
+    assert_eq!(response.conversation_id.as_deref(), Some(conversation_id));
 }
 
 fn ws_url(gateway_url: &str) -> String {
@@ -2271,7 +2264,7 @@ async fn test_websocket_generate_false_prewarm_redacts_mcp_runtime_credentials()
         new_input_items: vec![],
         response_id: "resp_lookup".to_owned(),
         conversation_id: None,
-        conversation_version: None,
+        checkpoint: None,
         continuation: None,
     };
     let stored = fixture
@@ -2281,6 +2274,7 @@ async fn test_websocket_generate_false_prewarm_redacts_mcp_runtime_credentials()
         .get(&lookup_ctx)
         .await
         .expect("stored prewarm response");
+    let stored = ResponseData::try_from(stored).expect("decode prewarm response");
     let tools = stored.metadata.effective_tools.expect("persisted tools");
     let ResponsesTool::Mcp(tool) = &tools[0] else {
         panic!("expected MCP tool");
@@ -2601,20 +2595,19 @@ async fn websocket_empty_prewarm_replaces_compacted_conversation_tool_search_sta
     let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
     let conversation_id = create_conversation(&gateway_url).await;
     let conversation_store = ConversationStore::new(Arc::clone(&fixture.pool));
-    conversation_store
-        .persist(
-            &conversation_id,
-            "resp_before_prewarm",
-            None,
-            vec![InOutItem::Input(InputItem::Compaction(CompactionItem {
-                agent: None,
-                id: Some("cmp_before_prewarm".to_owned()),
-                encrypted_content: "Existing compacted conversation state".to_owned(),
-            }))],
-            &ResponseMetadata::default(),
-        )
-        .await
-        .expect("seed compacted conversation state");
+    persist_turn(
+        &conversation_store,
+        &conversation_id,
+        "resp_before_prewarm",
+        vec![InOutItem::Input(InputItem::Compaction(CompactionItem {
+            agent: None,
+            id: Some("cmp_before_prewarm".to_owned()),
+            encrypted_content: "Existing compacted conversation state".to_owned(),
+        }))],
+        &ResponseMetadata::default(),
+    )
+    .await
+    .expect("seed compacted conversation state");
     let mut ws = connect_responses_ws(&gateway_url).await;
 
     for store in [false, true] {
@@ -3387,7 +3380,7 @@ async fn websocket_reclaims_completed_request_capacity_before_admission() {
 }
 
 #[tokio::test]
-async fn websocket_conversation_conflict_ends_request_without_persisting_stale_turn() {
+async fn websocket_conversation_turn_appends_after_a_turn_stored_while_it_ran() {
     // Arrange
     let (mock, arrived, release) =
         MockResponsesServer::start_gated(sse_response("resp_upstream_stale_ws", "msg_upstream_stale_ws", "STALE"))
@@ -3403,7 +3396,7 @@ async fn websocket_conversation_conflict_ends_request_without_persisting_stale_t
         json!({
             "type": "response.create",
             "model": "test-model",
-            "input": [{"type": "message", "role": "user", "content": "stale turn"}],
+            "input": [{"type": "message", "role": "user", "content": "later turn"}],
             "conversation_id": conversation_id,
             "store": true,
             "stream": true
@@ -3416,56 +3409,18 @@ async fn websocket_conversation_conflict_ends_request_without_persisting_stale_t
     let events = recv_until_completed(&mut ws).await;
 
     // Assert
-    let stale_response_id = events
+    assert_eq!(events.last().expect("terminal event")["type"], "response.completed");
+    assert!(events.iter().all(|event| event["type"] != "error"));
+    let response_id = events
         .iter()
         .find(|event| event["type"] == "response.created")
         .and_then(|event| event["response"]["id"].as_str())
-        .expect("gateway response ID from response.created")
-        .to_owned();
-    let error = events.last().expect("terminal conflict error");
-    assert_eq!(error["type"], "error");
-    assert_eq!(error["status"], StatusCode::BAD_REQUEST.as_u16());
-    assert_eq!(
-        error["error"],
-        json!({
-            "message": CONFLICT_MESSAGE,
-            "type": "invalid_request_error",
-            "code": "conversation_locked",
-            "param": "conversation"
-        })
-    );
-    assert!(events.iter().all(|event| event["type"] != "response.completed"));
-
-    // A local response queued after the error is an ordering barrier: it can only
-    // begin after the conflicted executor stream has ended.
-    send_json(
-        &mut ws,
-        json!({
-            "type": "response.create",
-            "model": "test-model",
-            "input": [],
-            "generate": false,
-            "store": false,
-            "stream": true
-        }),
-    )
-    .await;
-    let barrier_created = recv_json(&mut ws).await;
-    assert_eq!(barrier_created["type"], "response.created");
-    let barrier_response_id = barrier_created["response"]["id"]
-        .as_str()
-        .expect("barrier response ID")
-        .to_owned();
-    let barrier_completed = recv_json(&mut ws).await;
-    assert_eq!(barrier_completed["type"], "response.completed");
-    assert_eq!(barrier_completed["response"]["id"], barrier_response_id);
-    assert_ne!(barrier_response_id, stale_response_id);
-
-    assert_conflicting_websocket_turn_not_persisted(&fixture.pool, &conversation_id, &stale_response_id).await;
+        .expect("gateway response ID from response.created");
+    assert_turn_appended_after_competing_turn(&fixture.pool, &conversation_id, response_id).await;
 }
 
 #[tokio::test]
-async fn websocket_generate_false_conversation_conflict_rejects_stale_local_completion() {
+async fn websocket_generate_false_turn_appends_after_a_turn_stored_while_it_ran() {
     // Arrange
     let mock = MockResponsesServer::start(vec![]).await;
     let fixture = storage_backed_state(&mock.url).await;
@@ -3481,7 +3436,7 @@ async fn websocket_generate_false_conversation_conflict_rejects_stale_local_comp
         json!({
             "type": "response.create",
             "model": "test-model",
-            "input": [{"type": "message", "role": "user", "content": "stale local turn"}],
+            "input": [{"type": "message", "role": "user", "content": "later local turn"}],
             "conversation_id": conversation_id,
             "generate": false,
             "store": true,
@@ -3496,67 +3451,13 @@ async fn websocket_generate_false_conversation_conflict_rejects_stale_local_comp
     release
         .send(())
         .expect("local completion should remain paused before persistence");
-    let error = recv_json(&mut ws).await;
+    let events = recv_until_completed(&mut ws).await;
 
     // Assert
-    assert_eq!(
-        error,
-        json!({
-            "type": "error",
-            "status": StatusCode::BAD_REQUEST.as_u16(),
-            "error": {
-                "message": CONFLICT_MESSAGE,
-                "type": "invalid_request_error",
-                "code": "conversation_locked",
-                "param": "conversation"
-            }
-        })
-    );
-
-    // A local response queued after the error is an ordering barrier. Its first
-    // event proves the stale turn emitted no response.completed after the error.
-    send_json(
-        &mut ws,
-        json!({
-            "type": "response.create",
-            "model": "test-model",
-            "input": [],
-            "generate": false,
-            "store": false,
-            "stream": true
-        }),
-    )
-    .await;
-    let barrier_created = recv_json(&mut ws).await;
-    assert_eq!(barrier_created["type"], "response.created");
-    let barrier_response_id = barrier_created["response"]["id"]
-        .as_str()
-        .expect("barrier response ID")
-        .to_owned();
-    let barrier_completed = recv_json(&mut ws).await;
-    assert_eq!(barrier_completed["type"], "response.completed");
-    assert_eq!(barrier_completed["response"]["id"], barrier_response_id);
-
+    assert_eq!(events.last().expect("terminal event")["type"], "response.completed");
+    let response_id = events[0]["response"]["id"].as_str().expect("local response ID");
     assert!(mock.request_bodies().await.is_empty());
-    let conversation_store = ConversationStore::new(Arc::clone(&fixture.pool));
-    assert_eq!(
-        conversation_store
-            .rehydrate(&conversation_id)
-            .await
-            .expect("conversation history"),
-        competing_turn_items()
-    );
-    let response_ids = sqlx::query_scalar::<_, String>("SELECT id FROM responses WHERE id != $1 ORDER BY id")
-        .bind(&barrier_response_id)
-        .fetch_all(fixture.pool.as_ref())
-        .await
-        .expect("stored response IDs");
-    assert_eq!(response_ids, vec![COMPETING_RESPONSE_ID]);
-    let item_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM items")
-        .fetch_one(fixture.pool.as_ref())
-        .await
-        .expect("stored item count");
-    assert_eq!(item_count, 1, "rejected turn must not leave orphaned items");
+    assert_turn_appended_after_competing_turn(&fixture.pool, &conversation_id, response_id).await;
 }
 
 #[tokio::test]
@@ -3781,7 +3682,7 @@ async fn websocket_generate_false_rejects_rehydrated_code_interpreter_before_per
         ..ResponseMetadata::default()
     };
     ResponseStore::new(Arc::clone(&fixture.pool))
-        .persist("resp_parent", None, Vec::new(), &parent_metadata)
+        .persist("resp_parent", None, Vec::new(), None, &parent_metadata)
         .await
         .expect("persist legacy parent response");
 

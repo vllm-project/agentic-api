@@ -427,12 +427,10 @@ async fn a_round_with_client_calls_and_a_refusal_continues_with_a_fresh_budget()
     assert_eq!(second.status, "completed");
     let bodies = llm.request_bodies().await;
     assert_eq!(bodies.len(), 2);
+    // Both stored web_search_call items are lowered from their public form, so the
+    // refused call replays without its refusal text, beside the client's output.
     let outputs = tool_outputs(&bodies[1]);
-    assert!(
-        outputs
-            .iter()
-            .any(|output| output.contains("UserError: Reached tool call limit of 1"))
-    );
+    assert_eq!(outputs.len(), 3);
     assert!(outputs.iter().any(|output| output == "sunny"));
     assert!(
         bodies[1]["tools"]

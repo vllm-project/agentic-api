@@ -18,7 +18,7 @@ use indexmap::IndexMap;
 use crate::events::{EventPayload, SSEItemType};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::response_budget::{ExecutorResponseBudget, RetainedAccount, RetainedSize};
-use crate::types::io::{AgentAttribution, OutputItem, ReasoningOutput};
+use crate::types::io::{AgentAttribution, OutputItem};
 use crate::utils::common::deserialize_from_value_opt;
 use crate::utils::uuid7_str;
 
@@ -241,13 +241,11 @@ impl SlotMap {
         let EventPayload::OutputItemDone { item: raw_item, .. } = payload else {
             return Ok(None);
         };
-        let mut parsed = validated_done_item.cloned().or_else(|| {
-            deserialize_from_value_opt::<OutputItem>(raw_item.clone()).or_else(|| {
-                (identity.item_type == Some(SSEItemType::Reasoning))
-                    .then(|| ReasoningOutput::try_from(payload).ok().map(OutputItem::Reasoning))
-                    .flatten()
-            })
-        });
+        // A completion the typed schema rejects parses to `None`: strict ingestion already rejected it, and lenient
+        // ingestion keeps the item as it was opened and streamed instead of failing the response.
+        let mut parsed = validated_done_item
+            .cloned()
+            .or_else(|| deserialize_from_value_opt::<OutputItem>(raw_item.clone()));
         if let Some(previous) = self.slots.get(&index).and_then(|slot| slot.state.call_id())
             && !previous.is_empty()
             && parsed.as_ref().and_then(super::identity::output_item_call_id) != Some(previous)
@@ -344,6 +342,7 @@ impl SlotMap {
             | OutputItem::ToolSearchCall(_)
             | OutputItem::CustomToolCall(_)
             | OutputItem::ShellCall(_)
+            | OutputItem::FileSearchCall(_)
             | OutputItem::WebSearchCall(_)
             | OutputItem::McpCall(_)
             | OutputItem::McpListTools(_)

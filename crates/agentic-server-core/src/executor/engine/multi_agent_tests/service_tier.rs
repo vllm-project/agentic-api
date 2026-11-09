@@ -176,11 +176,11 @@ async fn final_root_tier_controls_json_sse_and_stored_snapshot() {
                 assert_eq!(payload.standard_fields.completed_at.is_some(), status == "completed");
                 if status == "failed" {
                     assert!(matches!(
-                        exec.resp_handler.retrieve(&payload.id).await,
+                        exec.resp_handler.get_snapshot(&payload.id).await,
                         Err(ExecutorError::Storage(crate::StorageError::ResponseNotFound { .. }))
                     ));
                 } else {
-                    let stored = exec.resp_handler.retrieve(&payload.id).await.unwrap();
+                    let stored = exec.resp_handler.get_snapshot(&payload.id).await.unwrap();
                     assert_eq!(stored.standard_fields.prompt_cache_options, expected_options);
                     assert_eq!(stored.service_tier.as_deref(), tier.or(Some("default")));
                 }

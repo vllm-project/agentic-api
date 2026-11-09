@@ -1,3 +1,6 @@
+mod support;
+
+use agentic_core::types::conversations::ConversationMetadata;
 use std::sync::Arc;
 
 use agentic_core::config::{PostgresConfig, SqliteConfig};
@@ -5,6 +8,7 @@ use agentic_core::storage::{ConversationStore, create_pool_with_schema_and_confi
 use agentic_core::types::io::InOutItem;
 use agentic_core::types::io::{InputItem, InputMessage, InputMessageContent};
 use serde_json::json;
+use support::persist_turn;
 
 fn metadata(value: serde_json::Value) -> agentic_core::types::conversations::ConversationMetadata {
     serde_json::from_value(value).unwrap()
@@ -25,11 +29,7 @@ async fn postgres_conversation_tenant_isolation() {
 
     // Create conversation for tenant A with metadata
     let conv_a = store
-        .create_with_metadata_and_items(
-            Some("tenant_a"),
-            Some(metadata(json!({"user": "alice", "project": "test"}))),
-            vec![],
-        )
+        .create("tenant_a", &metadata(json!({"user": "alice", "project": "test"})), &[])
         .await
         .expect("create for tenant_a failed");
 
@@ -64,7 +64,7 @@ async fn postgres_conversation_metadata_update_with_tenant() {
 
     // Create conversation
     let conv = store
-        .create_with_metadata_and_items(Some("tenant_a"), Some(metadata(json!({"status": "draft"}))), vec![])
+        .create("tenant_a", &metadata(json!({"status": "draft"})), &[])
         .await
         .expect("create failed");
 
@@ -97,7 +97,7 @@ async fn postgres_conversation_delete_with_tenant_scoping() {
 
     // Create conversation for tenant A
     let conv = store
-        .create_with_metadata_and_items(Some("tenant_a"), Some(metadata(json!({"temp": "true"}))), vec![])
+        .create("tenant_a", &metadata(json!({"temp": "true"})), &[])
         .await
         .expect("create failed");
 
@@ -138,10 +138,10 @@ async fn postgres_conversation_create_with_initial_items() {
 
     // Create conversation with initial items
     let conv = store
-        .create_with_metadata_and_items(
-            Some("tenant_a"),
-            Some(metadata(json!({"test": "initial_items", "db": "postgres"}))),
-            initial_items,
+        .create(
+            "tenant_a",
+            &metadata(json!({"test": "initial_items", "db": "postgres"})),
+            &initial_items,
         )
         .await
         .expect("create with items failed");
@@ -151,7 +151,7 @@ async fn postgres_conversation_create_with_initial_items() {
     // Rehydrate and verify items are present
     let items = store.rehydrate(&conv.conversation_id).await.expect("rehydrate failed");
 
-    assert_eq!(items.len(), 1, "should have 1 initial item");
+    assert_eq!(items.items.len(), 1, "should have 1 initial item");
 }
 
 #[tokio::test]
@@ -176,7 +176,7 @@ async fn postgres_concurrent_tenant_isolation() {
             barrier.wait().await;
 
             let conv = store
-                .create_with_metadata_and_items(Some(&tenant), Some(metadata(json!({"tenant": tenant}))), vec![])
+                .create(&tenant, &metadata(json!({"tenant": tenant})), &[])
                 .await
                 .expect("create failed");
 
@@ -217,13 +217,13 @@ async fn postgres_concurrent_tenant_isolation() {
 #[tokio::test]
 #[ignore = "requires TEST_POSTGRES_URL pointing to an isolated PostgreSQL database"]
 async fn postgres_item_crud_uses_turn_locking_and_preserves_history() {
-    use agentic_core::storage::{ResponseMetadata, ResponseStore, StorageError};
+    use agentic_core::storage::{ResponseCheckpoint, ResponseMetadata, ResponseStore};
     use agentic_core::types::io::ItemOrder;
 
     let pool = setup_postgres_pool().await;
     let store = Arc::new(ConversationStore::new(Arc::clone(&pool)));
     let conv = store
-        .create_with_metadata_and_items(Some("crud_tenant"), None, vec![])
+        .create("crud_tenant", &ConversationMetadata::new(), &[])
         .await
         .unwrap();
     let make_item = || {
@@ -234,22 +234,20 @@ async fn postgres_item_crud_uses_turn_locking_and_preserves_history() {
         }))
     };
     let response_id = agentic_core::utils::common::uuid7_str("resp_");
-    store
-        .persist(
-            &conv.conversation_id,
-            &response_id,
-            None,
-            vec![make_item()],
-            &ResponseMetadata::default(),
-        )
-        .await
-        .unwrap();
+    persist_turn(
+        &store,
+        &conv.conversation_id,
+        &response_id,
+        vec![make_item()],
+        &ResponseMetadata::default(),
+    )
+    .await
+    .unwrap();
     let first = store
         .list_items("crud_tenant", &conv.conversation_id, 100, None, ItemOrder::Asc)
         .await
         .unwrap();
     assert_eq!(first.len(), 1, "Responses items must be visible");
-    let snapshot = store.rehydrate_snapshot(&conv.conversation_id).await.unwrap();
     let barrier = Arc::new(tokio::sync::Barrier::new(8));
     let mut tasks = Vec::new();
     for _ in 0..8 {
@@ -266,40 +264,35 @@ async fn postgres_item_crud_uses_turn_locking_and_preserves_history() {
         task.await.unwrap().expect("concurrent append succeeds");
     }
     let after = store
-        .list_items(
-            "crud_tenant",
-            &conv.conversation_id,
-            100,
-            Some(&first[0].id),
-            ItemOrder::Asc,
-        )
+        .list_items("crud_tenant", &conv.conversation_id, 100, first[0].id(), ItemOrder::Asc)
         .await
         .unwrap();
     assert_eq!(after.len(), 8);
     assert!(
         store
-            .retrieve_item("other_tenant", &conv.conversation_id, &first[0].id)
+            .retrieve_item("other_tenant", &conv.conversation_id, first[0].id().unwrap())
             .await
             .is_err()
     );
     store
-        .delete_item("crud_tenant", &conv.conversation_id, &first[0].id)
+        .delete_item("crud_tenant", &conv.conversation_id, first[0].id().unwrap())
         .await
         .unwrap();
-    let stale = store
-        .persist_if_version(
+    // A turn that ran while an item was deleted still stores, as on OpenAI.
+    store
+        .persist(
             &conv.conversation_id,
-            snapshot.version,
+            &ResponseCheckpoint::default(),
             &agentic_core::utils::common::uuid7_str("resp_"),
-            None,
             vec![],
+            None,
             &ResponseMetadata::default(),
         )
-        .await;
-    assert!(matches!(stale, Err(StorageError::ConversationConflict { .. })));
+        .await
+        .expect("a turn after an item deletion persists");
     store.delete("crud_tenant", &conv.conversation_id).await.unwrap();
     assert_eq!(
-        ResponseStore::new(pool).rehydrate(&response_id).await.unwrap(),
+        ResponseStore::new(pool).rehydrate(&response_id).await.unwrap().1,
         vec![make_item()]
     );
 }

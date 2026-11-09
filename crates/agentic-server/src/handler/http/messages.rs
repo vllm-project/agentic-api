@@ -1,3 +1,4 @@
+use std::error::Error as _;
 use std::sync::Arc;
 
 use axum::extract::{Request, State};
@@ -14,11 +15,13 @@ use agentic_core::executor::{
 };
 use agentic_core::proxy::{ProxyAuth, ProxyRequest, error_response_for_auth, upstream_request_headers};
 use agentic_core::tool::{ToolRegistry, registry_tools};
+use agentic_core::types::messages::thread::MESSAGE_THREADS_BETA;
 
 use super::super::common::{
     convert_response, read_bytes_with_auth, sse_response_with_headers, upstream_error_response,
 };
 use crate::app::AppState;
+use crate::auth::AuthenticatedPrincipal;
 
 async fn proxy_messages(
     state: &AppState,
@@ -61,13 +64,8 @@ async fn execute_messages(
     state: &AppState,
     headers: &HeaderMap,
     query: Option<&str>,
-    parsed: ParsedMessagesRequest<'_>,
+    ctx: MessagesRequestContext,
 ) -> Response {
-    let ctx = match MessagesRequestContext::new(parsed) {
-        Ok(ctx) => ctx,
-        Err(e) => return messages_error_response(e),
-    };
-
     // Build the request-scoped registry from the declared tools (M6). Gateway
     // ownership (incl. configured aliases like Claude Code's `WebSearch`) is
     // resolved against the operator-configured map.
@@ -128,17 +126,76 @@ pub async fn messages(State(state): State<AppState>, request: Request) -> Respon
         Err(response) => return response,
     };
 
-    // Route to the loop only when a gateway-owned tool is declared; everything
-    // else keeps the transparent proxy path.
     match ParsedMessagesRequest::parse_for_gateway(&bytes, &state.exec_ctx.messages_gateway_tools) {
+        Ok(Some(parsed)) if parsed.is_thread() => {
+            let forwarded = upstream_request_headers(&parts.headers, &state.proxy_state.config, ProxyAuth::Anthropic);
+            let principal = parts.extensions.get::<AuthenticatedPrincipal>();
+            let owner = state.exec_ctx.messages_threads.owner(&[
+                principal.map_or(&[], |principal| principal.issuer().as_bytes()),
+                principal.map_or(&[], |principal| principal.subject().as_bytes()),
+                forwarded.get("authorization").map_or(&[], http::HeaderValue::as_bytes),
+                forwarded.get("x-api-key").map_or(&[], http::HeaderValue::as_bytes),
+                forwarded
+                    .get("anthropic-workspace-id")
+                    .map_or(&[], http::HeaderValue::as_bytes),
+                forwarded
+                    .get("anthropic-user-profile-id")
+                    .map_or(&[], http::HeaderValue::as_bytes),
+            ]);
+            let betas = parts
+                .headers
+                .get_all("anthropic-beta")
+                .iter()
+                .filter_map(|value| value.to_str().ok())
+                .flat_map(|value| value.split(','))
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_owned)
+                .collect();
+            let prepared = match state.exec_ctx.messages_threads.prepare(parsed, owner, betas).await {
+                Ok(prepared) => prepared,
+                Err(error) => {
+                    let status = error.http_status();
+                    if status.is_server_error() {
+                        tracing::error!(%error, source = ?error.source(), "Messages thread failure");
+                    }
+                    return (status, axum::Json(error.into_body())).into_response();
+                }
+            };
+            let ctx = match prepared.into_context() {
+                Ok(ctx) => ctx,
+                Err(error) => return messages_error_response(error),
+            };
+            // This beta is implemented locally; keep every other beta open-ended.
+            let mut headers = parts.headers;
+            let betas = headers
+                .get_all("anthropic-beta")
+                .iter()
+                .filter_map(|value| value.to_str().ok())
+                .flat_map(|value| value.split(','))
+                .map(str::trim)
+                .filter(|beta| *beta != MESSAGE_THREADS_BETA)
+                .collect::<Vec<_>>()
+                .join(",");
+            headers.remove("anthropic-beta");
+            if let Ok(value) = http::HeaderValue::from_str(&betas)
+                && !betas.is_empty()
+            {
+                headers.insert("anthropic-beta", value);
+            }
+            return execute_messages(&state, &headers, parts.uri.query(), ctx).await;
+        }
         Ok(Some(parsed)) => {
             debug!(
                 route = "messages_loop",
                 stream = parsed.stream(),
-                tools = parsed.tools().map_or(0, Vec::len),
                 "routing HTTP messages request"
             );
-            return execute_messages(&state, &parts.headers, parts.uri.query(), parsed).await;
+            let ctx = match MessagesRequestContext::new(parsed) {
+                Ok(ctx) => ctx,
+                Err(error) => return messages_error_response(error),
+            };
+            return execute_messages(&state, &parts.headers, parts.uri.query(), ctx).await;
         }
         Err(error) => return messages_error_response(error),
         Ok(None) => debug!(route = "proxy", "routing HTTP messages request"),
@@ -203,6 +260,11 @@ pub async fn count_tokens(State(state): State<AppState>, request: Request) -> Re
         Err(response) => return response,
     };
     if let Ok(mut request_json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+        if request_json.get("thread").is_some() {
+            return messages_error_response(ExecutorError::InvalidRequest(
+                "token counting does not support thread; send the full conversation".to_owned(),
+            ));
+        }
         // The executors own the availability policy: a disabled executor
         // refuses the declaration here too, so counting tokens and sending the
         // request answer alike.

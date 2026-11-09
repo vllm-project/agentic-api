@@ -2061,9 +2061,10 @@ fn strict_ingestion_rejects_malformed_typed_reasoning_on_both_paths() {
     }
 }
 
-/// Lenient ingestion keeps what earlier releases relayed; strict still rejects it.
+/// Reasoning the typed schema rejects is dropped by lenient JSON ingestion, keeps only the opened item in a
+/// stream, and fails strict ingestion without echoing opaque state.
 #[test]
-fn lenient_ingestion_projects_reasoning_earlier_releases_accepted() {
+fn ingestion_rejects_reasoning_outside_the_typed_schema() {
     let stream = |item: &serde_json::Value| {
         [
             serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"id":"rs_1","type":"reasoning"}}),
@@ -2077,28 +2078,9 @@ fn lenient_ingestion_projects_reasoning_earlier_releases_accepted() {
         let body = serde_json::json!({"id":"resp_1","status":"completed","output":[item]});
         acc.load_json_body(&body.to_string()).map(|()| acc.output)
     };
-    let pre_typed = serde_json::json!({
-        "id": "rs_1", "type": "reasoning",
-        "content": [{"type": "provider_text", "text": "kept plaintext"}],
-        "summary": [{"type": "summary_text", "text": "kept summary"}, {"type": "reasoning_text", "text": "dropped"}],
-        "encrypted_content": {"ciphertext": "sensitive-state"},
-        "status": "failed",
-    });
-    let projected = serde_json::json!([{
-        "type": "reasoning", "id": "rs_1",
-        "content": [{"type": "reasoning_text", "text": "kept plaintext"}],
-        "summary": [{"type": "summary_text", "text": "kept summary"}],
-    }]);
-    let streamed = from_sse_lines(stream(&pre_typed), None);
-    assert_eq!(serde_json::to_value(&streamed.output).unwrap(), projected);
-    let parsed = json(&pre_typed, Validation::Lenient).unwrap();
-    assert_eq!(serde_json::to_value(&parsed).unwrap(), projected);
-    let error = json(&pre_typed, Validation::Strict).unwrap_err();
-    assert!(!error.to_string().contains("sensitive-state"));
-
-    // Earlier releases rejected these too: JSON drops the item, and a stream keeps
-    // the opened item without the completion's fields.
     for fields in [
+        serde_json::json!({"content": [{"type": "provider_text", "text": "untyped part"}]}),
+        serde_json::json!({"encrypted_content": {"ciphertext": "sensitive-state"}}),
         serde_json::json!({"content": "not an array"}),
         serde_json::json!({"content": [{"text": "part without a type"}]}),
         serde_json::json!({"status": 5}),
@@ -2111,6 +2093,8 @@ fn lenient_ingestion_projects_reasoning_earlier_releases_accepted() {
             .unwrap()
             .extend(fields.as_object().unwrap().clone());
         assert!(json(&item, Validation::Lenient).unwrap().is_empty(), "{fields}");
+        let error = json(&item, Validation::Strict).unwrap_err();
+        assert!(!error.to_string().contains("sensitive-state"), "{fields}");
         let streamed = from_sse_lines(stream(&item), None);
         assert_eq!(
             serde_json::to_value(&streamed.output).unwrap(),
@@ -2120,14 +2104,6 @@ fn lenient_ingestion_projects_reasoning_earlier_releases_accepted() {
             "{fields}"
         );
     }
-
-    // Without plaintext, opaque state the typed schema drops leaves nothing vLLM can
-    // replay, so JSON drops the item instead of relaying an emptied one.
-    let opaque_only = serde_json::json!({
-        "id": "rs_1", "type": "reasoning", "content": [], "encrypted_content": {"ciphertext": "sensitive-state"}
-    });
-    assert!(json(&opaque_only, Validation::Lenient).unwrap().is_empty());
-    assert!(json(&opaque_only, Validation::Strict).is_err());
 }
 
 #[test]
@@ -2807,4 +2783,85 @@ fn test_reasoning_before_done_only_custom_tool_call_preserves_order() {
     assert_eq!(call.call_id, "call_1");
     assert_eq!(call.name, "raw_echo");
     assert_eq!(call.input, "hello");
+}
+
+#[test]
+fn file_search_lifecycle_preserves_typed_output() {
+    let call = serde_json::json!({"type":"file_search_call","id":"fs_1","status":"completed","queries":["policy"],"results":[]});
+    let mut acc = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Strict);
+    let frames = [
+        serde_json::json!({"type":"response.created","response":{"id":"resp_1","status":"in_progress"}}),
+        serde_json::json!({"type":"response.in_progress","response":{"id":"resp_1","status":"in_progress"}}),
+        serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"type":"file_search_call","id":"fs_1","status":"in_progress","queries":["policy"]}}),
+        serde_json::json!({"type":"response.file_search_call.in_progress","output_index":0,"item_id":"fs_1"}),
+        serde_json::json!({"type":"response.file_search_call.searching","output_index":0,"item_id":"fs_1"}),
+        serde_json::json!({"type":"response.file_search_call.completed","output_index":0,"item_id":"fs_1"}),
+        serde_json::json!({"type":"response.output_item.done","output_index":0,"item":call}),
+        serde_json::json!({"type":"response.completed","response":{"id":"resp_1","status":"completed"}}),
+    ];
+    for frame in frames {
+        acc.process_line(SseLine::parse(&format!("data: {frame}"))).unwrap();
+    }
+    let output = serde_json::to_value(acc.finalize("test", None, None).output).unwrap();
+    assert_eq!(output, serde_json::json!([call]));
+}
+
+#[test]
+fn file_search_incomplete_done_closes_the_item() {
+    let call = serde_json::json!({"type":"file_search_call","id":"fs_1","status":"incomplete","queries":["policy"]});
+    let mut acc = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Strict);
+    for frame in [
+        serde_json::json!({"type":"response.created","response":{"id":"resp_1","status":"in_progress"}}),
+        serde_json::json!({"type":"response.in_progress","response":{"id":"resp_1","status":"in_progress"}}),
+        serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"type":"file_search_call","id":"fs_1","status":"in_progress","queries":["policy"]}}),
+        serde_json::json!({"type":"response.file_search_call.in_progress","output_index":0,"item_id":"fs_1"}),
+        serde_json::json!({"type":"response.file_search_call.searching","output_index":0,"item_id":"fs_1"}),
+        serde_json::json!({"type":"response.output_item.done","output_index":0,"item":call}),
+        serde_json::json!({"type":"response.incomplete","response":{"id":"resp_1","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"}}}),
+    ] {
+        acc.process_line(SseLine::parse(&format!("data: {frame}"))).unwrap();
+    }
+    let output = serde_json::to_value(acc.finalize("test", None, None).output).unwrap();
+    assert_eq!(output, serde_json::json!([call]));
+}
+
+#[test]
+fn file_search_done_only_is_preserved_leniently_and_rejected_strictly() {
+    let call = serde_json::json!({"type":"file_search_call","id":"fs_1","status":"completed","queries":["policy"],"results":[]});
+    let lines = [
+        serde_json::json!({"type":"response.created","response":{"id":"resp_1","status":"in_progress"}}),
+        serde_json::json!({"type":"response.in_progress","response":{"id":"resp_1","status":"in_progress"}}),
+        serde_json::json!({"type":"response.output_item.done","output_index":0,"item":call}),
+        serde_json::json!({"type":"response.completed","response":{"id":"resp_1","status":"completed"}}),
+    ]
+    .map(|event| format!("data: {event}"));
+    let payload = from_sse_lines(lines.clone(), None).finalize("test", None, None);
+    assert_eq!(serde_json::to_value(payload.output).unwrap(), serde_json::json!([call]));
+
+    let mut strict = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Strict);
+    for line in &lines[..2] {
+        strict.process_line(SseLine::parse(line)).unwrap();
+    }
+    assert!(strict.process_line(SseLine::parse(&lines[2])).is_err());
+}
+
+#[test]
+fn file_search_progress_rejects_wrong_identity_and_completion_order() {
+    for invalid in [
+        serde_json::json!({"type":"response.file_search_call.searching","output_index":1,"item_id":"fs_1"}),
+        serde_json::json!({"type":"response.file_search_call.completed","output_index":0,"item_id":"other"}),
+    ] {
+        let mut acc = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Strict);
+        for frame in [
+            serde_json::json!({"type":"response.created","response":{"id":"resp_1","status":"in_progress"}}),
+            serde_json::json!({"type":"response.in_progress","response":{"id":"resp_1","status":"in_progress"}}),
+            serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"type":"file_search_call","id":"fs_1","status":"in_progress","queries":[]}}),
+        ] {
+            acc.process_line(SseLine::parse(&format!("data: {frame}"))).unwrap();
+        }
+        assert!(acc.process_line(SseLine::parse(&format!("data: {invalid}"))).is_err());
+    }
+    let mut acc = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Strict);
+    let event = r#"data: {"type":"response.file_search_call.completed","output_index":0,"item_id":"fs_1"}"#;
+    assert!(acc.process_line(SseLine::parse(event)).is_err());
 }

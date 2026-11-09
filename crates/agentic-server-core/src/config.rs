@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::Error;
 use crate::tool::McpServerEntry;
+use crate::types::file_search::FileSearchConfig;
 
 mod web_fetch;
 pub use web_fetch::{
@@ -302,6 +303,9 @@ pub struct SqliteConfig {
     pub journal_size_limit_bytes: u64,
     pub temp_store: SqliteTempStore,
     pub mmap_size_bytes: u64,
+    /// Recreate a database holding data from before the minimum supported migration instead of rejecting it.
+    /// `ExecutionContext::from_config` sets it for the default database in the Agentic API home only.
+    pub recreate_outdated_schema: bool,
 }
 
 impl Default for SqliteConfig {
@@ -311,6 +315,7 @@ impl Default for SqliteConfig {
             journal_size_limit_bytes: DEFAULT_SQLITE_JOURNAL_SIZE_LIMIT_BYTES,
             temp_store: SqliteTempStore::default(),
             mmap_size_bytes: DEFAULT_SQLITE_MMAP_SIZE_BYTES,
+            recreate_outdated_schema: false,
         }
     }
 }
@@ -493,6 +498,7 @@ impl std::fmt::Debug for WebSearchProviderConfig {
 
 #[derive(Debug, Clone)]
 pub struct ToolRuntimeConfig {
+    pub file_search: FileSearchConfig,
     pub web_search: WebSearchProviderConfig,
     /// Settings of the built-in `web_fetch` executor; enabled by default.
     pub web_fetch: WebFetchConfig,
@@ -514,6 +520,7 @@ pub struct ToolRuntimeConfig {
 impl Default for ToolRuntimeConfig {
     fn default() -> Self {
         Self {
+            file_search: FileSearchConfig::default(),
             web_search: WebSearchProviderConfig::default(),
             web_fetch: WebFetchConfig::default(),
             mcp_servers: HashMap::default(),

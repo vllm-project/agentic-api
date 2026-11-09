@@ -2,10 +2,12 @@
 
 mod support;
 
+use agentic_core::types::conversations::ConversationMetadata;
 use std::sync::Arc;
 
 use agentic_core::executor::{ConversationHandler, ExecutionContext, ResponseHandler, execute};
-use agentic_core::storage::{ConversationStore, ConversationVersion, ResponseMetadata, ResponseStore, StorageError};
+use agentic_core::storage::{ConversationStore, ResponseData, ResponseMetadata, ResponseStore, StorageError};
+use support::persist_turn;
 use support::{MockResponse, MockServer, load_cassette, make_request, setup_pool, unwrap_blocking};
 
 const SECRET: &str = "opaque-state-must-not-appear-in-diagnostics";
@@ -21,7 +23,7 @@ async fn invalid_history_references_block_read_and_child_persistence() -> Result
     let pool = setup_pool().await;
     let store = ResponseStore::new(Arc::clone(&pool));
     let metadata = ResponseMetadata::default();
-    store.persist("resp_parent", None, Vec::new(), &metadata).await?;
+    store.persist("resp_parent", None, Vec::new(), None, &metadata).await?;
 
     for invalid in ["not JSON", "null", "{}", "[1]", "[null]", "[\"truncated\""] {
         sqlx::query("UPDATE responses SET history_item_ids = $1 WHERE id = $2")
@@ -31,10 +33,14 @@ async fn invalid_history_references_block_read_and_child_persistence() -> Result
             .await?;
 
         for error in [
-            store.get("resp_parent").await.unwrap_err(),
+            store
+                .get("resp_parent")
+                .await
+                .and_then(ResponseData::try_from)
+                .unwrap_err(),
             store.rehydrate("resp_parent").await.unwrap_err(),
             store
-                .persist("resp_child", Some("resp_parent"), Vec::new(), &metadata)
+                .persist("resp_child", Some("resp_parent"), Vec::new(), None, &metadata)
                 .await
                 .unwrap_err(),
         ] {
@@ -54,20 +60,17 @@ async fn invalid_metadata_blocks_both_stores_without_echoing_secrets() -> Result
     let pool = setup_pool().await;
     let conversations = ConversationStore::new(Arc::clone(&pool));
     let responses = ResponseStore::new(Arc::clone(&pool));
-    let conversation = conversations.create().await?;
-    conversations
-        .persist(
-            &conversation.conversation_id,
-            "resp_parent",
-            None,
-            Vec::new(),
-            &ResponseMetadata::default(),
-        )
+    let conversation = conversations
+        .create("default_tenant", &ConversationMetadata::new(), &[])
         .await?;
-    let version = conversations
-        .rehydrate_snapshot(&conversation.conversation_id)
-        .await?
-        .version;
+    persist_turn(
+        &conversations,
+        &conversation.conversation_id,
+        "resp_parent",
+        Vec::new(),
+        &ResponseMetadata::default(),
+    )
+    .await?;
     let secret_metadata = format!(r#"{{"model":"test","effective_tool_choice":"{SECRET}"}}"#);
 
     for invalid in ["not JSON", "null", "[]", "{}", r#"{"model":42}"#, &secret_metadata] {
@@ -77,10 +80,14 @@ async fn invalid_metadata_blocks_both_stores_without_echoing_secrets() -> Result
             .execute(pool.as_ref())
             .await?;
         for error in [
-            responses.get("resp_parent").await.unwrap_err(),
+            responses
+                .get("resp_parent")
+                .await
+                .and_then(ResponseData::try_from)
+                .unwrap_err(),
             responses.rehydrate("resp_parent").await.unwrap_err(),
             conversations
-                .response_metadata_at_version(&conversation.conversation_id, &version)
+                .rehydrate(&conversation.conversation_id)
                 .await
                 .unwrap_err(),
             responses
@@ -88,6 +95,7 @@ async fn invalid_metadata_blocks_both_stores_without_echoing_secrets() -> Result
                     "resp_child",
                     Some("resp_parent"),
                     Vec::new(),
+                    None,
                     &ResponseMetadata::default(),
                 )
                 .await
@@ -105,48 +113,41 @@ async fn invalid_metadata_blocks_both_stores_without_echoing_secrets() -> Result
 }
 
 #[tokio::test]
-async fn missing_or_foreign_captured_response_is_not_empty_metadata() -> Result<(), Box<dyn std::error::Error>> {
+async fn foreign_latest_turn_is_not_empty_metadata() -> Result<(), Box<dyn std::error::Error>> {
     let pool = setup_pool().await;
-    let store = ConversationStore::new(pool);
-    let first = store.create().await?;
-    let other = store.create().await?;
-    store
-        .persist(
-            &first.conversation_id,
-            "resp_first",
-            None,
-            Vec::new(),
-            &ResponseMetadata::default(),
-        )
+    let store = ConversationStore::new(Arc::clone(&pool));
+    let first = store
+        .create("default_tenant", &ConversationMetadata::new(), &[])
         .await?;
-    for response_id in ["resp_missing", "resp_first"] {
-        let error = store
-            .response_metadata_at_version(
-                &other.conversation_id,
-                &ConversationVersion {
-                    response_id: Some(response_id.to_owned()),
-                    last_sequence: None,
-                    revision: 0,
-                },
-            )
-            .await
-            .unwrap_err();
-        assert!(matches!(error, StorageError::InvalidResponseMetadata { .. }));
-    }
-    for version in [
-        ConversationVersion::default(),
-        ConversationVersion {
-            last_sequence: Some(0),
-            ..ConversationVersion::default()
-        },
-    ] {
-        assert!(
-            store
-                .response_metadata_at_version(&first.conversation_id, &version)
-                .await?
-                .is_none()
-        );
-    }
+    let other = store
+        .create("default_tenant", &ConversationMetadata::new(), &[])
+        .await?;
+    assert!(
+        store
+            .rehydrate(&other.conversation_id)
+            .await?
+            .checkpoint
+            .response_id
+            .is_none()
+    );
+    persist_turn(
+        &store,
+        &first.conversation_id,
+        "resp_first",
+        Vec::new(),
+        &ResponseMetadata::default(),
+    )
+    .await?;
+    sqlx::query("UPDATE conversations SET latest_response_id = $1 WHERE id = $2")
+        .bind("resp_first")
+        .bind(&other.conversation_id)
+        .execute(pool.as_ref())
+        .await?;
+    let error = store.rehydrate(&other.conversation_id).await.unwrap_err();
+    assert!(matches!(
+        error,
+        StorageError::InvalidResponseMetadata { ref response_id } if response_id == "resp_first"
+    ));
     Ok(())
 }
 
@@ -155,32 +156,31 @@ async fn sql_null_legacy_fields_remain_readable() -> Result<(), Box<dyn std::err
     let pool = setup_pool().await;
     let conversations = ConversationStore::new(Arc::clone(&pool));
     let responses = ResponseStore::new(Arc::clone(&pool));
-    let conversation = conversations.create().await?;
-    conversations
-        .persist(
-            &conversation.conversation_id,
-            "resp_legacy",
-            None,
-            Vec::new(),
-            &ResponseMetadata::default(),
-        )
+    let conversation = conversations
+        .create("default_tenant", &ConversationMetadata::new(), &[])
         .await?;
+    persist_turn(
+        &conversations,
+        &conversation.conversation_id,
+        "resp_legacy",
+        Vec::new(),
+        &ResponseMetadata::default(),
+    )
+    .await?;
     sqlx::query("UPDATE responses SET history_item_ids = NULL, metadata = NULL WHERE id = $1")
         .bind("resp_legacy")
         .execute(pool.as_ref())
         .await?;
-    let response = responses.get("resp_legacy").await?;
+    let response = ResponseData::try_from(responses.get("resp_legacy").await?)?;
     assert!(response.history_item_ids.is_empty());
     assert!(response.metadata.model.is_empty());
-    assert!(responses.rehydrate("resp_legacy").await?.is_empty());
-    let version = conversations
-        .rehydrate_snapshot(&conversation.conversation_id)
-        .await?
-        .version;
+    assert!(responses.rehydrate("resp_legacy").await?.1.is_empty());
     assert!(
         conversations
-            .response_metadata_at_version(&conversation.conversation_id, &version)
+            .rehydrate(&conversation.conversation_id)
             .await?
+            .checkpoint
+            .response_id
             .is_none()
     );
     Ok(())

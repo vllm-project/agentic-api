@@ -33,6 +33,17 @@ const COUNTERS: [&str; 4] = [
 
 type Counters = [Option<u64>; COUNTERS.len()];
 
+/// Fallback responses are delivered but cannot seed another thread turn.
+pub(super) fn has_fallback(usage: Option<&Value>) -> bool {
+    usage
+        .and_then(|usage| usage["iterations"].as_array())
+        .is_some_and(|iterations| {
+            iterations
+                .iter()
+                .any(|iteration| iteration["type"] == "fallback_message")
+        })
+}
+
 /// The `usage.server_tool_use` counters.
 const SERVER_TOOL_COUNTERS: [&str; 2] = ["web_search_requests", "web_fetch_requests"];
 

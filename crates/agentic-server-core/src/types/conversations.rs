@@ -59,12 +59,12 @@ pub struct CreateItemRequest {
 impl ConversationResponse {
     /// Create a new conversation response.
     #[must_use]
-    pub fn new(id: String, created_at: i64, metadata: Option<ConversationMetadata>) -> Self {
+    pub fn new(id: String, created_at: i64, metadata: ConversationMetadata) -> Self {
         Self {
             id,
             object: "conversation".to_string(),
             created_at,
-            metadata: metadata.unwrap_or_default(),
+            metadata,
         }
     }
 }

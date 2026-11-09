@@ -6,7 +6,9 @@
 //! the logical retained size of output items and steering input. Ingestion
 //! charges growth incrementally and reconciles against this measurement at
 //! completion, so a new variable-sized field is added in exactly one place.
+mod annotation;
 mod client_outputs;
+mod file_search;
 mod input;
 mod reasoning;
 
@@ -16,12 +18,13 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use serde_json::Value;
 
 use crate::executor::error::{ExecutorError, ExecutorResult, ResourceLimit};
+use crate::types::file_search::AttributeValue;
 use crate::types::io::output::{McpListTool, McpListTools, McpToolExecutionError};
 use crate::types::io::{
     AgentAttribution, AgentMessage, AgentMessageContent, CodeInterpreterCall, CodeInterpreterCallOutput,
-    CompactionItem, CustomToolCall, FunctionToolCall, McpCall, McpCallError, MultiAgentCall, MultiAgentCallOutput,
-    MultiAgentCallOutputContent, OutputItem, OutputMessage, OutputMessageContent, OutputTextContent, OutputTextLogprob,
-    ShellCall, ToolSearchCall, TopLogprob, WebSearchAction, WebSearchCall,
+    CompactionItem, CustomToolCall, FileSearchCall, FileSearchCallResult, FunctionToolCall, McpCall, McpCallError,
+    MultiAgentCall, MultiAgentCallOutput, MultiAgentCallOutputContent, OutputItem, OutputMessage, OutputMessageContent,
+    OutputTextContent, OutputTextLogprob, ShellCall, ToolSearchCall, TopLogprob, WebSearchAction, WebSearchCall,
 };
 use crate::types::request_response::IncompleteDetails;
 #[cfg(test)]
@@ -479,6 +482,7 @@ impl RetainedSize for OutputItem {
             Self::ShellCall(item) => item.retained_bytes(),
             Self::Reasoning(item) => item.retained_bytes(),
             Self::ToolSearchCall(item) => item.retained_bytes(),
+            Self::FileSearchCall(item) => item.retained_bytes(),
             Self::ToolSearchOutput(item) => item.retained_bytes(),
             Self::WebSearchCall(item) => item.retained_bytes(),
             Self::McpCall(item) => item.retained_bytes(),
@@ -637,7 +641,6 @@ mod tests {
                     url: "https://example.test/plot.png".to_owned(),
                 },
             ]),
-            origin: crate::types::io::code_interpreter::CodeInterpreterCallOrigin::default(),
         });
 
         assert_eq!(
@@ -851,7 +854,7 @@ mod tests {
     fn retained_accounting_covers_annotations_compaction_and_nested_arguments() {
         let annotation = serde_json::json!({"type": "url_citation", "url": "https://example.com", "title": "x"});
         let mut part = OutputTextContent::new("body");
-        part.annotations = Some(vec![annotation.clone()]);
+        part.annotations = Some(vec![crate::types::io::OutputAnnotation::Other(annotation.clone())]);
         let mut message = OutputMessage::new("msg_1", crate::types::event::MessageStatus::Completed);
         message.content = vec![part.into()];
         assert_eq!(

@@ -42,6 +42,7 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
             .map(|(name, _)| name.to_owned())
             .collect(),
     )
+    .with_file_search_context(&agent.request.enriched_request.input)
     .with_async_tool_names(registry.async_tool_names().map(str::to_owned).collect())
     .with_response_metadata(
         registry.namespace_map().cloned(),
@@ -61,17 +62,13 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
 }
 
 /// Builds the JSON body sent upstream: history inlined, continuation fields removed,
-/// and `store: false` preserved when the caller disables storage.
+/// and `store: false` preserved when the caller disables storage. `guidance` is appended
+/// as the last input item, and `withheld` names the registry whose gateway-executed tools
+/// are left out after a `max_tool_calls` refusal; neither changes the persisted request.
 ///
 /// # Errors
 /// Unsupported message content, a tool-configuration error, or a serialization failure.
-pub fn upstream_request(ctx: &RequestContext, stream: bool) -> ExecutorResult<String> {
-    upstream_request_with_guidance(ctx, stream, None, None)
-}
-
-/// `withheld` names the registry whose gateway-executed tools are left out
-/// after a `max_tool_calls` refusal, without changing the persisted tools.
-fn upstream_request_with_guidance(
+pub fn upstream_request(
     ctx: &RequestContext,
     stream: bool,
     guidance: Option<&InputMessage>,
@@ -120,7 +117,7 @@ pub(super) async fn fetch_blocking_payload(
 ) -> ExecutorResult<ResponsePayload> {
     agent.ensure_request_prepared()?;
     let withheld = agent.builtin_tools_withheld().then_some(registry);
-    let upstream_json = upstream_request_with_guidance(&agent.request, false, agent.agent_guidance(), withheld)?;
+    let upstream_json = upstream_request(&agent.request, false, agent.agent_guidance(), withheld)?;
     let body = fetch_response_json_limited(
         upstream_json,
         &exec_ctx.responses_url(),
@@ -186,7 +183,7 @@ pub(super) async fn fetch_stream_payload(
 ) -> ExecutorResult<ResponsePayload> {
     agent.ensure_request_prepared()?;
     let withheld = agent.builtin_tools_withheld().then_some(registry);
-    let upstream_json = upstream_request_with_guidance(&agent.request, true, agent.agent_guidance(), withheld)?;
+    let upstream_json = upstream_request(&agent.request, true, agent.agent_guidance(), withheld)?;
     let lines = call_inference_with_headers_limited(
         upstream_json,
         exec_ctx.responses_url(),
@@ -234,11 +231,10 @@ pub(super) mod tests {
             "role":"developer","content":"current child ownership"
         }))
         .unwrap();
-        let baseline: Value = serde_json::from_str(&upstream_request(&ctx, false).unwrap()).unwrap();
+        let baseline: Value = serde_json::from_str(&upstream_request(&ctx, false, None, None).unwrap()).unwrap();
         for stream in [false, true] {
             let body: Value =
-                serde_json::from_str(&upstream_request_with_guidance(&ctx, stream, Some(&guidance), None).unwrap())
-                    .unwrap();
+                serde_json::from_str(&upstream_request(&ctx, stream, Some(&guidance), None).unwrap()).unwrap();
             assert_eq!(body["instructions"], "caller instructions");
             let items = body["input"].as_array().unwrap();
             assert_eq!(&items[..3], baseline["input"].as_array().unwrap());
@@ -246,7 +242,7 @@ pub(super) mod tests {
             assert_eq!(items[3]["role"], "developer");
             assert_eq!(items[3]["content"], "current child ownership");
         }
-        let after: Value = serde_json::from_str(&upstream_request(&ctx, false).unwrap()).unwrap();
+        let after: Value = serde_json::from_str(&upstream_request(&ctx, false, None, None).unwrap()).unwrap();
         assert_eq!(after, baseline);
         assert!(ctx.new_input_items.is_empty());
     }
@@ -482,7 +478,8 @@ pub(super) mod tests {
 
         // Inference keeps the lowered function schemas, and never carries request-scoped
         // credentials or the discovered `tools/list` result.
-        let upstream: Value = serde_json::from_str(&upstream_request(&request, false).expect("upstream body")).unwrap();
+        let upstream: Value =
+            serde_json::from_str(&upstream_request(&request, false, None, None).expect("upstream body")).unwrap();
         let upstream_names: Vec<&str> = upstream["tools"]
             .as_array()
             .expect("lowered function schemas")
@@ -566,7 +563,7 @@ pub(super) mod tests {
             new_input_items: Vec::new(),
             response_id: "resp_test".to_owned(),
             conversation_id: None,
-            conversation_version: None,
+            checkpoint: None,
             continuation: None,
         }
     }

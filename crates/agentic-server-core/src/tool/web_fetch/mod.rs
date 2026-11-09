@@ -43,7 +43,8 @@ use super::handler::{GatewayExecutor, ToolError, ToolHandler, ToolOutput};
 use super::ownership::GatewayBinding;
 use super::registry::{ToolEntry, ToolType};
 use crate::config::{DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS, WebFetchConfig};
-use crate::types::io::FunctionTool;
+use crate::types::io::output::{FunctionToolCall, GatewayCallStatus};
+use crate::types::io::{FunctionTool, OutputItem};
 use crate::types::tools::WebFetchToolParam;
 
 /// The registry key and model-visible name of the tool.
@@ -265,6 +266,22 @@ impl GatewayExecutor for WebFetchHandler {
 
     fn supports_parallel_execution(&self) -> bool {
         true
+    }
+
+    /// Messages answers a fetch with its own result blocks; there is no Responses item.
+    fn started_output(&self, _call: &FunctionToolCall, _params: &WebFetchToolParam) -> Option<OutputItem> {
+        None
+    }
+
+    /// Messages answers a fetch with its own result blocks; there is no Responses item.
+    fn public_output(
+        &self,
+        _call: &FunctionToolCall,
+        _output: &ToolOutput,
+        _status: GatewayCallStatus,
+        _params: &WebFetchToolParam,
+    ) -> Option<OutputItem> {
+        None
     }
 }
 

@@ -50,13 +50,25 @@ package metadata. Do not add a separate Python version or a fallback release ver
 
 In GitHub, open **Actions → Prepare release PR → Run workflow**, select `main`, and enter the new `version` without
 a `v` prefix. This updates `Cargo.toml` and `Cargo.lock`, runs Rust checks, and opens `release-prep/v<VERSION>` against
-`main`. It fails if that branch already exists; inspect the existing PR before trying again.
+`main`. If that branch already exists, it must point exactly at the workflow's selected main commit. A branch
+containing release work or a different base is rejected; inspect its existing PR before trying again.
+
+This repository restricts branch creation by the workflow token. Before dispatching, a maintainer should create
+`release-prep/v<VERSION>` at the intended `main` commit using their own repository access, as in the CLI example
+below. Creating the ref fails if it already exists; inspect that branch instead of replacing it. The workflow can
+then fast-forward that branch with its validated version commit. If `main`
+advances before dispatch, inspect the branch and select a matching base before proceeding; do not force-update a
+branch containing someone else's release work.
 
 The equivalent CLI command, from this repository, is:
 
 ```bash
 # Example only: choose a version not already published.
 release_version=0.8.0
+git fetch origin main
+release_sha="$(git rev-parse origin/main)"
+gh api repos/vllm-project/agentic-api/git/refs \
+  -f ref="refs/heads/release-prep/v$release_version" -f sha="$release_sha"
 gh workflow run prepare-release-pr.yml --ref main -f version="$release_version"
 ```
 
@@ -64,6 +76,12 @@ Review the diff and wait for required CI, including the three-platform Python re
 require a maintainer to select **Approve workflows to run** before CI starts; see
 [GitHub's workflow-trigger rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).
 If needed, dispatch Python validation on the preparation branch with `publish=false`.
+
+If repository policy prevents GitHub Actions from opening pull requests, preparation reports **Maintainer action
+required** with a compare link after validation and the version commit have succeeded. Open that PR against `main`
+with maintainer access, inspect the version diff, and continue with the same review and CI checks. Do not rerun
+preparation against the branch that already contains its release commit.
+
 The preparation workflow updates versions, not release notes. Move the applicable `CHANGELOG.md` entries from
 `Unreleased` into a dated release section, include Rust API migration notes, and check that the selected version
 reflects compatibility changes. Merge the preparation PR only after validation succeeds.

@@ -161,7 +161,7 @@ async fn child_shell_call_survives_checkpoint_and_client_continuation() {
                 );
                 if !store {
                     assert!(matches!(
-                        exec.resp_handler.retrieve(&completed.id).await,
+                        exec.resp_handler.get_snapshot(&completed.id).await,
                         Err(ExecutorError::Storage(StorageError::ResponseNotFound { .. }))
                     ));
                 }

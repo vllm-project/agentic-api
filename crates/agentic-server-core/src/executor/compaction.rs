@@ -7,22 +7,20 @@ mod context;
 mod summary;
 
 pub(crate) use carry_over::CompactionCarryOver;
-use carry_over::public_calls;
 
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use either::Either;
 
-use super::telemetry::FailureCategory;
 use super::telemetry::metrics::Stage;
 use super::telemetry::stages::CompactionTrigger;
 use context::item_has_meaningful_context;
 use summary::completed_summary_text;
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::pending_calls::resolved_prefix_len;
-use crate::executor::persist::persist_prepared_turn;
+use crate::executor::pending_calls::CallLedger;
+use crate::executor::persist::{TurnOutput, persist};
 use crate::executor::pipeline::AgentPipeline;
 use crate::executor::prepare::prepare_request_tools;
 use crate::executor::rehydrate::rehydrate_conversation;
@@ -198,7 +196,7 @@ async fn summarize_items(
         new_input_items: Vec::new(),
         response_id: uuid7_str("resp_"),
         conversation_id: None,
-        conversation_version: None,
+        checkpoint: None,
         continuation: None,
     };
     let mut agent = AgentPipeline::new(ctx, None, StreamRelay::detached());
@@ -256,7 +254,7 @@ pub(crate) async fn maybe_compact_context(
         .as_ref()
         .is_some_and(|config| config.enabled);
     let prefix = if multi_agent {
-        resolved_prefix_len(&items)?
+        CallLedger::scan(&items)?.resolved_prefix_len()
     } else {
         items.len()
     };
@@ -347,8 +345,7 @@ pub async fn compact_response(
             "/responses/compact is not supported with configuration_update".into(),
         ));
     }
-    let (mut ctx, tool_search_state) =
-        prepare_request_tools(ctx, &exec_ctx.conv_handler, &exec_ctx.resp_handler).await?;
+    let (mut ctx, tool_search_state) = prepare_request_tools(ctx)?;
     let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);
     let input = std::mem::replace(&mut ctx.enriched_request.input, ResponsesInput::Items(Vec::new()));
     // The returned window keeps every open async call, in its public form, so a client replaying it
@@ -361,19 +358,6 @@ pub async fn compact_response(
         ctx.new_input_items.iter().filter_map(InOutItem::as_input),
         &[],
     );
-    // A history call's public identity comes from what was stored, not from the tools this request
-    // declares: the model input above lowered it, and the declarations may have changed since.
-    // History is read again only when an open call came from it.
-    let from_history: HashSet<&str> = open_calls
-        .iter()
-        .filter_map(InputItem::call_id)
-        .filter(|call_id| !ctx.new_input_items.iter().any(|own| own.call_id() == Some(call_id)))
-        .collect();
-    let mut history_calls = if from_history.is_empty() {
-        HashMap::new()
-    } else {
-        public_calls(exec_ctx.resp_handler.rehydrate(&ctx).await?, &from_history)
-    };
     let (compacted, usage, service_tier) = compact_items_with_trigger(
         &ctx.enriched_request,
         input,
@@ -382,42 +366,13 @@ pub async fn compact_response(
         CompactionTrigger::Explicit,
     )
     .await?;
-    // A call this request supplied is already public; a call from history takes its stored form.
-    let public_call = |item: InputItem| -> InputItem {
-        let public = item.call_id().and_then(|call_id| {
-            ctx.new_input_items
-                .iter()
-                .filter_map(InOutItem::as_input)
-                .find(|own| own.call_id() == Some(call_id))
-                .map(Cow::into_owned)
-                .or_else(|| history_calls.remove(call_id))
-        });
-        public.unwrap_or(item)
-    };
+    // Rehydrated history and this request's items are both public, so the open calls are as the client saw them.
     let mut output = compacted.clone();
-    output.extend(open_calls.into_iter().map(public_call));
+    output.extend(open_calls);
 
     let response_id = ctx.response_id.clone();
     ctx.new_input_items = carried.insert_into(compacted).into_iter().map(Into::into).collect();
-    let timer = exec_ctx.metrics.stage(Stage::Persist);
-    match persist_prepared_turn(
-        ctx,
-        tool_search_metadata,
-        Vec::new(),
-        None,
-        &exec_ctx.conv_handler,
-        &exec_ctx.resp_handler,
-    )
-    .await
-    {
-        Ok(()) => timer.finish(None),
-        // Without storage nothing was written, so there is no stage to time.
-        Err(ExecutorError::Storage(crate::StorageError::NotConfigured)) => timer.discard(),
-        Err(error) => {
-            timer.finish(Some(FailureCategory::from(&error)));
-            return Err(error);
-        }
-    }
+    Box::pin(persist(ctx, TurnOutput::Compaction, tool_search_metadata, exec_ctx)).await?;
 
     Ok(CompactedResponse {
         service_tier,
@@ -510,7 +465,7 @@ mod tests {
             new_input_items: Vec::new(),
             response_id: "resp_test".to_owned(),
             conversation_id: None,
-            conversation_version: None,
+            checkpoint: None,
             continuation: None,
         }
     }
@@ -1299,7 +1254,7 @@ mod tests {
         let response = compact_response(compact_request(), &exec_ctx, None)
             .await
             .expect("compaction succeeds");
-        let history = response_store
+        let (_, history) = response_store
             .rehydrate(&response.id)
             .await
             .expect("compaction checkpoint can be rehydrated");
@@ -1321,13 +1276,13 @@ mod tests {
                 "resp_previous",
                 None,
                 vec![InOutItem::Input(user_message("remember banana"))],
+                None,
                 &ResponseMetadata {
                     multi_agent_tree: None,
                     model: "test-model".to_owned(),
                     previous_response_id: None,
                     effective_tools: None,
                     tool_search_loaded_tools: None,
-                    response_snapshot: None,
                     effective_tool_choice: crate::ToolChoice::Auto,
                     effective_instructions: None,
                 },
@@ -1344,7 +1299,7 @@ mod tests {
         let response = compact_response(request, &exec_ctx, None)
             .await
             .expect("previous response compacts");
-        let history = response_store
+        let (_, history) = response_store
             .rehydrate(&response.id)
             .await
             .expect("compacted continuation rehydrates");

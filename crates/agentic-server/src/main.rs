@@ -12,10 +12,10 @@ use agentic_core::config::{
     DEFAULT_POSTGRES_LOCK_TIMEOUT_SECONDS, DEFAULT_POSTGRES_MAX_CONNECTIONS, DEFAULT_POSTGRES_MAX_LIFETIME_SECONDS,
     DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS, DEFAULT_POSTGRES_STATEMENT_TIMEOUT_SECONDS,
     DEFAULT_SQLITE_JOURNAL_SIZE_LIMIT_BYTES, DEFAULT_SQLITE_MAX_CONNECTIONS, DEFAULT_SQLITE_MMAP_SIZE_BYTES,
-    PostgresConfig, SqliteConfig, SqliteTempStore, ToolRuntimeConfig, default_database_url, ensure_agentic_api_home,
-    normalize_base_url,
+    PostgresConfig, SqliteConfig, SqliteTempStore, ToolRuntimeConfig, ensure_agentic_api_home, normalize_base_url,
 };
 use agentic_core::error::Error;
+use agentic_core::types::file_search::FileSearchConfig;
 use agentic_server::auth::OidcConfig;
 use agentic_server::telemetry::{self, DEFAULT_SHUTDOWN_TIMEOUT, TelemetryConfig, TelemetryError, TelemetryGuard};
 use tracing::warn;
@@ -326,6 +326,7 @@ fn sqlite_config_from_env() -> Result<SqliteConfig, Error> {
         )?,
         temp_store: parse_env_temp_store()?,
         mmap_size_bytes: parse_env_u64("SQLITE_MMAP_SIZE_BYTES", DEFAULT_SQLITE_MMAP_SIZE_BYTES)?,
+        recreate_outdated_schema: false,
     })
 }
 
@@ -430,12 +431,12 @@ fn code_interpreter_config_from_operator_values(
 }
 
 fn build_config(llm_api_base: String, common: &CommonArgs, file: &FileConfig) -> Result<Config, Error> {
-    let db_url = common
-        .db_url
-        .clone()
-        .or_else(|| file.database_url.clone())
-        .map_or_else(default_database_url, Ok)?;
-    let (postgres, sqlite) = database_configs_from_env(&db_url)?;
+    // `None` selects the default SQLite database in the Agentic API home: only it may be recreated at startup.
+    let db_url = common.db_url.clone().or_else(|| file.database_url.clone());
+    let (postgres, sqlite) = match &db_url {
+        Some(url) => database_configs_from_env(url)?,
+        None => (PostgresConfig::default(), sqlite_config_from_env()?),
+    };
     let web_search = resolve_web_search_config(&file.web_search, environment_value)?;
     let web_fetch = resolve_web_fetch_config(&file.web_fetch, environment_value)?;
     let mcp_allowed_hosts = environment_value("AGENTIC_MCP_ALLOWED_HOSTS")
@@ -459,10 +460,24 @@ fn build_config(llm_api_base: String, common: &CommonArgs, file: &FileConfig) ->
         llm_ready_timeout_s: common.llm_ready_timeout_s,
         llm_ready_interval_s: common.llm_ready_interval_s,
         skip_llm_ready_check: common.skip_llm_ready_check,
-        db_url: Some(db_url),
+        db_url,
         postgres,
         sqlite,
         tools: ToolRuntimeConfig {
+            file_search: FileSearchConfig {
+                sqlite_vec_extension_path: std::env::var_os("AGENTIC_FILE_SEARCH_SQLITE_VEC_EXTENSION_PATH")
+                    .map(PathBuf::from)
+                    .or_else(|| file.file_search.sqlite_vec_extension_path.clone()),
+                files_storage_dir: std::env::var_os("AGENTIC_FILES_STORAGE_DIR")
+                    .map(PathBuf::from)
+                    .or_else(|| file.files.storage_dir.clone()),
+                embedding_base_url: environment_value("AGENTIC_FILE_SEARCH_EMBEDDING_BASE_URL")
+                    .or_else(|| file.file_search.embedding_base_url.clone()),
+                embedding_model: environment_value("AGENTIC_FILE_SEARCH_EMBEDDING_MODEL")
+                    .or_else(|| file.file_search.embedding_model.clone()),
+                embedding_api_key: environment_value("AGENTIC_FILE_SEARCH_EMBEDDING_API_KEY")
+                    .or_else(|| file.file_search.api_key_env.as_deref().and_then(environment_value)),
+            },
             web_search,
             web_fetch,
             mcp_servers: file.mcp_servers.clone(),

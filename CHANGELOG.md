@@ -14,6 +14,47 @@ All notable changes to Agentic API are documented here.
   a request that can compact (a `context_management` compaction entry, a `compaction_trigger`, multi-agent mode, or
   `POST /v1/responses/compact`) rejects an update in its input or history with HTTP 400. The gateway does not yet
   check upstream support; the rules for WebSocket continuation come later.
+
+## [0.10.0] - 2026-11-09
+
+### Upgrade notes
+
+- Back up persisted conversation state before upgrading. A database containing history from before migration 9
+  is incompatible with this release. The gateway automatically recreates its default SQLite database, discarding
+  that history; explicitly configured SQLite/PostgreSQL databases are rejected until reset or replaced.
+  Empty databases migrate normally. See the storage compatibility entry below before rolling out.
+- Rust source builds require Rust 1.98.1. Public Rust types and storage APIs have changed; review the migration
+  notes below when embedding `agentic-server-core`.
+
+### Added
+
+- Added the Files and vector-store HTTP APIs, document ingestion, and the Responses `file_search` built-in tool.
+  File metadata, searchable chunks, and blob storage use injectable `FileSearchRepository` and `FileBlobStore`
+  contracts. The defaults use SQL metadata and local files; sqlite-vec is available for semantic search, and
+  keyword/hybrid retrieval and optional PDF ingestion share the same service. Search results are opt-in through
+  `file_search_call.results`; explicit file citations survive JSON, streaming, persistence, and continuation
+  (#483, #484, #485, #486, #513). PostgreSQL/pgvector indexing remains separate and is not part of this release.
+- Added opt-in durable Messages threads with SQLite/PostgreSQL checkpoints, incremental continuation, and a
+  Claude Code compatibility mode. Send the documented `message-threads-2026-08-12` beta on each applicable turn.
+  Thread state is independent of Responses conversations; the basic beta contract is documented and gateway
+  behavior is covered by replay tests, while live Anthropic reference parity remains qualified (#508).
+- Added Responses WebSocket multi-agent execution and single-agent mid-turn steering with bounded admission,
+  ordered successor input, retained tool obligations, and disconnect handling. Vision scenarios require a
+  vision-capable upstream; protocol replay does not establish successful model completion in every capture
+  (#407, #445).
+- Added asynchronous client function/custom tools and namespace members. Calls marked `async: true` can remain
+  pending while the gateway continues inference, including through compaction and multi-agent continuation.
+  Synchronous client tools continue to require their outputs before resuming (#428).
+- Added `DELETE /v1/responses/{id}` and paginated `GET /v1/responses/{id}/input_items`, with recorded management
+  lifecycle and continuation coverage (#466).
+- Added opt-in per-caller request rate limiting for HTTP API requests and WebSocket `response.create`, with
+  OIDC identity or verified connection identity, bounded caller tracking, and retry/rate-limit headers (#458).
+- Added streaming passthrough for audio transcription/translation, embeddings passthrough, and
+  `GET /v1/models/{model}` upstream retrieval (#430, #440).
+- Added request, execution-stage, delivery, and Messages gateway-tool metrics with a local Collector smoke test;
+  propagated trace context and baggage to MCP calls (#375, #453, #473).
+- Added the Agentic API playground and expanded source-backed website quickstarts and CLI references (#426, #446).
+
 - Returned the native web search and web fetch calls the gateway runs on `/v1/messages` to the client, as Anthropic
   returns them (part of #409): each executed call is a `server_tool_use` block (id `srvtoolu_gw_<upstream id>`)
   followed by its `web_search_tool_result` or `web_fetch_tool_result`, over JSON and SSE, and
@@ -111,6 +152,28 @@ All notable changes to Agentic API are documented here.
 
 ### Changed
 
+- Source builds now require Rust 1.98.1. The workspace declares and CI checks this MSRV, including the optional
+  embedded interpreter dependency requirements (#379).
+- Storage compatibility: databases containing history from before migration 9 are no longer accepted. The
+  default SQLite database is recreated automatically; operators of explicitly configured SQLite/PostgreSQL
+  databases must reset incompatible state before startup. Back up conversation state before upgrading.
+  Item kind now lives in typed `items.metadata`, every row has a public ID, and the retrievable response lives
+  in `responses.snapshot` rather than continuation metadata (#501, #502, #503, #505).
+- Rust API migration: history uses `InOutItem` and one typed persistence/rehydration path, with public items kept
+  distinct from model-facing projections. Update exhaustive matches for file-search output and typed reasoning.
+  `OutputTextContent.annotations` now contains `OutputAnnotation`; match `FileCitation` for supported citations and
+  preserve `Other` for extension kinds. `FileSearchCallResult` fields are optional. Embedders should use
+  `ExecutionContext::with_file_search_service` when sharing a custom service between HTTP routes and execution
+  (#465, #483, #486, #501, #502, #505, #513).
+- Conversation turns append atomically instead of rejecting a concurrent turn merely because another response
+  advanced the conversation. Repeated public IDs retain separate stored occurrences (#455, #503).
+- Typed HTTP `store: false` requests run gateway tools and multi-agent execution without writing a durable
+  response. Unsupported background/prompt parameters fail admission with typed errors (#456, #475, #476).
+- Preserved `service_tier`, `prompt_cache_retention`, and `prompt_cache_options` through typed execution and
+  compaction, and preserved public built-in tool declarations in response metadata (#389, #412, #413, #436, #451).
+- Enforced `max_tool_calls` for single-agent Responses and shared configured tool-scheduling limits on Messages
+  execution (#422, #437).
+
 - `agentic_core`: `NATIVE_WEB_SEARCH_TYPE` and `NATIVE_WEB_FETCH_TYPE` still name the basic versions, which are no
   longer the only versions the Messages gateway executes; code that compares a declared type with them should look it
   up with `NativeToolVersion::find` in `NATIVE_WEB_SEARCH_VERSIONS` or `NATIVE_WEB_FETCH_VERSIONS` (#419). On
@@ -165,6 +228,21 @@ All notable changes to Agentic API are documented here.
   validation (`McpHandler::validate`) instead of during MCP discovery, with the same message: a streaming HTTP or
   WebSocket request gets the error before its stream starts instead of an error event in the stream. A request with
   several invalid declarations or inputs may now get this error first.
+
+### Fixed
+
+- Registered the configured file-search service as the built-in tool executor at server startup. File uploads
+  and direct search no longer succeed while Responses search reports the service as unavailable (#513).
+- Preserved native upstream annotations when the gateway does not own `file_search`, including when a
+  client function has the same name. Added OGX-guided shared citation fixtures and official OpenAI client checks
+  for Unicode offsets, split markers, unknown IDs, result inclusion, storage, and continuation (#513).
+- Made Responses orchestration advance with client stream consumption and gave ordered client delivery one
+  bounded owner, preserving cancellation, backpressure, and terminal response assembly (#386, #423).
+- Rejected malformed Messages block payloads before assembly and preserved future Messages parameter variants
+  through the appropriate passthrough paths (#411, #510).
+- Corrected PostgreSQL conversation upserts and preserved cache breakpoints when inlining text files (#467, #481).
+- Aligned output-item validation and public Responses shapes with recorded/Open Responses acceptance contracts,
+  including typed reasoning and corrupt-history failures (#384, #432, #487).
 
 ## [0.9.0] - 2026-09-30
 

@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 
+use super::parameters::{CacheControl, RequestField};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
@@ -17,7 +18,7 @@ pub use versions::{
 
 /// A Messages wire declaration. Add a variant and its discriminator mapping when
 /// supporting a new kind; routing and execution remain the tool layer's decision.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ToolParam {
     Function(MessagesToolFields),
     WebSearch(MessagesNativeTool),
@@ -28,7 +29,7 @@ pub enum ToolParam {
 /// A recognized native tool declaration with its original protocol version.
 /// The private version is selected from the shared support table during
 /// deserialization; classification alone does not authorize execution.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MessagesNativeTool {
     version: NativeToolVersion,
     pub fields: MessagesToolFields,
@@ -43,10 +44,13 @@ impl MessagesNativeTool {
 
 /// Fields shared by the currently supported declarations. JSON Schema and
 /// provider extensions remain opaque, preserving the existing wire contract.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct MessagesToolFields {
     pub name: String,
+    #[serde(default, skip_serializing_if = "RequestField::is_missing")]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<CacheControl>))]
+    pub cache_control: RequestField<CacheControl>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -57,7 +61,7 @@ pub struct MessagesToolFields {
 
 /// An unrecognized provider declaration, retained for pass-through. Future
 /// versions must not silently acquire the semantics of a supported version.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct MessagesProviderTool {
     #[serde(rename = "type")]

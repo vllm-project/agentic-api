@@ -6,7 +6,7 @@ use crate::events::ensure_supported_output_item_type;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::response_budget::{RetainedAccount, RetainedSize, retained_response_parts_bytes};
 use crate::types::event::ResponseStatus;
-use crate::types::io::{OutputItem, ReasoningOutput, ResponseUsage};
+use crate::types::io::{OutputItem, ResponseUsage};
 use crate::types::request_response::IncompleteDetails;
 use crate::utils::common::{deserialize_from_str, deserialize_from_value_opt};
 use serde::Deserialize;
@@ -73,20 +73,6 @@ pub(super) fn ensure_strict_response(json: &Value) -> ExecutorResult<()> {
     Ok(())
 }
 
-/// Decodes one upstream output item under lenient ingestion, dropping unreadable items.
-///
-/// Earlier releases relayed reasoning with untyped fields. Keep such an item with
-/// the fields the typed schema accepts instead of dropping it; strict ingestion
-/// rejects it in [`ensure_strict_response`].
-pub(super) fn lenient_output_item(item: Value) -> Option<OutputItem> {
-    if item.get("type").and_then(Value::as_str) != Some("reasoning") {
-        return deserialize_from_value_opt(item);
-    }
-    OutputItem::deserialize(&item)
-        .ok()
-        .or_else(|| ReasoningOutput::from_legacy_value(&item).map(OutputItem::Reasoning))
-}
-
 impl ResponseAccumulator {
     /// Parses a non-streaming JSON response body.
     ///
@@ -122,10 +108,12 @@ impl ResponseAccumulator {
             .to_string();
 
         let output = deserialize_from_value_opt::<Vec<serde_json::Value>>(json["output"].take())
+            // Lenient ingestion drops output items the typed schema rejects; strict ingestion rejected them above.
             .map(|items| {
-                let mut out = Vec::with_capacity(items.len());
-                out.extend(items.into_iter().filter_map(lenient_output_item));
-                out
+                items
+                    .into_iter()
+                    .filter_map(deserialize_from_value_opt::<OutputItem>)
+                    .collect()
             })
             .unwrap_or_default();
 

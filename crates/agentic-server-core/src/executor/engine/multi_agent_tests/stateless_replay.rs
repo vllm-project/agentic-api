@@ -1,6 +1,7 @@
 //! Client-supplied history is used directly; stateless requests carry no tree snapshot.
 use super::*;
 use crate::executor::rehydrate::rehydrate_conversation;
+use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 use crate::utils::common::deserialize_from_value;
 
@@ -21,7 +22,13 @@ async fn attributed_continuation_preserves_resolved_single_agent_history() {
             seed.store = true;
             seed.multi_agent = None;
             if conversation {
-                seed.conversation = Some(exec.conv_handler.create().await.unwrap().conversation_id);
+                seed.conversation = Some(
+                    exec.conv_handler
+                        .create("default_tenant", &ConversationMetadata::new(), &[])
+                        .await
+                        .unwrap()
+                        .conversation_id,
+                );
             }
             let previous = response(seed.clone(), exec.clone()).await;
             let mut continuation = request(stream);
@@ -54,7 +61,7 @@ async fn attributed_continuation_preserves_resolved_single_agent_history() {
             })));
             let completed = response(continuation, exec.clone()).await;
             assert_eq!(completed.status, "completed");
-            assert!(exec.resp_handler.retrieve(&completed.id).await.is_err());
+            assert!(exec.resp_handler.get_snapshot(&completed.id).await.is_err());
             server.abort();
         }
     }
@@ -76,7 +83,7 @@ async fn complete_history_runs_without_a_synthetic_checkpoint() {
                     .iter()
                     .any(|item| matches!(item, OutputItem::Compaction(_)))
             );
-            assert!(exec.resp_handler.retrieve(&completed.id).await.is_err());
+            assert!(exec.resp_handler.get_snapshot(&completed.id).await.is_err());
             history.extend(completed.output.into_iter().map(InOutItem::Output));
             history.push(deserialize_from_value(json!({"role":"user","content":"continue"})).unwrap());
             let ctx = rehydrate_conversation(request.clone(), &exec).await.unwrap();
@@ -184,7 +191,7 @@ async fn recorded_client_authored_agent_message_is_accepted() {
                     .iter()
                     .any(|item| matches!(item, OutputItem::Compaction(_)))
             );
-            assert!(exec.resp_handler.retrieve(&result.id).await.is_err());
+            assert!(exec.resp_handler.get_snapshot(&result.id).await.is_err());
             server.abort();
         }
     }
@@ -228,7 +235,7 @@ async fn stateless_partial_namespace_discovery_reaches_forked_children() {
         for _ in 0..3 {
             request.input = ResponsesInput::Items(history.clone());
             let completed = response(request.clone(), exec.clone()).await;
-            assert!(exec.resp_handler.retrieve(&completed.id).await.is_err());
+            assert!(exec.resp_handler.get_snapshot(&completed.id).await.is_err());
             let mut outputs = Vec::new();
             for item in &completed.output {
                 let output = match item {
@@ -275,7 +282,7 @@ async fn stateless_partial_namespace_discovery_reaches_forked_children() {
         for name in ["weather", "timezone", "echo"] {
             history.push(
                 serde_json::from_value(json!({
-                    "type":"mcp_list_tools", "id":format!("mcp_list_{name}"),
+                    "type":"mcp_list_tools", "id":format!("mcpl_{name}"),
                     "server_label":"docs", "tools":[], "agent":{"agent_name":format!("/root/{name}")}
                 }))
                 .unwrap(),

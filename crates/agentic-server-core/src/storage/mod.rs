@@ -16,6 +16,7 @@ pub mod schema;
 pub mod models;
 
 // Response storage operations
+pub mod messages;
 pub mod response;
 
 // Conversation storage operations
@@ -34,6 +35,8 @@ pub use pool::{
 pub use response::ResponseStore;
 pub use schema::{PoolWithSchema, SchemaManager};
 pub use types::{
-    ConversationData, ConversationSnapshot, ConversationVersion, ItemKind, ResponseData, ResponseMetadata,
-    StorageError, StoreResult,
+    ConversationData, ConversationSnapshot, ItemKind, ResponseCheckpoint, ResponseData, ResponseMetadata, StorageError,
+    StoreResult,
 };
+pub mod file_search;
+pub mod local_files;

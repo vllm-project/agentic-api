@@ -1,8 +1,9 @@
 mod support;
 
+use agentic_core::types::conversations::ConversationMetadata;
 use std::sync::Arc;
 
-use agentic_core::executor::{compact_response, create_conversation, execute};
+use agentic_core::executor::{compact_response, execute};
 use agentic_core::{CompactRequest, InputItem, RequestPayload};
 use serde_json::{Value, json};
 use support::{
@@ -393,7 +394,10 @@ async fn tool_search_automatic_compaction_restores_only_loaded_definition_on_con
         text_response("automatic compaction complete"),
     ])
     .await;
-    let conversation_id = create_conversation(&fixture.exec_ctx)
+    let conversation_id = fixture
+        .exec_ctx
+        .conv_handler
+        .create("default_tenant", &ConversationMetadata::new(), &[])
         .await
         .expect("create compacted conversation")
         .conversation_id;

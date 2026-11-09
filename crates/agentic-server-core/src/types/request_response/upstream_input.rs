@@ -91,8 +91,10 @@ impl RequestPayload {
             CodexNamespaceHandler.resolve_input(
                 map,
                 &functions,
-                self.input
-                    .normalized_model_input(self.tools.as_deref().unwrap_or_default())?,
+                Cow::Owned(
+                    self.input
+                        .normalized_model_input(self.tools.as_deref().unwrap_or_default())?,
+                ),
             ),
         ))
     }

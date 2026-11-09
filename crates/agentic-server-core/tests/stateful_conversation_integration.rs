@@ -6,8 +6,9 @@
 
 mod support;
 
-use agentic_core::executor::{create_conversation, execute};
+use agentic_core::executor::{ExecutionContext, execute};
 use agentic_core::storage::ConversationStore;
+use agentic_core::types::conversations::ConversationMetadata;
 use agentic_core::types::io::InOutItem;
 use serde_json::{Value, json};
 use std::collections::HashSet;
@@ -17,6 +18,17 @@ use support::{
     request_input_texts, responses_turns, text_response, tool_search_function_declarations, tool_search_output,
     tool_search_request, unwrap_blocking,
 };
+
+/// Create an empty conversation owned by the default tenant, as `POST /v1/conversations` does,
+/// and return its ID.
+async fn create_conversation(exec_ctx: &ExecutionContext) -> String {
+    exec_ctx
+        .conv_handler
+        .create("default_tenant", &ConversationMetadata::new(), &[])
+        .await
+        .expect("create conversation")
+        .conversation_id
+}
 
 const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/cassettes/text_only/conversation");
 
@@ -74,6 +86,7 @@ async fn assert_recorded_conversation_history(
     let items = store.rehydrate(conversation_id).await.expect("rehydrate conversation");
     let history = Value::Array(
         items
+            .items
             .iter()
             .map(|item| match item {
                 InOutItem::Input(input) => serde_json::to_value(input).expect("serialize input item"),
@@ -144,7 +157,7 @@ async fn test_two_turn_nonstreaming_conversation() {
     let (t1, t2) = (resp[0], resp[1]);
 
     // Mirrors /v1/conversations creation turn
-    let conv_id = create_conversation(ctx).await.expect("create conv").conversation_id;
+    let conv_id = create_conversation(ctx).await;
 
     // Act
     let p1 = unwrap_blocking(
@@ -182,10 +195,7 @@ async fn tool_search_conversation_continuation_rebuilds_loaded_tools_from_histor
         text_response("conversation weather complete"),
     ])
     .await;
-    let conversation_id = create_conversation(&fixture.exec_ctx)
-        .await
-        .expect("create conversation")
-        .conversation_id;
+    let conversation_id = create_conversation(&fixture.exec_ctx).await;
     let declarations = tool_search_function_declarations("get_weather", "Get weather");
 
     let first = unwrap_blocking(
@@ -276,10 +286,7 @@ async fn tool_search_previous_response_branch_cannot_replace_conversation_histor
         text_response("conversation resumed"),
     ])
     .await;
-    let conversation_id = create_conversation(&fixture.exec_ctx)
-        .await
-        .expect("create conversation")
-        .conversation_id;
+    let conversation_id = create_conversation(&fixture.exec_ctx).await;
 
     let winner_search = unwrap_blocking(
         execute(
@@ -383,7 +390,7 @@ async fn test_two_turn_streaming_conversation() {
     let resp = responses_turns(&cassette);
     let (t1, t2) = (resp[0], resp[1]);
 
-    let conv_id = create_conversation(ctx).await.expect("create conv").conversation_id;
+    let conv_id = create_conversation(ctx).await;
 
     // Act
     let p1 = collect_stream(
@@ -427,7 +434,7 @@ async fn test_conversation_isolation() {
     let (ta1, ta2, ta3, tb1, tb2, tb3) = (resp[0], resp[1], resp[2], resp[3], resp[4], resp[5]);
 
     // Conv A
-    let conv_a = create_conversation(ctx).await.expect("create conv A").conversation_id;
+    let conv_a = create_conversation(ctx).await;
     let pa1 = unwrap_blocking(
         execute(
             make_request(&ta1.request.body.input, true, false, None, Some(conv_a.clone())),
@@ -457,7 +464,7 @@ async fn test_conversation_isolation() {
     assert_eq!(output_text(&pa3), expected_text(ta3));
 
     // Conv B
-    let conv_b = create_conversation(ctx).await.expect("create conv B").conversation_id;
+    let conv_b = create_conversation(ctx).await;
     let pb1 = unwrap_blocking(
         execute(
             make_request(&tb1.request.body.input, true, false, None, Some(conv_b.clone())),
@@ -501,7 +508,7 @@ async fn test_branch_off_turn_1() {
     let resp = responses_turns(&cassette);
     let (t1, t2, t3, t4) = (resp[0], resp[1], resp[2], resp[3]);
 
-    let conv_id = create_conversation(ctx).await.expect("create conv").conversation_id;
+    let conv_id = create_conversation(ctx).await;
 
     // Main chain
     let p1 = unwrap_blocking(
@@ -559,7 +566,7 @@ async fn test_multi_branch() {
     let resp = responses_turns(&cassette);
     let (t1, t2, t3, t4, t5) = (resp[0], resp[1], resp[2], resp[3], resp[4]);
 
-    let conv_id = create_conversation(ctx).await.expect("create conv").conversation_id;
+    let conv_id = create_conversation(ctx).await;
 
     // Turn 1
     let p1 = unwrap_blocking(
@@ -633,7 +640,7 @@ async fn test_store_false_with_conversation_id_hydrates_without_persisting() {
     let resp = responses_turns(&cassette);
     let (t1, t2) = (resp[0], resp[1]);
 
-    let conv_id = create_conversation(ctx).await.expect("create conv").conversation_id;
+    let conv_id = create_conversation(ctx).await;
 
     // Turn 1: store=true
     let p1 = unwrap_blocking(
@@ -655,7 +662,7 @@ async fn test_store_false_with_conversation_id_hydrates_without_persisting() {
 
     // Turn 2 reads the stored history but must not append to it.
     let store = ConversationStore::new(Arc::clone(&fixture.pool));
-    let before = store.rehydrate(&conv_id).await.unwrap();
+    let before = store.rehydrate(&conv_id).await.unwrap().items;
     let p2 = unwrap_blocking(
         execute(
             make_request(
@@ -672,7 +679,7 @@ async fn test_store_false_with_conversation_id_hydrates_without_persisting() {
     );
     assert_eq!(p2.status, "completed");
     assert_eq!(output_text(&p2), expected_text(t2));
-    assert_eq!(store.rehydrate(&conv_id).await.unwrap(), before);
+    assert_eq!(store.rehydrate(&conv_id).await.unwrap().items, before);
 
     // Turn 2 was sent the full history from turn 1 (rehydrated correctly)
     let requests = fixture.request_bodies().await;

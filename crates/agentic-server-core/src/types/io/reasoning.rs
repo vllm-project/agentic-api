@@ -3,14 +3,10 @@
 //! Opaque state is a provider-owned string, not arbitrary JSON. Keeping it typed
 //! does not authorize replay to another provider or model family.
 
-mod legacy;
-
 use std::fmt;
 
 use serde::{Deserialize, Deserializer, Serialize, de};
 use thiserror::Error;
-
-pub(crate) use legacy::upgrade_legacy_reasoning;
 
 /// Absolute decoded-byte ceiling for one opaque reasoning value (16 MiB).
 ///
