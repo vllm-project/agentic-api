@@ -53,7 +53,7 @@ impl ResponseHandler {
             let Some(id) = item.id() else { continue };
             if !seen.insert(id.to_owned()) {
                 return Err(ExecutorError::UnsupportedValue {
-                    param: "input".into(),
+                    param: Some("input".into()),
                     code: None,
                     message: format!(
                         "Duplicate item found with id {id}. Remove duplicate items from your input and try again."

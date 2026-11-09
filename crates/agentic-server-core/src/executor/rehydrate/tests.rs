@@ -207,7 +207,7 @@ fn multi_agent_rejects_async_tools_only_with_explicit_parallel_tool_calls() {
             param,
             code,
             message,
-        } if param == "multi_agent" && code == Some("unsupported_value") && message == "Async parallel tool calls are not yet supported in multi-agent mode."
+        } if param.as_deref() == Some("multi_agent") && code == Some("unsupported_value") && message == "Async parallel tool calls are not yet supported in multi-agent mode."
     ));
     for (parallel, async_tool) in [
         (serde_json::json!(false), true),

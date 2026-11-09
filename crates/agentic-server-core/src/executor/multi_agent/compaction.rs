@@ -38,14 +38,7 @@ impl CompactionPlan {
         history: &[InputItem],
         request: &RequestPayload,
     ) -> ExecutorResult<Option<Self>> {
-        let threshold = request
-            .context_management
-            .as_deref()
-            .unwrap_or_default()
-            .iter()
-            .find(|entry| entry.type_ == "compaction")
-            .and_then(|entry| entry.compact_threshold);
-        let Some(threshold) = threshold else {
+        let Some(threshold) = request.compact_threshold() else {
             return Ok(None);
         };
         if estimate_history_tokens(history) <= threshold {
@@ -67,14 +60,8 @@ impl CompactionPlan {
             generation,
             prefix: prefix.to_vec(),
             request: RequestPayload {
-                model: request.model.clone(),
-                instructions: request.instructions.clone(),
                 tools: request.tools.clone(),
-                prompt_cache_key: request.prompt_cache_key.clone(),
-                prompt_cache_retention: request.prompt_cache_retention,
-                prompt_cache_options: request.prompt_cache_options,
-                service_tier: request.service_tier.clone(),
-                ..Default::default()
+                ..request.summary_settings()
             },
         }))
     }
@@ -101,21 +88,18 @@ impl CompactionPlan {
             .filter(|(_, record)| *record)
             .map(|(item, _)| item.clone())
             .collect();
-        let (mut replacement, usage, service_tier) =
-            compact_items(&self.request, ResponsesInput::from(self.prefix), exec, auth).await?;
-        let at = replacement
-            .iter()
-            .rposition(|item| matches!(item, InputItem::Compaction(_)))
-            .unwrap_or(replacement.len());
-        replacement.splice(at..at, async_records);
+        let window = compact_items(&self.request, ResponsesInput::from(self.prefix), exec, auth).await?;
+        let mut replacement = window.retained;
+        replacement.extend(async_records);
+        replacement.push(InputItem::Compaction(window.compaction));
         replacement.extend(discovery);
         Ok(CompactionResult {
             agent: self.agent,
             generation: self.generation,
             prefix_len,
             replacement,
-            usage,
-            service_tier,
+            usage: window.usage,
+            service_tier: window.service_tier,
         })
     }
 }

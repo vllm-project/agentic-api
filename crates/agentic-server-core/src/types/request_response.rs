@@ -7,12 +7,14 @@ use serde_json::Value;
 
 use super::conversations::ConversationMetadata;
 use super::io::input::{HistoryNaming, InputValidationError};
-use super::io::{FunctionTool, InputItem, MultiAgentConfig, OutputItem, ResponseUsage, ResponsesInput, ToolChoice};
+use super::io::{FunctionTool, MultiAgentConfig, OutputItem, ResponseUsage, ResponsesInput, ToolChoice};
 use super::tools::ResponsesTool;
 use crate::tool::{
     CodexNamespaceHandler, CustomHandler, ToolDeclaration, ToolError, declares_async, responses_declarations,
 };
 
+mod compaction;
+pub use compaction::{CompactRequest, CompactedResponse, ContextManagement};
 mod prompt_cache;
 pub use prompt_cache::{PromptCacheMode, PromptCacheOptions, PromptCacheOptionsError, PromptCacheTtl};
 mod max_tool_calls;
@@ -398,53 +400,6 @@ impl RequestPayload {
     }
 }
 
-/// Server-side context management configuration for a Responses request.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct ContextManagement {
-    #[serde(rename = "type")]
-    pub type_: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub compact_threshold: Option<u64>,
-}
-
-/// Request body accepted by `POST /v1/responses/compact`.
-#[derive(Debug, Clone, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct CompactRequest {
-    pub model: String,
-    #[serde(default)]
-    pub input: Option<ResponsesInput>,
-    #[serde(default)]
-    pub instructions: Option<String>,
-    #[serde(default)]
-    pub previous_response_id: Option<String>,
-    #[serde(default)]
-    pub service_tier: Option<String>,
-    #[serde(default)]
-    pub prompt_cache_retention: Option<PromptCacheRetention>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub prompt_cache_options: Option<PromptCacheOptions>,
-    #[serde(default)]
-    pub prompt_cache_key: Option<String>,
-    /// Compatibility fields sent by current SDK and Codex clients.
-    #[serde(flatten)]
-    pub compatibility: HashMap<String, Value>,
-}
-
-/// Result returned by `POST /v1/responses/compact`.
-#[derive(Debug, Clone, Serialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct CompactedResponse {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub service_tier: Option<String>,
-    pub id: String,
-    pub object: String,
-    pub created_at: i64,
-    pub output: Vec<InputItem>,
-    pub usage: ResponseUsage,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct IncompleteDetails {
@@ -488,6 +443,8 @@ pub struct ResponsePayload {
 
 #[cfg(test)]
 mod tests {
+    use crate::types::io::InputItem;
+
     use super::*;
     use crate::types::io::InOutItem;
 

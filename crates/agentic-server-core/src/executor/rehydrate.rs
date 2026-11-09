@@ -170,7 +170,7 @@ fn validate_multi_agent_request(request: &RequestPayload) -> ExecutorResult<()> 
     // `parallel_tool_calls` to false, so only an explicit `true` conflicts.
     if request.parallel_tool_calls == Some(true) && request.declares_async_tools() {
         return Err(ExecutorError::UnsupportedValue {
-            param: "multi_agent".into(),
+            param: Some("multi_agent".into()),
             code: Some("unsupported_value"),
             message: "Async parallel tool calls are not yet supported in multi-agent mode.".into(),
         });
@@ -195,11 +195,12 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
     if ctx.continuation.is_some() {
         return from_session_response(ctx, exec_ctx).await;
     }
-    let (checkpoint, history) = exec_ctx
+    let (mut checkpoint, history) = exec_ctx
         .resp_handler
         .rehydrate(ctx)
         .await?
         .ok_or_else(missing_previous_response_id)?;
+    checkpoint.continue_from_compaction(&history, &ctx.enriched_request);
     if !restore_agent_tree(ctx, &checkpoint.metadata, exec_ctx.responses_config.max_retained_bytes)? {
         set_model_input(ctx, InOutItem::into_input_items(history), identity)?;
         apply_effective_settings(ctx, &checkpoint.metadata);
@@ -229,6 +230,7 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
             .rehydrate(ctx)
             .await?
             .ok_or_else(missing_previous_response_id)?;
+        checkpoint.continue_from_compaction(&history, &ctx.enriched_request);
         checkpoint.history = canonical_session_history(InOutItem::into_input_items(history));
         let continuation = ctx.continuation.as_ref().ok_or_else(|| {
             ExecutorError::InvalidRequest("session response requires a continuation lease".to_owned())
@@ -273,6 +275,7 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
     };
     ctx.conversation_id.clone_from(&ctx.original_request.conversation);
     let ConversationSnapshot { items, mut checkpoint } = snapshot;
+    checkpoint.continue_from_compaction(&items, &ctx.enriched_request);
     if !restore_agent_tree(ctx, &checkpoint.metadata, exec_ctx.responses_config.max_retained_bytes)? {
         let history = InOutItem::into_input_items(items);
         // A turn is admitted only if it answers the history's pending call, so another turn may have answered it first.

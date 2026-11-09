@@ -1284,7 +1284,56 @@ The `include` request is checked for success and unchanged item order and
 message shape; this text-only scenario does not exercise other `include`
 expansions or every Conversation Items API format.
 
-### Compaction replay (OpenAI)
+### Public compaction recordings (OpenAI and gateway)
+
+`record_compaction_cassettes.sh` uses the shared recorder's `items` mode to capture one flat cassette per scenario
+and provider. `COMPACTION_RECORD_SET=all|openai|gateway` selects providers (default `all`), and
+`COMPACTION_SCENARIO` selects a row below (default `all`).
+
+| Scenario | HTTP turns | Coverage |
+| --- | --- | --- |
+| `stale` | 10 | A compacting streamed conversation turn overlaps another stored turn; inspect conversation items, each turn's input, and a later continuation. |
+| `in-turn-chain` | 5 | Compaction output and input-item history across a stored response chain. |
+| `in-turn-chain-stream` | 5 | The same chain with the compacting turn streamed, including compaction output-item events. |
+| `tool-loop` | 4 | Compaction around a client function call, its result, and continued inference. |
+| `standalone` | 5 | Compact direct input, replay the window, compact a stored response, and reject missing context. |
+| `multi-agent` | 5 | Compaction and public history across a response chain with multi-agent execution enabled. |
+| `store-false` | 2 | Stream compaction output from an unstored turn, then verify retrieval fails. |
+
+From the repository root, with recorder dependencies installed in `.venv` and vLLM listening on port 5050:
+
+```bash
+cargo build --release --locked -p agentic-server --bin agentic-server
+
+# Run in a separate terminal with an isolated database.
+AGENTIC_API_HOME=/tmp/agentic-compaction \
+  ./target/release/agentic-server --llm-api-base http://127.0.0.1:5050 \
+  --gateway-host 127.0.0.1 --gateway-port 9000
+
+COMPACTION_RECORD_SET=gateway GATEWAY_MODEL=Qwen/Qwen3.8-27B-FP8 \
+  GATEWAY_URL=http://127.0.0.1:9000 PYTHON_BIN=.venv/bin/python \
+  bash crates/agentic-server-core/tests/cassettes/record_compaction_cassettes.sh
+
+.venv/bin/python scripts/validate-cassettes.py crates/agentic-server-core/tests/cassettes/compaction
+cargo test --locked -p agentic-server-core --test compaction_cassette_test
+```
+
+Set `GATEWAY_MODEL` to the exact served model alias. OpenAI recording requires `OPENAI_API_KEY`; `OPENAI_MODEL`
+defaults to `gpt-4.1`, while `MULTI_AGENT_OPENAI_MODEL` defaults to `gpt-5.6-sol` for the multi-agent beta.
+`RECORDER_PROXY_PORT` overrides port 7070. Gateway-only recording does not refresh the OpenAI reference files.
+
+The public contract tests inspect both providers' captures for statuses, stream ordering, compaction identity in
+continued input, pending tool identity, and concurrent public history. They supplement the executor replays below;
+the gateway-facing recordings are not model-response mocks. Qwen reasoning items are excluded from cross-provider
+item-kind comparisons, but their streamed lifecycle and recorded identities are still checked.
+
+Known difference in the multi-agent capture: OpenAI emits a compaction after the answer as well as before it; the
+gateway currently emits only the earlier compaction. That also changes the following turn's public input history.
+The multi-agent capture is checked for successful requests, not full output parity. The other six scenarios agree
+on HTTP statuses and non-reasoning item kinds in these recordings; model text and compaction contents differ.
+Reference: [OpenAI compaction](https://developers.openai.com/api/docs/guides/compaction).
+
+### Compaction inference replay (OpenAI)
 
 These recordings capture the non-streaming `/v1/responses` inference calls replayed by the compaction integration
 tests. The JSON inputs contain the exact model-facing item arrays, including the context-checkpoint prompt. Use the

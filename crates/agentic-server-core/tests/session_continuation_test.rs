@@ -724,6 +724,7 @@ async fn session_automatic_compaction_fits_the_replaced_history_budget() {
         model_message("resp_old", "obsolete assistant detail"),
         model_message("resp_summary", "compact summary"),
         model_message("resp_compacted", "new answer"),
+        model_message("resp_summary_after", "compact summary after the answer"),
     ])
     .await;
     let session = ResponseSession::new(NonZeroUsize::new(4).unwrap(), NonZeroUsize::new(100_000).unwrap());
@@ -736,17 +737,22 @@ async fn session_automatic_compaction_fits_the_replaced_history_budget() {
         .await
         .unwrap();
     let history = serde_json::to_value(&next.enriched_request.input).unwrap();
+    // The turn compacted again after answering; that latest compaction stands in for everything before it.
     assert_eq!(
         history.as_array().unwrap().len(),
-        5,
-        "four retained items plus the new user item"
+        2,
+        "the latest compaction item plus the new user item"
     );
     assert!(!history.to_string().contains("obsolete assistant detail"));
     assert_eq!(
-        history[2]["type"], "compaction",
+        history[0]["type"], "compaction",
         "retain canonical items, not model-normalized summaries"
     );
-    assert_eq!(model.requests.lock().await.len(), 3);
+    let projected = serde_json::to_value(next.enriched_request.input.model_input()).unwrap();
+    assert_eq!(projected[0]["content"][0]["text"], "first user");
+    assert_eq!(projected[1]["content"][0]["text"], "second user");
+    assert_eq!(projected[2]["content"][0]["text"], "compact summary after the answer");
+    assert_eq!(model.requests.lock().await.len(), 4);
     model.close().await;
 }
 
@@ -782,6 +788,7 @@ async fn session_compacted_transient_parent_promotes_only_the_canonical_window()
         model_message("resp_old", "obsolete assistant detail"),
         model_message("resp_summary", "compact summary"),
         model_message("resp_compacted", "new answer"),
+        model_message("resp_summary_after", "compact summary after the answer"),
     ])
     .await;
     let pool = storage_pool().await;
@@ -799,20 +806,19 @@ async fn session_compacted_transient_parent_promotes_only_the_canonical_window()
         store.rehydrate(&second.id).await.unwrap().1,
     ))
     .unwrap();
-    assert_eq!(durable.as_array().unwrap().len(), 4);
-    assert!(!durable.to_string().contains("obsolete assistant detail"));
+    // The stored turn keeps the history it continued: the promoted parent, its own items and outputs, ending
+    // with the compaction made after the answer.
+    assert_eq!(durable.as_array().unwrap().len(), 6);
+    assert_eq!(durable[5]["type"], "compaction");
     let fresh = ResponseSession::new(NonZeroUsize::new(4).unwrap(), NonZeroUsize::new(100_000).unwrap());
     let mut continuation = request(Some(&second.id), json!("third user"));
     continuation.store = true;
     let restored = rehydrate_in_session(continuation, &model.exec, &fresh).await.unwrap();
-    assert_eq!(
-        serde_json::to_value(&restored.enriched_request.input)
-            .unwrap()
-            .as_array()
-            .unwrap()
-            .len(),
-        5
-    );
+    // A continuation restores only the window from the latest compaction.
+    let restored_input = serde_json::to_value(&restored.enriched_request.input).unwrap();
+    assert_eq!(restored_input.as_array().unwrap().len(), 2, "{restored_input}");
+    assert_eq!(restored_input[0]["type"], "compaction");
+    assert!(!restored_input.to_string().contains("obsolete assistant detail"));
     drop(restored);
     model.close().await;
     pool.close().await;
@@ -898,8 +904,9 @@ async fn session_tool_round_compaction_does_not_restore_superseded_output() {
         let mut payload = request(None, json!("short"));
         payload.store = store_durable;
         payload.tools = Some(serde_json::from_value(json!([{"type":"web_search_preview"}])).unwrap());
+        // Above the short final history, so the turn does not compact again after its answer.
         payload.context_management =
-            Some(serde_json::from_value(json!([{"type":"compaction", "compact_threshold":50}])).unwrap());
+            Some(serde_json::from_value(json!([{"type":"compaction", "compact_threshold":100}])).unwrap());
         let result = execute_local(&model, &session, payload).await;
         let public_output = serde_json::to_value(&result.output).unwrap();
         assert!(public_output.to_string().contains(&obsolete));
@@ -921,8 +928,8 @@ async fn session_tool_round_compaction_does_not_restore_superseded_output() {
             !history.to_string().contains(&obsolete),
             "pre-compaction output must remain public without returning to retained history: {history}"
         );
-        assert_eq!(history.as_array().unwrap().len(), 4);
-        assert_eq!(history[1]["type"], "compaction");
+        assert_eq!(history.as_array().unwrap().len(), 3);
+        assert_eq!(history[0]["type"], "compaction");
         if store_durable {
             let durable = InOutItem::into_input_items(store.rehydrate(&result.id).await.unwrap().1);
             let durable = serde_json::to_value(durable).unwrap();
@@ -1463,13 +1470,14 @@ async fn session_repeated_in_round_compaction_retains_only_the_latest_window() {
     let calls = with_local_search(&mut model);
     let session = ResponseSession::new(NonZeroUsize::new(3).unwrap(), NonZeroUsize::new(100_000).unwrap());
     let mut payload = search_request();
+    // Above the short final history, so the turn does not compact again after its answer.
     payload.context_management =
-        Some(serde_json::from_value(json!([{"type":"compaction", "compact_threshold":50}])).unwrap());
+        Some(serde_json::from_value(json!([{"type":"compaction", "compact_threshold":100}])).unwrap());
     let result = execute_local(&model, &session, payload).await;
     assert_eq!(
         result.output.len(),
-        5,
-        "both intermediate messages and search calls remain public"
+        7,
+        "both intermediate messages and search calls remain public, each compaction item before its round"
     );
     assert_eq!(calls.load(Ordering::Relaxed), 2);
     assert_eq!(model.requests.lock().await.len(), 5);
@@ -1477,10 +1485,12 @@ async fn session_repeated_in_round_compaction_retains_only_the_latest_window() {
         .await
         .unwrap();
     let history = serde_json::to_value(&next.enriched_request.input).unwrap();
-    assert_eq!(history.as_array().unwrap().len(), 4);
-    assert_eq!(history[1]["type"], "compaction");
-    assert_eq!(history[1]["encrypted_content"], "second summary");
-    assert!(history[2].to_string().contains("final answer"));
+    assert_eq!(history.as_array().unwrap().len(), 3);
+    assert_eq!(history[0]["type"], "compaction");
+    let projected = serde_json::to_value(next.enriched_request.input.model_input()).unwrap();
+    assert_eq!(projected[0]["content"][0]["text"], "short");
+    assert_eq!(projected[1]["content"][0]["text"], "second summary");
+    assert!(history[1].to_string().contains("final answer"));
     assert!(!history.to_string().contains("obsolete"));
     assert!(!history.to_string().contains("first summary"));
     model.close().await;
@@ -1493,6 +1503,7 @@ async fn session_compacted_durable_parent_restores_within_the_canonical_budget()
             model_message("resp_old", &"obsolete durable assistant detail".repeat(1_000)),
             model_message("resp_summary", "compact durable summary"),
             model_message("resp_compacted", "compacted answer"),
+            model_message("resp_summary_after", "durable summary after the answer"),
             model_message("resp_child", "new answer"),
         ])
         .await;
@@ -1536,8 +1547,9 @@ async fn session_compacted_durable_parent_restores_within_the_canonical_budget()
             .await
             .unwrap();
         let history = serde_json::to_value(&ctx.enriched_request.input).unwrap();
-        assert_eq!(history.as_array().unwrap().len(), 7);
-        assert_eq!(history[2]["type"], "compaction");
+        // The compaction made after the compacting turn's answer, then the child turn and the next user item.
+        assert_eq!(history.as_array().unwrap().len(), 4);
+        assert_eq!(history[0]["type"], "compaction");
         assert!(!history.to_string().contains("obsolete durable assistant detail"));
         assert!(
             store.get(&first.id).await.is_ok(),

@@ -862,7 +862,7 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   call and the last output that answers it, outside the model view, so a further output still
   finds its call while repeated outputs do not accumulate. A compacted call's public form
   comes from stored history, not from the current tool declarations.
-  Compaction replaces the request's own items, so it stores some of them again, as the
+  Standalone and explicit-trigger compaction replace the request's own items, so they store some of them again, as the
   request supplied them. Before the compaction item (the answered call and its output leave the
   window together) go outputs that answer calls made before the request, and the request's own
   answered async calls with the last output for each; after it go the async calls the request
@@ -955,7 +955,12 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   `ResponseHandler` in `modes/`, which only write.
 - **`compaction.rs`** — `compact_response()` (the explicit `/v1/responses/compact`
   path) and `maybe_compact_context()` (automatic, threshold-triggered, called from the
-  round loop before each inference call).
+  round loop before each inference call and after a completed single-agent answer). Automatic compaction leaves
+  `new_input_items` intact and emits a public compaction output through the existing relay. Its `CompactionItem`
+  carries the summary and retained user messages; `ResponsesInput` expands that carried window only for the model.
+  On a later single-agent continuation, `ResponseCheckpoint::continue_from_compaction` trims the referenced history
+  rows to the latest compaction, so input-item listings begin there. Multi-agent continuation keeps public history
+  and restores its separate tree; its coordinator currently compacts only before inference, without a final pass.
 - **`modes/conversation.rs`, `modes/response.rs`** — `ConversationHandler` and
   `ResponseHandler`. Thin, 1:1 wrappers around `storage::ConversationStore` /
   `storage::ResponseStore` that translate `RequestContext` into store calls and

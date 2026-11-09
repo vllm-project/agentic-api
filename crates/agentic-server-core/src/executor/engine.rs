@@ -26,9 +26,7 @@ use std::num::NonZeroUsize;
 use either::Either;
 
 use super::compaction::{CompactionCarryOver, compact_items};
-use super::gateway::{
-    compaction_event_plans, emit_gateway_completed_events, emit_gateway_start_events, emit_response_start_events,
-};
+use super::gateway::emit_response_start_events;
 use crate::executor::error::ExecutorResult;
 use crate::executor::persist::{TurnOutput, persist};
 use crate::executor::pipeline::AgentPipeline;
@@ -40,7 +38,7 @@ use crate::executor::response_budget::MAX_EXECUTOR_RESPONSE_BYTES;
 use crate::executor::telemetry::Api;
 use crate::executor::telemetry::metrics::RoundCounter;
 use crate::tool::{ToolSearchMetadata, ToolSearchState};
-use crate::types::io::{InOutItem, InputItem, OutputItem, ResponseUsage, ResponsesInput};
+use crate::types::io::{InOutItem, OutputItem, ResponseUsage, ResponsesInput};
 #[cfg(test)]
 use crate::types::request_response::RequestPayload;
 use crate::types::request_response::{IncompleteDetails, ResponsePayload};
@@ -65,9 +63,7 @@ async fn run_until_gateway_tools_complete(
         let payload = run_compaction_trigger(&mut agent.request, exec_ctx, auth).await?;
         let relay = agent.relay_mut();
         emit_response_start_events(&payload, relay).await?;
-        let event_plans = compaction_event_plans(&payload.output, 0);
-        emit_gateway_start_events(&event_plans, relay).await?;
-        emit_gateway_completed_events(&payload.output, &event_plans, relay).await?;
+        relay.present_compaction(&payload.output[0], 0).await?;
         return Ok((payload, tool_search_metadata));
     }
     Box::pin(
@@ -168,14 +164,29 @@ impl<'a> SingleAgentRun<'a> {
                 .run_round(self.output.len(), auth, stream_upstream, &self.response_budget)
                 .await?;
             accumulate_usage(&mut self.usage, payload.usage.take());
-            self.output.append(&mut payload.output);
             match decision {
-                RoundDecision::Continue => continue,
+                RoundDecision::Continue => {
+                    self.output.append(&mut payload.output);
+                    continue;
+                }
                 RoundDecision::Incomplete(reason) => {
                     "incomplete".clone_into(&mut payload.status);
                     payload.incomplete_details = Some(IncompleteDetails { reason: Some(reason) });
+                    self.output.append(&mut payload.output);
                 }
-                RoundDecision::Done | RoundDecision::RequiresClientAction | RoundDecision::UpstreamTerminal => {}
+                RoundDecision::Done if payload.status == "completed" => {
+                    let final_output = std::mem::take(&mut payload.output);
+                    let output_offset = self.output.len() + final_output.len();
+                    let compaction = self.root.compact_after_turn(&final_output, output_offset, auth).await?;
+                    self.output.extend(final_output);
+                    if let Some((item, usage)) = compaction {
+                        self.output.push(item);
+                        accumulate_usage(&mut self.usage, Some(usage));
+                    }
+                }
+                RoundDecision::Done | RoundDecision::RequiresClientAction | RoundDecision::UpstreamTerminal => {
+                    self.output.append(&mut payload.output);
+                }
             }
             finalize_loop(&mut payload, self.output, self.usage, &self.root.pipeline.request);
             return Ok((payload, self.root.pipeline.take_tool_search_metadata()));
@@ -210,20 +221,15 @@ async fn run_compaction_trigger(
         let carried = CompactionCarryOver::new(
             input.input_items(),
             ctx.new_input_items.iter().filter_map(InOutItem::as_input),
-            &[],
         )
         .stored
         .into_inputs();
-        let (mut compacted, usage, service_tier) = compact_items(&ctx.enriched_request, input, exec_ctx, auth).await?;
-        let Some(InputItem::Compaction(compaction)) = compacted.pop() else {
-            unreachable!("compact_items always appends a compaction item");
-        };
-        compacted.extend(carried);
-        ctx.new_input_items = compacted.into_iter().map(Into::into).collect();
+        let window = compact_items(&ctx.enriched_request, input, exec_ctx, auth).await?;
+        ctx.new_input_items = window.retained.into_iter().chain(carried).map(Into::into).collect();
         if let Some(continuation) = &mut ctx.continuation {
             continuation.mark_history_replaced();
         }
-        (compaction, usage, service_tier)
+        (window.compaction, window.usage, window.service_tier)
     };
     let mut payload = ResponsePayload {
         id: ctx.response_id.clone(),
@@ -290,6 +296,7 @@ mod tests {
     use crate::executor::modes::{ConversationHandler, ResponseHandler};
     use crate::storage::{ConversationStore, ResponseStore, create_pool_with_schema};
     use crate::tool::{GatewayExecutorRegistration, McpDiscoveredHandler, McpHandler};
+    use crate::types::io::InputItem;
     use crate::types::tools::{McpDiscoveredToolParam, ResponsesTool};
     use futures::StreamExt;
     use std::sync::Arc;

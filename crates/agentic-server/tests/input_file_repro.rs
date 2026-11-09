@@ -851,7 +851,11 @@ async fn automatic_compaction_summarizes_inlined_text_and_keeps_the_original() {
         .await;
     assert_eq!(status, reqwest::StatusCode::OK, "{body}");
     let captured = fixture.captured().await;
-    assert_eq!(captured.len(), 2, "summary and answer requests: {captured:?}");
+    assert_eq!(
+        captured.len(),
+        3,
+        "summary, answer, and summary-after-the-answer requests: {captured:?}"
+    );
     for request in &captured {
         let encoded = request.to_string();
         assert!(encoded.contains("hello from notes"), "{encoded}");

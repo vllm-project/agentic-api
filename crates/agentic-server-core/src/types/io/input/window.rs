@@ -4,11 +4,13 @@
 //! the previous checkpoint and async calls still open at the checkpoint, whose outputs may still
 //! arrive and must find their calls.
 
-use std::borrow::Borrow;
+use std::borrow::{Borrow, Cow};
 use std::collections::HashSet;
 use std::hash::Hash;
 
-use super::InputItem;
+use serde::{Deserialize, Serialize};
+
+use super::{CompactionItem, InputItem};
 use crate::types::event::MessageStatus;
 
 #[derive(Debug, Clone, Copy)]
@@ -60,6 +62,58 @@ pub(crate) fn latest_compaction_window<T: Borrow<InputItem>>(items: &[T]) -> Opt
         latest_index,
         retained_start,
     })
+}
+
+/// The window an in-turn compaction carries in its item, as `OpenAI`'s opaque item carries its compacted state: the
+/// summary and the user messages kept with it.
+#[derive(Serialize, Deserialize)]
+struct CarriedWindow {
+    summary: String,
+    retained: Vec<InputItem>,
+}
+
+impl CompactionItem {
+    /// A compaction item that carries its window, so a later turn that continues it still sees the kept user messages.
+    ///
+    /// # Errors
+    /// Fails if the kept messages cannot be serialized.
+    pub(crate) fn carrying(id: Option<String>, summary: String, retained: Vec<InputItem>) -> serde_json::Result<Self> {
+        Ok(Self {
+            agent: None,
+            id,
+            encrypted_content: serde_json::to_string(&CarriedWindow { summary, retained })?,
+        })
+    }
+
+    /// The kept user messages followed by a compaction holding only the summary, when the item carries its window;
+    /// `None` for any other compaction item.
+    pub(crate) fn carried_window(&self) -> Option<Vec<InputItem>> {
+        let CarriedWindow { summary, mut retained } = serde_json::from_str(&self.encrypted_content).ok()?;
+        retained.push(InputItem::Compaction(Self {
+            agent: self.agent.clone(),
+            id: self.id.clone(),
+            encrypted_content: summary,
+        }));
+        Some(retained)
+    }
+}
+
+/// `items` with every compaction that carries its window spread back into the user messages it kept and a compaction
+/// holding only the summary: the form the window rules and the model read.
+pub(crate) fn expand_carried_windows<'a>(
+    items: impl IntoIterator<Item = Cow<'a, InputItem>>,
+) -> Vec<Cow<'a, InputItem>> {
+    let mut expanded = Vec::new();
+    for item in items {
+        match &*item {
+            InputItem::Compaction(compaction) => match compaction.carried_window() {
+                Some(window) => expanded.extend(window.into_iter().map(Cow::Owned)),
+                None => expanded.push(item),
+            },
+            _ => expanded.push(item),
+        }
+    }
+    expanded
 }
 
 /// Call IDs of async calls in `items` that have no output in `items`.

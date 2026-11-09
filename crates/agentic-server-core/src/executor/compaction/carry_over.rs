@@ -22,12 +22,9 @@ pub(crate) struct CompactionCarryOver {
 }
 
 impl CompactionCarryOver {
-    /// `suffix` holds the items a multi-agent compaction leaves after its window; a call or output
-    /// there is kept in place, not stored twice. Single-agent compaction passes an empty suffix.
     pub(crate) fn new(
         compacted_items: impl Iterator<Item = impl Borrow<InputItem>>,
         own_items: impl Iterator<Item = impl Borrow<InputItem>>,
-        suffix: &[InputItem],
     ) -> Self {
         let compacted_items: Vec<_> = compacted_items.collect();
         let open = open_async_call_ids(&compacted_items);
@@ -37,19 +34,13 @@ impl CompactionCarryOver {
             .map(|item| item.borrow().clone())
             .collect();
         let own_calls: HashSet<_> = own_items.iter().filter_map(InputItem::call_id).collect();
-        let kept_in_suffix: HashSet<_> = suffix.iter().filter_map(InputItem::output_call_id).collect();
-        let calls_in_suffix: HashSet<_> = suffix.iter().filter_map(InputItem::call_id).collect();
         // Reuse the retained-history rule for answered async calls and their last outputs.
         let mut records = async_records(&own_items);
         for (item, record) in own_items.iter().zip(&mut records) {
             let late = item
                 .output_call_id()
-                .is_some_and(|call_id| !own_calls.contains(call_id) && !kept_in_suffix.contains(call_id));
-            let in_suffix = item.call_id().is_some_and(|call_id| calls_in_suffix.contains(call_id))
-                || item
-                    .output_call_id()
-                    .is_some_and(|call_id| kept_in_suffix.contains(call_id));
-            *record = late || (*record && !retained_async_call(item, &open) && !in_suffix);
+                .is_some_and(|call_id| !own_calls.contains(call_id));
+            *record = late || (*record && !retained_async_call(item, &open));
         }
         let mut stored = StoredCarryOver {
             answered: Vec::new(),
@@ -63,14 +54,24 @@ impl CompactionCarryOver {
             }
         }
         Self {
-            open_calls: compacted_items
-                .iter()
-                .map(Borrow::borrow)
-                .filter(|item| retained_async_call(item, &open))
-                .cloned()
-                .collect(),
+            open_calls: Self::open_calls_in(&compacted_items, &open),
             stored,
         }
+    }
+
+    /// The open async calls in `compacted_items`, which stay in the model input after the summary.
+    pub(crate) fn open_calls(compacted_items: impl Iterator<Item = impl Borrow<InputItem>>) -> Vec<InputItem> {
+        let compacted_items: Vec<_> = compacted_items.collect();
+        Self::open_calls_in(&compacted_items, &open_async_call_ids(&compacted_items))
+    }
+
+    fn open_calls_in(compacted_items: &[impl Borrow<InputItem>], open: &HashSet<&str>) -> Vec<InputItem> {
+        compacted_items
+            .iter()
+            .map(Borrow::borrow)
+            .filter(|item| retained_async_call(item, open))
+            .cloned()
+            .collect()
     }
 }
 
@@ -82,10 +83,9 @@ pub(crate) struct StoredCarryOver {
 }
 
 impl StoredCarryOver {
-    /// The stored window: `compacted`, which ends with its compaction item (and, for multi-agent
-    /// compaction, MCP discovery records), with the answered records before that item, so an
-    /// answered call and its output leave the window together, and the request's own open calls
-    /// after it.
+    /// The stored window: `compacted`, which ends with its compaction item, with the answered records before that
+    /// item, so an answered call and its output leave the window together, and the request's own open calls after
+    /// it.
     pub(super) fn insert_into(self, mut compacted: Vec<InputItem>) -> Vec<InputItem> {
         let at = compacted
             .iter()
@@ -127,7 +127,6 @@ mod tests {
         let carry = CompactionCarryOver::new(
             history.iter().filter_map(InOutItem::as_input),
             history.iter().filter_map(InOutItem::as_input),
-            &[],
         );
         assert_eq!(
             serde_json::to_value(&carry.open_calls).unwrap(),
@@ -139,8 +138,7 @@ mod tests {
         );
     }
 
-    /// The request's own answered async call is stored once: before the compaction item, or left in
-    /// place when a multi-agent compaction keeps it in the suffix.
+    /// The request's own answered async call is stored once, before the compaction item.
     #[test]
     fn own_answered_async_records_are_stored_once() {
         let item = |value: serde_json::Value| -> InputItem { serde_json::from_value(value).unwrap() };
@@ -150,7 +148,7 @@ mod tests {
         );
         let first = item(serde_json::json!({"type": "function_call_output", "call_id": "call_a", "output": "1"}));
         let last = item(serde_json::json!({"type": "function_call_output", "call_id": "call_a", "output": "2"}));
-        let own = [user_message(), call.clone(), first, last.clone()];
+        let own = [user_message(), call, first, last];
         let ids = |items: &[InputItem]| -> Vec<String> {
             items
                 .iter()
@@ -163,15 +161,7 @@ mod tests {
                 .collect()
         };
 
-        let stored = CompactionCarryOver::new(own.iter(), own.iter(), &[])
-            .stored
-            .into_inputs();
+        let stored = CompactionCarryOver::new(own.iter(), own.iter()).stored.into_inputs();
         assert_eq!(ids(&stored), ["call", "2"], "the call and its last output");
-
-        let suffix = [call, last];
-        let stored = CompactionCarryOver::new(own[..1].iter(), own.iter(), &suffix)
-            .stored
-            .into_inputs();
-        assert!(stored.is_empty(), "the suffix keeps them: {stored:?}");
     }
 }

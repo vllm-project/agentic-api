@@ -25,7 +25,8 @@ use crate::config::DEFAULT_MAX_STREAM_EVENT_BYTES;
 use crate::events::{EventFrame, SSEEventType, WireEvent};
 use crate::executor::error::ExecutorResult;
 use crate::executor::gateway::{
-    emit_gateway_completed_events, emit_gateway_start_events, mcp_list_tools_event_plans, public_output_items,
+    compaction_event_plans, emit_gateway_completed_events, emit_gateway_start_events, mcp_list_tools_event_plans,
+    public_output_items,
 };
 use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, StreamEvent, emit_sse_frame_limited};
 use crate::executor::request::RequestContext;
@@ -90,6 +91,10 @@ pub(super) struct StreamRelay {
     projection: SourceProjection,
     /// The current inference round's offset into the public output.
     output_offset: usize,
+    /// Whether the response is in progress for the client: items the gateway makes are presented only after that.
+    in_progress: bool,
+    /// A compaction item made before the response was in progress, with its output index.
+    opening: Option<(OutputItem, usize)>,
     deferred: DeferredFrames,
     limits: RelayLimits,
 }
@@ -121,6 +126,8 @@ impl StreamRelay {
             presentation: GatewayStreamAccumulator::with_max_stream_event_bytes(limits.event_bytes),
             projection: SourceProjection::default(),
             output_offset: 0,
+            in_progress: false,
+            opening: None,
             deferred: DeferredFrames::default(),
             limits,
         }
@@ -223,27 +230,46 @@ impl StreamRelay {
     /// frame, so a failed serialization, closed receiver, or cancelled wait
     /// consumes no sequence number or response-start event.
     async fn send(&mut self, frame: &mut EventFrame, offset: usize) -> ExecutorResult<bool> {
-        match &self.sink {
-            RelaySink::Detached => Ok(false),
+        let sent = match &self.sink {
+            RelaySink::Detached => false,
             RelaySink::Agent(sink) => {
                 let mut frame = frame.clone();
                 if let Some(index) = &mut frame.wire.output_index {
                     *index += offset as u64;
                 }
                 sink.send(&frame, self.limits.event_bytes).await?;
-                Ok(true)
+                true
             }
-            RelaySink::Response(sink) => sink.emit_frame(frame, offset).await,
+            RelaySink::Response(sink) => sink.emit_frame(frame, offset).await?,
             RelaySink::Client(sender) => {
                 let mut published = self.presentation.clone();
-                if !published.process_event(frame, offset) {
-                    return Ok(false);
+                let presented = published.process_event(frame, offset);
+                if presented {
+                    emit_sse_frame_limited(sender, frame, self.limits.event_bytes).await?;
+                    self.presentation = published;
                 }
-                emit_sse_frame_limited(sender, frame, self.limits.event_bytes).await?;
-                self.presentation = published;
-                Ok(true)
+                presented
             }
+        };
+        self.in_progress |= sent && frame.event_type == SSEEventType::ResponseInProgress;
+        Ok(sent)
+    }
+
+    /// Presents a compaction item at `output_index` of the public output. Before the response is in progress, it is
+    /// held and presented right after the response's MCP discovery items.
+    pub(super) async fn present_compaction(
+        &mut self,
+        compaction: &OutputItem,
+        output_index: usize,
+    ) -> ExecutorResult<()> {
+        if !self.in_progress {
+            self.opening = Some((compaction.clone(), output_index));
+            return Ok(());
         }
+        let output = std::slice::from_ref(compaction);
+        let event_plans = compaction_event_plans(output, output_index);
+        emit_gateway_start_events(&event_plans, self).await?;
+        emit_gateway_completed_events(output, &event_plans, self).await
     }
 
     async fn emit_mcp_discovery_lifecycle(&mut self, registry: &ToolRegistry) -> ExecutorResult<()> {
@@ -256,7 +282,11 @@ impl StreamRelay {
         let event_plans = mcp_list_tools_event_plans(&public_output, 0);
 
         emit_gateway_start_events(&event_plans, self).await?;
-        emit_gateway_completed_events(&public_output, &event_plans, self).await
+        emit_gateway_completed_events(&public_output, &event_plans, self).await?;
+        if let Some((compaction, output_index)) = self.opening.take() {
+            self.present_compaction(&compaction, output_index).await?;
+        }
+        Ok(())
     }
 }
 
