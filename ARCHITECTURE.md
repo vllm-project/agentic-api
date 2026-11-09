@@ -2051,7 +2051,9 @@ the operator enables it, and Eryx runtime readiness succeeds.
   declarations make a tool async and which carry `async` where it is not accepted;
   `GatewayExecutors::validate_declarations` rejects the latter with its declared index.
 - **`file_search/`** — `FileSearchHandler` normalizes the built-in declaration and
-  projects typed call items and citations. Its shared `FileSearchService` handles
+  projects typed call items and citations. Citation validation uses the registry's
+  gateway ownership; native upstream annotations survive unrelated requests and
+  client-owned functions named `file_search`. Its shared `FileSearchService` handles
   file ingestion and semantic, keyword, and hybrid retrieval against
   injected `FileSearchRepository` and `FileBlobStore` implementations. The default
   repository uses `storage::file_search`, while the default blob store uses local

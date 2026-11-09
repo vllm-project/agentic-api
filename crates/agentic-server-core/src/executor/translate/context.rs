@@ -105,7 +105,11 @@ impl TranslationContext {
     }
 
     pub(in crate::executor) fn with_file_search_context(mut self, input: &crate::types::io::ResponsesInput) -> Self {
-        self.file_search_citations = Some(FileSearchCitations::from_input(input));
+        // Validate only the gateway's model-facing search results. Native upstream
+        // citations have their own evidence and must survive unrelated execution.
+        self.file_search_citations = self
+            .is_gateway_owned("file_search")
+            .then(|| FileSearchCitations::from_input(input));
         self
     }
 
