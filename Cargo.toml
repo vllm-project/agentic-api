@@ -3,7 +3,7 @@ members = ["crates/*"]
 resolver = "3"
 
 [workspace.package]
-version = "0.9.0"
+version = "0.10.0"
 edition = "2024"
 # Minimum supported Rust version, checked in CI; keep clippy.toml `msrv` equal.
 # eryx 0.8 (the embedded-code-interpreter feature) declares 1.98.1.
@@ -19,7 +19,7 @@ all = { level = "deny", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 
 [workspace.dependencies]
-agentic-core = { package = "agentic-server-core", path = "crates/agentic-server-core", version = "0.9.0" }
+agentic-core = { package = "agentic-server-core", path = "crates/agentic-server-core", version = "0.10.0" }
 async-stream = "0.3"
 async-trait = "0.1"
 axum = { version = "0.8", features = ["ws"] }

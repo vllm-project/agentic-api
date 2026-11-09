@@ -76,6 +76,12 @@ Review the diff and wait for required CI, including the three-platform Python re
 require a maintainer to select **Approve workflows to run** before CI starts; see
 [GitHub's workflow-trigger rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).
 If needed, dispatch Python validation on the preparation branch with `publish=false`.
+
+If repository policy prevents GitHub Actions from opening pull requests, preparation reports **Maintainer action
+required** with a compare link after validation and the version commit have succeeded. Open that PR against `main`
+with maintainer access, inspect the version diff, and continue with the same review and CI checks. Do not rerun
+preparation against the branch that already contains its release commit.
+
 The preparation workflow updates versions, not release notes. Move the applicable `CHANGELOG.md` entries from
 `Unreleased` into a dated release section, include Rust API migration notes, and check that the selected version
 reflects compatibility changes. Merge the preparation PR only after validation succeeds.
