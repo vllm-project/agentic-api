@@ -50,13 +50,25 @@ package metadata. Do not add a separate Python version or a fallback release ver
 
 In GitHub, open **Actions → Prepare release PR → Run workflow**, select `main`, and enter the new `version` without
 a `v` prefix. This updates `Cargo.toml` and `Cargo.lock`, runs Rust checks, and opens `release-prep/v<VERSION>` against
-`main`. It fails if that branch already exists; inspect the existing PR before trying again.
+`main`. If that branch already exists, it must point exactly at the workflow's selected main commit. A branch
+containing release work or a different base is rejected; inspect its existing PR before trying again.
+
+This repository restricts branch creation by the workflow token. Before dispatching, a maintainer should create
+`release-prep/v<VERSION>` at the intended `main` commit using their own repository access, as in the CLI example
+below. Creating the ref fails if it already exists; inspect that branch instead of replacing it. The workflow can
+then fast-forward that branch with its validated version commit. If `main`
+advances before dispatch, inspect the branch and select a matching base before proceeding; do not force-update a
+branch containing someone else's release work.
 
 The equivalent CLI command, from this repository, is:
 
 ```bash
 # Example only: choose a version not already published.
 release_version=0.8.0
+git fetch origin main
+release_sha="$(git rev-parse origin/main)"
+gh api repos/vllm-project/agentic-api/git/refs \
+  -f ref="refs/heads/release-prep/v$release_version" -f sha="$release_sha"
 gh workflow run prepare-release-pr.yml --ref main -f version="$release_version"
 ```
 

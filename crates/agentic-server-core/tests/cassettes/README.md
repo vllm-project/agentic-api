@@ -795,6 +795,9 @@ configuration belongs to the running gateway. This refreshes client-facing
 captures; model, search, and MCP dependency captures remain separate.
 The Rust multi-agent contract test compares full-history continuation, delegated
 agents, web/MCP activity, and client shell outputs across both providers in JSON and SSE.
+Its dependency replay normalizes the MCP initialization client's string version, which changes with the
+gateway release. It still compares the client name, protocol version, capabilities, and tool arguments;
+missing or invalid client versions remain mismatches. The captured YAML is retained unchanged.
 
 ### Reasoning (gateway and OpenAI)
 
