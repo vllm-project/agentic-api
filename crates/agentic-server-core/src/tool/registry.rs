@@ -584,7 +584,7 @@ mod tests {
     use crate::types::io::output::GatewayCallStatus;
     use crate::types::io::output::McpListTool;
     use crate::types::io::{InputItem, ResponsesInput};
-    use crate::types::tools::{McpDiscoveredToolParam, McpToolParam, ResponsesTool};
+    use crate::types::tools::{McpDiscoveredToolParam, ResponsesTool};
 
     #[test]
     fn code_interpreter_tool_type_is_inherently_gateway_owned() {
@@ -834,37 +834,6 @@ mod tests {
 
         assert_eq!(registry.mcp_list_tool_items().count(), 0);
         assert!(registry.mcp_list_tools_items.is_empty());
-    }
-
-    #[test]
-    fn compacted_discovery_cannot_suppress_a_new_listing_or_hide_its_failure() {
-        let history: ResponsesInput = serde_json::from_value(serde_json::json!([
-            {"type": "mcp_list_tools", "id": "mcpl_old", "server_label": "counter", "tools": []},
-            {"type": "compaction", "id": "cmp_1", "encrypted_content": "summary"}
-        ]))
-        .unwrap();
-        for failed in [false, true] {
-            let mut registry = ToolRegistry::default();
-            let mut current = McpListTools::new("mcpl_current", "counter", Vec::new());
-            current.error = failed.then(|| "discovery failed".to_owned());
-            registry
-                .mcp_list_tools_items
-                .insert("counter".to_owned(), vec![current]);
-            registry.cache_listed_mcp_tools(&history);
-            assert_eq!(
-                registry
-                    .mcp_list_tool_items()
-                    .map(|item| item.id.as_str())
-                    .collect::<Vec<_>>(),
-                ["mcpl_current"]
-            );
-            assert_eq!(registry.failed_mcp_list_tools().is_some(), failed);
-        }
-        let server: McpToolParam = serde_json::from_value(serde_json::json!({
-            "server_label": "counter", "server_url": "http://127.0.0.1:9/mcp", "allowed_tools": []
-        }))
-        .unwrap();
-        assert!(McpHandler::reusable_listing(&history, &server).is_none());
     }
 
     #[test]

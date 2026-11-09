@@ -28,26 +28,6 @@ capture it through the recorder. Provider model/version, API headers, transport,
 Do not invent a parity rule to fit the gateway's current implementation. Document intentional gateway extensions or
 unsupported features separately; do not claim parity for capabilities the gateway does not implement.
 
-## Require provider evidence before behavioral conclusions
-
-Before calling an external behavior or edge case correct, incorrect, a regression, or compatible, identify the
-actual provider response that establishes the expected behavior. Responses claims require OpenAI Responses API
-evidence; Messages claims require Anthropic Messages API evidence. A claim spanning both requires evidence from
-both. Reuse an existing recording only when it exercises the same conditions; otherwise run the scenario against
-the provider and capture it with the existing recorder.
-
-Preserve the model, API/beta headers, transport, request sequence, status, error envelope, and item/call identity.
-For continuations, test the specific boundary being claimed: an ordinary follow-up does not establish behavior
-after compaction, and the first follow-up does not establish behavior after another stored turn. Include a control
-that distinguishes the suspected cause when needed. Documentation, SDK schemas, intuition, and gateway-only mocks
-guide the investigation but cannot substitute for observed provider evidence at an ambiguous boundary.
-
-If credentials, model access, or the provider are unavailable, state that the conclusion is unverified and identify
-the missing probe. Do not implement an assumed parity rule or announce a confirmed provider regression. Separate
-provider observations from gateway extensions and internal invariants, and correct earlier conclusions when new
-evidence contradicts them. Extend the nearest existing cassette scenario instead of creating a separate YAML for
-each edge case.
-
 ## Decide whether a new recording is needed
 
 - **New/ambiguous external behavior:** record the provider reference and corresponding gateway behavior; add replay

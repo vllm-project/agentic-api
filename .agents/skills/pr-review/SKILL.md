@@ -17,10 +17,6 @@ before this focused review. Reuse discovery already completed in the current ses
 3. Trace each behavior change across its complete path: HTTP/WebSocket input, typed normalization, executor state transitions, upstream request serialization, persistence/rehydration, tool rounds, streaming, and response conversion as applicable.
 4. Check tests against the changed boundary, not merely against helper functions. Look for missing negative cases, continuation/second-round coverage, streaming coverage, and assertions on the actual upstream or client-visible payload.
 5. Make an explicit cassette decision for every change that affects an external wire contract or a multi-step integration path.
-6. Apply the [provider-evidence requirement](../agentic-api-engineering/references/parity-and-recorders.md#require-provider-evidence-before-behavioral-conclusions)
-   before concluding that an API behavior or edge case is a bug or matches a provider. Cite the observed OpenAI
-   Responses or Anthropic Messages exchange for the affected surface; cross-provider conclusions require both.
-   Report a gateway-only suspicion as unverified until the corresponding provider scenario is observed.
 
 ## Cassette decision
 

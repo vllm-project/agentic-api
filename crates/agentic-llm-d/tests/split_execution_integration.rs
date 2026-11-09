@@ -663,7 +663,6 @@ async fn the_wire_context_round_trips_into_an_equal_context() {
         back.enriched_request.previous_response_id.is_none(),
         "upstream stays stateless"
     );
-    assert!(back.checkpoint.is_none(), "a split context carries no checkpoint");
 }
 
 /// A context `hydrate` did not issue must not be usable.

@@ -28,10 +28,6 @@ A focused PR is not authorization for a broader refactor, feature expansion, com
    Serde, and crate documentation against the repository's MSRV and locked dependencies; do not blindly copy old
    recipes. For API behavior, consult current official OpenAI or Anthropic documentation for the affected surface;
    consult both when adapting between them. Follow [provider parity and recorders](references/parity-and-recorders.md).
-   Do not conclude that an API behavior or edge case is correct, a regression, or provider parity without observed
-   evidence from the relevant provider API: OpenAI Responses for Responses behavior, Anthropic Messages for Messages
-   behavior, and both for cross-provider claims. A gateway-only reproduction is a finding to investigate, not proof
-   of the provider contract; label conclusions without provider evidence as unverified.
 
 Before the first edit, give a short account of the affected path, existing extension point, intended behavior, and
 verification plan. This is an explanation, not an extra approval gate. Resolve routine design choices autonomously.
