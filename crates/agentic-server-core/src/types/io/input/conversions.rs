@@ -89,7 +89,10 @@ impl From<OutputMessageContent> for InputContent {
             OutputMessageContent::OutputText(part) => {
                 let mut text = InputTextContent::new(part.text);
                 if let Some(annotations) = part.annotations {
-                    text.extra.insert("annotations".into(), Value::Array(annotations));
+                    text.extra.insert(
+                        "annotations".into(),
+                        Value::Array(annotations.into_iter().map(Into::into).collect()),
+                    );
                 }
                 // These fixed structs contain only JSON-compatible values and string keys.
                 text.extra.insert(
@@ -200,18 +203,7 @@ impl ResponsesInput {
         match self {
             Self::Items(mut items) => {
                 for item in &mut items {
-                    match item {
-                        InOutItem::Input(InputItem::FunctionCallOutput(output)) => {
-                            output.status.get_or_insert(MessageStatus::Completed);
-                        }
-                        InOutItem::Input(InputItem::CustomToolCallOutput(output)) => {
-                            output.status.get_or_insert(MessageStatus::Completed);
-                        }
-                        InOutItem::Input(InputItem::ShellCallOutput(output)) => {
-                            output.status.get_or_insert(ShellCallStatus::Completed);
-                        }
-                        _ => {}
-                    }
+                    item.complete_omitted_status();
                 }
                 items
             }

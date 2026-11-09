@@ -1,6 +1,8 @@
 use std::future::Future;
 use std::pin::Pin;
 
+use super::registry::ToolType;
+
 use crate::types::io::input::hosted_search_output_text;
 use crate::types::io::output::{FunctionToolCall, GatewayCallStatus, OutputItem};
 use crate::types::io::{FunctionTool, InputItem, InputToolSearchCall, ToolSearchCall, ToolSearchOutputMessage};
@@ -159,6 +161,8 @@ impl PlannedResult {
 pub enum ToolError {
     #[error("execution failed: {0}")]
     Execution(String),
+    #[error("file_search failed: {}", .0.public_message())]
+    FileSearch(#[from] crate::types::file_search::FileSearchError),
     #[error("invalid tool config: {0}")]
     Config(String),
     #[error("upstream returned an invalid tool-search call")]
@@ -187,7 +191,7 @@ pub trait ToolHandler: Send + Sync {
     type ToolParams: Send + Sync;
 
     #[must_use]
-    fn tool_type(&self) -> super::registry::ToolType;
+    fn tool_type(&self) -> ToolType;
 
     /// Validate the typed tool declaration parameters.
     ///
@@ -203,10 +207,9 @@ pub trait ToolHandler: Send + Sync {
 
 /// Extension of [`ToolHandler`] for tool types that are executed by the gateway.
 ///
-/// Only executable gateway handlers implement this trait. MCP and web search
-/// implement it unconditionally; the Eryx-backed code interpreter implements
-/// it when its Cargo feature is enabled. File search remains gateway-owned in
-/// the registry without an executor. Client-owned tools (`Function`,
+/// Only executable gateway handlers implement this trait. MCP, web search, and
+/// file search implement it unconditionally; the Eryx-backed code interpreter
+/// implements it when its Cargo feature is enabled. Client-owned tools (`Function`,
 /// `ToolSearch`, `Custom`, `CodexNamespace`) do not implement it, so they cannot
 /// be dispatched through this interface.
 ///
@@ -249,26 +252,19 @@ pub trait GatewayExecutor: ToolHandler + 'static {
     /// Plans the typed public lifecycle for one gateway call.
     ///
     /// The returned plan must not assign protocol indexes or construct SSE
-    /// frames. Defaults to an empty lifecycle for tools that have no public
-    /// gateway-specific call item.
+    /// frames. Defaults to the handler's [`Self::started_output`].
     #[must_use]
     fn plan_gateway_events(&self, call: &FunctionToolCall, params: &Self::ExecutionParams) -> GatewayToolEventPlan {
         GatewayToolEventPlan::new(self.started_output(call, params))
     }
 
-    /// The placeholder output item shown while this call is in progress.
-    ///
-    /// Kept as the compatibility hook for existing gateway executors;
-    /// implementations that need richer planning should override
-    /// [`Self::plan_gateway_events`] instead.
+    /// The item shown while this call is in progress: the start of its public item.
     #[must_use]
-    fn started_output(&self, call: &FunctionToolCall, params: &Self::ExecutionParams) -> Option<OutputItem> {
-        let _ = (call, params);
-        None
-    }
+    fn started_output(&self, call: &FunctionToolCall, params: &Self::ExecutionParams) -> Option<OutputItem>;
 
-    /// The public output item for a completed or failed call.
-    /// Defaults to `None` (no gateway-specific shape).
+    /// The public item for a completed or failed call: what the client receives and history stores in place of the
+    /// model-facing call and its output. A handler returns `None` only for a tool with no Responses item (`web_fetch`,
+    /// which Messages answers with its own result blocks).
     #[must_use]
     fn public_output(
         &self,
@@ -276,10 +272,7 @@ pub trait GatewayExecutor: ToolHandler + 'static {
         output: &ToolOutput,
         status: GatewayCallStatus,
         params: &Self::ExecutionParams,
-    ) -> Option<OutputItem> {
-        let _ = (call, output, status, params);
-        None
-    }
+    ) -> Option<OutputItem>;
 }
 
 #[cfg(test)]

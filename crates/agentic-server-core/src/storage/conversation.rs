@@ -56,9 +56,6 @@ impl ConversationStore {
         metadata: &ConversationMetadata,
         items: &[InOutItem],
     ) -> StoreResult<ConversationData> {
-        for (index, item) in items.iter().enumerate() {
-            item.validate_client_id(format!("items[{index}].id"))?;
-        }
         let items = items.iter().map(encode).collect::<StoreResult<Vec<_>>>()?;
         let metadata = encode_metadata(metadata)?;
         let id = uuid7_str("conv_");
@@ -226,9 +223,6 @@ impl ConversationStore {
     /// # Errors
     /// Returns an error if the resource is missing or persistence fails.
     pub async fn create_items(&self, tenant_id: &str, id: &str, items: Vec<InOutItem>) -> StoreResult<Vec<InOutItem>> {
-        for (index, item) in items.iter().enumerate() {
-            item.validate_client_id(format!("items[{index}].id"))?;
-        }
         let items = items.iter().map(encode).collect::<StoreResult<Vec<_>>>()?;
 
         let mut tx = self.pool()?.begin().await?;

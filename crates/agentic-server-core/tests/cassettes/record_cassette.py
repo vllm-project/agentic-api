@@ -582,6 +582,68 @@ def _record_competing_tool_outputs(client: httpx.Client, proxy_url: str, model: 
 
 
 
+def _record_call_ids(client: httpx.Client, proxy_url: str, model: str) -> None:
+    """Send function calls whose call_id is repeated, reused from a stored turn, or empty.
+
+    Each request carries its case name in `x-run-id`; its status is recorded, not asserted. A conversation's
+    follow-ups run only when its creation succeeded.
+    """
+    user = {"role": "user", "content": "What's the weather in Paris?"}
+
+    def call(call_id: str) -> dict:
+        return {"type": "function_call", "call_id": call_id, "name": "get_weather",
+                "arguments": json.dumps({"city": "Paris"})}
+
+    def output(call_id: str, text: str = "sunny") -> dict:
+        return {"type": "function_call_output", "call_id": call_id, "output": text}
+
+    def request(case: str, method: str, path: str, **kwargs: Any) -> dict:
+        return _item_request(client, proxy_url, method, path, headers={"x-run-id": case},
+                             expected_status=None, **kwargs)
+
+    def respond(case: str, input_items: list[dict], store: bool = False, **fields: Any) -> dict:
+        return request(case, "POST", "/v1/responses", body={
+            "model": model, "input": input_items, "tools": [WEATHER_TOOL], "store": store, "stream": False,
+            **fields})
+
+    for case, items in (
+        ("A", [user, call("call_a"), output("call_a"), call("call_a"), output("call_a", "rainy")]),
+        ("A2", [user, call("call_a2"), call("call_a2"), output("call_a2")]),
+        ("B", [user, call(""), output("")]),
+        ("D", [user, call("call_d"), output("call_d"), output("call_d", "rainy")]),
+        ("H", [user, call("call_h"), output("call_h"), call("call_h")]),
+    ):
+        respond(case, items)
+    first = respond("C0", [user], store=True, tool_choice="required")
+    calls = [item for item in first.get("output", []) if item.get("type") == "function_call"]
+    if not calls:
+        raise RuntimeError(f"C0: expected a get_weather call, got {first}")
+    call_id = calls[0]["call_id"]
+    for case, items in (
+        ("C1", [output(call_id), call(call_id), output(call_id, "rainy")]),
+        ("C2", [output(call_id), output(call_id, "rainy")]),
+        ("C3", [output(call_id)]),
+    ):
+        respond(case, items, previous_response_id=first["id"])
+
+    def turn(case: str, conversation: str) -> None:
+        respond(case, [{"role": "user", "content": "And tomorrow?"}], store=True, conversation=conversation)
+
+    def create(case: str, items: list[dict]) -> str | None:
+        return request(case, "POST", "/v1/conversations", body={"items": items}).get("id")
+
+    if conversation := create("E0", [user, call("call_e"), output("call_e"), call("call_e"),
+                                     output("call_e", "rainy")]):
+        request("E1", "GET", f"/v1/conversations/{conversation}/items", params={"order": "asc"})
+        turn("E2", conversation)
+    if conversation := create("F0", [user, call("call_f"), output("call_f")]):
+        request("F1", "POST", f"/v1/conversations/{conversation}/items",
+                body={"items": [call("call_f"), output("call_f", "rainy")]})
+        turn("F2", conversation)
+    if conversation := create("G0", [user, call(""), output("")]):
+        turn("G1", conversation)
+
+
 def _record_overlapping_multi_agent(client: httpx.Client, proxy_url: str, model: str) -> None:
     """Overlap two multi-agent turns that continue the same tree: streamed turn B (t3) and, while B streams, turn C
     (t4), which leaves a get_weather call pending. Both rehydrate the tree before either commits.
@@ -679,6 +741,9 @@ def run_items(
             conversation=conv_id, stream=stream,
         )
         _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
+        return
+    if scenario == "response-call-ids":
+        _record_call_ids(client, proxy_url, model)
         return
     if scenario == "response-tool-items":
         run_tool_items(client, proxy_url, model, send_request=_item_request,
@@ -2169,7 +2234,7 @@ def run_responses(
 )
 @click.option(
     "--items-scenario",
-    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "concurrent-writes", "competing-tool-outputs", "overlapping-multi-agent", "store-false", "multi-agent-store-false", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items"]),
+    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "concurrent-writes", "competing-tool-outputs", "overlapping-multi-agent", "store-false", "multi-agent-store-false", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items", "response-call-ids"]),
     default="continuation",
     help="Fixed Conversation Items or Responses API scenario (for --mode items).",
 )
@@ -2445,6 +2510,7 @@ def main(
                           19 if items_scenario == "response-conversation" else
                           14 if items_scenario == "response-replayed-items" else
                           48 if items_scenario == "response-tool-items" else
+                          17 if items_scenario == "response-call-ids" else
                           10 if items_scenario == "pagination" else
                           6 if items_scenario == "branch" else
                           19 if items_scenario == "edge-cases" else

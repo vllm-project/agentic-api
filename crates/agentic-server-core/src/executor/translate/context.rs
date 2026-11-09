@@ -1,11 +1,12 @@
 use crate::events::WireEvent;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::tool::custom::CustomToolMap;
+use crate::tool::file_search::handler::FileSearchCitations;
 use crate::tool::{NamespaceMap, ToolType};
 use crate::types::event::ResponseStatus;
 use crate::types::io::MultiAgentAction;
 use crate::types::io::ToolChoice;
-use crate::types::io::{FunctionToolCall, OutputItem, OutputMessage};
+use crate::types::io::{FunctionToolCall, OutputItem, OutputMessage, ReasoningOutput};
 use crate::types::request_response::{RequestPayload, ResponsePayload, StandardResponseFields};
 use crate::types::tools::ResponsesTool;
 use serde_json::{Map, Value, json};
@@ -14,6 +15,7 @@ use std::collections::{HashMap, HashSet};
 /// An owned snapshot of the effective tool classification and availability for one round.
 #[derive(Default)]
 pub(in crate::executor) struct TranslationContext {
+    file_search_citations: Option<FileSearchCitations>,
     tool_types: HashMap<String, ToolType>,
     gateway_owned_names: HashSet<String>,
     async_tool_names: HashSet<String>,
@@ -102,12 +104,24 @@ impl TranslationContext {
         self
     }
 
+    pub(in crate::executor) fn with_file_search_context(mut self, input: &crate::types::io::ResponsesInput) -> Self {
+        // Validate only the gateway's model-facing search results. Native upstream
+        // citations have their own evidence and must survive unrelated execution.
+        self.file_search_citations = self
+            .is_gateway_owned("file_search")
+            .then(|| FileSearchCitations::from_input(input));
+        self
+    }
+
     pub(in crate::executor) fn with_request_fields(mut self, request: &RequestPayload) -> Self {
         self.response_fields.apply_request(request);
         self
     }
 
     pub(super) fn restore_stream_event_wire(&self, wire: &mut WireEvent) -> ExecutorResult<()> {
+        if let Some(citations) = &self.file_search_citations {
+            citations.restore_wire(wire);
+        }
         super::tool_search::restore_response_tools(wire, self.response_tools.as_deref())?;
         // Report the selector the client submitted on every lifecycle snapshot, including
         // terminal ones that omit it, instead of letting a gateway default stand in for it.
@@ -208,10 +222,18 @@ impl TranslationContext {
         unfinished_stream_item_ids: &HashSet<String>,
     ) -> ExecutorResult<()> {
         super::tool_search::normalize_response_output(self, output, status, unfinished_stream_item_ids)?;
+        if let Some(citations) = &self.file_search_citations {
+            for item in output.iter_mut() {
+                citations.restore_output(item);
+            }
+        }
         // Mark before namespace restoration, while calls still carry their model-visible names.
         for item in output.iter_mut() {
             if let OutputItem::Message(message) = item {
                 OutputMessage::normalize_public_id(&mut message.id);
+            }
+            if let OutputItem::Reasoning(reasoning) = item {
+                ReasoningOutput::normalize_public_id(&mut reasoning.id);
             }
             if let OutputItem::FunctionCall(call) = item
                 && self.is_client_function(&call.name)
@@ -248,6 +270,7 @@ pub(super) fn mark_async_call(item: &mut OutputItem) -> ExecutorResult<()> {
         | OutputItem::AgentMessage(_)
         | OutputItem::Message(_)
         | OutputItem::CodeInterpreterCall(_)
+        | OutputItem::FileSearchCall(_)
         | OutputItem::ToolSearchCall(_)
         | OutputItem::ToolSearchOutput(_)
         | OutputItem::ShellCall(_)
@@ -300,6 +323,9 @@ fn normalize_output_item(item: &mut Value, context: &TranslationContext) {
         return;
     };
     if item.get("type").and_then(Value::as_str) == Some("reasoning") {
+        if let Some(Value::String(id)) = item.get_mut("id") {
+            ReasoningOutput::normalize_public_id(id);
+        }
         for field in ["content", "summary"] {
             if item.get(field).is_some_and(Value::is_null) {
                 item.insert(field.to_owned(), json!([]));

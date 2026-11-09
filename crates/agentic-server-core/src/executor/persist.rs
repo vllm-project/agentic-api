@@ -3,8 +3,6 @@
 //! Writes the completed response and output items to storage, routing to the
 //! appropriate handler based on whether the turn belongs to a conversation.
 
-use std::collections::HashMap;
-
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::multi_agent::ValidatedTreeCheckpoint;
 use crate::executor::prepare::prepare_request_tools;
@@ -16,7 +14,6 @@ use crate::tool::{ToolSearchMetadata, ToolSearchState};
 use crate::types::event::ResponseStatus;
 use crate::types::io::InOutItem;
 use crate::types::io::OutputItem;
-use crate::types::io::input::model_items;
 use crate::types::request_response::ResponsePayload;
 use tracing::error;
 
@@ -36,8 +33,7 @@ pub(crate) enum TurnOutput<'a> {
 /// stored parent or explicit conversation. Response-scoped session continuations
 /// still reach their handler to publish a connection-local checkpoint. Explicit
 /// conversations do not publish those checkpoints or append unstored turns.
-#[must_use]
-pub(crate) fn should_persist(ctx: &RequestContext) -> bool {
+fn should_persist(ctx: &RequestContext) -> bool {
     ctx.original_request.store || (ctx.continuation.is_some() && ctx.original_request.conversation.is_none())
 }
 
@@ -149,7 +145,7 @@ async fn write_turn(
     Ok(())
 }
 
-/// The turn's own history: the request's items, then its public output, less any output an in-turn session
+/// The turn's own history: its input items, then its public output, less any output an in-turn session
 /// compaction already absorbed ([`ResponseContinuation::retains_output`]).
 fn turn_items(
     ctx: &mut RequestContext,
@@ -215,88 +211,14 @@ pub async fn commit(
             payload.status
         )));
     }
-    if matches!(status, ResponseStatus::Completed | ResponseStatus::Incomplete) {
-        // Without a session the caller's context carries no history: load the continued response once, for the
-        // call-ID check and as the checkpoint this turn extends. A session keeps its parent in memory.
-        let stored = match ctx.continuation {
-            Some(_) => None,
-            None => exec_ctx.resp_handler.rehydrate(&ctx).await?,
-        };
-        let history = match stored {
-            Some((checkpoint, history)) => {
-                ctx.checkpoint = Some(checkpoint);
-                history
-            }
-            None => Vec::new(),
-        };
-        validate_output_call_ids(&ctx, &payload.output, &history)?;
+    if matches!(status, ResponseStatus::Completed | ResponseStatus::Incomplete) && ctx.continuation.is_none() {
+        // Without a session the caller's context carries no checkpoint: load the continued response once as the
+        // checkpoint this turn extends. A session keeps its parent in memory.
+        if let Some((checkpoint, _)) = exec_ctx.resp_handler.rehydrate(&ctx).await? {
+            ctx.checkpoint = Some(checkpoint);
+        }
     }
 
     Box::pin(persist(ctx, TurnOutput::Response(&payload), None, exec_ctx)).await?;
     Ok(payload)
-}
-
-fn validate_output_call_ids(
-    ctx: &RequestContext,
-    output_items: &[OutputItem],
-    history: &[InOutItem],
-) -> ExecutorResult<()> {
-    let mut call_ids = HashMap::new();
-    for (index, item) in output_items.iter().enumerate() {
-        let (item_type, call_id) = match item {
-            OutputItem::FunctionCall(call) => ("function_call", call.call_id.as_str()),
-            // A hosted search has no call id to pair.
-            OutputItem::ToolSearchCall(call) => match call.call_id.as_deref() {
-                Some(call_id) => ("tool_search_call", call_id),
-                None => continue,
-            },
-            OutputItem::CustomToolCall(call) => ("custom_tool_call", call.call_id.as_str()),
-            OutputItem::ShellCall(call) => ("shell_call", call.call_id.as_str()),
-            _ => continue,
-        };
-        if call_id.is_empty() {
-            return Err(ExecutorError::InvalidRequest(format!(
-                "upstream response output[{index}] {item_type} has no valid 'call_id'"
-            )));
-        }
-        if let Some((first_index, _)) = call_ids.insert(call_id, (index, item_type)) {
-            return Err(ExecutorError::InvalidRequest(format!(
-                "upstream response output[{index}] {item_type} repeats 'call_id' from output[{first_index}]"
-            )));
-        }
-    }
-    if call_ids.is_empty() {
-        return Ok(());
-    }
-
-    if ctx.continuation.is_some() {
-        // Rehydration already combined the pinned parent with normalized input.
-        // Validate that effective window, excluding calls superseded by compaction.
-        let projected = ctx.enriched_request.input.input_items().collect();
-        let items: Vec<_> = model_items(projected).collect();
-        return validate_history_call_ids(items.iter().map(|item| item.call_id()), &call_ids);
-    }
-    validate_history_call_ids(history.iter().map(InOutItem::call_id), &call_ids)?;
-    for (input_index, item) in ctx.new_input_items.iter().enumerate() {
-        if let Some((output_index, item_type)) = item.call_id().and_then(|call_id| call_ids.get(call_id)) {
-            return Err(ExecutorError::InvalidRequest(format!(
-                "upstream response output[{output_index}] {item_type} repeats 'call_id' from request input[{input_index}]"
-            )));
-        }
-    }
-    Ok(())
-}
-
-fn validate_history_call_ids<'a>(
-    history: impl Iterator<Item = Option<&'a str>>,
-    call_ids: &HashMap<&str, (usize, &str)>,
-) -> ExecutorResult<()> {
-    for (history_index, call_id) in history.enumerate() {
-        if let Some((output_index, item_type)) = call_id.and_then(|id| call_ids.get(id)) {
-            return Err(ExecutorError::InvalidRequest(format!(
-                "upstream response output[{output_index}] {item_type} repeats 'call_id' from continued history item[{history_index}]"
-            )));
-        }
-    }
-    Ok(())
 }

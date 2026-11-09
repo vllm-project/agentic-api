@@ -294,6 +294,35 @@ async fn failed_blob_removal_can_be_retried_after_metadata_deletion_and_service_
 }
 
 #[tokio::test]
+async fn file_deletion_succeeds_when_cleanup_marker_disappears_after_metadata_deletion() {
+    let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
+    let blobs = Arc::new(MemoryBlobs::default());
+    let service = FileSearchService::with_providers(
+        Arc::new(FileSearchStorage::new(pool.clone())),
+        blobs.clone(),
+        Arc::new(reqwest::Client::new()),
+        &FileSearchConfig::default(),
+    )
+    .unwrap();
+    let file = service
+        .upload_file("race.txt", "text/plain", "assistants", b"cleanup race".to_vec())
+        .await
+        .unwrap();
+    // Emulate the missing marker state left by reconciliation after deletion,
+    // without relying on task scheduling.
+    sqlx::raw_sql(
+        "CREATE TRIGGER clear_cleanup_after_file_delete AFTER DELETE ON file_search_files \
+         BEGIN DELETE FROM file_search_blob_cleanup WHERE file_id = OLD.id; END;",
+    )
+    .execute(pool.as_ref())
+    .await
+    .unwrap();
+    assert!(service.delete_file(&file.id).await.unwrap().deleted);
+    assert!(blobs.0.lock().unwrap().is_empty());
+    assert_eq!(service.get_file(&file.id).await.unwrap_err().status_code(), 404);
+}
+
+#[tokio::test]
 async fn rejected_metadata_and_failed_blob_removal_are_reconciled_after_restart() {
     let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
     let blobs = Arc::new(FailOnceBlobs::default());
@@ -1301,6 +1330,7 @@ async fn embedding_service() -> (
     let files = tempfile::tempdir().unwrap();
     let config = FileSearchConfig {
         files_storage_dir: Some(files.path().to_owned()),
+        sqlite_vec_extension_path: None,
         embedding_base_url: Some(format!("http://{addr}/v1")),
         embedding_model: Some("fixture".into()),
         embedding_api_key: Some("never-log-this-key".into()),
@@ -1591,6 +1621,7 @@ fn ogx_vector_mode_alias_and_secret_safe_debug_are_supported() {
     );
     let config = FileSearchConfig {
         files_storage_dir: None,
+        sqlite_vec_extension_path: None,
         embedding_base_url: Some("https://private.example/v1".into()),
         embedding_model: Some("model".into()),
         embedding_api_key: Some("secret-credential".into()),

@@ -93,10 +93,10 @@ pub(super) struct CallLedger {
 }
 
 impl CallLedger {
-    /// Scans `items` in order. Calls and outputs must have non-empty IDs and the same kind. A synchronous call takes
-    /// exactly one output; an async call accepts repeated outputs. An output whose `call_id` matches no call is
-    /// rejected. Namespace member calls are represented as `InputItem::FunctionCall`, so they're covered by the plain
-    /// function check.
+    /// Scans `items` in order. Calls and outputs must have non-empty IDs, and an output must match an earlier call of
+    /// the same kind. As on `OpenAI`, a `call_id` may repeat: a repeated call adds nothing, a call is answered once any
+    /// output for its `call_id` follows it, and further outputs are accepted. Namespace member calls are represented
+    /// as `InputItem::FunctionCall`, so they're covered by the plain function check.
     pub(super) fn scan(items: &[InputItem]) -> ExecutorResult<Self> {
         let mut ledger = Self::default();
         for (index, item) in items.iter().enumerate() {
@@ -209,11 +209,7 @@ impl CallLedger {
             )));
         };
         if self.calls.contains_key(&call_id) {
-            return Err(ExecutorError::InvalidRequest(format!(
-                "duplicate call_id '{}' in {}",
-                call_id.as_str(),
-                kind.call_item_name()
-            )));
+            return Ok(());
         }
         self.calls.insert(
             call_id,
@@ -251,21 +247,14 @@ impl CallLedger {
                 record.kind.call_item_name()
             )));
         }
-        match (record.resolved, record.async_execution) {
-            (false, async_execution) => {
-                record.resolved = true;
-                if !async_execution {
-                    self.unresolved_sync -= 1;
-                }
-                Ok(())
+        // OpenAI accepts repeated and conflicting outputs for a call.
+        if !record.resolved {
+            record.resolved = true;
+            if !record.async_execution {
+                self.unresolved_sync -= 1;
             }
-            // OpenAI accepts repeated and conflicting outputs for an async call.
-            (true, true) => Ok(()),
-            (true, false) => Err(ExecutorError::InvalidRequest(format!(
-                "{} references call_id '{call_id}' without a pending call",
-                output_kind.output_item_name()
-            ))),
         }
+        Ok(())
     }
 }
 
@@ -658,30 +647,46 @@ mod tests {
     }
 
     #[test]
-    fn empty_and_duplicate_call_ids_are_rejected() {
+    fn empty_call_ids_are_rejected() {
         assert_invalid(&[function_call("")], "function_call call_id must not be empty");
         assert_invalid(&[custom_tool_call("")], "custom_tool_call call_id must not be empty");
         assert_invalid(&[shell_call("")], "shell_call call_id must not be empty");
-        assert_invalid(
-            &[
+    }
+
+    /// Recorded `OpenAI` behavior: a `call_id` may repeat across calls and outputs; one output answers it.
+    #[test]
+    fn repeated_call_ids_are_accepted() {
+        for items in [
+            vec![
                 function_call("call_1"),
                 function_call("call_1"),
                 function_call_output("call_1"),
             ],
-            "duplicate call_id 'call_1'",
-        );
-        assert_invalid(
-            &[
+            vec![
                 function_call("call_1"),
                 function_call_output("call_1"),
-                custom_tool_call("call_1"),
+                function_call("call_1"),
             ],
-            "duplicate call_id 'call_1'",
-        );
+            vec![
+                function_call("call_1"),
+                function_call_output("call_1"),
+                function_call_output("call_1"),
+            ],
+            vec![
+                function_call("call_1"),
+                function_call_output("call_1"),
+                function_call("call_1"),
+                function_call_output("call_1"),
+            ],
+        ] {
+            let ledger = CallLedger::scan(&items).unwrap();
+            assert!(!ledger.awaits_output());
+            ledger.require_answered().unwrap();
+        }
     }
 
     #[test]
-    fn outputs_must_resolve_exactly_one_call_of_the_same_kind() {
+    fn outputs_must_resolve_an_earlier_call_of_the_same_kind() {
         assert_invalid(
             &[function_call_output("")],
             "function_call_output call_id must not be empty",
@@ -690,14 +695,6 @@ mod tests {
         assert_invalid(
             &[function_call_output("call_1")],
             "No tool call found for function call output with call_id call_1.",
-        );
-        assert_invalid(
-            &[
-                function_call("call_1"),
-                function_call_output("call_1"),
-                function_call_output("call_1"),
-            ],
-            "without a pending call",
         );
         assert_invalid(
             &[function_call("call_1"), custom_tool_call_output("call_1")],

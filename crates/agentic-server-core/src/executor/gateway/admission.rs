@@ -82,6 +82,7 @@ pub(super) fn limit_reached_message(limit: NonZeroU64) -> String {
 /// `code_interpreter_call` stops at `interpreting`, and an MCP call is omitted.
 pub(super) fn refused_output(started: &OutputItem) -> Option<OutputItem> {
     match started {
+        OutputItem::FileSearchCall(call) => Some(OutputItem::FileSearchCall(call.clone())),
         OutputItem::WebSearchCall(call) => Some(OutputItem::WebSearchCall(WebSearchCall {
             status: WebSearchCallStatus::Searching,
             ..call.clone()

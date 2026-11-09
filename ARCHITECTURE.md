@@ -693,8 +693,16 @@ goes through it, so it lowers the public records the model never read (search it
   `InOutItem::into_input_items` uses the existing output-to-input conversion and
   client-tool lowering for model history. Storage row markers and legacy decoding
   remain in `storage/`; there is no separate conversation-item enum.
+  `InOutItem::admit_all` (`item/item_id.rs`) is the one check every item a client sends passes, whatever its kind,
+  called once per endpoint that accepts items: Responses `input` in `ResponseHandler::resolve_input_items`, and
+  Conversations `items` in `ConversationHandler::create` and `create_items`. As on `OpenAI`, an item's ID must
+  begin with its kind's prefix, and a call or an output needs a non-empty `call_id` (`ClientCallId::validate`,
+  the same rule the pending-call ledger applies) while repeated ones are accepted. A refusal is a `ClientItemError` with `OpenAI`'s code (`invalid_value`, `empty_string`), parameter
+  (`input[N].id`, `items[N].call_id`) and message. Storage does not validate items, and upstream output is
+  not admitted: an empty `call_id` in stored history is refused by the ledger when a turn continues it.
   Item retrieval and listing return `InOutItem` directly. `into_public` assigns the
-  storage identity and expands shorthand messages on the returned item;
+  storage identity, gives an omitted status `OpenAI`'s value (a function call `in_progress`, an output
+  `completed`) and expands shorthand messages on the returned item;
   serialization uses the item types themselves, without an item-response wrapper.
   `ResponsesInput::input_items` uses `InOutItem::as_input` to borrow submitted input
   items and project outputs. The existing compaction-window selection accepts these
@@ -838,15 +846,15 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   call sequence. A request without stored history runs the same check when its input
   replays search items, since the ledger owns how client search calls and outputs pair;
   tool search keeps only the rules it alone sees (item ids, hosted pairs, output status).
-  Every call and call output must have a non-empty `call_id`; call IDs
-  must be unique across the sequence; and each output must resolve a call of the same
-  item kind. An output whose `call_id` matches no call is rejected with the `OpenAI`
-  unknown-call error; a second output for a resolved synchronous call or a
-  function/custom kind mismatch is an invalid request rather than evidence that the
-  call was resolved. Valid unresolved calls remain ordered by their original emission,
+  Every call and call output must have a non-empty `call_id`, and each output must resolve
+  an earlier call of the same item kind. As on `OpenAI` (the `call-ids` cassettes), a
+  `call_id` may repeat: a repeated call adds nothing, a call is answered once any output for
+  its `call_id` follows it, and further outputs are accepted. An output whose `call_id`
+  matches no call is rejected with the `OpenAI` unknown-call error; a function/custom kind
+  mismatch is an invalid request. Valid unresolved calls remain ordered by their original emission,
   and the first unresolved synchronous client-executed call produces the existing
   missing-output error. An async call (`async: true` on the call item) may stay
-  unresolved and accepts repeated outputs; it ends neither the resolved prefix used by
+  unresolved; it ends neither the resolved prefix used by
   compaction nor the continuation. A compaction window (`model_items`,
   `canonical_session_history`) shows the model an async call that was still open at its
   checkpoint. Retained histories (`retain_window`, a session whose history compaction
@@ -1420,7 +1428,7 @@ declarations, custom/namespace shapes, tool choice, and tool-search metadata.
 Nonempty provider message IDs without the public `msg` prefix receive `msg_` during
 translation. Message events and final JSON/SSE snapshots use the same public ID;
 ingestion retains the provider's original identity for lifecycle validation. Client
-message-ID validation remains strict, so returned history can be submitted unchanged.
+item-ID validation (`InOutItem::admit`) remains strict, so returned history can be submitted unchanged.
 Output-text `logprobs` use the existing nullable-vector deserializer: missing and
 null values become an empty vector and serialize as `[]`. Wire normalization uses
 the same default so content parts agree with item and terminal snapshots;
@@ -1570,8 +1578,8 @@ round:
   permits are acquired. These permit waits do not count toward it, so it is not a
   deadline for the entire round or total call latency. Timeout, execution, and tool-config
   failures become failed tool outputs that can be fed back to the model instead of
-  failing the whole response. A tool registered as gateway-owned without an
-  implementation (currently file search) likewise produces an error tool result.
+  failing the whole response. A gateway-owned tool without an executable
+  binding likewise produces an error tool call output.
 - Parallel safety is a per-handler contract. `GatewayExecutor::supports_parallel_execution`
   defaults to `false`; registration turns that into a `GatewayBinding::self_exclusion`
   semaphore. The semaphore serializes only simultaneous calls to the **same
@@ -1612,9 +1620,11 @@ round:
   are therefore separate concerns.
 - `public_output_items` is the public projection: custom function calls become
   `custom_tool_call`; gateway-owned internal function calls become their handler's
-  `web_search_call`/`mcp_call` output; client-owned function calls remain function
-  calls. The original gateway function calls and `function_call_output` results are
-  retained separately for continuation persistence.
+  public item (`web_search_call`, `mcp_call`, `code_interpreter_call`); client-owned
+  function calls remain function calls. A gateway call no executor can run (a declared
+  `file_search`) leaves the public output, like a hidden `max_tool_calls` refusal. The
+  gateway's `function_call_output` results feed only the next round's model input;
+  history stores the public items.
 
 The round decision remains in `engine.rs`, after gateway execution:
 
@@ -1738,16 +1748,16 @@ reachable only through the raw body, never the typed view.
 matching a returned gateway call result) to `auto`. The first round retains the
 client's selector; later rounds can answer from the tool result or choose another
 tool. Parallel-use settings and extension fields remain intact. Rounds containing
-client-executed function tools return before this mutation, and Messages does not
-persist this state.
+client-executed function tools return before this mutation. Threaded requests retain
+the resulting conversation in the independent Messages database store.
 
 `MessagesToolChoice` models `auto`, `any`, `tool` with a non-empty name, and
 `none` as an exhaustive enum. It retains parallel-use settings and flattened
 extension fields. The context performs fulfillment checks and transitions using
 that enum, then serializes the changed selector into the raw body. Malformed
 gateway-tool requests return HTTP 400 before inference; a parse failure cannot
-bypass validation by falling back to the proxy. Requests without gateway tools
-retain the transparent proxy contract and upstream validation.
+bypass validation by falling back to the proxy. Requests without gateway tools or
+`thread` retain the transparent proxy contract and upstream validation.
 
 vLLM can label a completed, explicitly named tool call `end_turn`. The shared
 request context accepts that stop only when the selected gateway tool appears in
@@ -1807,6 +1817,47 @@ round that omits `usage` still reports the hidden rounds' counters. `usage.serve
 adds the gateway's successful native searches (one per query) and fetches to the counters
 the upstream reported.
 
+`modes/messages_threads.rs` owns local Anthropic message-thread admission, rehydration,
+exclusive continuation reservations, and bounded durable checkpoints.
+`ParsedMessagesRequest` decodes the JSON body once and derives the shared typed
+`MessagesRequest` from that tree. Thread admission branches on its typed `thread`
+field; it has no probe decoder or parallel request/history model. The shared
+`ContentBlock` validates known blocks and preserves opaque provider blocks, including
+media and upstream server-tool content. Explicit null and omission remain distinct
+for create-only fields and retained block metadata.
+`types/messages/thread.rs` defines the independent checkpoint, typed fixed-field
+fingerprint, and error contracts. Checkpoints reuse `MessageParam`, `SystemPrompt`,
+and `ToolParam`; MCP fingerprints exclude the authorization token by construction.
+`storage/messages.rs` owns lease policy and cancellation; all thread queries live in
+`storage/models/message_thread.rs`, with row-state and checkpoint-column conversions in `storage/types/`.
+The Messages mode owns production access to the store; `executor::messages_threads` reexports that mode.
+The common schema verification and readiness paths include `message_threads`, its
+columns, primary key, three CHECK constraints, and backend privileges. No Responses items, sessions, or stores are involved. The HTTP
+adapter supplies an opaque owner derived from credentials, workspace, and verified
+OIDC identity, plus the beta set. Core strips `thread`, restores `system` and `tools`,
+and passes the full conversation to the existing stateless Messages loop.
+`modes/messages_threads/claude_code.rs` handles the explicit `claude-code-20250219`
+compatibility extension: it removes reserved billing attribution before retaining
+the prompt, permits unchanged repeated prompt/tool fields, and rejects mutations
+before reserving the parent. This shares the same checkpoint and execution path
+as ordinary Messages threads.
+
+`messages_stream/ingestion.rs` validates Messages SSE events and fills the existing
+`MessagesStreamAccumulator`; `messages_stream/blocks.rs` assembles content blocks.
+The streaming runner uses its completed round to publish the thread
+checkpoint before emitting the public terminal. The existing block assembler also
+retains streamed citation deltas. Both loops decide retention from the unfiltered
+round, so hiding a truncated tool call cannot make it continuable; fallback status
+is retained across every inference round. JSON execution success is recorded only
+after checkpoint publication succeeds. It adds no second SSE parser,
+channel, or ingestion worker. Publication consumes the parent's token-fenced lease
+and inserts the child's checkpoint in one database transaction. Dropping an unfinished
+reservation schedules a lease release in a `TaskTracker`; shutdown joins these
+cleanup operations. A stale lease cannot publish a child or release its replacement.
+The serving future polls expiry and renews active leases every ten seconds without
+holding a database transaction across inference. See [the API guide](docs/api/index.md#messages)
+for the five-minute lifetime, serialized-size budget, and crash recovery rules.
+
 ### `storage/` — persistence
 
 - **`pool.rs`** — `DbPool = sqlx::Pool<sqlx::Any>`, driver-agnostic across SQLite and
@@ -1816,8 +1867,18 @@ the upstream reported.
   connection URL, plus URL redaction for safe logging.
 - **`schema.rs`** — migrations and readiness (`PoolWithSchema::ensure_schema_ready`),
   including a path for a supervisor-managed schema that skips running migrations
-  itself and just verifies compatibility. Readiness probes live in `schema/readiness.rs`.
+  itself and just verifies compatibility. The PostgreSQL column/constraint/index contract lives in
+  `schema/postgres.rs`; readiness probes live in `schema/readiness.rs`.
   See [Schema, migrations, and where data goes](#schema-migrations-and-where-data-goes).
+- **`file_search.rs`** — portable file, vector-store, attachment, and chunk
+  persistence. Migration `0011_file_search_vec_map.sql` owns the portable
+  sqlite-vec row map; `storage/file_search/sqlite_vec_index.rs` owns per-store
+  `vec0` virtual tables and index operations after the provider loads its trusted
+  SQLite extension. Index staging and metadata publication share one
+  `BEGIN IMMEDIATE` transaction. The default
+  exact-search provider retains a 64 MiB serialized-corpus limit; sqlite-vec
+  admits 256 MiB. Its keyword, hybrid, and filtered semantic paths use that
+  same provider limit when they read chunks for exact ranking.
 - **`conversation.rs` (tenant-scoped API)** — conversation and item CRUD. Item ownership is checked through
   the conversation so Responses-persisted items are visible too. Item writes share `lock_in_tx` with
   turn persistence, so concurrent writers get distinct sequence numbers.
@@ -1959,9 +2020,8 @@ RequestPayload::to_upstream_request
 
 `RequestPayload::to_upstream_request` is the only request-level seam that prepares
 tools for vLLM. New callers must use it rather than rebuilding function schemas or
-normalizing declarations in the executor. Declared placeholders that are not yet
-supported, currently file search, produce no upstream function declaration until they
-have a complete handler and execution path. Code interpreter has a fixed
+normalizing declarations in the executor. File search normalizes to a built-in
+function contract and binds the request's configured vector stores. Code interpreter has a fixed
 normalization contract in every build. Requests that declare it fail before
 inference unless the binary includes the `embedded-code-interpreter` feature,
 the operator enables it, and Eryx runtime readiness succeeds.
@@ -1985,18 +2045,28 @@ the operator enables it, and Eryx runtime readiness succeeds.
   `ToolDeclaration`. These are the declaration-level validation and normalization entry
   points used by `RequestPayload::to_upstream_request` on the converted declarations. Each supported variant's
   policy belongs to its corresponding `ToolHandler`: `FunctionHandler`,
-  `ToolSearchHandler`, `McpHandler`, `WebSearchHandler`, `WebFetchHandler`,
+  `ToolSearchHandler`, `McpHandler`, `WebSearchHandler`, `WebFetchHandler`, `FileSearchHandler`,
   `CodexNamespaceHandler`, `CustomHandler`, or `CodeInterpreterHandler`. Web search's fixed canonical builder
   is shared with `WebSearchHandler::normalize`; it remains one schema even though it has no
   per-declaration normalization state. The method name is plural because namespace and
   MCP declarations may expand to several model-visible function tools.
-  `FileSearch` remains an unsupported placeholder and normalizes to nothing. The
-  code interpreter normalizes to one fixed function contract in every build, while
+  The code interpreter normalizes to one fixed function contract in every build, while
   request validation rejects unavailable runtimes before upstream inference.
   Feature-enabled builds bind the ready private `CodeInterpreterExecutor` to the provider.
   `ToolDeclaration::declares_async` and `declares_unsupported_async` answer which
   declarations make a tool async and which carry `async` where it is not accepted;
   `GatewayExecutors::validate_declarations` rejects the latter with its declared index.
+- **`file_search/`** — `FileSearchHandler` normalizes the built-in declaration and
+  projects typed call items and citations. Citation validation uses the registry's
+  gateway ownership; native upstream annotations survive unrelated requests and
+  client-owned functions named `file_search`. Its shared `FileSearchService` handles
+  file ingestion and semantic, keyword, and hybrid retrieval against
+  injected `FileSearchRepository` and `FileBlobStore` implementations. The default
+  repository uses `storage::file_search`, while the default blob store uses local
+  files. `ExecutionContext::from_config` initializes these defaults; embedders may
+  install a service with alternate providers. The Files and vector
+  store HTTP handlers call this same service. See [file search](docs/api/file-search.md) for configuration,
+  resource limits, and optional PDF ingestion.
 - **`async_execution.rs`** — the model-visible hints for async client tools. A vLLM-served
   model stops at a call, so the gateway continues the response with the call pending.
   `FunctionHandler`, `CustomHandler`, and `CodexNamespaceHandler` normalization append
@@ -2031,6 +2101,7 @@ the operator enables it, and Eryx runtime readiness succeeds.
           call: &FunctionToolCall,
           params: &Self::ExecutionParams,
       ) -> GatewayToolEventPlan;
+      fn started_output(&self, call: &FunctionToolCall, params: &Self::ExecutionParams) -> Option<OutputItem>;
       fn public_output(
           &self,
           call: &FunctionToolCall,
@@ -2052,7 +2123,11 @@ the operator enables it, and Eryx runtime readiness succeeds.
   controls same-tool self-exclusion, `plan_gateway_events()` creates the typed public
   lifecycle projection (and, for a tool that knows its result when planning, the
   `PlannedResult` recorded instead of executing), and `public_output()` shapes the
-  completed/failed client-visible item. No hook builds model input: the gateway records
+  completed/failed client-visible item. Every handler implements `started_output()` and
+  `public_output()` itself, so every gateway call has a public item for the client and
+  history; `plan_gateway_events()` defaults to `started_output()`. A web search executor
+  registered with `with_gateway_executor` builds its items with the public
+  `web_search::started_output_item` and `web_search::output_item`. No hook builds model input: the gateway records
   the result's items, and the upstream projection lowers them.
   - **Client-owned** tools implement `ToolHandler` and have a translator association:
     see `function.rs` (`FunctionHandler`), `custom.rs` (`CustomHandler`), `codex.rs`

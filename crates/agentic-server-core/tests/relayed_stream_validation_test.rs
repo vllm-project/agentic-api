@@ -9,7 +9,7 @@ use agentic_core::events::{EventPayload, SSEItemType, normalize_sse_line};
 use agentic_core::executor::accumulator::ResponseAccumulator;
 use agentic_core::executor::request::RequestContext;
 use agentic_core::executor::{UpstreamBody, decode_upstream};
-use agentic_core::types::io::OutputItem;
+use agentic_core::types::io::{OutputAnnotation, OutputItem, OutputMessageContent};
 use agentic_core::types::request_response::RequestPayload;
 use multi_agent_contract::RecordedSession;
 use serde_json::json;
@@ -31,6 +31,45 @@ fn request_context() -> RequestContext {
         conversation_id: None,
         checkpoint: None,
         continuation: None,
+    }
+}
+
+#[tokio::test]
+async fn strict_relay_decoder_preserves_public_file_citations_in_json_and_sse() {
+    let annotations = json!([{"type":"file_citation","file_id":"file_public","filename":"policy.txt","index":0}]);
+    let item = json!({
+        "type":"message", "id":"msg_public", "role":"assistant", "status":"completed",
+        "content":[{"type":"output_text","text":"The policy applies.","annotations":annotations}]
+    });
+    let response = json!({"id":"resp_upstream","status":"completed","output":[item]});
+    let json_body = response.to_string();
+    let stream = [
+        json!({"type":"response.created","response":{"id":"resp_upstream","status":"in_progress"}}),
+        json!({"type":"response.in_progress","response":{"id":"resp_upstream","status":"in_progress"}}),
+        json!({"type":"response.output_item.added","output_index":0,
+            "item":{"type":"message","id":"msg_public","role":"assistant","status":"in_progress","content":[]}}),
+        json!({"type":"response.output_item.done","output_index":0,"item":item}),
+        json!({"type":"response.completed","response":response}),
+    ]
+    .map(|event| format!("data: {event}"))
+    .join("\n");
+
+    for body in [UpstreamBody::Json(&json_body), UpstreamBody::Sse(&stream)] {
+        let (payload, _) = decode_upstream(request_context(), body)
+            .await
+            .expect("valid public response");
+        let OutputItem::Message(message) = &payload.output[0] else {
+            panic!("expected assistant message");
+        };
+        let OutputMessageContent::OutputText(text) = &message.content[0] else {
+            panic!("expected output text");
+        };
+        assert!(matches!(
+            text.annotations.as_deref(),
+            Some([OutputAnnotation::FileCitation(_)])
+        ));
+        let output = serde_json::to_value(payload.output).expect("typed output");
+        assert_eq!(output[0]["content"][0]["annotations"], annotations);
     }
 }
 

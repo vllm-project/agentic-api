@@ -88,15 +88,18 @@ if ! wait "$gateway_pid"; then
     exit 1
 fi
 
-# The Collector batches before exporting; poll until this run's metrics show up.
-for _ in $(seq 1 50); do
+# The Collector can export this run's instruments in separate batches. Wait for
+# the complete smoke check instead of stopping at the first batch.
+for _ in $(seq 1 100); do
     "${compose[@]}" logs --no-color otel-collector >"$work/collector.log" 2>&1
     curl -fsS http://127.0.0.1:8889/metrics >"$work/prometheus.txt"
-    if grep -q "service.name: Str($service)" "$work/collector.log" &&
-        grep -q "service_name=\"$service\"" "$work/prometheus.txt"; then
-        break
+    if python3 "$fixtures" check "$service" "$work/collector.log" "$work/prometheus.txt" \
+        >"$work/check.log" 2>&1; then
+        cat "$work/check.log"
+        exit 0
     fi
     sleep 0.2
 done
 
-python3 "$fixtures" check "$service" "$work/collector.log" "$work/prometheus.txt"
+cat "$work/check.log" >&2
+exit 1

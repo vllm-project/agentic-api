@@ -17,8 +17,11 @@ use tokio::sync::Mutex;
 
 use agentic_core::executor::{ConversationHandler, ExecutionContext, ResponseHandler};
 use agentic_core::storage::{ConversationStore, ResponseStore, create_pool_with_schema};
+use agentic_core::tool::web_search;
 use agentic_core::tool::{GatewayExecutor, ToolError, ToolHandler, ToolOutput, ToolType};
 use agentic_core::types::io::FunctionTool;
+use agentic_core::types::io::OutputItem;
+use agentic_core::types::io::output::{FunctionToolCall, GatewayCallStatus};
 use agentic_core::types::tools::WebSearchToolParam;
 
 use common::{spawn_gateway, test_config, test_state};
@@ -56,6 +59,20 @@ impl ToolHandler for TestWebSearchExecutor {
 
 impl GatewayExecutor for TestWebSearchExecutor {
     type ExecutionParams = WebSearchToolParam;
+
+    fn started_output(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> Option<OutputItem> {
+        web_search::started_output_item(call)
+    }
+
+    fn public_output(
+        &self,
+        call: &FunctionToolCall,
+        output: &ToolOutput,
+        status: GatewayCallStatus,
+        _params: &WebSearchToolParam,
+    ) -> Option<OutputItem> {
+        web_search::output_item(call, output, status.into())
+    }
 
     fn execute(
         &self,

@@ -39,7 +39,7 @@ use self::serply::SerplySearchProvider;
 use self::tavily::TavilySearchProvider;
 use self::you::{YOU_API_BASE_URL, YOU_API_KEY, YouSearchProvider};
 use super::handler::MAX_GATEWAY_TOOL_OUTPUT_BYTES;
-use super::handler::{GatewayExecutor, GatewayToolEventPlan, ToolError, ToolHandler, ToolOutput};
+use super::handler::{GatewayExecutor, ToolError, ToolHandler, ToolOutput};
 use super::ownership::GatewayBinding;
 use super::registry::{ToolEntry, ToolType};
 use crate::config::{DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS, WebSearchProviderConfig, WebSearchProviderKind};
@@ -144,12 +144,10 @@ pub(crate) fn web_search_function_tool() -> FunctionTool {
     }
 }
 
+/// The `web_search_call` for a completed or failed search, for a web search executor's
+/// [`GatewayExecutor::public_output`].
 #[must_use]
-pub(crate) fn output_item(
-    call: &FunctionToolCall,
-    output: &ToolOutput,
-    status: WebSearchCallStatus,
-) -> Option<OutputItem> {
+pub fn output_item(call: &FunctionToolCall, output: &ToolOutput, status: WebSearchCallStatus) -> Option<OutputItem> {
     let parsed_output = serde_json::from_str::<Value>(&output.output).ok();
     let queries = parsed_output
         .as_ref()
@@ -162,8 +160,9 @@ pub(crate) fn output_item(
         .ok()
 }
 
+/// The in-progress `web_search_call`, for a web search executor's [`GatewayExecutor::started_output`].
 #[must_use]
-pub(crate) fn started_output_item(call: &FunctionToolCall) -> Option<OutputItem> {
+pub fn started_output_item(call: &FunctionToolCall) -> Option<OutputItem> {
     WebSearchCall::try_new(
         call_output_id(call),
         WebSearchCallStatus::InProgress,
@@ -423,8 +422,8 @@ impl GatewayExecutor for WebSearchHandler {
         true
     }
 
-    fn plan_gateway_events(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> GatewayToolEventPlan {
-        GatewayToolEventPlan::new(started_output_item(call))
+    fn started_output(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> Option<OutputItem> {
+        started_output_item(call)
     }
 
     fn public_output(

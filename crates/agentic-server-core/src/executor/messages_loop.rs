@@ -24,8 +24,9 @@ use crate::executor::inference::fetch_response_json_with_headers;
 use crate::executor::messages_context::MessagesRequestContext;
 use crate::executor::messages_round::{MessagesRoundDecision, decide_round};
 use crate::executor::messages_server_tools::{NativeServerTools, ServerToolView};
+use crate::executor::messages_threads::ThreadRetention;
 use crate::executor::messages_tools::{ExecutedCall, execute_gateway_calls, request_gateway_map};
-use crate::executor::messages_usage::MessagesUsageTotals;
+use crate::executor::messages_usage::{MessagesUsageTotals, has_fallback};
 use crate::executor::request::ExecutionContext;
 use crate::executor::telemetry::metrics::{ExecutorMetrics, Stage};
 use crate::executor::telemetry::{Api, ExecutionSpan, FailureCategory, Route};
@@ -98,9 +99,12 @@ pub async fn run_messages_loop(
         .instrument(span)
         .await;
     match &result {
-        // Every `Ok` path inside states its own execution outcome; the
-        // payload is now the handler's to send.
-        Ok(_) => execution.delivered(),
+        // Checkpoint publication has succeeded before execution can complete.
+        // Error bodies already recorded their failure inside the loop.
+        Ok(response) => {
+            execution.completed_with_stop_reason(response.body["stop_reason"].as_str());
+            execution.delivered();
+        }
         Err(error) => {
             execution.failed(error);
             execution.not_delivered();
@@ -150,6 +154,7 @@ async fn run_messages_loop_traced(
         // A reply that is not a JSON object is refused like malformed JSON.
         let mut message = Value::Object(deserialize_from_str(&resp_text).map_err(ExecutorError::JsonError)?);
         record_message_usage(&exec_ctx.metrics, message.get("usage"));
+        turn.fallback |= has_fallback(message.get("usage"));
 
         // Any error body from upstream is surfaced verbatim (handler maps it to
         // the Anthropic error envelope).
@@ -168,8 +173,7 @@ async fn run_messages_loop_traced(
         // client should see. A client-owned tool_use means we cannot continue
         // the loop server-side — return the turn to the client (edge E7).
         let Some(content) = content else {
-            execution.completed_with_stop_reason(stop_reason);
-            return Ok(deliver(message, turn, &gateway_map, response_headers));
+            return deliver(message, turn, &gateway_map, response_headers, &mut ctx).await;
         };
         let mut gateway_calls: Vec<&Value> = Vec::new();
         let mut has_client_tool_use = false;
@@ -193,12 +197,11 @@ async fn run_messages_loop_traced(
         match decision {
             MessagesRoundDecision::ContinueGateway => {}
             MessagesRoundDecision::ReturnClient | MessagesRoundDecision::Finish => {
-                execution.completed_with_stop_reason(stop_reason);
                 let visible_stop = decision.visible_stop_reason(stop_reason);
                 if visible_stop != stop_reason {
                     message["stop_reason"] = json!(visible_stop);
                 }
-                return Ok(deliver(message, turn, &gateway_map, response_headers));
+                return deliver(message, turn, &gateway_map, response_headers, &mut ctx).await;
             }
         }
         // Pure gateway-tool round: execute the calls, then feed the model's FULL
@@ -242,6 +245,7 @@ async fn run_messages_loop_traced(
 struct ClientTurn {
     shown: Vec<Value>,
     usage: MessagesUsageTotals,
+    fallback: bool,
 }
 
 impl ClientTurn {
@@ -288,13 +292,34 @@ fn record_message_usage(metrics: &ExecutorMetrics, usage: Option<&Value>) {
 /// mid-call. The streaming loop suppresses these blocks too; this is the
 /// non-streaming half of the same contract. A final round whose `content` is a
 /// bare string keeps it as a text block after the shown rounds.
-fn deliver(
+async fn deliver(
     mut message: Value,
     turn: ClientTurn,
     gateway_map: &tool_seam::GatewayToolMap,
     headers: http::HeaderMap,
-) -> MessagesResponse<Value> {
-    let ClientTurn { mut shown, mut usage } = turn;
+    ctx: &mut MessagesRequestContext,
+) -> ExecutorResult<MessagesResponse<Value>> {
+    let ClientTurn {
+        mut shown,
+        mut usage,
+        fallback,
+    } = turn;
+    if let Some(id) = ctx.thread_message_id() {
+        message["id"] = json!(id);
+        if message["stop_reason"].as_str().is_none() || !message["content"].is_array() {
+            return Err(ExecutorError::StreamError("invalid upstream thread message".to_owned()));
+        }
+        let stop_reason = message["stop_reason"].as_str().filter(|_| !fallback);
+        let has_tool_call = message["content"]
+            .as_array()
+            .is_some_and(|blocks| blocks.iter().any(|block| block["type"] == "tool_use"));
+        let retention = ThreadRetention::for_response(stop_reason, has_tool_call);
+        let retained = message["content"].as_array().map_or(Value::Null, |content| {
+            Value::Array(tool_seam::strip_gateway_tool_use(content, gateway_map))
+        });
+        ctx.complete_thread(&retained, retention).await?;
+    }
+
     let visible = match message.get("content") {
         Some(Value::Array(content)) => {
             let visible = tool_seam::strip_gateway_tool_use(content, gateway_map);
@@ -308,7 +333,7 @@ fn deliver(
         fields.insert("content".to_owned(), Value::Array(shown));
     }
     usage.finish(&mut message);
-    MessagesResponse { body: message, headers }
+    Ok(MessagesResponse { body: message, headers })
 }
 
 /// The round's gateway-owned `tool_use` blocks as dispatchable calls.

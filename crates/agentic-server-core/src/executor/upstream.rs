@@ -42,6 +42,7 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
             .map(|(name, _)| name.to_owned())
             .collect(),
     )
+    .with_file_search_context(&agent.request.enriched_request.input)
     .with_async_tool_names(registry.async_tool_names().map(str::to_owned).collect())
     .with_response_metadata(
         registry.namespace_map().cloned(),
@@ -62,8 +63,8 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
 
 /// Builds the JSON body sent upstream: history inlined, continuation fields removed,
 /// and `store: false` preserved when the caller disables storage. `guidance` is appended
-/// as a final message, and `withheld` names the registry whose gateway-executed tools are
-/// left out after a `max_tool_calls` refusal, without changing the persisted tools.
+/// as the last input item, and `withheld` names the registry whose gateway-executed tools
+/// are left out after a `max_tool_calls` refusal; neither changes the persisted request.
 ///
 /// # Errors
 /// Unsupported message content, a tool-configuration error, or a serialization failure.
