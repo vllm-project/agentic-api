@@ -106,8 +106,12 @@ jobs:
           set -euo pipefail
           branch="release-prep/v$RELEASE_VERSION"
 
-          if git ls-remote --exit-code --heads origin "refs/heads/$branch" >/dev/null 2>&1; then
-            echo "::error::Branch $branch already exists"
+          # A maintainer can pre-create this branch when repository rules prevent
+          # GITHUB_TOKEN from creating refs. Only reuse the exact selected base.
+          base_sha="$(git rev-parse HEAD)"
+          branch_sha="$(git ls-remote --heads origin "refs/heads/$branch" | cut -f1)"
+          if [ -n "$branch_sha" ] && [ "$branch_sha" != "$base_sha" ]; then
+            echo "::error::Branch $branch already contains work or points to a different base; inspect its PR"
             exit 1
           fi
 
