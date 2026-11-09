@@ -4,7 +4,6 @@ use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 
 use axum::Router;
 use axum::middleware;
-use axum::routing::{get, post};
 use axum::serve::{ListenerExt as _, TapIo};
 use http::HeaderValue;
 use tokio::net::{TcpListener, TcpStream};
@@ -17,19 +16,20 @@ use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use agentic_core::executor::ExecutionContext;
 use agentic_core::proxy::ProxyState;
 
+use axum::extract::DefaultBodyLimit;
+
 use crate::auth::api_key::require_api_key;
-use crate::auth::{ANTHROPIC_COUNT_TOKENS_PATH, ANTHROPIC_MESSAGES_PATH, OidcAuthenticator, require_oidc};
-use crate::handler::http::file_search;
-use crate::handler::{
-    chat_completions, compact_response, completions, count_tokens, create_conversation, create_item,
-    delete_conversation, delete_item, delete_response, embeddings, health, list_input_items, list_items, messages,
-    models, ready, responses, responses_ws_with_auth, retrieve_conversation, retrieve_item, retrieve_model,
-    retrieve_response, transcriptions, translations, update_conversation,
-};
+use crate::auth::{OidcAuthenticator, require_oidc};
 use crate::model_capabilities::ModelCapabilities;
 use crate::rate_limit::{RateLimitConfig, RateLimiter, enforce_rate_limit};
 use crate::telemetry::http::{HttpMetrics, track_request};
 use crate::telemetry::websocket::WebSocketMetrics;
+
+mod api_routes;
+pub(crate) use api_routes::{
+    documented_file_search_routes, documented_model_wildcard_routes, documented_protected_routes,
+    documented_public_routes, documented_retrieval_routes,
+};
 
 /// Default ceiling on serialized inbound request bytes for HTTP bodies and
 /// WebSocket messages.
@@ -343,7 +343,7 @@ pub fn build_router_with_auth(
     server_config: &ServerConfig,
     authenticator: Option<OidcAuthenticator>,
 ) -> Router {
-    let public_routes = Router::new().route("/health", get(health)).route("/ready", get(ready));
+    let public_routes: Router<AppState> = documented_public_routes().into();
     #[cfg(feature = "openapi")]
     let public_routes = if server_config.enable_openapi_docs {
         public_routes.merge(crate::openapi::swagger_ui_router())
@@ -351,52 +351,26 @@ pub fn build_router_with_auth(
         public_routes
     };
     // Retrieval and deletion act on local storage, so they cannot rely on upstream credential validation.
-    let mut retrieval_route = get(retrieve_response).delete(delete_response);
-    let mut input_items_route = get(list_input_items);
+    let mut retrieval_routes: Router<AppState> = documented_retrieval_routes().into();
     if authenticator.is_none()
         && let Some(key) = state.openai_api_key.as_ref().filter(|key| !key.is_empty())
     {
-        retrieval_route = retrieval_route.route_layer(middleware::from_fn_with_state(key.clone(), require_api_key));
-        input_items_route = input_items_route.route_layer(middleware::from_fn_with_state(key.clone(), require_api_key));
+        retrieval_routes = retrieval_routes.route_layer(middleware::from_fn_with_state(key.clone(), require_api_key));
     }
-    let mut file_search_routes = file_search::router(state.max_request_body_size.get());
+    let mut file_search_routes =
+        Router::from(documented_file_search_routes()).layer(DefaultBodyLimit::max(state.max_request_body_size.get()));
     if authenticator.is_none()
         && let Some(key) = state.openai_api_key.as_ref().filter(|key| !key.is_empty())
     {
         file_search_routes =
             file_search_routes.route_layer(middleware::from_fn_with_state(key.clone(), require_api_key));
     }
-    let protected_routes = Router::new()
-        .merge(file_search_routes)
-        .route("/v1/conversations", post(create_conversation))
-        .route(
-            "/v1/conversations/{conversation_id}",
-            get(retrieve_conversation)
-                .post(update_conversation)
-                .delete(delete_conversation),
-        )
-        .route(
-            "/v1/conversations/{conversation_id}/items",
-            post(create_item).get(list_items),
-        )
-        .route(
-            "/v1/conversations/{conversation_id}/items/{item_id}",
-            get(retrieve_item).delete(delete_item),
-        )
-        .route("/v1/chat/completions", post(chat_completions))
-        .route("/v1/completions", post(completions))
-        .route("/v1/embeddings", post(embeddings))
-        .route("/v1/audio/transcriptions", post(transcriptions))
-        .route("/v1/audio/translations", post(translations))
-        .route("/v1/models", get(models))
-        // A wildcard, because model IDs such as `org/name` contain slashes.
-        .route("/v1/models/{*model}", get(retrieve_model))
-        .route(ANTHROPIC_MESSAGES_PATH, post(messages))
-        .route(ANTHROPIC_COUNT_TOKENS_PATH, post(count_tokens))
-        .route("/v1/responses", post(responses).get(responses_ws_with_auth))
-        .route("/v1/responses/compact", post(compact_response))
-        .route("/v1/responses/{response_id}", retrieval_route)
-        .route("/v1/responses/{response_id}/input_items", input_items_route);
+    let protected_routes: Router<AppState> = documented_protected_routes().into();
+    let model_routes: Router<AppState> = documented_model_wildcard_routes().into();
+    let protected_routes = protected_routes
+        .merge(model_routes)
+        .merge(retrieval_routes)
+        .merge(file_search_routes);
     // Layered before authentication, so it runs after it and sees the principal.
     let protected_routes = match server_config.rate_limit {
         Some(config) => protected_routes.route_layer(middleware::from_fn_with_state(

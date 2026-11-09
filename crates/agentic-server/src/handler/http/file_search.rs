@@ -5,39 +5,16 @@ use agentic_core::tool::file_search::{FileSearchService, MAX_FILE_BYTES};
 use agentic_core::types::file_search::{
     AttachFileRequest, CreateVectorStoreRequest, FileSearchError, ListParams, SearchRequest,
 };
+use axum::Json;
 use axum::extract::multipart::{MultipartError, MultipartRejection};
 use axum::extract::rejection::{JsonRejection, QueryRejection};
-use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, State};
+use axum::extract::{Multipart, Path, Query, State};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
-use axum::{Json, Router};
 use http::{StatusCode, header};
 use serde::Serialize;
 
 use crate::app::AppState;
 use crate::handler::common::executor_error_response;
-
-pub(crate) fn router(max_request_body_size: usize) -> Router<AppState> {
-    Router::new()
-        .route("/v1/files", post(upload_file).get(list_files))
-        .route("/v1/files/{file_id}", get(get_file).delete(delete_file))
-        .route("/v1/files/{file_id}/content", get(file_content))
-        .route("/v1/vector_stores", post(create_vector_store).get(list_vector_stores))
-        .route(
-            "/v1/vector_stores/{store_id}",
-            get(get_vector_store).delete(delete_vector_store),
-        )
-        .route(
-            "/v1/vector_stores/{store_id}/files",
-            post(attach_file).get(list_vector_store_files),
-        )
-        .route(
-            "/v1/vector_stores/{store_id}/files/{file_id}",
-            get(get_vector_store_file).delete(detach_file),
-        )
-        .route("/v1/vector_stores/{store_id}/search", post(search))
-        .layer(DefaultBodyLimit::max(max_request_body_size))
-}
 
 fn service(state: &AppState) -> Result<&FileSearchService, Box<Response>> {
     state.exec_ctx.file_search.as_ref().ok_or_else(|| {

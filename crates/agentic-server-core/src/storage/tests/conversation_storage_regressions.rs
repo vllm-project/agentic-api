@@ -1,16 +1,15 @@
 //! Storage-level conversation and item regressions using the existing tables directly.
 
-mod support;
+use super::test_support as support;
 
 use agentic_core::types::conversations::ConversationMetadata;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use crate::storage::models::Item;
+use crate::storage::models::{conversation as conversation_model, item as item_model, response as response_model};
 use agentic_core::executor::{ConversationHandler, ExecutorError};
-use agentic_core::storage::models::{
-    conversation as conversation_model, item as item_model, response as response_model,
-};
-use agentic_core::storage::{ConversationStore, Item, ResponseMetadata, ResponseStore, create_pool_with_schema};
+use agentic_core::storage::{ConversationStore, ResponseMetadata, ResponseStore, create_pool_with_schema};
 use agentic_core::types::io::InOutItem;
 use agentic_core::types::io::ItemOrder;
 use serde_json::json;
@@ -222,7 +221,7 @@ async fn insert_with_ids(
         })
         .collect();
     let mut tx = pool.begin().await?;
-    agentic_core::storage::models::conversation::lock_in_tx(&mut tx, id).await?;
+    crate::storage::models::conversation::lock_in_tx(&mut tx, id).await?;
     item_model::create_in_tx(&mut tx, items, Some(id)).await?;
     tx.commit().await?;
     Ok(())
@@ -514,7 +513,7 @@ async fn regression_concurrent_insert_checks_membership_under_the_conversation_l
     );
 }
 
-#[path = "conversations/item_references.rs"]
+#[path = "../../../tests/conversations/item_references.rs"]
 mod item_references;
 
 #[tokio::test]

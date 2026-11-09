@@ -1,3 +1,7 @@
+// Shared test fixtures import the core by its external crate name.
+#[cfg(test)]
+extern crate self as agentic_core;
+
 pub mod config;
 pub mod error;
 pub mod events;
@@ -12,7 +16,6 @@ pub mod utils;
 pub use storage::{
     ConversationData, ConversationStore, DatabaseBackend, DbPool, ItemKind, ResponseData, ResponseMetadata,
     ResponseStore, SchemaManager, StorageError, StoreResult, create_pool, create_pool_with_schema,
-    models::{Conversation as DbConversation, Item as DbItem, Response as DbResponse},
 };
 pub use tool::{
     CodeInterpreterHandler, CodexNamespaceHandler, FunctionHandler, GatewayExecutor, GatewayExecutorRegistration,

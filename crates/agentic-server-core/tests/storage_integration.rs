@@ -5,7 +5,7 @@ use agentic_core::storage::{
     ConversationData, ConversationStore, ResponseStore, StoreResult, create_pool_with_schema,
     create_pool_with_schema_and_sqlite_config,
 };
-use agentic_core::storage::{ResponseCheckpoint, ResponseData, ResponseMetadata, StorageError};
+use agentic_core::storage::{ResponseCheckpoint, ResponseMetadata, StorageError};
 use agentic_core::types::conversations::ConversationMetadata;
 use agentic_core::types::event::MessageStatus;
 use agentic_core::types::io::InOutItem;
@@ -381,11 +381,7 @@ async fn test_response_store_get() {
         .await
         .expect("persist failed");
 
-    let response = store
-        .get("resp_get_test")
-        .await
-        .and_then(ResponseData::try_from)
-        .expect("get failed");
+    let response = store.get("resp_get_test").await.expect("get failed");
 
     assert_eq!(response.response_id, "resp_get_test");
     assert_eq!(response.history_item_ids.len(), 1);
@@ -404,9 +400,7 @@ async fn response_rehydration_rejects_invalid_or_missing_history() -> Result<(),
             &ResponseMetadata::default(),
         )
         .await?;
-    let item_id = ResponseData::try_from(store.get("resp_corrupt").await?)?
-        .history_item_ids
-        .remove(0);
+    let item_id = store.get("resp_corrupt").await?.history_item_ids.remove(0);
 
     // Reasoning that even the legacy projection cannot read fails closed, not silently.
     let malformed = serde_json::json!({
@@ -483,11 +477,7 @@ async fn test_response_store_with_previous_response() {
         .await
         .expect("persist second failed");
 
-    let response = store
-        .get("resp_2")
-        .await
-        .and_then(ResponseData::try_from)
-        .expect("get failed");
+    let response = store.get("resp_2").await.expect("get failed");
 
     assert_eq!(response.previous_response_id, Some("resp_1".to_string()));
     assert_eq!(response.history_item_ids.len(), 2);
@@ -889,11 +879,7 @@ async fn test_response_store_get_after_persist() {
         .await
         .expect("persist failed");
 
-    let retrieved = store
-        .get("resp_stored")
-        .await
-        .and_then(ResponseData::try_from)
-        .expect("response should be found");
+    let retrieved = store.get("resp_stored").await.expect("response should be found");
 
     assert_eq!(retrieved.response_id, "resp_stored");
     assert_eq!(retrieved.history_item_ids.len(), 2);

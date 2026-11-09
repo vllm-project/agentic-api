@@ -51,6 +51,20 @@ repos:
         entry: cargo fmt -- --check
         types: [rust]
         pass_filenames: false
+    -   id: storage-boundaries
+        name: Storage ownership boundaries
+        language: python
+        entry: python scripts/check_storage_boundaries.py
+        additional_dependencies: *rust_size_dependencies
+        pass_filenames: false
+        always_run: true
+    -   id: storage-boundary-tests
+        name: Storage boundary checker tests
+        language: python
+        entry: python -m unittest discover -s scripts/tests -p test_storage_boundaries.py
+        additional_dependencies: *rust_size_dependencies
+        files: '^(scripts/(check_storage_boundaries.py|check_rust_file_sizes.py|tests/test_storage_boundaries.py)|\.pre-commit-config.yaml)$'
+        pass_filenames: false
 
 ci:
     skip: [rustfmt]

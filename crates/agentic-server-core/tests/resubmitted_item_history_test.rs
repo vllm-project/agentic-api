@@ -9,7 +9,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use agentic_core::executor::ExecuteRequest;
-use agentic_core::storage::{ResponseData, ResponseStore};
+use agentic_core::storage::ResponseStore;
 use agentic_core::types::io::InOutItem;
 use agentic_core::types::request_response::ResponsePayload;
 use serde_json::{Value, json};
@@ -161,11 +161,7 @@ async fn recorded_continuation_keeps_history(cassette_name: &str) {
     );
 
     // Each stored occurrence has a private row ID; public IDs stay stable for clients.
-    let response = store
-        .get(&second.id)
-        .await
-        .and_then(ResponseData::try_from)
-        .expect("read response row");
+    let response = store.get(&second.id).await.expect("read response row");
     assert_eq!(response.history_item_ids.len(), 4);
     assert_eq!(
         response.history_item_ids.iter().collect::<HashSet<_>>().len(),
@@ -241,11 +237,7 @@ async fn resubmitted_output_items_keep_every_occurrence(cassette_name: &str) {
         ]
     );
 
-    let response = store
-        .get(&second.id)
-        .await
-        .and_then(ResponseData::try_from)
-        .expect("read response row");
+    let response = store.get(&second.id).await.expect("read response row");
     assert_eq!(response.history_item_ids.len(), 4);
     assert_eq!(
         response.history_item_ids.iter().collect::<HashSet<_>>().len(),

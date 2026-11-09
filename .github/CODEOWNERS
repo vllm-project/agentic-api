@@ -1,3 +1,19 @@
 # Maintainers of vLLM Agentic API
 # Default - root-level owners as fallback
 * @bbrowning @franciscojavierarceo @haoshan98 @jiahuei @leseb @maralbahari @noobHappylife @qandrew @tjtanaa
+
+# Stored history has one typed path. Require code-owner approval in the main ruleset.
+/crates/agentic-server-core/src/storage/ @maralbahari @franciscojavierarceo
+/crates/agentic-server-core/migrations/ @maralbahari @franciscojavierarceo
+/crates/agentic-server-core/src/executor/modes/ @maralbahari @franciscojavierarceo
+/crates/agentic-server-core/src/executor/rehydrate.rs @maralbahari @franciscojavierarceo
+/crates/agentic-server-core/src/executor/persist.rs @maralbahari @franciscojavierarceo
+/crates/agentic-server-core/src/executor/request.rs @maralbahari @franciscojavierarceo
+/crates/agentic-server-core/tests/storage_contract_test.rs @maralbahari @franciscojavierarceo
+/scripts/check_storage_boundaries.py @maralbahari @franciscojavierarceo
+/.github/CODEOWNERS @maralbahari @franciscojavierarceo
+/crates/agentic-server-core/src/executor/prepare.rs @maralbahari @franciscojavierarceo
+/scripts/tests/test_storage_boundaries.py @maralbahari @franciscojavierarceo
+/.pre-commit-config.yaml @maralbahari @franciscojavierarceo
+/.github/workflows/rust.yml @maralbahari @franciscojavierarceo
+/.github/workflows/storage-performance.yml @maralbahari @franciscojavierarceo

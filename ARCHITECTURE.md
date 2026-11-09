@@ -1877,7 +1877,7 @@ for the five-minute lifetime, serialized-size budget, and crash recovery rules.
   the conversation so Responses-persisted items are visible too. Item writes share `lock_in_tx` with
   turn persistence, so concurrent writers get distinct sequence numbers.
   Removal detaches items rather than destroying history referenced by stored responses.
-- **`models/`** — one `sqlx::FromRow` row struct per table (`Conversation`, `Item`,
+- **`models/` (private)** — one `sqlx::FromRow` row struct per table (`Conversation`, `Item`,
   `Response`) plus one SQL function per table operation (`create_in_tx`, `get`,
   `lock_in_tx`, ...). This is the literal DB row shape: JSON columns are still strings
   here. Query SQL is portable across SQLite and PostgreSQL; `lock_in_tx` is the one
@@ -1906,10 +1906,8 @@ for the five-minute lifetime, serialized-size budget, and crash recovery rules.
   `InputItem`s pass through, while stored `OutputItem`s go through
   `OutputItem::to_input_item()`. Messages, reasoning, function/custom calls,
   compaction checkpoints, and MCP list-tools records are retained. Public
-  `web_search_call`, `mcp_call`, and `code_interpreter_call` outputs are deliberately omitted because their
-  model-facing function calls and results are already persisted as input items;
-  reconstructing them here would duplicate and lose information from that canonical
-  pair.
+  `web_search_call`, `mcp_call`, and `code_interpreter_call` records remain public in storage and are lowered to
+  model-facing function calls and outputs by `ResponsesInput::normalized_model_input`, at the upstream boundary.
 
   This conversion is **not** the model visibility boundary. The resulting enriched
   history still contains `InputItem::Compaction`, `InputItem::CompactionTrigger`, and
@@ -1940,6 +1938,42 @@ lists the history without the snapshot's output. Only the retrieval reads decode
 `get_input_items`, which counts its outputs), so a continuation, and a session checkpoint built from it, never
 carries the parent's full response. A response stored without a snapshot, such as a `store: false` session checkpoint, remains
 usable for continuation, but GET retrieval reports a conflict rather than fabricating status, usage, or output.
+
+#### Enforcing storage ownership
+
+Raw row models and store pool accessors are private to `storage/`; `ResponseStore::get` returns `ResponseData`, so HTTP handlers and
+executor callers cannot decode database columns themselves. Raw-row transaction and concurrency tests live
+inside `storage/tests/`. Public integration tests use typed stores and inspect SQL only to verify persisted facts.
+
+`scripts/check_storage_boundaries.py` runs in pre-commit and its CI job. It parses Rust syntax, excludes test-only
+items, and rejects response/conversation store access outside their executor modes and request bootstrap, JSON codecs in stores or models,
+SQL outside storage (with the existing sqlite-vec provider exception), duplicate `ResponseCheckpoint` definitions,
+and additional `persist*`/`rehydrate*` store entry points. This is an ownership check, not a Rust name resolver or a
+proof that two arbitrary algorithms are equivalent; private modules and owner review enforce the remaining boundary.
+
+`storage_contract_test` runs in Rust CI against SQLite and PostgreSQL. Its unchanged OpenAI recordings supply public
+web-search, MCP, and code-interpreter records. It checks plain item JSON and typed metadata, order and identity through
+both continuation paths, snapshot isolation, model-only lowering, and actual SQL statement budgets. The counter
+observes SQLx query events and calibrates itself before assertions; a disabled logger fails the test. Budgets exclude
+transaction control and connection housekeeping. They currently allow two statements for response rehydration, one
+for conversation rehydration, three for persisting a continued response, and five/four for a SQLite/PostgreSQL
+conversation persist. Complete executor turns are also measured: a `previous_response_id` turn allows five statements;
+a conversation turn allows seven/six on SQLite/PostgreSQL. These baselines include the parent read still present in
+response persistence and the extra conversation lookup; RFC #500's checkpoint follow-up can lower them. A lower
+count is allowed. Increase a budget only with an explicit owner-reviewed explanation.
+
+The storage paths and the checks have explicit `.github/CODEOWNERS` entries. For merge enforcement, a repository
+administrator must enable **Require review from Code Owners**, **Dismiss stale pull request approvals when new commits
+are pushed**, and required successful checks for **pre-commit**, **rust**, and **postgres** in the `main` ruleset.
+The inspected ruleset currently requires one approval but has code-owner review disabled and no required status
+checks. Adding CODEOWNERS or a workflow does not itself change those repository settings.
+
+The `Storage performance` workflow runs the existing `storage_crud` Criterion benchmarks at the PR's base and head
+on the same runner, for 3, 30, and 300 history items. It uploads raw measurements and the statistical comparison as
+`storage-performance`, and warns on reported regressions. Hosted runner timing is advisory: confirm a regression on a
+stable machine before treating it as a timing gate. Manual runs compare the selected branch with `origin/main`.
+For concurrency investigations, use the existing `storage_concurrent` benchmarks with matching database configuration. SQL budgets are deterministic CI gates; latency measurements
+must include history size, concurrency, backend, and run variance before changing a hot path or adding a threshold.
 
 #### Schema, migrations, and where data goes
 

@@ -125,6 +125,25 @@ pub(in crate::storage) fn decode_turn_metadata(
         .map_err(|_| invalid_metadata())
 }
 
+/// Encode the ordered row IDs in `responses.history_item_ids`.
+pub(in crate::storage) fn encode_history(ids: &[String]) -> Result<String, serde_json::Error> {
+    serde_json::to_string(ids)
+}
+
+impl StorageDbResponse {
+    /// Deserialize history references, treating only SQL NULL as legacy empty history.
+    ///
+    /// # Errors
+    /// Returns an error for malformed JSON or a value other than an array of strings.
+    pub fn history_item_ids_vec(&self) -> Result<Vec<String>, serde_json::Error> {
+        self.history_item_ids
+            .as_deref()
+            .map(serde_json::from_str)
+            .transpose()
+            .map(Option::unwrap_or_default)
+    }
+}
+
 /// Decode the `responses.metadata` column.
 impl TryFrom<&str> for ResponseMetadata {
     type Error = StorageError;

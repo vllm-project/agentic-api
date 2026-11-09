@@ -1,4 +1,4 @@
-mod support;
+use super::test_support as support;
 
 use agentic_core::types::conversations::ConversationMetadata;
 use std::sync::Arc;
@@ -228,7 +228,7 @@ async fn postgres_concurrent_conversation_writes_have_contiguous_sequences() {
             .expect("persist concurrent turn");
     }
 
-    let rows = agentic_core::storage::models::conversation::get_with_items(&first_pool, &conversation.conversation_id)
+    let rows = crate::storage::models::conversation::get_with_items(&first_pool, &conversation.conversation_id)
         .await
         .expect("load concurrent conversation items")
         .expect("conversation exists")
@@ -309,7 +309,7 @@ async fn postgres_racing_conversation_turns_both_append() {
         .expect("second turn persists");
 
     // As on OpenAI, both turns commit; the row lock gives each a contiguous run of sequence numbers.
-    let rows = agentic_core::storage::models::conversation::get_with_items(&first_pool, &conversation.conversation_id)
+    let rows = crate::storage::models::conversation::get_with_items(&first_pool, &conversation.conversation_id)
         .await
         .expect("load conversation items")
         .expect("conversation exists")
@@ -363,12 +363,9 @@ async fn postgres_lock_wait_is_bounded_without_blocking_other_conversations() {
         .await
         .expect("create unrelated conversation");
     let mut holding_transaction = first_pool.begin().await.expect("begin lock-holding transaction");
-    agentic_core::storage::models::conversation::lock_in_tx(
-        &mut holding_transaction,
-        &locked_conversation.conversation_id,
-    )
-    .await
-    .expect("hold conversation row lock");
+    crate::storage::models::conversation::lock_in_tx(&mut holding_transaction, &locked_conversation.conversation_id)
+        .await
+        .expect("hold conversation row lock");
 
     let blocked_store = ConversationStore::new(second_pool.clone());
     let blocked_conversation_id = locked_conversation.conversation_id.clone();

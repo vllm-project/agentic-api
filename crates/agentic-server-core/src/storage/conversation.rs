@@ -8,7 +8,7 @@ use super::models::{conversation, item, response};
 use super::pool::{DbPool, DbTransaction};
 use super::types::conversation::encode_metadata;
 use super::types::item::{decode_public, encode};
-use super::types::response::decode_turn_metadata;
+use super::types::response::{decode_turn_metadata, encode_history};
 use super::types::{
     ConversationData, ConversationSnapshot, ResponseCheckpoint, ResponseMetadata, StorageError, StoreResult,
 };
@@ -16,7 +16,7 @@ use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 use crate::types::io::ItemOrder;
 use crate::types::request_response::ResponsePayload;
-use crate::utils::common::{serialize_to_string, uuid7_str};
+use crate::utils::common::uuid7_str;
 
 /// Conversation storage operations.
 #[derive(Clone, Debug)]
@@ -42,7 +42,7 @@ impl ConversationStore {
     /// # Errors
     ///
     /// Returns error if store is disabled (no pool configured).
-    pub fn pool(&self) -> StoreResult<&DbPool> {
+    pub(in crate::storage) fn pool(&self) -> StoreResult<&DbPool> {
         self.pool.as_deref().ok_or(StorageError::NotConfigured)
     }
 
@@ -170,7 +170,7 @@ impl ConversationStore {
         let mut history_item_ids = checkpoint.history_item_ids.clone();
         let created = item::create_in_tx(&mut tx, new_items, Some(conversation_id)).await?;
         history_item_ids.extend(created.into_iter().map(|row| row.id));
-        let history_item_ids_json = serialize_to_string(&history_item_ids)?;
+        let history_item_ids_json = encode_history(&history_item_ids)?;
 
         response::create_in_tx(
             &mut tx,

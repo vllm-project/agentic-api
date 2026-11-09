@@ -74,9 +74,24 @@ jobs:
       - name: Run clippy
         run: cargo clippy --all-targets -- -D warnings
 
+      - name: Verify SQLite history contracts and SQL budgets
+        run: cargo test --locked -p agentic-server-core --test storage_contract_test
+
       # Includes Dynamo and SGLang cassette replays; no separate provider jobs are needed.
       - name: Run tests
         run: cargo test
+
+      - name: Check routes without OpenAPI feature
+        run: cargo check --locked -p agentic-server --no-default-features
+
+      - name: Export OpenAPI specification
+        run: cargo run --locked -p agentic-server --example export_openapi > "${RUNNER_TEMP}/openapi.json"
+
+      - name: Upload OpenAPI specification
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: agentic-api-openapi
+          path: ${{ runner.temp }}/openapi.json
 
       - name: Test file APIs with the OpenAI Python client
         run: |
@@ -289,7 +304,10 @@ jobs:
           cargo test -p agentic-server-core --lib storage::schema::tests:: -- --ignored --test-threads=1
 
       - name: Verify PostgreSQL migrations and restart persistence
-        run: cargo test -p agentic-server-core --test postgres_storage_integration -- --ignored --test-threads=1
+        run: cargo test -p agentic-server-core --lib storage::postgres_storage_integration -- --ignored --test-threads=1
+
+      - name: Verify PostgreSQL history contracts and SQL budgets
+        run: cargo test --locked -p agentic-server-core --test storage_contract_test
 
       - name: Verify Messages thread persistence and concurrent gateway instances
         run: cargo test -p agentic-server-core --test messages_thread_storage_test

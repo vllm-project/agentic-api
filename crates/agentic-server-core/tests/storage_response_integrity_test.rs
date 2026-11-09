@@ -6,7 +6,7 @@ use agentic_core::types::conversations::ConversationMetadata;
 use std::sync::Arc;
 
 use agentic_core::executor::{ConversationHandler, ExecutionContext, ResponseHandler, execute};
-use agentic_core::storage::{ConversationStore, ResponseData, ResponseMetadata, ResponseStore, StorageError};
+use agentic_core::storage::{ConversationStore, ResponseMetadata, ResponseStore, StorageError};
 use support::persist_turn;
 use support::{MockResponse, MockServer, load_cassette, make_request, setup_pool, unwrap_blocking};
 
@@ -33,11 +33,7 @@ async fn invalid_history_references_block_read_and_child_persistence() -> Result
             .await?;
 
         for error in [
-            store
-                .get("resp_parent")
-                .await
-                .and_then(ResponseData::try_from)
-                .unwrap_err(),
+            store.get("resp_parent").await.unwrap_err(),
             store.rehydrate("resp_parent").await.unwrap_err(),
             store
                 .persist("resp_child", Some("resp_parent"), Vec::new(), None, &metadata)
@@ -80,11 +76,7 @@ async fn invalid_metadata_blocks_both_stores_without_echoing_secrets() -> Result
             .execute(pool.as_ref())
             .await?;
         for error in [
-            responses
-                .get("resp_parent")
-                .await
-                .and_then(ResponseData::try_from)
-                .unwrap_err(),
+            responses.get("resp_parent").await.unwrap_err(),
             responses.rehydrate("resp_parent").await.unwrap_err(),
             conversations
                 .rehydrate(&conversation.conversation_id)
@@ -171,7 +163,7 @@ async fn sql_null_legacy_fields_remain_readable() -> Result<(), Box<dyn std::err
         .bind("resp_legacy")
         .execute(pool.as_ref())
         .await?;
-    let response = ResponseData::try_from(responses.get("resp_legacy").await?)?;
+    let response = responses.get("resp_legacy").await?;
     assert!(response.history_item_ids.is_empty());
     assert!(response.metadata.model.is_empty());
     assert!(responses.rehydrate("resp_legacy").await?.1.is_empty());

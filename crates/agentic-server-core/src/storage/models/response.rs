@@ -3,7 +3,8 @@
 use std::collections::HashSet;
 
 use super::super::pool::{DbResult, DbTransaction};
-use crate::utils::common::{serialize_to_string, utcnow_str};
+use crate::storage::types::response::encode_history;
+use crate::utils::common::utcnow_str;
 
 /// LLM API response stored in the database.
 ///
@@ -105,7 +106,7 @@ pub async fn delete_in_tx(tx: &mut DbTransaction<'_>, id: &str) -> DbResult<bool
                 .history_item_ids_vec()
                 .map_err(|error| sqlx::Error::Decode(Box::new(error)))?;
             ids.retain(|id| !inherited.contains(id));
-            let json = serialize_to_string(&ids).map_err(|error| sqlx::Error::Encode(Box::new(error)))?;
+            let json = encode_history(&ids).map_err(|error| sqlx::Error::Encode(Box::new(error)))?;
             sqlx::query("UPDATE responses SET history_item_ids = $1 WHERE id = $2")
                 .bind(json)
                 .bind(&child.id)
@@ -119,20 +120,6 @@ pub async fn delete_in_tx(tx: &mut DbTransaction<'_>, id: &str) -> DbResult<bool
         .execute(&mut **tx)
         .await?;
     Ok(true)
-}
-
-impl Response {
-    /// Deserialize history references, treating only SQL NULL as legacy empty history.
-    ///
-    /// # Errors
-    /// Returns an error for malformed JSON or a value other than an array of strings.
-    pub fn history_item_ids_vec(&self) -> Result<Vec<String>, serde_json::Error> {
-        self.history_item_ids
-            .as_deref()
-            .map(serde_json::from_str)
-            .transpose()
-            .map(Option::unwrap_or_default)
-    }
 }
 
 #[cfg(test)]
