@@ -5,7 +5,7 @@
 
 use std::convert::identity;
 
-use super::session::{ResponseContinuation, ResponseSession, canonical_session_history};
+use super::session::{ResponseContinuation, ResponseSession};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::multi_agent::{CheckpointLimits, ValidatedTreeCheckpoint};
 use crate::executor::pending_calls::CallLedger;
@@ -13,7 +13,7 @@ use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::telemetry::metrics::Stage;
 use crate::storage::{ConversationSnapshot, ResponseCheckpoint, ResponseMetadata, StorageError};
 use crate::types::io::InOutItem;
-use crate::types::io::input::is_search_item;
+use crate::types::io::input::{is_search_item, retain_window};
 use crate::types::io::{InputItem, ResponsesInput, resolve_tool_choice, resolve_tools};
 use crate::types::request_response::RequestPayload;
 use crate::utils::uuid7_str;
@@ -61,85 +61,81 @@ pub(crate) async fn rehydrate_with_continuation(
     continuation: Option<ResponseContinuation>,
 ) -> ExecutorResult<RequestContext> {
     let timer = exec_ctx.metrics.stage(Stage::Rehydrate);
-    // Boxed so this wrapper does not hold the request payload twice.
-    let rehydrated = Box::pin(rehydrate_request(request, exec_ctx, continuation)).await;
-    timer.finish_result(&rehydrated);
-    rehydrated
-}
+    // Keep the large request future off the caller's stack.
+    let rehydrated = Box::pin(async move {
+        request.validate_prompt_cache_options(exec_ctx.responses_config.prompt_cache_options_supported)?;
+        // Every typed entry point reaches this check: executor-routed HTTP, WebSocket, split execution, embedders.
+        request.ensure_supported_parameters()?;
+        validate_multi_agent_request(&request)?;
+        // Stored turns never supply `max_tool_calls`, so the request value is final here.
+        request.max_tool_calls_limit()?;
+        // Fail before storage work for explicitly declared tools and new content;
+        // check again once stored effective settings and history are resolved.
+        exec_ctx
+            .gateway_executors
+            .validate_declarations(request.tool_declarations().as_deref())?;
+        request.input.validate()?;
+        let response_id = uuid7_str("resp_");
+        // Persistence keeps the public items. Tool lowering belongs to the enriched
+        // inference copy, including when a later turn loads these items from storage.
+        let mut new_input_items = request.input.clone().into_canonical_items();
+        exec_ctx.resp_handler.resolve_input_items(&mut new_input_items).await?;
 
-async fn rehydrate_request(
-    request: RequestPayload,
-    exec_ctx: &ExecutionContext,
-    continuation: Option<ResponseContinuation>,
-) -> ExecutorResult<RequestContext> {
-    request.validate_prompt_cache_options(exec_ctx.responses_config.prompt_cache_options_supported)?;
-    // Every typed entry point reaches this check: executor-routed HTTP, WebSocket, split execution, embedders.
-    request.ensure_supported_parameters()?;
-    validate_multi_agent_request(&request)?;
-    // Stored turns never supply `max_tool_calls`, so the request value is final here.
-    request.max_tool_calls_limit()?;
-    // Fail before storage work for explicitly declared tools and new content;
-    // check again once stored effective settings and history are resolved.
-    exec_ctx
-        .gateway_executors
-        .validate_declarations(request.tool_declarations().as_deref())?;
-    request.input.validate()?;
-    let response_id = uuid7_str("resp_");
-    // Persistence keeps the public items. Tool lowering belongs to the enriched
-    // inference copy, including when a later turn loads these items from storage.
-    let mut new_input_items = request.input.clone().into_canonical_items();
-    exec_ctx.resp_handler.resolve_input_items(&mut new_input_items).await?;
+        // One clone for the unmodified original; `request` is moved as enriched_request.
+        let original_request = request.clone();
+        let mut ctx = RequestContext {
+            multi_agent_tree: None,
+            enriched_request: request,
+            original_request,
+            new_input_items,
+            response_id,
+            conversation_id: None,
+            checkpoint: None,
+            continuation,
+        };
 
-    // One clone for the unmodified original; `request` is moved as enriched_request.
-    let original_request = request.clone();
-    let mut ctx = RequestContext {
-        multi_agent_tree: None,
-        enriched_request: request,
-        original_request,
-        new_input_items,
-        response_id,
-        conversation_id: None,
-        checkpoint: None,
-        continuation,
-    };
+        match (
+            ctx.original_request.conversation.is_some(),
+            ctx.original_request.previous_response_id.is_some(),
+        ) {
+            (true, true) => {
+                return Err(ExecutorError::InvalidRequest(
+                    "provide only one of conversation or previous_response_id".into(),
+                ));
+            }
+            (true, false) => from_conversation(&mut ctx, exec_ctx).await?,
+            (false, true) => from_response(&mut ctx, exec_ctx).await?,
+            (false, false) => from_responses(&mut ctx)?,
+        }
 
-    match (
-        ctx.original_request.conversation.is_some(),
-        ctx.original_request.previous_response_id.is_some(),
-    ) {
-        (true, true) => {
+        // Stateless multi-agent runs use the existing automatic per-agent compactor.
+        // The explicit trigger extension cannot return a resumable stateless tree.
+        if !ctx.original_request.store
+            && ctx.original_request.input.has_compaction_trigger()
+            && ctx
+                .enriched_request
+                .multi_agent
+                .as_ref()
+                .is_some_and(|config| config.enabled)
+        {
             return Err(ExecutorError::InvalidRequest(
-                "provide only one of conversation or previous_response_id".into(),
+                "compaction_trigger is not supported with multi_agent and store: false; use automatic compaction"
+                    .into(),
             ));
         }
-        (true, false) => from_conversation(&mut ctx, exec_ctx).await?,
-        (false, true) => from_response(&mut ctx, exec_ctx).await?,
-        (false, false) => from_responses(&mut ctx)?,
-    }
-
-    // Stateless multi-agent runs use the existing automatic per-agent compactor.
-    // The explicit trigger extension cannot return a resumable stateless tree.
-    if !ctx.original_request.store
-        && ctx.original_request.input.has_compaction_trigger()
-        && ctx
-            .enriched_request
-            .multi_agent
-            .as_ref()
-            .is_some_and(|config| config.enabled)
-    {
-        return Err(ExecutorError::InvalidRequest(
-            "compaction_trigger is not supported with multi_agent and store: false; use automatic compaction".into(),
-        ));
-    }
-    exec_ctx
-        .gateway_executors
-        .apply_configured_mcp_defaults(ctx.enriched_request.tools.as_deref_mut());
-    exec_ctx
-        .gateway_executors
-        .validate_declarations(ctx.enriched_request.tool_declarations().as_deref())?;
-    ctx.enriched_request.input.validate()?;
-    validate_multi_agent_request(&ctx.enriched_request)?;
-    Ok(ctx)
+        exec_ctx
+            .gateway_executors
+            .apply_configured_mcp_defaults(ctx.enriched_request.tools.as_deref_mut());
+        exec_ctx
+            .gateway_executors
+            .validate_declarations(ctx.enriched_request.tool_declarations().as_deref())?;
+        ctx.enriched_request.input.validate()?;
+        validate_multi_agent_request(&ctx.enriched_request)?;
+        Ok(ctx)
+    })
+    .await;
+    timer.finish_result(&rehydrated);
+    rehydrated
 }
 
 /// Use the submitted Responses history without accessing response or conversation storage.
@@ -231,14 +227,14 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
             .await?
             .ok_or_else(missing_previous_response_id)?;
         checkpoint.continue_from_compaction(&history, &ctx.enriched_request);
-        checkpoint.history = canonical_session_history(InOutItem::into_input_items(history));
+        checkpoint.history = retain_window(InOutItem::into_input_items(history));
         let continuation = ctx.continuation.as_ref().ok_or_else(|| {
             ExecutorError::InvalidRequest("session response requires a continuation lease".to_owned())
         })?;
         std::sync::Arc::new(continuation.retain_parent(checkpoint)?)
     };
     if !restore_agent_tree(ctx, &parent.metadata, exec_ctx.responses_config.max_retained_bytes)? {
-        set_model_input(ctx, parent.history.clone(), canonical_session_history)?;
+        set_model_input(ctx, parent.history.clone(), retain_window)?;
         apply_effective_settings(ctx, &parent.metadata);
     }
     // The model input holds the parent's history; the turn's checkpoint keeps what persistence extends.

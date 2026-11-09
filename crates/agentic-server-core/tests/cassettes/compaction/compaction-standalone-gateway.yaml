@@ -184,8 +184,8 @@ turns:
     query_params: {}
   response:
     body:
-      created_at: 1794206635
-      id: resp_01a1bf0c-7b31-7491-ad03-446289cd081b
+      created_at: 1794216262
+      id: resp_01a1bf9f-5bf5-7ed3-ac14-24df1eba4027
       object: response.compaction
       output:
       - content:
@@ -360,41 +360,46 @@ turns:
             for later. Background notes for later. Background notes for later. Remember
             the word APRICOT. Reply with only OK.
           type: input_text
-        id: msg_01a1bf0c-7b31-7491-ad03-447f97514585
+        id: msg_01a1bf9f-5bf5-7ed3-ac14-24e7117b5e78
         role: user
         status: completed
         type: message
-      - encrypted_content: '**CONTEXT CHECKPOINT SUMMARY**
+      - encrypted_content: '**Context Checkpoint Summary**
 
 
-          - **Remembered token:** APRICOT
-
-          - **Background notes:** None provided — the prior message consisted solely
-          of repeated placeholder text ("Background notes for later.") with no substantive
-          content.
-
-          - **Decisions made:** None.
-
-          - **Constraints:** None established.
-
-          - **Unresolved work:** None.
-
-          - **Critical references:** None.
+          **State:** No substantive task in progress. The conversation consists of:
 
 
-          **Status:** No active task or ongoing work detected. Conversation is effectively
-          at a blank slate apart from the remembered word APRICOT.'
-        id: cmp_01a1bf0c-94c1-7ca1-9898-618bd22057fb
+          1. A large block of repeated filler text ("Background notes for later."
+          × ~400 instances) with no actual content.
+
+          2. An embedded instruction to remember the word **APRICOT**.
+
+          3. An instruction to reply with only "OK" (from the prior turn).
+
+
+          **Decisions:** None made.
+
+          **Constraints:** None established beyond the above.
+
+          **Unresolved work:** None.
+
+          **Critical references:** The word "APRICOT" was flagged for retention.
+
+
+          **Next model should:** Await a real task or prompt from the user. No active
+          thread to continue.'
+        id: cmp_01a1bf9f-7b82-7372-8ea2-45f90d063f30
         type: compaction
       service_tier: auto
       usage:
         input_tokens: 2349
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 271
+        output_tokens: 344
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 2620
+        total_tokens: 2693
     headers:
       content-type: application/json
     status_code: 200
@@ -574,31 +579,36 @@ turns:
             for later. Background notes for later. Background notes for later. Remember
             the word APRICOT. Reply with only OK.
           type: input_text
-        id: msg_01a1bf0c-7b31-7491-ad03-447f97514585
+        id: msg_01a1bf9f-5bf5-7ed3-ac14-24e7117b5e78
         role: user
         status: completed
         type: message
-      - encrypted_content: '**CONTEXT CHECKPOINT SUMMARY**
+      - encrypted_content: '**Context Checkpoint Summary**
 
 
-          - **Remembered token:** APRICOT
-
-          - **Background notes:** None provided — the prior message consisted solely
-          of repeated placeholder text ("Background notes for later.") with no substantive
-          content.
-
-          - **Decisions made:** None.
-
-          - **Constraints:** None established.
-
-          - **Unresolved work:** None.
-
-          - **Critical references:** None.
+          **State:** No substantive task in progress. The conversation consists of:
 
 
-          **Status:** No active task or ongoing work detected. Conversation is effectively
-          at a blank slate apart from the remembered word APRICOT.'
-        id: cmp_01a1bf0c-94c1-7ca1-9898-618bd22057fb
+          1. A large block of repeated filler text ("Background notes for later."
+          × ~400 instances) with no actual content.
+
+          2. An embedded instruction to remember the word **APRICOT**.
+
+          3. An instruction to reply with only "OK" (from the prior turn).
+
+
+          **Decisions:** None made.
+
+          **Constraints:** None established beyond the above.
+
+          **Unresolved work:** None.
+
+          **Critical references:** The word "APRICOT" was flagged for retention.
+
+
+          **Next model should:** Await a real task or prompt from the user. No active
+          thread to continue.'
+        id: cmp_01a1bf9f-7b82-7372-8ea2-45f90d063f30
         type: compaction
       - content: What word did I ask you to remember? Reply with only that word, or
           NONE if you cannot see it.
@@ -616,11 +626,11 @@ turns:
   response:
     body:
       background: false
-      completed_at: 1794206637
-      created_at: 1794206637
+      completed_at: 1794216264
+      created_at: 1794216264
       error: null
       frequency_penalty: 0.0
-      id: resp_01a1bf0c-94ef-7911-8551-7e56b10821db
+      id: resp_01a1bf9f-7bb3-7831-b40c-b129a3e4414e
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -630,14 +640,13 @@ turns:
       object: response
       output:
       - content:
-        - text: 'The user is asking me to recall a word they asked me to remember.
-            Looking back at the conversation, the user''s first message contained
-            the instruction "Remember the word APRICOT." I should reply with only
-            that word.
+        - text: 'The user is asking me what word they asked me to remember. In the
+            previous message, there was an instruction "Remember the word APRICOT."
+            So the answer is APRICOT.
 
             '
           type: reasoning_text
-        id: rs_919c47b8871a31a4
+        id: rs_82a08b555913a6d1
         summary: []
         type: reasoning
       - content:
@@ -648,7 +657,7 @@ turns:
 
             APRICOT'
           type: output_text
-        id: msg_8595214fbe97dd22
+        id: msg_819f38e64925e271
         role: assistant
         status: completed
         type: message
@@ -672,13 +681,13 @@ turns:
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 2446
+        input_tokens: 2486
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 52
+        output_tokens: 45
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 2498
+        total_tokens: 2531
     headers:
       content-type: application/json
     status_code: 200
@@ -848,11 +857,11 @@ turns:
   response:
     body:
       background: false
-      completed_at: 1794206639
-      created_at: 1794206639
+      completed_at: 1794216266
+      created_at: 1794216266
       error: null
       frequency_penalty: 0.0
-      id: resp_01a1bf0c-9d2d-7770-9252-df7a7e2aa7a3
+      id: resp_01a1bf9f-8374-7571-9d3c-f2ac3b4e54ea
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -862,16 +871,12 @@ turns:
       object: response
       output:
       - content:
-        - text: 'The user has sent a long message that consists of repeated "Background
-            notes for later." and ends with the instruction "Remember the word APRICOT.
-            Reply with only OK."
-
-
-            I should follow the instruction and reply with only "OK".
+        - text: 'The user is asking me to remember the word "APRICOT" and to reply
+            with only "OK". This is a simple instruction.
 
             '
           type: reasoning_text
-        id: rs_a145dd2cc691a70c
+        id: rs_ad3b485fc4285b3b
         summary: []
         type: reasoning
       - content:
@@ -882,7 +887,7 @@ turns:
 
             OK'
           type: output_text
-        id: msg_812332cc6232f1d6
+        id: msg_adb40ac8e29cf3ca
         role: assistant
         status: completed
         type: message
@@ -909,10 +914,10 @@ turns:
         input_tokens: 2302
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 53
+        output_tokens: 33
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 2355
+        total_tokens: 2335
     headers:
       content-type: application/json
     status_code: 200
@@ -920,7 +925,7 @@ turns:
   request:
     body:
       model: Qwen/Qwen3.8-27B-FP8
-      previous_response_id: resp_01a1bf0c-9d2d-7770-9252-df7a7e2aa7a3
+      previous_response_id: resp_01a1bf9f-8374-7571-9d3c-f2ac3b4e54ea
     headers:
       accept: '*/*'
       content-type: application/json
@@ -930,8 +935,8 @@ turns:
     query_params: {}
   response:
     body:
-      created_at: 1794206645
-      id: resp_01a1bf0c-a561-7b30-b9b4-acfcbfad1aad
+      created_at: 1794216271
+      id: resp_01a1bf9f-8a0b-7a41-81b1-e6c05a4f2967
       object: response.compaction
       output:
       - content:
@@ -1106,32 +1111,34 @@ turns:
             for later. Background notes for later. Background notes for later. Remember
             the word APRICOT. Reply with only OK.
           type: input_text
-        id: msg_01a1bf0c-a561-7b30-b9b4-ad09723a05e1
+        id: msg_01a1bf9f-8a0c-7b73-a089-a6e6414f4c43
         role: user
         status: completed
         type: message
       - encrypted_content: '**Context Checkpoint Summary**
 
 
-          - **Key fact to remember:** The word **APRICOT** (user explicitly requested
-          this be retained).
+          - **Task:** User asked me to remember the word **APRICOT**.
 
-          - **Status:** No active task in progress. The prior message consisted of
-          repeated filler text ("Background notes for later.") with no substantive
-          content beyond the APRICOT instruction.
+          - **Status:** Acknowledged. Word is retained in context.
 
-          - **Open items:** None. Awaiting next user instruction.'
-        id: cmp_01a1bf0c-bcc8-7432-88a8-a817a8c7ebab
+          - **Constraints:** User requested minimal responses ("Reply with only OK").
+
+          - **Unresolved work:** Awaiting user''s next prompt, likely to test recall
+          of "APRICOT."
+
+          - **Critical references:** The word APRICOT is the key item to preserve.'
+        id: cmp_01a1bf9f-9e6b-7ed0-ba44-50c11a7ebb7f
         type: compaction
       service_tier: auto
       usage:
-        input_tokens: 2408
+        input_tokens: 2388
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 243
+        output_tokens: 206
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 2651
+        total_tokens: 2594
     headers:
       content-type: application/json
     status_code: 200

@@ -15,7 +15,7 @@ use crate::types::io::input::internal_mcp_tool_name;
 use crate::types::io::output::{
     FunctionToolCall, GatewayCallStatus, McpCall, McpCallError, McpCallStatus, McpListTool, McpListTools, OutputItem,
 };
-use crate::types::io::{FunctionTool, InOutItem, InputItem, ResponsesInput};
+use crate::types::io::{FunctionTool, ResponsesInput};
 use crate::types::tools::{McpDiscoveredToolParam, McpToolParam};
 use crate::utils::common::{deserialize_from_str, deserialize_from_str_opt, serialize_to_string, stable_name_hash};
 use crate::utils::uuid7_str;
@@ -88,25 +88,11 @@ pub(crate) struct McpServerToolSet {
 }
 
 impl McpHandler {
-    /// Reuse a successful listing that covers an explicit allowed set.
-    /// Without a restriction, public history cannot prove catalog completeness.
+    /// Reuse successful discovery while it is in context, including an empty listing. Current authorization
+    /// filters the cached tools when building handlers; widening it does not invalidate the discovery snapshot.
     pub(crate) fn reusable_listing(history: &ResponsesInput, param: &McpToolParam) -> Option<McpListTools> {
-        let ResponsesInput::Items(items) = history else {
-            return None;
-        };
-        let allowed = param.allowed_tools.as_ref()?;
-        items.iter().rev().find_map(|item| {
-            let (InOutItem::Input(InputItem::McpListTools(listing))
-            | InOutItem::Output(OutputItem::McpListTools(listing))) = item
-            else {
-                return None;
-            };
-            (listing.server_label == param.server_label.trim()
-                && listing.error.is_none()
-                && allowed
-                    .iter()
-                    .all(|name| listing.tools.iter().any(|tool| &tool.name == name)))
-            .then(|| listing.clone())
+        history.mcp_list_tools().rev().find_map(|listing| {
+            (listing.server_label == param.server_label.trim() && listing.error.is_none()).then(|| listing.clone())
         })
     }
 

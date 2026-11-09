@@ -2,7 +2,7 @@
 # Record compaction scenarios against OpenAI and a gateway, one flat cassette per scenario and provider.
 # Each filename: tN is one HTTP request in execution order.
 # COMPACTION_RECORD_SET=all|openai|gateway (default: all)
-# COMPACTION_SCENARIO=all|stale|in-turn-chain|in-turn-chain-stream|tool-loop|standalone|multi-agent|store-false
+# COMPACTION_SCENARIO=all|stale|in-turn-chain|in-turn-chain-stream|tool-loop|standalone|multi-agent|store-false|mcp
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,6 +12,8 @@ SCENARIO="${COMPACTION_SCENARIO:-all}"
 OPENAI_MODEL="${OPENAI_MODEL:-gpt-4.1}"
 # The multi-agent beta needs a model that supports it.
 MULTI_AGENT_OPENAI_MODEL="${MULTI_AGENT_OPENAI_MODEL:-gpt-5.6-sol}"
+# Async client tools require a supporting OpenAI model.
+TOOL_LOOP_OPENAI_MODEL="${TOOL_LOOP_OPENAI_MODEL:-gpt-6-astra}"
 GATEWAY_MODEL="${GATEWAY_MODEL:-$OPENAI_MODEL}"
 GATEWAY_URL="${GATEWAY_URL:-http://localhost:9000}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
@@ -21,7 +23,7 @@ case "$RECORD_SET" in
     *) echo "COMPACTION_RECORD_SET must be all, openai, or gateway" >&2; exit 2 ;;
 esac
 case "$SCENARIO" in
-    all|stale|in-turn-chain|in-turn-chain-stream|tool-loop|standalone|multi-agent|store-false) ;;
+    all|stale|in-turn-chain|in-turn-chain-stream|tool-loop|standalone|multi-agent|store-false|mcp) ;;
     *) echo "Invalid COMPACTION_SCENARIO: $SCENARIO" >&2; exit 2 ;;
 esac
 if [[ "$RECORD_SET" != gateway && -z "${OPENAI_API_KEY:-}" ]]; then
@@ -62,19 +64,22 @@ for provider in openai gateway; do
     if [[ "$RECORD_SET" != all && "$RECORD_SET" != "$provider" ]]; then continue; fi
     model="$GATEWAY_MODEL"
     multi_agent_model="$GATEWAY_MODEL"
+    tool_loop_model="$GATEWAY_MODEL"
     if [[ "$provider" == openai ]]; then
         model="$OPENAI_MODEL"
         multi_agent_model="$MULTI_AGENT_OPENAI_MODEL"
+        tool_loop_model="$TOOL_LOOP_OPENAI_MODEL"
     fi
     if selected stale; then record "$provider" stale stale-compaction 10 "$model" --stream; fi
     if selected in-turn-chain; then record "$provider" in-turn-chain compaction-in-turn-chain 5 "$model" --no-stream; fi
     if selected in-turn-chain-stream; then
         record "$provider" in-turn-chain-stream compaction-in-turn-chain 5 "$model" --stream
     fi
-    if selected tool-loop; then record "$provider" tool-loop compaction-tool-loop 4 "$model" --no-stream; fi
+    if selected tool-loop; then record "$provider" tool-loop compaction-tool-loop 10 "$tool_loop_model" --no-stream; fi
     if selected standalone; then record "$provider" standalone compaction-standalone 5 "$model" --no-stream; fi
     if selected multi-agent; then
         record "$provider" multi-agent compaction-multi-agent 5 "$multi_agent_model" --no-stream
     fi
     if selected store-false; then record "$provider" store-false compaction-store-false 2 "$model" --stream; fi
+    if selected mcp; then record "$provider" mcp compaction-mcp 11 "$model" --no-stream; fi
 done

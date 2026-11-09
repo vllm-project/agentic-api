@@ -14,7 +14,6 @@ mod checkpoint;
 mod steering;
 
 pub(crate) use checkpoint::RetainedCheckpoint;
-pub(super) use checkpoint::canonical_session_history;
 pub use checkpoint::{ResponseCheckpointPin, ResponseContinuation};
 pub use steering::{SteeringQueue, SteeringSuccessorPublication, SteeringSuccessorReservation};
 

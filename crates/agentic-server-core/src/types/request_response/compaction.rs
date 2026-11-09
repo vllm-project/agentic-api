@@ -60,12 +60,29 @@ impl<T: ?Sized, C> RequestPayload<T, C> {
     /// compaction.
     #[must_use]
     pub fn compact_threshold(&self) -> Option<u64> {
+        let index = self.compaction_entry_index()?;
+        self.context_management.as_ref()?[index].compact_threshold
+    }
+
+    /// Supply a threshold only when the first compaction policy has none, adding that policy if absent.
+    pub(crate) fn set_default_compact_threshold(&mut self, default: u64) {
+        let index = self.compaction_entry_index();
+        let management = self.context_management.get_or_insert_with(Vec::new);
+        if let Some(index) = index {
+            management[index].compact_threshold.get_or_insert(default);
+        } else {
+            management.push(ContextManagement {
+                type_: "compaction".into(),
+                compact_threshold: Some(default),
+            });
+        }
+    }
+
+    fn compaction_entry_index(&self) -> Option<usize> {
         self.context_management
-            .as_deref()
-            .unwrap_or_default()
+            .as_ref()?
             .iter()
-            .find(|entry| entry.type_ == "compaction")
-            .and_then(|entry| entry.compact_threshold)
+            .position(|entry| entry.type_ == "compaction")
     }
 }
 
@@ -82,6 +99,59 @@ impl RequestPayload {
             prompt_cache_options: self.prompt_cache_options,
             service_tier: self.service_tier.clone(),
             ..Self::default()
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn compaction_default_preserves_explicit_thresholds_and_uses_the_first_policy() {
+        for (first, expected) in [(None, 100), (Some(0), 0), (Some(10), 10)] {
+            let mut request: RequestPayload = serde_json::from_value(json!({
+                "model": "test",
+                "input": [],
+                "context_management": [
+                    {"type": "other", "compact_threshold": 1},
+                    {"type": "compaction", "compact_threshold": first},
+                    {"type": "compaction", "compact_threshold": 200}
+                ]
+            }))
+            .unwrap();
+            assert_eq!(request.compact_threshold(), first);
+            request.set_default_compact_threshold(100);
+            assert_eq!(request.compact_threshold(), Some(expected));
+            assert_eq!(
+                serde_json::to_value(request.context_management).unwrap(),
+                json!([
+                    {"type": "other", "compact_threshold": 1},
+                    {"type": "compaction", "compact_threshold": expected},
+                    {"type": "compaction", "compact_threshold": 200}
+                ]),
+            );
+        }
+    }
+
+    #[test]
+    fn compaction_default_adds_a_missing_policy_once() {
+        for management in [Value::Null, json!([]), json!([{"type": "other"}])] {
+            let mut request: RequestPayload = serde_json::from_value(json!({
+                "model": "test", "input": [], "context_management": management
+            }))
+            .unwrap();
+            assert_eq!(request.compact_threshold(), None);
+            request.set_default_compact_threshold(100);
+            request.set_default_compact_threshold(200);
+            assert_eq!(request.compact_threshold(), Some(100));
+            let mut expected = management.as_array().cloned().unwrap_or_default();
+            expected.push(json!({"type": "compaction", "compact_threshold": 100}));
+            assert_eq!(
+                serde_json::to_value(request.context_management).unwrap(),
+                json!(expected)
+            );
         }
     }
 }

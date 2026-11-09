@@ -1,0 +1,1421 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Remember the word APRICOT. Do not call any tools. Reply only READY.
+      max_output_tokens: 4096
+      model: gpt-4.1
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - search_openai_docs
+        require_approval: never
+        server_label: openai_docs
+        server_url: https://developers.openai.com/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794215923
+      created_at: 1794215922
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0e0e8fadcb059ede006af18ff2b45487d2b15fc4831ab8ddd4
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_0e0e8fadcb059ede006af18ff2c05087d29873b34703a97612
+        server_label: openai_docs
+        tools:
+        - annotations:
+            read_only: true
+          description: Search across `platform.openai.com`, `developers.openai.com`,
+            and `learn.chatgpt.com` docs. Use this whenever you are working with the
+            OpenAI API (including the Responses API), OpenAI API SDKs, plugins, ChatGPT,
+            or Codex. Results include URLs—**after `search`, use `fetch_openai_doc`**
+            to read/quote the exact markdown.
+          input_schema:
+            $schema: https://json-schema.org/draft/2020-12/schema
+            properties:
+              cursor:
+                type: string
+              limit:
+                maximum: 50
+                minimum: 1
+                type: integer
+              query:
+                minLength: 1
+                type: string
+            required:
+            - query
+            type: object
+          name: search_openai_docs
+        type: mcp_list_tools
+      - content:
+        - annotations: []
+          logprobs: []
+          text: READY
+          type: output_text
+        id: msg_0e0e8fadcb059ede006af18ff388d887d2804f59c7328467d0
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - search_openai_docs
+        headers: null
+        require_approval: never
+        server_description: null
+        server_label: openai_docs
+        server_url: https://developers.openai.com/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 173
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 3
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 176
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - content: Remember the word APRICOT. Do not call any tools. Reply only READY.
+        role: user
+      - id: mcpl_0e0e8fadcb059ede006af18ff2c05087d29873b34703a97612
+        server_label: openai_docs
+        tools:
+        - annotations:
+            read_only: true
+          description: Search across `platform.openai.com`, `developers.openai.com`,
+            and `learn.chatgpt.com` docs. Use this whenever you are working with the
+            OpenAI API (including the Responses API), OpenAI API SDKs, plugins, ChatGPT,
+            or Codex. Results include URLs—**after `search`, use `fetch_openai_doc`**
+            to read/quote the exact markdown.
+          input_schema:
+            $schema: https://json-schema.org/draft/2020-12/schema
+            properties:
+              cursor:
+                type: string
+              limit:
+                maximum: 50
+                minimum: 1
+                type: integer
+              query:
+                minLength: 1
+                type: string
+            required:
+            - query
+            type: object
+          name: search_openai_docs
+        type: mcp_list_tools
+      - content:
+        - annotations: []
+          logprobs: []
+          text: READY
+          type: output_text
+        id: msg_0e0e8fadcb059ede006af18ff388d887d2804f59c7328467d0
+        role: assistant
+        status: completed
+        type: message
+      model: gpt-4.1
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses/compact
+    query_params: {}
+  response:
+    body:
+      created_at: 1794215926
+      id: resp_0e0e8fadcb059ede016af18ff46a3087d2bb8a28d47c04ca6a
+      image:
+        context_compression: disabled
+      object: response.compaction
+      output:
+      - content:
+        - text: Remember the word APRICOT. Do not call any tools. Reply only READY.
+          type: input_text
+        id: msg_0e0e8fadcb059ede016af18ff4718887d2baaabe692e81e4ce
+        role: user
+        status: completed
+        type: message
+      - encrypted_content: gAAAAABq8Y_25r-pUHrfVaj8NnzeBj6WKP1MjwlvaCfGi3u9nFG4Mdr2x0uybhyQbket_HA5KEnVUVLzXjNQWNhgkDSwNcpF6kWJWaJd8B0oOBahNb6Yl0M5U0F8tUIuS_OscC5lif8FJrfLtgB3MVHoeS-0YnacUj19qhpMb88Ot3OB6SxE232Q4zY6KHo7q6_iLo9d9hlqqCttsxNnJ6jXwy0drRtOR_EpGV25glzWB6G6yp4s7wijXKaf3e1QygPU6zpVjI4naUb-h5otUhsXPbnGh47w_KYv6XmhsOviZcrVrdQ5I6xKRR95dGSxSzh6IB9XF1urkyRimWLqY7_BizmRqzN7q-NekRyCijINOH1VtiW3eIIqVeBmB3EjDxtv3O4n7MIeyDJm5of_vP2Fyvtj29W-zk1MJeItXo4n3JO33IR0qqtkR2p0LGfuqw2WN_B4ThfRo-9mIpvhI8oCpVEsXIlJDlHmXfx9oP-xwTw0F2LIpkLWgOHyAZoVPTNMJGhAesylJypFuc3BoEo6XlsY5JhO7tFs2SLH6_dltFvaggd08PpL-o1BSWSTyRn7jXCXloBX43QlmunxDfK5aRIfAY4z3eNVJ0wePBDr04eeSwjsUAJwsNLb5gL0vSi5DCBjhjueiQ8U9NcvOd2-UpKxDlrQ2Ipq14mQl8SJTeyPfBu0u6AJJxqwsf6teJMu357Caq3o2MYsi_UsP04eYT6VDBxBLKXk_iH3J92HSChwF3YOlTa_RLAm4_nkJMygCg7KOIk-845XCm5dW0gJ2giaose3cLwMjF7tjkIOEYur1YG6qJd8GRDHp0vF_Xg33Tm0cDRdTmAQ-xeFQmHopKgIQ-RJbes0SeXZvDcUFr06RFU_c5laUIJXjhoUXiXs5vff-OFthWT9fE9OmlOaF-0xSuBlAaj1S3v_xqaVUz0k0W8cY6_jpxFajcqsWmldLoVbFgCnpcXtIWHbRUjnar8Bxix96thk0_XIARONc_AVM5_cSIXybO7uh-eHfD3zS70I4N9MHYT3nAn59lo-Z4EaYLEzAMqcRnqz_bgY5S0ZCczjv2VRg6xSWYWDvAX8r5i-upiKjAitYaOGybihxnMwFy5Dkucta6oAqtUxE4zNssX9bLnlMsMBl6dmly2MaAbE4VYgpFkd23BefCdf6h8k2lnzZy27KZ901D_HG0cZs6l-n980xpEiojmNU9AUqrjWIqX_tWQ39vqaFUZPPHlA2mV_IQY9GwBYVXGmOSspIlNIbwg5A9TCsEAvSkHP_HLY5ZSA051PuP81WU5HUhff032KlxqyhXqMCDy6UaXxbss6lzfitGXMeROFHBYw-Cd2HUMu3riQ3Gn9ivgXO_FePh6UZYDD94JwDbLj4UHEfuNH4KyJRbQXQl7zNsdpM0WEvWRX3QJ-zIHkbfTs8bPOEj-ho5WoiNqxpzTO0FTpj41v_i0flNJGJNMXN2tCq2GbTJs1pHsgl_zIMb8zLZo5Raz0dK__73X5sSXmOieSpDQVbYALFe50RPW6eQL6hcEe6ZbM-CJ4hOV2Z8jzdBdMY10b8JaU0RtXhY0sKCCd2pJbVcV27MjRoSCuZtPtwHmryMuAgvYXoMfcXz3HIOmE0u_T_B41ebI9BnFm6EeTgkRzeYhoMJrV1FziE1B5QcmN9ygOjAwJFJUgWKlNaGll5cPuLVWzX9AJ3FVOFe9Mgkx7xnMBoTI58_ES86T_Ea0TtJz8OWtzV9eHTycPocvOcNFMoUfC-XfYtfMs-M2twMF70fxv3JdSqhxrsn1qfEU7_KcjzfBxIp3U9iziia2GYh0fPb5ipqlBvA1ejFbhCUfoeLwawcSx_voKCLI0NFWudBdbbGaAxNpTCZ_RNbKA0IM-FYEpLV0SMcGXTkJY0SJhzPmPvDU2kAO7IuCYr9r5GEDzpqFhf38n5FViYVVcSfX8f4h8q6usPZoXxpA47zmQYr_xTV6YjnkekSKekryg9iRSGg6o0YSMDXeWlHyhmOGlNaHeUwnzsPvpswPUptt7S_sF-CSYhaXtm3if3_vIQ_jjZjJt84wHtAj5lXmaZ9TPvE8Al39tLOenDikhmN4V0goZMwP3Qcf4RZcJugrumAol5-OrvOU3LwFU0byKCGNdbCjH5GouNfiktx2YNg16Nj73GoXOMlUKPmLHwdIQtt_M753KEWNGLgzj-l3lBrUxX5OY3q9eYMFNJlMiY1qHoR9TNy7MXhNUjkUJlxovmHaHl-Unh1haZ19ZImNUqFni64AoyXIeBZHJZtc1ed1wiH5LB3BjP1e3IZtp909g90bYqsX5FqpPwJ4PbDNEIP_91lrnuVyHJfj1DYm_gfpkX-Y87-MLbp4bM8ztqx8sZp3o8INNNyA1Ykr8ca2f0bKBm4Sdb9ern62aPIl00bP6oGqL-Y0JZ6c3e9PLK1YGk0DaetJ-4VwiuvSpizoxX17i7_et9c3wKPG90HcGmkBBA-V5Tc13RLOVTGag47zUYP60A1ZnLHBq5BHoby2vDEfYwGa8p-RTAtZinyaCotlXqT8nYgc9bet2HL-J2etxNET8d7a2PMDWCm82dSXM4rZilRgyRryjS4yvT-Kc7d1t3V4wnYO-yrigO_01Omgk8eRLbNs9sOChen0w4cGbx2MgP8whxG73ta7lSnqyg4qoN95MeVESjUxiBnIJscQq07HbW9yr7Kj2tiPEAZX4sVWM7TTTKv9SKPMfpMkuydBPWTRhC8mgDtknqZK_StZ4Ro5uhwwyF0KnvmMQ14r_nKLvUmzg6P14Y88R3xBJZQWeOZNh1yqwUDcZh0nkBwX3XNoNMhQxAUvNUwmENTa-n8316XTVf24C2cvBz4Be5HyvSimwdyYtMO-FfU0YPw5hIjbqqxvANvkr_RGNBX-X-3wSqKcQMKYyL1eSs53F4SskMrUhyIwjpUPjCVkRIP3DguwpNmrEEYAflSqRZBcW2MGV0Pb1qwDo9uXHF9I19dDEDtIvbailslP0cIPqsnqLnYzcK4EWav2WXK-o3zEoQc_Zzs7nSJjGmAF1e7JwOzPqFNUU9XfreF29_giBVVkXuagcPajnUXoNue99Z6zj1_Fek_odZsLnv-ELqS1VUrFNnnraWROyqrEf6U8-zQ0R9yb2IQDGDSzFH2VGHcljEtwB5mAyomIx3FuE03P3s0MdkQpnPihO3t3VUHuek9uTu-eKSqDxbnGcKXxcMpU6Tj5LeB24fm9yM8isBvoMXnTDjawX7bqvfzTUudRE3jDEsfXQBsJPwTfHgfAAoEmLtumNSvjnL1yMg8opdC8flvxhMX6yvtKgd12MGeZDQGNHA9As-cs2c1i0S_RsBa7NusukvNrfowNhDf4PlPnQgfxx9MchEbuQgVqbwmliEAjffB7e-oIH9e_JCUQnWobV1x9qsNZ3rBULNo-vDu-nvgFJ_xxK-1QjLefd9zDAKLWmKBrrXBLmQgi-lLEOa5GK_zRbW1imFE05d9EuTQG1qftn4xrkKsxK8IOYLAjTXauPzPp0WhGxVaubuYYsA6K_eh0uL-Uk_JyM8uulprt1QPZjQe41vxcbb5hvMRYx7zIe4lyYuWITkB0yLERFc0NNjeGFig==
+        id: cmp_0e0e8fadcb059ede016af18ff540a487d28d05f7046f25c1d0
+        type: compaction
+      usage:
+        input_tokens: 122
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 228
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 350
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input:
+      - content: Remember the word APRICOT. Do not call any tools. Reply only READY.
+        role: user
+      - id: mcpl_0e0e8fadcb059ede006af18ff2c05087d29873b34703a97612
+        server_label: openai_docs
+        tools:
+        - annotations:
+            read_only: true
+          description: Search across `platform.openai.com`, `developers.openai.com`,
+            and `learn.chatgpt.com` docs. Use this whenever you are working with the
+            OpenAI API (including the Responses API), OpenAI API SDKs, plugins, ChatGPT,
+            or Codex. Results include URLs—**after `search`, use `fetch_openai_doc`**
+            to read/quote the exact markdown.
+          input_schema:
+            $schema: https://json-schema.org/draft/2020-12/schema
+            properties:
+              cursor:
+                type: string
+              limit:
+                maximum: 50
+                minimum: 1
+                type: integer
+              query:
+                minLength: 1
+                type: string
+            required:
+            - query
+            type: object
+          name: search_openai_docs
+        type: mcp_list_tools
+      - content:
+        - annotations: []
+          logprobs: []
+          text: READY
+          type: output_text
+        id: msg_0e0e8fadcb059ede006af18ff388d887d2804f59c7328467d0
+        role: assistant
+        status: completed
+        type: message
+      - content: What word did I ask you to remember? Reply with only that word, or
+          NONE if you cannot see it. Do not call any tools.
+        role: user
+      max_output_tokens: 4096
+      model: gpt-4.1
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - search_openai_docs
+        require_approval: never
+        server_label: openai_docs
+        server_url: https://developers.openai.com/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794215927
+      created_at: 1794215926
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0e0e8fadcb059ede006af18ff6a49487d29fcca763e8f1c86f
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: APRICOT
+          type: output_text
+        id: msg_0e0e8fadcb059ede006af18ff6f58887d2a3878e051edb5dd5
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - search_openai_docs
+        headers: null
+        require_approval: never
+        server_description: null
+        server_label: openai_docs
+        server_url: https://developers.openai.com/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 211
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 5
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 216
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body:
+      input:
+      - content:
+        - text: Remember the word APRICOT. Do not call any tools. Reply only READY.
+          type: input_text
+        id: msg_0e0e8fadcb059ede016af18ff4718887d2baaabe692e81e4ce
+        role: user
+        status: completed
+        type: message
+      - encrypted_content: gAAAAABq8Y_25r-pUHrfVaj8NnzeBj6WKP1MjwlvaCfGi3u9nFG4Mdr2x0uybhyQbket_HA5KEnVUVLzXjNQWNhgkDSwNcpF6kWJWaJd8B0oOBahNb6Yl0M5U0F8tUIuS_OscC5lif8FJrfLtgB3MVHoeS-0YnacUj19qhpMb88Ot3OB6SxE232Q4zY6KHo7q6_iLo9d9hlqqCttsxNnJ6jXwy0drRtOR_EpGV25glzWB6G6yp4s7wijXKaf3e1QygPU6zpVjI4naUb-h5otUhsXPbnGh47w_KYv6XmhsOviZcrVrdQ5I6xKRR95dGSxSzh6IB9XF1urkyRimWLqY7_BizmRqzN7q-NekRyCijINOH1VtiW3eIIqVeBmB3EjDxtv3O4n7MIeyDJm5of_vP2Fyvtj29W-zk1MJeItXo4n3JO33IR0qqtkR2p0LGfuqw2WN_B4ThfRo-9mIpvhI8oCpVEsXIlJDlHmXfx9oP-xwTw0F2LIpkLWgOHyAZoVPTNMJGhAesylJypFuc3BoEo6XlsY5JhO7tFs2SLH6_dltFvaggd08PpL-o1BSWSTyRn7jXCXloBX43QlmunxDfK5aRIfAY4z3eNVJ0wePBDr04eeSwjsUAJwsNLb5gL0vSi5DCBjhjueiQ8U9NcvOd2-UpKxDlrQ2Ipq14mQl8SJTeyPfBu0u6AJJxqwsf6teJMu357Caq3o2MYsi_UsP04eYT6VDBxBLKXk_iH3J92HSChwF3YOlTa_RLAm4_nkJMygCg7KOIk-845XCm5dW0gJ2giaose3cLwMjF7tjkIOEYur1YG6qJd8GRDHp0vF_Xg33Tm0cDRdTmAQ-xeFQmHopKgIQ-RJbes0SeXZvDcUFr06RFU_c5laUIJXjhoUXiXs5vff-OFthWT9fE9OmlOaF-0xSuBlAaj1S3v_xqaVUz0k0W8cY6_jpxFajcqsWmldLoVbFgCnpcXtIWHbRUjnar8Bxix96thk0_XIARONc_AVM5_cSIXybO7uh-eHfD3zS70I4N9MHYT3nAn59lo-Z4EaYLEzAMqcRnqz_bgY5S0ZCczjv2VRg6xSWYWDvAX8r5i-upiKjAitYaOGybihxnMwFy5Dkucta6oAqtUxE4zNssX9bLnlMsMBl6dmly2MaAbE4VYgpFkd23BefCdf6h8k2lnzZy27KZ901D_HG0cZs6l-n980xpEiojmNU9AUqrjWIqX_tWQ39vqaFUZPPHlA2mV_IQY9GwBYVXGmOSspIlNIbwg5A9TCsEAvSkHP_HLY5ZSA051PuP81WU5HUhff032KlxqyhXqMCDy6UaXxbss6lzfitGXMeROFHBYw-Cd2HUMu3riQ3Gn9ivgXO_FePh6UZYDD94JwDbLj4UHEfuNH4KyJRbQXQl7zNsdpM0WEvWRX3QJ-zIHkbfTs8bPOEj-ho5WoiNqxpzTO0FTpj41v_i0flNJGJNMXN2tCq2GbTJs1pHsgl_zIMb8zLZo5Raz0dK__73X5sSXmOieSpDQVbYALFe50RPW6eQL6hcEe6ZbM-CJ4hOV2Z8jzdBdMY10b8JaU0RtXhY0sKCCd2pJbVcV27MjRoSCuZtPtwHmryMuAgvYXoMfcXz3HIOmE0u_T_B41ebI9BnFm6EeTgkRzeYhoMJrV1FziE1B5QcmN9ygOjAwJFJUgWKlNaGll5cPuLVWzX9AJ3FVOFe9Mgkx7xnMBoTI58_ES86T_Ea0TtJz8OWtzV9eHTycPocvOcNFMoUfC-XfYtfMs-M2twMF70fxv3JdSqhxrsn1qfEU7_KcjzfBxIp3U9iziia2GYh0fPb5ipqlBvA1ejFbhCUfoeLwawcSx_voKCLI0NFWudBdbbGaAxNpTCZ_RNbKA0IM-FYEpLV0SMcGXTkJY0SJhzPmPvDU2kAO7IuCYr9r5GEDzpqFhf38n5FViYVVcSfX8f4h8q6usPZoXxpA47zmQYr_xTV6YjnkekSKekryg9iRSGg6o0YSMDXeWlHyhmOGlNaHeUwnzsPvpswPUptt7S_sF-CSYhaXtm3if3_vIQ_jjZjJt84wHtAj5lXmaZ9TPvE8Al39tLOenDikhmN4V0goZMwP3Qcf4RZcJugrumAol5-OrvOU3LwFU0byKCGNdbCjH5GouNfiktx2YNg16Nj73GoXOMlUKPmLHwdIQtt_M753KEWNGLgzj-l3lBrUxX5OY3q9eYMFNJlMiY1qHoR9TNy7MXhNUjkUJlxovmHaHl-Unh1haZ19ZImNUqFni64AoyXIeBZHJZtc1ed1wiH5LB3BjP1e3IZtp909g90bYqsX5FqpPwJ4PbDNEIP_91lrnuVyHJfj1DYm_gfpkX-Y87-MLbp4bM8ztqx8sZp3o8INNNyA1Ykr8ca2f0bKBm4Sdb9ern62aPIl00bP6oGqL-Y0JZ6c3e9PLK1YGk0DaetJ-4VwiuvSpizoxX17i7_et9c3wKPG90HcGmkBBA-V5Tc13RLOVTGag47zUYP60A1ZnLHBq5BHoby2vDEfYwGa8p-RTAtZinyaCotlXqT8nYgc9bet2HL-J2etxNET8d7a2PMDWCm82dSXM4rZilRgyRryjS4yvT-Kc7d1t3V4wnYO-yrigO_01Omgk8eRLbNs9sOChen0w4cGbx2MgP8whxG73ta7lSnqyg4qoN95MeVESjUxiBnIJscQq07HbW9yr7Kj2tiPEAZX4sVWM7TTTKv9SKPMfpMkuydBPWTRhC8mgDtknqZK_StZ4Ro5uhwwyF0KnvmMQ14r_nKLvUmzg6P14Y88R3xBJZQWeOZNh1yqwUDcZh0nkBwX3XNoNMhQxAUvNUwmENTa-n8316XTVf24C2cvBz4Be5HyvSimwdyYtMO-FfU0YPw5hIjbqqxvANvkr_RGNBX-X-3wSqKcQMKYyL1eSs53F4SskMrUhyIwjpUPjCVkRIP3DguwpNmrEEYAflSqRZBcW2MGV0Pb1qwDo9uXHF9I19dDEDtIvbailslP0cIPqsnqLnYzcK4EWav2WXK-o3zEoQc_Zzs7nSJjGmAF1e7JwOzPqFNUU9XfreF29_giBVVkXuagcPajnUXoNue99Z6zj1_Fek_odZsLnv-ELqS1VUrFNnnraWROyqrEf6U8-zQ0R9yb2IQDGDSzFH2VGHcljEtwB5mAyomIx3FuE03P3s0MdkQpnPihO3t3VUHuek9uTu-eKSqDxbnGcKXxcMpU6Tj5LeB24fm9yM8isBvoMXnTDjawX7bqvfzTUudRE3jDEsfXQBsJPwTfHgfAAoEmLtumNSvjnL1yMg8opdC8flvxhMX6yvtKgd12MGeZDQGNHA9As-cs2c1i0S_RsBa7NusukvNrfowNhDf4PlPnQgfxx9MchEbuQgVqbwmliEAjffB7e-oIH9e_JCUQnWobV1x9qsNZ3rBULNo-vDu-nvgFJ_xxK-1QjLefd9zDAKLWmKBrrXBLmQgi-lLEOa5GK_zRbW1imFE05d9EuTQG1qftn4xrkKsxK8IOYLAjTXauPzPp0WhGxVaubuYYsA6K_eh0uL-Uk_JyM8uulprt1QPZjQe41vxcbb5hvMRYx7zIe4lyYuWITkB0yLERFc0NNjeGFig==
+        id: cmp_0e0e8fadcb059ede016af18ff540a487d28d05f7046f25c1d0
+        type: compaction
+      - content: What word did I ask you to remember? Reply with only that word, or
+          NONE if you cannot see it. Do not call any tools.
+        role: user
+      max_output_tokens: 4096
+      model: gpt-4.1
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - search_openai_docs
+        require_approval: never
+        server_label: openai_docs
+        server_url: https://developers.openai.com/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794215928
+      created_at: 1794215928
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0e0e8fadcb059ede006af18ff7fe2c87d2ad0842073bcdc3c9
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_0e0e8fadcb059ede006af18ff80b9c87d2bf785a9e55831170
+        server_label: openai_docs
+        tools:
+        - annotations:
+            read_only: true
+          description: Search across `platform.openai.com`, `developers.openai.com`,
+            and `learn.chatgpt.com` docs. Use this whenever you are working with the
+            OpenAI API (including the Responses API), OpenAI API SDKs, plugins, ChatGPT,
+            or Codex. Results include URLs—**after `search`, use `fetch_openai_doc`**
+            to read/quote the exact markdown.
+          input_schema:
+            $schema: https://json-schema.org/draft/2020-12/schema
+            properties:
+              cursor:
+                type: string
+              limit:
+                maximum: 50
+                minimum: 1
+                type: integer
+              query:
+                minLength: 1
+                type: string
+            required:
+            - query
+            type: object
+          name: search_openai_docs
+        type: mcp_list_tools
+      - content:
+        - annotations: []
+          logprobs: []
+          text: APRICOT
+          type: output_text
+        id: msg_0e0e8fadcb059ede006af18ff8be9087d2b1ed3b9fad2fa337
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - search_openai_docs
+        headers: null
+        require_approval: never
+        server_description: null
+        server_label: openai_docs
+        server_url: https://developers.openai.com/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 514
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 5
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 519
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      context_management:
+      - compact_threshold: 1000
+        type: compaction
+      input: Background notes for later. Background notes for later. Background notes
+        for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Remember the word APRICOT. Reply with only OK. Do not call
+        any tools.
+      max_output_tokens: 4096
+      model: gpt-4.1
+      previous_response_id: resp_0e0e8fadcb059ede006af18ff2b45487d2b15fc4831ab8ddd4
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - search_openai_docs
+        require_approval: never
+        server_label: openai_docs
+        server_url: https://developers.openai.com/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794215933
+      created_at: 1794215929
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0e0e8fadcb059ede006af18ff9bcc087d29c4767e3a9c273f6
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - encrypted_content: gAAAAABq8Y_7CjthIInUjPM3JHvhhHocngU30eijd2U71aLiXqlK8RsNWuDL-uizU9D-Av6ODTpT7zOSR44tgZxDwHEly6HtVcdM9GgnrE5GLafiatrvReobaqSklUYP43oz5vnRjHWXE8hcqVqac5Ncz4VSSx0hEn2HbxXokx3OGxHtvj-EHS3OC-bUoaQQJduRIi5ra4aiE9ZJZdnoujU-nv3IFoRexP0uyxra6GjwEN2oGgacVwpbOuDk-6fv-l6r05jK8CVR61mR172dCVLLQYLvULVkbUq0AfECFBQm__gc8ce1PDC3z43s4Q7LRdgkshnRWlO-uy8zFygf_AOKP8jweT2hw_VsWwG1lD76vFfTDWgHjGM9v31216Cv_Vo245xnznvMMrMbABTvv8gnjStwfWaoH1Od9yDEWT7xibD78jIw3hgI8kNXrESk4IEjh_77Y_zmNRU-uwCdkSJjjN4g5zJmucZu-RF2xX7GSttqTO8xJZvW6CSFbs3jXlbStGiOHf3kYGYHqEk_vwmC3f8vSUTLdgtpbB-6eR5FFdvy-DDAWBQbcrwU_-xHxekW--U36UTE7J248sJ9RXpdzjkzxJrOVxkJoxUs4FyWjiOGuUg9BHembrKSEBMgEWq-5Ck_krSSCGTRYH7xqd8dlQMikVaWcVvDQ2mJIeZCl2PEVftEA-fvWqY6FBcZ7cP9He4J2pU-p0AbglI7D2pM-s1a34nZSBna8z3Ld5MZd8BEEFdNvdN4BT0gzo58g5dePItV93ZTo_5ziI5jsIMRV4BJVVFhJHenEFxlDKwD4rJ6R2kcXUWaXXc3pJUkI1hZJ28fSVZaeWSO5VuIUPxnRfJM55KkC99Pu9AiimpJkAg--nss3dje60KvDckEqUKA6zK8OQhqRz3Jy7WguzRthttfZP7dynm8ZzTkAAygPrQJo5-gTY2r9ajLhMUs8QXyVomuGw6rBmxvnITNyuktsH2HnNegfiiOA_cJiEHIT9Ekz6xorvF_4L90oN46USnq3CpRnwL1rNX2SzZbhR4ktGGqBTiRSD0ZF2j_5sE2OjvEGWb5p-AAnGNFfI3NKkQovEqYm-k1p7GMhHSRWXS0uvfEsYw5rwZEtpIj-TqShECj-EZ7n9Acy-pyocvP2c6CMRsQkamOtOZP2PB1bnYaa3Q91PJrOnSIF_ziXRHCcHcQwSDPJwngfupai1EBwIDuddR_wg2IcE8yhGtPWdnORcWli2jt9F6yQmPN6Lpv2ipedXUp7KrRp2Gif8JmyT5xyM5tQ8W2eebun2y4HzBZjXHEGfa0QWUZ0J1zIdlYKeBq0-FC_N0EnitbchjZsqZVxbjqhm4L2zu6m_YqMlbKEyCosPrei9XATarDc0qz40p88XxgT8EXa7tALsOnt39UlfkSAb6bJCFKC25iY2TktGvrgqoGP8o3fuD6rPze5mpZiPD55QqVnBXtX6is5gRuSfniTcn2XUv-ZU93Db8hpfB7n-kOW8u-nhrC25JDUc24QuN33s26l3k1Mmo2eut4wFiOhzQZXEdIB1lOEv9BussBimjQ-v_k27NSTYS9cFm4UJ8Bod3d-9uQP7pr3DK1_VbJa0OePesbusI3eEy9qNSZDePsiELcvJUL9IRqCHhl2Jw-y67f149o1YzFpzGSU3J2xqZlGjVoHeUCaGvqKiQeWCEXFNqOmCTDoQYcjjpDKcQ8j_UlrkRt2WyRzojrrIqGuj_N20o6QrByBUjx51DaSVPsMZ8lxwmnYeGeB3vWMFBTRFvGwFVsn-6nYgepTaf-24VxbxNFQuxF7nrIYzHmffE-AnrZObfaQWwAkwxZufsePGAf4AGWU0ydru5oW-ShFkBEz4fqRZNhg3wt6oBsBQLN8GbujwUj5xutNAUqzy8x1oEw9VYOQZtjc9oMI_SVZAtWy29Lyg1BWiynF_D-mBau3VQhGbUGoCVX9W7-aKQrpGc4VjDpcOqeQmlnZ71sPu6SzvriPk6YlxQug66PtFVAq9_K_QxHcyMzLv7cIbiOn876vDt6xD7I26sT_BLCCCDuOqTxNKJ5PIA6sro9gaHHa9AlH9HGSQj6qrjTUIfIomIrLSFKkE8eMGrFF9q7qDDaL493JLqLJ1RcNCNZA2HsJx9ZYtjW8Gkcj5B3RnR68OWTDFTygP6oNh2CXh2HUaoLh2UFU3D8l-tto9pcvvlo4fC1gO6z8gQpd0w2dPS2Dl2vF3902GYGiOiXZcVs67bUtUurybWHo_DObs9c6aZiL7XpzBsSXsdgxoCYRqKxHvRgqLcy9d5kkfFgriCO4qE1vNxxqfKOPC6Nat4uPp0P1M87cUtOAdwTWUhFmxyehEL9PSuqrlmqhHIzjz_x4TKkho67qTG4BMny6hOuz8itz5T867Gzeqn_0kcbRLNFLJVyL00MdELri30CoMeuBd3jByCEqmvL_yfFha0u3_PjXvGNEqhd3PAG5PiP8H2JFYErEffIuRO_iUCMS9XHvnoBY8q-EZD7ejtoEZlP-KRhCdW0gaei-8XGG5bFgxWBdCqWeQMv-hXj93-3akfwotkXVct4oU8kgHhS34Z6usWUEZBXv_DizqdutWhHldW9fk08UmqGG1yRLKKYMpw83pxATvRZ2LmNgND0FUeAukQ2yk0A7rHfQagk9WQ5R73TUcTIsT-xPOXWSTZlwuYT5YCiuDkwdNKvoG0iBn8770G3PBD1E6X8aKFOk8aTSQdKgh_YMwDa1QZeaoRdDCs4O-7I2m1PqKb4Y1JeqtLpZ7GO5duSxgfTh3UI1UtM8wLSbC1Sx6BbijrX1oRSOOJ0q7j4SJ_dtBeRAh2_0VpVg5PbRGJojIwm95Ggz9dWGr-pvUlAMgHeg0jNV3i_hkgalw3j3WzfsW8micXVfg0Gl8hSOap-hndzHVK0AxjCKsLTimtTKaNquYk-a2UnDGLjIUoQJNeibSDH-YkcigcJm-BAvo_Kb8BB-_re2YZGWfsSOPuwxqp5U_tb58Jcc__EJLDuJ0mOLPTdQkQ0i7oEyd7-GelCsdCPMx823m23-VE5HwboxhNcMEhQro5hKSntEwwyRSYsLBrmimgKU-v9RY3L0IQXxxe2sG57JZVZJ2LmNqKtne-C9q4W4l-kkLfLAQaxR1XSGiZvQOesUYxf0UwPgy249IwUYQTocroqrFP0EcnZg1GgFLM4DTA-dJD1s9OFH8NpreQbbpeEOEczixjtmRjPJTUM3pfMKimNyN3kdTQn9lE8GBiCQxEYqYlSrnwiZrVe6B0C_VCQykezU8piXRRQYzyl4wZUu_zcUs0tZb22bLmT1kYtyGg_2LtKIx9ixhAuhiYeFCg1x434Zo1kuFvm5eDLIcF4jyxz5g5AhxGQQMRyMo45248CD1UHS7N2_hAXThxNyz1iNfhiQ3BxkL55p-KtAZdKbQeIe0DI9-gI_mWIayR3YV07atNsIKaR8fKq4knCtIDK2xUNb1fBUBuoSVYNemL3gpnk0nVws9OnOG5veHY24q8YGQ8o-42MSG37rs63CFnNxICJbdRpOWjZ_00BTnTRjpnB47YgbanJ5o-RKiuYDizDDPZ6b1Fh0F6NbbXZdc_Iyr25SLvCd6AhOKABwbuU8deWkKZr-nwY4gtddhwRJGFw4wPrkZurkB2Ayr_6akPI1B35BdxVqoNS2OAwOzwsYvfp52t2nADUGNcjYmScBLTcHyKhuZYdbgfmIG9I8Amm6pc3RNKZDGfKsieFTayQh81Ox0D_IGCOsbawJGSPrldLEkanU58cHHeKpgF51kfdzx3d1obZ1_vjkqH6Me48CuXFmf_t2USzH8xGCSdsG4PLJB_ahRc0uJzOkyqCtLyKIxuNEKQDxftZDnNe0UhKBBOMhPnXZV0t4240k_SKXHaSLFHXk03dykO_10NoI7oDoZhnpSwq6cJUwjmA6R1QztQ7SSo_Tws-uOay8q514bzUPIoN4KdyphZ8kpt-BNeFCooIEuCIG-LTAu1h-O5GFYsP1HNA9Ak-kalLePFVlW88odXylITOWgL0kZhhUtL1AQqf1-3STIFVZbY3n-nfqVQEwHiGm8wAZJOJ5YB8RERiFY7PzuadaAaoHQUv6Q_UrsXBU8737HV5-7WpnHTExNeeuz45AVhf09FBrMGo8GFG4d7MeYhmG9ne4AJsbBbVrVmB5z72_lZALtlyfigC695uUodIDoGyeUPaiL39ZsSLiCYxpU_2FgGOgh2plkjhJR0yMvwlxanY2Oi3IXN2e2IRw6TuX4rs67MCR-OBrCfLmFzyRFcyPaO578BCA3-rFB6od-TunBDQvkVCwJ181Zi1LswNZO0wbNEFqyh8sqR9fNmhruy6JAem1fEK-nIvZhV5S-1FJ4TiZ_fW9XpYzpLgQxp0XL5_cyQtpEO4oPiGRowS0Ck_pTyIEfUf6PQyKKTRqCfus2EtaS1GfI4ibGMPkOJyP-I=
+        id: cmp_0e0e8fadcb059ede006af18ffbb41887d2999868a552aa8a06
+        type: compaction
+      - content:
+        - annotations: []
+          logprobs: []
+          text: OK
+          type: output_text
+        id: msg_0e0e8fadcb059ede006af18ffc025087d28ebb31bdda71d35b
+        role: assistant
+        status: completed
+        type: message
+      - encrypted_content: gAAAAABq8Y_9dgsHZjxOVoI0-0EA1uIpMdFRRubPWp_fqslUVyua-EZYy62GgUXYAqj9NRnMcEKP0vp5PhmhEtcb7M-eaOYCfQLOHytFT9GDUQOGpXhfgzb7CMqANVH0r0g_PxYj3alluBrvQBSCH_sgtPtQDTwhxL2gm5h0WFrFqoz9LwmvnsfI-42FuKvl4p-7k9xwpnU4aXvHlLAQZvVrvzS9DcYwM6Sdk_gqKAEg2fEafinRa2PI5jocxCUaSVl0ewyWnYG9DppZYG3xB63hsygEdQZI7PPEIDAvaJDbnwm5AlQ-Tb7pxrEWmcds6K0eNOEDqS6bCKuh2ZkGNQNb_M1z5FlY0XGl8fw0vnkPnIG7LlK2P4yg66TcHP8bBRz0qAHAhuTKc_0KaEsizZ8b42df4kJ0NfckHbo4ODdRZ2eGwatkxH3OSAKA4qHXjwykQ1gUgvEHDmPMEn3728Vo4mYi1lA7dOqx8qowylYOaXiLrUts0LsPnI1DFDGT1gIiD0J7nU5Zz-I-0QKxbCq2_7Z3bGJNG1puvTl2xYPuPoZ7TrgYiKy9q3CDKKu3qrPA8Myo6WJo7Jao2V1TyVktrgW617vmT8VN4jKL9jI7vIkOn6zxHfXx9WlqM_0BahxVX-N2j2j3di5S-DIyQ9lkFROEm8UXQbf0iaEr96e2v-nasTPJfhXFt6QLZKK-O3FSvef5JKKJZEtyRgLjM37bStwb0vcZnQ5_gEPlzR2d0IVqYIuusZf_SBROH_DNWJJQpsl3YlH9vfAHVMjf02d_cNfZQrlEkZU78SMbgjQo6V6ktltoF4IuUEcwfrVSaF4d3Kbg50YguM38V1zWTLEv5t2DAaHceUeGE6hd3umnF7rxP2hNcFbMT0hTeslDeJV71lpqDX5RBTiHdsE0Qd-3iQkoCOgmlbxnlbACM7JzQrcbkzR_tSvRAiUtxQFWzSmDBhp15wc0mmwYZtMmEbtWTlHuPLM_mf_p95o_ZMoDERHvL_nS0fIv6shckQVrnQhfvhtBrX_zy_vpS70PrS046IqJz8IfWoqiJhe85CkGZe5uUuBwx0Bji5kkNaVX1HxQ9n0k7HXdz8xh2V-F7ZRpt4diGvJoE0UqBJz-1p1qn65gtWn1xcsepqXPpfLgCZQa3k6f2wd9lEIxu3U8g0jdzGAW8Frw6Sdz87knbGhmDFBiXUnoXmZMRJyo3uDvqt8e5QceoY5wJp6o7zjU-E1ll_b6F1Ojds2IBbGw341BEsKD5f-jgpiTjVGF4RX3RkqY0r-9_kykFCSBwA1_3ggsN_BzL3j7LXYW4By-D0t5pR7rLiTy3DGm6_y80_1ODIF2Lh-lMNwQMYY6wf1fBa_IwgoE4OypVK8xN1JNh7u4hru4LNsvRJGDgyfQsjUp-pPeXCOhf1iI87Qu8UlJ4dmggxCqJ2Y-LRJ4ig8x4Rt5l9-BuS7BFnfk0LJaGu2Yy8Rf9_CtOq2FqO6Mitlq8Jjz_jGODcZTvCdbhwWM0ZH0ZXIf048Zb3oST2P-4ePmqUYw73YkxgxnPZEklEtBsfKv0ltHaXhYP87ieAWsLV989L5b-sYcHc1f8-Seku-kfuo6kXkFvj9fvcEjCEF63oiwJqeW1oOt-NyI8ij6Uhvb4Qb4PF876DDsM9gnr17O1BBIYtFvBrXQ2mq1Ye4jrqGkyRDPEiITYO3ewfbJeFAHVIqMMy0kEuXjmHcOoFgWpVApDAbztaLGOlnNkigTa4TTb-8bSHaH8SkKD3he1_irjO4QTC0w_1Zpv2OiDrxErF64AQs92mXgyCAPOf_wh6-a-DdxblFDXkwnDWveqd1ievy_K_yeENZe8nrvWOMQncH2j1S2W2K32TMlEgvVoacUCr1Gd2n85l_Kif1KNWIDz3p8SeHaXzDXOAdo_5mtyIwoh22z831y4FpJj-VvSlAs8qQV_gvCgqBPhY4U_UTQ9ckYz_Vh3i1r9cqk7yyXImix67o8Va4n0quDEbvZi3RkicZvt3OgHw2PiaQwr9NOCRoxeBPNVtq8ZoSgbSLEUnyvC1UgtdJWlB4NlE7rPq_eA0-n7jYKEwqE5QUYT937de4waCFhqaTFwBuK_q77LS_rTETcNFKT8Qr9OBBCwTWyRSwwu9A1y0T-Xz4iqOQIxdEzQ7hCfkaOaeWLNIMKAxRgc9HE5xgf1DlEaavFSstLxHUmb6JN0C12dWHJHb2B7yLyzgxnJLPn7QHtOVjyVqLQdLDi0soDc2ejgAI4FaeDngiWz7cDh71LT32JxEqguKw77E9EhNN8YkpY-JeJ_MT6JkBGlhRNDX5F-ulO3BvXftMVS25wxacZ5bY7HDgry64nowOSNML2cv4mpUnWMdRxSyqynwq6jS6-_WSrlEq9UPAOeh6g_xV4c-z8CcsP08m8WTEGjTkGYyBMSrE9qq97JpqmFHx0Zw57JPyMoPn_2nDqM2LUgM-jOhzFHw-GJRd9_mLvINBi3aP3UnINlbkOpdvEu8JHh8qvFP5-efCCkvNrgItLJ6vDEHE421l8ZgZ3hndfAZU0S40WR540uNKEPoZArA3YR4J1kOTMuzoveMBTpco5tlOxBlmcWPRhccd6eNMAy3JayGiMyYfyq_2Wh8V07snWS3E0810BseHp4CgeScJYGp1W5nB49WA4D_Cb-FL6xyB-BplYgXMKRPMq-UgISmzyye1HHR9jpQD91MVD7KUlE078yUIZ22tZrX7zNr_qNAOnsLClRXcLIXXbb90evyXO3Kl8-z56gmeaawApHgQ4xKTNB5ze146ilzrUI2YkXPF6Rz97k7MEePq8KkBq5c8EKNmBhx2k7Tf156hN38qrIG_0_Ek2eiMGRuu5WFTkFXaflG9Pkw6OMW2VYvop1d11IHfcyBtQ9JrB4u-_xJpuHAPwo5a9-c5BLbIcn7hp_LTq8MHzi_Y4J1Mk2glfSIuRXkJmUU-yHZNsqr81LB4wixRpqzUz25-G1xCbi8lY0frBFz_6j7kOUar-IdMCAWDUleM7Cm88-33jZ4Px4RNvnMSDyuPdPTHK6zR8kJfi6_frbEuRnK1POYYm4E86YI-E7MOtdhj2Lq6P-vBjDDmbUFOILJNTgA1bFa0pZbhfDftvzvqvNEYeik5pPytNV3bqkazqJxxgDo8INPQ9LpzD_gDZKjOvHI4zVhT_nkqqiO4nc-PO_IfSlhiC-wCGokRNG-PRWAgXru-pIh7gJU18kGFsgr9XB4_ZRl4_DkLSolFZ2LpmiVz8HzCxr6dBcDIPM_Luhis7Dsp9NWO0CStIq4FEw16rfgqTjBFoRUnljUISZk1B5O7aknfo8YrJ9VGN8CJHjrTMhTOjX6FTuj3Hljba50UPXSio2YPHeystyiIqJFV0WwNable1SR3dELWvQm6IYWUe1JWITs71e_uNE8lkxkVwMEmY1-aOAzBV8apFfOHnSwu7wbl_tZjqYRTySlsYG9HBfBcFxCGdSsUDTBksD8ndchoBNr_vZVeVFFJlil1E5DlzIBXUofFFXsDafE8m4uPVNcSld_-OarjeJnG9bR9-uPDA6XmSwxjfYBqGh0qNjCiNe185okH4-3QrpcPykk_Df0SUg1i3YipL26K0E9dEaZG-_bSWvzYA9Vb1ZYS54__v_RkSjQx7XXx0JpLy7596Kyua0BrAqSFsYUoRzptilU47QIFyjWvmL3UTKEMDnz6MAhnxIQAg44snkCpiKb9Khd50qzKlKvUTllyVFyJM338y53u8VNVZmd05bpPPmjO2kmmQjt59aEGWY7HQykUeplaqWKHahJ08TS69KjmaWH3zxDs3fVZbWDYg_vVMG0jdebXb4kbzH58yOLYzFgWoo9qXL03hlvYJcWmybn-dx42oHj1ax1hw5eXIHuAr4I5NPuQQfI-98dUuT3tG_75UYFtBuzVrpeZls-Azk36voEhcB5042HKoyrudoiVRnUlAleIgO6jToVrXGMQNdJopyYolICaTInKPstRGw_E8aqQb15vmUAB4iTEley9HHB_vIhVdtM_TVnNEL3-hx-ZMNpr6EjTb7ESIn-OekpCutn2IJcBrvFQ3DmacmhC94s8WmIQCtpNSaLR2CW94_S1iIYc-1jVrBCIVKxaBW6jQZxqGI5RhkXMMrpFqJ-ikJfmgc-dSWGRUYddxXFc7viDOYd5DBRTArO6r1MIZpCG1zbKGGwRTUmor8Fqta06qhRQ2_G3WOSFWNqhhzZyIvK96Sl3OHWbCEcZ1zMtLCRYGa_GxMPYPDolDeMBMyrlqSaDpviQ7imuLLcUBGESTsur3l34aDFWBJDBrgxj_X-5Xrh9ZS6Ayqoo4yUoCVLqgC5efFbB8I5tmzjcu5xUn1CvJ0pMVAmWy06w2HwJaA7MgF9YVsbVtDauXh34_OKgzlPXJ5s2E6vTaAn3nf6a9k-6jR3r0gXYbs889a_gUmQcUIZ5DCTUYJK9XBO9pFJT8ycouuHq_S2GHNwU7T1-TDbA8RTOSMW1aYqQTDzGB7HGBBNCSfdjrLObZNkLZ26ygV-iBb0C-LJTRsH_bF5cRotX9sj99l9yFSP6OHw161nw2hs2fPt7-R_stjGDs8rSoOcgKEOHK6kk8sZfFNjEqHCd6wy_Ls1heHEQS8pc2OWGuXXq9day-LmOj4wlmOMYM6RcNxsM25xtJ1Fuyvrzc-SIsKdIK-5-JiZFgH4qY6mwBUhRxEicp6QrCC_xenTCrXL7Z7NqtjC4QKaxUgWEwV7zYzqN6WzxqH8N4u7k-WliVHjIcfIvOU3JXT0kxgT1DmSMy_0xts61tzUjkDC1pC_FP8UN0_fPh3B0CFVPKThxitnisTNjyrLjuuSEirU_aHSlY1oHS4od-_z5AXYyroi_xC2mge9-923QT7OyjthEiyZpeHql-9rpnbEWK91A9DBj-xviaPFfe-w4RrQLkkgkUUs-nEW9APtKlBxWnNM7kH3gZrIgSj5KZyfGfylnOxI7-XYOW5NAMgaQsT6O8OsU9srTgyVAqHbniwS6iQtVX8p7UJcXK4xhjiQ65ynEJcO1WrhSbNZ78mMk3-vmSsuXaV4yJuiQCadVE11JinRVmKQSfe60In-XlDAQncTy8zu-vr_9SbkygddogqacqI7sroOI-2t1PnAUYF_hYHDKBx6Y71yxM9liK9AMYS4IgbX9YOYi_QBBvJm1Yojio4hcgBVSCpiID3cMMR0qGjrh3p8JGiKoqO9XVkUJrzmc-X6F5fC0BxV8cjyp10pGL99W3V6IHgtb03093i3sS_M2KQrmlqZjHn1iUwyySVLAdUrzLNe6e3zGWBJf50SchxqDM8gfHspxLli5B9X5f9-HC4Te14h2kNR7katdiktyx0bOu0l81hgqUoQXbcfxHvi9lNo0elqhujsiZAKpt7hrQ6MFwRU97ydX3MI_nCgwtk24BWgdSeRXOGQ2zTsYzSk7aRljgUGurYg93uM_jNsJ_65tQQMtLCrlYBH14xIBHFsVKVAV308aBPhHPcimQJ8G8oyJTBYdk087qDpgvr1WVUn_XhFevZzlNkgLDhJCCNtMd-pFgGl2EIfDnhEhs12TEVE1a_CV-GiC9dHop4DI74qNgyvqAIbml2joBYsNnQPhVtxNcerDSk0JeGJRqFVl9S3sU1L5ULssyg1ljXpk3woyeWVoZeLNBETdAbwAF87FdltzWN_csxBJwQSpQ3UfLay-kfC_DAdKaoRJjfZVbamjP5fPMG7wRkNIPtmhZXw5oHAPHqQyMqmPHPW91RRtW9SD1lJxoRdLaciG4NPygm1B1qt0xWZLR0OQT0PYpQTsvCxOehmqFJB9KMGrLtybGMBAf-2cQe8g-mlgLxnuurB3RW4iKnwDosGePnSN0PMnR5HRUK6x3e8Og8qkq9gYcCL9E4e2v-0Kliwmd297tmLSxC6HJb9dAvSNQ74L_C1CiklC2G0HekkZm-Pd_4O-BaNU8fiw2rTFKhhq-sElW-BiYlLErWX1f4IPKqCRF9IdVxroMSybiXXLkkXVxRo5-MUtC9kQPh0v_ScdpJQi3KEFVLrz6GoeqHKdVcgLK0L-4OW9-7wWGbY6A3aY5r-HV_xMvRjS9G0SpdAyff0l3lzQYTVvzWee07mrBHFTpO3RS9IwOIqvtyOrFZtUDEmDj9xpZVPlfostcfMpoDbJJNfzah6tI2ZshOPKFBwvYnjJOswnSAWH6-PpkaOFk3HQUZAz06Rd9hNejTA==
+        id: cmp_0e0e8fadcb059ede006af18ffc086887d28830380b79eb2fa4
+        type: compaction
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_0e0e8fadcb059ede006af18ff2b45487d2b15fc4831ab8ddd4
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - search_openai_docs
+        headers: null
+        require_approval: never
+        server_description: null
+        server_label: openai_docs
+        server_url: https://developers.openai.com/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 2704
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 529
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 3233
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body:
+      input:
+      - content: What word did I ask you to remember? Reply with only that word, or
+          NONE if you cannot see it. Do not call any tools.
+        role: user
+      max_output_tokens: 4096
+      model: gpt-4.1
+      previous_response_id: resp_0e0e8fadcb059ede006af18ff9bcc087d29c4767e3a9c273f6
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - search_openai_docs
+        require_approval: never
+        server_label: openai_docs
+        server_url: https://developers.openai.com/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794215935
+      created_at: 1794215934
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0e0e8fadcb059ede006af18ffec78487d2a183ef9a9af81075
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_0e0e8fadcb059ede006af18ffef73c87d2acf0f2c2bb01ebb3
+        server_label: openai_docs
+        tools:
+        - annotations:
+            read_only: true
+          description: Search across `platform.openai.com`, `developers.openai.com`,
+            and `learn.chatgpt.com` docs. Use this whenever you are working with the
+            OpenAI API (including the Responses API), OpenAI API SDKs, plugins, ChatGPT,
+            or Codex. Results include URLs—**after `search`, use `fetch_openai_doc`**
+            to read/quote the exact markdown.
+          input_schema:
+            $schema: https://json-schema.org/draft/2020-12/schema
+            properties:
+              cursor:
+                type: string
+              limit:
+                maximum: 50
+                minimum: 1
+                type: integer
+              query:
+                minLength: 1
+                type: string
+            required:
+            - query
+            type: object
+          name: search_openai_docs
+        type: mcp_list_tools
+      - content:
+        - annotations: []
+          logprobs: []
+          text: APRICOT
+          type: output_text
+        id: msg_0e0e8fadcb059ede006af18fffbb8087d2a60db78c0ba7cd8f
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_0e0e8fadcb059ede006af18ff9bcc087d29c4767e3a9c273f6
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - search_openai_docs
+        headers: null
+        require_approval: never
+        server_description: null
+        server_label: openai_docs
+        server_url: https://developers.openai.com/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 3164
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 2560
+        output_tokens: 5
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 3169
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_0e0e8fadcb059ede006af18ffec78487d2a183ef9a9af81075/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - encrypted_content: gAAAAABq8Y_9dgsHZjxOVoI0-0EA1uIpMdFRRubPWp_fqslUVyua-EZYy62GgUXYAqj9NRnMcEKP0vp5PhmhEtcb7M-eaOYCfQLOHytFT9GDUQOGpXhfgzb7CMqANVH0r0g_PxYj3alluBrvQBSCH_sgtPtQDTwhxL2gm5h0WFrFqoz9LwmvnsfI-42FuKvl4p-7k9xwpnU4aXvHlLAQZvVrvzS9DcYwM6Sdk_gqKAEg2fEafinRa2PI5jocxCUaSVl0ewyWnYG9DppZYG3xB63hsygEdQZI7PPEIDAvaJDbnwm5AlQ-Tb7pxrEWmcds6K0eNOEDqS6bCKuh2ZkGNQNb_M1z5FlY0XGl8fw0vnkPnIG7LlK2P4yg66TcHP8bBRz0qAHAhuTKc_0KaEsizZ8b42df4kJ0NfckHbo4ODdRZ2eGwatkxH3OSAKA4qHXjwykQ1gUgvEHDmPMEn3728Vo4mYi1lA7dOqx8qowylYOaXiLrUts0LsPnI1DFDGT1gIiD0J7nU5Zz-I-0QKxbCq2_7Z3bGJNG1puvTl2xYPuPoZ7TrgYiKy9q3CDKKu3qrPA8Myo6WJo7Jao2V1TyVktrgW617vmT8VN4jKL9jI7vIkOn6zxHfXx9WlqM_0BahxVX-N2j2j3di5S-DIyQ9lkFROEm8UXQbf0iaEr96e2v-nasTPJfhXFt6QLZKK-O3FSvef5JKKJZEtyRgLjM37bStwb0vcZnQ5_gEPlzR2d0IVqYIuusZf_SBROH_DNWJJQpsl3YlH9vfAHVMjf02d_cNfZQrlEkZU78SMbgjQo6V6ktltoF4IuUEcwfrVSaF4d3Kbg50YguM38V1zWTLEv5t2DAaHceUeGE6hd3umnF7rxP2hNcFbMT0hTeslDeJV71lpqDX5RBTiHdsE0Qd-3iQkoCOgmlbxnlbACM7JzQrcbkzR_tSvRAiUtxQFWzSmDBhp15wc0mmwYZtMmEbtWTlHuPLM_mf_p95o_ZMoDERHvL_nS0fIv6shckQVrnQhfvhtBrX_zy_vpS70PrS046IqJz8IfWoqiJhe85CkGZe5uUuBwx0Bji5kkNaVX1HxQ9n0k7HXdz8xh2V-F7ZRpt4diGvJoE0UqBJz-1p1qn65gtWn1xcsepqXPpfLgCZQa3k6f2wd9lEIxu3U8g0jdzGAW8Frw6Sdz87knbGhmDFBiXUnoXmZMRJyo3uDvqt8e5QceoY5wJp6o7zjU-E1ll_b6F1Ojds2IBbGw341BEsKD5f-jgpiTjVGF4RX3RkqY0r-9_kykFCSBwA1_3ggsN_BzL3j7LXYW4By-D0t5pR7rLiTy3DGm6_y80_1ODIF2Lh-lMNwQMYY6wf1fBa_IwgoE4OypVK8xN1JNh7u4hru4LNsvRJGDgyfQsjUp-pPeXCOhf1iI87Qu8UlJ4dmggxCqJ2Y-LRJ4ig8x4Rt5l9-BuS7BFnfk0LJaGu2Yy8Rf9_CtOq2FqO6Mitlq8Jjz_jGODcZTvCdbhwWM0ZH0ZXIf048Zb3oST2P-4ePmqUYw73YkxgxnPZEklEtBsfKv0ltHaXhYP87ieAWsLV989L5b-sYcHc1f8-Seku-kfuo6kXkFvj9fvcEjCEF63oiwJqeW1oOt-NyI8ij6Uhvb4Qb4PF876DDsM9gnr17O1BBIYtFvBrXQ2mq1Ye4jrqGkyRDPEiITYO3ewfbJeFAHVIqMMy0kEuXjmHcOoFgWpVApDAbztaLGOlnNkigTa4TTb-8bSHaH8SkKD3he1_irjO4QTC0w_1Zpv2OiDrxErF64AQs92mXgyCAPOf_wh6-a-DdxblFDXkwnDWveqd1ievy_K_yeENZe8nrvWOMQncH2j1S2W2K32TMlEgvVoacUCr1Gd2n85l_Kif1KNWIDz3p8SeHaXzDXOAdo_5mtyIwoh22z831y4FpJj-VvSlAs8qQV_gvCgqBPhY4U_UTQ9ckYz_Vh3i1r9cqk7yyXImix67o8Va4n0quDEbvZi3RkicZvt3OgHw2PiaQwr9NOCRoxeBPNVtq8ZoSgbSLEUnyvC1UgtdJWlB4NlE7rPq_eA0-n7jYKEwqE5QUYT937de4waCFhqaTFwBuK_q77LS_rTETcNFKT8Qr9OBBCwTWyRSwwu9A1y0T-Xz4iqOQIxdEzQ7hCfkaOaeWLNIMKAxRgc9HE5xgf1DlEaavFSstLxHUmb6JN0C12dWHJHb2B7yLyzgxnJLPn7QHtOVjyVqLQdLDi0soDc2ejgAI4FaeDngiWz7cDh71LT32JxEqguKw77E9EhNN8YkpY-JeJ_MT6JkBGlhRNDX5F-ulO3BvXftMVS25wxacZ5bY7HDgry64nowOSNML2cv4mpUnWMdRxSyqynwq6jS6-_WSrlEq9UPAOeh6g_xV4c-z8CcsP08m8WTEGjTkGYyBMSrE9qq97JpqmFHx0Zw57JPyMoPn_2nDqM2LUgM-jOhzFHw-GJRd9_mLvINBi3aP3UnINlbkOpdvEu8JHh8qvFP5-efCCkvNrgItLJ6vDEHE421l8ZgZ3hndfAZU0S40WR540uNKEPoZArA3YR4J1kOTMuzoveMBTpco5tlOxBlmcWPRhccd6eNMAy3JayGiMyYfyq_2Wh8V07snWS3E0810BseHp4CgeScJYGp1W5nB49WA4D_Cb-FL6xyB-BplYgXMKRPMq-UgISmzyye1HHR9jpQD91MVD7KUlE078yUIZ22tZrX7zNr_qNAOnsLClRXcLIXXbb90evyXO3Kl8-z56gmeaawApHgQ4xKTNB5ze146ilzrUI2YkXPF6Rz97k7MEePq8KkBq5c8EKNmBhx2k7Tf156hN38qrIG_0_Ek2eiMGRuu5WFTkFXaflG9Pkw6OMW2VYvop1d11IHfcyBtQ9JrB4u-_xJpuHAPwo5a9-c5BLbIcn7hp_LTq8MHzi_Y4J1Mk2glfSIuRXkJmUU-yHZNsqr81LB4wixRpqzUz25-G1xCbi8lY0frBFz_6j7kOUar-IdMCAWDUleM7Cm88-33jZ4Px4RNvnMSDyuPdPTHK6zR8kJfi6_frbEuRnK1POYYm4E86YI-E7MOtdhj2Lq6P-vBjDDmbUFOILJNTgA1bFa0pZbhfDftvzvqvNEYeik5pPytNV3bqkazqJxxgDo8INPQ9LpzD_gDZKjOvHI4zVhT_nkqqiO4nc-PO_IfSlhiC-wCGokRNG-PRWAgXru-pIh7gJU18kGFsgr9XB4_ZRl4_DkLSolFZ2LpmiVz8HzCxr6dBcDIPM_Luhis7Dsp9NWO0CStIq4FEw16rfgqTjBFoRUnljUISZk1B5O7aknfo8YrJ9VGN8CJHjrTMhTOjX6FTuj3Hljba50UPXSio2YPHeystyiIqJFV0WwNable1SR3dELWvQm6IYWUe1JWITs71e_uNE8lkxkVwMEmY1-aOAzBV8apFfOHnSwu7wbl_tZjqYRTySlsYG9HBfBcFxCGdSsUDTBksD8ndchoBNr_vZVeVFFJlil1E5DlzIBXUofFFXsDafE8m4uPVNcSld_-OarjeJnG9bR9-uPDA6XmSwxjfYBqGh0qNjCiNe185okH4-3QrpcPykk_Df0SUg1i3YipL26K0E9dEaZG-_bSWvzYA9Vb1ZYS54__v_RkSjQx7XXx0JpLy7596Kyua0BrAqSFsYUoRzptilU47QIFyjWvmL3UTKEMDnz6MAhnxIQAg44snkCpiKb9Khd50qzKlKvUTllyVFyJM338y53u8VNVZmd05bpPPmjO2kmmQjt59aEGWY7HQykUeplaqWKHahJ08TS69KjmaWH3zxDs3fVZbWDYg_vVMG0jdebXb4kbzH58yOLYzFgWoo9qXL03hlvYJcWmybn-dx42oHj1ax1hw5eXIHuAr4I5NPuQQfI-98dUuT3tG_75UYFtBuzVrpeZls-Azk36voEhcB5042HKoyrudoiVRnUlAleIgO6jToVrXGMQNdJopyYolICaTInKPstRGw_E8aqQb15vmUAB4iTEley9HHB_vIhVdtM_TVnNEL3-hx-ZMNpr6EjTb7ESIn-OekpCutn2IJcBrvFQ3DmacmhC94s8WmIQCtpNSaLR2CW94_S1iIYc-1jVrBCIVKxaBW6jQZxqGI5RhkXMMrpFqJ-ikJfmgc-dSWGRUYddxXFc7viDOYd5DBRTArO6r1MIZpCG1zbKGGwRTUmor8Fqta06qhRQ2_G3WOSFWNqhhzZyIvK96Sl3OHWbCEcZ1zMtLCRYGa_GxMPYPDolDeMBMyrlqSaDpviQ7imuLLcUBGESTsur3l34aDFWBJDBrgxj_X-5Xrh9ZS6Ayqoo4yUoCVLqgC5efFbB8I5tmzjcu5xUn1CvJ0pMVAmWy06w2HwJaA7MgF9YVsbVtDauXh34_OKgzlPXJ5s2E6vTaAn3nf6a9k-6jR3r0gXYbs889a_gUmQcUIZ5DCTUYJK9XBO9pFJT8ycouuHq_S2GHNwU7T1-TDbA8RTOSMW1aYqQTDzGB7HGBBNCSfdjrLObZNkLZ26ygV-iBb0C-LJTRsH_bF5cRotX9sj99l9yFSP6OHw161nw2hs2fPt7-R_stjGDs8rSoOcgKEOHK6kk8sZfFNjEqHCd6wy_Ls1heHEQS8pc2OWGuXXq9day-LmOj4wlmOMYM6RcNxsM25xtJ1Fuyvrzc-SIsKdIK-5-JiZFgH4qY6mwBUhRxEicp6QrCC_xenTCrXL7Z7NqtjC4QKaxUgWEwV7zYzqN6WzxqH8N4u7k-WliVHjIcfIvOU3JXT0kxgT1DmSMy_0xts61tzUjkDC1pC_FP8UN0_fPh3B0CFVPKThxitnisTNjyrLjuuSEirU_aHSlY1oHS4od-_z5AXYyroi_xC2mge9-923QT7OyjthEiyZpeHql-9rpnbEWK91A9DBj-xviaPFfe-w4RrQLkkgkUUs-nEW9APtKlBxWnNM7kH3gZrIgSj5KZyfGfylnOxI7-XYOW5NAMgaQsT6O8OsU9srTgyVAqHbniwS6iQtVX8p7UJcXK4xhjiQ65ynEJcO1WrhSbNZ78mMk3-vmSsuXaV4yJuiQCadVE11JinRVmKQSfe60In-XlDAQncTy8zu-vr_9SbkygddogqacqI7sroOI-2t1PnAUYF_hYHDKBx6Y71yxM9liK9AMYS4IgbX9YOYi_QBBvJm1Yojio4hcgBVSCpiID3cMMR0qGjrh3p8JGiKoqO9XVkUJrzmc-X6F5fC0BxV8cjyp10pGL99W3V6IHgtb03093i3sS_M2KQrmlqZjHn1iUwyySVLAdUrzLNe6e3zGWBJf50SchxqDM8gfHspxLli5B9X5f9-HC4Te14h2kNR7katdiktyx0bOu0l81hgqUoQXbcfxHvi9lNo0elqhujsiZAKpt7hrQ6MFwRU97ydX3MI_nCgwtk24BWgdSeRXOGQ2zTsYzSk7aRljgUGurYg93uM_jNsJ_65tQQMtLCrlYBH14xIBHFsVKVAV308aBPhHPcimQJ8G8oyJTBYdk087qDpgvr1WVUn_XhFevZzlNkgLDhJCCNtMd-pFgGl2EIfDnhEhs12TEVE1a_CV-GiC9dHop4DI74qNgyvqAIbml2joBYsNnQPhVtxNcerDSk0JeGJRqFVl9S3sU1L5ULssyg1ljXpk3woyeWVoZeLNBETdAbwAF87FdltzWN_csxBJwQSpQ3UfLay-kfC_DAdKaoRJjfZVbamjP5fPMG7wRkNIPtmhZXw5oHAPHqQyMqmPHPW91RRtW9SD1lJxoRdLaciG4NPygm1B1qt0xWZLR0OQT0PYpQTsvCxOehmqFJB9KMGrLtybGMBAf-2cQe8g-mlgLxnuurB3RW4iKnwDosGePnSN0PMnR5HRUK6x3e8Og8qkq9gYcCL9E4e2v-0Kliwmd297tmLSxC6HJb9dAvSNQ74L_C1CiklC2G0HekkZm-Pd_4O-BaNU8fiw2rTFKhhq-sElW-BiYlLErWX1f4IPKqCRF9IdVxroMSybiXXLkkXVxRo5-MUtC9kQPh0v_ScdpJQi3KEFVLrz6GoeqHKdVcgLK0L-4OW9-7wWGbY6A3aY5r-HV_xMvRjS9G0SpdAyff0l3lzQYTVvzWee07mrBHFTpO3RS9IwOIqvtyOrFZtUDEmDj9xpZVPlfostcfMpoDbJJNfzah6tI2ZshOPKFBwvYnjJOswnSAWH6-PpkaOFk3HQUZAz06Rd9hNejTA==
+        id: cmp_0e0e8fadcb059ede006af18ffc086887d28830380b79eb2fa4
+        type: compaction
+      - content:
+        - text: What word did I ask you to remember? Reply with only that word, or
+            NONE if you cannot see it. Do not call any tools.
+          type: input_text
+        id: msg_0e0e8fadcb059ede006af18ffecfec87d2bc7038ae85cae71b
+        role: user
+        status: completed
+        type: message
+      first_id: cmp_0e0e8fadcb059ede006af18ffc086887d28830380b79eb2fa4
+      has_more: false
+      last_id: msg_0e0e8fadcb059ede006af18ffecfec87d2bc7038ae85cae71b
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body:
+      input: Use fetch_openai_doc to read https://developers.openai.com/api/docs/guides/compaction
+        then say DONE. If that tool is unavailable, say UNAVAILABLE. Do not use search_openai_docs.
+      max_output_tokens: 4096
+      model: gpt-4.1
+      previous_response_id: resp_0e0e8fadcb059ede006af18ff2b45487d2b15fc4831ab8ddd4
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - search_openai_docs
+        - fetch_openai_doc
+        require_approval: never
+        server_label: openai_docs
+        server_url: https://developers.openai.com/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794215939
+      created_at: 1794215939
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0e0e8fadcb059ede006af19002eeac87d2aac6c56eaddd9a95
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: UNAVAILABLE
+          type: output_text
+        id: msg_0e0e8fadcb059ede006af190035e9487d2b2e3b36c2a1d4b09
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_0e0e8fadcb059ede006af18ff2b45487d2b15fc4831ab8ddd4
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - search_openai_docs
+        - fetch_openai_doc
+        headers: null
+        require_approval: never
+        server_description: null
+        server_label: openai_docs
+        server_url: https://developers.openai.com/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 225
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 4
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 229
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body:
+      input: Use fetch_openai_doc to read https://developers.openai.com/api/docs/guides/compaction
+        then say DONE. If that tool is unavailable, say UNAVAILABLE. Do not use search_openai_docs.
+      max_output_tokens: 4096
+      model: gpt-4.1
+      previous_response_id: resp_0e0e8fadcb059ede006af18ff2b45487d2b15fc4831ab8ddd4
+      store: true
+      stream: false
+      tools:
+      - require_approval: never
+        server_label: openai_docs
+        server_url: https://developers.openai.com/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794215941
+      created_at: 1794215941
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0e0e8fadcb059ede006af1900509e487d285f3fe3d58555fb4
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: UNAVAILABLE
+          type: output_text
+        id: msg_0e0e8fadcb059ede006af19005847c87d2b47a15015bf71289
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_0e0e8fadcb059ede006af18ff2b45487d2b15fc4831ab8ddd4
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools: null
+        headers: null
+        require_approval: never
+        server_description: null
+        server_label: openai_docs
+        server_url: https://developers.openai.com/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 225
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 4
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 229
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t10
+  request:
+    body:
+      input: Remember the word APRICOT. Do not call any tools. Reply only READY.
+      max_output_tokens: 4096
+      model: gpt-4.1
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - no_such_tool
+        require_approval: never
+        server_label: openai_docs
+        server_url: https://developers.openai.com/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794215943
+      created_at: 1794215942
+      error: null
+      frequency_penalty: 0.0
+      id: resp_09d1c608f13ae961006af19006cf2487d2b2673b3d45c64512
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_09d1c608f13ae961006af19006dd0087d29386b409374a07ac
+        server_label: openai_docs
+        tools: []
+        type: mcp_list_tools
+      - content:
+        - annotations: []
+          logprobs: []
+          text: READY
+          type: output_text
+        id: msg_09d1c608f13ae961006af190078c4487d2817354b77873b60e
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - no_such_tool
+        headers: null
+        require_approval: never
+        server_description: null
+        server_label: openai_docs
+        server_url: https://developers.openai.com/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 50
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 2
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 52
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t11
+  request:
+    body:
+      input: Remember the word APRICOT. Do not call any tools. Reply only READY.
+      max_output_tokens: 4096
+      model: gpt-4.1
+      previous_response_id: resp_09d1c608f13ae961006af19006cf2487d2b2673b3d45c64512
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - no_such_tool
+        require_approval: never
+        server_label: openai_docs
+        server_url: https://developers.openai.com/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794215946
+      created_at: 1794215945
+      error: null
+      frequency_penalty: 0.0
+      id: resp_09d1c608f13ae961006af19008ce7c87d28b5a0ddddc287549
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: READY
+          type: output_text
+        id: msg_09d1c608f13ae961006af1900a185c87d28b150a5669df3729
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_09d1c608f13ae961006af19006cf2487d2b2673b3d45c64512
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - no_such_tool
+        headers: null
+        require_approval: never
+        server_description: null
+        server_label: openai_docs
+        server_url: https://developers.openai.com/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 76
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 2
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 78
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200

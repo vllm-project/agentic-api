@@ -1,5 +1,7 @@
 #[path = "compaction/recordings.rs"]
 mod recordings;
+#[path = "compaction/replay.rs"]
+mod replay;
 mod support;
 
 use agentic_core::types::conversations::ConversationMetadata;

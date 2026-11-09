@@ -428,7 +428,7 @@ fn steering_requirements_use_pinned_parent_custom_tool_metadata() {
 }
 
 #[test]
-fn compaction_replacement_preserves_mcp_discovery_without_old_context() {
+fn compaction_replacement_drops_mcp_discovery_with_old_context() {
     let session = session(3, 10_000);
     let lease = session.begin(None).unwrap();
     let items = serde_json::from_value::<Vec<InputItem>>(json!([
@@ -454,9 +454,9 @@ fn compaction_replacement_preserves_mcp_discovery_without_old_context() {
     let checkpoint = lease
         .checkpoint("resp_2".to_owned(), &ResponseMetadata::default(), &items, false)
         .unwrap();
-    assert_eq!(checkpoint.history.len(), 3);
-    assert!(matches!(checkpoint.history[0], InputItem::McpListTools(_)));
-    assert!(matches!(checkpoint.history[2], InputItem::Compaction(_)));
+    assert_eq!(checkpoint.history.len(), 2);
+    assert!(matches!(checkpoint.history[0], InputItem::Message(_)));
+    assert!(matches!(checkpoint.history[1], InputItem::Compaction(_)));
     assert!(
         !serde_json::to_string(&checkpoint.history)
             .unwrap()
@@ -465,7 +465,7 @@ fn compaction_replacement_preserves_mcp_discovery_without_old_context() {
 }
 
 #[test]
-fn compacted_outputs_are_dropped_except_discovery_and_async_calls() {
+fn compacted_outputs_are_dropped_except_async_calls() {
     let session = session(10, 10_000);
     let mut lease = session.begin(None).unwrap();
     let message: OutputItem = serde_json::from_value(json!({
@@ -485,7 +485,7 @@ fn compacted_outputs_are_dropped_except_discovery_and_async_calls() {
     lease.mark_outputs_compacted(3);
     assert!(!lease.retains_output(1, &message));
     assert!(lease.retains_output(3, &message));
-    assert!(lease.retains_output(0, &discovery));
+    assert!(!lease.retains_output(0, &discovery));
     assert!(
         lease.retains_output(2, &async_call),
         "an open async call's output arrives in a later request"

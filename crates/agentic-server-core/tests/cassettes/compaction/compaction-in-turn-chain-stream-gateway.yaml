@@ -166,11 +166,11 @@ turns:
   response:
     body:
       background: false
-      completed_at: 1794206556
-      created_at: 1794206556
+      completed_at: 1794216173
+      created_at: 1794216173
       error: null
       frequency_penalty: 0.0
-      id: resp_01a1bf0b-5bce-78a3-871f-efbbf80d9803
+      id: resp_01a1bf9e-160f-75a1-8bd0-81ce850686fd
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -180,13 +180,16 @@ turns:
       object: response
       output:
       - content:
-        - text: 'The user has sent a long message consisting of repeated "Background
-            notes for later." phrases, and at the very end asks me to remember the
-            word APRICOT and reply with only OK.
+        - text: 'The user has sent a long message that is mostly repetitive "Background
+            notes for later." text, and at the end asks me to remember the word "APRICOT"
+            and reply with only "OK".
+
+
+            This is a simple request. I''ll comply.
 
             '
           type: reasoning_text
-        id: rs_80d70fdd03a066fa
+        id: rs_b85d74322710c038
         summary: []
         type: reasoning
       - content:
@@ -197,7 +200,7 @@ turns:
 
             OK'
           type: output_text
-        id: msg_b090ec42dc4b9bb0
+        id: msg_ba177fd4d3803e78
         role: assistant
         status: completed
         type: message
@@ -224,10 +227,10 @@ turns:
         input_tokens: 2302
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 43
+        output_tokens: 57
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 2345
+        total_tokens: 2359
     headers:
       content-type: application/json
     status_code: 200
@@ -239,7 +242,7 @@ turns:
         type: compaction
       input: Count from 1 to 60, one number per line, digits only.
       model: Qwen/Qwen3.8-27B-FP8
-      previous_response_id: resp_01a1bf0b-5bce-78a3-871f-efbbf80d9803
+      previous_response_id: resp_01a1bf9e-160f-75a1-8bd0-81ce850686fd
       store: true
       stream: true
     headers:
@@ -256,7 +259,7 @@ turns:
     - 'event: response.created
 
       '
-    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a1bf0b-62c6-73a0-a1a7-6951c144c302","created_at":1794206566,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":null,"max_tool_calls":null,"previous_response_id":"resp_01a1bf0b-5bce-78a3-871f-efbbf80d9803","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":true,"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null,"error":null}}
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a1bf9e-1e31-7c02-88da-c410ce41bbff","created_at":1794216182,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":null,"max_tool_calls":null,"previous_response_id":"resp_01a1bf9e-160f-75a1-8bd0-81ce850686fd","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":true,"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null,"error":null}}
 
       '
     - '
@@ -265,7 +268,7 @@ turns:
     - 'event: response.in_progress
 
       '
-    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a1bf0b-62c6-73a0-a1a7-6951c144c302","created_at":1794206566,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":null,"max_tool_calls":null,"previous_response_id":"resp_01a1bf0b-5bce-78a3-871f-efbbf80d9803","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":true,"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null,"error":null}}
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a1bf9e-1e31-7c02-88da-c410ce41bbff","created_at":1794216182,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":null,"max_tool_calls":null,"previous_response_id":"resp_01a1bf9e-160f-75a1-8bd0-81ce850686fd","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":true,"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null,"error":null}}
 
       '
     - '
@@ -274,11 +277,14 @@ turns:
     - 'event: response.output_item.added
 
       '
-    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"type":"compaction","id":"cmp_01a1bf0b-8900-70f0-833d-7e84ab547b5a","encrypted_content":"{\"summary\":\"**Context
-      Checkpoint Summary**\\n\\n- **Remembered token:** APRICOT\\n- **Outstanding
-      task:** User requested a count from 1 to 60, one number per line, digits only.
-      Not yet fulfilled.\\n- **Constraints:** No additional constraints specified.\\n-
-      **No other decisions, unresolved issues, or critical references present.**\",\"retained\":[{\"type\":\"message\",\"id\":\"msg_01a1bf0b-62c7-78d0-9968-343e50e3feca\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Background
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"type":"compaction","id":"cmp_01a1bf9e-4453-72c1-a6c7-6f3ebc309f07","encrypted_content":"{\"summary\":\"**Context
+      Checkpoint Summary**\\n\\n**Completed:**\\n- User requested I remember the word
+      **APRICOT**. Confirmed with \\\"OK\\\".\\n\\n**Pending (unanswered):**\\n- User
+      asked: \\\"Count from 1 to 60, one number per line, digits only.\\\" — This
+      has not yet been fulfilled. The next model should output 1 through 60, one per
+      line, digits only.\\n\\n**Constraints/Decisions:**\\n- No other constraints
+      established.\\n- The word APRICOT was explicitly requested to be remembered
+      — preserve it if relevant to downstream tasks.\",\"retained\":[{\"type\":\"message\",\"id\":\"msg_01a1bf9e-1e32-7f82-a946-e18a8133495e\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
@@ -429,7 +435,7 @@ turns:
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Remember
-      the word APRICOT. Reply with only OK.\"}]},{\"type\":\"message\",\"id\":\"msg_01a1bf0b-62c7-78d0-9968-344ddbac5eab\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Count
+      the word APRICOT. Reply with only OK.\"}]},{\"type\":\"message\",\"id\":\"msg_01a1bf9e-1e32-7f82-a946-e19c0c7e3a04\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Count
       from 1 to 60, one number per line, digits only.\"}]}]}"}}
 
       '
@@ -439,11 +445,14 @@ turns:
     - 'event: response.output_item.done
 
       '
-    - 'data: {"type":"response.output_item.done","sequence_number":3,"output_index":0,"item":{"type":"compaction","id":"cmp_01a1bf0b-8900-70f0-833d-7e84ab547b5a","encrypted_content":"{\"summary\":\"**Context
-      Checkpoint Summary**\\n\\n- **Remembered token:** APRICOT\\n- **Outstanding
-      task:** User requested a count from 1 to 60, one number per line, digits only.
-      Not yet fulfilled.\\n- **Constraints:** No additional constraints specified.\\n-
-      **No other decisions, unresolved issues, or critical references present.**\",\"retained\":[{\"type\":\"message\",\"id\":\"msg_01a1bf0b-62c7-78d0-9968-343e50e3feca\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Background
+    - 'data: {"type":"response.output_item.done","sequence_number":3,"output_index":0,"item":{"type":"compaction","id":"cmp_01a1bf9e-4453-72c1-a6c7-6f3ebc309f07","encrypted_content":"{\"summary\":\"**Context
+      Checkpoint Summary**\\n\\n**Completed:**\\n- User requested I remember the word
+      **APRICOT**. Confirmed with \\\"OK\\\".\\n\\n**Pending (unanswered):**\\n- User
+      asked: \\\"Count from 1 to 60, one number per line, digits only.\\\" — This
+      has not yet been fulfilled. The next model should output 1 through 60, one per
+      line, digits only.\\n\\n**Constraints/Decisions:**\\n- No other constraints
+      established.\\n- The word APRICOT was explicitly requested to be remembered
+      — preserve it if relevant to downstream tasks.\",\"retained\":[{\"type\":\"message\",\"id\":\"msg_01a1bf9e-1e32-7f82-a946-e18a8133495e\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
@@ -594,7 +603,7 @@ turns:
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Remember
-      the word APRICOT. Reply with only OK.\"}]},{\"type\":\"message\",\"id\":\"msg_01a1bf0b-62c7-78d0-9968-344ddbac5eab\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Count
+      the word APRICOT. Reply with only OK.\"}]},{\"type\":\"message\",\"id\":\"msg_01a1bf9e-1e32-7f82-a946-e19c0c7e3a04\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Count
       from 1 to 60, one number per line, digits only.\"}]}]}"}}
 
       '
@@ -604,7 +613,7 @@ turns:
     - 'event: response.output_item.added
 
       '
-    - 'data: {"type":"response.output_item.added","sequence_number":4,"output_index":1,"item":{"id":"rs_a028a6d3a8f3b770","summary":[],"type":"reasoning","content":[],"status":"in_progress"}}
+    - 'data: {"type":"response.output_item.added","sequence_number":4,"output_index":1,"item":{"id":"rs_94b7c0b3af20c0a8","summary":[],"type":"reasoning","content":[],"status":"in_progress"}}
 
       '
     - '
@@ -613,7 +622,7 @@ turns:
     - 'event: response.reasoning_part.added
 
       '
-    - 'data: {"type":"response.reasoning_part.added","sequence_number":5,"output_index":1,"content_index":0,"item_id":"rs_a028a6d3a8f3b770","part":{"text":"","type":"reasoning_text"}}
+    - 'data: {"type":"response.reasoning_part.added","sequence_number":5,"output_index":1,"content_index":0,"item_id":"rs_94b7c0b3af20c0a8","part":{"text":"","type":"reasoning_text"}}
 
       '
     - '
@@ -622,7 +631,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":6,"output_index":1,"content_index":0,"delta":"The","item_id":"rs_a028a6d3a8f3b770"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":6,"output_index":1,"content_index":0,"delta":"The","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -632,7 +641,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":7,"output_index":1,"content_index":0,"delta":"
-      user","item_id":"rs_a028a6d3a8f3b770"}
+      user","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -642,7 +651,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":8,"output_index":1,"content_index":0,"delta":"
-      wants","item_id":"rs_a028a6d3a8f3b770"}
+      wants","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -652,7 +661,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":9,"output_index":1,"content_index":0,"delta":"
-      me","item_id":"rs_a028a6d3a8f3b770"}
+      me","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -662,7 +671,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":10,"output_index":1,"content_index":0,"delta":"
-      to","item_id":"rs_a028a6d3a8f3b770"}
+      to","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -672,7 +681,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":11,"output_index":1,"content_index":0,"delta":"
-      count","item_id":"rs_a028a6d3a8f3b770"}
+      count","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -682,7 +691,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":12,"output_index":1,"content_index":0,"delta":"
-      from","item_id":"rs_a028a6d3a8f3b770"}
+      from","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -692,7 +701,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":13,"output_index":1,"content_index":0,"delta":"
-      ","item_id":"rs_a028a6d3a8f3b770"}
+      ","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -701,7 +710,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":14,"output_index":1,"content_index":0,"delta":"1","item_id":"rs_a028a6d3a8f3b770"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":14,"output_index":1,"content_index":0,"delta":"1","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -711,7 +720,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":15,"output_index":1,"content_index":0,"delta":"
-      to","item_id":"rs_a028a6d3a8f3b770"}
+      to","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -721,7 +730,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":16,"output_index":1,"content_index":0,"delta":"
-      ","item_id":"rs_a028a6d3a8f3b770"}
+      ","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -730,7 +739,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":17,"output_index":1,"content_index":0,"delta":"6","item_id":"rs_a028a6d3a8f3b770"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":17,"output_index":1,"content_index":0,"delta":"6","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -739,7 +748,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":18,"output_index":1,"content_index":0,"delta":"0","item_id":"rs_a028a6d3a8f3b770"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":18,"output_index":1,"content_index":0,"delta":"0","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -748,7 +757,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":19,"output_index":1,"content_index":0,"delta":",","item_id":"rs_a028a6d3a8f3b770"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":19,"output_index":1,"content_index":0,"delta":",","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -758,7 +767,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":20,"output_index":1,"content_index":0,"delta":"
-      one","item_id":"rs_a028a6d3a8f3b770"}
+      one","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -768,7 +777,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":21,"output_index":1,"content_index":0,"delta":"
-      number","item_id":"rs_a028a6d3a8f3b770"}
+      number","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -778,7 +787,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":22,"output_index":1,"content_index":0,"delta":"
-      per","item_id":"rs_a028a6d3a8f3b770"}
+      per","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -788,7 +797,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":23,"output_index":1,"content_index":0,"delta":"
-      line","item_id":"rs_a028a6d3a8f3b770"}
+      line","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -797,7 +806,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":24,"output_index":1,"content_index":0,"delta":",","item_id":"rs_a028a6d3a8f3b770"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":24,"output_index":1,"content_index":0,"delta":",","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -807,7 +816,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":25,"output_index":1,"content_index":0,"delta":"
-      digits","item_id":"rs_a028a6d3a8f3b770"}
+      digits","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -817,7 +826,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":26,"output_index":1,"content_index":0,"delta":"
-      only","item_id":"rs_a028a6d3a8f3b770"}
+      only","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -826,7 +835,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":27,"output_index":1,"content_index":0,"delta":".","item_id":"rs_a028a6d3a8f3b770"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":27,"output_index":1,"content_index":0,"delta":".","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -836,7 +845,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":28,"output_index":1,"content_index":0,"delta":"
-      This","item_id":"rs_a028a6d3a8f3b770"}
+      This","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -846,7 +855,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":29,"output_index":1,"content_index":0,"delta":"
-      is","item_id":"rs_a028a6d3a8f3b770"}
+      is","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -856,7 +865,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":30,"output_index":1,"content_index":0,"delta":"
-      straightforward","item_id":"rs_a028a6d3a8f3b770"}
+      straightforward","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -865,7 +874,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":31,"output_index":1,"content_index":0,"delta":".","item_id":"rs_a028a6d3a8f3b770"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":31,"output_index":1,"content_index":0,"delta":".","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -874,7 +883,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":32,"output_index":1,"content_index":0,"delta":"\n","item_id":"rs_a028a6d3a8f3b770"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":32,"output_index":1,"content_index":0,"delta":"\n","item_id":"rs_94b7c0b3af20c0a8"}
 
       '
     - '
@@ -883,7 +892,7 @@ turns:
     - 'event: response.reasoning_text.done
 
       '
-    - 'data: {"type":"response.reasoning_text.done","sequence_number":33,"output_index":1,"content_index":0,"item_id":"rs_a028a6d3a8f3b770","text":"The
+    - 'data: {"type":"response.reasoning_text.done","sequence_number":33,"output_index":1,"content_index":0,"item_id":"rs_94b7c0b3af20c0a8","text":"The
       user wants me to count from 1 to 60, one number per line, digits only. This
       is straightforward.\n"}
 
@@ -894,7 +903,7 @@ turns:
     - 'event: response.reasoning_part.done
 
       '
-    - 'data: {"type":"response.reasoning_part.done","sequence_number":34,"output_index":1,"content_index":0,"item_id":"rs_a028a6d3a8f3b770","part":{"text":"The
+    - 'data: {"type":"response.reasoning_part.done","sequence_number":34,"output_index":1,"content_index":0,"item_id":"rs_94b7c0b3af20c0a8","part":{"text":"The
       user wants me to count from 1 to 60, one number per line, digits only. This
       is straightforward.\n","type":"reasoning_text"}}
 
@@ -905,7 +914,7 @@ turns:
     - 'event: response.output_item.done
 
       '
-    - 'data: {"type":"response.output_item.done","sequence_number":35,"output_index":1,"item":{"id":"rs_a028a6d3a8f3b770","summary":[],"type":"reasoning","content":[{"text":"The
+    - 'data: {"type":"response.output_item.done","sequence_number":35,"output_index":1,"item":{"id":"rs_94b7c0b3af20c0a8","summary":[],"type":"reasoning","content":[{"text":"The
       user wants me to count from 1 to 60, one number per line, digits only. This
       is straightforward.\n","type":"reasoning_text"}],"status":"completed"}}
 
@@ -916,7 +925,7 @@ turns:
     - 'event: response.output_item.added
 
       '
-    - 'data: {"type":"response.output_item.added","sequence_number":36,"output_index":2,"item":{"id":"msg_a17cb9f1e940b2f8","content":[],"role":"assistant","status":"in_progress","type":"message"}}
+    - 'data: {"type":"response.output_item.added","sequence_number":36,"output_index":2,"item":{"id":"msg_9961149286e76433","content":[],"role":"assistant","status":"in_progress","type":"message"}}
 
       '
     - '
@@ -925,7 +934,7 @@ turns:
     - 'event: response.content_part.added
 
       '
-    - 'data: {"type":"response.content_part.added","sequence_number":37,"output_index":2,"content_index":0,"item_id":"msg_a17cb9f1e940b2f8","part":{"annotations":[],"text":"","type":"output_text","logprobs":[]}}
+    - 'data: {"type":"response.content_part.added","sequence_number":37,"output_index":2,"content_index":0,"item_id":"msg_9961149286e76433","part":{"annotations":[],"text":"","type":"output_text","logprobs":[]}}
 
       '
     - '
@@ -934,7 +943,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":38,"output_index":2,"content_index":0,"delta":"\n\n1","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":38,"output_index":2,"content_index":0,"delta":"\n\n1","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -943,7 +952,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":39,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":39,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -952,7 +961,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":40,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":40,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -961,7 +970,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":41,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":41,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -970,7 +979,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":42,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":42,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -979,7 +988,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":43,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":43,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -988,7 +997,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":44,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":44,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -997,7 +1006,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":45,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":45,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1006,7 +1015,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":46,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":46,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1015,7 +1024,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":47,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":47,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1024,7 +1033,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":48,"output_index":2,"content_index":0,"delta":"6","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":48,"output_index":2,"content_index":0,"delta":"6","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1033,7 +1042,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":49,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":49,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1042,7 +1051,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":50,"output_index":2,"content_index":0,"delta":"7","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":50,"output_index":2,"content_index":0,"delta":"7","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1051,7 +1060,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":51,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":51,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1060,7 +1069,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":52,"output_index":2,"content_index":0,"delta":"8","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":52,"output_index":2,"content_index":0,"delta":"8","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1069,7 +1078,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":53,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":53,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1078,7 +1087,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":54,"output_index":2,"content_index":0,"delta":"9","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":54,"output_index":2,"content_index":0,"delta":"9","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1087,7 +1096,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":55,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":55,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1096,7 +1105,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":56,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":56,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1105,7 +1114,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":57,"output_index":2,"content_index":0,"delta":"0","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":57,"output_index":2,"content_index":0,"delta":"0","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1114,7 +1123,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":58,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":58,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1123,7 +1132,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":59,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":59,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1132,7 +1141,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":60,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":60,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1141,7 +1150,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":61,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":61,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1150,7 +1159,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":62,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":62,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1159,7 +1168,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":63,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":63,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1168,7 +1177,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":64,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":64,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1177,7 +1186,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":65,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":65,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1186,7 +1195,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":66,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":66,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1195,7 +1204,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":67,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":67,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1204,7 +1213,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":68,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":68,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1213,7 +1222,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":69,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":69,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1222,7 +1231,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":70,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":70,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1231,7 +1240,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":71,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":71,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1240,7 +1249,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":72,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":72,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1249,7 +1258,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":73,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":73,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1258,7 +1267,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":74,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":74,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1267,7 +1276,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":75,"output_index":2,"content_index":0,"delta":"6","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":75,"output_index":2,"content_index":0,"delta":"6","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1276,7 +1285,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":76,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":76,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1285,7 +1294,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":77,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":77,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1294,7 +1303,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":78,"output_index":2,"content_index":0,"delta":"7","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":78,"output_index":2,"content_index":0,"delta":"7","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1303,7 +1312,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":79,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":79,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1312,7 +1321,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":80,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":80,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1321,7 +1330,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":81,"output_index":2,"content_index":0,"delta":"8","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":81,"output_index":2,"content_index":0,"delta":"8","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1330,7 +1339,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":82,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":82,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1339,7 +1348,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":83,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":83,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1348,7 +1357,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":84,"output_index":2,"content_index":0,"delta":"9","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":84,"output_index":2,"content_index":0,"delta":"9","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1357,7 +1366,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":85,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":85,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1366,7 +1375,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":86,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":86,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1375,7 +1384,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":87,"output_index":2,"content_index":0,"delta":"0","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":87,"output_index":2,"content_index":0,"delta":"0","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1384,7 +1393,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":88,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":88,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1393,7 +1402,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":89,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":89,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1402,7 +1411,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":90,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":90,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1411,7 +1420,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":91,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":91,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1420,7 +1429,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":92,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":92,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1429,7 +1438,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":93,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":93,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1438,7 +1447,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":94,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":94,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1447,7 +1456,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":95,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":95,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1456,7 +1465,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":96,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":96,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1465,7 +1474,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":97,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":97,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1474,7 +1483,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":98,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":98,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1483,7 +1492,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":99,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":99,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1492,7 +1501,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":100,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":100,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1501,7 +1510,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":101,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":101,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1510,7 +1519,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":102,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":102,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1519,7 +1528,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":103,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":103,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1528,7 +1537,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":104,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":104,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1537,7 +1546,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":105,"output_index":2,"content_index":0,"delta":"6","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":105,"output_index":2,"content_index":0,"delta":"6","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1546,7 +1555,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":106,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":106,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1555,7 +1564,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":107,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":107,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1564,7 +1573,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":108,"output_index":2,"content_index":0,"delta":"7","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":108,"output_index":2,"content_index":0,"delta":"7","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1573,7 +1582,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":109,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":109,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1582,7 +1591,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":110,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":110,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1591,7 +1600,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":111,"output_index":2,"content_index":0,"delta":"8","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":111,"output_index":2,"content_index":0,"delta":"8","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1600,7 +1609,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":112,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":112,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1609,7 +1618,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":113,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":113,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1618,7 +1627,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":114,"output_index":2,"content_index":0,"delta":"9","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":114,"output_index":2,"content_index":0,"delta":"9","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1627,7 +1636,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":115,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":115,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1636,7 +1645,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":116,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":116,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1645,7 +1654,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":117,"output_index":2,"content_index":0,"delta":"0","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":117,"output_index":2,"content_index":0,"delta":"0","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1654,7 +1663,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":118,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":118,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1663,7 +1672,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":119,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":119,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1672,7 +1681,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":120,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":120,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1681,7 +1690,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":121,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":121,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1690,7 +1699,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":122,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":122,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1699,7 +1708,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":123,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":123,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1708,7 +1717,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":124,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":124,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1717,7 +1726,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":125,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":125,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1726,7 +1735,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":126,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":126,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1735,7 +1744,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":127,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":127,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1744,7 +1753,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":128,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":128,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1753,7 +1762,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":129,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":129,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1762,7 +1771,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":130,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":130,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1771,7 +1780,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":131,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":131,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1780,7 +1789,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":132,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":132,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1789,7 +1798,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":133,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":133,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1798,7 +1807,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":134,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":134,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1807,7 +1816,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":135,"output_index":2,"content_index":0,"delta":"6","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":135,"output_index":2,"content_index":0,"delta":"6","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1816,7 +1825,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":136,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":136,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1825,7 +1834,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":137,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":137,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1834,7 +1843,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":138,"output_index":2,"content_index":0,"delta":"7","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":138,"output_index":2,"content_index":0,"delta":"7","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1843,7 +1852,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":139,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":139,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1852,7 +1861,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":140,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":140,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1861,7 +1870,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":141,"output_index":2,"content_index":0,"delta":"8","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":141,"output_index":2,"content_index":0,"delta":"8","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1870,7 +1879,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":142,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":142,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1879,7 +1888,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":143,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":143,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1888,7 +1897,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":144,"output_index":2,"content_index":0,"delta":"9","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":144,"output_index":2,"content_index":0,"delta":"9","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1897,7 +1906,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":145,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":145,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1906,7 +1915,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":146,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":146,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1915,7 +1924,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":147,"output_index":2,"content_index":0,"delta":"0","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":147,"output_index":2,"content_index":0,"delta":"0","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1924,7 +1933,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":148,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":148,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1933,7 +1942,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":149,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":149,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1942,7 +1951,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":150,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":150,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1951,7 +1960,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":151,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":151,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1960,7 +1969,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":152,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":152,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1969,7 +1978,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":153,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":153,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1978,7 +1987,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":154,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":154,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1987,7 +1996,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":155,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":155,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -1996,7 +2005,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":156,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":156,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2005,7 +2014,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":157,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":157,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2014,7 +2023,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":158,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":158,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2023,7 +2032,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":159,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":159,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2032,7 +2041,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":160,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":160,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2041,7 +2050,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":161,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":161,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2050,7 +2059,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":162,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":162,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2059,7 +2068,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":163,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":163,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2068,7 +2077,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":164,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":164,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2077,7 +2086,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":165,"output_index":2,"content_index":0,"delta":"6","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":165,"output_index":2,"content_index":0,"delta":"6","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2086,7 +2095,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":166,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":166,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2095,7 +2104,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":167,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":167,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2104,7 +2113,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":168,"output_index":2,"content_index":0,"delta":"7","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":168,"output_index":2,"content_index":0,"delta":"7","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2113,7 +2122,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":169,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":169,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2122,7 +2131,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":170,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":170,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2131,7 +2140,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":171,"output_index":2,"content_index":0,"delta":"8","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":171,"output_index":2,"content_index":0,"delta":"8","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2140,7 +2149,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":172,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":172,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2149,7 +2158,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":173,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":173,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2158,7 +2167,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":174,"output_index":2,"content_index":0,"delta":"9","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":174,"output_index":2,"content_index":0,"delta":"9","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2167,7 +2176,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":175,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":175,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2176,7 +2185,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":176,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":176,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2185,7 +2194,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":177,"output_index":2,"content_index":0,"delta":"0","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":177,"output_index":2,"content_index":0,"delta":"0","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2194,7 +2203,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":178,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":178,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2203,7 +2212,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":179,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":179,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2212,7 +2221,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":180,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":180,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2221,7 +2230,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":181,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":181,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2230,7 +2239,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":182,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":182,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2239,7 +2248,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":183,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":183,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2248,7 +2257,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":184,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":184,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2257,7 +2266,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":185,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":185,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2266,7 +2275,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":186,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":186,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2275,7 +2284,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":187,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":187,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2284,7 +2293,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":188,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":188,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2293,7 +2302,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":189,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":189,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2302,7 +2311,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":190,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":190,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2311,7 +2320,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":191,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":191,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2320,7 +2329,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":192,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":192,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2329,7 +2338,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":193,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":193,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2338,7 +2347,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":194,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":194,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2347,7 +2356,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":195,"output_index":2,"content_index":0,"delta":"6","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":195,"output_index":2,"content_index":0,"delta":"6","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2356,7 +2365,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":196,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":196,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2365,7 +2374,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":197,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":197,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2374,7 +2383,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":198,"output_index":2,"content_index":0,"delta":"7","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":198,"output_index":2,"content_index":0,"delta":"7","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2383,7 +2392,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":199,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":199,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2392,7 +2401,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":200,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":200,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2401,7 +2410,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":201,"output_index":2,"content_index":0,"delta":"8","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":201,"output_index":2,"content_index":0,"delta":"8","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2410,7 +2419,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":202,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":202,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2419,7 +2428,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":203,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":203,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2428,7 +2437,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":204,"output_index":2,"content_index":0,"delta":"9","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":204,"output_index":2,"content_index":0,"delta":"9","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2437,7 +2446,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":205,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":205,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2446,7 +2455,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":206,"output_index":2,"content_index":0,"delta":"6","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":206,"output_index":2,"content_index":0,"delta":"6","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2455,7 +2464,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":207,"output_index":2,"content_index":0,"delta":"0","item_id":"msg_a17cb9f1e940b2f8","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":207,"output_index":2,"content_index":0,"delta":"0","item_id":"msg_9961149286e76433","logprobs":[]}
 
       '
     - '
@@ -2464,7 +2473,7 @@ turns:
     - 'event: response.output_text.done
 
       '
-    - 'data: {"type":"response.output_text.done","sequence_number":208,"output_index":2,"content_index":0,"item_id":"msg_a17cb9f1e940b2f8","logprobs":[],"text":"\n\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n33\n34\n35\n36\n37\n38\n39\n40\n41\n42\n43\n44\n45\n46\n47\n48\n49\n50\n51\n52\n53\n54\n55\n56\n57\n58\n59\n60"}
+    - 'data: {"type":"response.output_text.done","sequence_number":208,"output_index":2,"content_index":0,"item_id":"msg_9961149286e76433","logprobs":[],"text":"\n\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n33\n34\n35\n36\n37\n38\n39\n40\n41\n42\n43\n44\n45\n46\n47\n48\n49\n50\n51\n52\n53\n54\n55\n56\n57\n58\n59\n60"}
 
       '
     - '
@@ -2473,7 +2482,7 @@ turns:
     - 'event: response.content_part.done
 
       '
-    - 'data: {"type":"response.content_part.done","sequence_number":209,"output_index":2,"content_index":0,"item_id":"msg_a17cb9f1e940b2f8","part":{"annotations":[],"text":"\n\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n33\n34\n35\n36\n37\n38\n39\n40\n41\n42\n43\n44\n45\n46\n47\n48\n49\n50\n51\n52\n53\n54\n55\n56\n57\n58\n59\n60","type":"output_text","logprobs":[]}}
+    - 'data: {"type":"response.content_part.done","sequence_number":209,"output_index":2,"content_index":0,"item_id":"msg_9961149286e76433","part":{"annotations":[],"text":"\n\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n33\n34\n35\n36\n37\n38\n39\n40\n41\n42\n43\n44\n45\n46\n47\n48\n49\n50\n51\n52\n53\n54\n55\n56\n57\n58\n59\n60","type":"output_text","logprobs":[]}}
 
       '
     - '
@@ -2482,7 +2491,7 @@ turns:
     - 'event: response.output_item.done
 
       '
-    - 'data: {"type":"response.output_item.done","sequence_number":210,"output_index":2,"item":{"id":"msg_a17cb9f1e940b2f8","content":[{"annotations":[],"text":"\n\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n33\n34\n35\n36\n37\n38\n39\n40\n41\n42\n43\n44\n45\n46\n47\n48\n49\n50\n51\n52\n53\n54\n55\n56\n57\n58\n59\n60","type":"output_text","logprobs":[]}],"role":"assistant","status":"completed","type":"message","summary":[]}}
+    - 'data: {"type":"response.output_item.done","sequence_number":210,"output_index":2,"item":{"id":"msg_9961149286e76433","content":[{"annotations":[],"text":"\n\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n33\n34\n35\n36\n37\n38\n39\n40\n41\n42\n43\n44\n45\n46\n47\n48\n49\n50\n51\n52\n53\n54\n55\n56\n57\n58\n59\n60","type":"output_text","logprobs":[]}],"role":"assistant","status":"completed","type":"message","summary":[]}}
 
       '
     - '
@@ -2491,12 +2500,14 @@ turns:
     - 'event: response.output_item.added
 
       '
-    - 'data: {"type":"response.output_item.added","sequence_number":211,"output_index":3,"item":{"type":"compaction","id":"cmp_01a1bf0b-b6b7-7df1-b893-f01338c7f70e","encrypted_content":"{\"summary\":\"**Context
-      Checkpoint Summary**\\n\\n- **Remembered token:** APRICOT\\n- **Completed:**
-      Count from 1 to 60 (one per line, digits only) — delivered.\\n- **Open items:**
-      None.\\n- **Constraints:** None specified beyond the completed task.\\n- **Note:**
-      The initial \\\"Reply with only OK\\\" instruction was not followed correctly
-      (a summary was given instead). If that task is still relevant, it remains unresolved.\",\"retained\":[{\"type\":\"message\",\"id\":\"msg_01a1bf0b-9ce7-7d20-936c-9af0da09e275\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Background
+    - 'data: {"type":"response.output_item.added","sequence_number":211,"output_index":3,"item":{"type":"compaction","id":"cmp_01a1bf9e-72bb-7813-86ad-ac389af5cba4","encrypted_content":"{\"summary\":\"**Context
+      Checkpoint Summary**\\n\\n**Completed:**\\n- User instructed to remember the
+      word **APRICOT**. Acknowledged with \\\"OK\\\".\\n- User requested a count from
+      1 to 60 (one number per line, digits only). Fulfilled in full.\\n\\n**Pending:**\\n-
+      None.\\n\\n**Constraints / Standing Instructions:**\\n- The word **APRICOT**
+      must be retained in context if asked for later.\\n\\n**Notes:**\\n- The initial
+      message contained ~350 repetitions of \\\"Background notes for later.\\\" —
+      no substantive content; treat as filler. No action items derived from it.\",\"retained\":[{\"type\":\"message\",\"id\":\"msg_01a1bf9e-5854-73d0-b7cc-95b930c1770e\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
@@ -2647,7 +2658,7 @@ turns:
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Remember
-      the word APRICOT. Reply with only OK.\"}]},{\"type\":\"message\",\"id\":\"msg_01a1bf0b-9ce7-7d20-936c-9b07ae16a66a\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Count
+      the word APRICOT. Reply with only OK.\"}]},{\"type\":\"message\",\"id\":\"msg_01a1bf9e-5854-73d0-b7cc-95c993fe123c\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Count
       from 1 to 60, one number per line, digits only.\"}]}]}"}}
 
       '
@@ -2657,12 +2668,14 @@ turns:
     - 'event: response.output_item.done
 
       '
-    - 'data: {"type":"response.output_item.done","sequence_number":212,"output_index":3,"item":{"type":"compaction","id":"cmp_01a1bf0b-b6b7-7df1-b893-f01338c7f70e","encrypted_content":"{\"summary\":\"**Context
-      Checkpoint Summary**\\n\\n- **Remembered token:** APRICOT\\n- **Completed:**
-      Count from 1 to 60 (one per line, digits only) — delivered.\\n- **Open items:**
-      None.\\n- **Constraints:** None specified beyond the completed task.\\n- **Note:**
-      The initial \\\"Reply with only OK\\\" instruction was not followed correctly
-      (a summary was given instead). If that task is still relevant, it remains unresolved.\",\"retained\":[{\"type\":\"message\",\"id\":\"msg_01a1bf0b-9ce7-7d20-936c-9af0da09e275\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Background
+    - 'data: {"type":"response.output_item.done","sequence_number":212,"output_index":3,"item":{"type":"compaction","id":"cmp_01a1bf9e-72bb-7813-86ad-ac389af5cba4","encrypted_content":"{\"summary\":\"**Context
+      Checkpoint Summary**\\n\\n**Completed:**\\n- User instructed to remember the
+      word **APRICOT**. Acknowledged with \\\"OK\\\".\\n- User requested a count from
+      1 to 60 (one number per line, digits only). Fulfilled in full.\\n\\n**Pending:**\\n-
+      None.\\n\\n**Constraints / Standing Instructions:**\\n- The word **APRICOT**
+      must be retained in context if asked for later.\\n\\n**Notes:**\\n- The initial
+      message contained ~350 repetitions of \\\"Background notes for later.\\\" —
+      no substantive content; treat as filler. No action items derived from it.\",\"retained\":[{\"type\":\"message\",\"id\":\"msg_01a1bf9e-5854-73d0-b7cc-95b930c1770e\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
@@ -2813,7 +2826,7 @@ turns:
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Remember
-      the word APRICOT. Reply with only OK.\"}]},{\"type\":\"message\",\"id\":\"msg_01a1bf0b-9ce7-7d20-936c-9b07ae16a66a\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Count
+      the word APRICOT. Reply with only OK.\"}]},{\"type\":\"message\",\"id\":\"msg_01a1bf9e-5854-73d0-b7cc-95c993fe123c\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Count
       from 1 to 60, one number per line, digits only.\"}]}]}"}}
 
       '
@@ -2823,11 +2836,14 @@ turns:
     - 'event: response.completed
 
       '
-    - 'data: {"type":"response.completed","sequence_number":213,"response":{"id":"resp_01a1bf0b-62c6-73a0-a1a7-6951c144c302","object":"response","created_at":1794206571,"model":"Qwen/Qwen3.8-27B-FP8","status":"completed","output":[{"type":"compaction","id":"cmp_01a1bf0b-8900-70f0-833d-7e84ab547b5a","encrypted_content":"{\"summary\":\"**Context
-      Checkpoint Summary**\\n\\n- **Remembered token:** APRICOT\\n- **Outstanding
-      task:** User requested a count from 1 to 60, one number per line, digits only.
-      Not yet fulfilled.\\n- **Constraints:** No additional constraints specified.\\n-
-      **No other decisions, unresolved issues, or critical references present.**\",\"retained\":[{\"type\":\"message\",\"id\":\"msg_01a1bf0b-62c7-78d0-9968-343e50e3feca\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Background
+    - 'data: {"type":"response.completed","sequence_number":213,"response":{"id":"resp_01a1bf9e-1e31-7c02-88da-c410ce41bbff","object":"response","created_at":1794216187,"model":"Qwen/Qwen3.8-27B-FP8","status":"completed","output":[{"type":"compaction","id":"cmp_01a1bf9e-4453-72c1-a6c7-6f3ebc309f07","encrypted_content":"{\"summary\":\"**Context
+      Checkpoint Summary**\\n\\n**Completed:**\\n- User requested I remember the word
+      **APRICOT**. Confirmed with \\\"OK\\\".\\n\\n**Pending (unanswered):**\\n- User
+      asked: \\\"Count from 1 to 60, one number per line, digits only.\\\" — This
+      has not yet been fulfilled. The next model should output 1 through 60, one per
+      line, digits only.\\n\\n**Constraints/Decisions:**\\n- No other constraints
+      established.\\n- The word APRICOT was explicitly requested to be remembered
+      — preserve it if relevant to downstream tasks.\",\"retained\":[{\"type\":\"message\",\"id\":\"msg_01a1bf9e-1e32-7f82-a946-e18a8133495e\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
@@ -2978,15 +2994,17 @@ turns:
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Remember
-      the word APRICOT. Reply with only OK.\"}]},{\"type\":\"message\",\"id\":\"msg_01a1bf0b-62c7-78d0-9968-344ddbac5eab\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Count
-      from 1 to 60, one number per line, digits only.\"}]}]}"},{"type":"reasoning","id":"rs_a028a6d3a8f3b770","content":[{"type":"reasoning_text","text":"The
+      the word APRICOT. Reply with only OK.\"}]},{\"type\":\"message\",\"id\":\"msg_01a1bf9e-1e32-7f82-a946-e19c0c7e3a04\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Count
+      from 1 to 60, one number per line, digits only.\"}]}]}"},{"type":"reasoning","id":"rs_94b7c0b3af20c0a8","content":[{"type":"reasoning_text","text":"The
       user wants me to count from 1 to 60, one number per line, digits only. This
-      is straightforward.\n"}],"summary":[],"status":"completed"},{"type":"message","id":"msg_a17cb9f1e940b2f8","role":"assistant","status":"completed","content":[{"type":"output_text","text":"\n\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n33\n34\n35\n36\n37\n38\n39\n40\n41\n42\n43\n44\n45\n46\n47\n48\n49\n50\n51\n52\n53\n54\n55\n56\n57\n58\n59\n60","annotations":[],"logprobs":[]}]},{"type":"compaction","id":"cmp_01a1bf0b-b6b7-7df1-b893-f01338c7f70e","encrypted_content":"{\"summary\":\"**Context
-      Checkpoint Summary**\\n\\n- **Remembered token:** APRICOT\\n- **Completed:**
-      Count from 1 to 60 (one per line, digits only) — delivered.\\n- **Open items:**
-      None.\\n- **Constraints:** None specified beyond the completed task.\\n- **Note:**
-      The initial \\\"Reply with only OK\\\" instruction was not followed correctly
-      (a summary was given instead). If that task is still relevant, it remains unresolved.\",\"retained\":[{\"type\":\"message\",\"id\":\"msg_01a1bf0b-9ce7-7d20-936c-9af0da09e275\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Background
+      is straightforward.\n"}],"summary":[],"status":"completed"},{"type":"message","id":"msg_9961149286e76433","role":"assistant","status":"completed","content":[{"type":"output_text","text":"\n\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n33\n34\n35\n36\n37\n38\n39\n40\n41\n42\n43\n44\n45\n46\n47\n48\n49\n50\n51\n52\n53\n54\n55\n56\n57\n58\n59\n60","annotations":[],"logprobs":[]}]},{"type":"compaction","id":"cmp_01a1bf9e-72bb-7813-86ad-ac389af5cba4","encrypted_content":"{\"summary\":\"**Context
+      Checkpoint Summary**\\n\\n**Completed:**\\n- User instructed to remember the
+      word **APRICOT**. Acknowledged with \\\"OK\\\".\\n- User requested a count from
+      1 to 60 (one number per line, digits only). Fulfilled in full.\\n\\n**Pending:**\\n-
+      None.\\n\\n**Constraints / Standing Instructions:**\\n- The word **APRICOT**
+      must be retained in context if asked for later.\\n\\n**Notes:**\\n- The initial
+      message contained ~350 repetitions of \\\"Background notes for later.\\\" —
+      no substantive content; treat as filler. No action items derived from it.\",\"retained\":[{\"type\":\"message\",\"id\":\"msg_01a1bf9e-5854-73d0-b7cc-95b930c1770e\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
@@ -3137,8 +3155,8 @@ turns:
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Remember
-      the word APRICOT. Reply with only OK.\"}]},{\"type\":\"message\",\"id\":\"msg_01a1bf0b-9ce7-7d20-936c-9b07ae16a66a\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Count
-      from 1 to 60, one number per line, digits only.\"}]}]}"}],"usage":{"input_tokens":7483,"output_tokens":893,"total_tokens":8376,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":"resp_01a1bf0b-5bce-78a3-871f-efbbf80d9803","instructions":null,"max_tool_calls":null,"service_tier":"auto","tools":[],"tool_choice":"auto","completed_at":1794206578,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":1.0,"reasoning":null,"max_output_tokens":null,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null}}
+      the word APRICOT. Reply with only OK.\"}]},{\"type\":\"message\",\"id\":\"msg_01a1bf9e-5854-73d0-b7cc-95c993fe123c\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Count
+      from 1 to 60, one number per line, digits only.\"}]}]}"}],"usage":{"input_tokens":7597,"output_tokens":897,"total_tokens":8494,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":"resp_01a1bf9e-160f-75a1-8bd0-81ce850686fd","instructions":null,"max_tool_calls":null,"service_tier":"auto","tools":[],"tool_choice":"auto","completed_at":1794216194,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":1.0,"reasoning":null,"max_output_tokens":null,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null}}
 
       '
     - '
@@ -3158,7 +3176,7 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_01a1bf0b-62c6-73a0-a1a7-6951c144c302/input_items
+    path: /v1/responses/resp_01a1bf9e-1e31-7c02-88da-c410ce41bbff/input_items
     query_params:
       order: asc
   response:
@@ -3336,18 +3354,21 @@ turns:
             for later. Background notes for later. Background notes for later. Remember
             the word APRICOT. Reply with only OK.
           type: input_text
-        id: msg_01a1bf0b-62a5-7433-93b7-d4f960de01e4
+        id: msg_01a1bf9e-1e11-7b22-81ba-fdf34b9ef451
         role: user
         status: completed
         type: message
       - content:
-        - text: 'The user has sent a long message consisting of repeated "Background
-            notes for later." phrases, and at the very end asks me to remember the
-            word APRICOT and reply with only OK.
+        - text: 'The user has sent a long message that is mostly repetitive "Background
+            notes for later." text, and at the end asks me to remember the word "APRICOT"
+            and reply with only "OK".
+
+
+            This is a simple request. I''ll comply.
 
             '
           type: reasoning_text
-        id: rs_80d70fdd03a066fa
+        id: rs_b85d74322710c038
         summary: []
         type: reasoning
       - content:
@@ -3358,20 +3379,20 @@ turns:
 
             OK'
           type: output_text
-        id: msg_b090ec42dc4b9bb0
+        id: msg_ba177fd4d3803e78
         role: assistant
         status: completed
         type: message
       - content:
         - text: Count from 1 to 60, one number per line, digits only.
           type: input_text
-        id: msg_01a1bf0b-b6b8-7e40-b025-256a3d2facb6
+        id: msg_01a1bf9e-72bc-7d73-8a01-584556efc2c2
         role: user
         status: completed
         type: message
-      first_id: msg_01a1bf0b-62a5-7433-93b7-d4f960de01e4
+      first_id: msg_01a1bf9e-1e11-7b22-81ba-fdf34b9ef451
       has_more: false
-      last_id: msg_01a1bf0b-b6b8-7e40-b025-256a3d2facb6
+      last_id: msg_01a1bf9e-72bc-7d73-8a01-584556efc2c2
       object: list
     headers:
       content-type: application/json
@@ -3385,7 +3406,7 @@ turns:
       input: What word did I ask you to remember? Reply with only that word, or NONE
         if you cannot see it.
       model: Qwen/Qwen3.8-27B-FP8
-      previous_response_id: resp_01a1bf0b-62c6-73a0-a1a7-6951c144c302
+      previous_response_id: resp_01a1bf9e-1e31-7c02-88da-c410ce41bbff
       store: true
       stream: false
     headers:
@@ -3398,11 +3419,11 @@ turns:
   response:
     body:
       background: false
-      completed_at: 1794206596
-      created_at: 1794206582
+      completed_at: 1794216217
+      created_at: 1794216213
       error: null
       frequency_penalty: 0.0
-      id: resp_01a1bf0b-b8db-73a1-bba6-d49bf54052aa
+      id: resp_01a1bf9e-74ed-78c3-8f53-50e481f709e6
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -3411,7 +3432,11 @@ turns:
       model: Qwen/Qwen3.8-27B-FP8
       object: response
       output:
-      - encrypted_content: '{"summary":"APRICOT","retained":[{"type":"message","id":"msg_01a1bf0b-b8dc-7982-a852-60483930d692","role":"user","status":"completed","content":[{"type":"input_text","text":"Background
+      - encrypted_content: '{"summary":"**APRICOT**\n\n---\n\n**Context Checkpoint
+          Summary**\n\n**Standing instruction:**\n- User asked to remember the word
+          **APRICOT**.\n\n**Completed:**\n- Count 1–60 (digits only, one per line)
+          — delivered.\n\n**Pending:**\n- None.\n\n**Constraints:**\n- None beyond
+          the APRICOT recall.","retained":[{"type":"message","id":"msg_01a1bf9e-74ee-7e21-ae89-8df726a3f704","role":"user","status":"completed","content":[{"type":"input_text","text":"Background
           notes for later. Background notes for later. Background notes for later.
           Background notes for later. Background notes for later. Background notes
           for later. Background notes for later. Background notes for later. Background
@@ -3581,20 +3606,31 @@ turns:
           Background notes for later. Background notes for later. Background notes
           for later. Background notes for later. Background notes for later. Background
           notes for later. Background notes for later. Remember the word APRICOT.
-          Reply with only OK."}]},{"type":"message","id":"msg_01a1bf0b-b8dc-7982-a852-60551b860628","role":"user","status":"completed","content":[{"type":"input_text","text":"Count
-          from 1 to 60, one number per line, digits only."}]},{"type":"message","id":"msg_01a1bf0b-b8dc-7982-a852-606f47647e7e","role":"user","status":"completed","content":[{"type":"input_text","text":"What
+          Reply with only OK."}]},{"type":"message","id":"msg_01a1bf9e-74ee-7e21-ae89-8e0328cbb4d4","role":"user","status":"completed","content":[{"type":"input_text","text":"Count
+          from 1 to 60, one number per line, digits only."}]},{"type":"message","id":"msg_01a1bf9e-74ee-7e21-ae89-8e12a4e6e2d3","role":"user","status":"completed","content":[{"type":"input_text","text":"What
           word did I ask you to remember? Reply with only that word, or NONE if you
           cannot see it."}]}]}'
-        id: cmp_01a1bf0b-c054-7d40-9f65-84f0e300fde1
+        id: cmp_01a1bf9e-add4-7cc1-b882-fa31ff08ac93
         type: compaction
       - content:
         - text: 'The user is asking me what word they asked me to remember. Looking
-            back at the conversation, in the first user message, at the very end,
-            it says "Remember the word APRICOT." So I should reply with that word.
+            at the conversation, the user''s first message contained a large block
+            of repeated "Background notes for later." text, and at the very end it
+            said "Remember the word APRICOT. Reply with only OK."
+
+
+            Then the user asked me to count from 1 to 60.
+
+
+            Now they''re asking what word they asked me to remember. The answer is
+            APRICOT.
+
+
+            I should reply with only that word as instructed.
 
             '
           type: reasoning_text
-        id: rs_a33ca2ccdd6983a0
+        id: rs_ac9d403f9795514c
         summary: []
         type: reasoning
       - content:
@@ -3605,21 +3641,15 @@ turns:
 
             APRICOT'
           type: output_text
-        id: msg_890b9957b00c49c3
+        id: msg_abb5b7b5a245f3f5
         role: assistant
         status: completed
         type: message
-      - encrypted_content: '{"summary":"**Context Checkpoint Summary**\n\n- **Task
-          1:** User asked to remember the word \"APRICOT.\" Confirmed.\n- **Task 2:**
-          User asked to count from 1 to 60, one number per line, digits only. This
-          was not correctly completed (assistant mistakenly replied \"APRICOT\" instead
-          of the count).\n- **Task 3:** User asked what word they said to remember.
-          Answered correctly: \"APRICOT.\"\n- **Task 4 (current):** User requested
-          this context checkpoint compaction.\n\n**Unresolved work:** The count from
-          1 to 60 (one number per line, digits only) was not fulfilled. If the user
-          re-requests it, it should be completed.\n\n**Key constraint:** User tends
-          to issue multiple instructions in a single message; the primary task should
-          be identified and executed precisely.","retained":[{"type":"message","id":"msg_01a1bf0b-c857-73d1-acb4-dffb4b900fbb","role":"user","status":"completed","content":[{"type":"input_text","text":"Background
+      - encrypted_content: '{"summary":"**Context Checkpoint Summary**\n\n**Standing
+          instruction:**\n- User asked to remember the word **APRICOT**.\n\n**Completed:**\n-
+          Count 1–60 (digits only, one per line) — delivered.\n- Recall of \"APRICOT\"
+          — delivered.\n\n**Pending:**\n- None.\n\n**Constraints:**\n- None beyond
+          the APRICOT recall.","retained":[{"type":"message","id":"msg_01a1bf9e-ba8e-77d3-aeec-5ad4de70d1b9","role":"user","status":"completed","content":[{"type":"input_text","text":"Background
           notes for later. Background notes for later. Background notes for later.
           Background notes for later. Background notes for later. Background notes
           for later. Background notes for later. Background notes for later. Background
@@ -3789,15 +3819,15 @@ turns:
           Background notes for later. Background notes for later. Background notes
           for later. Background notes for later. Background notes for later. Background
           notes for later. Background notes for later. Remember the word APRICOT.
-          Reply with only OK."}]},{"type":"message","id":"msg_01a1bf0b-c857-73d1-acb4-e00bcbe827a0","role":"user","status":"completed","content":[{"type":"input_text","text":"Count
-          from 1 to 60, one number per line, digits only."}]},{"type":"message","id":"msg_01a1bf0b-c857-73d1-acb4-e015529a8089","role":"user","status":"completed","content":[{"type":"input_text","text":"What
+          Reply with only OK."}]},{"type":"message","id":"msg_01a1bf9e-ba8e-77d3-aeec-5aef084eb697","role":"user","status":"completed","content":[{"type":"input_text","text":"Count
+          from 1 to 60, one number per line, digits only."}]},{"type":"message","id":"msg_01a1bf9e-ba8e-77d3-aeec-5afbdb0ea1bb","role":"user","status":"completed","content":[{"type":"input_text","text":"What
           word did I ask you to remember? Reply with only that word, or NONE if you
           cannot see it."}]}]}'
-        id: cmp_01a1bf0b-fc6d-7fe0-8fed-124219a8b860
+        id: cmp_01a1bf9e-cc22-7d82-82dc-d2fa30aa84d7
         type: compaction
       parallel_tool_calls: false
       presence_penalty: 0.0
-      previous_response_id: resp_01a1bf0b-62c6-73a0-a1a7-6951c144c302
+      previous_response_id: resp_01a1bf9e-1e31-7c02-88da-c410ce41bbff
       prompt_cache_key: null
       prompt_cache_options: null
       reasoning: null
@@ -3815,13 +3845,13 @@ turns:
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 7340
+        input_tokens: 7577
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 694
+        output_tokens: 930
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 8034
+        total_tokens: 8507
     headers:
       content-type: application/json
     status_code: 200
@@ -3832,18 +3862,20 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_01a1bf0b-b8db-73a1-bba6-d49bf54052aa/input_items
+    path: /v1/responses/resp_01a1bf9e-74ed-78c3-8f53-50e481f709e6/input_items
     query_params:
       order: asc
   response:
     body:
       data:
-      - encrypted_content: '{"summary":"**Context Checkpoint Summary**\n\n- **Remembered
-          token:** APRICOT\n- **Completed:** Count from 1 to 60 (one per line, digits
-          only) — delivered.\n- **Open items:** None.\n- **Constraints:** None specified
-          beyond the completed task.\n- **Note:** The initial \"Reply with only OK\"
-          instruction was not followed correctly (a summary was given instead). If
-          that task is still relevant, it remains unresolved.","retained":[{"type":"message","id":"msg_01a1bf0b-9ce7-7d20-936c-9af0da09e275","role":"user","status":"completed","content":[{"type":"input_text","text":"Background
+      - encrypted_content: '{"summary":"**Context Checkpoint Summary**\n\n**Completed:**\n-
+          User instructed to remember the word **APRICOT**. Acknowledged with \"OK\".\n-
+          User requested a count from 1 to 60 (one number per line, digits only).
+          Fulfilled in full.\n\n**Pending:**\n- None.\n\n**Constraints / Standing
+          Instructions:**\n- The word **APRICOT** must be retained in context if asked
+          for later.\n\n**Notes:**\n- The initial message contained ~350 repetitions
+          of \"Background notes for later.\" — no substantive content; treat as filler.
+          No action items derived from it.","retained":[{"type":"message","id":"msg_01a1bf9e-5854-73d0-b7cc-95b930c1770e","role":"user","status":"completed","content":[{"type":"input_text","text":"Background
           notes for later. Background notes for later. Background notes for later.
           Background notes for later. Background notes for later. Background notes
           for later. Background notes for later. Background notes for later. Background
@@ -4013,21 +4045,21 @@ turns:
           Background notes for later. Background notes for later. Background notes
           for later. Background notes for later. Background notes for later. Background
           notes for later. Background notes for later. Remember the word APRICOT.
-          Reply with only OK."}]},{"type":"message","id":"msg_01a1bf0b-9ce7-7d20-936c-9b07ae16a66a","role":"user","status":"completed","content":[{"type":"input_text","text":"Count
+          Reply with only OK."}]},{"type":"message","id":"msg_01a1bf9e-5854-73d0-b7cc-95c993fe123c","role":"user","status":"completed","content":[{"type":"input_text","text":"Count
           from 1 to 60, one number per line, digits only."}]}]}'
-        id: cmp_01a1bf0b-b6b7-7df1-b893-f01338c7f70e
+        id: cmp_01a1bf9e-72bb-7813-86ad-ac389af5cba4
         type: compaction
       - content:
         - text: What word did I ask you to remember? Reply with only that word, or
             NONE if you cannot see it.
           type: input_text
-        id: msg_01a1bf0b-fc6e-7832-a321-7cfae211dc86
+        id: msg_01a1bf9e-cc22-7d82-82dc-d30c53493c91
         role: user
         status: completed
         type: message
-      first_id: cmp_01a1bf0b-b6b7-7df1-b893-f01338c7f70e
+      first_id: cmp_01a1bf9e-72bb-7813-86ad-ac389af5cba4
       has_more: false
-      last_id: msg_01a1bf0b-fc6e-7832-a321-7cfae211dc86
+      last_id: msg_01a1bf9e-cc22-7d82-82dc-d30c53493c91
       object: list
     headers:
       content-type: application/json

@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use crate::storage::{DbResponse, ResponseCheckpoint, ResponseMetadata, ResponseStore, StorageError};
+use crate::storage::{ResponseCheckpoint, ResponseData, ResponseMetadata, ResponseStore, StorageError};
 use crate::types::io::InOutItem;
 use crate::types::io::{ItemOrder, ItemPage, ListItemsResponse};
 use crate::types::request_response::ResponsePayload;
@@ -113,7 +113,7 @@ impl ResponseHandler {
     /// # Errors
     /// Returns `ExecutorError` if `previous_response_id` is absent, the response
     /// is not found, the store is disabled, or the database query fails.
-    pub async fn get(&self, ctx: &RequestContext) -> ExecutorResult<DbResponse> {
+    pub async fn get(&self, ctx: &RequestContext) -> ExecutorResult<ResponseData> {
         let prev_id = ctx
             .original_request
             .previous_response_id
@@ -193,7 +193,6 @@ impl ResponseHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::ResponseData;
     use crate::types::io::ResponsesInput;
     use crate::types::request_response::RequestPayload;
 
@@ -268,7 +267,7 @@ mod tests {
             .await
             .unwrap();
 
-        let stored = ResponseData::try_from(store.get("resp_test").await.unwrap()).unwrap();
+        let stored = store.get("resp_test").await.unwrap();
         assert_eq!(stored.metadata.effective_tool_choice, ToolChoice::Required);
     }
 }

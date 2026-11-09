@@ -610,7 +610,9 @@ def _record_compaction_in_turn_chain(client: httpx.Client, proxy_url: str, model
 
 def _record_compaction_tool_loop(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
     """Compaction around a client function call: B (t2) calls get_weather after compacting, and C (t3) answers the
-    call while the history still passes the threshold. C's input items (t4) show the call and output kept."""
+    call while the history still passes the threshold. C's input items (t4) show the call and output kept.
+    An async call (t5) remains pending across compaction (t6) and another turn (t7). Inspect that turn's input (t8),
+    then submit the result late (t9) and on a separate branch immediately after compaction (t10)."""
     def turn(input_value: Any, previous: str, **extra: Any) -> dict:
         body = {"model": model, "store": True, "stream": stream, "input": input_value, "previous_response_id": previous,
                 "tools": [WEATHER_TOOL], "parallel_tool_calls": False, "context_management": COMPACTION_THRESHOLD,
@@ -626,6 +628,43 @@ def _record_compaction_tool_loop(client: httpx.Client, proxy_url: str, model: st
                     calling["id"], tool_choice="none")
     _item_request(client, proxy_url, "GET", f"/v1/responses/{answered['id']}/input_items",
                   params={"order": "asc"}, expected_status=None)
+
+    fixtures = Path(__file__).parent / "async_tools"
+    prompts = json.loads((fixtures / "prompts.json").read_text())
+    async_request = {
+        "model": model, "store": True, "stream": False, "max_output_tokens": 8192,
+        "tools": json.loads((fixtures / "tools.json").read_text())["weather_async"],
+    }
+    pending = _observed_turn(client, proxy_url, {
+        **async_request, "input": prompts["weather_start"], "instructions": prompts["instructions"]["weather"],
+    })
+    async_calls = [item for item in pending.get("output", []) if item.get("type") == "function_call"
+                   and item.get("name") == "get_weather" and item.get("async") is True]
+    if pending.get("status") != "completed" or len(async_calls) != 1:
+        raise RuntimeError("async compaction requires one completed response with an async weather call")
+    compacting = _observed_turn(client, proxy_url, {
+        **async_request, "previous_response_id": pending["id"], "context_management": COMPACTION_THRESHOLD,
+        "input": COMPACTION_NOTES + " Do not call any tools. The weather lookup is still running; reply only OK.",
+    })
+    if compacting.get("status") != "completed" or not any(
+        item.get("type") == "compaction" for item in compacting.get("output", [])
+    ):
+        raise RuntimeError("the pending async call's follow-up did not complete compaction")
+    continued = _observed_turn(client, proxy_url, {
+        **async_request, "previous_response_id": compacting["id"],
+        "input": "The weather result is still pending. Do not call any tools. Reply only WAITING.",
+    })
+    if continued.get("status") != "completed":
+        raise RuntimeError("continuation after compaction did not complete")
+    _item_request(client, proxy_url, "GET", f"/v1/responses/{continued['id']}/input_items",
+                  params={"order": "asc"})
+    result = [
+        {"type": "function_call_output", "call_id": async_calls[0]["call_id"], "output": prompts["weather_output"]},
+        {"type": "message", "role": "user", "content": prompts["weather_ask"]},
+    ]
+    for previous in [continued["id"], compacting["id"]]:
+        # Record rejection as evidence too; do not turn the current gateway behavior into an expectation.
+        _observed_turn(client, proxy_url, {**async_request, "previous_response_id": previous, "input": result})
 
 
 def _record_compaction_standalone(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
@@ -685,9 +724,48 @@ def _record_compaction_store_false(client: httpx.Client, proxy_url: str, model: 
                   expected_status=None)
 
 
+def _record_compaction_mcp(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
+    """Compare MCP discovery before compaction, after standalone compaction, and after automatic compaction."""
+    tools = [{"type": "mcp", "server_label": "openai_docs", "server_url": "https://developers.openai.com/mcp",
+              "allowed_tools": ["search_openai_docs"], "require_approval": "never"}]
+
+    def turn(input_value: Any, **extra: Any) -> dict:
+        response = _observed_turn(client, proxy_url, {
+            "model": model, "store": True, "stream": stream, "input": input_value, "tools": tools,
+            "max_output_tokens": 4096, **extra,
+        })
+        if response.get("status") != "completed":
+            raise RuntimeError(f"MCP compaction probe did not complete: {response.get('incomplete_details')}")
+        return response
+
+    prompt = "Remember the word APRICOT. Do not call any tools. Reply only READY."
+    first = turn(prompt)
+    history = [{"role": "user", "content": prompt}, *first["output"]]
+    compacted = _item_request(client, proxy_url, "POST", "/v1/responses/compact",
+                              body={"model": model, "input": history})
+    followup = [{"role": "user", "content": RECALL_PROMPT + " Do not call any tools."}]
+    turn([*history, *followup])
+    turn([*compacted["output"], *followup])
+    automatic = turn(COMPACTION_NOTES + " Do not call any tools.", previous_response_id=first["id"],
+                     context_management=COMPACTION_THRESHOLD)
+    continued = turn(followup, previous_response_id=automatic["id"])
+    _item_request(client, proxy_url, "GET", f"/v1/responses/{continued['id']}/input_items",
+                  params={"order": "asc"})
+    expanded = dict(tools[0], allowed_tools=["search_openai_docs", "fetch_openai_doc"])
+    unrestricted = {key: value for key, value in tools[0].items() if key != "allowed_tools"}
+    probe = ("Use fetch_openai_doc to read https://developers.openai.com/api/docs/guides/compaction then say DONE. "
+             "If that tool is unavailable, say UNAVAILABLE. Do not use search_openai_docs.")
+    for declaration in [expanded, unrestricted]:
+        turn(probe, previous_response_id=first["id"], tools=[declaration])
+    empty = [dict(tools[0], allowed_tools=["no_such_tool"])]
+    empty_response = turn(prompt, tools=empty)
+    turn(prompt, previous_response_id=empty_response["id"], tools=empty)
+
+
 COMPACTION_SCENARIOS: dict[str, tuple[Callable[..., None], int]] = {
+    "compaction-mcp": (_record_compaction_mcp, 11),
     "compaction-in-turn-chain": (_record_compaction_in_turn_chain, 5),
-    "compaction-tool-loop": (_record_compaction_tool_loop, 4),
+    "compaction-tool-loop": (_record_compaction_tool_loop, 10),
     "compaction-standalone": (_record_compaction_standalone, 5),
     "compaction-multi-agent": (_record_compaction_multi_agent, 5),
     "compaction-store-false": (_record_compaction_store_false, 2),

@@ -166,11 +166,11 @@ turns:
   response:
     body:
       background: false
-      completed_at: 1794206520
-      created_at: 1794206520
+      completed_at: 1794216126
+      created_at: 1794216126
       error: null
       frequency_penalty: 0.0
-      id: resp_01a1bf0a-ccfe-75b2-9389-6da742e805ac
+      id: resp_01a1bf9d-5f7e-72e1-8b53-01b189b449a4
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -180,13 +180,13 @@ turns:
       object: response
       output:
       - content:
-        - text: 'The user has sent a long message filled with repeated "Background
+        - text: 'The user has sent a long message consisting of repeated "Background
             notes for later." and at the end asks me to remember the word "APRICOT"
             and reply with only "OK".
 
             '
           type: reasoning_text
-        id: rs_bf6a7d68f3b2c78f
+        id: rs_971fa23115c6da0b
         summary: []
         type: reasoning
       - content:
@@ -197,7 +197,7 @@ turns:
 
             OK'
           type: output_text
-        id: msg_8d3364c8a8821aa7
+        id: msg_a5b8f26d263d7026
         role: assistant
         status: completed
         type: message
@@ -239,7 +239,7 @@ turns:
         type: compaction
       input: Count from 1 to 60, one number per line, digits only.
       model: Qwen/Qwen3.8-27B-FP8
-      previous_response_id: resp_01a1bf0a-ccfe-75b2-9389-6da742e805ac
+      previous_response_id: resp_01a1bf9d-5f7e-72e1-8b53-01b189b449a4
       store: true
       stream: false
     headers:
@@ -252,11 +252,11 @@ turns:
   response:
     body:
       background: false
-      completed_at: 1794206538
-      created_at: 1794206532
+      completed_at: 1794216144
+      created_at: 1794216137
       error: null
       frequency_penalty: 0.0
-      id: resp_01a1bf0a-d3e8-7c01-9b26-86395cd2eff2
+      id: resp_01a1bf9d-666e-7e61-ac54-0790b5421450
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -265,10 +265,11 @@ turns:
       model: Qwen/Qwen3.8-27B-FP8
       object: response
       output:
-      - encrypted_content: '{"summary":"**Handoff Summary**\n\n- **Remembered word:**
-          APRICOT (per user instruction)\n- **Pending task:** Count from 1 to 60,
-          one number per line, digits only (not yet completed)\n- **Constraints:**
-          No extra text, digits only, one per line","retained":[{"type":"message","id":"msg_01a1bf0a-d3e9-7111-b214-a3846394daea","role":"user","status":"completed","content":[{"type":"input_text","text":"Background
+      - encrypted_content: '{"summary":"**Context Handoff Summary**\n\n- **Remembered
+          word:** APRICOT\n- **Pending task:** Count from 1 to 60, one number per
+          line, digits only (not yet completed).\n- **Constraints:** Digits only,
+          one per line.\n- **No other decisions, unresolved issues, or critical references
+          present.**","retained":[{"type":"message","id":"msg_01a1bf9d-666f-76c1-98dd-c02777be25a1","role":"user","status":"completed","content":[{"type":"input_text","text":"Background
           notes for later. Background notes for later. Background notes for later.
           Background notes for later. Background notes for later. Background notes
           for later. Background notes for later. Background notes for later. Background
@@ -438,18 +439,17 @@ turns:
           Background notes for later. Background notes for later. Background notes
           for later. Background notes for later. Background notes for later. Background
           notes for later. Background notes for later. Remember the word APRICOT.
-          Reply with only OK."}]},{"type":"message","id":"msg_01a1bf0a-d3e9-7111-b214-a3919735854f","role":"user","status":"completed","content":[{"type":"input_text","text":"Count
+          Reply with only OK."}]},{"type":"message","id":"msg_01a1bf9d-666f-76c1-98dd-c03165fbd00c","role":"user","status":"completed","content":[{"type":"input_text","text":"Count
           from 1 to 60, one number per line, digits only."}]}]}'
-        id: cmp_01a1bf0a-ec0d-7182-baf8-be2531063ccc
+        id: cmp_01a1bf9d-7eff-71c3-8f5a-8afe67c116ec
         type: compaction
       - content:
         - text: 'The user wants me to count from 1 to 60, one number per line, digits
-            only. I also need to remember the word APRICOT from the previous message.
-            Let me just output the numbers 1 through 60, one per line.
+            only. This is straightforward.
 
             '
           type: reasoning_text
-        id: rs_a477cf98a044eb36
+        id: rs_bd932154aabbfaab
         summary: []
         type: reasoning
       - content:
@@ -578,17 +578,19 @@ turns:
 
             60'
           type: output_text
-        id: msg_af1bdfca77939321
+        id: msg_bba49fb5197aba7a
         role: assistant
         status: completed
         type: message
-      - encrypted_content: '{"summary":"**Handoff Summary**\n\n- **Remembered word:**
-          APRICOT (explicitly instructed by user to remember)\n- **Completed tasks:**\n  -
-          Count from 1 to 60 (one per line, digits only) — done\n- **Unresolved:**\n  -
-          User originally asked to \"Reply with only OK\" after the APRICOT instruction;
-          this was not fulfilled (a handoff summary was sent instead). If the user
-          references it, acknowledge the miss.\n- **Constraints:** None active beyond
-          the above.","retained":[{"type":"message","id":"msg_01a1bf0b-021a-7642-a281-ffdb81e46a1e","role":"user","status":"completed","content":[{"type":"input_text","text":"Background
+      - encrypted_content: '{"summary":"**Context Handoff Summary**\n\n- **Remembered
+          word:** APRICOT (explicitly requested to be remembered in the first user
+          message).\n- **Completed task:** Counted 1–60, one per line, digits only
+          (delivered in full).\n- **Unresolved work:** The first user message instructed
+          \"Reply with only OK\" — this was never fulfilled (the conversation moved
+          to the counting task before a response was given).\n- **Constraints:** None
+          active beyond what was task-specific.\n- **Critical references:** None beyond
+          the remembered word APRICOT.\n- **No other decisions, open threads, or pending
+          instructions detected.**","retained":[{"type":"message","id":"msg_01a1bf9d-92cb-7002-9f32-5add3487b0cd","role":"user","status":"completed","content":[{"type":"input_text","text":"Background
           notes for later. Background notes for later. Background notes for later.
           Background notes for later. Background notes for later. Background notes
           for later. Background notes for later. Background notes for later. Background
@@ -758,13 +760,13 @@ turns:
           Background notes for later. Background notes for later. Background notes
           for later. Background notes for later. Background notes for later. Background
           notes for later. Background notes for later. Remember the word APRICOT.
-          Reply with only OK."}]},{"type":"message","id":"msg_01a1bf0b-021a-7642-a281-ffeec4423306","role":"user","status":"completed","content":[{"type":"input_text","text":"Count
+          Reply with only OK."}]},{"type":"message","id":"msg_01a1bf9d-92cb-7002-9f32-5ae31c448ce1","role":"user","status":"completed","content":[{"type":"input_text","text":"Count
           from 1 to 60, one number per line, digits only."}]}]}'
-        id: cmp_01a1bf0b-1c3f-7de2-a532-5f086996c459
+        id: cmp_01a1bf9d-b029-7150-b195-c3cd9a8a165a
         type: compaction
       parallel_tool_calls: false
       presence_penalty: 0.0
-      previous_response_id: resp_01a1bf0a-ccfe-75b2-9389-6da742e805ac
+      previous_response_id: resp_01a1bf9d-5f7e-72e1-8b53-01b189b449a4
       prompt_cache_key: null
       prompt_cache_options: null
       reasoning: null
@@ -782,13 +784,13 @@ turns:
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 7491
+        input_tokens: 7481
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 755
+        output_tokens: 772
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 8246
+        total_tokens: 8253
     headers:
       content-type: application/json
     status_code: 200
@@ -799,7 +801,7 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_01a1bf0a-d3e8-7c01-9b26-86395cd2eff2/input_items
+    path: /v1/responses/resp_01a1bf9d-666e-7e61-ac54-0790b5421450/input_items
     query_params:
       order: asc
   response:
@@ -977,18 +979,18 @@ turns:
             for later. Background notes for later. Background notes for later. Remember
             the word APRICOT. Reply with only OK.
           type: input_text
-        id: msg_01a1bf0a-d3c9-7580-af12-3e5dc3034b27
+        id: msg_01a1bf9d-6649-7451-8778-389319077edc
         role: user
         status: completed
         type: message
       - content:
-        - text: 'The user has sent a long message filled with repeated "Background
+        - text: 'The user has sent a long message consisting of repeated "Background
             notes for later." and at the end asks me to remember the word "APRICOT"
             and reply with only "OK".
 
             '
           type: reasoning_text
-        id: rs_bf6a7d68f3b2c78f
+        id: rs_971fa23115c6da0b
         summary: []
         type: reasoning
       - content:
@@ -999,20 +1001,20 @@ turns:
 
             OK'
           type: output_text
-        id: msg_8d3364c8a8821aa7
+        id: msg_a5b8f26d263d7026
         role: assistant
         status: completed
         type: message
       - content:
         - text: Count from 1 to 60, one number per line, digits only.
           type: input_text
-        id: msg_01a1bf0b-1c3f-7de2-a532-5f1f541a27e0
+        id: msg_01a1bf9d-b029-7150-b195-c3d40bb514a4
         role: user
         status: completed
         type: message
-      first_id: msg_01a1bf0a-d3c9-7580-af12-3e5dc3034b27
+      first_id: msg_01a1bf9d-6649-7451-8778-389319077edc
       has_more: false
-      last_id: msg_01a1bf0b-1c3f-7de2-a532-5f1f541a27e0
+      last_id: msg_01a1bf9d-b029-7150-b195-c3d40bb514a4
       object: list
     headers:
       content-type: application/json
@@ -1026,7 +1028,7 @@ turns:
       input: What word did I ask you to remember? Reply with only that word, or NONE
         if you cannot see it.
       model: Qwen/Qwen3.8-27B-FP8
-      previous_response_id: resp_01a1bf0a-d3e8-7c01-9b26-86395cd2eff2
+      previous_response_id: resp_01a1bf9d-666e-7e61-ac54-0790b5421450
       store: true
       stream: false
     headers:
@@ -1039,11 +1041,11 @@ turns:
   response:
     body:
       background: false
-      completed_at: 1794206553
-      created_at: 1794206547
+      completed_at: 1794216169
+      created_at: 1794216161
       error: null
       frequency_penalty: 0.0
-      id: resp_01a1bf0b-1d13-7e60-aae6-cc7a5ecf4941
+      id: resp_01a1bf9d-b108-7761-8e97-afdd2e7d1613
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -1052,10 +1054,12 @@ turns:
       model: Qwen/Qwen3.8-27B-FP8
       object: response
       output:
-      - encrypted_content: '{"summary":"**Handoff Summary**\n\n- **Remembered word:**
-          APRICOT\n- **Completed:** Count 1–60 (digits only, one per line)\n- **Pending:**
-          User''s question \"What word did I ask you to remember?\" — correct answer
-          is APRICOT\n- **Constraints:** None active","retained":[{"type":"message","id":"msg_01a1bf0b-1d14-7893-86e8-d8639202925d","role":"user","status":"completed","content":[{"type":"input_text","text":"Background
+      - encrypted_content: '{"summary":"APRICOT\n\n**Context Handoff Summary**\n\n-
+          **Remembered word:** APRICOT (from first user message).\n- **Tasks completed:**
+          Counted 1–60 (digits only, one per line).\n- **Unresolved:** Original instruction
+          \"Reply with only OK\" was never fulfilled.\n- **Constraints:** None active.\n-
+          **Critical references:** The remembered word is APRICOT; no other persistent
+          context exists.","retained":[{"type":"message","id":"msg_01a1bf9d-b109-7c33-b59e-81d9ad1a47ba","role":"user","status":"completed","content":[{"type":"input_text","text":"Background
           notes for later. Background notes for later. Background notes for later.
           Background notes for later. Background notes for later. Background notes
           for later. Background notes for later. Background notes for later. Background
@@ -1225,27 +1229,24 @@ turns:
           Background notes for later. Background notes for later. Background notes
           for later. Background notes for later. Background notes for later. Background
           notes for later. Background notes for later. Remember the word APRICOT.
-          Reply with only OK."}]},{"type":"message","id":"msg_01a1bf0b-1d14-7893-86e8-d87863fc9e66","role":"user","status":"completed","content":[{"type":"input_text","text":"Count
-          from 1 to 60, one number per line, digits only."}]},{"type":"message","id":"msg_01a1bf0b-1d14-7893-86e8-d88407eef7c4","role":"user","status":"completed","content":[{"type":"input_text","text":"What
+          Reply with only OK."}]},{"type":"message","id":"msg_01a1bf9d-b109-7c33-b59e-81e614471c49","role":"user","status":"completed","content":[{"type":"input_text","text":"Count
+          from 1 to 60, one number per line, digits only."}]},{"type":"message","id":"msg_01a1bf9d-b109-7c33-b59e-81fb6006a3b5","role":"user","status":"completed","content":[{"type":"input_text","text":"What
           word did I ask you to remember? Reply with only that word, or NONE if you
           cannot see it."}]}]}'
-        id: cmp_01a1bf0b-3320-72f0-b1a3-98addef8556b
+        id: cmp_01a1bf9d-e878-7623-b1ba-936de81744b5
         type: compaction
       - content:
         - text: 'The user is asking me what word they asked me to remember. Looking
-            back at the conversation, in the first message there was a long block
-            of repeated "Background notes for later." text, and at the end it said
-            "Remember the word APRICOT. Reply with only OK."
+            back at the conversation, in the first message, buried at the end of a
+            long block of repeated "Background notes for later." text, there was the
+            instruction: "Remember the word APRICOT. Reply with only OK."
 
 
-            So the word I was asked to remember is APRICOT.
-
-
-            The user wants me to reply with only that word.
+            So the word they asked me to remember is APRICOT.
 
             '
           type: reasoning_text
-        id: rs_b76f199a4aa932fd
+        id: rs_a1e8a608b6c3ba5e
         summary: []
         type: reasoning
       - content:
@@ -1256,13 +1257,17 @@ turns:
 
             APRICOT'
           type: output_text
-        id: msg_94be911f693d5380
+        id: msg_9a2ac1cdb461d281
         role: assistant
         status: completed
         type: message
-      - encrypted_content: '{"summary":"**Handoff Summary**\n\n- **Remembered word:**
-          APRICOT\n- **Completed:** Count 1–60 (digits only, one per line)\n- **Pending:**
-          None\n- **Constraints:** None active","retained":[{"type":"message","id":"msg_01a1bf0b-3e0c-7000-bec3-f691cab58b73","role":"user","status":"completed","content":[{"type":"input_text","text":"Background
+      - encrypted_content: '{"summary":"**Context Checkpoint Summary**\n\n- **Remembered
+          word:** APRICOT (user asked to remember it in the first message).\n- **Tasks
+          completed:**\n  - Counted 1–60 (digits only, one per line) — fulfilled.\n  -
+          Answered \"APRICOT\" when asked what word to remember — fulfilled.\n- **Pending/unresolved:**
+          None.\n- **Constraints:** None active beyond the remembered word.\n- **Critical
+          references:** The word to remember is **APRICOT**. No other persistent context
+          exists.","retained":[{"type":"message","id":"msg_01a1bf9d-f2be-7be2-9ef4-b1dcbf0ba61f","role":"user","status":"completed","content":[{"type":"input_text","text":"Background
           notes for later. Background notes for later. Background notes for later.
           Background notes for later. Background notes for later. Background notes
           for later. Background notes for later. Background notes for later. Background
@@ -1432,15 +1437,15 @@ turns:
           Background notes for later. Background notes for later. Background notes
           for later. Background notes for later. Background notes for later. Background
           notes for later. Background notes for later. Remember the word APRICOT.
-          Reply with only OK."}]},{"type":"message","id":"msg_01a1bf0b-3e0c-7000-bec3-f6a963a21a7f","role":"user","status":"completed","content":[{"type":"input_text","text":"Count
-          from 1 to 60, one number per line, digits only."}]},{"type":"message","id":"msg_01a1bf0b-3e0c-7000-bec3-f6b28a08e7e9","role":"user","status":"completed","content":[{"type":"input_text","text":"What
+          Reply with only OK."}]},{"type":"message","id":"msg_01a1bf9d-f2be-7be2-9ef4-b1eedcda8232","role":"user","status":"completed","content":[{"type":"input_text","text":"Count
+          from 1 to 60, one number per line, digits only."}]},{"type":"message","id":"msg_01a1bf9d-f2be-7be2-9ef4-b1fb464345df","role":"user","status":"completed","content":[{"type":"input_text","text":"What
           word did I ask you to remember? Reply with only that word, or NONE if you
           cannot see it."}]}]}'
-        id: cmp_01a1bf0b-5500-7f10-816b-f7f485cdc044
+        id: cmp_01a1bf9e-0f5e-7e20-9d3d-dbf286d6dd69
         type: compaction
       parallel_tool_calls: false
       presence_penalty: 0.0
-      previous_response_id: resp_01a1bf0a-d3e8-7c01-9b26-86395cd2eff2
+      previous_response_id: resp_01a1bf9d-666e-7e61-ac54-0790b5421450
       prompt_cache_key: null
       prompt_cache_options: null
       reasoning: null
@@ -1458,13 +1463,13 @@ turns:
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 7516
+        input_tokens: 7585
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 550
+        output_tokens: 1020
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 8066
+        total_tokens: 8605
     headers:
       content-type: application/json
     status_code: 200
@@ -1475,19 +1480,21 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_01a1bf0b-1d13-7e60-aae6-cc7a5ecf4941/input_items
+    path: /v1/responses/resp_01a1bf9d-b108-7761-8e97-afdd2e7d1613/input_items
     query_params:
       order: asc
   response:
     body:
       data:
-      - encrypted_content: '{"summary":"**Handoff Summary**\n\n- **Remembered word:**
-          APRICOT (explicitly instructed by user to remember)\n- **Completed tasks:**\n  -
-          Count from 1 to 60 (one per line, digits only) — done\n- **Unresolved:**\n  -
-          User originally asked to \"Reply with only OK\" after the APRICOT instruction;
-          this was not fulfilled (a handoff summary was sent instead). If the user
-          references it, acknowledge the miss.\n- **Constraints:** None active beyond
-          the above.","retained":[{"type":"message","id":"msg_01a1bf0b-021a-7642-a281-ffdb81e46a1e","role":"user","status":"completed","content":[{"type":"input_text","text":"Background
+      - encrypted_content: '{"summary":"**Context Handoff Summary**\n\n- **Remembered
+          word:** APRICOT (explicitly requested to be remembered in the first user
+          message).\n- **Completed task:** Counted 1–60, one per line, digits only
+          (delivered in full).\n- **Unresolved work:** The first user message instructed
+          \"Reply with only OK\" — this was never fulfilled (the conversation moved
+          to the counting task before a response was given).\n- **Constraints:** None
+          active beyond what was task-specific.\n- **Critical references:** None beyond
+          the remembered word APRICOT.\n- **No other decisions, open threads, or pending
+          instructions detected.**","retained":[{"type":"message","id":"msg_01a1bf9d-92cb-7002-9f32-5add3487b0cd","role":"user","status":"completed","content":[{"type":"input_text","text":"Background
           notes for later. Background notes for later. Background notes for later.
           Background notes for later. Background notes for later. Background notes
           for later. Background notes for later. Background notes for later. Background
@@ -1657,21 +1664,21 @@ turns:
           Background notes for later. Background notes for later. Background notes
           for later. Background notes for later. Background notes for later. Background
           notes for later. Background notes for later. Remember the word APRICOT.
-          Reply with only OK."}]},{"type":"message","id":"msg_01a1bf0b-021a-7642-a281-ffeec4423306","role":"user","status":"completed","content":[{"type":"input_text","text":"Count
+          Reply with only OK."}]},{"type":"message","id":"msg_01a1bf9d-92cb-7002-9f32-5ae31c448ce1","role":"user","status":"completed","content":[{"type":"input_text","text":"Count
           from 1 to 60, one number per line, digits only."}]}]}'
-        id: cmp_01a1bf0b-1c3f-7de2-a532-5f086996c459
+        id: cmp_01a1bf9d-b029-7150-b195-c3cd9a8a165a
         type: compaction
       - content:
         - text: What word did I ask you to remember? Reply with only that word, or
             NONE if you cannot see it.
           type: input_text
-        id: msg_01a1bf0b-5500-7f10-816b-f805e5d796ef
+        id: msg_01a1bf9e-0f5e-7e20-9d3d-dc01369021be
         role: user
         status: completed
         type: message
-      first_id: cmp_01a1bf0b-1c3f-7de2-a532-5f086996c459
+      first_id: cmp_01a1bf9d-b029-7150-b195-c3cd9a8a165a
       has_more: false
-      last_id: msg_01a1bf0b-5500-7f10-816b-f805e5d796ef
+      last_id: msg_01a1bf9e-0f5e-7e20-9d3d-dc01369021be
       object: list
     headers:
       content-type: application/json

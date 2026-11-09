@@ -227,6 +227,48 @@ fn preparation_retains_mcp_list_metadata_until_upstream_projection() {
 }
 
 #[test]
+fn preparation_keeps_only_discovery_after_the_latest_compaction() {
+    for output_form in [false, true] {
+        let mut request: RequestPayload = serde_json::from_value(json!({
+            "model": "test", "tools": [{"type": "tool_search", "execution": "client"}],
+            "input": [
+                {"type": "mcp_list_tools", "id": "mcpl_old", "server_label": "counter", "tools": []},
+                {"type": "compaction", "id": "cmp_first", "encrypted_content": "old summary"},
+                {"type": "mcp_list_tools", "id": "mcpl_middle", "server_label": "counter", "tools": []},
+                {"type": "compaction", "id": "cmp_last", "encrypted_content": "latest summary"},
+                {"type": "mcp_list_tools", "id": "mcpl_current", "server_label": "counter", "tools": []},
+                {"role": "user", "content": "continue"}
+            ]
+        }))
+        .unwrap();
+        if output_form {
+            let ResponsesInput::Items(items) = &mut request.input else {
+                unreachable!()
+            };
+            for item in items {
+                *item = match item {
+                    InOutItem::Input(InputItem::McpListTools(list)) => {
+                        InOutItem::Output(OutputItem::McpListTools(list.clone()))
+                    }
+                    InOutItem::Input(InputItem::Compaction(compaction)) => {
+                        InOutItem::Output(OutputItem::Compaction(compaction.clone()))
+                    }
+                    _ => continue,
+                };
+            }
+        }
+        ToolSearchHandler::prepare_request(&mut request, &[], false).unwrap();
+        let ids: Vec<_> = request.input.mcp_list_tools().map(|list| list.id.as_str()).collect();
+        assert_eq!(ids, ["mcpl_current"], "output_form={output_form}");
+        assert!(
+            !serde_json::to_string(&request.input.model_input())
+                .unwrap()
+                .contains("mcp_list_tools")
+        );
+    }
+}
+
+#[test]
 fn preparation_preserves_shell_declarations_and_history() {
     let mut request: RequestPayload = serde_json::from_value(json!({
         "model": "test",

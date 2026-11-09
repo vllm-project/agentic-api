@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use agentic_core::config::{PostgresConfig, SqliteConfig};
 use agentic_core::storage::{
-    ConversationStore, ResponseCheckpoint, ResponseData, ResponseMetadata, ResponseStore, create_pool_with_configs,
+    ConversationStore, ResponseCheckpoint, ResponseMetadata, ResponseStore, create_pool_with_configs,
     create_pool_with_schema_and_configs,
 };
 use agentic_core::types::io::InOutItem;
@@ -118,14 +118,7 @@ async fn postgres_migrations_and_state_survive_pool_restarts() {
     second_store
         .persist(
             &continuation_id,
-            Some(
-                &second_store
-                    .get(&response_id)
-                    .await
-                    .and_then(ResponseData::try_from)
-                    .expect("parent")
-                    .into(),
-            ),
+            Some(&second_store.get(&response_id).await.expect("parent").into()),
             vec![input_item("second turn")],
             None,
             &metadata,

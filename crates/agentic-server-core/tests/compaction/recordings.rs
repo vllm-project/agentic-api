@@ -36,15 +36,18 @@ fn public_compaction_recordings_have_complete_turns_and_stream_lifecycles() {
             ("stale", 10),
             ("in-turn-chain", 5),
             ("in-turn-chain-stream", 5),
-            ("tool-loop", 4),
+            ("tool-loop", 10),
             ("standalone", 5),
             ("multi-agent", 5),
             ("store-false", 2),
+            ("mcp", 11),
         ] {
             let recording = cassette(&format!("compaction-{scenario}-{provider}.yaml"));
             assert_eq!(recording.turns.len(), count, "{scenario}/{provider}");
             for (index, turn) in recording.turns.iter().enumerate() {
-                let status = if index + 1 == count {
+                let status = if scenario == "tool-loop" && (index == 8 || (index == 9 && provider == "openai")) {
+                    400
+                } else if index + 1 == count {
                     match scenario {
                         "stale" | "standalone" => 400,
                         "store-false" => 404,
@@ -59,7 +62,7 @@ fn public_compaction_recordings_have_complete_turns_and_stream_lifecycles() {
                     "{scenario}/{provider} t{index}"
                 );
                 let response = body(turn);
-                if turn.request.path == "/v1/responses" {
+                if turn.request.path == "/v1/responses" && status == 200 {
                     assert_eq!(response["status"], "completed", "{scenario}/{provider} t{index}");
                 }
                 if turn.response.sse.is_none() {
@@ -100,6 +103,35 @@ fn public_compaction_recordings_have_complete_turns_and_stream_lifecycles() {
                 }
             }
         }
+    }
+}
+
+#[test]
+fn mcp_discovery_is_reused_until_compaction_in_both_providers() {
+    for provider in ["openai", "gateway"] {
+        let recording = cassette(&format!("compaction-mcp-{provider}.yaml"));
+        let turns = &recording.turns;
+        for index in [0, 3, 5, 9] {
+            assert_eq!(
+                kinds(&body(&turns[index])["output"]),
+                ["mcp_list_tools", "message"],
+                "{provider} t{index}"
+            );
+        }
+        for index in [2, 7, 8, 10] {
+            assert_eq!(
+                kinds(&body(&turns[index])["output"]),
+                ["message"],
+                "{provider} t{index}"
+            );
+        }
+        assert_eq!(kinds(&body(&turns[1])["output"]), ["message", "compaction"]);
+        assert_eq!(
+            kinds(&body(&turns[4])["output"]),
+            ["compaction", "message", "compaction"]
+        );
+        assert_eq!(kinds(&body(&turns[6])["data"]), ["compaction", "message"]);
+        assert_eq!(body(&turns[9])["output"][0]["tools"], serde_json::json!([]));
     }
 }
 
@@ -146,6 +178,45 @@ fn recorded_compaction_preserves_pending_tool_call_identity() {
         assert_eq!(stored_call["id"], call["id"]);
         assert_eq!(result["call_id"], call["call_id"]);
         assert_eq!(result["output"], "18 degrees and sunny");
+    }
+}
+
+#[test]
+fn recorded_async_results_after_compaction_cover_immediate_and_delayed_continuations() {
+    for provider in ["openai", "gateway"] {
+        let recording = cassette(&format!("compaction-tool-loop-{provider}.yaml"));
+        let turns = &recording.turns;
+        let pending = body(&turns[4]);
+        let call = pending["output"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["type"] == "function_call" && item["async"] == true)
+            .unwrap();
+        assert!(kinds(&body(&turns[5])["output"]).contains(&"compaction"));
+        assert_eq!(kinds(&body(&turns[7])["data"]), ["compaction", "message"]);
+        for index in [8, 9] {
+            assert_eq!(turns[index].request.body.input[0]["call_id"], call["call_id"]);
+        }
+        let delayed = body(&turns[8]);
+        assert_eq!(turns[8].response.status_code, Some(400));
+        assert_eq!(delayed["error"]["type"], "invalid_request_error");
+        assert_eq!(delayed["error"]["param"], "input");
+        assert!(
+            delayed["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains(call["call_id"].as_str().unwrap())
+        );
+        // Observed difference: OpenAI already rejects the result on the first post-compaction continuation.
+        let immediate = body(&turns[9]);
+        if provider == "openai" {
+            assert_eq!(turns[9].response.status_code, Some(400));
+            assert_eq!(immediate["error"], delayed["error"]);
+        } else {
+            assert_eq!(turns[9].response.status_code, Some(200));
+            assert_eq!(immediate["status"], "completed");
+        }
     }
 }
 

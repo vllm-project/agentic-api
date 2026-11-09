@@ -25,7 +25,7 @@ use std::num::NonZeroUsize;
 #[cfg(test)]
 use either::Either;
 
-use super::compaction::{CompactionCarryOver, compact_items};
+use super::compaction::{CompactionCarryOver, summarize_items};
 use super::gateway::emit_response_start_events;
 use crate::executor::error::ExecutorResult;
 use crate::executor::persist::{TurnOutput, persist};
@@ -37,8 +37,11 @@ use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::response_budget::MAX_EXECUTOR_RESPONSE_BYTES;
 use crate::executor::telemetry::Api;
 use crate::executor::telemetry::metrics::RoundCounter;
+use crate::executor::telemetry::stages::CompactionTrigger;
 use crate::tool::{ToolSearchMetadata, ToolSearchState};
-use crate::types::io::{InOutItem, OutputItem, ResponseUsage, ResponsesInput};
+#[cfg(test)]
+use crate::types::io::ResponsesInput;
+use crate::types::io::{InOutItem, OutputItem, ResponseUsage};
 #[cfg(test)]
 use crate::types::request_response::RequestPayload;
 use crate::types::request_response::{IncompleteDetails, ResponsePayload};
@@ -214,18 +217,29 @@ async fn run_compaction_trigger(
     {
         MultiAgentRun::compact_root(ctx, exec_ctx, auth).await?
     } else {
-        let input = std::mem::replace(&mut ctx.enriched_request.input, ResponsesInput::Items(Vec::new()));
         // Earlier open async calls stay visible through the compaction window. The request's late
         // outputs and its own open calls would be dropped with the items this turn replaces, so they
         // are stored again, before the compaction output.
         let carried = CompactionCarryOver::new(
-            input.input_items(),
+            ctx.enriched_request.input.input_items(),
             ctx.new_input_items.iter().filter_map(InOutItem::as_input),
+        );
+        let input = std::mem::take(&mut ctx.enriched_request.input);
+        let window = summarize_items(
+            &ctx.enriched_request,
+            input,
+            exec_ctx,
+            auth,
+            CompactionTrigger::InputItem,
         )
-        .stored
-        .into_inputs();
-        let window = compact_items(&ctx.enriched_request, input, exec_ctx, auth).await?;
-        ctx.new_input_items = window.retained.into_iter().chain(carried).map(Into::into).collect();
+        .await?;
+        ctx.new_input_items = window
+            .retained
+            .into_iter()
+            .chain(carried.before)
+            .chain(carried.after)
+            .map(Into::into)
+            .collect();
         if let Some(continuation) = &mut ctx.continuation {
             continuation.mark_history_replaced();
         }

@@ -1295,10 +1295,11 @@ and provider. `COMPACTION_RECORD_SET=all|openai|gateway` selects providers (defa
 | `stale` | 10 | A compacting streamed conversation turn overlaps another stored turn; inspect conversation items, each turn's input, and a later continuation. |
 | `in-turn-chain` | 5 | Compaction output and input-item history across a stored response chain. |
 | `in-turn-chain-stream` | 5 | The same chain with the compacting turn streamed, including compaction output-item events. |
-| `tool-loop` | 4 | Compaction around a client function call, its result, and continued inference. |
+| `tool-loop` | 10 | Compaction around a client function call, plus immediate and delayed async results after automatic compaction. |
 | `standalone` | 5 | Compact direct input, replay the window, compact a stored response, and reject missing context. |
 | `multi-agent` | 5 | Compaction and public history across a response chain with multi-agent execution enabled. |
 | `store-false` | 2 | Stream compaction output from an unstored turn, then verify retrieval fails. |
+| `mcp` | 11 | Discovery reuse, standalone and automatic compaction followed by rediscovery, widened/removed allowlists, and an empty discovery snapshot reused on continuation. |
 
 From the repository root, with recorder dependencies installed in `.venv` and vLLM listening on port 5050:
 
@@ -1306,7 +1307,7 @@ From the repository root, with recorder dependencies installed in `.venv` and vL
 cargo build --release --locked -p agentic-server --bin agentic-server
 
 # Run in a separate terminal with an isolated database.
-AGENTIC_API_HOME=/tmp/agentic-compaction \
+AGENTIC_API_HOME=/tmp/agentic-compaction AGENTIC_MCP_ALLOWED_HOSTS=developers.openai.com \
   ./target/release/agentic-server --llm-api-base http://127.0.0.1:5050 \
   --gateway-host 127.0.0.1 --gateway-port 9000
 
@@ -1319,18 +1320,36 @@ cargo test --locked -p agentic-server-core --test compaction_cassette_test
 ```
 
 Set `GATEWAY_MODEL` to the exact served model alias. OpenAI recording requires `OPENAI_API_KEY`; `OPENAI_MODEL`
-defaults to `gpt-4.1`, while `MULTI_AGENT_OPENAI_MODEL` defaults to `gpt-5.6-sol` for the multi-agent beta.
+defaults to `gpt-4.1`, while `MULTI_AGENT_OPENAI_MODEL` defaults to `gpt-5.6-sol` for the multi-agent beta and
+`TOOL_LOOP_OPENAI_MODEL` defaults to `gpt-6-astra` for async client tools.
 `RECORDER_PROXY_PORT` overrides port 7070. Gateway-only recording does not refresh the OpenAI reference files.
 
 The public contract tests inspect both providers' captures for statuses, stream ordering, compaction identity in
-continued input, pending tool identity, and concurrent public history. They supplement the executor replays below;
-the gateway-facing recordings are not model-response mocks. Qwen reasoning items are excluded from cross-provider
-item-kind comparisons, but their streamed lifecycle and recorded identities are still checked.
+continued input, pending tool identity, and concurrent public history. `compaction/replay.rs` also executes the
+seven original gateway scenarios through the current Rust executor and management handlers with fresh SQLite
+storage. It scripts inference from the captured text and tool calls, then checks generated public items, ID
+relationships, stored history, and SSE lifecycles against the captures. Compaction, retention, and persistence run
+live in Rust. The MCP scenario contacts the read-only OpenAI documentation MCP server during recording; the
+hosted-tool-search integration tests exercise discovery and calls against a local MCP server, including compacted
+stored and transient-session continuations. Qwen reasoning items are excluded from cross-provider item-kind
+comparisons, but their streamed lifecycle and recorded identities are still checked.
+
+The MCP reference omits `mcp_list_tools` from the standalone compact output. Replaying that output discovers tools
+again; replaying the uncompacted history does not. A completed automatic compaction also drops the old listing
+from the next turn's input and discovers tools again. This describes observable items, not the contents of OpenAI's
+opaque compaction payload.
+Ordinary follow-ups reuse the discovery snapshot, even when it is empty or the request widens/removes its
+`allowed_tools` restriction. Widening authorization does not expose tools absent from that snapshot until discovery
+runs again after compaction. Narrowing authorization still filters which cached tools are callable.
 
 Known difference in the multi-agent capture: OpenAI emits a compaction after the answer as well as before it; the
 gateway currently emits only the earlier compaction. That also changes the following turn's public input history.
-The multi-agent capture is checked for successful requests, not full output parity. The other six scenarios agree
-on HTTP statuses and non-reasoning item kinds in these recordings; model text and compaction contents differ.
+The multi-agent capture is checked for successful requests, not full output parity.
+
+The tool-loop capture also records a remaining async difference. Both providers reject an async result after
+compaction and an intervening continuation, with HTTP 400 identifying the missing call. When the result instead
+directly follows the compacting response, OpenAI also rejects it, while the gateway accepts it. The tests preserve
+both observations; they do not assert parity for that branch. Model text and compaction contents also differ.
 Reference: [OpenAI compaction](https://developers.openai.com/api/docs/guides/compaction).
 
 ### Compaction inference replay (OpenAI)

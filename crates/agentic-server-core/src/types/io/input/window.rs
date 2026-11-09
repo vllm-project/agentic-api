@@ -10,8 +10,35 @@ use std::hash::Hash;
 
 use serde::{Deserialize, Serialize};
 
-use super::{CompactionItem, InputItem};
+use super::{CompactionItem, InputItem, ResponsesInput};
 use crate::types::event::MessageStatus;
+use crate::types::io::output::McpListTools;
+use crate::types::io::{InOutItem, OutputItem};
+
+impl ResponsesInput {
+    /// Discovery records in the current window, in history order. Compaction invalidates earlier listings;
+    /// unlike async calls, they must not be restored from a summarized prefix.
+    pub(crate) fn mcp_list_tools(&self) -> impl DoubleEndedIterator<Item = &McpListTools> {
+        let items = match self {
+            Self::Items(items) => items.as_slice(),
+            Self::Text(_) => &[],
+        };
+        let start = items
+            .iter()
+            .rposition(|item| {
+                matches!(
+                    item,
+                    InOutItem::Input(InputItem::Compaction(_)) | InOutItem::Output(OutputItem::Compaction(_))
+                )
+            })
+            .map_or(0, |index| index + 1);
+        items[start..].iter().filter_map(|item| match item {
+            InOutItem::Input(InputItem::McpListTools(listing))
+            | InOutItem::Output(OutputItem::McpListTools(listing)) => Some(listing),
+            _ => None,
+        })
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct CompactionWindow {
@@ -188,9 +215,9 @@ pub(crate) fn model_items<T: Borrow<InputItem>>(items: Vec<T>) -> impl Iterator<
 }
 
 /// The items of the latest compaction window, plus the async call records from before it
-/// ([`async_records`]) and earlier items that `keep` selects.
+/// ([`async_records`]). MCP discovery is summarized with the old window and must be performed again afterward.
 #[must_use]
-pub(crate) fn retain_window(history: Vec<InputItem>, keep: impl Fn(&InputItem) -> bool) -> Vec<InputItem> {
+pub(crate) fn retain_window(history: Vec<InputItem>) -> Vec<InputItem> {
     let Some(window) = latest_compaction_window(&history) else {
         return history;
     };
@@ -200,7 +227,7 @@ pub(crate) fn retain_window(history: Vec<InputItem>, keep: impl Fn(&InputItem) -
             .iter()
             .enumerate()
             .map(|(index, item)| {
-                index >= window.latest_index() || window.retains_user_item(index, item) || records[index] || keep(item)
+                index >= window.latest_index() || window.retains_user_item(index, item) || records[index]
             })
             .collect()
     };

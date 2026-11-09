@@ -3,6 +3,7 @@
 use std::ops::Deref;
 use std::sync::{Arc, Mutex, Weak};
 
+use either::Either;
 use serde::Serialize;
 use tokio::sync::Notify;
 
@@ -109,15 +110,6 @@ impl Deref for RetainedCheckpoint {
     }
 }
 
-/// Restore only the current canonical window, while preserving orchestration
-/// records that the model-facing projection would strip. Durable response chains
-/// can still reference superseded parent rows; those must not consume the session
-/// checkpoint budget or introduce obsolete pending calls after reconnecting.
-pub(in crate::executor) fn canonical_session_history(history: Vec<InputItem>) -> Vec<InputItem> {
-    // MCP discovery records stay so the registry knows which servers were already listed.
-    retain_window(history, |item| matches!(item, InputItem::McpListTools(_)))
-}
-
 impl ResponseContinuation {
     /// The executor has replaced this turn's input with a canonical compacted window.
     pub(crate) fn mark_history_replaced(&mut self) {
@@ -129,27 +121,25 @@ impl ResponseContinuation {
         self.compacted_output_count = output_count;
     }
 
-    /// Whether persistence stores this output. A compaction's summary stands for the outputs it absorbed, except MCP
-    /// discovery, which later turns need to know which servers were listed, and async calls, whose outputs arrive
-    /// in a later request.
+    /// Whether persistence stores this output. Async calls survive an absorbed prefix because their outputs may
+    /// arrive in a later request. MCP discovery must be performed again after compaction.
     pub(crate) fn retains_output(&self, index: usize, item: &OutputItem) -> bool {
-        index >= self.compacted_output_count || matches!(item, OutputItem::McpListTools(_)) || item.is_async_call()
+        index >= self.compacted_output_count || item.is_async_call()
     }
 
-    /// Retain orchestration records across compaction without restoring the old
-    /// model context. MCP discovery still needs to know which servers were listed,
-    /// and async calls with their outputs remain so a later output finds its call.
+    /// Retain async records across compaction without restoring the old model context, so a later output finds its call.
     pub(crate) fn parent_items(&self) -> impl Iterator<Item = &InputItem> {
         let history = self.parent.as_ref().map_or(&[][..], |parent| parent.history.as_slice());
-        let records = if self.history_replaced {
-            async_records(history)
+        if self.history_replaced {
+            Either::Left(
+                history
+                    .iter()
+                    .zip(async_records(history))
+                    .filter_map(|(item, keep)| keep.then_some(item)),
+            )
         } else {
-            Vec::new()
-        };
-        history.iter().enumerate().filter_map(move |(index, item)| {
-            let kept = !self.history_replaced || matches!(item, InputItem::McpListTools(_)) || records[index];
-            kept.then_some(item)
-        })
+            Either::Right(history.iter())
+        }
     }
 
     pub(crate) fn checkpoint(
@@ -173,7 +163,7 @@ impl ResponseContinuation {
             durable,
             history_item_ids: Vec::new(),
             requires_latest: false,
-            history: canonical_session_history(history),
+            history: retain_window(history),
         };
         let (max_items, max_bytes) = {
             let state = lock_state(&self.state)?;

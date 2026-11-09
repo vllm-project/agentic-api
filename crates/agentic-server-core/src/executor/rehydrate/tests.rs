@@ -29,14 +29,11 @@ fn session_history_without_compaction_is_unchanged() {
     ]))
     .unwrap();
     let expected = serde_json::to_value(&history).unwrap();
-    assert_eq!(
-        serde_json::to_value(canonical_session_history(history)).unwrap(),
-        expected
-    );
+    assert_eq!(serde_json::to_value(retain_window(history)).unwrap(), expected);
 }
 
 #[test]
-fn restored_session_keeps_canonical_compaction_and_mcp_discovery() {
+fn restored_session_keeps_canonical_compaction_and_drops_old_mcp_discovery() {
     let history: Vec<InputItem> = serde_json::from_value(serde_json::json!([
         {"type":"mcp_list_tools", "id":"mcpl_1", "server_label":"counter", "tools":[]},
         {"type":"message", "role":"assistant", "content":"obsolete detail"},
@@ -48,16 +45,16 @@ fn restored_session_keeps_canonical_compaction_and_mcp_discovery() {
         {"type":"function_call_output", "call_id":"live", "output":"live result"}
     ]))
     .unwrap();
-    let history = canonical_session_history(history);
-    assert_eq!(history.len(), 5);
-    assert!(matches!(history[0], InputItem::McpListTools(_)));
-    assert!(matches!(&history[2], InputItem::Compaction(item)
+    let history = retain_window(history);
+    assert_eq!(history.len(), 4);
+    assert!(matches!(&history[1], InputItem::Compaction(item)
         if item.id.as_deref() == Some("cmp_latest") && item.encrypted_content == "latest summary"));
     assert!(pending_calls(&history).unwrap().is_empty());
     let serialized = serde_json::to_value(&history).unwrap();
-    assert_eq!(serialized[1]["id"], "msg_keep");
+    assert_eq!(serialized[0]["id"], "msg_keep");
+    assert_eq!(serialized[2]["call_id"], "live");
     assert_eq!(serialized[3]["call_id"], "live");
-    assert_eq!(serialized[4]["call_id"], "live");
+    assert!(!serialized.to_string().contains("mcp_list_tools"));
     assert!(!serialized.to_string().contains("obsolete"));
 }
 
@@ -74,13 +71,12 @@ fn restored_session_uses_the_latest_window_and_preserves_live_pending_calls() {
         {"type":"function_call", "call_id":"live", "name":"lookup", "arguments":"{}"}
     ]))
     .unwrap();
-    let history = canonical_session_history(history);
+    let history = retain_window(history);
     let serialized = serde_json::to_value(&history).unwrap();
-    assert_eq!(history.len(), 5);
-    assert_eq!(serialized[0]["id"], "mcpl_old");
-    assert_eq!(serialized[1]["id"], "msg_keep");
-    assert_eq!(serialized[2]["id"], "mcpl_new");
-    assert_eq!(serialized[3]["id"], "cmp_new");
+    assert_eq!(history.len(), 3);
+    assert_eq!(serialized[0]["id"], "msg_keep");
+    assert_eq!(serialized[1]["id"], "cmp_new");
+    assert!(!serialized.to_string().contains("mcp_list_tools"));
     let pending = pending_calls(&history).unwrap();
     assert_eq!(pending.len(), 1);
     assert_eq!(pending[0].call_id.as_str(), "live");
@@ -220,7 +216,7 @@ fn multi_agent_rejects_async_tools_only_with_explicit_parallel_tool_calls() {
 }
 
 #[tokio::test]
-async fn inherited_multi_agent_rejects_max_tool_calls() {
+async fn inherited_multi_agent_preserves_checkpoint_and_validates_limits() {
     let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await.unwrap();
     let response_store = ResponseStore::new(pool.clone());
     let conversation_store = ConversationStore::new(pool);
@@ -252,8 +248,13 @@ async fn inherited_multi_agent_rejects_max_tool_calls() {
         }),
         ..Default::default()
     };
+    let items: Vec<InOutItem> = serde_json::from_value(serde_json::json!([
+        {"role": "user", "content": "retained public history"},
+        {"type": "compaction", "id": "cmp_tree", "encrypted_content": "summary"}
+    ]))
+    .unwrap();
     response_store
-        .persist("resp_tree", None, Vec::new(), None, &metadata)
+        .persist("resp_tree", None, items.clone(), None, &metadata)
         .await
         .unwrap();
     conversation_store
@@ -261,7 +262,7 @@ async fn inherited_multi_agent_rejects_max_tool_calls() {
             &conversation.conversation_id,
             &ResponseCheckpoint::default(),
             "resp_conversation_tree",
-            Vec::new(),
+            items,
             None,
             &metadata,
         )
@@ -274,12 +275,17 @@ async fn inherited_multi_agent_rejects_max_tool_calls() {
             (Some(conversation.conversation_id.as_str()), None),
         ] {
             // No explicit multi_agent: admission must check again after restoring the tree.
-            let mut request = request(conversation_id, previous);
-            request.stream = stream;
-            request.max_tool_calls = Some(MaxToolCalls::new(NonZeroU64::new(5).unwrap()));
-            let error = rehydrate_conversation(request, &exec_ctx).await.unwrap_err();
+            let mut payload = request(conversation_id, previous);
+            payload.stream = stream;
+            payload.max_tool_calls = Some(MaxToolCalls::new(NonZeroU64::new(5).unwrap()));
+            let error = rehydrate_conversation(payload, &exec_ctx).await.unwrap_err();
             assert!(matches!(error, ExecutorError::InvalidRequest(message)
                 if message == "max_tool_calls is not supported with multi_agent"));
+            let ctx = rehydrate_conversation(request(conversation_id, previous), &exec_ctx)
+                .await
+                .unwrap();
+            assert!(ctx.enriched_request.multi_agent.unwrap().enabled);
+            assert_eq!(ctx.checkpoint.unwrap().history_item_ids.len(), 2);
         }
     }
 }

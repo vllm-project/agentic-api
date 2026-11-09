@@ -15,7 +15,7 @@ use crate::types::event::ResponseStatus;
 use crate::types::io::InOutItem;
 use crate::types::io::OutputItem;
 use crate::types::request_response::ResponsePayload;
-use tracing::error;
+use tracing::{Instrument, error, info_span};
 
 /// What a finished turn stores beside its input items.
 pub(crate) enum TurnOutput<'a> {
@@ -45,7 +45,7 @@ fn should_persist(ctx: &RequestContext) -> bool {
 /// For a generated response, [`ExecutorError::Conflict`] and [`ExecutorError::PayloadTooLarge`] as they are and any
 /// other failure logged and returned as [`ExecutorError::Persistence`]; for any other turn, the failure as it is.
 pub(crate) async fn persist(
-    ctx: RequestContext,
+    mut ctx: RequestContext,
     output: TurnOutput<'_>,
     tool_search_metadata: Option<ToolSearchMetadata>,
     exec_ctx: &ExecutionContext,
@@ -65,7 +65,58 @@ pub(crate) async fn persist(
     let compaction = matches!(output, TurnOutput::Compaction);
     let generated = matches!(output, TurnOutput::Response(_));
     let timer = exec_ctx.metrics.stage(Stage::Persist);
-    let persisted = Box::pin(write_turn(ctx, output, tool_search_metadata, exec_ctx)).await;
+    let span = info_span!(
+        "agentic.persist",
+        agentic.persist.destination = if ctx.original_request.conversation.is_some() {
+            "conversation"
+        } else {
+            "response"
+        }
+    );
+    let persisted = Box::pin(
+        async move {
+            let metadata = prepare_metadata(&mut ctx, tool_search_metadata);
+            let (output_items, snapshot) = match output {
+                TurnOutput::Response(payload) => {
+                    (payload.output.as_slice(), ctx.original_request.store.then_some(payload))
+                }
+                TurnOutput::Empty | TurnOutput::Compaction => (&[][..], None),
+            };
+            if ctx.original_request.conversation.is_some() {
+                let items = turn_items(&mut ctx, output_items, None);
+                return exec_ctx.conv_handler.persist(&ctx, items, snapshot, &metadata).await;
+            }
+
+            // A session turn publishes a connection-local checkpoint; it is durable only when the request is stored.
+            let continuation = ctx.continuation.take();
+            let durable = continuation.is_none() || ctx.original_request.store;
+            let mut items = turn_items(&mut ctx, output_items, continuation.as_ref());
+            let checkpoint = continuation
+                .as_ref()
+                .map(|lease| lease.checkpoint(ctx.response_id.clone(), &metadata, &items, durable))
+                .transpose()?;
+            let transient_parent = continuation
+                .as_ref()
+                .filter(|lease| lease.parent.as_ref().is_some_and(|parent| !parent.durable));
+            // A stored child of a transient parent stores the parent's full history: there is no stored parent to extend.
+            if let Some(lease) = transient_parent
+                && durable
+            {
+                items.splice(0..0, lease.parent_items().cloned().map(InOutItem::Input));
+            }
+            let history_item_ids = if durable {
+                exec_ctx.resp_handler.persist(&ctx, items, snapshot, &metadata).await?
+            } else {
+                Vec::new()
+            };
+            if let Some((lease, checkpoint)) = continuation.zip(checkpoint) {
+                lease.publish(checkpoint.with_history_item_ids(history_item_ids))?;
+            }
+            Ok(())
+        }
+        .instrument(span),
+    )
+    .await;
     match &persisted {
         // Without storage nothing was written, so there is no stage to time.
         Err(ExecutorError::Storage(StorageError::NotConfigured)) => timer.discard(),
@@ -96,53 +147,6 @@ pub async fn persist_turn(ctx: RequestContext, exec_ctx: &ExecutionContext) -> E
     let (ctx, tool_search_state) = prepare_request_tools(ctx)?;
     let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);
     persist(ctx, TurnOutput::Empty, tool_search_metadata, exec_ctx).await
-}
-
-#[tracing::instrument(name = "agentic.persist", skip_all, fields(
-    agentic.persist.destination = if ctx.original_request.conversation.is_some() { "conversation" } else { "response" }
-))]
-async fn write_turn(
-    mut ctx: RequestContext,
-    output: TurnOutput<'_>,
-    tool_search_metadata: Option<ToolSearchMetadata>,
-    exec_ctx: &ExecutionContext,
-) -> ExecutorResult<()> {
-    let metadata = prepare_metadata(&mut ctx, tool_search_metadata);
-    let (output_items, snapshot) = match output {
-        TurnOutput::Response(payload) => (payload.output.as_slice(), ctx.original_request.store.then_some(payload)),
-        TurnOutput::Empty | TurnOutput::Compaction => (&[][..], None),
-    };
-    if ctx.original_request.conversation.is_some() {
-        let items = turn_items(&mut ctx, output_items, None);
-        return exec_ctx.conv_handler.persist(&ctx, items, snapshot, &metadata).await;
-    }
-
-    // A session turn publishes a connection-local checkpoint; it is durable only when the request is stored.
-    let continuation = ctx.continuation.take();
-    let durable = continuation.is_none() || ctx.original_request.store;
-    let mut items = turn_items(&mut ctx, output_items, continuation.as_ref());
-    let checkpoint = continuation
-        .as_ref()
-        .map(|lease| lease.checkpoint(ctx.response_id.clone(), &metadata, &items, durable))
-        .transpose()?;
-    let transient_parent = continuation
-        .as_ref()
-        .filter(|lease| lease.parent.as_ref().is_some_and(|parent| !parent.durable));
-    // A stored child of a transient parent stores the parent's full history: there is no stored parent to extend.
-    if let Some(lease) = transient_parent
-        && durable
-    {
-        items.splice(0..0, lease.parent_items().cloned().map(InOutItem::Input));
-    }
-    let history_item_ids = if durable {
-        exec_ctx.resp_handler.persist(&ctx, items, snapshot, &metadata).await?
-    } else {
-        Vec::new()
-    };
-    if let Some((lease, checkpoint)) = continuation.zip(checkpoint) {
-        lease.publish(checkpoint.with_history_item_ids(history_item_ids))?;
-    }
-    Ok(())
 }
 
 /// The turn's own history: its input items, then its public output, less any output an in-turn session
@@ -211,12 +215,13 @@ pub async fn commit(
             payload.status
         )));
     }
-    if matches!(status, ResponseStatus::Completed | ResponseStatus::Incomplete) && ctx.continuation.is_none() {
-        // Without a session the caller's context carries no checkpoint: load the continued response once as the
-        // checkpoint this turn extends. A session keeps its parent in memory.
-        if let Some((checkpoint, _)) = exec_ctx.resp_handler.rehydrate(&ctx).await? {
-            ctx.checkpoint = Some(checkpoint);
-        }
+    if matches!(status, ResponseStatus::Completed | ResponseStatus::Incomplete)
+        && ctx.checkpoint.is_none()
+        && ctx.continuation.is_none()
+        && ctx.original_request.previous_response_id.is_some()
+    {
+        // A split context omits the checkpoint. Load its parent row without rehydrating history a second time.
+        ctx.checkpoint = Some(exec_ctx.resp_handler.get(&ctx).await?.into());
     }
 
     Box::pin(persist(ctx, TurnOutput::Response(&payload), None, exec_ctx)).await?;

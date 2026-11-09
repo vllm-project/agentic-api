@@ -24,7 +24,7 @@ use crate::executor::relay::StreamRelay;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::upstream::fetch_blocking_payload;
 use crate::storage::ResponseCheckpoint;
-use crate::tool::{CodexNamespaceHandler, ToolSearchState};
+use crate::tool::{CodexNamespaceHandler, ToolRegistry, ToolSearchState};
 use crate::types::event::MessageStatus;
 use crate::types::io::input::{InputTextContent, expand_carried_windows, latest_compaction_window};
 use crate::types::io::{
@@ -67,7 +67,8 @@ impl ResponseCheckpoint {
     /// `OpenAI`, a single-agent turn's input items begin with that compaction, which stands in for everything before
     /// it. A multi-agent turn keeps its whole history, as on `OpenAI`.
     pub(in crate::executor) fn continue_from_compaction(&mut self, history: &[InOutItem], request: &RequestPayload) {
-        if request.multi_agent.as_ref().is_some_and(|config| config.enabled) {
+        if self.metadata.multi_agent_tree.is_some() || request.multi_agent.as_ref().is_some_and(|config| config.enabled)
+        {
             return;
         }
         let latest = history.iter().rposition(|item| {
@@ -91,15 +92,6 @@ pub(crate) struct CompactedWindow {
     pub(crate) service_tier: Option<String>,
 }
 
-impl CompactedWindow {
-    /// The window as items: the retained user messages, then the compaction item.
-    pub(crate) fn items(&self) -> Vec<InputItem> {
-        let mut items = self.retained.clone();
-        items.push(InputItem::Compaction(self.compaction.clone()));
-        items
-    }
-}
-
 #[cfg(test)]
 fn build_compacted_window(items: &[InputItem], summary: String) -> Vec<InputItem> {
     let mut window = retained_user_window(items);
@@ -118,19 +110,10 @@ fn build_compacted_window(items: &[InputItem], summary: String) -> Vec<InputItem
 ///
 /// Returns an invalid-request error for empty input, an upstream error for an unusable model
 /// summary, and propagates inference and serialization failures.
-pub(crate) async fn compact_items(
-    request: &RequestPayload,
-    input: ResponsesInput,
-    exec_ctx: &ExecutionContext,
-    auth: Option<&UpstreamHeaders>,
-) -> ExecutorResult<CompactedWindow> {
-    compact_items_with_trigger(request, input, exec_ctx, auth, CompactionTrigger::InputItem).await
-}
-
 #[tracing::instrument(name = "agentic.compaction", skip_all, fields(
     agentic.compaction.operation = "summarize", agentic.compaction.trigger = trigger.as_str()
 ))]
-async fn compact_items_with_trigger(
+pub(crate) async fn summarize_items(
     request: &RequestPayload,
     input: ResponsesInput,
     exec_ctx: &ExecutionContext,
@@ -138,77 +121,70 @@ async fn compact_items_with_trigger(
     trigger: CompactionTrigger,
 ) -> ExecutorResult<CompactedWindow> {
     let timer = exec_ctx.metrics.stage(Stage::Compaction);
-    let summarized = summarize_items(request, input, exec_ctx, auth).await;
+    let summarized = async {
+        request.validate_prompt_cache_options(exec_ctx.responses_config.prompt_cache_options_supported)?;
+        // A compaction this turn made carries its window; summarize what the model saw.
+        let original_items: Vec<InputItem> = expand_carried_windows(input.input_items())
+            .into_iter()
+            .map(Cow::into_owned)
+            .collect();
+        if !original_items.iter().any(item_has_meaningful_context) {
+            return Err(ExecutorError::InvalidRequest(
+                "compaction requires non-empty input or previous_response_id context".to_owned(),
+            ));
+        }
+
+        let retained = retained_user_window(&original_items);
+        let mut summary_items: Vec<InputItem> = original_items
+            .into_iter()
+            .filter(|item| !item.is_compaction_trigger())
+            .collect();
+        summary_items.push(InputItem::Message(InputMessage {
+            role: "user".to_owned(),
+            content: InputMessageContent::Text(COMPACTION_PROMPT.to_owned()),
+            ..Default::default()
+        }));
+        let original_request = request.summary_settings();
+        let mut enriched_request = RequestPayload {
+            input: ResponsesInput::from(summary_items),
+            ..request.summary_settings()
+        };
+        // The summary offers no tools. Resolve searched top-level function names from the source before discarding
+        // its declarations, while preserving actual namespace members in the summary's public history.
+        let names = request.top_level_function_names();
+        let functions = names.iter().map(String::as_str).collect();
+        enriched_request.input = CodexNamespaceHandler
+            .resolve_input(None, &functions, Cow::Owned(enriched_request.input))
+            .into_owned();
+        let ctx = RequestContext {
+            multi_agent_tree: None,
+            original_request,
+            enriched_request,
+            new_input_items: Vec::new(),
+            response_id: uuid7_str("resp_"),
+            conversation_id: None,
+            checkpoint: None,
+            continuation: None,
+        };
+        let mut agent = AgentPipeline::new(ctx, None, StreamRelay::detached());
+        let response = fetch_blocking_payload(&mut agent, exec_ctx, auth, &ToolRegistry::default(), None).await?;
+        exec_ctx.metrics.record_response_usage(response.usage.as_ref());
+        let summary = completed_summary_text(&response)?;
+
+        Ok(CompactedWindow {
+            retained,
+            compaction: CompactionItem {
+                agent: None,
+                id: Some(uuid7_str("cmp_")),
+                encrypted_content: summary,
+            },
+            usage: response.usage.unwrap_or_default(),
+            service_tier: response.service_tier,
+        })
+    }
+    .await;
     timer.finish_result(&summarized);
     summarized
-}
-
-async fn summarize_items(
-    request: &RequestPayload,
-    input: ResponsesInput,
-    exec_ctx: &ExecutionContext,
-    auth: Option<&UpstreamHeaders>,
-) -> ExecutorResult<CompactedWindow> {
-    request.validate_prompt_cache_options(exec_ctx.responses_config.prompt_cache_options_supported)?;
-    // A compaction this turn made carries its window; summarize what the model saw.
-    let original_items: Vec<InputItem> = expand_carried_windows(input.input_items())
-        .into_iter()
-        .map(Cow::into_owned)
-        .collect();
-    if !original_items.iter().any(item_has_meaningful_context) {
-        return Err(ExecutorError::InvalidRequest(
-            "compaction requires non-empty input or previous_response_id context".to_owned(),
-        ));
-    }
-
-    let retained = retained_user_window(&original_items);
-    let mut summary_items: Vec<InputItem> = original_items
-        .into_iter()
-        .filter(|item| !item.is_compaction_trigger())
-        .collect();
-    summary_items.push(InputItem::Message(InputMessage {
-        role: "user".to_owned(),
-        content: InputMessageContent::Text(COMPACTION_PROMPT.to_owned()),
-        ..Default::default()
-    }));
-    let original_request = request.summary_settings();
-    let mut enriched_request = RequestPayload {
-        input: ResponsesInput::from(summary_items),
-        ..request.summary_settings()
-    };
-    // The summary offers no tools. Resolve searched top-level function names from the source before discarding
-    // its declarations, while preserving actual namespace members in the summary's public history.
-    let names = request.top_level_function_names();
-    let functions = names.iter().map(String::as_str).collect();
-    enriched_request.input = CodexNamespaceHandler
-        .resolve_input(None, &functions, Cow::Owned(enriched_request.input))
-        .into_owned();
-    let ctx = RequestContext {
-        multi_agent_tree: None,
-        original_request,
-        enriched_request,
-        new_input_items: Vec::new(),
-        response_id: uuid7_str("resp_"),
-        conversation_id: None,
-        checkpoint: None,
-        continuation: None,
-    };
-    let mut agent = AgentPipeline::new(ctx, None, StreamRelay::detached());
-    let response =
-        fetch_blocking_payload(&mut agent, exec_ctx, auth, &crate::tool::ToolRegistry::default(), None).await?;
-    exec_ctx.metrics.record_response_usage(response.usage.as_ref());
-    let summary = completed_summary_text(&response)?;
-
-    Ok(CompactedWindow {
-        retained,
-        compaction: CompactionItem {
-            agent: None,
-            id: Some(uuid7_str("cmp_")),
-            encrypted_content: summary,
-        },
-        usage: response.usage.unwrap_or_default(),
-        service_tier: response.service_tier,
-    })
 }
 
 /// Apply the first configured compaction threshold to the resolved request history.
@@ -244,7 +220,7 @@ pub(crate) async fn maybe_compact_context(
     // The model continues from the compacted window. The turn's items stay as the request supplied them, and the
     // compaction item is the turn's output, as on OpenAI.
     let open_calls = CompactionCarryOver::open_calls(ctx.enriched_request.input.input_items());
-    let window = compact_items_with_trigger(
+    let window = summarize_items(
         &ctx.enriched_request,
         ResponsesInput::from(items),
         exec_ctx,
@@ -306,17 +282,14 @@ pub async fn compact_response(
     }
     let (mut ctx, tool_search_state) = prepare_request_tools(ctx)?;
     let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);
-    let input = std::mem::replace(&mut ctx.enriched_request.input, ResponsesInput::Items(Vec::new()));
     // The returned window keeps every open async call, in its public form, so a client replaying it
     // stays self-contained; storage adds only this request's own items (see `CompactionCarryOver`).
-    let CompactionCarryOver {
-        open_calls,
-        stored: carried,
-    } = CompactionCarryOver::new(
-        input.input_items(),
+    let carry_over = CompactionCarryOver::new(
+        ctx.enriched_request.input.input_items(),
         ctx.new_input_items.iter().filter_map(InOutItem::as_input),
     );
-    let window = compact_items_with_trigger(
+    let input = std::mem::take(&mut ctx.enriched_request.input);
+    let window = summarize_items(
         &ctx.enriched_request,
         input,
         exec_ctx,
@@ -325,12 +298,19 @@ pub async fn compact_response(
     )
     .await?;
     // Rehydrated history and this request's items are both public, so the open calls are as the client saw them.
-    let compacted = window.items();
-    let mut output = compacted.clone();
-    output.extend(open_calls);
+    let mut output = window.retained.clone();
+    output.push(InputItem::Compaction(window.compaction.clone()));
+    output.extend(carry_over.open_calls);
 
     let response_id = ctx.response_id.clone();
-    ctx.new_input_items = carried.insert_into(compacted).into_iter().map(Into::into).collect();
+    ctx.new_input_items = window
+        .retained
+        .into_iter()
+        .chain(carry_over.before)
+        .chain([InputItem::Compaction(window.compaction)])
+        .chain(carry_over.after)
+        .map(Into::into)
+        .collect();
     Box::pin(persist(ctx, TurnOutput::Compaction, tool_search_metadata, exec_ctx)).await?;
 
     Ok(CompactedResponse {
@@ -360,7 +340,7 @@ mod tests {
         CompactionItem, CustomToolCallOutputMessage, FunctionToolResultMessage, InputContent, InputImageContent,
         InputItem, InputMessage, InputMessageContent, ResponsesInput, ToolCallOutput, ToolOutputContent,
     };
-    use crate::types::request_response::{ContextManagement, RequestPayload};
+    use crate::types::request_response::{CompactRequest, ContextManagement, RequestPayload};
 
     use super::{
         build_compacted_window, compact_response, completed_summary_text, estimate_history_tokens,
@@ -516,7 +496,7 @@ mod tests {
         (exec_ctx, requests, server)
     }
 
-    fn compact_request() -> crate::CompactRequest {
+    fn standalone_request() -> CompactRequest {
         serde_json::from_value(serde_json::json!({
             "model": "test-model",
             "input": [{"role": "user", "content": "important context"}]
@@ -1147,7 +1127,7 @@ mod tests {
     async fn disabled_storage_does_not_fail_compaction() {
         let (exec_ctx, _requests, server) = mock_execution_context(ResponseStore::disabled()).await;
 
-        let response = compact_response(compact_request(), &exec_ctx, None)
+        let response = compact_response(standalone_request(), &exec_ctx, None)
             .await
             .expect("disabled persistence should be ignored");
 
@@ -1221,7 +1201,7 @@ mod tests {
         let response_store = ResponseStore::new(pool);
         let (exec_ctx, _requests, server) = mock_execution_context(response_store.clone()).await;
 
-        let response = compact_response(compact_request(), &exec_ctx, None)
+        let response = compact_response(standalone_request(), &exec_ctx, None)
             .await
             .expect("compaction succeeds");
         let (_, history) = response_store
