@@ -1,4 +1,6 @@
 mod common;
+#[path = "responses/model_capabilities.rs"]
+mod model_capabilities;
 #[path = "../../agentic-server-core/tests/support/multi_agent_contract.rs"]
 pub mod multi_agent_contract;
 #[path = "responses/multi_agent_stateless.rs"]

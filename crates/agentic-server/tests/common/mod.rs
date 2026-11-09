@@ -53,7 +53,7 @@ pub fn test_state_with_max_request_body_size(config: &Config, max_request_body_s
         Arc::new(reqwest::Client::new()),
         config.llm_api_base.clone(),
     )
-    .with_responses_config(config.responses);
+    .with_responses_config(config.responses.clone());
     let exec_ctx = Arc::new(exec_ctx);
     let proxy_state = ProxyState::new(config.clone()).expect("proxy state");
     AppState {

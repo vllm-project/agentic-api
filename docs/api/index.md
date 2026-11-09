@@ -287,16 +287,16 @@ Differences from OpenAI:
   round, the stream delivers the async call after that tool completes, keeping output
   indexes in order. Async calls before or without gateway calls stream immediately.
 
-`prompt_cache_key` is forwarded unchanged on direct and executor-backed HTTP
-requests, WebSocket requests, gateway tool rounds, automatic compaction,
-standalone `/v1/responses/compact` requests, and summary inference requested by
-a `compaction_trigger` input item.
+#### Prompt-cache controls and service tiers
+
+`prompt_cache_key` is forwarded unchanged on HTTP and WebSocket requests,
+gateway tool rounds, automatic compaction, standalone `/v1/responses/compact`
+requests, and summary inference requested by a `compaction_trigger` input item.
 
 - The key is scoped to the current request. A continuation using
   `previous_response_id` must send it again to remain in the same upstream
   cache group.
-- Executor-backed requests omit an absent or `null` key. Direct HTTP requests
-  preserve the original body, including an explicit `null`.
+- HTTP and WebSocket execution omit an absent or `null` key.
 - The same request-scoped behavior applies when `/v1/responses/compact` loads
   history through `previous_response_id`. The key is not echoed in responses.
 
@@ -309,30 +309,25 @@ checked on October 11, 2026. The object accepts optional `mode` (`"implicit"` or
 an empty object; the gateway inserts no defaults. Present members must be non-null.
 The top-level absent or `null` object is treated as unset by typed execution.
 
-Direct HTTP pass-through preserves the original request body, including options,
-explicit `null`, prewarming, diagnostics, and future members. The upstream decides
-whether to accept these values; the gateway does not apply its typed options parser
-or capability switch to that route. `store: false` alone does not ensure pass-through:
-a previous response ID, conversation, built-in tool, or another executor feature
-still selects typed execution.
-
-For typed execution, the configured upstream must implement these semantics for
-every served model. Options are rejected by default on that path. After verifying
-that contract, an operator can enable forwarding in `config.toml`:
+Requests that set a cache options object are rejected by default. After verifying
+mode and TTL support for a served model, enable forwarding for its exact ID in
+`config.toml`:
 
 ```toml
-[responses]
+[responses.models."qualified-model"]
 prompt_cache_options_supported = true
 ```
 
-This switch is an operator assertion, not model-name detection or a capability probe.
-Unsupported typed options return `400` with `param: "prompt_cache_options"` and
-`code: "unsupported_parameter"` before history lookup, tool discovery, or inference.
-Enabling the switch does not add typed support for prewarming, diagnostics, or future
-members: `prewarm`, `comparison_response_id`, unknown members, invalid mode/TTL
-values, and non-object options return `400` on executor routes.
-`prompt_cache_options` and `prompt_cache_retention` are independent: both may be
-provided and are forwarded without translating either into the other.
+The model-specific setting overrides `[responses] prompt_cache_options_supported`.
+Models without an override use that deployment default, which is `false` unless
+configured. Qualify all models using the default before setting it to `true`.
+Setting an options object for a model with forwarding disabled returns `400`
+with `param: "prompt_cache_options"` and `code: "unsupported_parameter"` before
+history lookup, tool discovery, or inference. The typed parser rejects `prewarm`,
+`comparison_response_id`, unknown members, invalid mode or TTL values, and
+non-object options even when forwarding is enabled.
+`prompt_cache_options` and `prompt_cache_retention` are independent. When the
+policy allows both, the gateway forwards both as provided.
 
 An accepted typed object is forwarded through HTTP JSON/SSE, WebSocket execution,
 gateway tool rounds, multi-agent execution, automatic compaction,
@@ -347,52 +342,91 @@ reuse remain upstream responsibilities.
 
 Typed Responses objects echo the current request's options in JSON, response-bearing
 SSE/WebSocket events, and stored response snapshots. An absent or top-level `null`
-request value is echoed as `null`; an empty object stays empty. This is request
-metadata, not proof of upstream acceptance or a cache hit. Direct HTTP responses
-remain upstream pass-through, and standalone compaction objects do not echo options.
+request value is echoed as `null`, and an empty object stays empty. The echo
+describes the request. Standalone compaction objects omit this metadata.
 
 | Path | Mode/TTL handling | Continuation behavior |
 | --- | --- | --- |
-| Direct HTTP JSON/SSE | Original options preserved; upstream validation; no gateway capability check | No gateway history resolution |
-| Typed HTTP JSON/SSE and WebSocket | Object forwarded; absent/null omitted upstream; current request echoed in Responses objects | Top-level options are not inherited |
+| HTTP JSON/SSE and WebSocket | Object forwarded when enabled; absent/null omitted upstream; current request echoed in Responses objects | Top-level options are not inherited |
 | Gateway tool rounds and multi-agent execution | Current request's options retained in every inference round | Current request scope |
 | Automatic, trigger, and standalone compaction | Current request's options forwarded to summary inference | Loading a previous response does not inherit its options |
 
-This matrix contributes to [#314](https://github.com/vllm-project/agentic-api/issues/314)
-and [#330](https://github.com/vllm-project/agentic-api/issues/330).
-Model-specific capability profiles and upstream-reported cache diagnostics remain follow-ups.
-
 `prompt_cache_retention` accepts the legacy `"in_memory"` and `"24h"` values.
-An explicit value is forwarded through HTTP JSON/SSE, WebSocket execution,
+Allowed values are forwarded through HTTP JSON/SSE, WebSocket execution,
 gateway tool rounds, multi-agent execution, automatic compaction,
 `compaction_trigger` summary inference, and `/v1/responses/compact`.
 Continuations restore item history but do not inherit a previous request's
-retention policy: send it again when needed. Missing or `null` values are omitted
-by typed execution; direct HTTP preserves an explicit `null`. Invalid values
-return `400` before inference. This is request forwarding; response-object
-retention echoing is outside its scope.
+retention policy, so send it again when needed. Execution omits missing or
+`null` values and rejects invalid values with `400` before inference.
 
-Retention support depends on the configured upstream and model. The gateway
-sets no retention default, manages no KV-cache lifetime, and does not translate
-retention into `cache_salt` or `prompt_cache_options.ttl`. See the
-[OpenAI prompt caching guide](https://developers.openai.com/api/docs/guides/prompt-caching).
-Forwarding is not a capability guarantee: the
+The upstream manages cache lifetime. The gateway forwards retention separately
+from `cache_salt` and `prompt_cache_options.ttl`. The pinned
 [vLLM Responses request contract](https://github.com/vllm-project/vllm/blob/840c7c2f4bc72c7c55edb2dea6d23f9a9c9734e0/vllm/entrypoints/openai/responses/protocol.py)
-checked on October 1, 2026 does not define `prompt_cache_retention`, so this field should not be
-used to configure vLLM cache lifetime. Model-specific backend capability enforcement
-remains a follow-up in
-[#330](https://github.com/vllm-project/agentic-api/issues/330).
+checked on October 1, 2026 lacks the legacy `prompt_cache_retention` field.
+Set `prompt_cache_retention_supported = false` on a model policy to reject the
+field before inference when the deployment cannot honor it. See the
+[OpenAI prompt caching guide](https://developers.openai.com/api/docs/guides/prompt-caching).
 
-`service_tier` is also request-scoped. Direct and executor-backed HTTP requests,
-WebSocket requests, gateway tool rounds, automatic compaction, standalone
+`service_tier` is also request-scoped. HTTP and WebSocket requests,
+gateway tool rounds, automatic compaction, standalone
 `/v1/responses/compact` requests, and `compaction_trigger` summary inference
 forward an explicit value unchanged. An absent or `null` value is not inherited
 by a continuation. When the upstream reports the tier that actually served the
-terminal inference round, that value is returned to the client and retained in stored response snapshots; it may
-differ from the requested value. The gateway does not select a tier or silently
-retry with another one. In multi-agent execution, the last root-agent inference
-round determines the returned tier; child-agent tiers do not override it, and a
-missing final root tier clears any earlier value.
+terminal inference round, the gateway returns that value to the client and retains
+it in the stored response snapshot. A tier rejection follows the ordinary
+upstream error path. In multi-agent execution, the last root-agent inference
+round determines the returned tier, and a missing final root tier clears any
+earlier value.
+
+#### Model capability policies
+
+The gateway selects an optional `[responses.models."<served-model-id>"]` policy
+by exact match with the current request's `model`. This also applies when
+continuing a response or conversation, including a WebSocket continuation.
+These policies are separate from the `[models]` entries used by the Codex catalog.
+
+The following policy follows the published Responses contract for the public
+`gpt-6-astra` model ID. The
+[model page](https://developers.openai.com/api/docs/models/gpt-6-astra) and
+[migration guide](https://developers.openai.com/api/docs/guides/latest-model#update-api-and-model-parameters)
+were checked on November 8, 2026. The model page lists the public ID without a
+separate dated snapshot.
+
+```toml
+[responses.models."gpt-6-astra"]
+sampling_supported = false
+logprobs_supported = false
+reasoning_efforts = ["low", "medium", "high", "xhigh", "max"]
+```
+
+| Policy field | Request admission |
+| --- | --- |
+| `sampling_supported = false` | Rejects non-null `temperature` and `top_p`. |
+| `logprobs_supported = false` | Rejects non-null `top_logprobs` and `message.output_text.logprobs` in `include`. |
+| `reasoning_efforts` | Allows explicitly set `reasoning.effort` values from this list. |
+| `service_tiers` | Allows explicitly set `service_tier` values from this deployment's list. |
+| `prompt_cache_options_supported` | Enables or disables forwarding the qualified mode/TTL subset for this model, overriding the deployment default. |
+| `prompt_cache_retention_supported = false` | Rejects a non-null legacy `prompt_cache_retention` value. |
+
+When a model policy or field is omitted, the upstream continues to validate the
+affected parameter, subject to the deployment default for `prompt_cache_options`
+and the gateway's typed request parser. An empty allowlist rejects every
+explicit value for that field. Set `service_tiers` only for known
+deployment restrictions. The upstream determines actual account and regional
+availability and returns the tier it served.
+
+The checks run before history lookup, tool discovery, and inference for HTTP
+JSON/SSE and WebSocket. A violation returns HTTP `400` or a WebSocket `error`
+event with `type: "invalid_request_error"` and the affected `param`. The code is
+`unsupported_value`, except that disabled `prompt_cache_options` uses
+`unsupported_parameter`. Standalone compaction applies the configured checks
+for `prompt_cache_options`, `prompt_cache_retention`, and `service_tier` using
+the model in the compaction request.
+
+For a request that passes local admission, an upstream HTTP rejection before
+streaming starts retains the upstream status and body. After a stream starts,
+clients receive the failure through the transport's existing error path.
+WebSocket errors retain the upstream explanation in the gateway's error envelope.
 
 #### Content-part cache breakpoints
 
@@ -407,14 +441,13 @@ unchanged on supported parts, without interpreting them as valid cache policies.
 
 | Path or transformation | Breakpoint handling |
 | --- | --- |
-| Direct HTTP JSON/SSE | Original content passes through; upstream validation |
 | Typed HTTP JSON/SSE | Text/image part boundaries and order are preserved; no boundary is inserted on unmarked parts |
 | Stored and WebSocket history | Boundaries remain attached to restored content, including after a durable WebSocket reconnect or local `generate: false` completion |
 | Image defaults and client tool normalization | Adding image `detail: "auto"` or lowering custom outputs to function outputs preserves content extensions, including structured text/image/file tool outputs |
 | Gateway tool rounds and multi-agent history forks | Original text/image boundaries remain in every inference round that carries those items |
 | Standalone, automatic, and trigger compaction | Summary inference receives original boundaries; retained user parts keep theirs; boundaries on replaced content are not moved to the generated summary |
 | Inline UTF-8 text message files | Supported base64 `file_data` becomes model-facing `input_text` in place, retaining its cache breakpoint; canonical and stored history keep the original `input_file` |
-| Unsupported message files or unknown content on typed routes | File IDs/URLs, unsupported non-text files, invalid base64/UTF-8, and unknown content types are rejected before inference or storage; direct HTTP still passes them through |
+| Unsupported message files or unknown content | File IDs/URLs, unsupported non-text files, invalid base64/UTF-8, and unknown content types are rejected before inference or storage |
 
 Text-file inlining prefixes decoded text with `File: <filename>` when a filename
 is present. Only the shared `prompt_cache_breakpoint` extension is carried onto the
@@ -441,8 +474,7 @@ OpenAI reference recordings under `crates/agentic-server-core/tests/cassettes/ma
 
 - The value must be an integer from 1 to 9223372036854775807. Other values return
   `400` with `param: "max_tool_calls"` and code `integer_below_min_value`,
-  `integer_above_max_value`, or `invalid_type`, on direct and executor-backed HTTP
-  requests and on WebSocket requests.
+  `integer_above_max_value`, or `invalid_type`, on HTTP and WebSocket requests.
 - A call over the limit is not executed. The model receives
   `{"error":"UserError: Reached tool call limit of N"}` as its tool call output, and later
   rounds of the response no longer offer gateway-executed built-in tools. One
@@ -452,35 +484,26 @@ OpenAI reference recordings under `crates/agentic-server-core/tests/cassettes/ma
   still completes normally.
 - Every response echoes `max_tool_calls` (`null` when unset). The value applies
   to one response and is not inherited through `previous_response_id`.
-- Executor-backed requests enforce the limit in the gateway and do not forward
-  it upstream; direct requests are passed through unchanged. Multi-agent
-  requests reject it.
+- The gateway enforces the limit locally. Multi-agent requests reject it.
 
 #### Unsupported request parameters
 
-Typed execution cannot honour `background: true` or a reusable `prompt`
-reference, so it rejects them with `400` and `type: "invalid_request_error"`
-instead of silently dropping them. The check runs before history lookup, tool
-discovery, storage, or inference. Direct HTTP pass-through preserves the original
-request body, and the upstream decides whether to accept these members, whatever
-their values.
-`store: false` alone does not ensure pass-through: a previous response ID,
-conversation, built-in tool, or another executor feature still selects typed
-execution.
+Typed execution rejects `background: true` and reusable `prompt` references with
+`400` and `type: "invalid_request_error"`. The check runs before history lookup,
+tool discovery, storage, or inference for both `store` values.
 
 | Path | `background` | `prompt` | `tool_choice` of type `mcp` |
 | --- | --- | --- | --- |
-| Direct HTTP JSON/SSE | Forwarded unchanged; upstream validation | Forwarded unchanged; upstream validation | `code: "unsupported_value"`, `param: "tool_choice"` |
 | Typed HTTP JSON/SSE, WebSocket, and split-execution hydration | Absent, `null`, or `false` accepted and not forwarded; `true` returns `code: "unsupported_value"`, and any other value returns `code: "invalid_type"`, both with `param: "background"` | Absent or `null` accepted; any other value returns `code: "unsupported_parameter"`, `param: "prompt"` | `code: "unsupported_value"`, `param: "tool_choice"` |
 
 Background mode is tracked in
 [#357](https://github.com/vllm-project/agentic-api/issues/357). This matrix
 contributes to [#314](https://github.com/vllm-project/agentic-api/issues/314).
 
-Typed execution still ignores other members the gateway does not model,
-including `top_logprobs`, `user`, `safety_identifier`, `stream_options`, and vLLM
-sampling extensions such as `top_k`, `min_p`, `seed`, and `stop`. Direct requests
-forward them unchanged. Reporting effective parameters is tracked in
+Unmodeled provider members such as `user`, `safety_identifier`, `stream_options`,
+`top_k`, `min_p`, `seed`, and `stop` are forwarded unchanged. A request that
+passes the model capability policy also forwards `top_logprobs` unchanged.
+Reporting effective parameters is tracked in
 [#434](https://github.com/vllm-project/agentic-api/issues/434).
 
 #### Prompt-cache usage compatibility
@@ -511,12 +534,28 @@ inference rounds contribute separately. Reported `total_tokens` is preserved
 independently rather than recomputed from the other counters. These counts do not establish a cache hit
 rate or billing amount.
 
-This matrix covers usage preservation under
-[#330](https://github.com/vllm-project/agentic-api/issues/330) and
-[#314](https://github.com/vllm-project/agentic-api/issues/314).
-The mode/TTL forwarding matrix above covers request preservation with an operator
-capability assertion. The breakpoint matrix above covers content preservation and compaction behavior;
-model-specific backend capability enforcement remains a separate acceptance item.
+#### Responses capability matrix
+
+This is the Responses caching and service-tier portion of the
+[#314 capability contract](https://github.com/vllm-project/agentic-api/issues/314)
+and the acceptance matrix for
+[#330](https://github.com/vllm-project/agentic-api/issues/330).
+Both HTTP storage modes use the executor. The differential tests compare
+`store: false` and `store: true` across the current execution paths.
+
+| Control | Supported | Transformed | Rejected | Regression evidence |
+| --- | --- | --- | --- | --- |
+| `prompt_cache_key` | Forwarded on HTTP JSON/SSE, WebSocket, tool rounds, and compaction. | Absent and null values are omitted upstream. Continuations use the current request's value. | Invalid types. | [#347](https://github.com/vllm-project/agentic-api/pull/347), [#412](https://github.com/vllm-project/agentic-api/pull/412) |
+| `prompt_cache_options` | Enabled models forward `implicit`/`explicit` and `30m`. Response objects echo the current request. | Absent and null values are omitted upstream and echoed as null. Continuations use the current request's options. | Disabled models, invalid values, unknown members, and unsupported TTLs. | [#436](https://github.com/vllm-project/agentic-api/pull/436) and model policy tests |
+| `prompt_cache_retention` | Forwards `in_memory` and `24h` independently of `cache_salt` and cache options. | Absent and null values are omitted upstream. Continuations use the current request's retention. | Invalid values and models whose policy disables legacy retention. | [#413](https://github.com/vllm-project/agentic-api/pull/413) and model policy tests |
+| Content breakpoints | Preserved on supported parts through item history, tool rounds, and compaction. Explicit mode stays explicit. | Inline UTF-8 files become model-facing text with the same breakpoint. Stored history keeps the file item. | Unsupported message files and content types. | [#467](https://github.com/vllm-project/agentic-api/pull/467) |
+| `service_tier` | Explicit request values reach the upstream. The final root inference supplies the actual tier in the response and stored snapshot. | Absent and null values are omitted upstream. Continuations use the current request's tier. | Tiers excluded by a model's deployment policy, plus upstream account/region errors. | [#389](https://github.com/vllm-project/agentic-api/pull/389) and model policy tests |
+| Sampling, logprobs, and `reasoning.effort` | Accepted values reach the upstream. Each model uses its own policy. | Typed null values for sampling and effort are treated as unset. | Values and logprobs selections disallowed by the matching model policy. | Model policy tests use the documented `gpt-6-astra` controls and compare another served model. |
+| Cache-read/write usage | Preserves upstream reads and reported writes, including explicit zero, through streaming and stored retrieval. | Aggregates terminal usage across inference rounds. Missing writes remain omitted. | — | [#421](https://github.com/vllm-project/agentic-api/pull/421) |
+
+The deterministic model policy tests exercise the published `gpt-6-astra`
+parameter rules and upstream error propagation. Live model acceptance, cache
+reuse, and regional tier availability depend on the upstream deployment.
 
 ### `GET /v1/responses/{response_id}`
 
@@ -612,7 +651,9 @@ Conversations API behavior: `store:false` reads existing history without appendi
 
 A failed ordinary same-lane continuation evicts its referenced cached parent. Failed forks
 preserve the source lane's parent. Admission rejections (429) preserve existing
-checkpoints and accepted queued work. Parent lookup happens when execution begins.
+checkpoints and accepted queued work. Model capability rejections also preserve the
+parent checkpoint, so a client can retry with supported settings. Parent lookup happens
+when execution begins.
 
 For a single-agent response on the current connection, send a steering update
 while generation or tool execution is in progress:

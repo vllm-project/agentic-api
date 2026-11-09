@@ -8,7 +8,9 @@ use std::path::Path;
 use std::time::Duration;
 
 use agentic_core::McpServerEntry;
-use agentic_core::config::{CONFIG_FILE_NAME, CodeInterpreterRuntimeConfig, WebSearchProviderKind};
+use agentic_core::config::{
+    CONFIG_FILE_NAME, CodeInterpreterRuntimeConfig, ResponsesModelPolicy, WebSearchProviderKind,
+};
 use agentic_core::error::Error;
 use agentic_server::model_capabilities::{InputModalities, ModelCapabilities, ModelOverride, SupportedReasoningLevels};
 use serde::{Deserialize, Serialize};
@@ -218,6 +220,8 @@ impl ModelFileConfig {
 pub(crate) struct ResponsesFileConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_cache_options_supported: Option<bool>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub models: BTreeMap<String, ResponsesModelPolicy>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_retained_bytes: Option<NonZeroUsize>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -231,6 +235,7 @@ pub(crate) struct ResponsesFileConfig {
 impl ResponsesFileConfig {
     fn is_empty(&self) -> bool {
         self.prompt_cache_options_supported.is_none()
+            && self.models.is_empty()
             && self.max_retained_bytes.is_none()
             && self.max_upstream_json_bytes.is_none()
             && self.max_upstream_sse_line_bytes.is_none()

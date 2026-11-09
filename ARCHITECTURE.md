@@ -190,6 +190,14 @@ Unmodeled top-level provider parameters, such as `chat_template_kwargs` and `top
 are retained in `RequestPayload::extra` and borrowed by `UpstreamRequest` for forwarding
 on each inference round. Known fields keep their typed validation and conversion;
 gateway state controls and WebSocket event metadata are not provider extensions.
+Core admission checks any operator policy under `[responses.models]` against the
+current request's exact model ID before history lookup or inference. HTTP,
+WebSocket, and standalone compaction share this check. Embedded and split
+execution can supply the same policy through `ResponsesConfig`. The WebSocket
+path checks the policy before claiming a connection-local checkpoint so a
+rejected request can retry with the same parent. The deployment cache-options
+default applies when the selected model has no override. The separate
+`[models]` catalog configuration controls Codex advertisement.
 With `store: false` and no state IDs, execution does not rehydrate stored history or
 persist the turn. Clients supply the complete item history in `input`, including
 prior output items and tool call outputs. `previous_response_id` still loads an
