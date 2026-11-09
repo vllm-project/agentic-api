@@ -8,7 +8,7 @@ Since 0.4.0 the gateway is also published to crates.io, so a container is not re
 toolchain (MSRV 1.98.1):
 
 ```console
-cargo install agentic-server --version 0.4.0 --locked
+cargo install agentic-server --version 0.10.0 --locked
 ```
 
 This installs two binaries: `agentic`, the harness CLI (`agentic serve` starts the gateway alone; `agentic run
@@ -16,9 +16,23 @@ claude|codex` starts it and launches a harness), and `agentic-server`, the stand
 same environment variables as the container below. The container remains the recommended path for Kubernetes and
 for hosts without a toolchain.
 
+## Use the published image
+
+The `v0.10.0` release image is available for Linux x86_64:
+
+```console
+docker pull vllm/agentic-api:v0.10.0
+```
+
+For an immutable deployment, pin the verified release digest:
+
+```text
+vllm/agentic-api@sha256:c0c650362b898b0e0ccccefeb2f751eb98772ee477b2dcc828f5c17d36211a6d
+```
+
 ## Build the image
 
-The multi-stage build pins its Rust and Debian bases by digest, uses BuildKit caches, and copies only `agentic-server` into the runtime stage. Dependabot proposes weekly digest updates so base-image changes remain explicit and reviewable.
+The multi-stage build pins its Rust and Debian bases by digest, uses BuildKit caches, and copies `agentic-server` and `agentic-llm-d` into the runtime stage. Dependabot proposes weekly digest updates so base-image changes remain explicit and reviewable.
 
 ```console
 DOCKER_BUILDKIT=1 docker build \
@@ -30,7 +44,7 @@ DOCKER_BUILDKIT=1 docker build \
 ```
 
 For a release build, pass the version being packaged instead of `dev` and tag the image to match, for example
-`OCI_VERSION="0.4.0"` with `--tag agentic-api:0.4.0`. That version tag (or, preferably, the digest recorded when
+`OCI_VERSION="v0.10.0"` with `--tag agentic-api:v0.10.0`. That version tag (or, preferably, the digest recorded when
 the image is pushed) is what an environment overlay such as the one in the
 [Kubernetes guide](kubernetes.md) should pin.
 
