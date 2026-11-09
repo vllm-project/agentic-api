@@ -4,6 +4,7 @@ import { Architecture } from '@/components/site/architecture';
 import Link from 'next/link';
 import { Features } from '@/components/site/features';
 import { Quickstart } from '@/components/site/quickstart';
+import { ReleaseUpdates } from '@/components/site/release-updates';
 import { Ecosystem } from '@/components/site/ecosystem';
 import { CommunityMeetingLinks } from '@/components/site/community-meeting-links';
 import community from '@/lib/data/community.json';
@@ -60,6 +61,7 @@ export default function Home() {
           <span>WebSockets</span>
         </div>
       </div>
+      <ReleaseUpdates />
       <section id="capabilities" className="container section">
         <span className="eyebrow">BUILT FOR THE AGENT LOOP</span>
         <div className="section-heading">

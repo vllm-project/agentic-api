@@ -4,7 +4,7 @@
 
 vLLM serves the model; Agentic API coordinates the tool loop and state. The project provides Responses and Messages API surfaces, conversation storage, streaming, and WebSocket transport for Responses. Built-in web search and MCP tools can execute on the gateway; client-executed function tools remain in the harness.
 
-Version 0.9.0 is available on PyPI and crates.io. With uv installed, run `uvx --from agentic-api==0.9.0 agentic run codex --upstream http://127.0.0.1:5050` (or `run claude`) without a global install. To start only the gateway, use `uvx --from agentic-api==0.9.0 agentic serve --upstream http://127.0.0.1:5050`. Alternatively, install with `cargo install agentic-server --version 0.9.0 --locked` (Rust and Cargo), then run `agentic`. The Python wheel bundles the Rust executables; serve vLLM separately.
+Version 0.10.0 is available on PyPI and crates.io. With uv installed, run `uvx --from agentic-api==0.10.0 agentic run codex --upstream http://127.0.0.1:5050` (or `run claude`) without a global install. To start only the gateway, use `uvx --from agentic-api==0.10.0 agentic serve --upstream http://127.0.0.1:5050`. Alternatively, install with `cargo install agentic-server --version 0.10.0 --locked` (Rust and Cargo), then run `agentic`. The Python wheel bundles the Rust executables; serve vLLM separately.
 
 Use a tool-capable model and the appropriate tool-calling configuration. SGLang and NVIDIA Dynamo also have documented, tested upstream configurations. Compatibility depends on the model, serving configuration, and API surface. The separate agentic-llm-d component provides response hydration and persistence for llm-d.
 
@@ -14,6 +14,7 @@ The Markdown guides below track the development branch (`main`). For a released 
 
 - [Roadmap](https://raw.githubusercontent.com/vllm-project/agentic-api/main/ROADMAP.md): Project goals, near-term priorities, longer-term direction, and non-goals.
 
+- [File search](https://vllm-project.github.io/agentic-api/docs/latest/api/file-search.md): Files and vector-store APIs, sqlite-vec configuration, pluggable storage, and citation behavior.
 - [Quickstart](https://vllm-project.github.io/agentic-api/docs/latest/guides/quickstart.md): Install Agentic API, connect a running vLLM endpoint, and send a first Responses API request.
 - [Project overview](https://raw.githubusercontent.com/vllm-project/agentic-api/main/README.md): Architecture, agentic CLI commands, and configuration examples.
 - [Rust CLI reference](https://vllm-project.github.io/agentic-api/docs/latest/rust-cli.md): Generated commands, options, and defaults for `agentic ...`: run a harness, attach to an existing gateway, serve, and validate. Installed by both Cargo and PyPI.
@@ -51,6 +52,7 @@ The Markdown guides below track the development branch (`main`). For a released 
 - [Meeting notes](https://docs.google.com/document/d/1zJUfxdloxu9_oBYfbfTtgbz5sSZxwAnqvlnt72T67oU/edit?tab=t.0#heading=h.d5de0vs6frfk): Read the shared community meeting notes.
 
 - [Contributing](https://raw.githubusercontent.com/vllm-project/agentic-api/main/docs/community/index.md): Ways to contribute code, documentation, reviews, and feedback.
+- [v0.10.0 release notes](https://github.com/vllm-project/agentic-api/releases/tag/v0.10.0): File search, asynchronous tools, Messages threads, metrics, and upgrade notes.
 - [Releases](https://github.com/vllm-project/agentic-api/releases): Published versions and release notes.
 - [Versioned documentation directory](https://vllm-project.github.io/agentic-api/docs): Choose a documentation snapshot.
 - [vLLM Slack](https://slack.vllm.ai/): Join the community in #sig-agentic-api.
