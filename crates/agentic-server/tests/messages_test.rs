@@ -12,7 +12,7 @@ use http::{HeaderMap, StatusCode};
 use tokio::net::{TcpListener, TcpSocket};
 use tokio::sync::Mutex;
 
-use agentic_core::types::session::{ScopedSessionId, SessionTenant};
+use agentic_core::types::session_id::{ScopedSessionId, SessionTenant};
 use common::{spawn_gateway, test_config, test_state};
 
 const CLAUDE_CODE_CACHE_CONTROL_REQUEST: &[u8] =
@@ -20,6 +20,8 @@ const CLAUDE_CODE_CACHE_CONTROL_REQUEST: &[u8] =
 
 /// Request headers as (name, value) pairs; repeated names become repeated lines.
 type HeaderPairs<'a, V> = &'a [(&'a str, V)];
+/// A forwarding case: name, request headers, request body, and the expected `X-Session-ID`.
+type ForwardCase<'a> = (&'a str, HeaderPairs<'a, &'a str>, &'a [u8], Option<&'a str>);
 
 fn default_tenant_session(client_session_id: &str) -> String {
     ScopedSessionId::new(SessionTenant::Default, client_session_id)
@@ -632,28 +634,62 @@ async fn messages_forward_one_tenant_scoped_session_id() {
     let (llm_url, requests, upstream) =
         spawn_recording_upstream(StatusCode::OK, "application/json", r#"{"id":"msg_1"}"#).await;
     let (gateway_url, gateway) = spawn_gateway(test_state(&test_config(&llm_url))).await;
-    let body = br#"{"model":"test","max_tokens":8,"messages":[{"role":"user","content":"hi"}]}"#;
+    let messages_body = |session_id: Option<&str>| {
+        let mut body =
+            serde_json::json!({"model": "test", "max_tokens": 8, "messages": [{"role": "user", "content": "hi"}]});
+        if let Some(session_id) = session_id {
+            body["vllm_xargs"] = serde_json::json!({"session_id": session_id});
+        }
+        serde_json::to_vec(&body).unwrap()
+    };
+    let (plain, xargs_s1, xargs_s2, xargs_empty) = (
+        messages_body(None),
+        messages_body(Some("s1")),
+        messages_body(Some("s2")),
+        messages_body(Some("")),
+    );
     let scoped = default_tenant_session("s1");
-    let cases: [(&str, HeaderPairs<&str>, Option<&str>); 8] = [
-        ("claude code", &[("x-claude-code-session-id", "s1")], Some(&scoped)),
-        ("generic", &[("X-Session-ID", "s1")], Some(&scoped)),
+    let cases: [ForwardCase<'_>; 12] = [
+        (
+            "claude code",
+            &[("x-claude-code-session-id", "s1")],
+            &plain,
+            Some(&scoped),
+        ),
+        ("generic", &[("X-Session-ID", "s1")], &plain, Some(&scoped)),
         (
             "matching",
             &[("x-claude-code-session-id", "s1"), ("x-session-id", "s1")],
+            &plain,
             Some(&scoped),
         ),
         (
             "empty generic",
             &[("x-claude-code-session-id", "s1"), ("x-session-id", "")],
+            &plain,
             Some(&scoped),
         ),
-        ("missing", &[], None),
-        ("empty", &[("x-claude-code-session-id", ""), ("x-session-id", "")], None),
-        ("count_tokens", &[("x-claude-code-session-id", "s1")], Some(&scoped)),
-        ("count_tokens missing", &[], None),
+        ("missing", &[], &plain, None),
+        (
+            "empty",
+            &[("x-claude-code-session-id", ""), ("x-session-id", "")],
+            &plain,
+            None,
+        ),
+        ("body", &[], &xargs_s1, Some(&scoped)),
+        ("empty body value", &[], &xargs_empty, None),
+        ("header over body", &[("x-session-id", "s1")], &xargs_s2, Some(&scoped)),
+        (
+            "count_tokens",
+            &[("x-claude-code-session-id", "s1")],
+            &plain,
+            Some(&scoped),
+        ),
+        ("count_tokens missing", &[], &plain, None),
+        ("count_tokens body", &[], &xargs_s1, Some(&scoped)),
     ];
 
-    for (case, headers, expected) in cases {
+    for (case, headers, body, expected) in cases {
         let path = if case.starts_with("count_tokens") {
             "/v1/messages/count_tokens"
         } else {
@@ -710,7 +746,7 @@ async fn messages_reject_conflicting_or_invalid_session_ids_before_upstream() {
         ("gateway stream", "/v1/messages", &gateway_stream),
         ("count_tokens", "/v1/messages/count_tokens", &proxy),
     ];
-    let invalid: [(&str, HeaderPairs<&[u8]>); 4] = [
+    let invalid: [(&str, HeaderPairs<&[u8]>); 6] = [
         (
             "cross-header",
             &[("x-claude-code-session-id", b"s1"), ("X-Session-ID", b"s2")],
@@ -718,6 +754,17 @@ async fn messages_reject_conflicting_or_invalid_session_ids_before_upstream() {
         ("repeated", &[("x-session-id", b"s1"), ("x-session-id", b"s2")]),
         ("non-ascii", &[("x-claude-code-session-id", "s\u{e9}".as_bytes())]),
         ("too long", &[("x-session-id", &[b's'; 257])]),
+        (
+            "hop-by-hop X-Session-ID",
+            &[("x-claude-code-session-id", b"s1"), ("connection", b"X-Session-ID")],
+        ),
+        (
+            "hop-by-hop claude code header",
+            &[
+                ("x-claude-code-session-id", b"s1"),
+                ("connection", b"keep-alive, x-claude-code-session-id"),
+            ],
+        ),
     ];
 
     for (target, path, body) in targets {

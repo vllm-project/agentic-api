@@ -705,7 +705,7 @@ async fn configured_oidc_preserves_distinct_anthropic_upstream_credential() {
 
 #[tokio::test]
 async fn messages_session_id_is_scoped_to_the_authenticated_principal() {
-    use agentic_core::types::session::{ScopedSessionId, SessionTenant};
+    use agentic_core::types::session_id::{ScopedSessionId, SessionTenant};
 
     let (issuer, private_key_der, _public_jwk, _jwks_requests, _provider) = spawn_oidc_provider().await;
     let authenticator = discover_test_authenticator(&issuer).await;

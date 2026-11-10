@@ -10,7 +10,7 @@ All notable changes to Agentic API are documented here.
   `x-claude-code-session-id` and `X-Session-ID` must agree or the request fails with HTTP 400 before any upstream
   call. The gateway forwards `X-Session-ID`, which vLLM reads as the request's `session_id`, set to a SHA-256 of the
   verified OIDC principal (or the default tenant) and the client's id, so a client's own `X-Session-ID` no longer
-  reaches the upstream unchanged.
+  reaches the upstream unchanged. With neither header, `vllm_xargs.session_id` in the body is scoped the same way.
 
 ## [0.10.0] - 2026-11-09
 

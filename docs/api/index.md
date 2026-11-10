@@ -745,13 +745,17 @@ Messages requests are not persisted. See
 
 `x-claude-code-session-id` and the provider-neutral `X-Session-ID` name the
 same session. One non-empty value, or equal values, give one session id.
-Different values, non-ASCII values, and values longer than 256 bytes return
-HTTP 400 `invalid_request_error` before any upstream call. The gateway forwards the session as `X-Session-ID`, set to the lowercase
-hex SHA-256 of the owning tenant and the client's id. The tenant is the
-verified OIDC principal (issuer and subject) when OIDC is enabled, otherwise
-the default tenant. A client's own `X-Session-ID` value is never forwarded;
-`x-claude-code-session-id` and the body are. vLLM reads `X-Session-ID` as the
-request's `session_id`. It is a routing hint, not KV-cache identity.
+Different values, non-ASCII values, values longer than 256 bytes, and a
+`Connection` header that lists either header return HTTP 400
+`invalid_request_error` before any upstream call. With neither header, a
+non-empty `vllm_xargs.session_id` string in the body names the session. The
+gateway forwards the session as `X-Session-ID`, set to the lowercase hex
+SHA-256 of the owning tenant and the client's id. The tenant is the verified
+OIDC principal (issuer and subject) when OIDC is enabled, otherwise the default
+tenant. A client's own `X-Session-ID` value is never forwarded;
+`x-claude-code-session-id` and the body are, unchanged. vLLM reads
+`X-Session-ID` as the request's `session_id` and prefers it to
+`vllm_xargs.session_id`. It is a routing hint, not KV-cache identity.
 
 Each native web search or web fetch call the gateway runs reaches the client as
 Anthropic returns it: a `server_tool_use` block, whose id is `srvtoolu_gw_`

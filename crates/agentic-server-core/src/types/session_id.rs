@@ -1,10 +1,11 @@
-//! Tenant-scoped session identity for Messages requests.
+//! Tenant-scoped session IDs for Messages requests.
 //!
 //! A client names its session with an opaque id. The gateway forwards a value
 //! derived from that id and the owning tenant, so equal client ids from two
 //! tenants never name the same upstream session, and a client cannot choose
 //! another tenant's value. The derived id is a soft routing and retention hint;
-//! it is not KV-cache block identity and does not prove residency.
+//! it is not KV-cache block identity and does not prove residency. It is
+//! unrelated to a response session (`executor::session`).
 
 use std::fmt::Write as _;
 
