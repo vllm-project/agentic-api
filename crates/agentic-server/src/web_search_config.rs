@@ -8,7 +8,8 @@ use agentic_core::tool::validate_searxng_base_url;
 
 use crate::config_file::WebSearchFileConfig;
 
-/// Environment override for the `web_search` backend (`you`, `brave`, `tavily`, `searxng`, or `serply`).
+/// Environment override for the `web_search` backend (`you`, `brave`, `tavily`, `searxng`, `serply`, or
+/// `keenable`).
 const WEB_SEARCH_PROVIDER_ENV: &str = "AGENTIC_WEB_SEARCH_PROVIDER";
 /// Provider-neutral environment override for the `web_search` endpoint.
 const WEB_SEARCH_BASE_URL_ENV: &str = "AGENTIC_WEB_SEARCH_BASE_URL";
@@ -231,6 +232,34 @@ mod tests {
     }
 
     #[test]
+    fn web_search_config_selects_keenable_with_or_without_a_key() {
+        let config = resolve_web_search_config(
+            &WebSearchFileConfig::default(),
+            env_from(&[
+                ("AGENTIC_WEB_SEARCH_PROVIDER", "Keenable"),
+                ("KEENABLE_API_KEY", "keenable-secret"),
+                ("YOU_API_BASE_URL", "https://you.example"),
+            ]),
+        )
+        .expect("resolve keenable");
+        assert_eq!(config.provider, WebSearchProviderKind::Keenable);
+        assert_eq!(config.api_key.as_deref(), Some("keenable-secret"));
+        assert_eq!(
+            config.base_url.as_deref(),
+            Some("https://api.keenable.ai"),
+            "YOU_API_BASE_URL must not leak into the Keenable endpoint"
+        );
+
+        let config = resolve_web_search_config(
+            &WebSearchFileConfig::default(),
+            env_from(&[("AGENTIC_WEB_SEARCH_PROVIDER", "keenable")]),
+        )
+        .expect("keenable resolves without a key");
+        assert_eq!(config.provider, WebSearchProviderKind::Keenable);
+        assert_eq!(config.api_key, None);
+    }
+
+    #[test]
     fn web_search_config_selects_searxng_and_requires_its_endpoint() {
         let config = resolve_web_search_config(
             &WebSearchFileConfig::default(),
@@ -340,7 +369,7 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "AGENTIC_WEB_SEARCH_PROVIDER: unknown web_search provider \"bing\"; \
-             expected one of: you, brave, tavily, searxng, serply"
+             expected one of: you, brave, tavily, searxng, serply, keenable"
         );
 
         let error = resolve_web_search_config(
@@ -403,6 +432,7 @@ mod tests {
             ("you", "searxng", "SEARXNG_API_KEY"),
             ("tavily", "serply", "SERPLY_API_KEY"),
             ("serply", "you", "YOU_API_KEY"),
+            ("serply", "keenable", "KEENABLE_API_KEY"),
         ] {
             let generated = generated_web_search_file_config(env_from(&[("AGENTIC_WEB_SEARCH_PROVIDER", initial)]));
             let config = resolve_web_search_config(
