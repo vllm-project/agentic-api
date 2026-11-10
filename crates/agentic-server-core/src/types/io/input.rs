@@ -19,7 +19,8 @@ pub use tool_search::{InputToolSearchCall, ToolSearchOutputMessage};
 pub use validation::InputValidationError;
 
 pub(crate) use window::{
-    async_records, latest_compaction_window, model_items, open_async_call_ids, retain_window, retained_async_call,
+    async_records, expand_carried_windows, latest_compaction_window, model_items, open_async_call_ids, retain_window,
+    retained_async_call,
 };
 
 pub use content::{InputContent, InputFileContent, InputImageContent, InputTextContent, RefusalContent};
@@ -432,7 +433,7 @@ impl ResponsesInput {
         {
             return Cow::Borrowed(self);
         }
-        let projected = self.input_items().collect();
+        let projected = expand_carried_windows(self.input_items());
         let model = model_items(projected)
             .map(|item| match item.into_owned() {
                 InputItem::Compaction(compaction) => InputItem::Message(InputMessage {

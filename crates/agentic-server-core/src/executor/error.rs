@@ -127,10 +127,11 @@ pub enum ExecutorError {
     /// The request's `max_tool_calls` is not an integer of at least one.
     #[error(transparent)]
     InvalidMaxToolCalls(#[from] MaxToolCallsError),
-    /// A rejected request parameter value, with its public code and parameter name.
+    /// A rejected request parameter value, with its public code and parameter name; `None` is reported as a `null`
+    /// parameter.
     #[error("{message}")]
     UnsupportedValue {
-        param: String,
+        param: Option<String>,
         code: Option<&'static str>,
         message: String,
     },
@@ -322,7 +323,8 @@ impl ExecutorError {
     pub fn error_param(&self) -> Option<&str> {
         match self.client_visible_error() {
             Self::ClientItem(error) => Some(error.param()),
-            Self::Tool(ToolError::UnknownParameter { param }) | Self::UnsupportedValue { param, .. } => Some(param),
+            Self::Tool(ToolError::UnknownParameter { param }) => Some(param),
+            Self::UnsupportedValue { param, .. } => param.as_deref(),
             Self::Storage(StorageError::ItemAlreadyInConversation) => Some("items"),
             Self::Storage(StorageError::ItemCursorNotFound { .. }) => Some("after"),
             Self::ConversationLocked { .. } => Some("conversation"),
@@ -377,7 +379,7 @@ impl ExecutorError {
             error.insert("param".to_owned(), serde_json::json!(param));
         } else if matches!(
             self.client_visible_error(),
-            Self::Storage(StorageError::ResponseNotFound { .. })
+            Self::Storage(StorageError::ResponseNotFound { .. }) | Self::UnsupportedValue { param: None, .. }
         ) {
             error.insert("param".to_owned(), serde_json::Value::Null);
         }
@@ -639,7 +641,7 @@ mod tests {
     #[test]
     fn unsupported_value_matches_openai_error_envelope() {
         let error = ExecutorError::UnsupportedValue {
-            param: "multi_agent".into(),
+            param: Some("multi_agent".into()),
             code: Some("unsupported_value"),
             message: "Async parallel tool calls are not yet supported in multi-agent mode.".into(),
         };

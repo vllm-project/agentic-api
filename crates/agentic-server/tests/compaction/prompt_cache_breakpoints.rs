@@ -4,7 +4,12 @@ use serde_json::{Value, json};
 #[tokio::test]
 async fn breakpoints_follow_retained_parts_through_all_compaction_paths() {
     for path in ["standalone", "automatic", "trigger"] {
-        let (model_url, captured, model) = spawn_sequential_model(vec![("checkpoint", 10), ("answer", 5)]).await;
+        let mut responses = vec![("checkpoint", 10), ("answer", 5)];
+        // Automatic compaction summarizes once more after the answer.
+        if path == "automatic" {
+            responses.push(("checkpoint after the answer", 10));
+        }
+        let (model_url, captured, model) = spawn_sequential_model(responses).await;
         let pool = agentic_core::storage::create_pool_with_schema(Some("sqlite::memory:"))
             .await
             .unwrap();
@@ -82,7 +87,7 @@ async fn breakpoints_follow_retained_parts_through_all_compaction_paths() {
             assert_eq!(status, reqwest::StatusCode::OK, "{body}");
         }
         let requests = captured.lock().await;
-        assert_eq!(requests.len(), 2, "{path}");
+        assert_eq!(requests.len(), if path == "automatic" { 3 } else { 2 }, "{path}");
         // Summary inference receives the original boundaries, before content is replaced.
         assert_eq!(requests[0]["input"][0]["content"], developer_parts, "{path}");
         assert_eq!(requests[0]["input"][1]["content"], parts, "{path}");
@@ -91,6 +96,10 @@ async fn breakpoints_follow_retained_parts_through_all_compaction_paths() {
         assert_eq!(requests[1]["input"][0]["content"], parts, "{path}");
         assert_eq!(requests[1]["input"][1]["role"], "assistant");
         assert_eq!(requests[1]["input"][1]["content"][0]["text"], "checkpoint");
+        if path == "automatic" {
+            // The summary after the answer receives the retained boundaries too.
+            assert_eq!(requests[2]["input"][0]["content"], parts, "{path}");
+        }
         for request in requests.iter() {
             assert_eq!(request["prompt_cache_options"], options);
             // Boundaries are never copied onto the generated summary or summary instruction.

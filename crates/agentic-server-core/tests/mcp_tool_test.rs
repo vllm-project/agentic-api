@@ -1,6 +1,6 @@
 use agentic_core::config::ToolRuntimeConfig;
-use agentic_core::executor::ExecuteRequest;
 use agentic_core::executor::accumulator::ResponseAccumulator;
+use agentic_core::executor::{ExecuteRequest, compact_response};
 use agentic_core::tool::ToolDeclaration;
 use agentic_core::tool::mcp::McpServerEntry;
 use agentic_core::tool::{GatewayExecutors, ToolOwnership, ToolRegistry, ToolType};
@@ -412,7 +412,7 @@ async fn narrowing_mcp_permissions_preserves_discovery_aliases_and_history() {
 }
 
 #[tokio::test]
-async fn expanded_mcp_permissions_rediscover_a_partial_listing() {
+async fn expanded_mcp_permissions_keep_the_snapshot_until_compaction() {
     const NEW_ALIAS: &str = "mcp__stub__read_file__597ac8fee0";
     for (store, stream, unrestricted) in [false, true].into_iter().flat_map(|store| {
         [false, true]
@@ -420,8 +420,16 @@ async fn expanded_mcp_permissions_rediscover_a_partial_listing() {
             .flat_map(move |stream| [false, true].map(|all| (store, stream, all)))
     }) {
         let (url, listings, server) = spawn_colliding_mcp(true).await;
-        let mut responses = mcp_inference_responses(stream, NEW_ALIAS, &json!({"path":"sample"}));
-        responses.insert(0, support::text_response("Ready."));
+        let mut responses = vec![
+            support::text_response("Ready."),
+            if stream {
+                support::text_sse_response("The new tool is unavailable.")
+            } else {
+                support::text_response("The new tool is unavailable.")
+            },
+            support::text_response("Read sample next."),
+        ];
+        responses.extend(mcp_inference_responses(stream, NEW_ALIAS, &json!({"path":"sample"})));
         let fixture = support::TestFixture::new_with_responses(responses).await;
         let mut body = json!({"model":"test-model", "store":store, "input":"Read sample.", "tools":[{
             "type":"mcp", "server_label":"stub", "server_url":url,
@@ -450,20 +458,48 @@ async fn expanded_mcp_permissions_rediscover_a_partial_listing() {
             history.push(json!({"role":"user", "content":"Use read_file now."}));
             body["input"] = json!(history);
         }
-        let second = complete_mcp_response(serde_json::from_value(body).unwrap(), &fixture).await;
+        let second = complete_mcp_response(serde_json::from_value(body.clone()).unwrap(), &fixture).await;
         let bodies = fixture.request_bodies().await;
         assert_eq!(
             bodies[1]["tools"].as_array().unwrap().len(),
-            2,
-            "removed restrictions must expose the full catalog"
+            1,
+            "widening authorization does not replace an in-context discovery snapshot"
         );
         assert!(
             second["output"]
                 .as_array()
                 .unwrap()
                 .iter()
+                .all(|item| item["type"] != "mcp_list_tools")
+        );
+        assert_eq!(listings.load(Ordering::SeqCst), 1);
+        let compact = if store {
+            json!({"model": "test-model", "previous_response_id": second["id"]})
+        } else {
+            let mut history = body["input"].as_array().unwrap().clone();
+            history.extend(second["output"].as_array().unwrap().iter().cloned());
+            json!({"model": "test-model", "input": history})
+        };
+        let compacted = compact_response(serde_json::from_value(compact).unwrap(), &fixture.exec_ctx, None)
+            .await
+            .unwrap();
+        body.as_object_mut().unwrap().remove("previous_response_id");
+        let mut history = serde_json::to_value(compacted.output)
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
+        history.push(json!({"role":"user", "content":"Use read_file now."}));
+        body["input"] = json!(history);
+        let refreshed = complete_mcp_response(serde_json::from_value(body).unwrap(), &fixture).await;
+        assert_eq!(fixture.request_bodies().await[3]["tools"].as_array().unwrap().len(), 2);
+        assert!(
+            refreshed["output"]
+                .as_array()
+                .unwrap()
+                .iter()
                 .any(|item| item["type"] == "mcp_call" && item["name"] == "read_file"),
-            "store={store}, stream={stream}, unrestricted={unrestricted}: {second}"
+            "store={store}, stream={stream}, unrestricted={unrestricted}: {refreshed}"
         );
         assert_eq!(listings.load(Ordering::SeqCst), 2);
         server.abort();

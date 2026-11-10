@@ -830,10 +830,16 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   for the two request copies' responsibilities.
 - **`rehydrate.rs`** — `rehydrate_conversation()` loads prior history from either the
   conversation store or the response store depending on which ID the request carries,
-  and builds the enriched `RequestContext`. It keeps the continued response's or conversation turn's
-  `ResponseMetadata` on the context (`rehydrated_metadata`), so `prepare.rs` restores tool-search state after
-  compaction without another storage read, and `persist.rs` builds the new turn's metadata (`prepare_metadata`)
-  from the same context. Rehydration retains internal
+  and builds the enriched `RequestContext`. Every source (a stored response, a session parent, or a
+  conversation turn) leaves its `ResponseCheckpoint` on the context (`checkpoint`): the continued turn's
+  metadata and its stored history rows. `prepare.rs` restores tool-search
+  state after compaction from it without another storage read, and persistence extends it: a response's history
+  is its parent's rows plus the new ones, so neither store reads the parent again. A conversation turn's response
+  keeps the history the turn continued, as OpenAI does, while its items are appended after whatever the
+  conversation holds when it is stored. A session keeps the same
+  checkpoint type in memory, with the history items, as the next turn's parent. A conversation is read in one
+  statement; a missing one is created for a stored turn and rejected for an unstored one. Client-supplied item IDs are checked and resolved against storage
+  in bounded query batches. Rehydration retains internal
   `InputItem::McpListTools` records so `ToolRegistry` can suppress repeated MCP
   discovery lifecycle output. After stored history and the new request input are
   combined, `pending_calls.rs` validates the complete continuation's function/custom
@@ -849,14 +855,17 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   and the first unresolved synchronous client-executed call produces the existing
   missing-output error. An async call (`async: true` on the call item) may stay
   unresolved; it ends neither the resolved prefix used by
-  compaction nor the continuation. A compaction window (`model_items`,
-  `canonical_session_history`) shows the model an async call that was still open at its
-  checkpoint. Retained histories (`retain_window`, a session whose history compaction
-  replaces, and a multi-agent compaction, before its compaction item) also keep every async
+  compaction nor the continuation. A compaction window (`model_items`) shows the model an async
+  call that was still open at its checkpoint. `types/io/input/window.rs` owns the async-record
+  retention rule used by request replacement, multi-agent compaction, and session histories.
+  `executor/compaction/carry_over.rs` places the request's own retained records around its checkpoint.
+  The retained-window scanner keeps every async
   call and the last output that answers it, outside the model view, so a further output still
-  finds its call while repeated outputs do not accumulate. A compacted call's public form
+  finds its call while repeated outputs do not accumulate. Durable single-agent continuation separately trims
+  stored row references at automatic compaction, so this scanner does not guarantee retention across later stored
+  turns; the tool-loop cassettes cover immediate and delayed results at that boundary. A compacted call's public form
   comes from stored history, not from the current tool declarations.
-  Compaction replaces the request's own items, so it stores some of them again, as the
+  Standalone and explicit-trigger compaction replace the request's own items, so they store some of them again, as the
   request supplied them. Before the compaction item (the answered call and its output leave the
   window together) go outputs that answer calls made before the request, and the request's own
   answered async calls with the last output for each; after it go the async calls the request
@@ -949,7 +958,20 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   `ResponseHandler` in `modes/`, which only write.
 - **`compaction.rs`** — `compact_response()` (the explicit `/v1/responses/compact`
   path) and `maybe_compact_context()` (automatic, threshold-triggered, called from the
-  round loop before each inference call).
+  round loop before each inference call and after a completed single-agent answer). Automatic compaction leaves
+  `new_input_items` intact and emits a public compaction output through the existing relay. Its `CompactionItem`
+  carries the summary and retained user messages; `ResponsesInput` expands that carried window only for the model.
+  On a later single-agent continuation, `ResponseCheckpoint::continue_from_compaction` trims the referenced history
+  rows to the latest compaction, so input-item listings begin there. Multi-agent continuation keeps public history
+  and restores its separate tree; its coordinator currently compacts only before inference, without a final pass.
+  All paths share `summarize_items`, which summarizes context and returns a typed `CompactedWindow`.
+  `compaction/carry_over.rs` selects and places the request's own async records kept through compaction;
+  tree replacement places async records before the checkpoint. MCP discovery is absorbed with the old window:
+  it is absent from standalone compact output and must run again on continuation. The shared
+  `ResponsesInput::mcp_list_tools` view in `types/io/input/window.rs` exposes only listings after the latest
+  checkpoint, for tool-search preparation, discovery reuse, and registry lifecycle suppression. Loaded deferred
+  tools remain in typed checkpoint metadata even when their search pair and discovery listing were summarized.
+  Model visibility remains in `types/io/input/window.rs`.
 - **`modes/conversation.rs`, `modes/response.rs`** — `ConversationHandler` and
   `ResponseHandler`. Thin, 1:1 wrappers around `storage::ConversationStore` /
   `storage::ResponseStore` that translate `RequestContext` into store calls and
@@ -1160,11 +1182,13 @@ stored tree continuation, so submitting a sibling's client tool output does not
 execute completed Python calls again. Feature, operator and readiness gates apply
 before inference, including when the tool declaration is inherited from storage.
 
-**Compaction.** Automatic compaction is per agent. `prepare_agent` supplies a default
-compaction threshold of 100,000 estimated tokens when none is configured. A
+**Compaction.** Automatic compaction is per agent. `prepare_agent` uses
+`RequestPayload::set_default_compact_threshold` to supply 100,000 estimated tokens when the first compaction policy
+has no threshold or is absent; `RequestPayload` owns the shared policy lookup. A
 `CompactionPlan` owns a resolved-prefix snapshot, agent identity and context generation.
 Its completion replaces that prefix only when the generation still matches
-(`CompactionCommit::Applied`); a stale result leaves current history intact. The
+(`CompactionCommit::Applied`); a stale result leaves current history intact. The commit returns the exact typed
+checkpoint it inserted, so automatic and explicit callers do not search the resulting history for it. The
 coordinator accounts for completed compaction work once even when the result is stale.
 Pending calls, unresolved suffixes and new mail are not discarded by prefix replacement.
 
@@ -1923,6 +1947,8 @@ for the five-minute lifetime, serialized-size budget, and crash recovery rules.
 - **`conversation.rs`, `response.rs`** — `ConversationStore` and `ResponseStore`: one
   typed function per operation, taking and returning `InOutItem` and storage types rather
   than rows (`create`, `get`, `get_or_create`, `rehydrate`, `persist`, and the item CRUD).
+  `ResponseStore::get` decodes `ResponseData` at the store boundary; handlers and executor callers receive the
+  typed value. Split commit reuses a checkpoint or loads only this parent row when its wire context omitted it.
   Conversation `rehydrate` is one query; response `rehydrate` reads the response row and then its
   history items. Conversation `persist` locks the conversation and appends the turn after whatever it holds
   then, as OpenAI does. A turn that answers the history's pending call fails with `conversation_locked` when another
@@ -2185,11 +2211,11 @@ the operator enables it, and Eryx runtime readiness succeeds.
   `server_label`. Registry construction accepts the response's discovery history
   before materialization, so restored children can reuse the root's successful
   listing even when their forked message context omits it. Current declarations
-  and allowlists still validate the tools exposed for execution. Reusable
-  retained listings must cover an explicit `allowed_tools` set. Removing that
-  restriction cannot prove a public listing is complete, so request-declared
-  servers rediscover their catalog; configured servers can use their authoritative
-  discovery cache. Expanding a restriction beyond the listing also rediscovers.
+  and allowlists still validate the tools exposed for execution. Successful listings,
+  including empty listings, are reused for ordinary continuations. Expanding or
+  removing `allowed_tools` keeps that discovery snapshot, as on OpenAI; narrowing
+  permissions filters the available handlers. Compaction invalidates listings before
+  the latest checkpoint, so the next continuation discovers the server's tools again.
   Preparation appends newly discovered listings to the parent request's enriched input,
   so subsequent restored agents reuse them without a separate discovery history. Each
   agent's model context still comes from its own stored history. This also applies when

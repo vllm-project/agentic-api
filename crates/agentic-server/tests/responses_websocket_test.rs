@@ -30,9 +30,7 @@ use tokio_util::sync::CancellationToken;
 use agentic_core::config::ResponsesConfig;
 use agentic_core::executor::{ConversationHandler, ExecutionContext, RequestContext, ResponseHandler};
 use agentic_core::proxy::ProxyState;
-use agentic_core::storage::{
-    ConversationStore, DbPool, ResponseData, ResponseMetadata, ResponseStore, create_pool_with_schema,
-};
+use agentic_core::storage::{ConversationStore, DbPool, ResponseMetadata, ResponseStore, create_pool_with_schema};
 use agentic_core::tool::{WebSearchHandler, model_visible_namespace_member_name};
 use agentic_core::types::RequestPayload;
 use agentic_core::types::io::InOutItem;
@@ -2274,7 +2272,6 @@ async fn test_websocket_generate_false_prewarm_redacts_mcp_runtime_credentials()
         .get(&lookup_ctx)
         .await
         .expect("stored prewarm response");
-    let stored = ResponseData::try_from(stored).expect("decode prewarm response");
     let tools = stored.metadata.effective_tools.expect("persisted tools");
     let ResponsesTool::Mcp(tool) = &tools[0] else {
         panic!("expected MCP tool");

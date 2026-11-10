@@ -798,7 +798,7 @@ mod tests {
         for round in 0..20 {
             history.push(function_call_output("call_poll"));
             history.push(compaction(&format!("cmp_{round}")));
-            history = crate::types::io::input::retain_window(history, |_| false);
+            history = crate::types::io::input::retain_window(history);
         }
         let kinds: Vec<&str> = history
             .iter()
