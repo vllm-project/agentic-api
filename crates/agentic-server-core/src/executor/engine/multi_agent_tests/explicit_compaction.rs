@@ -1,6 +1,6 @@
 //! Automatic and explicit compaction preserve agent state and client-call ownership.
 use super::*;
-use crate::executor::{pending_calls::resolved_prefix_len, rehydrate::rehydrate_conversation};
+use crate::executor::{pending_calls::CallLedger, rehydrate::rehydrate_conversation};
 use crate::types::agent_tree::StoredTreeSnapshot;
 use crate::utils::common::deserialize_from_value;
 
@@ -39,7 +39,7 @@ pub(super) async fn compact_checkpoint(previous: &str, stream: bool, exec: Arc<E
     assert_eq!(before.agents.len(), after.agents.len());
     for (mut original, compacted) in before.agents.into_iter().zip(after.agents) {
         if original.identity.is_root() {
-            let suffix = &original.history[resolved_prefix_len(&original.history).unwrap()..];
+            let suffix = &original.history[CallLedger::scan(&original.history).unwrap().resolved_prefix_len()..];
             assert_eq!(
                 serde_json::to_value(suffix).unwrap(),
                 serde_json::to_value(&compacted.history[compacted.history.len() - suffix.len()..]).unwrap()
@@ -135,7 +135,7 @@ async fn automatic_compaction_is_attributed_and_usage_is_counted_once() {
             let ctx = rehydrate_conversation(continuation, &exec).await.unwrap();
             assert!(ctx.multi_agent_tree.is_none());
             assert!(ctx.enriched_request.input.contains_compaction());
-            assert!(exec.resp_handler.retrieve(&result.id).await.is_err());
+            assert!(exec.resp_handler.get_snapshot(&result.id).await.is_err());
         }
     }
     server.abort();

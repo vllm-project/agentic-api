@@ -19,7 +19,10 @@ use agentic_core::executor::{
     ResponseSessionGroup, rehydrate_conversation, rehydrate_in_session,
 };
 use agentic_core::storage::{ConversationStore, DbPool, ResponseStore, create_pool_with_schema};
+use agentic_core::tool::web_search;
 use agentic_core::tool::{GatewayExecutor, ToolError, ToolHandler, ToolOutput, ToolType, WebSearchHandler};
+use agentic_core::types::io::OutputItem;
+use agentic_core::types::io::output::{FunctionToolCall, GatewayCallStatus};
 use agentic_core::types::{FunctionTool, InputItem, RequestPayload, ResponsesInput, WebSearchToolParam};
 use either::Either;
 use futures::StreamExt;
@@ -164,6 +167,20 @@ impl ToolHandler for ControlledSearch {
 
 impl GatewayExecutor for ControlledSearch {
     type ExecutionParams = WebSearchToolParam;
+
+    fn started_output(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> Option<OutputItem> {
+        web_search::started_output_item(call)
+    }
+
+    fn public_output(
+        &self,
+        call: &FunctionToolCall,
+        output: &ToolOutput,
+        status: GatewayCallStatus,
+        _params: &WebSearchToolParam,
+    ) -> Option<OutputItem> {
+        web_search::output_item(call, output, status.into())
+    }
     fn execute(
         &self,
         _call_id: &str,
@@ -288,7 +305,7 @@ async fn terminal_event_still_follows_persistence_and_checkpoint_publication() {
             .rehydrate(&stored)
             .await
             .unwrap()
-            .is_empty()
+            .is_none_or(|(_, history)| history.is_empty())
     );
     let checkpoint = rehydrate_in_session(followup, &fixture.context, &session)
         .await

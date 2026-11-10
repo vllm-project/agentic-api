@@ -13,8 +13,7 @@ use tokio::sync::Notify;
 mod checkpoint;
 mod steering;
 
-pub(super) use checkpoint::canonical_session_history;
-pub(crate) use checkpoint::{ResponseCheckpoint, RetainedCheckpoint};
+pub(crate) use checkpoint::RetainedCheckpoint;
 pub use checkpoint::{ResponseCheckpointPin, ResponseContinuation};
 pub use steering::{SteeringQueue, SteeringSuccessorPublication, SteeringSuccessorReservation};
 
@@ -25,7 +24,7 @@ use crate::storage::ResponseMetadata;
 #[cfg(test)]
 use crate::types::io::InOutItem;
 #[cfg(test)]
-use crate::types::io::{InputItem, OutputItem};
+use crate::types::io::InputItem;
 #[cfg(test)]
 use crate::types::websocket::SteeringRequiredInput;
 #[cfg(test)]
@@ -213,7 +212,7 @@ impl ResponseSession {
         Ok(state
             .latest
             .as_ref()
-            .filter(|checkpoint| checkpoint.response_id == response_id)
+            .filter(|checkpoint| checkpoint.response_id.as_deref() == Some(response_id))
             .map(|checkpoint| ResponseCheckpointPin {
                 owner: Arc::downgrade(&self.state),
                 checkpoint: Arc::clone(checkpoint),
@@ -259,7 +258,7 @@ impl ResponseSession {
         if state
             .latest
             .as_ref()
-            .is_some_and(|latest| latest.response_id == response_id)
+            .is_some_and(|latest| latest.response_id.as_deref() == Some(response_id))
         {
             state.latest = None;
         }
@@ -282,7 +281,7 @@ impl ResponseSession {
         let parent = state
             .latest
             .as_ref()
-            .filter(|entry| Some(entry.response_id.as_str()) == previous_id)
+            .filter(|entry| entry.response_id.as_deref() == previous_id)
             .cloned();
         state.active = true;
         let mut continuation = ResponseContinuation {
@@ -290,8 +289,7 @@ impl ResponseSession {
             idle: Arc::clone(&self.idle),
             parent,
             budget: self.budget.clone(),
-            history_replaced: false,
-            recorded_output_count: 0,
+            compacted_output_count: 0,
             finished: false,
         };
         drop(state);
@@ -310,7 +308,7 @@ impl ResponseSession {
                 if let Some(parent) = source
                     .latest
                     .as_ref()
-                    .filter(|parent| parent.response_id == previous_id)
+                    .filter(|parent| parent.response_id.as_deref() == Some(previous_id))
                 {
                     continuation.parent = Some(Arc::clone(parent));
                     break;

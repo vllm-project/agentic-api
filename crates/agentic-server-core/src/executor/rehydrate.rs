@@ -3,87 +3,20 @@
 //! Builds a [`RequestContext`] by loading prior turns from storage and
 //! injecting them into the enriched request before it is forwarded to the LLM.
 
-use super::session::{ResponseCheckpoint, ResponseContinuation, ResponseSession, canonical_session_history};
+use std::convert::identity;
+
+use super::session::{ResponseContinuation, ResponseSession};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::multi_agent::{CheckpointLimits, ValidatedTreeCheckpoint};
-use crate::executor::pending_calls::first_unanswered_sync_call;
+use crate::executor::pending_calls::CallLedger;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::telemetry::metrics::Stage;
-use crate::storage::{ResponseMetadata, StorageError};
-use crate::tool::ToolError;
+use crate::storage::{ConversationSnapshot, ResponseCheckpoint, ResponseMetadata, StorageError};
 use crate::types::io::InOutItem;
-use crate::types::io::input::is_search_item;
-use crate::types::io::{
-    InputItem, OutputItem, ReasoningOutput, ReasoningTextContent, ResponsesInput, resolve_tool_choice, resolve_tools,
-};
+use crate::types::io::input::{is_search_item, retain_window};
+use crate::types::io::{InputItem, ResponsesInput, resolve_tool_choice, resolve_tools};
 use crate::types::request_response::RequestPayload;
 use crate::utils::uuid7_str;
-
-fn has_plaintext_reasoning(reasoning: &ReasoningOutput) -> bool {
-    reasoning.content.iter().any(|content| !content.text.is_empty())
-}
-
-fn has_opaque_reasoning_state(reasoning: &ReasoningOutput) -> bool {
-    reasoning.encrypted_content.is_some()
-}
-
-/// Reject opaque reasoning that vLLM cannot replay before any normal inference call.
-pub(super) fn validate_reasoning_for_vllm(input: &ResponsesInput) -> ExecutorResult<()> {
-    let ResponsesInput::Items(items) = input else {
-        return Ok(());
-    };
-
-    if items.iter().any(|item| {
-        matches!(item, InOutItem::Input(InputItem::Reasoning(reasoning)) | InOutItem::Output(OutputItem::Reasoning(reasoning)) if has_opaque_reasoning_state(reasoning) && !has_plaintext_reasoning(reasoning))
-    }) {
-        return Err(ExecutorError::InvalidRequest(
-            "reasoning item contains encrypted state without plaintext reasoning content and cannot be replayed to vLLM"
-                .to_owned(),
-        ));
-    }
-
-    Ok(())
-}
-
-/// Prepare reasoning in the vLLM-bound request copy.
-///
-/// vLLM can replay plaintext reasoning content but cannot interpret opaque provider state. Its generic Responses
-/// conversion reads only the first reasoning content part and falls back to a summary when content is absent, while
-/// its Harmony conversion joins all content parts. Normalize usable plaintext into one ordered, newline-delimited part
-/// and remove summaries so both paths receive the same continuation state. Summary-only items have no usable vLLM
-/// state and are omitted. [`RequestContext`] keeps the original request and new input items separately, so none of
-/// these changes mutate persisted state.
-pub(super) fn prepare_reasoning_for_vllm(input: &mut ResponsesInput) -> ExecutorResult<()> {
-    // Validate the complete input before mutation so an error never leaves a partially prepared request behind.
-    validate_reasoning_for_vllm(input)?;
-
-    let ResponsesInput::Items(items) = input else {
-        return Ok(());
-    };
-
-    items.retain_mut(|item| {
-        let (InOutItem::Input(InputItem::Reasoning(reasoning)) | InOutItem::Output(OutputItem::Reasoning(reasoning))) =
-            item
-        else {
-            return true;
-        };
-        if !has_plaintext_reasoning(reasoning) {
-            return false;
-        }
-
-        let plaintext = reasoning
-            .content
-            .iter()
-            .map(|content| content.text.as_str())
-            .collect::<Vec<_>>()
-            .join("\n");
-        reasoning.content = vec![ReasoningTextContent::new(plaintext)];
-        reasoning.summary.clear();
-        reasoning.encrypted_content = None;
-        true
-    });
-    Ok(())
-}
 
 /// Step 1 — Build [`RequestContext`] by rehydrating conversation history.
 ///
@@ -128,106 +61,91 @@ pub(crate) async fn rehydrate_with_continuation(
     continuation: Option<ResponseContinuation>,
 ) -> ExecutorResult<RequestContext> {
     let timer = exec_ctx.metrics.stage(Stage::Rehydrate);
-    // Boxed so this wrapper does not hold the request payload twice.
-    let rehydrated = Box::pin(rehydrate_request(request, exec_ctx, continuation)).await;
-    timer.finish_result(&rehydrated);
-    rehydrated
-}
+    // Keep the large request future off the caller's stack.
+    let rehydrated = Box::pin(async move {
+        request.validate_prompt_cache_options(exec_ctx.responses_config.prompt_cache_options_supported)?;
+        // Every typed entry point reaches this check: executor-routed HTTP, WebSocket, split execution, embedders.
+        request.ensure_supported_parameters()?;
+        validate_multi_agent_request(&request)?;
+        // Stored turns never supply `max_tool_calls`, so the request value is final here.
+        request.max_tool_calls_limit()?;
+        // Fail before storage work for explicitly declared tools and new content;
+        // check again once stored effective settings and history are resolved.
+        exec_ctx
+            .gateway_executors
+            .validate_declarations(request.tool_declarations().as_deref())?;
+        request.input.validate()?;
+        let response_id = uuid7_str("resp_");
+        // Persistence keeps the public items. Tool lowering belongs to the enriched
+        // inference copy, including when a later turn loads these items from storage.
+        let mut new_input_items = request.input.clone().into_canonical_items();
+        exec_ctx.resp_handler.resolve_input_items(&mut new_input_items).await?;
 
-async fn rehydrate_request(
-    request: RequestPayload,
-    exec_ctx: &ExecutionContext,
-    continuation: Option<ResponseContinuation>,
-) -> ExecutorResult<RequestContext> {
-    request.validate_prompt_cache_options(exec_ctx.responses_config.prompt_cache_options_supported)?;
-    // Every typed entry point reaches this check: executor-routed HTTP, WebSocket, split execution, embedders.
-    request.ensure_supported_parameters()?;
-    validate_multi_agent_request(&request)?;
-    // Stored turns never supply `max_tool_calls`, so the request value is final here.
-    request.max_tool_calls_limit()?;
-    // Fail before storage work for explicitly declared tools and new content;
-    // check again once stored effective settings and history are resolved.
-    exec_ctx
-        .gateway_executors
-        .validate_declarations(request.tool_declarations().as_deref())?;
-    request.input.validate()?;
-    let response_id = uuid7_str("resp_");
-    // Persistence keeps the public items. Tool lowering belongs to the enriched
-    // inference copy, including when a later turn loads these items from storage.
-    let mut new_input_items = request.input.clone().into_canonical_items();
-    exec_ctx.resp_handler.resolve_input_items(&mut new_input_items).await?;
+        // One clone for the unmodified original; `request` is moved as enriched_request.
+        let original_request = request.clone();
+        let mut ctx = RequestContext {
+            multi_agent_tree: None,
+            enriched_request: request,
+            original_request,
+            new_input_items,
+            response_id,
+            conversation_id: None,
+            checkpoint: None,
+            continuation,
+        };
 
-    // One clone for the unmodified original; `request` is moved as enriched_request.
-    let original_request = request.clone();
-    let mut ctx = RequestContext {
-        multi_agent_tree: None,
-        enriched_request: request,
-        original_request,
-        new_input_items,
-        response_id,
-        conversation_id: None,
-        conversation_version: None,
-        continuation,
-    };
+        match (
+            ctx.original_request.conversation.is_some(),
+            ctx.original_request.previous_response_id.is_some(),
+        ) {
+            (true, true) => {
+                return Err(ExecutorError::InvalidRequest(
+                    "provide only one of conversation or previous_response_id".into(),
+                ));
+            }
+            (true, false) => from_conversation(&mut ctx, exec_ctx).await?,
+            (false, true) => from_response(&mut ctx, exec_ctx).await?,
+            (false, false) => from_responses(&mut ctx)?,
+        }
 
-    match (
-        ctx.original_request.conversation.is_some(),
-        ctx.original_request.previous_response_id.is_some(),
-    ) {
-        (true, true) => {
+        // Stateless multi-agent runs use the existing automatic per-agent compactor.
+        // The explicit trigger extension cannot return a resumable stateless tree.
+        if !ctx.original_request.store
+            && ctx.original_request.input.has_compaction_trigger()
+            && ctx
+                .enriched_request
+                .multi_agent
+                .as_ref()
+                .is_some_and(|config| config.enabled)
+        {
             return Err(ExecutorError::InvalidRequest(
-                "provide only one of conversation or previous_response_id".into(),
+                "compaction_trigger is not supported with multi_agent and store: false; use automatic compaction"
+                    .into(),
             ));
         }
-        (true, false) => from_conversation(&mut ctx, exec_ctx).await?,
-        (false, true) => from_response(&mut ctx, exec_ctx).await?,
-        (false, false) => from_responses(&mut ctx)?,
-    }
-
-    // Stateless multi-agent runs use the existing automatic per-agent compactor.
-    // The explicit trigger extension cannot return a resumable stateless tree.
-    if !ctx.original_request.store
-        && ctx.original_request.input.has_compaction_trigger()
-        && ctx
-            .enriched_request
-            .multi_agent
-            .as_ref()
-            .is_some_and(|config| config.enabled)
-    {
-        return Err(ExecutorError::InvalidRequest(
-            "compaction_trigger is not supported with multi_agent and store: false; use automatic compaction".into(),
-        ));
-    }
-    exec_ctx
-        .gateway_executors
-        .apply_configured_mcp_defaults(ctx.enriched_request.tools.as_deref_mut());
-    exec_ctx
-        .gateway_executors
-        .validate_declarations(ctx.enriched_request.tool_declarations().as_deref())?;
-    ctx.enriched_request.input.validate()?;
-    validate_multi_agent_request(&ctx.enriched_request)?;
-    Ok(ctx)
+        exec_ctx
+            .gateway_executors
+            .apply_configured_mcp_defaults(ctx.enriched_request.tools.as_deref_mut());
+        exec_ctx
+            .gateway_executors
+            .validate_declarations(ctx.enriched_request.tool_declarations().as_deref())?;
+        ctx.enriched_request.input.validate()?;
+        validate_multi_agent_request(&ctx.enriched_request)?;
+        Ok(ctx)
+    })
+    .await;
+    timer.finish_result(&rehydrated);
+    rehydrated
 }
 
 /// Use the submitted Responses history without accessing response or conversation storage.
 fn from_responses(ctx: &mut RequestContext) -> ExecutorResult<()> {
     let items = InOutItem::into_input_items(ctx.new_input_items.clone());
     if items.iter().any(is_search_item) {
-        reject_unanswered_sync_call(&items)?;
+        CallLedger::scan(&items)?.require_answered()?;
     }
     ctx.enriched_request.input = ResponsesInput::from(items);
     Ok(())
-}
-
-/// Refuses a history whose synchronous call has no output yet; the pending-call ledger also rejects a duplicate
-/// call id, an output with no call, and an output for a call of another kind.
-fn reject_unanswered_sync_call(items: &[InputItem]) -> ExecutorResult<()> {
-    match first_unanswered_sync_call(items)? {
-        Some(pending) => Err(ExecutorError::Tool(ToolError::MissingOutput {
-            call_id: pending.call_id,
-        })),
-        None => Ok(()),
-    }
 }
 
 fn validate_multi_agent_request(request: &RequestPayload) -> ExecutorResult<()> {
@@ -248,7 +166,7 @@ fn validate_multi_agent_request(request: &RequestPayload) -> ExecutorResult<()> 
     // `parallel_tool_calls` to false, so only an explicit `true` conflicts.
     if request.parallel_tool_calls == Some(true) && request.declares_async_tools() {
         return Err(ExecutorError::UnsupportedValue {
-            param: "multi_agent".into(),
+            param: Some("multi_agent".into()),
             code: Some("unsupported_value"),
             message: "Async parallel tool calls are not yet supported in multi-agent mode.".into(),
         });
@@ -267,37 +185,27 @@ fn validate_multi_agent_request(request: &RequestPayload) -> ExecutorResult<()> 
 
 /// Hydrates `ctx` from the previous response chain.
 ///
-/// Loads the stored response, rehydrates its history items, resolves effective
-/// tools and tool choice from the stored metadata, and prepends the history to
-/// the enriched request input. The new response is independent of any conversation
-/// associated with its parent.
+/// Loads the stored response and its history, inherits its effective settings, and continues its history with this
+/// request's items. The new response is independent of any conversation associated with its parent.
 async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) -> ExecutorResult<()> {
     if ctx.continuation.is_some() {
         return from_session_response(ctx, exec_ctx).await;
     }
-    let stored = exec_ctx.resp_handler.get(ctx).await.map_err(|error| match error {
-        ExecutorError::Storage(ref source) if source.is_not_found() => StorageError::PreviousResponseNotFound {
-            id: ctx.original_request.previous_response_id.clone().unwrap_or_default(),
-        }
-        .into(),
-        other => other,
-    })?;
-    if restore_agent_tree(ctx, &stored.metadata, exec_ctx.responses_config.max_retained_bytes)? {
-        return Ok(());
+    let (mut checkpoint, history) = exec_ctx
+        .resp_handler
+        .rehydrate(ctx)
+        .await?
+        .ok_or_else(missing_previous_response_id)?;
+    checkpoint.continue_from_compaction(&history, &ctx.enriched_request);
+    if !restore_agent_tree(ctx, &checkpoint.metadata, exec_ctx.responses_config.max_retained_bytes)? {
+        set_model_input(ctx, InOutItem::into_input_items(history), identity)?;
+        apply_effective_settings(ctx, &checkpoint.metadata);
     }
-    let history = exec_ctx.resp_handler.rehydrate(ctx).await?;
-
-    let mut items = InOutItem::into_input_items(history);
-    items.reserve(ctx.new_input_items.len());
-    items.extend(InOutItem::into_input_items(ctx.new_input_items.clone()));
-    reject_unanswered_sync_call(&items)?;
-
-    ctx.enriched_request.previous_response_id = None;
-    ctx.enriched_request.input = ResponsesInput::from(items);
-    apply_effective_settings(ctx, &stored.metadata);
+    ctx.checkpoint = Some(checkpoint);
     Ok(())
 }
 
+/// Hydrates `ctx` from the session's retained parent, loading and retaining a stored parent on first use.
 async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) -> ExecutorResult<()> {
     let cached = ctx
         .continuation
@@ -313,92 +221,87 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
             }
             .into());
         }
-        let map_missing = |error| match error {
-            ExecutorError::Storage(ref source) if source.is_not_found() => StorageError::PreviousResponseNotFound {
-                id: previous_id.to_owned(),
-            }
-            .into(),
-            other => other,
-        };
-        let stored = exec_ctx.resp_handler.get(ctx).await.map_err(map_missing)?;
-        let history = exec_ctx.resp_handler.rehydrate(ctx).await.map_err(map_missing)?;
-        let checkpoint = ResponseCheckpoint {
-            response_id: stored.response_id,
-            conversation_id: stored.conversation_id,
-            history: canonical_session_history(InOutItem::into_input_items(history)),
-            metadata: stored.metadata,
-            durable: true,
-        };
+        let (mut checkpoint, history) = exec_ctx
+            .resp_handler
+            .rehydrate(ctx)
+            .await?
+            .ok_or_else(missing_previous_response_id)?;
+        checkpoint.continue_from_compaction(&history, &ctx.enriched_request);
+        checkpoint.history = retain_window(InOutItem::into_input_items(history));
         let continuation = ctx.continuation.as_ref().ok_or_else(|| {
             ExecutorError::InvalidRequest("session response requires a continuation lease".to_owned())
         })?;
         std::sync::Arc::new(continuation.retain_parent(checkpoint)?)
     };
-    if restore_agent_tree(ctx, &parent.metadata, exec_ctx.responses_config.max_retained_bytes)? {
-        if let Some(continuation) = ctx.continuation.as_mut() {
-            continuation.parent = Some(parent);
-        }
-        return Ok(());
+    if !restore_agent_tree(ctx, &parent.metadata, exec_ctx.responses_config.max_retained_bytes)? {
+        set_model_input(ctx, parent.history.clone(), retain_window)?;
+        apply_effective_settings(ctx, &parent.metadata);
     }
-    let mut items = parent.history.clone();
-    // Match durable rehydration: lower custom/shell call outputs only in the
-    // inference copy. new_input_items retains their public wire types.
-    items.extend(InOutItem::into_input_items(ctx.new_input_items.clone()));
-    let items = canonical_session_history(items);
-    reject_unanswered_sync_call(&items)?;
-    ctx.enriched_request.previous_response_id = None;
-    ctx.enriched_request.input = ResponsesInput::from(items);
-    ctx.enriched_request.tools = resolve_tools(
-        ctx.original_request.tools.as_deref(),
-        parent.metadata.effective_tools.as_deref(),
-        ctx.original_request.tools.is_some(),
-    );
-    ctx.enriched_request.tool_choice = Some(resolve_tool_choice(
-        ctx.original_request.tool_choice.as_ref(),
-        &parent.metadata.effective_tool_choice,
-        ctx.original_request.tool_choice.is_some() || ctx.original_request.tools.is_some(),
-    ));
+    // The model input holds the parent's history; the turn's checkpoint keeps what persistence extends.
+    ctx.checkpoint = Some(ResponseCheckpoint {
+        response_id: parent.response_id.clone(),
+        metadata: parent.metadata.clone(),
+        durable: parent.durable,
+        history_item_ids: parent.history_item_ids.clone(),
+        requires_latest: false,
+        history: Vec::new(),
+    });
     if let Some(continuation) = ctx.continuation.as_mut() {
         continuation.parent = Some(parent);
     }
     Ok(())
 }
 
+/// Response continuation runs only for a request with `previous_response_id`.
+fn missing_previous_response_id() -> ExecutorError {
+    ExecutorError::InvalidRequest("previous_response_id is required to continue a response".to_owned())
+}
+
 /// Hydrates `ctx` from the conversation store.
 ///
-/// Gets or creates the conversation (depending on `store`) and rehydrates its
-/// history in parallel, then prepends the history items to the enriched request input.
+/// Rehydrates the conversation's history and continues it with this request's items. A missing conversation is
+/// created by a stored turn and required by an unstored one. A conversation turn does not inherit the stored settings.
 async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) -> ExecutorResult<()> {
-    let (conv_data, snapshot) = tokio::try_join!(
-        async {
-            if ctx.original_request.store {
-                exec_ctx.conv_handler.get_or_create(ctx).await
-            } else {
-                exec_ctx.conv_handler.get(ctx).await
-            }
-        },
-        exec_ctx.conv_handler.rehydrate_snapshot(ctx),
-    )?;
-
-    if let Some(metadata) = exec_ctx
-        .conv_handler
-        .response_metadata_at_version(ctx, &snapshot.version)
-        .await?
-        && restore_agent_tree(ctx, &metadata, exec_ctx.responses_config.max_retained_bytes)?
-    {
-        ctx.conversation_id = Some(conv_data.conversation_id);
-        ctx.conversation_version = Some(snapshot.version);
-        return Ok(());
+    let snapshot = match exec_ctx.conv_handler.rehydrate(ctx).await {
+        Err(ExecutorError::Storage(error)) if error.is_not_found() && ctx.original_request.store => {
+            exec_ctx.conv_handler.get_or_create(ctx).await?;
+            ConversationSnapshot::default()
+        }
+        result => result?,
+    };
+    ctx.conversation_id.clone_from(&ctx.original_request.conversation);
+    let ConversationSnapshot { items, mut checkpoint } = snapshot;
+    checkpoint.continue_from_compaction(&items, &ctx.enriched_request);
+    if !restore_agent_tree(ctx, &checkpoint.metadata, exec_ctx.responses_config.max_retained_bytes)? {
+        let history = InOutItem::into_input_items(items);
+        // A turn is admitted only if it answers the history's pending call, so another turn may have answered it first.
+        checkpoint.requires_latest = CallLedger::scan(&history)?.awaits_output();
+        set_model_input(ctx, history, identity)?;
     }
+    // A multi-agent tree is the latest turn's snapshot, not appended history: a multi-agent turn, which continues or
+    // builds one, must be stored right after the turn it continued, or it would replace another turn's tree.
+    checkpoint.requires_latest |= ctx
+        .enriched_request
+        .multi_agent
+        .as_ref()
+        .is_some_and(|config| config.enabled);
+    ctx.checkpoint = Some(checkpoint);
+    Ok(())
+}
 
-    let mut items = InOutItem::into_input_items(snapshot.items);
-    items.reserve(ctx.new_input_items.len());
-    items.extend(InOutItem::into_input_items(ctx.new_input_items.clone()));
-    reject_unanswered_sync_call(&items)?;
-
+/// Makes the continued `history` followed by this request's own items the turn's model input, once no synchronous call
+/// in them is left unanswered. `window` keeps what the turn continues: a session keeps the window after the latest
+/// compaction, which this request's items can move.
+fn set_model_input(
+    ctx: &mut RequestContext,
+    mut history: Vec<InputItem>,
+    window: fn(Vec<InputItem>) -> Vec<InputItem>,
+) -> ExecutorResult<()> {
+    history.extend(InOutItem::into_input_items(ctx.new_input_items.clone()));
+    let items = window(history);
+    CallLedger::scan(&items)?.require_answered()?;
+    ctx.enriched_request.previous_response_id = None;
     ctx.enriched_request.input = ResponsesInput::from(items);
-    ctx.conversation_id = Some(conv_data.conversation_id);
-    ctx.conversation_version = Some(snapshot.version);
     Ok(())
 }
 
@@ -455,828 +358,4 @@ fn apply_agent_tree(ctx: &mut RequestContext, tree: ValidatedTreeCheckpoint) -> 
 }
 
 #[cfg(test)]
-mod tests {
-    use std::num::NonZeroUsize;
-    use std::sync::Arc;
-
-    use super::*;
-    use crate::executor::modes::{ConversationHandler, ResponseHandler};
-    use crate::executor::pending_calls::pending_calls;
-    use crate::storage::{
-        ConversationStore, ConversationVersion, ResponseMetadata, ResponseStore, create_pool_with_schema,
-    };
-    use crate::types::agent::{AgentIdentity, AgentTurnId};
-    use crate::types::agent_tree::{AgentState, StoredAgent, StoredTreeSnapshot};
-    use crate::types::io::InOutItem;
-    use crate::types::io::MultiAgentConfig;
-    use crate::types::io::output::{McpListTools, OutputItem};
-    use crate::types::request_response::{MaxToolCalls, RequestPayload};
-    use std::num::NonZeroU64;
-
-    #[test]
-    fn session_history_without_compaction_is_unchanged() {
-        let history: Vec<InputItem> = serde_json::from_value(serde_json::json!([
-            {"type":"message", "role":"user", "content":"question"},
-            {"type":"mcp_list_tools", "id":"mcpl_1", "server_label":"counter", "tools":[]},
-            {"type":"function_call", "call_id":"pending", "name":"lookup", "arguments":"{}"}
-        ]))
-        .unwrap();
-        let expected = serde_json::to_value(&history).unwrap();
-        assert_eq!(
-            serde_json::to_value(canonical_session_history(history)).unwrap(),
-            expected
-        );
-    }
-
-    #[test]
-    fn restored_session_keeps_canonical_compaction_and_mcp_discovery() {
-        let history: Vec<InputItem> = serde_json::from_value(serde_json::json!([
-            {"type":"mcp_list_tools", "id":"mcpl_1", "server_label":"counter", "tools":[]},
-            {"type":"message", "role":"assistant", "content":"obsolete detail"},
-            {"type":"function_call", "call_id":"obsolete", "name":"lookup", "arguments":"{}"},
-            {"type":"message", "role":"user", "content":"noncanonical old user"},
-            {"type":"message", "role":"user", "id":"msg_keep", "status":"completed", "content":"canonical user"},
-            {"type":"compaction", "id":"cmp_latest", "encrypted_content":"latest summary"},
-            {"type":"function_call", "call_id":"live", "name":"lookup", "arguments":"{}"},
-            {"type":"function_call_output", "call_id":"live", "output":"live result"}
-        ]))
-        .unwrap();
-        let history = canonical_session_history(history);
-        assert_eq!(history.len(), 5);
-        assert!(matches!(history[0], InputItem::McpListTools(_)));
-        assert!(matches!(&history[2], InputItem::Compaction(item)
-            if item.id.as_deref() == Some("cmp_latest") && item.encrypted_content == "latest summary"));
-        assert!(pending_calls(&history).unwrap().is_empty());
-        let serialized = serde_json::to_value(&history).unwrap();
-        assert_eq!(serialized[1]["id"], "msg_keep");
-        assert_eq!(serialized[3]["call_id"], "live");
-        assert_eq!(serialized[4]["call_id"], "live");
-        assert!(!serialized.to_string().contains("obsolete"));
-    }
-
-    #[test]
-    fn restored_session_uses_the_latest_window_and_preserves_live_pending_calls() {
-        let history: Vec<InputItem> = serde_json::from_value(serde_json::json!([
-            {"type":"message", "role":"user", "id":"msg_old", "status":"completed", "content":"old user"},
-            {"type":"mcp_list_tools", "id":"mcpl_old", "server_label":"old", "tools":[]},
-            {"type":"compaction", "id":"cmp_old", "encrypted_content":"old summary"},
-            {"type":"message", "role":"user", "id":"msg_keep", "status":"completed", "content":"retained user"},
-            {"type":"message", "role":"user", "id":"msg_incomplete", "status":"in_progress", "content":"superseded"},
-            {"type":"mcp_list_tools", "id":"mcpl_new", "server_label":"new", "tools":[]},
-            {"type":"compaction", "id":"cmp_new", "encrypted_content":"latest summary"},
-            {"type":"function_call", "call_id":"live", "name":"lookup", "arguments":"{}"}
-        ]))
-        .unwrap();
-        let history = canonical_session_history(history);
-        let serialized = serde_json::to_value(&history).unwrap();
-        assert_eq!(history.len(), 5);
-        assert_eq!(serialized[0]["id"], "mcpl_old");
-        assert_eq!(serialized[1]["id"], "msg_keep");
-        assert_eq!(serialized[2]["id"], "mcpl_new");
-        assert_eq!(serialized[3]["id"], "cmp_new");
-        let pending = pending_calls(&history).unwrap();
-        assert_eq!(pending.len(), 1);
-        assert_eq!(pending[0].call_id, "live");
-    }
-
-    fn reasoning_item(content: &[&str], encrypted_content: Option<&str>) -> InputItem {
-        InputItem::Reasoning(ReasoningOutput {
-            agent: None,
-            id: "rs_prior".to_owned(),
-            content: content.iter().map(|text| ReasoningTextContent::new(*text)).collect(),
-            summary: vec![crate::types::ReasoningSummaryContent::new("public summary")],
-            encrypted_content: encrypted_content
-                .map(|text| crate::types::OpaqueReasoning::try_from(text.to_owned()).unwrap()),
-            status: Some(crate::types::ReasoningStatus::Completed),
-        })
-    }
-
-    #[test]
-    fn plaintext_reasoning_is_normalized_for_both_vllm_paths() {
-        let mut input = ResponsesInput::from(vec![reasoning_item(
-            &["first continuation part", "second continuation part"],
-            Some("opaque-provider-state"),
-        )]);
-
-        prepare_reasoning_for_vllm(&mut input).expect("plaintext reasoning is replayable");
-
-        let ResponsesInput::Items(items) = input else {
-            panic!("expected structured input");
-        };
-        let InOutItem::Input(InputItem::Reasoning(reasoning)) = &items[0] else {
-            panic!("expected reasoning item");
-        };
-        assert_eq!(reasoning.id, "rs_prior");
-        assert_eq!(reasoning.content.len(), 1);
-        assert_eq!(
-            reasoning.content[0].text,
-            "first continuation part\nsecond continuation part"
-        );
-        assert!(reasoning.summary.is_empty());
-        assert_eq!(reasoning.status, Some(crate::types::ReasoningStatus::Completed));
-        assert_eq!(reasoning.encrypted_content, None);
-    }
-
-    #[test]
-    fn encrypted_reasoning_requires_nonempty_plaintext_content() {
-        for content in [Vec::new(), vec![""], vec!["", ""]] {
-            let mut input = ResponsesInput::from(vec![reasoning_item(&content, Some("opaque-provider-state"))]);
-
-            let error =
-                prepare_reasoning_for_vllm(&mut input).expect_err("encrypted-only reasoning must not reach vLLM");
-
-            assert_eq!(error.http_status(), http::StatusCode::BAD_REQUEST);
-            assert!(
-                error
-                    .to_string()
-                    .contains("encrypted state without plaintext reasoning content")
-            );
-            assert!(!error.to_string().contains("opaque-provider-state"));
-        }
-    }
-
-    #[test]
-    fn plaintext_reasoning_with_null_encrypted_state_is_normalized_without_summary() {
-        let item = reasoning_item(&["plaintext continuation"], None);
-        let mut input = ResponsesInput::from(vec![item]);
-
-        prepare_reasoning_for_vllm(&mut input).expect("null encrypted state is valid");
-
-        let ResponsesInput::Items(items) = input else {
-            panic!("expected structured input");
-        };
-        let InOutItem::Input(InputItem::Reasoning(reasoning)) = &items[0] else {
-            panic!("expected reasoning item");
-        };
-        assert_eq!(
-            reasoning.content[0].type_,
-            crate::types::ReasoningTextKind::ReasoningText
-        );
-        assert_eq!(reasoning.content[0].text, "plaintext continuation");
-        assert!(reasoning.summary.is_empty());
-        assert_eq!(reasoning.encrypted_content, None);
-    }
-
-    #[test]
-    fn summary_only_reasoning_without_opaque_state_is_removed_from_vllm_copy() {
-        for input in [
-            r#"[{"type":"reasoning","summary":[{"type":"summary_text","text":"public summary"}]}]"#,
-            r#"[{"type":"reasoning","summary":[{"type":"summary_text","text":"public summary"}],"encrypted_content":null}]"#,
-        ] {
-            let mut input: ResponsesInput = serde_json::from_str(input).unwrap();
-
-            prepare_reasoning_for_vllm(&mut input).expect("summary-only reasoning has no usable vLLM state");
-
-            let ResponsesInput::Items(items) = input else {
-                panic!("expected structured input");
-            };
-            assert!(
-                items.is_empty(),
-                "a reasoning summary must never be promoted to reasoning text"
-            );
-        }
-    }
-
-    #[test]
-    fn validation_failure_does_not_partially_mutate_input() {
-        let valid = reasoning_item(&["plaintext continuation"], Some("first-opaque-state"));
-        let invalid = reasoning_item(&[], Some("second-opaque-state"));
-        let mut input = ResponsesInput::from(vec![valid.clone(), invalid]);
-
-        prepare_reasoning_for_vllm(&mut input).expect_err("the complete input must validate before normalization");
-
-        let ResponsesInput::Items(items) = input else {
-            panic!("expected structured input");
-        };
-        let (InOutItem::Input(InputItem::Reasoning(actual)), InputItem::Reasoning(expected)) = (&items[0], &valid)
-        else {
-            panic!("expected reasoning items");
-        };
-        assert_eq!(actual.content[0].text, expected.content[0].text);
-        assert_eq!(actual.summary, expected.summary);
-        assert_eq!(actual.encrypted_content, expected.encrypted_content);
-    }
-
-    #[test]
-    fn text_input_is_unchanged() {
-        let mut input = ResponsesInput::Text("plain user input".to_owned());
-
-        prepare_reasoning_for_vllm(&mut input).expect("text input contains no reasoning item");
-
-        assert!(matches!(input, ResponsesInput::Text(ref text) if text == "plain user input"));
-    }
-
-    fn request(conversation_id: Option<&str>, previous_response_id: Option<&str>) -> RequestPayload {
-        RequestPayload {
-            model: "test".into(),
-            input: ResponsesInput::Text("new input".into()),
-            store: true,
-            previous_response_id: previous_response_id.map(str::to_owned),
-            conversation: conversation_id.map(str::to_owned),
-            ..Default::default()
-        }
-    }
-
-    fn execution_context(conversation_store: ConversationStore, response_store: ResponseStore) -> ExecutionContext {
-        ExecutionContext::new(
-            ConversationHandler::new(conversation_store),
-            ResponseHandler::new(response_store),
-            Arc::new(reqwest::Client::new()),
-            "http://localhost:8000".to_owned(),
-        )
-    }
-
-    #[tokio::test]
-    async fn multi_agent_session_admission_allows_both_storage_values() {
-        let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
-        for store in [true, false] {
-            let session = ResponseSession::new(NonZeroUsize::new(128).unwrap(), NonZeroUsize::new(65_536).unwrap());
-            let mut request = request(None, None);
-            request.store = store;
-            request.multi_agent = Some(MultiAgentConfig {
-                enabled: true,
-                max_concurrent_subagents: Some(3),
-            });
-            let ctx = rehydrate_in_session(request, &exec_ctx, &session).await.unwrap();
-            assert!(ctx.enriched_request.multi_agent.unwrap().enabled);
-            assert!(ctx.continuation.is_some());
-        }
-    }
-
-    #[test]
-    fn multi_agent_compaction_trigger_is_allowed() {
-        let mut request = request(None, None);
-        request.input = ResponsesInput::from(vec![InputItem::CompactionTrigger]);
-        request.multi_agent = serde_json::from_value(serde_json::json!({"enabled":true})).unwrap();
-        validate_multi_agent_request(&request).unwrap();
-    }
-
-    #[test]
-    fn client_tools_are_supported_with_multi_agent() {
-        let mut request = request(None, None);
-        request.tools = Some(
-            serde_json::from_value(serde_json::json!([
-                {"type":"custom","name":"echo"}, {"type":"tool_search","execution":"client"}
-            ]))
-            .unwrap(),
-        );
-        validate_multi_agent_request(&request).unwrap();
-        request.multi_agent = serde_json::from_value(serde_json::json!({"enabled":false})).unwrap();
-        validate_multi_agent_request(&request).unwrap();
-        request.multi_agent = serde_json::from_value(serde_json::json!({"enabled":true})).unwrap();
-        validate_multi_agent_request(&request).unwrap();
-    }
-
-    #[tokio::test]
-    async fn invalid_max_tool_calls_is_rejected_before_history_access() {
-        let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
-        for (limit, code) in [
-            (serde_json::json!(0), "integer_below_min_value"),
-            (serde_json::json!("2"), "invalid_type"),
-        ] {
-            for previous in [None, Some("resp_missing")] {
-                let request: RequestPayload = serde_json::from_value(serde_json::json!({
-                    "model": "test", "input": "hello", "previous_response_id": previous, "max_tool_calls": limit
-                }))
-                .unwrap();
-                let error = rehydrate_conversation(request, &exec_ctx).await.unwrap_err();
-                assert!(matches!(error, ExecutorError::InvalidMaxToolCalls(_)), "{error:?}");
-                assert_eq!(error.error_code(), code);
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn multi_agent_max_tool_calls_is_rejected_before_history_access() {
-        let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
-        for stream in [false, true] {
-            for limit in [0, 5] {
-                for previous in [None, Some("resp_missing")] {
-                    let request: RequestPayload = serde_json::from_value(serde_json::json!({
-                        "model": "test", "input": "hello", "stream": stream,
-                        "previous_response_id": previous,
-                        "multi_agent": {"enabled": true}, "max_tool_calls": limit
-                    }))
-                    .unwrap();
-                    let error = rehydrate_conversation(request, &exec_ctx).await.unwrap_err();
-                    assert!(matches!(error, ExecutorError::InvalidRequest(message)
-                        if message == "max_tool_calls is not supported with multi_agent"));
-                }
-            }
-        }
-    }
-
-    /// Recorded `OpenAI` behavior: multi-agent mode rejects async tools with explicit parallel tool
-    /// calls, and accepts them with parallel calls off. The gateway's default is `false`.
-    #[test]
-    fn multi_agent_rejects_async_tools_only_with_explicit_parallel_tool_calls() {
-        let request = |parallel: serde_json::Value, async_tool: bool| -> RequestPayload {
-            serde_json::from_value(serde_json::json!({
-                "model": "test", "input": "hello", "store": true,
-                "multi_agent": {"enabled": true},
-                "parallel_tool_calls": parallel,
-                "tools": [{"type": "function", "name": "get_weather", "async": async_tool}]
-            }))
-            .unwrap()
-        };
-
-        let error = validate_multi_agent_request(&request(serde_json::json!(true), true)).unwrap_err();
-        assert!(matches!(
-            error,
-            ExecutorError::UnsupportedValue {
-                param,
-                code,
-                message,
-            } if param == "multi_agent" && code == Some("unsupported_value") && message == "Async parallel tool calls are not yet supported in multi-agent mode."
-        ));
-        for (parallel, async_tool) in [
-            (serde_json::json!(false), true),
-            (serde_json::Value::Null, true),
-            (serde_json::json!(true), false),
-        ] {
-            validate_multi_agent_request(&request(parallel.clone(), async_tool))
-                .unwrap_or_else(|error| panic!("parallel={parallel} async={async_tool}: {error}"));
-        }
-    }
-
-    #[tokio::test]
-    async fn inherited_multi_agent_rejects_max_tool_calls() {
-        let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await.unwrap();
-        let response_store = ResponseStore::new(pool.clone());
-        let conversation_store = ConversationStore::new(pool);
-        let conversation = conversation_store.create().await.unwrap();
-        let metadata = ResponseMetadata {
-            multi_agent_tree: Some(StoredTreeSnapshot {
-                version: 1,
-                config: MultiAgentConfig {
-                    enabled: true,
-                    max_concurrent_subagents: Some(3),
-                },
-                agents: vec![StoredAgent {
-                    identity: AgentIdentity::root(),
-                    parent: None,
-                    turn: AgentTurnId::new(),
-                    state: AgentState::Idle,
-                    mailbox: Vec::new(),
-                    history: Vec::new(),
-                    loaded_tools: Vec::new(),
-                    last_task: String::new(),
-                    final_answer: None,
-                    rounds: 0,
-                    wait: None,
-                }],
-                client_calls: Vec::new(),
-            }),
-            ..Default::default()
-        };
-        response_store
-            .persist("resp_tree", None, Vec::new(), &metadata)
-            .await
-            .unwrap();
-        conversation_store
-            .persist(
-                &conversation.conversation_id,
-                "resp_conversation_tree",
-                None,
-                Vec::new(),
-                &metadata,
-            )
-            .await
-            .unwrap();
-        let exec_ctx = execution_context(conversation_store, response_store);
-        for stream in [false, true] {
-            for (conversation_id, previous) in [
-                (None, Some("resp_tree")),
-                (Some(conversation.conversation_id.as_str()), None),
-            ] {
-                // No explicit multi_agent: admission must check again after restoring the tree.
-                let mut request = request(conversation_id, previous);
-                request.stream = stream;
-                request.max_tool_calls = Some(MaxToolCalls::new(NonZeroU64::new(5).unwrap()));
-                let error = rehydrate_conversation(request, &exec_ctx).await.unwrap_err();
-                assert!(matches!(error, ExecutorError::InvalidRequest(message)
-                    if message == "max_tool_calls is not supported with multi_agent"));
-            }
-        }
-    }
-
-    #[test]
-    fn max_tool_calls_restriction_only_applies_to_enabled_multi_agent() {
-        for config in [serde_json::Value::Null, serde_json::json!({"enabled": false})] {
-            let request: RequestPayload = serde_json::from_value(serde_json::json!({
-                "model": "test", "input": "hello", "multi_agent": config, "max_tool_calls": 5
-            }))
-            .unwrap();
-            validate_multi_agent_request(&request).unwrap();
-        }
-        let request: RequestPayload = serde_json::from_value(serde_json::json!({
-            "model": "test", "input": "hello", "multi_agent": {"enabled": true}, "max_tool_calls": null
-        }))
-        .unwrap();
-        validate_multi_agent_request(&request).unwrap();
-    }
-
-    #[tokio::test]
-    async fn nonstored_multi_agent_needs_no_history_store_without_state_ids() {
-        let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
-        for stream in [false, true] {
-            let mut request = request(None, None);
-            request.store = false;
-            request.stream = stream;
-            request.multi_agent = Some(MultiAgentConfig {
-                enabled: true,
-                max_concurrent_subagents: Some(3),
-            });
-            let ctx = rehydrate_conversation(request.clone(), &exec_ctx).await.unwrap();
-            assert!(ctx.multi_agent_tree.is_none());
-            assert_eq!(ctx.new_input_items.len(), 1);
-            request.input.push(InputItem::CompactionTrigger);
-            assert!(matches!(rehydrate_conversation(request, &exec_ctx).await,
-                Err(ExecutorError::InvalidRequest(message)) if message.contains("compaction_trigger")));
-        }
-    }
-
-    #[tokio::test]
-    async fn omitted_or_disabled_multi_agent_preserves_rehydration() {
-        let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
-        for store in [false, true] {
-            for multi_agent in [
-                None,
-                Some(crate::types::io::MultiAgentConfig {
-                    enabled: false,
-                    max_concurrent_subagents: None,
-                }),
-            ] {
-                let mut request = request(None, None);
-                request.store = store;
-                request.multi_agent = multi_agent;
-                let expected_input = Vec::<InputItem>::from(&request.input);
-                let ctx = rehydrate_conversation(request, &exec_ctx).await.unwrap();
-                assert_eq!(ctx.original_request.store, store);
-                assert_eq!(
-                    serde_json::to_value(&ctx.enriched_request.input).unwrap(),
-                    serde_json::to_value(expected_input).unwrap()
-                );
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn new_conversation_rehydration_captures_empty_version() -> Result<(), Box<dyn std::error::Error>> {
-        let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
-        let conversation_store = ConversationStore::new(pool);
-        let conversation = conversation_store.create().await?;
-        let exec_ctx = execution_context(conversation_store, ResponseStore::disabled());
-
-        let ctx = rehydrate_conversation(request(Some(&conversation.conversation_id), None), &exec_ctx).await?;
-
-        assert_eq!(ctx.conversation_version, Some(ConversationVersion::default()));
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn existing_conversation_rehydration_captures_last_response() -> Result<(), Box<dyn std::error::Error>> {
-        let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
-        let conversation_store = ConversationStore::new(pool);
-        let conversation = conversation_store.create().await?;
-        let prior_items = Vec::<InputItem>::from(&ResponsesInput::Text("prior input".into()))
-            .into_iter()
-            .map(InOutItem::Input)
-            .collect();
-        conversation_store
-            .persist(
-                &conversation.conversation_id,
-                "resp_prior",
-                None,
-                prior_items,
-                &ResponseMetadata::default(),
-            )
-            .await?;
-        let exec_ctx = execution_context(conversation_store, ResponseStore::disabled());
-
-        let ctx = rehydrate_conversation(request(Some(&conversation.conversation_id), None), &exec_ctx).await?;
-
-        assert_eq!(
-            ctx.conversation_version,
-            Some(ConversationVersion {
-                response_id: Some("resp_prior".to_owned()),
-                revision: 1,
-                last_sequence: Some(0),
-            })
-        );
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn conversation_rehydration_remembers_listed_mcp_servers() -> Result<(), Box<dyn std::error::Error>> {
-        let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
-        let conversation_store = ConversationStore::new(pool);
-        let conversation = conversation_store.create().await?;
-        conversation_store
-            .persist(
-                &conversation.conversation_id,
-                "resp_prior",
-                None,
-                vec![InOutItem::Output(OutputItem::McpListTools(McpListTools::new(
-                    "mcpl_prior",
-                    "counter",
-                    Vec::new(),
-                )))],
-                &ResponseMetadata::default(),
-            )
-            .await?;
-        let exec_ctx = execution_context(conversation_store, ResponseStore::disabled());
-
-        let ctx = rehydrate_conversation(request(Some(&conversation.conversation_id), None), &exec_ctx).await?;
-
-        let ResponsesInput::Items(items) = &ctx.enriched_request.input else {
-            panic!("rehydrated input should contain items");
-        };
-        assert!(
-            matches!(items.first(), Some(InOutItem::Input(InputItem::McpListTools(list_tools))) if list_tools.server_label == "counter")
-        );
-        let ResponsesInput::Items(model_items) = ctx.enriched_request.input.model_input().into_owned() else {
-            panic!("model input should contain items");
-        };
-        assert!(
-            model_items
-                .iter()
-                .all(|item| !matches!(item, InOutItem::Input(InputItem::McpListTools(_))))
-        );
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn request_without_continuation_has_no_conversation_version() -> Result<(), Box<dyn std::error::Error>> {
-        let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
-
-        let ctx = rehydrate_conversation(request(None, None), &exec_ctx).await?;
-
-        assert_eq!(ctx.conversation_version, None);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn rehydration_remains_public_until_explicit_tool_search_preparation() {
-        let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
-        let request: RequestPayload = serde_json::from_value(serde_json::json!({
-            "model": "test",
-            "input": "find weather tools",
-            "store": false,
-            "tools": [{
-                "type": "tool_search",
-                "execution": "client",
-                "description": "Find a tool",
-                "parameters": {"type": "object"}
-            }]
-        }))
-        .expect("valid tool-search request");
-
-        let ctx = rehydrate_conversation(request, &exec_ctx)
-            .await
-            .expect("blocking store:false search rehydrates");
-
-        assert!(matches!(
-            ctx.enriched_request.tools.as_deref(),
-            Some([crate::types::tools::ResponsesTool::ToolSearch(search)])
-                if search.execution == crate::types::tools::ToolSearchExecution::Client
-        ));
-
-        let (ctx, tool_search_state) =
-            crate::executor::prepare::prepare_request_tools(ctx, &exec_ctx.conv_handler, &exec_ctx.resp_handler)
-                .await
-                .expect("explicit handler preparation accepts the rehydrated request");
-
-        assert!(
-            tool_search_state
-                .as_ref()
-                .is_some_and(crate::tool::ToolSearchState::is_active)
-        );
-        let upstream = ctx
-            .enriched_request
-            .to_upstream_request(false)
-            .expect("prepared tool-search request lowers at the upstream boundary");
-        assert!(matches!(
-            upstream.tools.as_deref(),
-            Some([crate::types::request_response::UpstreamTool::Function(function)])
-                if function.name == "tool_search"
-        ));
-    }
-
-    #[tokio::test]
-    async fn rehydration_rejects_orphan_tool_search_outputs() {
-        let pool = create_pool_with_schema(Some("sqlite://?mode=memory"))
-            .await
-            .expect("create response store");
-        let response_store = ResponseStore::new(pool);
-        let orphan: InputItem = serde_json::from_value(serde_json::json!({
-            "type": "tool_search_output",
-            "call_id": "call_search_1",
-            "tools": []
-        }))
-        .expect("valid public output item");
-        response_store
-            .persist(
-                "resp_search",
-                None,
-                vec![InOutItem::Input(orphan)],
-                &ResponseMetadata::default(),
-            )
-            .await
-            .expect("seed prior response");
-        let exec_ctx = execution_context(ConversationStore::disabled(), response_store);
-
-        let error = rehydrate_conversation(request(None, Some("resp_search")), &exec_ctx)
-            .await
-            .expect_err("shared call validation rejects orphan stored search outputs");
-        assert!(
-            matches!(&error, ExecutorError::Tool(ToolError::UnknownCallOutput { call_id }) if call_id == "call_search_1"),
-            "unexpected error: {error}"
-        );
-        assert_eq!(error.http_status(), http::StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn stored_public_search_call_pairs_with_new_output_after_rehydration() {
-        let pool = create_pool_with_schema(Some("sqlite://?mode=memory"))
-            .await
-            .expect("create response store");
-        let response_store = ResponseStore::new(pool);
-        let stored_call: OutputItem = serde_json::from_value(serde_json::json!({
-            "type": "tool_search_call",
-            "id": "tsc_stored",
-            "call_id": "call_search_stored",
-            "execution": "client",
-            "arguments": {"query": "weather"},
-            "status": "completed"
-        }))
-        .expect("valid emitted public search call");
-        let effective_tools = serde_json::from_value(serde_json::json!([
-            {
-                "type": "tool_search",
-                "execution": "client",
-                "description": "Find a tool",
-                "parameters": {"type": "object"}
-            },
-            {
-                "type": "function",
-                "name": "get_weather",
-                "description": "Get weather",
-                "parameters": {"type": "object"},
-                "defer_loading": true
-            }
-        ]))
-        .expect("valid effective public declarations");
-        let metadata = ResponseMetadata {
-            multi_agent_tree: None,
-            effective_tools: Some(effective_tools),
-            ..ResponseMetadata::default()
-        };
-        response_store
-            .persist(
-                "resp_stored_search",
-                None,
-                vec![InOutItem::Output(stored_call)],
-                &metadata,
-            )
-            .await
-            .expect("persist public search call");
-        let exec_ctx = execution_context(ConversationStore::disabled(), response_store);
-        let mut continuation = request(None, Some("resp_stored_search"));
-        continuation.input = serde_json::from_value(serde_json::json!([{
-            "type": "tool_search_output",
-            "call_id": "call_search_stored",
-            "tools": [{
-                "type": "function",
-                "name": "get_weather",
-                "description": "Get weather",
-                "parameters": {"type": "object"},
-                "defer_loading": true
-            }]
-        }]))
-        .expect("valid new public search output");
-
-        let ctx = rehydrate_conversation(continuation, &exec_ctx)
-            .await
-            .expect("stored public call rehydrates before new output");
-        let (ctx, tool_search_state) =
-            crate::executor::prepare::prepare_request_tools(ctx, &exec_ctx.conv_handler, &exec_ctx.resp_handler)
-                .await
-                .expect("stored continuation derives valid tool-search state");
-
-        let state = tool_search_state
-            .as_ref()
-            .expect("valid state was prepared after rehydration");
-        assert!(state.is_active());
-        assert_eq!(state.loaded_public_tools().len(), 1);
-        assert!(matches!(
-            &state.loaded_public_tools()[0],
-            crate::types::tools::ResponsesTool::Function(function) if function.name.as_str() == "get_weather"
-        ));
-        let private_input =
-            serde_json::to_value(&ctx.enriched_request.input).expect("prepared private history serializes");
-        assert_eq!(private_input[0]["call_id"], "call_search_stored");
-        assert_eq!(private_input[1]["call_id"], "call_search_stored");
-    }
-
-    #[tokio::test]
-    async fn native_code_interpreter_call_rehydrates_for_previous_response_and_conversation()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let native_call: OutputItem = serde_json::from_value(serde_json::json!({
-            "type": "code_interpreter_call",
-            "id": "ci_native",
-            "container_id": "cntr_native",
-            "code": "print(7)",
-            "status": "completed",
-            "outputs": [{"type": "logs", "logs": "7\n"}]
-        }))?;
-        let response_pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
-        let conversation_pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
-        let response_store = ResponseStore::new(response_pool);
-        let conversation_store = ConversationStore::new(conversation_pool);
-        response_store
-            .persist(
-                "resp_native",
-                None,
-                vec![InOutItem::Output(native_call.clone())],
-                &ResponseMetadata::default(),
-            )
-            .await?;
-        let conversation = conversation_store.create().await?;
-        conversation_store
-            .persist(
-                &conversation.conversation_id,
-                "resp_conversation_native",
-                None,
-                vec![InOutItem::Output(native_call)],
-                &ResponseMetadata::default(),
-            )
-            .await?;
-        let exec_ctx = execution_context(conversation_store, response_store);
-
-        for request in [
-            request(None, Some("resp_native")),
-            request(Some(&conversation.conversation_id), None),
-        ] {
-            let ctx = rehydrate_conversation(request, &exec_ctx).await?;
-            let model_input = serde_json::to_value(ctx.enriched_request.input.model_input())?;
-            assert_eq!(model_input[0]["type"], "code_interpreter_call");
-            assert_eq!(model_input[0]["id"], "ci_native");
-            assert_eq!(model_input[0]["outputs"][0]["logs"], "7\n");
-            assert_eq!(model_input[1]["role"], "user");
-        }
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn previous_response_rehydration_has_no_conversation_version() -> Result<(), Box<dyn std::error::Error>> {
-        let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
-        let response_store = ResponseStore::new(pool);
-        response_store
-            .persist("resp_prior", None, Vec::new(), &ResponseMetadata::default())
-            .await?;
-        let exec_ctx = execution_context(ConversationStore::disabled(), response_store);
-
-        let ctx = rehydrate_conversation(request(None, Some("resp_prior")), &exec_ctx).await?;
-
-        assert_eq!(ctx.conversation_version, None);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn previous_response_rehydration_remembers_listed_mcp_servers() -> Result<(), Box<dyn std::error::Error>> {
-        let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
-        let response_store = ResponseStore::new(pool);
-        response_store
-            .persist(
-                "resp_prior",
-                None,
-                vec![InOutItem::Output(OutputItem::McpListTools(McpListTools::new(
-                    "mcpl_prior",
-                    "counter",
-                    Vec::new(),
-                )))],
-                &ResponseMetadata::default(),
-            )
-            .await?;
-        let exec_ctx = execution_context(ConversationStore::disabled(), response_store);
-
-        let ctx = rehydrate_conversation(request(None, Some("resp_prior")), &exec_ctx).await?;
-
-        let ResponsesInput::Items(items) = &ctx.enriched_request.input else {
-            panic!("rehydrated input should contain items");
-        };
-        assert!(
-            matches!(items.first(), Some(InOutItem::Input(InputItem::McpListTools(list_tools))) if list_tools.server_label == "counter")
-        );
-        let ResponsesInput::Items(model_items) = ctx.enriched_request.input.model_input().into_owned() else {
-            panic!("model input should contain items");
-        };
-        assert!(
-            model_items
-                .iter()
-                .all(|item| !matches!(item, InOutItem::Input(InputItem::McpListTools(_))))
-        );
-        Ok(())
-    }
-}
+mod tests;

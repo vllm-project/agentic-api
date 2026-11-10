@@ -12,7 +12,7 @@ use bytes::Bytes;
 use futures::{Stream, StreamExt};
 use http::StatusCode;
 use serde::de::DeserializeOwned;
-use tracing::warn;
+use tracing::{debug, warn};
 
 use agentic_core::executor::{BoxStream, ExecutorError};
 use agentic_core::proxy::{
@@ -60,7 +60,11 @@ pub fn executor_error_response(err: ExecutorError) -> Response {
         return upstream_error_response(status, body, headers);
     }
     let status = err.http_status();
-    warn!("executor error ({status}): {err}");
+    if status.is_client_error() {
+        debug!("executor error ({status}): {err}");
+    } else {
+        warn!("executor error ({status}): {err}");
+    }
     Response::builder()
         .status(status)
         .header("Content-Type", "application/json")

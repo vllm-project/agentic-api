@@ -1,0 +1,82 @@
+turns:
+- filename: t1
+  request:
+    body:
+      chat_template_kwargs:
+        enable_thinking: false
+      max_tokens: 256
+      messages:
+      - content: The verification token for this conversation is THREAD_PROOF_91827.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      stream: false
+      system: Follow instructions exactly. Keep answers short.
+      temperature: 0
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/messages
+    query_params:
+      beta: 'true'
+  response:
+    body:
+      content:
+      - text: Acknowledged.
+        type: text
+      id: chatcmpl-a3bfcf63d2d8922e
+      model: Qwen/Qwen3.8-27B-FP8
+      role: assistant
+      stop_reason: end_turn
+      type: message
+      usage:
+        input_tokens: 42
+        output_tokens: 4
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      chat_template_kwargs:
+        enable_thinking: false
+      max_tokens: 256
+      messages:
+      - content: The verification token for this conversation is THREAD_PROOF_91827.
+        role: user
+      - content:
+        - text: Acknowledged.
+          type: text
+        role: assistant
+      - content: Write the verification token from my first message. Output only the
+          token.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      stream: false
+      system: Follow instructions exactly. Keep answers short.
+      temperature: 0
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/messages
+    query_params:
+      beta: 'true'
+  response:
+    body:
+      content:
+      - text: THREAD_PROOF_91827
+        type: text
+      id: chatcmpl-a3481a733658dfb6
+      model: Qwen/Qwen3.8-27B-FP8
+      role: assistant
+      stop_reason: end_turn
+      type: message
+      usage:
+        input_tokens: 73
+        output_tokens: 10
+    headers:
+      content-type: application/json
+    status_code: 200

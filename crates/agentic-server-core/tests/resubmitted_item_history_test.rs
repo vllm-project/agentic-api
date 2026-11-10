@@ -141,7 +141,7 @@ async fn recorded_continuation_keeps_history(cassette_name: &str) {
     );
 
     // Stored history keeps the recorded public IDs, roles, and content in order.
-    let history = stored(&store.rehydrate(&second.id).await.expect("rehydrate continuation"));
+    let history = stored(&store.rehydrate(&second.id).await.expect("rehydrate continuation").1);
     assert_eq!(
         ids(&history),
         ids(&first_output)
@@ -217,7 +217,7 @@ async fn resubmitted_output_items_keep_every_occurrence(cassette_name: &str) {
     assert_eq!(second.status, "completed", "resubmitted history must persist");
 
     let second_output = serde_json::to_value(&second.output).expect("serialize second output");
-    let history = stored(&store.rehydrate(&second.id).await.expect("rehydrate resubmission"));
+    let history = stored(&store.rehydrate(&second.id).await.expect("rehydrate resubmission").1);
     assert_eq!(
         ids(&history),
         ids(&first_output)

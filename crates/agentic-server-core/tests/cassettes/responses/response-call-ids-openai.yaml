@@ -1,0 +1,1573 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input:
+      - content: What's the weather in Paris?
+        role: user
+      - arguments: '{"city": "Paris"}'
+        call_id: call_a
+        name: get_weather
+        type: function_call
+      - call_id: call_a
+        output: sunny
+        type: function_call_output
+      - arguments: '{"city": "Paris"}'
+        call_id: call_a
+        name: get_weather
+        type: function_call
+      - call_id: call_a
+        output: rainy
+        type: function_call_output
+      model: gpt-4.1
+      store: false
+      stream: false
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: A
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1793937397
+      created_at: 1793937397
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0648eb289d9c0791016aed4ff51b9887d2b13787dd5019d4a8
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: There's a bit of a mix-up in my weather sources, but the latest update
+            says it's rainy in Paris right now. You might want to take an umbrella
+            if you're heading out!
+          type: output_text
+        id: msg_0648eb289d9c0791016aed4ff5854087d2ba26d6fd1609e8c7
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 91
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 38
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 129
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - content: What's the weather in Paris?
+        role: user
+      - arguments: '{"city": "Paris"}'
+        call_id: call_a2
+        name: get_weather
+        type: function_call
+      - arguments: '{"city": "Paris"}'
+        call_id: call_a2
+        name: get_weather
+        type: function_call
+      - call_id: call_a2
+        output: sunny
+        type: function_call_output
+      model: gpt-4.1
+      store: false
+      stream: false
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: A2
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1793937398
+      created_at: 1793937398
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0956ae23f16ddcec016aed4ff613e887d2937fdd62799963aa
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: The weather in Paris is currently sunny.
+          type: output_text
+        id: msg_0956ae23f16ddcec016aed4ff66ff087d2870205e75186785e
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 83
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 10
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 93
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input:
+      - content: What's the weather in Paris?
+        role: user
+      - arguments: '{"city": "Paris"}'
+        call_id: ''
+        name: get_weather
+        type: function_call
+      - call_id: ''
+        output: sunny
+        type: function_call_output
+      model: gpt-4.1
+      store: false
+      stream: false
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: B
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: empty_string
+        message: 'Invalid ''input[1].call_id'': empty string. Expected a string with
+          minimum length 1, but got an empty string instead.'
+        param: input[1].call_id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t4
+  request:
+    body:
+      input:
+      - content: What's the weather in Paris?
+        role: user
+      - arguments: '{"city": "Paris"}'
+        call_id: call_d
+        name: get_weather
+        type: function_call
+      - call_id: call_d
+        output: sunny
+        type: function_call_output
+      - call_id: call_d
+        output: rainy
+        type: function_call_output
+      model: gpt-4.1
+      store: false
+      stream: false
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: D
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1793937399
+      created_at: 1793937399
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0285d255e1f3f43f016aed4ff735f087d2bb1b1a17c3bd33d5
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: The weather in Paris is currently sunny (though there seems to be
+            some conflicting data suggesting it could also be rainy). It's best to
+            check a live local source for the most accurate update! Let me know if
+            you need more details like temperature or a forecast.
+          type: output_text
+        id: msg_0285d255e1f3f43f016aed4ff793c087d28902b32645c61c95
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 76
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 53
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 129
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      input:
+      - content: What's the weather in Paris?
+        role: user
+      - arguments: '{"city": "Paris"}'
+        call_id: call_h
+        name: get_weather
+        type: function_call
+      - call_id: call_h
+        output: sunny
+        type: function_call_output
+      - arguments: '{"city": "Paris"}'
+        call_id: call_h
+        name: get_weather
+        type: function_call
+      model: gpt-4.1
+      store: false
+      stream: false
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: H
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1793937400
+      created_at: 1793937400
+      error: null
+      frequency_penalty: 0.0
+      id: resp_04781ce22ba128c0016aed4ff838fc87d2aebfbcfdf50784a7
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: The weather in Paris is currently sunny. If you need more details
+            or the temperature, let me know!
+          type: output_text
+        id: msg_04781ce22ba128c0016aed4ff8842c87d2ac190e6385c7c93a
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 83
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 23
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 106
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body:
+      input:
+      - content: What's the weather in Paris?
+        role: user
+      model: gpt-4.1
+      store: true
+      stream: false
+      tool_choice: required
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: C0
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1793937401
+      created_at: 1793937401
+      error: null
+      frequency_penalty: 0.0
+      id: resp_023c2312ff54f6cf006aed4ff9026087d28545632ab848e765
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - arguments: '{"city":"Paris"}'
+        call_id: call_kVYhIvgmD2d0MqWnAAgHkA7h
+        id: fc_023c2312ff54f6cf006aed4ff9534c87d28984031ec031812b
+        name: get_weather
+        status: completed
+        type: function_call
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: required
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 54
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 6
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 60
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body:
+      input:
+      - call_id: call_kVYhIvgmD2d0MqWnAAgHkA7h
+        output: sunny
+        type: function_call_output
+      - arguments: '{"city": "Paris"}'
+        call_id: call_kVYhIvgmD2d0MqWnAAgHkA7h
+        name: get_weather
+        type: function_call
+      - call_id: call_kVYhIvgmD2d0MqWnAAgHkA7h
+        output: rainy
+        type: function_call_output
+      model: gpt-4.1
+      previous_response_id: resp_023c2312ff54f6cf006aed4ff9026087d28545632ab848e765
+      store: false
+      stream: false
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: C1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1793937403
+      created_at: 1793937402
+      error: null
+      frequency_penalty: 0.0
+      id: resp_023c2312ff54f6cf016aed4ffa604c87d2b410c90208d7277e
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: 'There are conflicting updates for the weather in Paris: one indicates
+            it’s sunny, while another says it’s rainy. For the most accurate and current
+            information, please check a trusted local weather app or website. If you
+            have a specific date or time in mind, let me know!'
+          type: output_text
+        id: msg_023c2312ff54f6cf016aed4ffab91487d2b44868f671b1b8d3
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_023c2312ff54f6cf006aed4ff9026087d28545632ab848e765
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 90
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 58
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 148
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body:
+      input:
+      - call_id: call_kVYhIvgmD2d0MqWnAAgHkA7h
+        output: sunny
+        type: function_call_output
+      - call_id: call_kVYhIvgmD2d0MqWnAAgHkA7h
+        output: rainy
+        type: function_call_output
+      model: gpt-4.1
+      previous_response_id: resp_023c2312ff54f6cf006aed4ff9026087d28545632ab848e765
+      store: false
+      stream: false
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: C2
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1793937404
+      created_at: 1793937403
+      error: null
+      frequency_penalty: 0.0
+      id: resp_023c2312ff54f6cf016aed4ffb674887d2a3cbf6e9f0d7818b
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: 'There seems to be a discrepancy in the latest weather data. According
+            to some sources, Paris is currently experiencing sunny weather, while
+            others report it is rainy.
+
+
+            Would you like a more detailed update or a recommendation based on both
+            possibilities?'
+          type: output_text
+        id: msg_023c2312ff54f6cf016aed4ffbe5f087d2baf739462b5a868d
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_023c2312ff54f6cf006aed4ff9026087d28545632ab848e765
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 75
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 48
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 123
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body:
+      input:
+      - call_id: call_kVYhIvgmD2d0MqWnAAgHkA7h
+        output: sunny
+        type: function_call_output
+      model: gpt-4.1
+      previous_response_id: resp_023c2312ff54f6cf006aed4ff9026087d28545632ab848e765
+      store: false
+      stream: false
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: C3
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1793937405
+      created_at: 1793937404
+      error: null
+      frequency_penalty: 0.0
+      id: resp_023c2312ff54f6cf016aed4ffc8f0c87d2894a4ef8f7912af1
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: The weather in Paris is currently sunny. If you need more details,
+            such as temperature or forecast, let me know!
+          type: output_text
+        id: msg_023c2312ff54f6cf016aed4ffce8a087d2b4f7a261122209a0
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_023c2312ff54f6cf006aed4ff9026087d28545632ab848e765
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 67
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 26
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 93
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t10
+  request:
+    body:
+      items:
+      - content: What's the weather in Paris?
+        role: user
+      - arguments: '{"city": "Paris"}'
+        call_id: call_e
+        name: get_weather
+        type: function_call
+      - call_id: call_e
+        output: sunny
+        type: function_call_output
+      - arguments: '{"city": "Paris"}'
+        call_id: call_e
+        name: get_weather
+        type: function_call
+      - call_id: call_e
+        output: rainy
+        type: function_call_output
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: E0
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1793937405
+      id: conv_6aed4ffd75148196b77aa0a9031b949c035c323bbe5e9c3f
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t11
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+      x-run-id: E1
+    method: GET
+    path: /v1/conversations/conv_6aed4ffd75148196b77aa0a9031b949c035c323bbe5e9c3f/items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: What's the weather in Paris?
+          type: input_text
+        id: msg_6aed4ffd75548196bfb17a728223ce20035c323bbe5e9c3f
+        role: user
+        status: completed
+        type: message
+      - arguments: '{"city": "Paris"}'
+        call_id: call_e
+        id: fc_6aed4ffd7574819696bcc80567244ea6035c323bbe5e9c3f
+        name: get_weather
+        status: in_progress
+        type: function_call
+      - call_id: call_e
+        id: fc_6aed4ffd7598819683d5fbd1318b44a1035c323bbe5e9c3f
+        output: sunny
+        status: completed
+        type: function_call_output
+      - arguments: '{"city": "Paris"}'
+        call_id: call_e
+        id: fc_6aed4ffd75b88196aaad0b20f24bf3ec035c323bbe5e9c3f
+        name: get_weather
+        status: in_progress
+        type: function_call
+      - call_id: call_e
+        id: fc_6aed4ffd75d4819699484bf510aa9cbb035c323bbe5e9c3f
+        output: rainy
+        status: completed
+        type: function_call_output
+      first_id: msg_6aed4ffd75548196bfb17a728223ce20035c323bbe5e9c3f
+      has_more: false
+      last_id: fc_6aed4ffd75d4819699484bf510aa9cbb035c323bbe5e9c3f
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t12
+  request:
+    body:
+      conversation: conv_6aed4ffd75148196b77aa0a9031b949c035c323bbe5e9c3f
+      input:
+      - content: And tomorrow?
+        role: user
+      model: gpt-4.1
+      store: true
+      stream: false
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: E2
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1793937407
+      conversation:
+        id: conv_6aed4ffd75148196b77aa0a9031b949c035c323bbe5e9c3f
+      created_at: 1793937407
+      error: null
+      frequency_penalty: 0.0
+      id: resp_035c323bbe5e9c3f006aed4ffe8a4c8196a0eed67d518dbc1d
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: I don’t have access to tomorrow’s weather forecast at the moment,
+            only the current weather in Paris (which is rainy). For an accurate forecast
+            for tomorrow, I recommend checking a reliable weather website or app.
+            If you need more help or want live updates, let me know!
+          type: output_text
+        id: msg_035c323bbe5e9c3f006aed4fff3ffc8196915745fd2cf0b07b
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 98
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 58
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 156
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t13
+  request:
+    body:
+      items:
+      - content: What's the weather in Paris?
+        role: user
+      - arguments: '{"city": "Paris"}'
+        call_id: call_f
+        name: get_weather
+        type: function_call
+      - call_id: call_f
+        output: sunny
+        type: function_call_output
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: F0
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1793937409
+      id: conv_6aed50013fc4819387ed40c448e9634d0f6cc822edc64daf
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t14
+  request:
+    body:
+      items:
+      - arguments: '{"city": "Paris"}'
+        call_id: call_f
+        name: get_weather
+        type: function_call
+      - call_id: call_f
+        output: rainy
+        type: function_call_output
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: F1
+    method: POST
+    path: /v1/conversations/conv_6aed50013fc4819387ed40c448e9634d0f6cc822edc64daf/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - arguments: '{"city": "Paris"}'
+        call_id: call_f
+        id: fc_6aed500249ac8193891fae4353ad50c40f6cc822edc64daf
+        name: get_weather
+        status: in_progress
+        type: function_call
+      - call_id: call_f
+        id: fc_6aed500249e88193a5f8a7238789cb0e0f6cc822edc64daf
+        output: rainy
+        status: completed
+        type: function_call_output
+      first_id: fc_6aed500249ac8193891fae4353ad50c40f6cc822edc64daf
+      has_more: false
+      last_id: fc_6aed500249e88193a5f8a7238789cb0e0f6cc822edc64daf
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t15
+  request:
+    body:
+      conversation: conv_6aed50013fc4819387ed40c448e9634d0f6cc822edc64daf
+      input:
+      - content: And tomorrow?
+        role: user
+      model: gpt-4.1
+      store: true
+      stream: false
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: F2
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1793937412
+      conversation:
+        id: conv_6aed50013fc4819387ed40c448e9634d0f6cc822edc64daf
+      created_at: 1793937411
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0f6cc822edc64daf006aed50030714819395ae7c7a716ec583
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: I don't have access to real-time or future weather forecasts, but
+            I can help you find a reliable source or provide general expectations
+            for Paris's seasonal weather if you'd like. Would you like some tips on
+            where to check tomorrow's weather in Paris, or a general forecast for
+            this time of year?
+          type: output_text
+        id: msg_0f6cc822edc64daf006aed5003c87881938f6891fe62f7f859
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 98
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 61
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 159
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t16
+  request:
+    body:
+      items:
+      - content: What's the weather in Paris?
+        role: user
+      - arguments: '{"city": "Paris"}'
+        call_id: ''
+        name: get_weather
+        type: function_call
+      - call_id: ''
+        output: sunny
+        type: function_call_output
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: G0
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      error:
+        code: empty_string
+        message: 'Invalid ''items[1].call_id'': empty string. Expected a string with
+          minimum length 1, but got an empty string instead.'
+        param: items[1].call_id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400

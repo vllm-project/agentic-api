@@ -7,6 +7,7 @@ use super::code_interpreter::CodeInterpreterHandler;
 use super::codex::CodexNamespaceHandler;
 use super::custom::CustomHandler;
 use super::declaration::ToolDeclaration;
+use super::file_search::handler::FileSearchHandler;
 use super::function::FunctionHandler;
 use super::handler::{ToolError, ToolHandler, ToolOutput};
 use super::mcp::McpHandler;
@@ -46,7 +47,8 @@ impl ToolDeclaration {
             Self::ToolSearch(param) => ToolSearchHandler.validate(param),
             Self::WebSearch(param) => WebSearchHandler::spec_only().validate(param),
             Self::WebFetch(param) => WebFetchHandler::spec_only().validate(param),
-            Self::FileSearch(_) | Self::Unsupported => Ok(()),
+            Self::FileSearch(param) => FileSearchHandler::spec_only().validate(param),
+            Self::Unsupported => Ok(()),
             // Runtime availability is checked before the request is normalized.
             Self::CodeInterpreter(param) => CodeInterpreterHandler.validate(param),
             Self::Shell(param) => ShellHandler.validate(param),
@@ -116,8 +118,7 @@ impl ToolDeclaration {
     /// - `CodeInterpreter` lowers to its fixed function contract in every build;
     ///   supported request flows reject an unavailable runtime before calling
     ///   this conversion.
-    /// - Unimplemented `FileSearch` variants return an empty list and emit a
-    ///   `tracing::debug!`.
+    /// - `FileSearch` lowers to a gateway-executed built-in function tool.
     ///
     /// `RequestPayload::to_upstream_request()` uses this conversion for
     /// all model-visible tools.
@@ -133,10 +134,7 @@ impl ToolDeclaration {
             Self::ToolSearch(param) => ToolSearchHandler.normalize(param).into_iter().take(1).collect(),
             Self::WebSearch(_) => vec![web_search_function_tool()],
             Self::WebFetch(param) => WebFetchHandler::spec_only().normalize(param),
-            Self::FileSearch(_) => {
-                tracing::debug!("file_search tool skipped in normalize - handler not yet registered");
-                vec![]
-            }
+            Self::FileSearch(param) => FileSearchHandler::spec_only().normalize(param),
             Self::CodeInterpreter(param) => CodeInterpreterHandler.normalize(param),
             Self::Shell(param) => ShellHandler.normalize(param),
             Self::Namespace(param) => CodexNamespaceHandler.normalize(param),
@@ -177,6 +175,35 @@ mod tests {
             let declaration = ToolDeclaration::from(tool);
             assert_eq!(declaration.tool_type(), Some(ToolType::ToolSearch));
             assert_eq!(declaration.is_gateway_owned(), gateway);
+        }
+    }
+
+    #[test]
+    fn file_search_normalizes_to_executable_function() {
+        let tool: ResponsesTool = serde_json::from_value(serde_json::json!({
+            "type": "file_search", "vector_store_ids": ["vs_documents"]
+        }))
+        .unwrap();
+        let declaration = ToolDeclaration::from(tool);
+        declaration.validate().unwrap();
+        let functions = declaration.to_function_tools();
+        assert_eq!(functions.len(), 1);
+        assert_eq!(functions[0].name, "file_search");
+    }
+
+    #[test]
+    fn file_search_rejects_empty_stores_and_invalid_limits() {
+        for declaration in [
+            serde_json::json!({"type": "file_search"}),
+            serde_json::json!({"type": "file_search", "vector_store_ids": []}),
+            serde_json::json!({"type": "file_search", "vector_store_ids": [" "]}),
+            serde_json::json!({"type": "file_search", "vector_store_ids": ["vs_1"], "max_num_results": 0}),
+            serde_json::json!({"type": "file_search", "vector_store_ids": ["vs_1"], "max_num_results": 51}),
+            serde_json::json!({"type": "file_search", "vector_store_ids": ["vs_1"], "ranking_options": {"ranker":"neural"}}),
+            serde_json::json!({"type": "file_search", "vector_store_ids": ["vs_1"], "ranking_options": {"score_threshold":2.0}}),
+        ] {
+            let tool: ResponsesTool = serde_json::from_value(declaration).unwrap();
+            assert!(ToolDeclaration::from(tool).validate().is_err());
         }
     }
 

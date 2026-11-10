@@ -12,24 +12,24 @@ use super::accumulate_usage;
 use round_policy::{AsyncContinuations, ClientCalls, classify_round};
 use std::{collections::HashMap, num::NonZeroUsize};
 
-use tracing::{Instrument as _, debug};
+use tracing::Instrument as _;
 
 use crate::executor::compaction::maybe_compact_context;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway::{
-    BuiltInToolCallBudget, GatewayCallResult, GatewayScheduler, append_gateway_calls_to_new_input,
-    append_gateway_results, append_output_items_to_input, emit_gateway_start_events, execute_and_emit_output_calls,
-    public_output_items, relay_round_events,
+    BuiltInToolCallBudget, GatewayCallResult, GatewayScheduler, emit_gateway_start_events,
+    execute_and_emit_output_calls, public_output_items, relay_round_events,
 };
 use crate::executor::pipeline::AgentPipeline;
-use crate::executor::rehydrate::prepare_reasoning_for_vllm;
-use crate::executor::request::{ExecutionContext, RequestContext};
+use crate::executor::request::ExecutionContext;
 use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::telemetry::metrics::Stage;
+use crate::executor::telemetry::stages::inference_round;
 use crate::executor::upstream::{fetch_blocking_payload, fetch_stream_payload};
 use crate::executor::{inference::UpstreamHeaders, relay::Release};
-use crate::tool::{ToolRegistry, mcp, record_discovered_mcp_tools, responses_declarations};
-use crate::types::io::{InputItem, OutputItem, ResponsesInput};
+use crate::tool::{ToolRegistry, record_discovered_mcp_tools, responses_declarations};
+use crate::types::io::input::InputFunctionToolCall;
+use crate::types::io::{InOutItem, InputItem, OutputItem, ResponseUsage, ResponsesInput};
 use crate::types::request_response::ResponsePayload;
 
 /// Outcome of inspecting one inference round's output, deciding whether the
@@ -66,6 +66,12 @@ pub(super) async fn build_tool_registry(
     history: Option<&ResponsesInput>,
 ) -> ExecutorResult<ToolRegistry> {
     let mut executors = exec_ctx.gateway_executors.request_scoped();
+    executors.include_file_search_results = agent
+        .request
+        .original_request
+        .include
+        .as_ref()
+        .is_some_and(|include| include.iter().any(|field| field == "file_search_call.results"));
     let history = history.unwrap_or(&agent.request.enriched_request.input);
     let mut registry: ToolRegistry = match agent.request.enriched_request.tools.as_mut() {
         Some(tools) => {
@@ -93,42 +99,6 @@ pub(super) async fn build_tool_registry(
     Ok(registry)
 }
 
-fn prepare_initial_reasoning_for_vllm(input: &mut ResponsesInput, round: usize, compacted: bool) -> ExecutorResult<()> {
-    if round == 0 && !compacted {
-        return prepare_reasoning_for_vllm(input);
-    }
-    Ok(())
-}
-
-fn record_round_history(
-    ctx: &mut RequestContext,
-    output_items: &[OutputItem],
-    registry: &ToolRegistry,
-    public_output_count: usize,
-) {
-    // Explicit conversations append public output through their durable handler;
-    // the session lease still serializes execution but must not record it twice.
-    if let Some(continuation) = ctx
-        .continuation
-        .as_mut()
-        .filter(|_| ctx.original_request.conversation.is_none())
-    {
-        // The canonical sequence includes reasoning and intermediate messages in
-        // their original positions, followed by this round's tool call outputs.
-        // Discovery records are appended separately from the public response.
-        ctx.new_input_items.extend(
-            output_items
-                .iter()
-                .filter(|item| !matches!(item, OutputItem::McpListTools(_)) && registry.records_output_item(item))
-                .filter_map(OutputItem::to_input_item)
-                .map(Into::into),
-        );
-        continuation.mark_outputs_recorded(public_output_count);
-    } else {
-        append_gateway_calls_to_new_input(ctx, output_items, registry);
-    }
-}
-
 /// One agent's tool registry and execution state, retained across its rounds.
 ///
 /// The caller supplies the retained-byte budget so descendants can share the
@@ -136,7 +106,7 @@ fn record_round_history(
 /// therefore remain shared across independently constructed turns as well.
 pub(super) struct AgentTurn<'a> {
     pub(super) pipeline: &'a mut AgentPipeline,
-    registry: ToolRegistry,
+    pub(super) registry: ToolRegistry,
     exec_ctx: &'a ExecutionContext,
     max_rounds: NonZeroUsize,
     next_round: usize,
@@ -174,7 +144,8 @@ impl AgentExecutionState {
         let output = self
             .registry
             .mcp_list_tool_items()
-            .map(mcp::handler::list_tools_output_item)
+            .cloned()
+            .map(OutputItem::McpListTools)
             .collect();
         self.registry.clear_mcp_list_tool_items();
         output
@@ -235,13 +206,6 @@ impl<'a> AgentTurn<'a> {
         })
     }
 
-    pub(super) fn discovery_output(&self) -> Vec<OutputItem> {
-        self.registry
-            .mcp_list_tool_items()
-            .map(mcp::handler::list_tools_output_item)
-            .collect()
-    }
-
     /// Advance through one inference round and its gateway-executed tools.
     /// The turn owns round numbering; the engine supplies the public output
     /// offset and shared budget. Registry and pipeline state survive each step.
@@ -266,18 +230,21 @@ impl<'a> AgentTurn<'a> {
             .multi_agent
             .as_ref()
             .is_some_and(|config| config.enabled);
-        // The tree coordinator commits multi-agent summaries by generation.
-        let compaction_usage = if multi_agent {
+        // The tree coordinator commits multi-agent summaries by generation. A compaction item is the round's first
+        // output, as on OpenAI; the model's output follows it.
+        let (compaction, compaction_usage) = if multi_agent {
             None
         } else {
-            maybe_compact_context(&mut self.pipeline.request, self.exec_ctx, auth).await?
-        };
-        prepare_initial_reasoning_for_vllm(
-            &mut self.pipeline.request.enriched_request.input,
-            round,
-            compaction_usage.is_some(),
-        )?;
-        let round_span = crate::executor::telemetry::stages::inference_round(round);
+            self.compact(output_offset, auth).await?
+        }
+        .unzip();
+        if compaction.is_some()
+            && let Some(continuation) = &mut self.pipeline.request.continuation
+        {
+            continuation.mark_outputs_compacted(output_offset);
+        }
+        let output_offset = output_offset + usize::from(compaction.is_some());
+        let round_span = inference_round(round);
         let timer = self.exec_ctx.metrics.stage(Stage::Inference);
         let fetched = if stream_upstream {
             fetch_stream_payload(
@@ -313,6 +280,7 @@ impl<'a> AgentTurn<'a> {
         accumulate_usage(&mut round_usage, payload.usage.take());
         payload.usage = round_usage;
         if matches!(payload.status.as_str(), "error" | "failed") {
+            payload.output.splice(0..0, compaction);
             // A failed round skips tool execution, but its deferred public events
             // (including upstream diagnostics) still precede the terminal event.
             let (ctx, relay) = self.pipeline.parts_mut();
@@ -324,32 +292,62 @@ impl<'a> AgentTurn<'a> {
         }
 
         let current_output = std::mem::take(&mut payload.output);
-        log_custom_tool_calls(&current_output, &self.pipeline.request.response_id);
         self.registry.ensure_loaded_calls(&current_output)?;
         let client_calls = ClientCalls::of(&current_output, &self.registry);
         let gateway_results = self
             .execute_round_output(&current_output, output_offset, response_budget)
             .await?;
         payload.output = public_output_items(&current_output, &self.registry, &gateway_results)?;
+        payload.output.splice(0..0, compaction);
         if self.tool_call_budget.has_refused() {
             self.pipeline.withhold_builtin_tools();
         }
-        record_round_history(
-            &mut self.pipeline.request,
-            &current_output,
-            &self.registry,
-            output_offset + payload.output.len(),
-        );
 
         let decision = self.round_decision(&mut payload, client_calls, &gateway_results, round);
         if matches!(decision, RoundDecision::Continue) || multi_agent {
             self.append_round_input(&current_output, &payload.output, multi_agent);
         }
         let hosted_loads = hosted_search::hosted_search_loads(&gateway_results);
-        self.record_gateway_results(gateway_results);
+        self.record_gateway_results(&current_output, gateway_results);
         // Loads persist with the response whatever this round decided.
         self.load_hosted_tools(&hosted_loads).await?;
         Ok(RoundResult { payload, decision })
+    }
+
+    /// Compacts the turn's model input together with its final output once they pass the compaction threshold, as
+    /// `OpenAI` does after answering, so the next turn starts from that summary. The compaction item is presented at
+    /// `output_offset` as the turn's last output.
+    pub(super) async fn compact_after_turn(
+        &mut self,
+        final_output: &[OutputItem],
+        output_offset: usize,
+        auth: Option<&UpstreamHeaders>,
+    ) -> ExecutorResult<Option<(OutputItem, ResponseUsage)>> {
+        // A compaction this round made is already the start of the model input.
+        let answer = final_output
+            .iter()
+            .filter(|item| !matches!(item, OutputItem::Compaction(_)))
+            .filter_map(OutputItem::to_input_item);
+        self.pipeline.request.enriched_request.input.extend(answer);
+        self.compact(output_offset, auth).await
+    }
+
+    /// Compacts the model input once it passes the compaction threshold, and presents the compaction item at
+    /// `output_offset` of the public output.
+    async fn compact(
+        &mut self,
+        output_offset: usize,
+        auth: Option<&UpstreamHeaders>,
+    ) -> ExecutorResult<Option<(OutputItem, ResponseUsage)>> {
+        let Some((item, usage)) = maybe_compact_context(&mut self.pipeline.request, self.exec_ctx, auth).await? else {
+            return Ok(None);
+        };
+        let item = OutputItem::Compaction(item);
+        self.pipeline
+            .relay_mut()
+            .present_compaction(&item, output_offset)
+            .await?;
+        Ok(Some((item, usage)))
     }
 
     fn round_decision(
@@ -411,27 +409,41 @@ impl<'a> AgentTurn<'a> {
                     OutputItem::FunctionCall(call) => client_calls.get(call.call_id.as_str()).copied().unwrap_or(item),
                     item => item,
                 };
-                let input = match item {
-                    OutputItem::ShellCall(call) => Some(InputItem::ShellCall(call.clone())),
-                    OutputItem::CustomToolCall(call) => Some(InputItem::CustomToolCall(call.clone())),
-                    item => item.to_input_item(),
-                };
-                if let Some(input) = input {
-                    self.pipeline.request.enriched_request.input.push(input);
-                }
+                self.pipeline
+                    .request
+                    .enriched_request
+                    .input
+                    .extend(item.to_input_item());
             }
         } else {
-            let recorded: Vec<_> = output
+            let recorded = output
                 .iter()
                 .filter(|item| self.registry.records_output_item(item))
-                .cloned()
-                .collect();
-            append_output_items_to_input(&mut self.pipeline.request.enriched_request.input, &recorded);
+                .filter_map(OutputItem::to_input_item);
+            self.pipeline.request.enriched_request.input.extend(recorded);
         }
     }
 
-    fn record_gateway_results(&mut self, results: Vec<GatewayCallResult>) {
-        append_gateway_results(&mut self.pipeline.request, results);
+    /// Give the model each built-in tool's output. File-search calls and their outputs also stay in item history so
+    /// a later turn can use the same retrieved context, even when the public item omits `results`.
+    fn record_gateway_results(&mut self, output: &[OutputItem], results: Vec<GatewayCallResult>) {
+        for result in results {
+            if matches!(&result.public_output, Some(OutputItem::FileSearchCall(_)))
+                && let Some(OutputItem::FunctionCall(call)) = output.get(result.item_index)
+            {
+                self.pipeline
+                    .request
+                    .new_input_items
+                    .push(InOutItem::Input(InputItem::FunctionCall(InputFunctionToolCall::from(
+                        call.clone(),
+                    ))));
+                self.pipeline
+                    .request
+                    .new_input_items
+                    .extend(result.input.iter().cloned().map(InOutItem::Input));
+            }
+            self.pipeline.request.enriched_request.input.extend(result.input);
+        }
     }
 
     async fn execute_round_output(
@@ -476,19 +488,5 @@ impl<'a> AgentTurn<'a> {
         )
         .await?;
         Ok(gateway_results)
-    }
-}
-
-fn log_custom_tool_calls(output: &[OutputItem], response_id: &str) {
-    for item in output {
-        if let OutputItem::CustomToolCall(call) = item {
-            debug!(
-                response_id,
-                call_id = %call.call_id,
-                name = %call.name,
-                input_bytes = call.input.len(),
-                "custom tool call requires client execution"
-            );
-        }
     }
 }

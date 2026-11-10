@@ -4,6 +4,7 @@
 #[allow(dead_code)]
 mod common;
 
+use agentic_core::types::conversations::ConversationMetadata;
 use std::fmt::Write as _;
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,6 +18,7 @@ use axum::Router;
 use axum::body::Bytes;
 use axum::response::IntoResponse;
 use axum::routing::post;
+use common::persist_turn;
 use futures::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
@@ -193,15 +195,17 @@ impl Fixture {
         let response_store = ResponseStore::new(Arc::clone(&self.pool));
         let reference = if conversation {
             let store = ConversationStore::new(Arc::clone(&self.pool));
-            let data = store.create().await.expect("create conversation");
-            store
-                .persist(&data.conversation_id, response_id, None, vec![placeholder], &metadata)
+            let data = store
+                .create("default_tenant", &ConversationMetadata::new(), &[])
+                .await
+                .expect("create conversation");
+            persist_turn(&store, &data.conversation_id, response_id, vec![placeholder], &metadata)
                 .await
                 .expect("persist conversation fixture");
             json!({"conversation_id":data.conversation_id})
         } else {
             response_store
-                .persist(response_id, None, vec![placeholder], &metadata)
+                .persist(response_id, None, vec![placeholder], None, &metadata)
                 .await
                 .expect("persist response fixture");
             json!({"previous_response_id":response_id})
@@ -648,11 +652,12 @@ fn composed_upstream_request_cannot_bypass_file_validation() {
         new_input_items: Vec::new(),
         response_id: "resp_composed".to_owned(),
         conversation_id: None,
-        conversation_version: None,
+        checkpoint: None,
         continuation: None,
     };
     for stream in [false, true] {
-        let error = upstream_request(&ctx, stream).expect_err("direct typed upstream preparation must reject files");
+        let error = upstream_request(&ctx, stream, None, None)
+            .expect_err("direct typed upstream preparation must reject files");
         assert_eq!(error.http_status().as_u16(), 400);
         assert!(error.error_message().contains("input_file"));
     }
@@ -840,7 +845,11 @@ async fn automatic_compaction_summarizes_inlined_text_and_keeps_the_original() {
         .await;
     assert_eq!(status, reqwest::StatusCode::OK, "{body}");
     let captured = fixture.captured().await;
-    assert_eq!(captured.len(), 2, "summary and answer requests: {captured:?}");
+    assert_eq!(
+        captured.len(),
+        3,
+        "summary, answer, and summary-after-the-answer requests: {captured:?}"
+    );
     for request in &captured {
         let encoded = request.to_string();
         assert!(encoded.contains("hello from notes"), "{encoded}");

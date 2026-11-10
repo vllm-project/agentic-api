@@ -2,7 +2,8 @@ pub mod code_interpreter;
 pub mod input;
 mod item;
 pub use item::{
-    DeletedResponse, InOutItem, InvalidItemLimit, ItemInclude, ItemLimit, ItemOrder, ItemPage, ListItemsResponse,
+    ClientItemError, DeletedResponse, InOutItem, InvalidItemLimit, ItemInclude, ItemLimit, ItemOrder, ItemPage,
+    ListItemsResponse,
 };
 pub mod multi_agent;
 pub mod output;
@@ -10,6 +11,7 @@ pub mod reasoning;
 pub mod shell;
 pub mod tools;
 pub mod usage;
+pub mod web_search;
 
 pub use code_interpreter::{
     CodeInterpreterCall, CodeInterpreterCallOutput, CodeInterpreterCallStatus, CodeInterpreterCallStreamEvent,
@@ -31,6 +33,7 @@ pub use output::{
     TopLogprob, WebSearchAction, WebSearchActionError, WebSearchActionFindInPage, WebSearchActionOpenPage,
     WebSearchActionSearch, WebSearchCall, WebSearchCallStatus, WebSearchSource,
 };
+pub use output::{FileCitation, FileSearchCall, FileSearchCallResult, FileSearchCallStatus, OutputAnnotation};
 pub use reasoning::{
     OpaqueReasoning, OpaqueReasoningError, ReasoningStatus, ReasoningSummaryContent, ReasoningSummaryKind,
     ReasoningTextKind,

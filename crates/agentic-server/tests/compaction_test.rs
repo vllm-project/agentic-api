@@ -17,8 +17,12 @@ use tokio::sync::Mutex;
 
 use agentic_core::executor::{ConversationHandler, ExecutionContext, ResponseHandler};
 use agentic_core::storage::{ConversationStore, ResponseStore, create_pool_with_schema};
+use agentic_core::tool::web_search;
 use agentic_core::tool::{GatewayExecutor, ToolError, ToolHandler, ToolOutput, ToolType};
 use agentic_core::types::io::FunctionTool;
+use agentic_core::types::io::OutputItem;
+use agentic_core::types::io::ResponsesInput;
+use agentic_core::types::io::output::{FunctionToolCall, GatewayCallStatus};
 use agentic_core::types::tools::WebSearchToolParam;
 
 use common::{spawn_gateway, test_config, test_state};
@@ -56,6 +60,20 @@ impl ToolHandler for TestWebSearchExecutor {
 
 impl GatewayExecutor for TestWebSearchExecutor {
     type ExecutionParams = WebSearchToolParam;
+
+    fn started_output(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> Option<OutputItem> {
+        web_search::started_output_item(call)
+    }
+
+    fn public_output(
+        &self,
+        call: &FunctionToolCall,
+        output: &ToolOutput,
+        status: GatewayCallStatus,
+        _params: &WebSearchToolParam,
+    ) -> Option<OutputItem> {
+        web_search::output_item(call, output, status.into())
+    }
 
     fn execute(
         &self,
@@ -394,6 +412,21 @@ async fn spawn_compaction_tool_loop_model() -> (String, Arc<Mutex<Vec<serde_json
             }],
             "usage": {"input_tokens": 4, "output_tokens": 1, "total_tokens": 5}
         }),
+        serde_json::json!({
+            "id": "resp_answer_summary",
+            "object": "response",
+            "created_at": 0,
+            "model": "test-model",
+            "status": "completed",
+            "output": [{
+                "id": "msg_answer_summary",
+                "type": "message",
+                "role": "assistant",
+                "status": "completed",
+                "content": [{"type": "output_text", "text": "summary after the answer", "annotations": []}]
+            }],
+            "usage": {"input_tokens": 12, "output_tokens": 3, "total_tokens": 15}
+        }),
     ])));
     let app = Router::new().route(
         "/v1/responses",
@@ -493,8 +526,12 @@ async fn compact_endpoint_returns_reusable_canonical_window() {
 
 #[tokio::test]
 async fn automatic_compaction_runs_above_threshold_and_accumulates_usage() {
-    let (model_url, requests, _model) =
-        spawn_sequential_model(vec![("automatic summary", 25), ("final answer", 10)]).await;
+    let (model_url, requests, _model) = spawn_sequential_model(vec![
+        ("automatic summary", 25),
+        ("final answer", 10),
+        ("answer summary", 15),
+    ])
+    .await;
     let (gateway_url, _gateway) = spawn_gateway(test_state(&test_config(&model_url))).await;
 
     let response = reqwest::Client::new()
@@ -513,9 +550,21 @@ async fn automatic_compaction_runs_above_threshold_and_accumulates_usage() {
 
     assert_eq!(response.status(), reqwest::StatusCode::OK);
     let body: serde_json::Value = response.json().await.expect("automatic response JSON");
-    assert_eq!(body["usage"]["total_tokens"], 35);
+    // The retained input still passes the threshold with the answer, so the turn compacts again after answering.
+    assert_eq!(body["usage"]["total_tokens"], 50);
+    let output_types: Vec<_> = body["output"]
+        .as_array()
+        .expect("output")
+        .iter()
+        .map(|item| &item["type"])
+        .collect();
+    assert_eq!(output_types, ["compaction", "message", "compaction"]);
+    let replay: ResponsesInput = serde_json::from_value(body["output"].clone()).expect("replayable output");
+    let projected = serde_json::to_value(replay.model_input()).unwrap();
+    assert_eq!(projected[0]["content"][0]["text"], "x".repeat(200));
+    assert_eq!(projected[1]["content"][0]["text"], "answer summary");
     let requests = requests.lock().await;
-    assert_eq!(requests.len(), 2);
+    assert_eq!(requests.len(), 3);
     assert!(
         requests
             .iter()
@@ -526,6 +575,11 @@ async fn automatic_compaction_runs_above_threshold_and_accumulates_usage() {
     assert_eq!(requests[1]["input"][1]["role"], "assistant");
     assert_eq!(requests[1]["input"][1]["content"][0]["text"], "automatic summary");
     assert_eq!(requests[1]["reasoning"], serde_json::json!({"effort": "high"}));
+    let answer_summary = requests[2]["input"].as_array().expect("summary input");
+    assert_eq!(
+        answer_summary[answer_summary.len() - 2]["content"][0]["text"],
+        "final answer"
+    );
 }
 
 #[tokio::test]
@@ -560,11 +614,12 @@ async fn automatic_compaction_accumulates_usage_across_gateway_tool_loop() {
 
     assert_eq!(response.status(), reqwest::StatusCode::OK);
     let body: serde_json::Value = response.json().await.expect("automatic response JSON");
-    assert_eq!(body["usage"]["total_tokens"], 40);
+    // The tool round, its summary, the answer, and the summary after the answer.
+    assert_eq!(body["usage"]["total_tokens"], 55);
     assert_eq!(tool_calls.load(Ordering::Relaxed), 1);
 
     let requests = requests.lock().await;
-    assert_eq!(requests.len(), 3);
+    assert_eq!(requests.len(), 4);
     assert_eq!(requests[0]["input"].as_array().map(Vec::len), Some(1));
     assert!(
         requests[1]["input"]
@@ -577,6 +632,13 @@ async fn automatic_compaction_accumulates_usage_across_gateway_tool_loop() {
     assert_eq!(requests[2]["input"][0]["role"], "user");
     assert_eq!(requests[2]["input"][1]["role"], "assistant");
     assert_eq!(requests[2]["input"][1]["content"][0]["text"], "automatic summary");
+    assert!(
+        requests[3]["input"]
+            .as_array()
+            .and_then(|input| input.last())
+            .and_then(|item| item["content"].as_str())
+            .is_some_and(|content| content.contains("CONTEXT CHECKPOINT COMPACTION"))
+    );
 }
 
 #[tokio::test]

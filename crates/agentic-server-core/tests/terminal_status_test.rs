@@ -12,7 +12,7 @@ fn context() -> RequestContext {
         new_input_items: Vec::new(),
         response_id: "resp_local".to_owned(),
         conversation_id: None,
-        conversation_version: None,
+        checkpoint: None,
         continuation: None,
     }
 }

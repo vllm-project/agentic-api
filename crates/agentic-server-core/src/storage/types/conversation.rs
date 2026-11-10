@@ -1,26 +1,18 @@
 //! Domain type for conversation storage.
 
 use super::super::models::Conversation as StorageDbConversation;
+use super::errors::{StorageError, StoreResult};
+use super::response::ResponseCheckpoint;
+use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 
-/// Version of a conversation snapshot, including item mutations and legacy state.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct ConversationVersion {
-    /// Last sequence still detects writes by legacy persistence paths.
-    pub last_sequence: Option<i64>,
-    /// Exact persisted turn used to restore effective request metadata.
-    pub response_id: Option<String>,
-    /// Monotonic revision detects deletion, including deleting all items.
-    pub revision: i64,
-}
-
-/// Rehydrated conversation items together with their storage version.
-#[derive(Debug, Clone, PartialEq)]
+/// Rehydrated conversation items together with the checkpoint a turn continues.
+#[derive(Debug, Clone, Default)]
 pub struct ConversationSnapshot {
     /// Rehydrated input and output items in stored order.
     pub items: Vec<InOutItem>,
-    /// Version derived from the final item sequence and latest response identity.
-    pub version: ConversationVersion,
+    /// The conversation's latest turn and its history rows.
+    pub checkpoint: ResponseCheckpoint,
 }
 
 /// Domain entity for a stored conversation.
@@ -30,114 +22,83 @@ pub struct ConversationSnapshot {
 pub struct ConversationData {
     /// Unique conversation identifier
     pub conversation_id: String,
-    /// Optional metadata as JSON string
-    pub metadata: Option<String>,
+    /// Client-supplied metadata; empty when none was set
+    pub metadata: ConversationMetadata,
     /// Creation timestamp as Unix timestamp in seconds
     pub created_at: i64,
     /// Tenant identifier for multi-tenancy isolation
     pub tenant_id: Option<String>,
 }
 
-impl From<StorageDbConversation> for ConversationData {
-    fn from(row: StorageDbConversation) -> Self {
-        Self {
+impl TryFrom<StorageDbConversation> for ConversationData {
+    type Error = StorageError;
+
+    fn try_from(row: StorageDbConversation) -> Result<Self, Self::Error> {
+        let metadata = row
+            .metadata
+            .as_deref()
+            .map(serde_json::from_str)
+            .transpose()?
+            .unwrap_or_default();
+        Ok(Self {
             conversation_id: row.id,
-            metadata: row.metadata,
+            metadata,
             created_at: row.created_at,
             tenant_id: row.tenant_id,
-        }
+        })
     }
 }
 
-impl From<ConversationData> for StorageDbConversation {
-    fn from(data: ConversationData) -> Self {
-        Self {
-            id: data.conversation_id,
-            metadata: data.metadata,
-            created_at: data.created_at,
-            latest_response_id: None,
-            revision: 0,
-            tenant_id: data.tenant_id,
-        }
-    }
+/// Encode client metadata for the `conversations.metadata` column.
+///
+/// # Errors
+/// Returns a serialization error.
+pub(in crate::storage) fn encode_metadata(metadata: &ConversationMetadata) -> StoreResult<String> {
+    Ok(serde_json::to_string(metadata)?)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_conversation_from_db_conversation() {
-        let db_row = StorageDbConversation {
-            id: "conv_123".to_string(),
-            metadata: None,
+    fn row(metadata: Option<&str>) -> StorageDbConversation {
+        StorageDbConversation {
+            id: "conv_123".to_owned(),
+            metadata: metadata.map(str::to_owned),
             created_at: 1_704_067_200,
             latest_response_id: None,
-            revision: 0,
-            tenant_id: None,
-        };
+            tenant_id: Some("tenant_test".to_owned()),
+        }
+    }
 
-        let conversation: ConversationData = db_row.into();
+    #[test]
+    fn row_decodes_typed_metadata() {
+        let conversation = ConversationData::try_from(row(Some(r#"{"key":"value"}"#))).unwrap();
         assert_eq!(conversation.conversation_id, "conv_123");
         assert_eq!(conversation.created_at, 1_704_067_200);
+        assert_eq!(conversation.tenant_id.as_deref(), Some("tenant_test"));
+        assert_eq!(conversation.metadata.get("key").map(String::as_str), Some("value"));
     }
 
     #[test]
-    fn test_conversation_roundtrip() {
-        let data = ConversationData {
-            conversation_id: "conv_456".to_string(),
-            metadata: Some(r#"{"key":"value"}"#.to_string()),
-            created_at: 1_704_067_200,
-            tenant_id: Some("tenant_test".to_string()),
-        };
-
-        let db_row: StorageDbConversation = data.into();
-        assert_eq!(db_row.id, "conv_456");
-        assert_eq!(db_row.metadata, Some(r#"{"key":"value"}"#.to_string()));
-        assert_eq!(db_row.created_at, 1_704_067_200);
+    fn missing_metadata_is_empty() {
+        assert!(ConversationData::try_from(row(None)).unwrap().metadata.is_empty());
     }
 
     #[test]
-    fn test_conversation_data_clone() {
-        let data = ConversationData {
-            conversation_id: "conv_clone".to_string(),
-            metadata: None,
-            created_at: 1_704_067_200,
-            tenant_id: None,
-        };
-
-        let cloned = data.clone();
-        assert_eq!(cloned.conversation_id, data.conversation_id);
-        assert_eq!(cloned.created_at, data.created_at);
+    fn malformed_metadata_is_an_error() {
+        assert!(
+            ConversationData::try_from(row(Some("not json")))
+                .unwrap_err()
+                .is_serialization()
+        );
     }
 
     #[test]
-    fn test_conversation_data_debug_format() {
-        let data = ConversationData {
-            conversation_id: "conv_debug".to_string(),
-            metadata: None,
-            created_at: 1_704_067_200,
-            tenant_id: None,
-        };
-
-        let debug_str = format!("{data:?}");
-        assert!(debug_str.contains("conv_debug"));
-        assert!(debug_str.contains("ConversationData"));
-    }
-
-    #[test]
-    fn test_conversation_bidirectional_conversion() {
-        let original = ConversationData {
-            conversation_id: "conv_bidir".to_string(),
-            metadata: None,
-            created_at: 1_706_790_600,
-            tenant_id: None,
-        };
-
-        let db_row: StorageDbConversation = original.clone().into();
-        let recovered: ConversationData = db_row.into();
-
-        assert_eq!(original.conversation_id, recovered.conversation_id);
-        assert_eq!(original.created_at, recovered.created_at);
+    fn metadata_round_trips_through_its_column() {
+        let metadata = ConversationMetadata::from([("topic".to_owned(), "billing".to_owned())]);
+        let encoded = encode_metadata(&metadata).unwrap();
+        let decoded = ConversationData::try_from(row(Some(&encoded))).unwrap();
+        assert_eq!(decoded.metadata, metadata);
     }
 }

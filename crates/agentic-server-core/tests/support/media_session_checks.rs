@@ -1,4 +1,6 @@
 //! Session contracts for media-aware compaction and typed message-file rejection.
+use agentic_core::types::io::ResponsesInput;
+
 use super::*;
 
 fn media_request(previous: Option<&str>, input: Value) -> RequestPayload {
@@ -89,20 +91,42 @@ async fn combined_media_text_compaction_promotes_and_restores_canonical_image_hi
         NonZeroUsize::new(2 * 1024 * 1024).unwrap(),
     );
     let input = media_input(256 * 1024);
+    let mut model_image = input[0]["content"][1].clone();
+    model_image["detail"] = json!("auto");
     let first = execute_local(&model, &session, media_request(None, input.clone())).await;
-    assert_eq!(model.requests.lock().await.len(), 1, "image alone must not compact");
+    {
+        // The image alone does not compact before the round; the long answer then passes the threshold, so the
+        // turn compacts after answering.
+        let requests = model.requests.lock().await;
+        assert_eq!(requests.len(), 2, "long text must still cause a summary");
+        assert!(
+            !requests[0]["input"].to_string().contains(&old_answer),
+            "image alone must not compact"
+        );
+        assert!(requests[1]["input"].to_string().contains(&old_answer));
+    }
     let mut next = media_request(Some(&first.id), json!("second question"));
     next.store = true;
     let second = execute_local(&model, &session, next).await;
-    assert_eq!(
-        model.requests.lock().await.len(),
-        3,
-        "long text must still cause a summary"
-    );
+    {
+        let requests = model.requests.lock().await;
+        assert_eq!(requests.len(), 3, "the compacted history does not compact again");
+        assert_eq!(
+            retained_image(&requests[2]["input"]),
+            &model_image,
+            "the image survives compaction"
+        );
+        assert!(!requests[2]["input"].to_string().contains(&old_answer));
+    }
     assert!(store.get(&first.id).await.unwrap_err().is_not_found());
-    let durable =
-        serde_json::to_value(InOutItem::into_input_items(store.rehydrate(&second.id).await.unwrap())).unwrap();
-    assert_eq!(retained_image(&durable), &input[0]["content"][1]);
+    let durable = ResponsesInput::from(InOutItem::into_input_items(
+        store.rehydrate(&second.id).await.unwrap().1,
+    ));
+    // Automatic compaction carries retained media inside its checkpoint. Inspect the existing model projection
+    // to verify the image survives storage without requiring a duplicate top-level user message.
+    let projected = serde_json::to_value(durable.model_input()).unwrap();
+    assert_eq!(retained_image(&projected), &input[0]["content"][1]);
+    let durable = serde_json::to_value(durable).unwrap();
     assert!(!durable.to_string().contains(&old_answer));
     assert_eq!(
         durable
@@ -123,8 +147,6 @@ async fn combined_media_text_compaction_promotes_and_restores_canonical_image_hi
     execute_local(&model, &fresh, restored).await;
     let requests = model.requests.lock().await;
     assert_eq!(requests.len(), 4, "canonical restore must not recompact image bytes");
-    let mut model_image = input[0]["content"][1].clone();
-    model_image["detail"] = json!("auto");
     assert_eq!(retained_image(&requests[3]["input"]), &model_image);
     assert!(!requests[3]["input"].to_string().contains(&old_answer));
     drop(requests);

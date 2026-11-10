@@ -7,6 +7,8 @@
 
 #![allow(dead_code)]
 
+pub mod replay;
+
 use std::fmt::Write as _;
 use std::sync::Arc;
 
@@ -23,24 +25,32 @@ use tokio::task::JoinHandle;
 
 use agentic_core::executor::{BoxStream, ConversationHandler, ExecutionContext, ResponseHandler};
 use agentic_core::storage::{ConversationStore, DbPool, ResponseStore, create_pool_with_schema};
+use agentic_core::storage::{ResponseMetadata, StoreResult};
+use agentic_core::types::io::InOutItem;
 use agentic_core::types::io::{OutputItem, OutputMessageContent};
 use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
 
 #[derive(Debug, Deserialize)]
-pub struct Cassette {
-    pub turns: Vec<Turn>,
+pub struct Cassette<B = TurnBody> {
+    pub turns: Vec<Turn<B>>,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct Turn {
-    pub request: TurnRequest,
+pub struct Turn<B = TurnBody> {
+    #[serde(default)]
+    pub filename: String,
+    pub request: TurnRequest<B>,
     pub response: TurnResponse,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct TurnRequest {
+pub struct TurnRequest<B = TurnBody> {
+    #[serde(default)]
+    pub method: String,
     pub path: String,
-    pub body: TurnBody,
+    #[serde(default)]
+    pub query_params: Value,
+    pub body: B,
 }
 
 #[derive(Debug, Deserialize, Default, PartialEq)]
@@ -723,6 +733,7 @@ pub fn output_text(payload: &ResponsePayload) -> String {
             | OutputItem::ToolSearchOutput(_)
             | OutputItem::CustomToolCall(_)
             | OutputItem::ShellCall(_)
+            | OutputItem::FileSearchCall(_)
             | OutputItem::WebSearchCall(_)
             | OutputItem::McpCall(_)
             | OutputItem::McpListTools(_)
@@ -761,4 +772,18 @@ pub fn query_params_as_json(uri: &axum::http::Uri) -> serde_json::Value {
         }
     }
     serde_json::Value::Object(params)
+}
+
+/// Persist a turn without a response snapshot.
+pub async fn persist_turn(
+    store: &ConversationStore,
+    conversation_id: &str,
+    response_id: &str,
+    items: Vec<InOutItem>,
+    metadata: &ResponseMetadata,
+) -> StoreResult<()> {
+    let checkpoint = store.rehydrate(conversation_id).await?.checkpoint;
+    store
+        .persist(conversation_id, &checkpoint, response_id, items, None, metadata)
+        .await
 }

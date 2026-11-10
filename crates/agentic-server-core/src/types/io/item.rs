@@ -1,6 +1,7 @@
 //! Shared input/output history items for Responses, Conversations, and storage.
 
 mod item_id;
+pub use item_id::ClientItemError;
 
 use std::borrow::Cow;
 use std::str::FromStr;
@@ -62,11 +63,50 @@ impl From<OutputItem> for InOutItem {
 }
 
 impl InOutItem {
-    /// Assign the stored public identity and expand shorthand message content.
-    /// This consumes the returned copy; retained model history is not modified.
+    /// What a turn stores of the items a client sent, as on `OpenAI`: history starts at the latest compaction. A
+    /// supplied compaction is used for the turn only, while one resolved from storage stays history. The items before
+    /// it are not stored, except the user messages its window keeps (completed, with an ID, after any earlier
+    /// compaction). A compaction trigger asks for this turn's compaction and is not history.
+    #[must_use]
+    pub(crate) fn filter_for_compaction(items: Vec<Self>) -> Vec<Self> {
+        let is_compaction = |item: &Self| {
+            matches!(
+                item,
+                Self::Input(InputItem::Compaction(_)) | Self::Output(OutputItem::Compaction(_))
+            )
+        };
+        let latest = items.iter().rposition(is_compaction);
+        let retained_start = latest.map_or(0, |latest| {
+            items[..latest]
+                .iter()
+                .rposition(is_compaction)
+                .map_or(0, |index| index + 1)
+        });
+        items
+            .into_iter()
+            .enumerate()
+            .filter(|(index, item)| match item {
+                Self::Input(InputItem::Compaction(_) | InputItem::CompactionTrigger) => false,
+                Self::Output(OutputItem::Compaction(_)) => latest == Some(*index),
+                _ if latest.is_none_or(|latest| *index > latest) => true,
+                Self::Input(InputItem::Message(message)) => {
+                    *index >= retained_start
+                        && message.role == "user"
+                        && message.id.is_some()
+                        && message.status == Some(MessageStatus::Completed)
+                }
+                _ => false,
+            })
+            .map(|(_, item)| item)
+            .collect()
+    }
+
+    /// Assign the stored public identity, give an omitted call or output status the one `OpenAI` returns, and expand
+    /// shorthand message content. This consumes the returned copy; retained model history is not modified.
     #[must_use]
     pub(crate) fn into_public(mut self, id: String) -> Self {
         self.set_id(id);
+        self.complete_omitted_status();
         if let Self::Input(InputItem::Message(message)) = &mut self {
             message.status.get_or_insert(MessageStatus::Completed);
             if let InputMessageContent::Text(text) = &mut message.content {
@@ -101,19 +141,8 @@ impl InOutItem {
         }
     }
 
-    pub(crate) fn call_id(&self) -> Option<&str> {
-        match self {
-            Self::Input(item) => item.call_id(),
-            Self::Output(OutputItem::FunctionCall(call)) => Some(&call.call_id),
-            Self::Output(OutputItem::ToolSearchCall(call)) => call.call_id.as_deref(),
-            Self::Output(OutputItem::CustomToolCall(call)) => Some(&call.call_id),
-            Self::Output(OutputItem::ShellCall(call)) => Some(&call.call_id),
-            Self::Output(_) => None,
-        }
-    }
-
-    /// Converts stored history into input items for continuation processing.
-    /// Internal items are removed later by `ResponsesInput::model_input`.
+    /// Converts stored history into input items for continuation processing. Tool items keep their public types;
+    /// the upstream projection lowers them, and `ResponsesInput::model_input` removes internal items.
     #[must_use]
     pub fn into_input_items(history: Vec<InOutItem>) -> Vec<InputItem> {
         history
@@ -121,13 +150,6 @@ impl InOutItem {
             .filter_map(|item| match item {
                 Self::Input(item) => Some(item),
                 Self::Output(output) => output.to_input_item(),
-            })
-            .map(|item| match item {
-                InputItem::ShellCall(call) => InputItem::FunctionCall(call.into()),
-                InputItem::ShellCallOutput(output) => InputItem::FunctionCallOutput(output.into()),
-                InputItem::CustomToolCall(call) => InputItem::FunctionCall(call.into()),
-                InputItem::CustomToolCallOutput(output) => InputItem::FunctionCallOutput(output.into()),
-                item => item,
             })
             .collect()
     }

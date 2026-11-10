@@ -1539,7 +1539,7 @@ async fn builtin_tool_declarations_stay_public_in_json_and_stored_responses() {
         "terminal payload",
     );
     assert_eq!(response.tool_choice, Some(ToolChoice::Required));
-    let stored = exec_ctx.resp_handler.retrieve(&response.id).await.unwrap();
+    let stored = exec_ctx.resp_handler.get_snapshot(&response.id).await.unwrap();
     assert_eq!(stored.tool_choice, Some(ToolChoice::Required));
     assert_public_tool_metadata(
         &serde_json::to_value(&stored).unwrap(),
@@ -1656,7 +1656,7 @@ async fn builtin_tool_declarations_stay_public_for_mixed_tool_kinds() {
         .collect();
     assert_eq!(public_output_kinds, ["web_search_call", "message"]);
     let payload: ResponsePayload = serde_json::from_value(terminal).expect("terminal payload");
-    let stored = exec_ctx.resp_handler.retrieve(&payload.id).await.unwrap();
+    let stored = exec_ctx.resp_handler.get_snapshot(&payload.id).await.unwrap();
     assert_eq!(
         serde_json::to_value(&stored).unwrap()["tools"],
         public_tools,
@@ -1888,6 +1888,7 @@ async fn execute_returns_mixed_client_tool_calls_without_followup_model_request(
     let output_items = response_output.as_array().unwrap();
     assert_eq!(output_items[0]["type"], "web_search_call");
     assert_eq!(output_items[0]["action"]["query"], "rust async");
+    let search_id = output_items[0]["id"].clone();
     assert!(
         !output_items
             .iter()
@@ -1924,8 +1925,8 @@ async fn execute_returns_mixed_client_tool_calls_without_followup_model_request(
         .expect("second request input array");
     let tool_output = second_input
         .iter()
-        .find(|item| item["type"] == "function_call_output" && item["call_id"] == "call_search")
-        .expect("continuation includes persisted web_search output");
+        .find(|item| item["type"] == "function_call_output" && item["call_id"] == search_id)
+        .expect("continuation lowers the stored web_search_call to its function output");
     let tool_output = tool_output["output"].as_str().unwrap();
     assert!(tool_output.contains("https://example.com/rust"));
 }
@@ -2735,14 +2736,14 @@ async fn incomplete_turn_persists_a_consistent_conversation_for_continuation() {
         .collect();
 
     // The FINAL round (call_r9) executed but the loop stopped on the budget. Its
-    // call and output must both be persisted — guards the Incomplete arm skipping
-    // the append, which would drop call_r9's output while its call is in output.
+    // web_search_call must be persisted and lowered with its output, under the
+    // public item ID — guards the Incomplete arm skipping the append.
     assert!(
-        call_ids.contains("call_r9"),
+        call_ids.contains("ws_call_r9"),
         "final-round gateway call must be persisted, got calls {call_ids:?}"
     );
     assert!(
-        output_call_ids.contains("call_r9"),
+        output_call_ids.contains("ws_call_r9"),
         "final-round gateway call has no matching output in the persisted conversation"
     );
     for cid in &call_ids {
@@ -2843,7 +2844,7 @@ async fn service_tier_comes_only_from_the_final_tool_round() {
             panic!("expected JSON response");
         };
         assert_eq!(response.service_tier.as_deref(), actual);
-        let stored = exec.resp_handler.retrieve(&response.id).await.unwrap();
+        let stored = exec.resp_handler.get_snapshot(&response.id).await.unwrap();
         assert_eq!(stored.service_tier.as_deref(), actual.or(Some("default")));
         let requests = llm.request_bodies().await;
         assert_eq!(requests.len(), 2);
@@ -2959,11 +2960,7 @@ async fn input_pages_return_stored_items_without_changing_model_history() {
         .list_input_items(&root.id, ItemPage::default())
         .await
         .unwrap();
-    assert_eq!(
-        page.data.len(),
-        3,
-        "stored input items include the gateway call and result"
-    );
+    assert_eq!(page.data.len(), 1, "model-facing gateway calls stay out of input items");
     let payload: RequestPayload = serde_json::from_value(serde_json::json!({
         "model": "test-model", "store": true, "previous_response_id": root.id,
         "input": [{"type": "function_call_output", "call_id": "call_weather", "output": "sunny"}]
@@ -2990,27 +2987,18 @@ async fn input_pages_return_stored_items_without_changing_model_history() {
             .iter()
             .map(|item| item["type"].as_str().unwrap())
             .collect::<Vec<_>>(),
-        [
-            "message",
-            "function_call",
-            "function_call_output",
-            "web_search_call",
-            "function_call",
-            "function_call_output"
-        ]
+        ["message", "web_search_call", "function_call", "function_call_output"]
     );
-    assert_eq!(public[1]["call_id"], "call_search");
-    assert_eq!(public[2]["call_id"], "call_search");
-    assert_eq!(public[4]["name"], "get_weather");
-    assert_eq!(public[5]["call_id"], "call_weather");
+    assert_eq!(public[2]["name"], "get_weather");
+    assert_eq!(public[3]["call_id"], "call_weather");
     let bodies = llm.request_bodies().await;
     let model_input = bodies[1]["input"].as_array().unwrap();
     for kind in ["function_call", "function_call_output"] {
         assert!(
             model_input
                 .iter()
-                .any(|item| item["type"] == kind && item["call_id"] == "call_search"),
-            "canonical search {kind} must remain in inference history"
+                .any(|item| item["type"] == kind && item["call_id"] == public[1]["id"]),
+            "the stored web_search_call is lowered to a {kind} for inference"
         );
     }
 }

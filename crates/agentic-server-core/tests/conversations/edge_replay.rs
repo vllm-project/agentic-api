@@ -6,25 +6,13 @@ use agentic_core::storage::{ConversationData, ConversationStore, create_pool_wit
 use agentic_core::types::conversations::{ConversationResponse, CreateConversationRequest, CreateItemRequest};
 use agentic_core::types::io::{ItemLimit, ItemOrder, ItemPage, ListItemsResponse};
 
-pub(super) fn remap_ids(value: &Value, ids: &IdPairs) -> Value {
-    match value {
-        Value::String(value) => Value::String(ids.forward.get(value).unwrap_or(value).clone()),
-        Value::Array(values) => Value::Array(values.iter().map(|value| remap_ids(value, ids)).collect()),
-        Value::Object(values) => Value::Object(
-            values
-                .iter()
-                .map(|(key, value)| (key.clone(), remap_ids(value, ids)))
-                .collect(),
-        ),
-        value => value.clone(),
-    }
-}
+pub(super) use crate::support::replay::remap_ids;
 
 fn conversation_body(data: ConversationData) -> Value {
     serde_json::to_value(ConversationResponse::new(
         data.conversation_id,
         data.created_at,
-        data.metadata.map(|metadata| serde_json::from_str(&metadata).unwrap()),
+        data.metadata,
     ))
     .unwrap()
 }
@@ -44,7 +32,11 @@ pub(super) async fn execute_step(
         ("POST", 2) => {
             let request: CreateConversationRequest = serde_json::from_value(body).unwrap();
             let data = handler
-                .create_with_metadata_and_items("default_tenant", request.metadata, request.items.unwrap_or_default())
+                .create(
+                    "default_tenant",
+                    &request.metadata.unwrap_or_default(),
+                    &request.items.unwrap_or_default(),
+                )
                 .await?;
             Ok(conversation_body(data))
         }

@@ -4,12 +4,41 @@
 //! the previous checkpoint and async calls still open at the checkpoint, whose outputs may still
 //! arrive and must find their calls.
 
-use std::borrow::Borrow;
+use std::borrow::{Borrow, Cow};
 use std::collections::HashSet;
 use std::hash::Hash;
 
-use super::InputItem;
+use serde::{Deserialize, Serialize};
+
+use super::{CompactionItem, InputItem, ResponsesInput};
 use crate::types::event::MessageStatus;
+use crate::types::io::output::McpListTools;
+use crate::types::io::{InOutItem, OutputItem};
+
+impl ResponsesInput {
+    /// Discovery records in the current window, in history order. Compaction invalidates earlier listings;
+    /// unlike async calls, they must not be restored from a summarized prefix.
+    pub(crate) fn mcp_list_tools(&self) -> impl DoubleEndedIterator<Item = &McpListTools> {
+        let items = match self {
+            Self::Items(items) => items.as_slice(),
+            Self::Text(_) => &[],
+        };
+        let start = items
+            .iter()
+            .rposition(|item| {
+                matches!(
+                    item,
+                    InOutItem::Input(InputItem::Compaction(_)) | InOutItem::Output(OutputItem::Compaction(_))
+                )
+            })
+            .map_or(0, |index| index + 1);
+        items[start..].iter().filter_map(|item| match item {
+            InOutItem::Input(InputItem::McpListTools(listing))
+            | InOutItem::Output(OutputItem::McpListTools(listing)) => Some(listing),
+            _ => None,
+        })
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct CompactionWindow {
@@ -60,6 +89,58 @@ pub(crate) fn latest_compaction_window<T: Borrow<InputItem>>(items: &[T]) -> Opt
         latest_index,
         retained_start,
     })
+}
+
+/// The window an in-turn compaction carries in its item, as `OpenAI`'s opaque item carries its compacted state: the
+/// summary and the user messages kept with it.
+#[derive(Serialize, Deserialize)]
+struct CarriedWindow {
+    summary: String,
+    retained: Vec<InputItem>,
+}
+
+impl CompactionItem {
+    /// A compaction item that carries its window, so a later turn that continues it still sees the kept user messages.
+    ///
+    /// # Errors
+    /// Fails if the kept messages cannot be serialized.
+    pub(crate) fn carrying(id: Option<String>, summary: String, retained: Vec<InputItem>) -> serde_json::Result<Self> {
+        Ok(Self {
+            agent: None,
+            id,
+            encrypted_content: serde_json::to_string(&CarriedWindow { summary, retained })?,
+        })
+    }
+
+    /// The kept user messages followed by a compaction holding only the summary, when the item carries its window;
+    /// `None` for any other compaction item.
+    pub(crate) fn carried_window(&self) -> Option<Vec<InputItem>> {
+        let CarriedWindow { summary, mut retained } = serde_json::from_str(&self.encrypted_content).ok()?;
+        retained.push(InputItem::Compaction(Self {
+            agent: self.agent.clone(),
+            id: self.id.clone(),
+            encrypted_content: summary,
+        }));
+        Some(retained)
+    }
+}
+
+/// `items` with every compaction that carries its window spread back into the user messages it kept and a compaction
+/// holding only the summary: the form the window rules and the model read.
+pub(crate) fn expand_carried_windows<'a>(
+    items: impl IntoIterator<Item = Cow<'a, InputItem>>,
+) -> Vec<Cow<'a, InputItem>> {
+    let mut expanded = Vec::new();
+    for item in items {
+        match &*item {
+            InputItem::Compaction(compaction) => match compaction.carried_window() {
+                Some(window) => expanded.extend(window.into_iter().map(Cow::Owned)),
+                None => expanded.push(item),
+            },
+            _ => expanded.push(item),
+        }
+    }
+    expanded
 }
 
 /// Call IDs of async calls in `items` that have no output in `items`.
@@ -134,9 +215,9 @@ pub(crate) fn model_items<T: Borrow<InputItem>>(items: Vec<T>) -> impl Iterator<
 }
 
 /// The items of the latest compaction window, plus the async call records from before it
-/// ([`async_records`]) and earlier items that `keep` selects.
+/// ([`async_records`]). MCP discovery is summarized with the old window and must be performed again afterward.
 #[must_use]
-pub(crate) fn retain_window(history: Vec<InputItem>, keep: impl Fn(&InputItem) -> bool) -> Vec<InputItem> {
+pub(crate) fn retain_window(history: Vec<InputItem>) -> Vec<InputItem> {
     let Some(window) = latest_compaction_window(&history) else {
         return history;
     };
@@ -146,7 +227,7 @@ pub(crate) fn retain_window(history: Vec<InputItem>, keep: impl Fn(&InputItem) -
             .iter()
             .enumerate()
             .map(|(index, item)| {
-                index >= window.latest_index() || window.retains_user_item(index, item) || records[index] || keep(item)
+                index >= window.latest_index() || window.retains_user_item(index, item) || records[index]
             })
             .collect()
     };

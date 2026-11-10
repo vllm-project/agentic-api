@@ -40,13 +40,13 @@ use agentic_core::types::io::InOutItem;
 use agentic_core::types::io::{InputItem, ResponsesInput};
 use agentic_server::app::{AppState, DEFAULT_MAX_REQUEST_BODY_SIZE, WebSocketTracker};
 
+use common::persist_turn;
 use common::{spawn_gateway, spawn_mock_llm, test_config, test_state, test_state_with_max_request_body_size};
 
 /// Deliberately tiny ceiling used to exercise the limit without large allocations.
 const SMALL_REQUEST_SIZE_LIMIT: NonZeroUsize = NonZeroUsize::new(500).expect("nonzero");
 
 const COMPETING_RESPONSE_ID: &str = "resp_competing";
-const CONFLICT_MESSAGE: &str = "conversation changed while the response was being generated; retry the request";
 
 enum MockResponse {
     GatedJson {
@@ -260,29 +260,19 @@ fn competing_turn_items() -> Vec<InOutItem> {
 }
 
 async fn persist_competing_turn(pool: &Arc<DbPool>, conversation_id: &str) {
-    ConversationStore::new(Arc::clone(pool))
-        .persist(
-            conversation_id,
-            COMPETING_RESPONSE_ID,
-            None,
-            competing_turn_items(),
-            &ResponseMetadata {
-                multi_agent_tree: None,
-                model: "competing-model".to_owned(),
-                ..ResponseMetadata::default()
-            },
-        )
-        .await
-        .expect("competing turn should persist");
-}
-
-fn conflict_error() -> serde_json::Value {
-    serde_json::json!({
-        "message": CONFLICT_MESSAGE,
-        "type": "invalid_request_error",
-        "code": "conversation_locked",
-        "param": "conversation"
-    })
+    persist_turn(
+        &ConversationStore::new(Arc::clone(pool)),
+        conversation_id,
+        COMPETING_RESPONSE_ID,
+        competing_turn_items(),
+        &ResponseMetadata {
+            multi_agent_tree: None,
+            model: "competing-model".to_owned(),
+            ..ResponseMetadata::default()
+        },
+    )
+    .await
+    .expect("competing turn should persist");
 }
 
 fn sse_events(body: &str) -> Vec<serde_json::Value> {
@@ -330,25 +320,24 @@ fn gated_sse_chunks() -> (String, String) {
     )
 }
 
-async fn assert_only_competing_turn_persisted(pool: &Arc<DbPool>, conversation_id: &str) {
-    let conversation_store = ConversationStore::new(Arc::clone(pool));
-    assert_eq!(
-        conversation_store
-            .rehydrate(conversation_id)
-            .await
-            .expect("conversation history"),
-        competing_turn_items()
+/// A turn that ran while a competing turn was stored is appended after it, as `OpenAI` does.
+async fn assert_turn_appended_after_competing_turn(pool: &Arc<DbPool>, conversation_id: &str, response_id: &str) {
+    let items = ConversationStore::new(Arc::clone(pool))
+        .rehydrate(conversation_id)
+        .await
+        .expect("conversation history")
+        .items;
+    let competing = competing_turn_items();
+    assert_eq!(items[..competing.len()], competing[..]);
+    assert!(
+        items.len() > competing.len(),
+        "the later turn's items follow the competing turn"
     );
     let response = ResponseStore::new(Arc::clone(pool))
-        .get(COMPETING_RESPONSE_ID)
+        .get(response_id)
         .await
-        .expect("competing response should remain");
+        .expect("the later turn is stored");
     assert_eq!(response.conversation_id.as_deref(), Some(conversation_id));
-    let response_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM responses")
-        .fetch_one(pool.as_ref())
-        .await
-        .expect("response count");
-    assert_eq!(response_count, 1, "only the competing response should be stored");
 }
 
 async fn assert_response_not_persisted(pool: &Arc<DbPool>, response_id: &str) {
@@ -2027,7 +2016,7 @@ async fn test_streaming_store_true_hides_persistence_details_without_sequence_ga
 }
 
 #[tokio::test]
-async fn http_json_conversation_conflict_rejects_stale_turn_without_persisting_it() {
+async fn http_json_conversation_turn_appends_after_a_turn_stored_while_it_ran() {
     // Arrange
     let upstream_body = serde_json::json!({
         "id": "resp_upstream_stale_json",
@@ -2054,7 +2043,7 @@ async fn http_json_conversation_conflict_rejects_stale_turn_without_persisting_i
                 .post(format!("{gateway_url}/v1/responses"))
                 .json(&serde_json::json!({
                     "model": "test-model",
-                    "input": [{"type": "message", "role": "user", "content": "stale turn"}],
+                    "input": [{"type": "message", "role": "user", "content": "later turn"}],
                     "conversation_id": conversation_id,
                     "store": true,
                     "stream": false
@@ -2070,16 +2059,15 @@ async fn http_json_conversation_conflict_rejects_stale_turn_without_persisting_i
     let response = response_task.await.expect("response task");
 
     // Assert
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    assert_eq!(
-        response.json::<serde_json::Value>().await.expect("error response JSON"),
-        serde_json::json!({"error": conflict_error()})
-    );
-    assert_only_competing_turn_persisted(&fixture.pool, &conversation_id).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.json::<serde_json::Value>().await.expect("response JSON");
+    assert_eq!(body["status"], "completed");
+    let response_id = body["id"].as_str().expect("gateway response ID");
+    assert_turn_appended_after_competing_turn(&fixture.pool, &conversation_id, response_id).await;
 }
 
 #[tokio::test]
-async fn http_sse_conversation_conflict_terminates_after_observable_delta_without_persisting_stale_turn() {
+async fn http_sse_conversation_turn_appends_after_a_turn_stored_while_it_streamed() {
     // Arrange
     let (first_chunk, terminal_chunk) = gated_sse_chunks();
     let (mock, arrived, release) = MockResponsesServer::start_gated_sse(first_chunk, terminal_chunk).await;
@@ -2093,7 +2081,7 @@ async fn http_sse_conversation_conflict_terminates_after_observable_delta_withou
         .post(format!("{gateway_url}/v1/responses"))
         .json(&serde_json::json!({
             "model": "test-model",
-            "input": [{"type": "message", "role": "user", "content": "stale turn"}],
+            "input": [{"type": "message", "role": "user", "content": "later turn"}],
             "conversation_id": conversation_id,
             "store": true,
             "stream": true
@@ -2123,32 +2111,18 @@ async fn http_sse_conversation_conflict_terminates_after_observable_delta_withou
 
     // Assert
     let events = sse_events(&body);
-    let stale_response_id = events
+    let response_id = events
         .iter()
         .find(|event| event["type"] == "response.created")
         .and_then(|event| event["response"]["id"].as_str())
         .expect("gateway response ID from response.created");
-    assert!(
-        events
-            .iter()
-            .any(|event| event["type"] == "response.output_text.delta" && event["delta"] == "partial"),
+    assert_eq!(
+        events.last().expect("terminal SSE event")["type"],
+        "response.completed",
         "{body}"
     );
-    let errors = events
-        .iter()
-        .filter(|event| event["type"] == "error")
-        .collect::<Vec<_>>();
-    assert_eq!(errors.len(), 1, "{body}");
-    assert_eq!(errors[0]["status"], StatusCode::BAD_REQUEST.as_u16());
-    assert_eq!(errors[0]["error"], conflict_error());
-    assert_eq!(events.last().expect("terminal SSE event")["type"], "error");
-    assert!(body.contains("data: [DONE]"), "{body}");
-    assert!(
-        events.iter().all(|event| event["type"] != "response.completed"),
-        "{body}"
-    );
-    assert_only_competing_turn_persisted(&fixture.pool, &conversation_id).await;
-    assert_response_not_persisted(&fixture.pool, stale_response_id).await;
+    assert!(events.iter().all(|event| event["type"] != "error"), "{body}");
+    assert_turn_appended_after_competing_turn(&fixture.pool, &conversation_id, response_id).await;
 }
 
 #[tokio::test]

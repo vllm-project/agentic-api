@@ -1,9 +1,8 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::Map;
 
 use super::{PromptCacheOptions, RequestPayload, ResponseTextConfig, ResponseTextFormat};
+use crate::types::conversations::ConversationMetadata;
 use crate::types::io::ToolChoice;
 use crate::types::tools::ResponsesTool;
 
@@ -50,7 +49,7 @@ pub struct StandardResponseFields {
     #[serde(default = "default_stored_response")]
     pub store: bool,
     pub background: bool,
-    pub metadata: HashMap<String, Value>,
+    pub metadata: ConversationMetadata,
     pub safety_identifier: Option<String>,
     pub prompt_cache_key: Option<String>,
     /// Current request settings, echoed consistently across response lifecycle and storage.
@@ -84,7 +83,7 @@ impl Default for StandardResponseFields {
             max_output_tokens: None,
             store: false,
             background: false,
-            metadata: HashMap::new(),
+            metadata: ConversationMetadata::new(),
             safety_identifier: None,
             prompt_cache_key: None,
             prompt_cache_options: None,
@@ -114,17 +113,7 @@ impl StandardResponseFields {
             effort: reasoning.effort.clone(),
             summary: reasoning.summary.clone(),
         });
-        self.metadata = request
-            .metadata
-            .as_ref()
-            .and_then(Value::as_object)
-            .map(|metadata| {
-                metadata
-                    .iter()
-                    .map(|(key, value)| (key.clone(), value.clone()))
-                    .collect()
-            })
-            .unwrap_or_default();
+        self.metadata = request.metadata.clone().unwrap_or_default();
         self.prompt_cache_key.clone_from(&request.prompt_cache_key);
         self.prompt_cache_options = request.prompt_cache_options;
     }

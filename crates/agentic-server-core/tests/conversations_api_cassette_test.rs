@@ -3,10 +3,11 @@
 
 mod support;
 
+use agentic_core::types::conversations::ConversationMetadata;
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::collections::HashMap;
 use std::path::PathBuf;
+use support::replay::{IdPairs, compare_value, remap_error_message};
 
 #[derive(Debug, Deserialize)]
 struct Cassette {
@@ -63,79 +64,6 @@ fn pair(name: &str) -> Option<(Cassette, Cassette)> {
         openai.expect("missing OpenAI cassette"),
         gateway.expect("missing gateway cassette"),
     ))
-}
-
-#[derive(Default)]
-struct IdPairs {
-    forward: HashMap<String, String>,
-    reverse: HashMap<String, String>,
-}
-
-impl IdPairs {
-    fn compare(&mut self, a: &str, b: &str, location: &str) {
-        if let Some(previous) = self.forward.insert(a.to_owned(), b.to_owned()) {
-            assert_eq!(previous, b, "{location}: one OpenAI ID mapped to two gateway IDs");
-        }
-        if let Some(previous) = self.reverse.insert(b.to_owned(), a.to_owned()) {
-            assert_eq!(previous, a, "{location}: two OpenAI IDs mapped to one gateway ID");
-        }
-    }
-}
-
-fn remap_error_message(body: &mut Value, ids: &IdPairs) {
-    if let Some(message) = body["error"]["message"].as_str() {
-        let message = ids
-            .forward
-            .iter()
-            .fold(message.to_owned(), |message, (recorded, actual)| {
-                message.replace(&format!("'{recorded}'"), &format!("'{actual}'"))
-            });
-        body["error"]["message"] = Value::String(message);
-    }
-}
-
-fn is_id_field(key: &str) -> bool {
-    matches!(
-        key,
-        "id" | "conversation"
-            | "conversation_id"
-            | "previous_response_id"
-            | "first_id"
-            | "last_id"
-            | "after"
-            | "call_id"
-    )
-}
-
-fn compare_value(a: &Value, b: &Value, path: &str, ids: &mut IdPairs, generated_text: bool) {
-    match (a, b) {
-        (Value::Object(a), Value::Object(b)) => {
-            assert_eq!(a.len(), b.len(), "{path}: field count differs");
-            for (key, av) in a {
-                let bv = b.get(key).unwrap_or_else(|| panic!("{path}: missing field {key}"));
-                if key == "model" || key == "created_at" || key == "updated_at" || key == "usage" {
-                    assert_eq!(
-                        std::mem::discriminant(av),
-                        std::mem::discriminant(bv),
-                        "{path}.{key}: type differs"
-                    );
-                } else if is_id_field(key) && av.is_string() && bv.is_string() {
-                    ids.compare(av.as_str().unwrap(), bv.as_str().unwrap(), &format!("{path}.{key}"));
-                } else if generated_text && key == "text" && av.is_string() && bv.is_string() {
-                    // Model wording varies. History visibility is asserted separately.
-                } else {
-                    compare_value(av, bv, &format!("{path}.{key}"), ids, generated_text);
-                }
-            }
-        }
-        (Value::Array(a), Value::Array(b)) => {
-            assert_eq!(a.len(), b.len(), "{path}: item count differs");
-            for (i, (av, bv)) in a.iter().zip(b).enumerate() {
-                compare_value(av, bv, &format!("{path}[{i}]"), ids, generated_text);
-            }
-        }
-        _ => assert_eq!(a, b, "{path}: values differ"),
-    }
 }
 
 fn compare_path(a: &str, b: &str, ids: &mut IdPairs) {
@@ -306,7 +234,7 @@ fn comparable_body(turn: &Turn) -> Value {
             turn.request.body.get("conversation").is_some() || turn.request.body.get("conversation_id").is_some();
         return response_shape(&body, has_conversation);
     }
-    if turn.request.path.ends_with("/items") && turn.response.status_code == 200 {
+    if turn.request.path.ends_with("items") && turn.response.status_code == 200 {
         return list_shape(&body);
     }
     if turn.request.path.contains("/items/") && turn.request.method == "GET" && turn.response.status_code == 200 {
@@ -366,7 +294,8 @@ fn compare_recordings(name: &str, openai: &Cassette, gateway: &Cassette) {
                 "{location}: SSE lifecycle"
             );
         }
-        let a_body = comparable_body(a);
+        let mut a_body = comparable_body(a);
+        remap_error_message(&mut a_body, &ids);
         let b_body = comparable_body(b);
         compare_value(&a_body, &b_body, &location, &mut ids, false);
     }
@@ -692,6 +621,176 @@ async fn pagination_matches_openai() {
 #[path = "conversations/replay.rs"]
 mod replay;
 
+const APRICOT: &str = "Remember the word APRICOT. Reply with only OK.";
+const COUNT: &str = "Count from 1 to 120, one number per line, digits only.";
+
+/// Message history as user text and generated item IDs, so recordings compare despite model wording.
+fn history(turn: &Turn) -> Vec<String> {
+    turn.response.body.as_ref().expect("list body")["data"]
+        .as_array()
+        .expect("list data")
+        .iter()
+        .filter(|item| item["type"] == "message")
+        .map(|item| match item["role"].as_str() {
+            Some("user") => item["content"][0]["text"].as_str().expect("user text").to_owned(),
+            _ => item["id"].as_str().expect("item ID").to_owned(),
+        })
+        .collect()
+}
+
+fn output_id(turn: &Turn) -> String {
+    let body = result_body(&turn.response);
+    let output = body["output"].as_array().expect("response output");
+    let message = output
+        .iter()
+        .find(|item| item["type"] == "message")
+        .expect("output message");
+    message["id"].as_str().expect("message ID").to_owned()
+}
+
+/// Three conversations, each changed while its streamed turn B (t3, t10, t16) runs: t4 adds an item,
+/// t11 deletes A's first item, t17 deletes response A. B completes in every case, as on `OpenAI`.
+fn check_concurrent_writes(cassette: &Cassette) {
+    let turns = &cassette.turns;
+    assert_eq!(turns.len(), 22, "API step count");
+    for (index, turn) in turns.iter().enumerate() {
+        assert_eq!(turn.filename, format!("t{}", index + 1));
+        let status = if index == 21 { 404 } else { 200 };
+        assert_eq!(turn.response.status_code, status, "t{} status", index + 1);
+    }
+    for b in [2, 9, 15] {
+        assert_eq!(turns[b].request.body["input"][0]["content"], COUNT);
+        assert!(
+            sse_events(&turns[b].response)
+                .iter()
+                .all(|event| event["type"] != "error")
+        );
+        assert_eq!(lifecycle(&turns[b].response).last().unwrap(), "response.completed");
+    }
+    let started = |a: usize| vec![APRICOT.to_owned(), output_id(&turns[a]), COUNT.to_owned()];
+    let finished = |a: usize, b: usize| [started(a), vec![output_id(&turns[b])]].concat();
+
+    let mut expected = finished(1, 2);
+    expected.insert(2, "Side note: the marker is VIOLET.".to_owned());
+    assert_eq!(history(&turns[5]), expected, "side item precedes B's items");
+
+    let deleted = turns[8].response.body.as_ref().unwrap()["data"][0]["id"]
+        .as_str()
+        .unwrap();
+    assert!(turns[10].request.path.ends_with(&format!("/items/{deleted}")));
+    assert_eq!(history(&turns[12]), finished(7, 9)[1..], "deleted item stays deleted");
+
+    let response_a = result_body(&turns[14].response)["id"].as_str().unwrap().to_owned();
+    assert_eq!(turns[16].request.path, format!("/v1/responses/{response_a}"));
+    assert_eq!(turns[16].response.body.as_ref().unwrap()["deleted"], true);
+    assert_eq!(turns[21].request.path, turns[16].request.path);
+    assert_eq!(history(&turns[17]), started(14));
+    assert_eq!(
+        history(&turns[18]),
+        finished(14, 15),
+        "deleting a response keeps its items"
+    );
+    let follow_up = turns[19].request.body["input"][0]["content"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(history(&turns[20]), [finished(14, 15), vec![follow_up]].concat());
+    assert_answer(&turns[19], "APRICOT");
+
+    // B stores the history it started from: no side item, and still the deleted item.
+    assert_eq!(history(&turns[4]), started(1));
+    assert_eq!(history(&turns[11]), started(7));
+}
+
+#[test]
+fn conversation_turn_completes_when_the_conversation_changes_mid_stream() {
+    let Some((openai, gateway)) = pair("concurrent-writes") else {
+        return;
+    };
+    check_concurrent_writes(&openai);
+    check_concurrent_writes(&gateway);
+    compare_recordings("concurrent-writes", &openai, &gateway);
+}
+
+/// Whether a turn was refused with `conversation_locked`: an `error` event in its stream, or an error body.
+fn refused(turn: &Turn) -> bool {
+    let error = if turn.response.sse.is_some() {
+        sse_events(&turn.response)
+            .into_iter()
+            .find(|event| event["type"] == "error")
+            .map(|event| event["error"].clone())
+    } else {
+        turn.response.body.as_ref().and_then(|body| body.get("error")).cloned()
+    };
+    error.is_some_and(|error| error["code"] == "conversation_locked")
+}
+
+fn listed_items(turn: &Turn) -> &[Value] {
+    turn.response.body.as_ref().expect("list body")["data"]
+        .as_array()
+        .expect("list data")
+}
+
+fn assert_completed(turn: &Turn) {
+    assert_eq!(turn.response.status_code, 200, "{} status", turn.filename);
+    assert_eq!(
+        result_body(&turn.response)["status"],
+        "completed",
+        "{} status",
+        turn.filename
+    );
+}
+
+/// Two turns answer one pending call: streamed turn B (t3) and turn C (t4), sent while B streams. The second to
+/// commit is refused, the conversation (t5) keeps the other answer, and D (t8) continues with it.
+fn check_competing_tool_outputs(cassette: &Cassette) {
+    let turns = &cassette.turns;
+    assert_eq!(turns.len(), 9, "API step count");
+    let (b, c) = (&turns[2], &turns[3]);
+    assert_ne!(refused(b), refused(c), "exactly one answer is refused");
+    let kept = if refused(b) { c } else { b };
+    let kept_output = kept.request.body["input"][0]["output"].as_str().expect("tool output");
+    let outputs: Vec<_> = listed_items(&turns[4])
+        .iter()
+        .filter(|item| item["type"] == "function_call_output")
+        .map(|item| item["output"].as_str().expect("tool output"))
+        .collect();
+    assert_eq!(outputs, [kept_output], "the conversation keeps one answer");
+    assert_completed(&turns[7]);
+    let temperature =
+        serde_json::from_str::<Value>(kept_output).expect("tool output JSON")["temperature_c"].to_string();
+    assert_answer(&turns[7], &temperature);
+}
+
+#[test]
+fn competing_outputs_for_one_call_keep_the_conversation_usable() {
+    let Some((openai, gateway)) = pair("competing-tool-outputs") else {
+        return;
+    };
+    check_competing_tool_outputs(&openai);
+    check_competing_tool_outputs(&gateway);
+}
+
+/// Multi-agent turns B (streamed, t3) and C (t4, leaving a `get_weather` call pending) continue the same tree. C
+/// commits first, so B, which would replace C's tree, is refused; D (t6) answers C's call.
+fn check_overlapping_multi_agent(cassette: &Cassette) {
+    let turns = &cassette.turns;
+    assert_eq!(turns.len(), 7, "API step count");
+    assert!(refused(&turns[2]), "B, stored after C, is refused");
+    assert!(!refused(&turns[3]), "C commits");
+    assert_completed(&turns[5]);
+    assert!(response_text(&turns[5]).contains('7'), "D reports C's tool output");
+}
+
+#[test]
+fn overlapping_multi_agent_turns_keep_the_first_turns_pending_call() {
+    let Some((openai, gateway)) = pair("overlapping-multi-agent") else {
+        return;
+    };
+    check_overlapping_multi_agent(&openai);
+    check_overlapping_multi_agent(&gateway);
+}
+
 fn check_edge_case_recording(cassette: &Cassette) {
     let turns = &cassette.turns;
     assert_eq!(turns.len(), 19);
@@ -832,7 +931,7 @@ async fn supplied_id_validation_matches_recorded_openai_errors() {
                 .await
                 .unwrap_err(),
             handler
-                .create_with_metadata_and_items("tenant", None, request.items)
+                .create("tenant", &ConversationMetadata::new(), &request.items)
                 .await
                 .unwrap_err(),
         ];
@@ -905,10 +1004,10 @@ async fn existing_conversation_item_error_matches_openai_recording() {
     let source = &reference.turns[7].response.body.as_ref().unwrap()["data"][2];
     let original = InOutItem::Input(serde_json::from_value(source.clone()).unwrap());
     let conversation = store
-        .create_with_metadata_and_items(Some("default_tenant"), None, vec![original])
+        .create("default_tenant", &ConversationMetadata::new(), &[original])
         .await
         .unwrap();
-    let before = store.rehydrate_snapshot(&conversation.conversation_id).await.unwrap();
+    let before = store.rehydrate(&conversation.conversation_id).await.unwrap();
     let request: CreateItemRequest = serde_json::from_value(reference.turns[17].request.body.clone()).unwrap();
     let error: ExecutorError = store
         .create_items("default_tenant", &conversation.conversation_id, request.items)
@@ -918,9 +1017,8 @@ async fn existing_conversation_item_error_matches_openai_recording() {
     assert_eq!(error.http_status().as_u16(), reference.turns[17].response.status_code);
     let body: Value = serde_json::from_slice(&error.into_response_body()).unwrap();
     assert_eq!(&body, reference.turns[17].response.body.as_ref().unwrap());
-    let after = store.rehydrate_snapshot(&conversation.conversation_id).await.unwrap();
+    let after = store.rehydrate(&conversation.conversation_id).await.unwrap();
     assert_eq!(after.items, before.items);
-    assert_eq!(after.version, before.version);
 }
 
 #[tokio::test]
@@ -938,9 +1036,9 @@ async fn deleted_cursor_error_body_matches_openai_recording() {
         .unwrap()
         .iter()
         .map(|value| InOutItem::Input(serde_json::from_value(value.clone()).unwrap()))
-        .collect();
+        .collect::<Vec<_>>();
     let conversation = store
-        .create_with_metadata_and_items(Some("tenant"), None, items)
+        .create("tenant", &ConversationMetadata::new(), &items)
         .await
         .unwrap();
     let cursor = reference.turns[10].request.query_params["after"].as_str().unwrap();

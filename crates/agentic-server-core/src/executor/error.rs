@@ -3,6 +3,8 @@ use thiserror::Error;
 
 use crate::StorageError;
 use crate::tool::ToolError;
+use crate::types::file_search::FileSearchError;
+use crate::types::io::ClientItemError;
 use crate::types::io::input::InputValidationError;
 use crate::types::io::output::McpListTools;
 use crate::types::request_response::{
@@ -32,6 +34,8 @@ impl std::fmt::Display for ResourceLimit {
 #[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum ExecutorError {
+    #[error(transparent)]
+    FileSearch(#[from] FileSearchError),
     /// Request-owned streaming orchestration panicked. Never forward panic data.
     #[error("stream producer panicked")]
     StreamProducerPanicked,
@@ -90,6 +94,11 @@ pub enum ExecutorError {
         serde_json::Error,
     ),
 
+    /// The upstream supplied invalid typed content. Keep parser diagnostics as
+    /// a source without reporting a backend defect as a client request error.
+    #[error("upstream returned invalid Messages content")]
+    UpstreamProtocol(#[source] serde_json::Error),
+
     /// A general stream processing error with a human-readable message.
     ///
     /// Used for non-network stream failures (e.g. worker thread panic).
@@ -111,13 +120,18 @@ pub enum ExecutorError {
     #[error("invalid request: {0}")]
     InvalidInput(#[from] InputValidationError),
 
+    /// A client-supplied item `OpenAI` refuses.
+    #[error(transparent)]
+    ClientItem(#[from] ClientItemError),
+
     /// The request's `max_tool_calls` is not an integer of at least one.
     #[error(transparent)]
     InvalidMaxToolCalls(#[from] MaxToolCallsError),
-    /// A rejected request parameter value, with its public code and parameter name.
+    /// A rejected request parameter value, with its public code and parameter name; `None` is reported as a `null`
+    /// parameter.
     #[error("{message}")]
     UnsupportedValue {
-        param: String,
+        param: Option<String>,
         code: Option<&'static str>,
         message: String,
     },
@@ -192,6 +206,9 @@ impl ExecutorError {
     #[must_use]
     pub fn http_status(&self) -> StatusCode {
         match self.client_visible_error() {
+            Self::FileSearch(error) | Self::Tool(ToolError::FileSearch(error)) => {
+                StatusCode::from_u16(error.status_code()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
+            }
             Self::Storage(StorageError::PreviousResponseNotFound { .. })
             | Self::ConversationLocked { .. }
             | Self::Tool(
@@ -202,6 +219,7 @@ impl ExecutorError {
             )
             | Self::InvalidRequest(_)
             | Self::InvalidInput(_)
+            | Self::ClientItem(_)
             | Self::InvalidPromptCacheOptions(_)
             | Self::InvalidMaxToolCalls(_)
             | Self::UnsupportedValue { .. }
@@ -232,6 +250,13 @@ impl ExecutorError {
     #[must_use]
     pub fn error_type(&self) -> &'static str {
         match self.client_visible_error() {
+            Self::FileSearch(error) | Self::Tool(ToolError::FileSearch(error)) => match error.status_code() {
+                400 => "invalid_request_error",
+                404 => "not_found",
+                409 => "conflict_error",
+                502 => "upstream_error",
+                _ => "server_error",
+            },
             Self::ConversationLocked { .. }
             | Self::Tool(
                 ToolError::Config(_)
@@ -241,6 +266,7 @@ impl ExecutorError {
             )
             | Self::InvalidRequest(_)
             | Self::InvalidInput(_)
+            | Self::ClientItem(_)
             | Self::InvalidPromptCacheOptions(_)
             | Self::InvalidMaxToolCalls(_)
             | Self::UnsupportedValue { .. }
@@ -278,7 +304,7 @@ impl ExecutorError {
             Self::ConversationLocked { .. } => "conversation_locked",
             Self::Storage(StorageError::PreviousResponseNotFound { .. }) => "previous_response_not_found",
             Self::Conflict(_) => "response_already_stored",
-            Self::Storage(StorageError::InvalidItemId { .. }) => "invalid_value",
+            Self::ClientItem(error) => error.code(),
             Self::Storage(StorageError::ItemAlreadyInConversation) => "item_already_in_conversation",
             Self::PayloadTooLarge(_) => "body_too_large",
             Self::ResourceLimitExceeded { .. } => "response_resource_limit_exceeded",
@@ -296,9 +322,9 @@ impl ExecutorError {
     #[must_use]
     pub fn error_param(&self) -> Option<&str> {
         match self.client_visible_error() {
-            Self::Storage(StorageError::InvalidItemId { param, .. })
-            | Self::Tool(ToolError::UnknownParameter { param })
-            | Self::UnsupportedValue { param, .. } => Some(param),
+            Self::ClientItem(error) => Some(error.param()),
+            Self::Tool(ToolError::UnknownParameter { param }) => Some(param),
+            Self::UnsupportedValue { param, .. } => param.as_deref(),
             Self::Storage(StorageError::ItemAlreadyInConversation) => Some("items"),
             Self::Storage(StorageError::ItemCursorNotFound { .. }) => Some("after"),
             Self::ConversationLocked { .. } => Some("conversation"),
@@ -316,9 +342,9 @@ impl ExecutorError {
     #[must_use]
     pub fn error_message(&self) -> String {
         match self.client_visible_error() {
+            Self::FileSearch(error) | Self::Tool(ToolError::FileSearch(error)) => error.public_message(),
             Self::Storage(
-                error @ (StorageError::InvalidItemId { .. }
-                | StorageError::ItemAlreadyInConversation
+                error @ (StorageError::ItemAlreadyInConversation
                 | StorageError::ItemCursorNotFound { .. }
                 | StorageError::ResponseNotFound { .. }
                 | StorageError::PreviousResponseNotFound { .. }),
@@ -353,7 +379,7 @@ impl ExecutorError {
             error.insert("param".to_owned(), serde_json::json!(param));
         } else if matches!(
             self.client_visible_error(),
-            Self::Storage(StorageError::ResponseNotFound { .. })
+            Self::Storage(StorageError::ResponseNotFound { .. }) | Self::UnsupportedValue { param: None, .. }
         ) {
             error.insert("param".to_owned(), serde_json::Value::Null);
         }
@@ -378,6 +404,32 @@ pub type ExecutorResult<T> = Result<T, ExecutorError>;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_search_error_envelopes_preserve_request_failure_categories() {
+        use crate::types::file_search::FileSearchError;
+        for (source, status, category) in [
+            (
+                FileSearchError::InvalidRequest("bad query".to_owned()),
+                400,
+                "invalid_request_error",
+            ),
+            (FileSearchError::NotFound("missing file".to_owned()), 404, "not_found"),
+            (
+                FileSearchError::Conflict("already attached".to_owned()),
+                409,
+                "conflict_error",
+            ),
+            (FileSearchError::Unavailable("disabled".to_owned()), 503, "server_error"),
+            (FileSearchError::ProviderProtocol, 502, "upstream_error"),
+        ] {
+            let error = ExecutorError::from(ToolError::FileSearch(source));
+            assert_eq!(error.http_status().as_u16(), status);
+            assert_eq!(error.error_type(), category);
+            assert_eq!(error.response_error()["type"], category);
+            assert!(std::error::Error::source(&error).is_some());
+        }
+    }
 
     #[test]
     fn test_executor_error_display() {
@@ -589,7 +641,7 @@ mod tests {
     #[test]
     fn unsupported_value_matches_openai_error_envelope() {
         let error = ExecutorError::UnsupportedValue {
-            param: "multi_agent".into(),
+            param: Some("multi_agent".into()),
             code: Some("unsupported_value"),
             message: "Async parallel tool calls are not yet supported in multi-agent mode.".into(),
         };

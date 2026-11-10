@@ -4,10 +4,11 @@
 //! mapping to public `web_search_call` output items. [`provider`] defines the
 //! private provider contract, normalized result types, and the response helpers every provider shares. [`args`]
 //! parses the model's arguments; provider modules ([`you`], [`brave`], [`tavily`], [`searxng`],
-//! [`serply`]) shape requests and map responses.
+//! [`serply`], [`keenable`]) shape requests and map responses.
 
 pub(crate) mod args;
 pub(crate) mod brave;
+pub(crate) mod keenable;
 pub(crate) mod output;
 pub(crate) mod provider;
 pub(crate) mod searxng;
@@ -29,6 +30,7 @@ use tokio::sync::Semaphore;
 
 use self::args::{MAX_WEB_SEARCH_QUERIES, WebSearchArguments};
 use self::brave::BraveSearchProvider;
+use self::keenable::KeenableSearchProvider;
 use self::output::{WebSearchResultSections, WebSearchToolOutput};
 use self::provider::{
     ApiKey, WebSearchProvider, WebSearchProviderMetadata, WebSearchProviderResponse, WebSearchResult, clean_base_url,
@@ -39,7 +41,7 @@ use self::serply::SerplySearchProvider;
 use self::tavily::TavilySearchProvider;
 use self::you::{YOU_API_BASE_URL, YOU_API_KEY, YouSearchProvider};
 use super::handler::MAX_GATEWAY_TOOL_OUTPUT_BYTES;
-use super::handler::{GatewayExecutor, GatewayToolEventPlan, ToolError, ToolHandler, ToolOutput};
+use super::handler::{GatewayExecutor, ToolError, ToolHandler, ToolOutput};
 use super::ownership::GatewayBinding;
 use super::registry::{ToolEntry, ToolType};
 use crate::config::{DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS, WebSearchProviderConfig, WebSearchProviderKind};
@@ -144,12 +146,10 @@ pub(crate) fn web_search_function_tool() -> FunctionTool {
     }
 }
 
+/// The `web_search_call` for a completed or failed search, for a web search executor's
+/// [`GatewayExecutor::public_output`].
 #[must_use]
-pub(crate) fn output_item(
-    call: &FunctionToolCall,
-    output: &ToolOutput,
-    status: WebSearchCallStatus,
-) -> Option<OutputItem> {
+pub fn output_item(call: &FunctionToolCall, output: &ToolOutput, status: WebSearchCallStatus) -> Option<OutputItem> {
     let parsed_output = serde_json::from_str::<Value>(&output.output).ok();
     let queries = parsed_output
         .as_ref()
@@ -162,8 +162,9 @@ pub(crate) fn output_item(
         .ok()
 }
 
+/// The in-progress `web_search_call`, for a web search executor's [`GatewayExecutor::started_output`].
 #[must_use]
-pub(crate) fn started_output_item(call: &FunctionToolCall) -> Option<OutputItem> {
+pub fn started_output_item(call: &FunctionToolCall) -> Option<OutputItem> {
     WebSearchCall::try_new(
         call_output_id(call),
         WebSearchCallStatus::InProgress,
@@ -265,6 +266,15 @@ impl WebSearchHandler {
                 config
                     .max_concurrent_queries
                     .or(WebSearchProviderKind::Serply.default_max_concurrent_queries())
+                    .unwrap_or(max_concurrent_gateway_calls),
+            )),
+            WebSearchProviderKind::Keenable => Arc::new(KeenableSearchProvider::from_values(
+                client,
+                config.api_key.clone(),
+                config.base_url.clone(),
+                config
+                    .max_concurrent_queries
+                    .or(WebSearchProviderKind::Keenable.default_max_concurrent_queries())
                     .unwrap_or(max_concurrent_gateway_calls),
             )),
         };
@@ -423,8 +433,8 @@ impl GatewayExecutor for WebSearchHandler {
         true
     }
 
-    fn plan_gateway_events(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> GatewayToolEventPlan {
-        GatewayToolEventPlan::new(started_output_item(call))
+    fn started_output(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> Option<OutputItem> {
+        started_output_item(call)
     }
 
     fn public_output(

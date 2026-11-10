@@ -11,7 +11,7 @@ use serde_json::{Map, Value};
 use crate::types::event::{MessageStatus, ResponseStatus};
 pub(crate) use crate::types::io::input::TOOL_SEARCH_NAME;
 use crate::types::io::output::FunctionToolCall;
-use crate::types::io::{FunctionTool, InOutItem, InputItem, ResponsesInput, ToolChoice, ToolSearchCall};
+use crate::types::io::{FunctionTool, InputItem, ResponsesInput, ToolChoice, ToolSearchCall};
 use crate::types::request_response::RequestPayload;
 use crate::types::tools::{
     CodexNamespaceMember, CodexNamespaceToolParam, ResponsesTool, ToolSearchExecution, ToolSearchStatus,
@@ -497,12 +497,11 @@ impl ToolCatalog {
 /// Model-visible history (search items kept for definition loading) plus MCP list records.
 fn active_model_input(input: &ResponsesInput) -> ResponsesInput {
     let mut active_input = input.model_input_keeping_search_items().into_owned();
-    if let (ResponsesInput::Items(public_items), ResponsesInput::Items(active_items)) = (input, &mut active_input) {
+    if let ResponsesInput::Items(active_items) = &mut active_input {
         active_items.extend(
-            public_items
-                .iter()
-                .filter(|item| matches!(item, InOutItem::Input(InputItem::McpListTools(_))))
-                .cloned(),
+            input
+                .mcp_list_tools()
+                .map(|list| InputItem::McpListTools(list.clone()).into()),
         );
     }
     active_input

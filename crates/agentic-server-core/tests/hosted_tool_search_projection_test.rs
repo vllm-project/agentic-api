@@ -267,6 +267,7 @@ async fn compaction_summary_shows_the_search_and_its_call_as_the_model_saw_them(
     let (llm_url, requests) = spawn_llm(vec![
         upstream("up_summary", json!([message("summary")])),
         upstream("up_1", json!([message("done")])),
+        upstream("up_summary_after", json!([message("summary after the answer")])),
     ])
     .await;
     let (context, _, _) = durable_context(llm_url).await;
@@ -290,7 +291,11 @@ async fn compaction_summary_shows_the_search_and_its_call_as_the_model_saw_them(
     assert_eq!(response.status, "completed");
 
     let requests = requests.lock().await;
-    assert_eq!(requests.len(), 2, "a summary request, then the answer");
+    assert_eq!(
+        requests.len(),
+        3,
+        "a summary request, the answer, then a summary after the answer"
+    );
     assert!(requests[0]["tools"].is_null(), "{}", requests[0]["tools"]);
     let summary = model_input(&requests[0]);
     assert_eq!(summary[1]["type"], "function_call");
@@ -309,6 +314,7 @@ async fn compaction_summary_keeps_a_namespace_member_named_like_its_namespace() 
     let (llm_url, requests) = spawn_llm(vec![
         upstream("up_summary", json!([message("summary")])),
         upstream("up_1", json!([message("done")])),
+        upstream("up_summary_after", json!([message("summary after the answer")])),
     ])
     .await;
     let (context, _, _) = durable_context(llm_url).await;
@@ -337,7 +343,11 @@ async fn compaction_summary_keeps_a_namespace_member_named_like_its_namespace() 
     assert_eq!(response.status, "completed");
 
     let requests = requests.lock().await;
-    assert_eq!(requests.len(), 2, "a summary request, then the answer");
+    assert_eq!(
+        requests.len(),
+        3,
+        "a summary request, the answer, then a summary after the answer"
+    );
     assert!(requests[0]["tools"].is_null(), "{}", requests[0]["tools"]);
     let summary = model_input(&requests[0]);
     assert_eq!(summary[3]["type"], "function_call");
@@ -351,15 +361,19 @@ async fn compaction_summary_keeps_a_namespace_member_named_like_its_namespace() 
 async fn second_compaction_summary_of_a_restored_function_call(multi_agent: bool) {
     let weather_call = json!({"type": "function_call", "id": "fc_w1", "call_id": "call_w1", "name": "get_weather",
         "arguments": "{\"city\":\"Paris\"}", "status": "completed"});
-    let (llm_url, requests) = spawn_llm(vec![
+    let mut responses = vec![
         upstream("up_1", json!([search_call("s1")])),
         upstream("up_2", json!([message("loaded")])),
         upstream("up_summary_1", json!([message("summary one")])),
         upstream("up_3", json!([weather_call])),
         upstream("up_summary_2", json!([message("summary two")])),
         upstream("up_4", json!([message("done")])),
-    ])
-    .await;
+    ];
+    // A single-agent turn that answers compacts once more after the answer; a multi-agent run does not.
+    if !multi_agent {
+        responses.push(upstream("up_summary_3", json!([message("summary three")])));
+    }
+    let (llm_url, requests) = spawn_llm(responses).await;
     let (context, _, _) = durable_context(llm_url).await;
     let turn = |input: Value, previous: Option<&str>| {
         let mut body = json!({"model": "test", "input": input, "tools": tools(), "store": true});
@@ -383,8 +397,8 @@ async fn second_compaction_summary_of_a_restored_function_call(multi_agent: bool
     let requests = requests.lock().await;
     assert_eq!(
         requests.len(),
-        6,
-        "two rounds, a summary and a call, a summary and an answer"
+        6 + usize::from(!multi_agent),
+        "two rounds, a summary and a call, a summary and an answer (and a summary after it)"
     );
     let summary = &requests[4];
     assert!(summary["tools"].is_null(), "{}", summary["tools"]);
@@ -428,6 +442,7 @@ async fn compaction_summary_keeps_a_namespace_member_beside_a_top_level_function
     let (llm_url, requests) = spawn_llm(vec![
         upstream("up_summary", json!([message("summary")])),
         upstream("up_1", json!([message("done")])),
+        upstream("up_summary_after", json!([message("summary after the answer")])),
     ])
     .await;
     let (context, _, _) = durable_context(llm_url).await;

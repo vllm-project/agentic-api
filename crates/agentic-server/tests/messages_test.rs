@@ -9,7 +9,7 @@ use axum::extract::OriginalUri;
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use http::{HeaderMap, StatusCode};
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpSocket};
 use tokio::sync::Mutex;
 
 use agentic_core::types::session::{ScopedSessionId, SessionTenant};
@@ -295,12 +295,19 @@ async fn messages_gateway_stream_preserves_initial_upstream_error_status_and_bod
     assert_eq!(response.text().await.unwrap(), upstream_error);
 }
 
+/// An upstream URL that refuses connections. The socket stays bound without listening, so a server from a test
+/// running in parallel cannot take the port while the returned socket is alive.
+fn refused_upstream() -> (TcpSocket, String) {
+    let socket = TcpSocket::new_v4().unwrap();
+    socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+    let url = format!("http://{}", socket.local_addr().unwrap());
+    (socket, url)
+}
+
 #[tokio::test]
 async fn messages_returns_anthropic_error_for_unreachable_upstream() {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let dead_addr = listener.local_addr().unwrap();
-    drop(listener);
-    let (gateway_url, _gateway) = spawn_gateway(test_state(&test_config(&format!("http://{dead_addr}")))).await;
+    let (_reserved, dead_url) = refused_upstream();
+    let (gateway_url, _gateway) = spawn_gateway(test_state(&test_config(&dead_url))).await;
 
     let response = reqwest::Client::new()
         .post(format!("{gateway_url}/v1/messages"))
@@ -325,10 +332,8 @@ async fn messages_returns_anthropic_error_for_unreachable_upstream() {
 
 #[tokio::test]
 async fn messages_gateway_loop_returns_anthropic_error_for_unreachable_upstream() {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let dead_addr = listener.local_addr().unwrap();
-    drop(listener);
-    let (gateway_url, _gateway) = spawn_gateway(test_state(&test_config(&format!("http://{dead_addr}")))).await;
+    let (_reserved, dead_url) = refused_upstream();
+    let (gateway_url, _gateway) = spawn_gateway(test_state(&test_config(&dead_url))).await;
     let body = br#"{"model":"qwen3","max_tokens":256,"stream":false,"messages":[{"role":"user","content":"search"}],"tools":[{"name":"web_search","input_schema":{"type":"object"}}]}"#;
 
     let response = reqwest::Client::new()

@@ -1,11 +1,19 @@
-//! Public Responses output shape for gateway-executed Python calls.
+//! Public Responses output shape for gateway-executed Python calls, and the model-facing call and output it stands for.
 
 use serde::{Deserialize, Serialize};
 
+use super::input::{FunctionToolResultMessage, InputFunctionToolCall};
 use super::multi_agent::AgentAttribution;
+use crate::tool::code_interpreter::CODE_INTERPRETER_FUNCTION_NAME;
+use crate::tool::code_interpreter::provider::{ExecutionOutput, ExecutionStatus};
+use crate::types::event::MessageStatus;
 
 /// One code-interpreter call exposed in a response.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// The gateway executes code interpreter itself: the model sees a `code_interpreter` function call, and this item is
+/// the public projection of that execution. History keeps it, and the upstream projection lowers it back to that
+/// function call and its output.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct CodeInterpreterCall {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -17,37 +25,10 @@ pub struct CodeInterpreterCall {
     /// Execution outputs. `OpenAI` emits `null` while a call is in progress;
     /// gateway completion uses `Some`, including an empty output list.
     pub outputs: Option<Vec<CodeInterpreterCallOutput>>,
-    /// Internal provenance for continuation. This is stored separately from
-    /// the public item and cannot be selected through the Responses wire.
-    #[serde(skip)]
-    pub(crate) origin: CodeInterpreterCallOrigin,
-}
-
-impl PartialEq for CodeInterpreterCall {
-    fn eq(&self, other: &Self) -> bool {
-        self.agent == other.agent
-            && self.id == other.id
-            && self.container_id == other.container_id
-            && self.code == other.code
-            && self.status == other.status
-            && self.outputs == other.outputs
-    }
-}
-
-impl Eq for CodeInterpreterCall {}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub(crate) enum CodeInterpreterCallOrigin {
-    #[default]
-    Upstream,
-    Gateway,
 }
 
 impl CodeInterpreterCall {
-    /// Construct a code-interpreter call received from an upstream provider.
-    ///
-    /// The public wire does not carry execution origin. Gateway projections
-    /// set their internal origin when they are created by the tool handler.
+    /// Construct a code-interpreter call.
     #[must_use]
     pub fn new(
         id: String,
@@ -63,7 +44,6 @@ impl CodeInterpreterCall {
             code,
             status,
             outputs,
-            origin: CodeInterpreterCallOrigin::Upstream,
         }
     }
 }
@@ -138,6 +118,57 @@ pub enum CodeInterpreterCallStreamEvent {
     },
 }
 
+/// The model-facing call a stored `code_interpreter_call` stands for, under the item's id.
+impl From<&CodeInterpreterCall> for InputFunctionToolCall {
+    fn from(call: &CodeInterpreterCall) -> Self {
+        Self {
+            agent: call.agent.clone(),
+            id: None,
+            call_id: call.id.clone(),
+            name: CODE_INTERPRETER_FUNCTION_NAME.to_owned(),
+            namespace: None,
+            arguments: serde_json::json!({ "code": call.code }).to_string(),
+            status: Some(MessageStatus::Completed),
+            async_execution: false,
+        }
+    }
+}
+
+/// The model-facing output of a stored `code_interpreter_call`. The public item keeps stdout and stderr as separate
+/// logs in that order, so the output joins them as stdout.
+impl From<&CodeInterpreterCall> for FunctionToolResultMessage {
+    fn from(call: &CodeInterpreterCall) -> Self {
+        let status = match call.status {
+            CodeInterpreterCallStatus::Completed => ExecutionStatus::Completed,
+            CodeInterpreterCallStatus::Failed => ExecutionStatus::Failed,
+            CodeInterpreterCallStatus::InProgress
+            | CodeInterpreterCallStatus::Interpreting
+            | CodeInterpreterCallStatus::Incomplete => ExecutionStatus::Incomplete,
+        };
+        let stdout = call
+            .outputs
+            .iter()
+            .flatten()
+            .filter_map(|output| match output {
+                CodeInterpreterCallOutput::Logs { logs } => Some(logs.as_str()),
+                CodeInterpreterCallOutput::Image { .. } => None,
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let output = ExecutionOutput {
+            status,
+            stdout,
+            stderr: String::new(),
+        };
+        Self {
+            id: None,
+            status: Some(MessageStatus::Completed),
+            call_id: call.id.clone(),
+            output: serde_json::to_string(&output).unwrap_or_default().into(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -156,7 +187,6 @@ mod tests {
                     url: "https://example.test/plot.png".to_owned(),
                 },
             ]),
-            origin: CodeInterpreterCallOrigin::Upstream,
         };
         let wire = serde_json::to_value(&call).expect("serialize call");
         assert_eq!(wire["outputs"][0]["type"], "logs");
@@ -176,14 +206,6 @@ mod tests {
         assert_eq!(
             serde_json::from_value::<CodeInterpreterCall>(attributed_wire).expect("deserialize attributed call"),
             attributed
-        );
-        let mut gateway = call.clone();
-        gateway.origin = CodeInterpreterCallOrigin::Gateway;
-        let public = serde_json::to_value(&gateway).expect("serialize gateway call");
-        assert_eq!(
-            serde_json::from_value::<CodeInterpreterCall>(public).expect("deserialize public call"),
-            gateway,
-            "internal origin must not affect public item equality"
         );
     }
 

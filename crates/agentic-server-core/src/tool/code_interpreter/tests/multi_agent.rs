@@ -354,7 +354,7 @@ async fn execute(request: RequestPayload, exec: Arc<ExecutionContext>, discovery
     };
     assert_eq!(response.status, "completed");
     assert_eq!(response.standard_fields.store, store);
-    assert_eq!(exec.resp_handler.retrieve(&response.id).await.is_ok(), store);
+    assert_eq!(exec.resp_handler.get_snapshot(&response.id).await.is_ok(), store);
     assert_eq!(
         response
             .output

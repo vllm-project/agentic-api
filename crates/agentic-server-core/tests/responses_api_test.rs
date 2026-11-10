@@ -46,6 +46,18 @@ fn cassette(scenario: &str, provider: &str) -> Option<Vec<Value>> {
     Some(turns)
 }
 
+/// The recorded turn answering `turn`: the one with the same `x-run-id` case when labelled, else the same index.
+fn counterpart<'a>(turns: &'a [Value], index: usize, turn: &Value) -> &'a Value {
+    let case = &turn["request"]["headers"]["x-run-id"];
+    if case.is_null() {
+        return &turns[index];
+    }
+    turns
+        .iter()
+        .find(|other| other["request"]["headers"]["x-run-id"] == *case)
+        .unwrap_or_else(|| panic!("no recorded case {case}"))
+}
+
 fn terminal(response: &Value) -> Value {
     if let Some(body) = response.get("body") {
         return body.clone();
@@ -89,7 +101,7 @@ fn map_request_ids(value: &mut Value, ids: &HashMap<String, String>) {
 fn item_signature(item: &Value) -> Value {
     let mut item = item.clone();
     item.as_object_mut().unwrap().remove("id");
-    // Missing tool-history status defaults are deferred to the item-type refactor.
+    // Recordings made before listings filled OpenAI's omitted statuses lack them.
     // Ignore only absence versus these recorded defaults; other statuses still differ.
     if matches!(
         (item["type"].as_str(), item["status"].as_str()),
@@ -397,7 +409,11 @@ async fn replay(scenario: &str, provider: &str, turns: &[Value]) {
             &client,
             &url,
             turn,
-            if provider == "openai" { turn } else { &reference[index] },
+            if provider == "openai" {
+                turn
+            } else {
+                counterpart(&reference, index, turn)
+            },
             &mut ids,
             &format!("{scenario}/{provider} t{}", index + 1),
         )
@@ -468,6 +484,8 @@ replay_tests! {
     (replay_replayed_items_gateway, "replayed-items", "gateway"),
     (replay_replayed_items_stream_openai, "replayed-items-stream", "openai"),
     (replay_replayed_items_stream_gateway, "replayed-items-stream", "gateway"),
+    (replay_call_ids_openai, "call-ids", "openai"),
+    (replay_call_ids_gateway, "call-ids", "gateway"),
 }
 
 #[tokio::test]

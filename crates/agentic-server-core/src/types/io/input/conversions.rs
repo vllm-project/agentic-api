@@ -1,6 +1,7 @@
 use crate::types::event::MessageStatus;
 use crate::types::io::{
-    InOutItem, McpCall, OutputItem, OutputMessage, OutputMessageContent, ShellCallOutputMessage, ShellCallStatus,
+    InOutItem, McpCall, OutputItem, OutputMessage, OutputMessageContent, ReasoningTextContent, ShellCallOutputMessage,
+    ShellCallStatus,
 };
 use crate::types::tools::ResponsesTool;
 use crate::utils::common::stable_name_hash;
@@ -10,7 +11,6 @@ use super::{
     CustomToolCallOutputMessage, FunctionToolResultMessage, InputContent, InputFunctionToolCall, InputItem,
     InputMessage, InputMessageContent, InputMessageType, InputTextContent, InputValidationError, ResponsesInput,
 };
-use std::borrow::Cow;
 use std::collections::HashMap;
 
 /// The existing discovery naming rule, also used when projecting returned MCP history.
@@ -89,7 +89,10 @@ impl From<OutputMessageContent> for InputContent {
             OutputMessageContent::OutputText(part) => {
                 let mut text = InputTextContent::new(part.text);
                 if let Some(annotations) = part.annotations {
-                    text.extra.insert("annotations".into(), Value::Array(annotations));
+                    text.extra.insert(
+                        "annotations".into(),
+                        Value::Array(annotations.into_iter().map(Into::into).collect()),
+                    );
                 }
                 // These fixed structs contain only JSON-compatible values and string keys.
                 text.extra.insert(
@@ -200,96 +203,96 @@ impl ResponsesInput {
         match self {
             Self::Items(mut items) => {
                 for item in &mut items {
-                    match item {
-                        InOutItem::Input(InputItem::FunctionCallOutput(output)) => {
-                            output.status.get_or_insert(MessageStatus::Completed);
-                        }
-                        InOutItem::Input(InputItem::CustomToolCallOutput(output)) => {
-                            output.status.get_or_insert(MessageStatus::Completed);
-                        }
-                        InOutItem::Input(InputItem::ShellCallOutput(output)) => {
-                            output.status.get_or_insert(ShellCallStatus::Completed);
-                        }
-                        _ => {}
-                    }
+                    item.complete_omitted_status();
                 }
                 items
             }
-            // Reuse the existing user-message conversion only for text. Its
-            // item-array branch also lowers custom/shell items for inference.
+            // Reuse the existing user-message conversion for text.
             text @ Self::Text(_) => Vec::<InputItem>::from(text).into_iter().map(InOutItem::Input).collect(),
         }
     }
 
-    /// Normalize tool items only in the model-facing copy of canonical history.
-    /// Returned MCP records become function-call/result pairs using the same
-    /// discovery naming rule, while their public history remains unchanged.
-    ///
-    /// Message files become `input_text` parts in place through
-    /// `InputTextContent::try_from(&InputFileContent)`; the canonical history
-    /// keeps the client's `input_file`.
+    /// The model-facing copy of canonical history; the public history is unchanged. Every tool reaches the model as a
+    /// function tool (MCP, web search and code interpreter records as a call and its output, MCP with the discovery
+    /// naming rule), message files become `input_text` parts and images without a detail get `auto`. Reasoning keeps
+    /// only its plaintext, joined into one part: vLLM's generic conversion reads the first part and its Harmony
+    /// conversion joins them all, and neither can use a summary or provider-encrypted state, so a summary-only item
+    /// is dropped.
     ///
     /// # Errors
-    /// Returns a file that cannot be converted to text. Positions refer to the
-    /// model-facing copy; [`Self::validate`] reports the same failure with the
-    /// request's positions and runs first on typed paths.
-    pub(crate) fn normalized_model_input(
-        &self,
-        tools: &[ResponsesTool],
-    ) -> Result<Cow<'_, Self>, InputValidationError> {
-        let input = self.model_input();
-        let has_tools_to_normalize = matches!(&*input, Self::Items(items) if items.iter().any(|item| matches!(item,
-            InOutItem::Input(InputItem::ShellCall(_) | InputItem::ShellCallOutput(_)
-                | InputItem::CustomToolCall(_) | InputItem::CustomToolCallOutput(_) | InputItem::McpCall(_))
-        )));
-        let has_parts_to_normalize = matches!(&*input, Self::Items(items) if items.iter().any(|item| matches!(item,
-            InOutItem::Input(InputItem::Message(message)) if matches!(&message.content,
-                InputMessageContent::Parts(parts) if parts.iter().any(|part| matches!(part,
-                    InputContent::InputImage(image) if image.detail.is_none())
-                    || matches!(part, InputContent::InputFile(_)))))));
-        if !has_tools_to_normalize && !has_parts_to_normalize {
+    /// Returns a file that cannot be converted to text, or a reasoning item with only encrypted state. Positions refer
+    /// to the model-facing copy; [`Self::validate`] reports a file failure with the request's positions and runs
+    /// first on typed paths.
+    pub(crate) fn normalized_model_input(&self, tools: &[ResponsesTool]) -> Result<Self, InputValidationError> {
+        let input = self.model_input().into_owned();
+        let Self::Items(_) = input else {
             return Ok(input);
-        }
-        let mut model = if has_tools_to_normalize {
-            let items = Vec::<InputItem>::from(input.into_owned());
-            let mut normalized = Vec::with_capacity(items.len());
-            for item in items {
-                match item {
-                    InputItem::McpCall(call) => normalized.extend(self.mcp_call_input(call, tools)),
-                    other => normalized.push(other),
-                }
-            }
-            Self::from(normalized)
-        } else {
-            input.into_owned()
         };
-        if let Self::Items(items) = &mut model {
-            for (item_index, item) in items.iter_mut().enumerate() {
-                if let InOutItem::Input(InputItem::Message(message)) = item
-                    && let InputMessageContent::Parts(parts) = &mut message.content
-                {
-                    for (part_index, part) in parts.iter_mut().enumerate() {
-                        match part {
-                            InputContent::InputImage(image) => {
-                                image.detail.get_or_insert_with(|| "auto".to_owned());
+        let mut model = Vec::new();
+        for item in Vec::<InputItem>::from(input) {
+            match item {
+                InputItem::McpCall(call) => model.extend(self.mcp_call_input(call, tools)),
+                InputItem::WebSearchCall(call) => model.extend([
+                    InputItem::FunctionCall((&call).into()),
+                    InputItem::FunctionCallOutput((&call).into()),
+                ]),
+                InputItem::CodeInterpreterCall(call) => model.extend([
+                    InputItem::FunctionCall((&call).into()),
+                    InputItem::FunctionCallOutput((&call).into()),
+                ]),
+                InputItem::CustomToolCall(call) => model.push(InputItem::FunctionCall(call.into())),
+                InputItem::CustomToolCallOutput(output) => model.push(InputItem::FunctionCallOutput(output.into())),
+                InputItem::ShellCall(call) => model.push(InputItem::FunctionCall(call.into())),
+                InputItem::ShellCallOutput(output) => model.push(InputItem::FunctionCallOutput(output.into())),
+                InputItem::Reasoning(mut reasoning) => {
+                    if reasoning.content.iter().all(|content| content.text.is_empty()) {
+                        if reasoning.encrypted_content.is_some() {
+                            return Err(InputValidationError::encrypted_reasoning(model.len()));
+                        }
+                        continue;
+                    }
+                    let text = reasoning.content.iter().map(|content| content.text.as_str());
+                    reasoning.content = vec![ReasoningTextContent::new(text.collect::<Vec<_>>().join("\n"))];
+                    reasoning.summary.clear();
+                    reasoning.encrypted_content = None;
+                    model.push(InputItem::Reasoning(reasoning));
+                }
+                InputItem::Message(mut message) => {
+                    if let InputMessageContent::Parts(parts) = &mut message.content {
+                        for (part_index, part) in parts.iter_mut().enumerate() {
+                            match part {
+                                InputContent::InputImage(image) => {
+                                    image.detail.get_or_insert_with(|| "auto".to_owned());
+                                }
+                                InputContent::InputFile(file) => {
+                                    let text = InputTextContent::try_from(&*file).map_err(|reason| {
+                                        InputValidationError::unsupported_file(model.len(), part_index, reason)
+                                    })?;
+                                    *part = InputContent::InputText(text);
+                                }
+                                InputContent::InputText(_)
+                                | InputContent::OutputText(_)
+                                | InputContent::Refusal(_)
+                                | InputContent::ReasoningText(_)
+                                | InputContent::Unknown(_) => {}
                             }
-                            InputContent::InputFile(file) => {
-                                let text = InputTextContent::try_from(&*file).map_err(|reason| {
-                                    InputValidationError::unsupported_file(item_index, part_index, reason)
-                                })?;
-                                *part = InputContent::InputText(text);
-                            }
-                            InputContent::InputText(_)
-                            | InputContent::OutputText(_)
-                            | InputContent::Refusal(_)
-                            | InputContent::ReasoningText(_)
-                            | InputContent::Unknown(_) => {}
                         }
                     }
+                    model.push(InputItem::Message(message));
                 }
+                other => model.push(other),
             }
         }
-        Ok(Cow::Owned(model))
+        Ok(Self::from(model))
+    }
+}
+
+/// Appends history items, as [`ResponsesInput::push`] does.
+impl Extend<InputItem> for ResponsesInput {
+    fn extend<I: IntoIterator<Item = InputItem>>(&mut self, items: I) {
+        for item in items {
+            self.push(item);
+        }
     }
 }
 
@@ -408,7 +411,7 @@ mod tests {
         assert!(matches!(&parts[0], InputContent::InputImage(image) if image.detail.is_none()));
 
         let model = input.normalized_model_input(&[]).unwrap();
-        let ResponsesInput::Items(model_items) = &*model else {
+        let ResponsesInput::Items(model_items) = &model else {
             panic!("model items")
         };
         assert!(matches!(
@@ -437,20 +440,13 @@ mod tests {
         ]))
         .unwrap();
         let model = input.normalized_model_input(&[]).unwrap();
-        assert!(matches!(model, Cow::Owned(_)));
         assert_eq!(
-            serialize_to_value(&*model).unwrap()[0]["content"],
+            serialize_to_value(&model).unwrap()[0]["content"],
             json!([{"type":"input_text", "text":"before"}, {"type":"input_text", "text":"File: notes.txt\nhi"},
                 {"type":"input_text", "text":"after"}])
         );
         let canonical = serialize_to_value(&ResponsesInput::from(input.clone().into_canonical_items())).unwrap();
         assert_eq!(canonical[0]["content"][1], file);
-
-        let plain: ResponsesInput = deserialize_from_value(json!([
-            {"role":"user", "content":[{"type":"input_text", "text":"hello"}]}
-        ]))
-        .unwrap();
-        assert!(matches!(plain.normalized_model_input(&[]).unwrap(), Cow::Borrowed(_)));
     }
 
     #[test]
@@ -467,5 +463,112 @@ mod tests {
                 .starts_with("input[0].content[1]: input_file content is not supported"),
             "{error}"
         );
+    }
+
+    fn reasoning_item(content: &[&str], encrypted_content: Option<&str>) -> InputItem {
+        InputItem::Reasoning(crate::types::io::ReasoningOutput {
+            agent: None,
+            id: "rs_prior".to_owned(),
+            content: content.iter().map(|text| ReasoningTextContent::new(*text)).collect(),
+            summary: vec![crate::types::ReasoningSummaryContent::new("public summary")],
+            encrypted_content: encrypted_content
+                .map(|text| crate::types::OpaqueReasoning::try_from(text.to_owned()).unwrap()),
+            status: Some(crate::types::ReasoningStatus::Completed),
+        })
+    }
+
+    #[test]
+    fn plaintext_reasoning_is_normalized_for_both_vllm_paths() {
+        let input = ResponsesInput::from(vec![reasoning_item(
+            &["first continuation part", "second continuation part"],
+            Some("opaque-provider-state"),
+        )]);
+
+        let model = input
+            .normalized_model_input(&[])
+            .expect("plaintext reasoning is replayable");
+
+        assert!(
+            matches!(&input, ResponsesInput::Items(items) if items.len() == 1),
+            "public history is unchanged"
+        );
+        let ResponsesInput::Items(items) = model else {
+            panic!("expected structured input");
+        };
+        let InOutItem::Input(InputItem::Reasoning(reasoning)) = &items[0] else {
+            panic!("expected reasoning item");
+        };
+        assert_eq!(reasoning.id, "rs_prior");
+        assert_eq!(reasoning.content.len(), 1);
+        assert_eq!(
+            reasoning.content[0].text,
+            "first continuation part\nsecond continuation part"
+        );
+        assert!(reasoning.summary.is_empty());
+        assert_eq!(reasoning.status, Some(crate::types::ReasoningStatus::Completed));
+        assert_eq!(reasoning.encrypted_content, None);
+    }
+
+    #[test]
+    fn encrypted_reasoning_requires_nonempty_plaintext_content() {
+        for content in [Vec::new(), vec![""], vec!["", ""]] {
+            let input = ResponsesInput::from(vec![reasoning_item(&content, Some("opaque-provider-state"))]);
+
+            let error = input
+                .normalized_model_input(&[])
+                .expect_err("encrypted-only reasoning must not reach vLLM");
+
+            assert!(
+                error
+                    .to_string()
+                    .contains("encrypted state without plaintext reasoning content")
+            );
+            assert!(!error.to_string().contains("opaque-provider-state"));
+        }
+    }
+
+    #[test]
+    fn plaintext_reasoning_with_null_encrypted_state_is_normalized_without_summary() {
+        let input = ResponsesInput::from(vec![reasoning_item(&["plaintext continuation"], None)]);
+
+        let model = input
+            .normalized_model_input(&[])
+            .expect("null encrypted state is valid");
+
+        let ResponsesInput::Items(items) = model else {
+            panic!("expected structured input");
+        };
+        let InOutItem::Input(InputItem::Reasoning(reasoning)) = &items[0] else {
+            panic!("expected reasoning item");
+        };
+        assert_eq!(
+            reasoning.content[0].type_,
+            crate::types::ReasoningTextKind::ReasoningText
+        );
+        assert_eq!(reasoning.content[0].text, "plaintext continuation");
+        assert!(reasoning.summary.is_empty());
+        assert_eq!(reasoning.encrypted_content, None);
+    }
+
+    #[test]
+    fn summary_only_reasoning_without_opaque_state_is_removed_from_vllm_copy() {
+        for input in [
+            r#"[{"type":"reasoning","summary":[{"type":"summary_text","text":"public summary"}]}]"#,
+            r#"[{"type":"reasoning","summary":[{"type":"summary_text","text":"public summary"}],"encrypted_content":null}]"#,
+        ] {
+            let input: ResponsesInput = serde_json::from_str(input).unwrap();
+
+            let model = input
+                .normalized_model_input(&[])
+                .expect("summary-only reasoning has no usable vLLM state");
+
+            let ResponsesInput::Items(items) = model else {
+                panic!("expected structured input");
+            };
+            assert!(
+                items.is_empty(),
+                "a reasoning summary must never be promoted to reasoning text"
+            );
+        }
     }
 }
