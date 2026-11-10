@@ -12,8 +12,8 @@ use crate::executor::telemetry::metrics::Stage;
 use crate::storage::{ResponseMetadata, StorageError};
 use crate::tool::{ToolSearchMetadata, ToolSearchState};
 use crate::types::event::ResponseStatus;
+use crate::types::io::InOutItem;
 use crate::types::io::OutputItem;
-use crate::types::io::{InOutItem, InputItem};
 use crate::types::request_response::ResponsePayload;
 use tracing::error;
 
@@ -112,9 +112,10 @@ async fn write_turn(
         TurnOutput::Response(payload) => (payload.output.as_slice(), ctx.original_request.store.then_some(payload)),
         TurnOutput::Empty | TurnOutput::Compaction => (&[][..], None),
     };
-    // A compaction trigger asks for this turn's compaction; it is not history.
-    ctx.new_input_items
-        .retain(|item| !matches!(item, InOutItem::Input(InputItem::CompactionTrigger)));
+    // A standalone compaction stores the window it built.
+    if !matches!(output, TurnOutput::Compaction) {
+        ctx.new_input_items = InOutItem::filter_for_compaction(std::mem::take(&mut ctx.new_input_items));
+    }
     if ctx.original_request.conversation.is_some() {
         let items = turn_items(&mut ctx, output_items, None);
         return exec_ctx.conv_handler.persist(&ctx, items, snapshot, &metadata).await;

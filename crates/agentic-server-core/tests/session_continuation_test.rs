@@ -1563,7 +1563,9 @@ async fn session_compacted_durable_parent_restores_within_the_canonical_budget()
 }
 
 #[tokio::test]
-async fn replayed_compaction_releases_superseded_session_history() {
+/// As on `OpenAI`, a compaction the client supplies is used for its turn only: it is not stored, so the next turn
+/// continues the history it replaced, including a call that history left unanswered.
+async fn replayed_compaction_is_used_for_its_turn_only() {
     let exec = execution();
     for pending_call in [false, true] {
         let session = ResponseSession::new(NonZeroUsize::new(2).unwrap(), NonZeroUsize::new(100_000).unwrap());
@@ -1589,23 +1591,31 @@ async fn replayed_compaction_releases_superseded_session_history() {
             &session,
         )
         .await
-        .expect("a replayed window supersedes old pending calls");
+        .expect("the replayed window is this turn's model input");
         let child = ctx.response_id.clone();
         let output = response(&ctx, json!([]));
-        commit(ctx, output, &exec)
-            .await
-            .expect("superseded history must not consume the checkpoint budget");
-        let ctx = rehydrate_in_session(request(Some(&child), json!([])), &exec, &session)
-            .await
-            .unwrap();
-        let items = serde_json::to_value(&ctx.enriched_request.input).unwrap();
-        assert_eq!(items.as_array().unwrap().len(), 1);
-        assert_eq!(items[0]["type"], "compaction");
+        commit(ctx, output, &exec).await.expect("the turn is stored");
+        let next = rehydrate_in_session(request(Some(&child), json!([])), &exec, &session).await;
+        if pending_call {
+            assert!(
+                matches!(next, Err(ExecutorError::Tool(_))),
+                "the old call is still unanswered"
+            );
+            continue;
+        }
+        let items = serde_json::to_value(&next.unwrap().enriched_request.input).unwrap();
+        assert!(
+            !items.to_string().contains("cmp_replayed"),
+            "the supplied compaction is not stored"
+        );
+        assert!(items.to_string().contains("obsolete answer"));
     }
 }
 
 #[tokio::test]
-async fn session_commit_validates_call_ids_against_replayed_compaction_window() {
+/// The replayed compaction is not stored, so the history it superseded is continued: the old and the new call share
+/// `call_first`, and one output answers both, as repeated call IDs are accepted.
+async fn session_continuation_keeps_history_a_replayed_compaction_superseded() {
     let exec = execution();
     let session = session();
     let parent = parent_with_call(&exec, &session).await;
@@ -1627,8 +1637,17 @@ async fn session_commit_validates_call_ids_against_replayed_compaction_window() 
         .expect("the old call is outside the effective history");
     let ctx = resolved_continuation(&exec, &session, &child.id).await;
     let items = serde_json::to_value(&ctx.enriched_request.input).unwrap();
-    assert_eq!(items.as_array().unwrap().len(), 3);
-    assert_eq!(items[0]["type"], "compaction");
-    assert_eq!(items[1]["type"], "function_call");
-    assert_eq!(items[2]["type"], "function_call_output");
+    let types = items
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["type"].as_str().unwrap_or("message"))
+        .collect::<Vec<_>>();
+    assert!(!types.contains(&"compaction"), "{types:?}");
+    assert_eq!(
+        types.iter().filter(|kind| **kind == "function_call").count(),
+        2,
+        "{types:?}"
+    );
+    assert_eq!(types.last(), Some(&"function_call_output"));
 }

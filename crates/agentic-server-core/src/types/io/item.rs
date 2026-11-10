@@ -63,11 +63,35 @@ impl From<OutputItem> for InOutItem {
 }
 
 impl InOutItem {
-    /// Whether the item is a compaction a client supplied as input, which a response's input items do not list, as
-    /// on `OpenAI`.
+    /// What a turn stores of the items a client sent, as on `OpenAI`: a supplied compaction is used for the turn only.
+    /// Neither it nor the items before it are stored, except the user messages its window keeps (completed, with an
+    /// ID, after any earlier compaction). A compaction trigger asks for this turn's compaction and is not history.
     #[must_use]
-    pub(crate) fn is_supplied_compaction(&self) -> bool {
-        matches!(self, Self::Input(InputItem::Compaction(_)))
+    pub(crate) fn filter_for_compaction(items: Vec<Self>) -> Vec<Self> {
+        let is_compaction = |item: &Self| matches!(item, Self::Input(InputItem::Compaction(_)));
+        let latest = items.iter().rposition(is_compaction);
+        let retained_start = latest.map_or(0, |latest| {
+            items[..latest]
+                .iter()
+                .rposition(is_compaction)
+                .map_or(0, |index| index + 1)
+        });
+        items
+            .into_iter()
+            .enumerate()
+            .filter(|(index, item)| match item {
+                Self::Input(InputItem::Compaction(_) | InputItem::CompactionTrigger) => false,
+                _ if latest.is_none_or(|latest| *index > latest) => true,
+                Self::Input(InputItem::Message(message)) => {
+                    *index >= retained_start
+                        && message.role == "user"
+                        && message.id.is_some()
+                        && message.status == Some(MessageStatus::Completed)
+                }
+                _ => false,
+            })
+            .map(|(_, item)| item)
+            .collect()
     }
 
     /// Assign the stored public identity, give an omitted call or output status the one `OpenAI` returns, and expand
