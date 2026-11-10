@@ -377,6 +377,17 @@ async fn replay(scenario: &str) {
             "the third stored response must still receive the retained image, as in the OpenAI reference"
         );
     }
+    // The last turn asks for the remembered word after the client sent a compaction back as input: only a stored
+    // one stays history, as on OpenAI.
+    let last_input = requests.last().unwrap()["input"].to_string();
+    if scenario == "store-false" {
+        assert!(
+            !last_input.contains("APRICOT"),
+            "an unstored checkpoint is used for its turn only"
+        );
+    } else if scenario.starts_with("in-turn-chain") {
+        assert!(last_input.contains("APRICOT"), "a stored checkpoint stays history");
+    }
 }
 
 async fn run(scenario: &str) {

@@ -71,15 +71,15 @@ for provider in openai gateway; do
         tool_loop_model="$TOOL_LOOP_OPENAI_MODEL"
     fi
     if selected stale; then record "$provider" stale stale-compaction 10 "$model" --stream; fi
-    if selected in-turn-chain; then record "$provider" in-turn-chain compaction-in-turn-chain 5 "$model" --no-stream; fi
+    if selected in-turn-chain; then record "$provider" in-turn-chain compaction-in-turn-chain 9 "$model" --no-stream; fi
     if selected in-turn-chain-stream; then
-        record "$provider" in-turn-chain-stream compaction-in-turn-chain 5 "$model" --stream
+        record "$provider" in-turn-chain-stream compaction-in-turn-chain 9 "$model" --stream
     fi
     if selected tool-loop; then record "$provider" tool-loop compaction-tool-loop 10 "$tool_loop_model" --no-stream; fi
     if selected standalone; then record "$provider" standalone compaction-standalone 12 "$model" --no-stream; fi
     if selected multi-agent; then
         record "$provider" multi-agent compaction-multi-agent 5 "$multi_agent_model" --no-stream
     fi
-    if selected store-false; then record "$provider" store-false compaction-store-false 2 "$model" --stream; fi
+    if selected store-false; then record "$provider" store-false compaction-store-false 6 "$model" --stream; fi
     if selected mcp; then record "$provider" mcp compaction-mcp 11 "$model" --no-stream; fi
 done

@@ -174,7 +174,7 @@ turns:
     - 'event: response.created
 
       '
-    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a1c460-ad3e-73f3-9079-9b73afc012b9","created_at":1794296041,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":null,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":false,"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null,"error":null}}
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a1c4b4-cce6-7601-ab2c-036ba10dad67","created_at":1794301551,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":null,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":false,"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null,"error":null}}
 
       '
     - '
@@ -183,7 +183,7 @@ turns:
     - 'event: response.in_progress
 
       '
-    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a1c460-ad3e-73f3-9079-9b73afc012b9","created_at":1794296041,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":null,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":false,"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null,"error":null}}
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a1c4b4-cce6-7601-ab2c-036ba10dad67","created_at":1794301551,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":null,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":false,"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null,"error":null}}
 
       '
     - '
@@ -192,16 +192,15 @@ turns:
     - 'event: response.output_item.added
 
       '
-    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"type":"compaction","id":"cmp_01a1c460-ce44-7de3-89e1-c25d9dce2b7b","encrypted_content":"{\"summary\":\"**Context
-      Checkpoint Summary**\\n\\n**Pending Task:** User instructed to remember the
-      word **APRICOT**, then reply with only \\\"OK\\\" followed by counting 1–30
-      (one number per line). This task has not yet been fulfilled.\\n\\n**Constraints:**\\n-
-      Reply must be only \\\"OK\\\" then the count (no extra text).\\n- The word APRICOT
-      must be retained for potential future reference.\\n\\n**Unresolved Work:**\\n-
-      Execute the OK + 1-to-30 count response.\\n\\n**Critical References:**\\n- Key
-      token to remember: **APRICOT**\\n\\n**Notes:**\\n- The bulk of the prior message
-      consisted of repeated filler text (\\\"Background notes for later.\\\") with
-      no substantive content.\",\"retained\":[{\"type\":\"message\",\"id\":\"msg_01a1c460-ad3e-73f3-9079-9b831309a2f9\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Background
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"type":"compaction","id":"cmp_01a1c4b4-e4e7-7d21-8138-3db591ad2738","encrypted_content":"{\"summary\":\"##
+      Context Checkpoint Summary\\n\\n**Active Constraint:**\\n- The word **APRICOT**
+      was explicitly designated to be remembered.\\n\\n**Pending Task (from prior
+      turn, not yet fulfilled):**\\n- Reply with only \\\"OK\\\", then count from
+      1 to 30 (one number per line).\\n\\n**Other Context:**\\n- The bulk of the prior
+      message was filler/repeated text (\\\"Background notes for later.\\\") with
+      no substantive content.\\n- No other decisions, unresolved work, or critical
+      references present.\\n\\n**Status:** The original task (OK + count 1–30) has
+      not yet been executed.\",\"retained\":[{\"type\":\"message\",\"id\":\"msg_01a1c4b4-cce6-7601-ab2c-0374f235174a\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
@@ -362,16 +361,15 @@ turns:
     - 'event: response.output_item.done
 
       '
-    - 'data: {"type":"response.output_item.done","sequence_number":3,"output_index":0,"item":{"type":"compaction","id":"cmp_01a1c460-ce44-7de3-89e1-c25d9dce2b7b","encrypted_content":"{\"summary\":\"**Context
-      Checkpoint Summary**\\n\\n**Pending Task:** User instructed to remember the
-      word **APRICOT**, then reply with only \\\"OK\\\" followed by counting 1–30
-      (one number per line). This task has not yet been fulfilled.\\n\\n**Constraints:**\\n-
-      Reply must be only \\\"OK\\\" then the count (no extra text).\\n- The word APRICOT
-      must be retained for potential future reference.\\n\\n**Unresolved Work:**\\n-
-      Execute the OK + 1-to-30 count response.\\n\\n**Critical References:**\\n- Key
-      token to remember: **APRICOT**\\n\\n**Notes:**\\n- The bulk of the prior message
-      consisted of repeated filler text (\\\"Background notes for later.\\\") with
-      no substantive content.\",\"retained\":[{\"type\":\"message\",\"id\":\"msg_01a1c460-ad3e-73f3-9079-9b831309a2f9\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Background
+    - 'data: {"type":"response.output_item.done","sequence_number":3,"output_index":0,"item":{"type":"compaction","id":"cmp_01a1c4b4-e4e7-7d21-8138-3db591ad2738","encrypted_content":"{\"summary\":\"##
+      Context Checkpoint Summary\\n\\n**Active Constraint:**\\n- The word **APRICOT**
+      was explicitly designated to be remembered.\\n\\n**Pending Task (from prior
+      turn, not yet fulfilled):**\\n- Reply with only \\\"OK\\\", then count from
+      1 to 30 (one number per line).\\n\\n**Other Context:**\\n- The bulk of the prior
+      message was filler/repeated text (\\\"Background notes for later.\\\") with
+      no substantive content.\\n- No other decisions, unresolved work, or critical
+      references present.\\n\\n**Status:** The original task (OK + count 1–30) has
+      not yet been executed.\",\"retained\":[{\"type\":\"message\",\"id\":\"msg_01a1c4b4-cce6-7601-ab2c-0374f235174a\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
@@ -532,7 +530,7 @@ turns:
     - 'event: response.output_item.added
 
       '
-    - 'data: {"type":"response.output_item.added","sequence_number":4,"output_index":1,"item":{"id":"rs_99e904b5feb0f322","summary":[],"type":"reasoning","content":[],"status":"in_progress"}}
+    - 'data: {"type":"response.output_item.added","sequence_number":4,"output_index":1,"item":{"id":"rs_b4a3e05eeec336ce","summary":[],"type":"reasoning","content":[],"status":"in_progress"}}
 
       '
     - '
@@ -541,7 +539,7 @@ turns:
     - 'event: response.reasoning_part.added
 
       '
-    - 'data: {"type":"response.reasoning_part.added","sequence_number":5,"output_index":1,"content_index":0,"item_id":"rs_99e904b5feb0f322","part":{"text":"","type":"reasoning_text"}}
+    - 'data: {"type":"response.reasoning_part.added","sequence_number":5,"output_index":1,"content_index":0,"item_id":"rs_b4a3e05eeec336ce","part":{"text":"","type":"reasoning_text"}}
 
       '
     - '
@@ -550,7 +548,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":6,"output_index":1,"content_index":0,"delta":"The","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":6,"output_index":1,"content_index":0,"delta":"The","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -560,7 +558,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":7,"output_index":1,"content_index":0,"delta":"
-      user","item_id":"rs_99e904b5feb0f322"}
+      user","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -570,7 +568,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":8,"output_index":1,"content_index":0,"delta":"
-      wants","item_id":"rs_99e904b5feb0f322"}
+      is","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -580,7 +578,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":9,"output_index":1,"content_index":0,"delta":"
-      me","item_id":"rs_99e904b5feb0f322"}
+      asking","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -590,7 +588,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":10,"output_index":1,"content_index":0,"delta":"
-      to","item_id":"rs_99e904b5feb0f322"}
+      me","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -599,7 +597,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":11,"output_index":1,"content_index":0,"delta":":","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":11,"output_index":1,"content_index":0,"delta":"
+      to","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -608,7 +607,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":12,"output_index":1,"content_index":0,"delta":"\n","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":12,"output_index":1,"content_index":0,"delta":":","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -617,7 +616,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":13,"output_index":1,"content_index":0,"delta":"1","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":13,"output_index":1,"content_index":0,"delta":"\n","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -626,7 +625,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":14,"output_index":1,"content_index":0,"delta":".","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":14,"output_index":1,"content_index":0,"delta":"1","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -635,8 +634,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":15,"output_index":1,"content_index":0,"delta":"
-      Remember","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":15,"output_index":1,"content_index":0,"delta":".","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -646,7 +644,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":16,"output_index":1,"content_index":0,"delta":"
-      the","item_id":"rs_99e904b5feb0f322"}
+      Remember","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -656,7 +654,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":17,"output_index":1,"content_index":0,"delta":"
-      word","item_id":"rs_99e904b5feb0f322"}
+      the","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -666,7 +664,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":18,"output_index":1,"content_index":0,"delta":"
-      APR","item_id":"rs_99e904b5feb0f322"}
+      word","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -675,7 +673,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":19,"output_index":1,"content_index":0,"delta":"IC","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":19,"output_index":1,"content_index":0,"delta":"
+      APR","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -684,7 +683,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":20,"output_index":1,"content_index":0,"delta":"OT","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":20,"output_index":1,"content_index":0,"delta":"IC","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -693,7 +692,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":21,"output_index":1,"content_index":0,"delta":"\n","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":21,"output_index":1,"content_index":0,"delta":"OT","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -702,7 +701,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":22,"output_index":1,"content_index":0,"delta":"2","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":22,"output_index":1,"content_index":0,"delta":"\n","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -711,7 +710,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":23,"output_index":1,"content_index":0,"delta":".","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":23,"output_index":1,"content_index":0,"delta":"2","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -720,8 +719,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":24,"output_index":1,"content_index":0,"delta":"
-      Reply","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":24,"output_index":1,"content_index":0,"delta":".","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -731,7 +729,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":25,"output_index":1,"content_index":0,"delta":"
-      with","item_id":"rs_99e904b5feb0f322"}
+      Reply","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -741,7 +739,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":26,"output_index":1,"content_index":0,"delta":"
-      only","item_id":"rs_99e904b5feb0f322"}
+      with","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -751,7 +749,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":27,"output_index":1,"content_index":0,"delta":"
-      \"","item_id":"rs_99e904b5feb0f322"}
+      only","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -760,7 +758,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":28,"output_index":1,"content_index":0,"delta":"OK","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":28,"output_index":1,"content_index":0,"delta":"
+      OK","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -769,7 +768,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":29,"output_index":1,"content_index":0,"delta":"\"","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":29,"output_index":1,"content_index":0,"delta":"\n","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -778,7 +777,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":30,"output_index":1,"content_index":0,"delta":"\n","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":30,"output_index":1,"content_index":0,"delta":"3","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -787,7 +786,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":31,"output_index":1,"content_index":0,"delta":"3","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":31,"output_index":1,"content_index":0,"delta":".","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -796,7 +795,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":32,"output_index":1,"content_index":0,"delta":".","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":32,"output_index":1,"content_index":0,"delta":"
+      Then","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -806,7 +806,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":33,"output_index":1,"content_index":0,"delta":"
-      Then","item_id":"rs_99e904b5feb0f322"}
+      count","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -816,7 +816,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":34,"output_index":1,"content_index":0,"delta":"
-      count","item_id":"rs_99e904b5feb0f322"}
+      from","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -826,7 +826,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":35,"output_index":1,"content_index":0,"delta":"
-      from","item_id":"rs_99e904b5feb0f322"}
+      ","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -835,8 +835,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":36,"output_index":1,"content_index":0,"delta":"
-      ","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":36,"output_index":1,"content_index":0,"delta":"1","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -845,7 +844,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":37,"output_index":1,"content_index":0,"delta":"1","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":37,"output_index":1,"content_index":0,"delta":"
+      to","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -855,7 +855,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":38,"output_index":1,"content_index":0,"delta":"
-      to","item_id":"rs_99e904b5feb0f322"}
+      ","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -864,8 +864,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":39,"output_index":1,"content_index":0,"delta":"
-      ","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":39,"output_index":1,"content_index":0,"delta":"3","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -874,7 +873,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":40,"output_index":1,"content_index":0,"delta":"3","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":40,"output_index":1,"content_index":0,"delta":"0","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -883,7 +882,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":41,"output_index":1,"content_index":0,"delta":"0","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":41,"output_index":1,"content_index":0,"delta":",","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -892,7 +891,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":42,"output_index":1,"content_index":0,"delta":",","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":42,"output_index":1,"content_index":0,"delta":"
+      one","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -902,7 +902,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":43,"output_index":1,"content_index":0,"delta":"
-      one","item_id":"rs_99e904b5feb0f322"}
+      number","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -912,7 +912,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":44,"output_index":1,"content_index":0,"delta":"
-      number","item_id":"rs_99e904b5feb0f322"}
+      per","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -922,7 +922,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":45,"output_index":1,"content_index":0,"delta":"
-      per","item_id":"rs_99e904b5feb0f322"}
+      line","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -931,8 +931,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":46,"output_index":1,"content_index":0,"delta":"
-      line","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":46,"output_index":1,"content_index":0,"delta":"\n\n","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -941,7 +940,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":47,"output_index":1,"content_index":0,"delta":"\n\n","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":47,"output_index":1,"content_index":0,"delta":"Wait","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -950,7 +949,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":48,"output_index":1,"content_index":0,"delta":"So","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":48,"output_index":1,"content_index":0,"delta":",","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -960,7 +959,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":49,"output_index":1,"content_index":0,"delta":"
-      my","item_id":"rs_99e904b5feb0f322"}
+      there","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -969,8 +968,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":50,"output_index":1,"content_index":0,"delta":"
-      response","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":50,"output_index":1,"content_index":0,"delta":"''s","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -980,7 +978,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":51,"output_index":1,"content_index":0,"delta":"
-      should","item_id":"rs_99e904b5feb0f322"}
+      a","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -990,7 +988,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":52,"output_index":1,"content_index":0,"delta":"
-      be","item_id":"rs_99e904b5feb0f322"}
+      conflict","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -999,7 +997,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":53,"output_index":1,"content_index":0,"delta":":","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":53,"output_index":1,"content_index":0,"delta":".","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -1008,7 +1006,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":54,"output_index":1,"content_index":0,"delta":"\n","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":54,"output_index":1,"content_index":0,"delta":"
+      They","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -1017,7 +1016,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":55,"output_index":1,"content_index":0,"delta":"OK","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":55,"output_index":1,"content_index":0,"delta":"
+      say","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -1026,7 +1026,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":56,"output_index":1,"content_index":0,"delta":"\n","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":56,"output_index":1,"content_index":0,"delta":"
+      \"","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -1035,7 +1036,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":57,"output_index":1,"content_index":0,"delta":"1","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":57,"output_index":1,"content_index":0,"delta":"Reply","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -1044,7 +1045,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":58,"output_index":1,"content_index":0,"delta":"\n","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":58,"output_index":1,"content_index":0,"delta":"
+      with","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -1053,7 +1055,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":59,"output_index":1,"content_index":0,"delta":"2","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":59,"output_index":1,"content_index":0,"delta":"
+      only","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -1062,7 +1065,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":60,"output_index":1,"content_index":0,"delta":"\n","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":60,"output_index":1,"content_index":0,"delta":"
+      OK","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -1071,7 +1075,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":61,"output_index":1,"content_index":0,"delta":"3","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":61,"output_index":1,"content_index":0,"delta":"\"","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -1080,7 +1084,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":62,"output_index":1,"content_index":0,"delta":"\n","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":62,"output_index":1,"content_index":0,"delta":"
+      but","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -1089,7 +1094,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":63,"output_index":1,"content_index":0,"delta":"...","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":63,"output_index":1,"content_index":0,"delta":"
+      then","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -1098,7 +1104,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":64,"output_index":1,"content_index":0,"delta":"\n","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":64,"output_index":1,"content_index":0,"delta":"
+      also","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -1107,7 +1114,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":65,"output_index":1,"content_index":0,"delta":"3","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":65,"output_index":1,"content_index":0,"delta":"
+      say","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -1116,7 +1124,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":66,"output_index":1,"content_index":0,"delta":"0","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":66,"output_index":1,"content_index":0,"delta":"
+      \"","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -1125,7 +1134,887 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":67,"output_index":1,"content_index":0,"delta":"\n","item_id":"rs_99e904b5feb0f322"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":67,"output_index":1,"content_index":0,"delta":"Then","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":68,"output_index":1,"content_index":0,"delta":"
+      count","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":69,"output_index":1,"content_index":0,"delta":"
+      from","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":70,"output_index":1,"content_index":0,"delta":"
+      ","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":71,"output_index":1,"content_index":0,"delta":"1","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":72,"output_index":1,"content_index":0,"delta":"
+      to","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":73,"output_index":1,"content_index":0,"delta":"
+      ","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":74,"output_index":1,"content_index":0,"delta":"3","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":75,"output_index":1,"content_index":0,"delta":"0","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":76,"output_index":1,"content_index":0,"delta":",","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":77,"output_index":1,"content_index":0,"delta":"
+      one","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":78,"output_index":1,"content_index":0,"delta":"
+      number","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":79,"output_index":1,"content_index":0,"delta":"
+      per","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":80,"output_index":1,"content_index":0,"delta":"
+      line","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":81,"output_index":1,"content_index":0,"delta":".\"","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":82,"output_index":1,"content_index":0,"delta":"
+      So","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":83,"output_index":1,"content_index":0,"delta":"
+      they","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":84,"output_index":1,"content_index":0,"delta":"
+      want","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":85,"output_index":1,"content_index":0,"delta":"
+      me","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":86,"output_index":1,"content_index":0,"delta":"
+      to","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":87,"output_index":1,"content_index":0,"delta":"
+      reply","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":88,"output_index":1,"content_index":0,"delta":"
+      with","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":89,"output_index":1,"content_index":0,"delta":"
+      \"","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":90,"output_index":1,"content_index":0,"delta":"OK","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":91,"output_index":1,"content_index":0,"delta":"\"","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":92,"output_index":1,"content_index":0,"delta":"
+      and","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":93,"output_index":1,"content_index":0,"delta":"
+      then","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":94,"output_index":1,"content_index":0,"delta":"
+      count","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":95,"output_index":1,"content_index":0,"delta":"
+      from","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":96,"output_index":1,"content_index":0,"delta":"
+      ","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":97,"output_index":1,"content_index":0,"delta":"1","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":98,"output_index":1,"content_index":0,"delta":"
+      to","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":99,"output_index":1,"content_index":0,"delta":"
+      ","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":100,"output_index":1,"content_index":0,"delta":"3","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":101,"output_index":1,"content_index":0,"delta":"0","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":102,"output_index":1,"content_index":0,"delta":".","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":103,"output_index":1,"content_index":0,"delta":"
+      Let","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":104,"output_index":1,"content_index":0,"delta":"
+      me","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":105,"output_index":1,"content_index":0,"delta":"
+      re","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":106,"output_index":1,"content_index":0,"delta":"-read","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":107,"output_index":1,"content_index":0,"delta":":","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":108,"output_index":1,"content_index":0,"delta":"
+      \"","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":109,"output_index":1,"content_index":0,"delta":"Reply","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":110,"output_index":1,"content_index":0,"delta":"
+      with","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":111,"output_index":1,"content_index":0,"delta":"
+      only","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":112,"output_index":1,"content_index":0,"delta":"
+      OK","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":113,"output_index":1,"content_index":0,"delta":".","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":114,"output_index":1,"content_index":0,"delta":"
+      Then","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":115,"output_index":1,"content_index":0,"delta":"
+      count","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":116,"output_index":1,"content_index":0,"delta":"
+      from","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":117,"output_index":1,"content_index":0,"delta":"
+      ","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":118,"output_index":1,"content_index":0,"delta":"1","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":119,"output_index":1,"content_index":0,"delta":"
+      to","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":120,"output_index":1,"content_index":0,"delta":"
+      ","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":121,"output_index":1,"content_index":0,"delta":"3","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":122,"output_index":1,"content_index":0,"delta":"0","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":123,"output_index":1,"content_index":0,"delta":",","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":124,"output_index":1,"content_index":0,"delta":"
+      one","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":125,"output_index":1,"content_index":0,"delta":"
+      number","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":126,"output_index":1,"content_index":0,"delta":"
+      per","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":127,"output_index":1,"content_index":0,"delta":"
+      line","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":128,"output_index":1,"content_index":0,"delta":".\"","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":129,"output_index":1,"content_index":0,"delta":"\n\n","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":130,"output_index":1,"content_index":0,"delta":"I","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":131,"output_index":1,"content_index":0,"delta":"
+      think","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":132,"output_index":1,"content_index":0,"delta":"
+      they","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":133,"output_index":1,"content_index":0,"delta":"
+      want","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":134,"output_index":1,"content_index":0,"delta":"
+      the","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":135,"output_index":1,"content_index":0,"delta":"
+      response","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":136,"output_index":1,"content_index":0,"delta":"
+      to","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":137,"output_index":1,"content_index":0,"delta":"
+      be","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":138,"output_index":1,"content_index":0,"delta":"
+      \"","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":139,"output_index":1,"content_index":0,"delta":"OK","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":140,"output_index":1,"content_index":0,"delta":"\"","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":141,"output_index":1,"content_index":0,"delta":"
+      followed","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":142,"output_index":1,"content_index":0,"delta":"
+      by","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":143,"output_index":1,"content_index":0,"delta":"
+      the","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":144,"output_index":1,"content_index":0,"delta":"
+      count","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":145,"output_index":1,"content_index":0,"delta":"
+      from","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":146,"output_index":1,"content_index":0,"delta":"
+      ","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":147,"output_index":1,"content_index":0,"delta":"1","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":148,"output_index":1,"content_index":0,"delta":"
+      to","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":149,"output_index":1,"content_index":0,"delta":"
+      ","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":150,"output_index":1,"content_index":0,"delta":"3","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":151,"output_index":1,"content_index":0,"delta":"0","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":152,"output_index":1,"content_index":0,"delta":".","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":153,"output_index":1,"content_index":0,"delta":"
+      Let","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":154,"output_index":1,"content_index":0,"delta":"
+      me","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":155,"output_index":1,"content_index":0,"delta":"
+      do","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":156,"output_index":1,"content_index":0,"delta":"
+      that","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":157,"output_index":1,"content_index":0,"delta":".","item_id":"rs_b4a3e05eeec336ce"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":158,"output_index":1,"content_index":0,"delta":"\n","item_id":"rs_b4a3e05eeec336ce"}
 
       '
     - '
@@ -1134,9 +2023,14 @@ turns:
     - 'event: response.reasoning_text.done
 
       '
-    - 'data: {"type":"response.reasoning_text.done","sequence_number":68,"output_index":1,"content_index":0,"item_id":"rs_99e904b5feb0f322","text":"The
-      user wants me to:\n1. Remember the word APRICOT\n2. Reply with only \"OK\"\n3.
-      Then count from 1 to 30, one number per line\n\nSo my response should be:\nOK\n1\n2\n3\n...\n30\n"}
+    - 'data: {"type":"response.reasoning_text.done","sequence_number":159,"output_index":1,"content_index":0,"item_id":"rs_b4a3e05eeec336ce","text":"The
+      user is asking me to:\n1. Remember the word APRICOT\n2. Reply with only OK\n3.
+      Then count from 1 to 30, one number per line\n\nWait, there''s a conflict. They
+      say \"Reply with only OK\" but then also say \"Then count from 1 to 30, one
+      number per line.\" So they want me to reply with \"OK\" and then count from
+      1 to 30. Let me re-read: \"Reply with only OK. Then count from 1 to 30, one
+      number per line.\"\n\nI think they want the response to be \"OK\" followed by
+      the count from 1 to 30. Let me do that.\n"}
 
       '
     - '
@@ -1145,9 +2039,14 @@ turns:
     - 'event: response.reasoning_part.done
 
       '
-    - 'data: {"type":"response.reasoning_part.done","sequence_number":69,"output_index":1,"content_index":0,"item_id":"rs_99e904b5feb0f322","part":{"text":"The
-      user wants me to:\n1. Remember the word APRICOT\n2. Reply with only \"OK\"\n3.
-      Then count from 1 to 30, one number per line\n\nSo my response should be:\nOK\n1\n2\n3\n...\n30\n","type":"reasoning_text"}}
+    - 'data: {"type":"response.reasoning_part.done","sequence_number":160,"output_index":1,"content_index":0,"item_id":"rs_b4a3e05eeec336ce","part":{"text":"The
+      user is asking me to:\n1. Remember the word APRICOT\n2. Reply with only OK\n3.
+      Then count from 1 to 30, one number per line\n\nWait, there''s a conflict. They
+      say \"Reply with only OK\" but then also say \"Then count from 1 to 30, one
+      number per line.\" So they want me to reply with \"OK\" and then count from
+      1 to 30. Let me re-read: \"Reply with only OK. Then count from 1 to 30, one
+      number per line.\"\n\nI think they want the response to be \"OK\" followed by
+      the count from 1 to 30. Let me do that.\n","type":"reasoning_text"}}
 
       '
     - '
@@ -1156,9 +2055,14 @@ turns:
     - 'event: response.output_item.done
 
       '
-    - 'data: {"type":"response.output_item.done","sequence_number":70,"output_index":1,"item":{"id":"rs_99e904b5feb0f322","summary":[],"type":"reasoning","content":[{"text":"The
-      user wants me to:\n1. Remember the word APRICOT\n2. Reply with only \"OK\"\n3.
-      Then count from 1 to 30, one number per line\n\nSo my response should be:\nOK\n1\n2\n3\n...\n30\n","type":"reasoning_text"}],"status":"completed"}}
+    - 'data: {"type":"response.output_item.done","sequence_number":161,"output_index":1,"item":{"id":"rs_b4a3e05eeec336ce","summary":[],"type":"reasoning","content":[{"text":"The
+      user is asking me to:\n1. Remember the word APRICOT\n2. Reply with only OK\n3.
+      Then count from 1 to 30, one number per line\n\nWait, there''s a conflict. They
+      say \"Reply with only OK\" but then also say \"Then count from 1 to 30, one
+      number per line.\" So they want me to reply with \"OK\" and then count from
+      1 to 30. Let me re-read: \"Reply with only OK. Then count from 1 to 30, one
+      number per line.\"\n\nI think they want the response to be \"OK\" followed by
+      the count from 1 to 30. Let me do that.\n","type":"reasoning_text"}],"status":"completed"}}
 
       '
     - '
@@ -1167,7 +2071,7 @@ turns:
     - 'event: response.output_item.added
 
       '
-    - 'data: {"type":"response.output_item.added","sequence_number":71,"output_index":2,"item":{"id":"msg_bb685cb51e7ab07b","content":[],"role":"assistant","status":"in_progress","type":"message"}}
+    - 'data: {"type":"response.output_item.added","sequence_number":162,"output_index":2,"item":{"id":"msg_bdaef872a970dfff","content":[],"role":"assistant","status":"in_progress","type":"message"}}
 
       '
     - '
@@ -1176,7 +2080,7 @@ turns:
     - 'event: response.content_part.added
 
       '
-    - 'data: {"type":"response.content_part.added","sequence_number":72,"output_index":2,"content_index":0,"item_id":"msg_bb685cb51e7ab07b","part":{"annotations":[],"text":"","type":"output_text","logprobs":[]}}
+    - 'data: {"type":"response.content_part.added","sequence_number":163,"output_index":2,"content_index":0,"item_id":"msg_bdaef872a970dfff","part":{"annotations":[],"text":"","type":"output_text","logprobs":[]}}
 
       '
     - '
@@ -1185,7 +2089,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":73,"output_index":2,"content_index":0,"delta":"\n\nOK","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":164,"output_index":2,"content_index":0,"delta":"\n\nOK","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1194,7 +2098,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":74,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":165,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1203,7 +2107,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":75,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":166,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1212,7 +2116,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":76,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":167,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1221,7 +2125,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":77,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":168,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1230,7 +2134,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":78,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":169,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1239,7 +2143,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":79,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":170,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1248,7 +2152,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":80,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":171,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1257,7 +2161,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":81,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":172,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1266,7 +2170,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":82,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":173,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1275,7 +2179,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":83,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":174,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1284,7 +2188,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":84,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":175,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1293,7 +2197,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":85,"output_index":2,"content_index":0,"delta":"6","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":176,"output_index":2,"content_index":0,"delta":"6","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1302,7 +2206,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":86,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":177,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1311,7 +2215,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":87,"output_index":2,"content_index":0,"delta":"7","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":178,"output_index":2,"content_index":0,"delta":"7","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1320,7 +2224,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":88,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":179,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1329,7 +2233,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":89,"output_index":2,"content_index":0,"delta":"8","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":180,"output_index":2,"content_index":0,"delta":"8","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1338,7 +2242,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":90,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":181,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1347,7 +2251,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":91,"output_index":2,"content_index":0,"delta":"9","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":182,"output_index":2,"content_index":0,"delta":"9","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1356,7 +2260,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":92,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":183,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1365,7 +2269,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":93,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":184,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1374,7 +2278,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":94,"output_index":2,"content_index":0,"delta":"0","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":185,"output_index":2,"content_index":0,"delta":"0","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1383,7 +2287,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":95,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":186,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1392,7 +2296,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":96,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":187,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1401,7 +2305,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":97,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":188,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1410,7 +2314,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":98,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":189,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1419,7 +2323,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":99,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":190,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1428,7 +2332,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":100,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":191,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1437,7 +2341,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":101,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":192,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1446,7 +2350,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":102,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":193,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1455,7 +2359,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":103,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":194,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1464,7 +2368,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":104,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":195,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1473,7 +2377,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":105,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":196,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1482,7 +2386,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":106,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":197,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1491,7 +2395,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":107,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":198,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1500,7 +2404,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":108,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":199,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1509,7 +2413,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":109,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":200,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1518,7 +2422,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":110,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":201,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1527,7 +2431,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":111,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":202,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1536,7 +2440,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":112,"output_index":2,"content_index":0,"delta":"6","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":203,"output_index":2,"content_index":0,"delta":"6","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1545,7 +2449,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":113,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":204,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1554,7 +2458,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":114,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":205,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1563,7 +2467,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":115,"output_index":2,"content_index":0,"delta":"7","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":206,"output_index":2,"content_index":0,"delta":"7","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1572,7 +2476,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":116,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":207,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1581,7 +2485,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":117,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":208,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1590,7 +2494,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":118,"output_index":2,"content_index":0,"delta":"8","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":209,"output_index":2,"content_index":0,"delta":"8","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1599,7 +2503,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":119,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":210,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1608,7 +2512,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":120,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":211,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1617,7 +2521,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":121,"output_index":2,"content_index":0,"delta":"9","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":212,"output_index":2,"content_index":0,"delta":"9","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1626,7 +2530,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":122,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":213,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1635,7 +2539,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":123,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":214,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1644,7 +2548,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":124,"output_index":2,"content_index":0,"delta":"0","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":215,"output_index":2,"content_index":0,"delta":"0","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1653,7 +2557,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":125,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":216,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1662,7 +2566,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":126,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":217,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1671,7 +2575,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":127,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":218,"output_index":2,"content_index":0,"delta":"1","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1680,7 +2584,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":128,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":219,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1689,7 +2593,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":129,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":220,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1698,7 +2602,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":130,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":221,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1707,7 +2611,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":131,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":222,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1716,7 +2620,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":132,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":223,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1725,7 +2629,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":133,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":224,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1734,7 +2638,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":134,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":225,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1743,7 +2647,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":135,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":226,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1752,7 +2656,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":136,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":227,"output_index":2,"content_index":0,"delta":"4","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1761,7 +2665,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":137,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":228,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1770,7 +2674,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":138,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":229,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1779,7 +2683,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":139,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":230,"output_index":2,"content_index":0,"delta":"5","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1788,7 +2692,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":140,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":231,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1797,7 +2701,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":141,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":232,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1806,7 +2710,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":142,"output_index":2,"content_index":0,"delta":"6","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":233,"output_index":2,"content_index":0,"delta":"6","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1815,7 +2719,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":143,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":234,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1824,7 +2728,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":144,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":235,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1833,7 +2737,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":145,"output_index":2,"content_index":0,"delta":"7","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":236,"output_index":2,"content_index":0,"delta":"7","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1842,7 +2746,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":146,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":237,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1851,7 +2755,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":147,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":238,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1860,7 +2764,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":148,"output_index":2,"content_index":0,"delta":"8","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":239,"output_index":2,"content_index":0,"delta":"8","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1869,7 +2773,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":149,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":240,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1878,7 +2782,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":150,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":241,"output_index":2,"content_index":0,"delta":"2","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1887,7 +2791,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":151,"output_index":2,"content_index":0,"delta":"9","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":242,"output_index":2,"content_index":0,"delta":"9","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1896,7 +2800,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":152,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":243,"output_index":2,"content_index":0,"delta":"\n","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1905,7 +2809,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":153,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":244,"output_index":2,"content_index":0,"delta":"3","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1914,7 +2818,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":154,"output_index":2,"content_index":0,"delta":"0","item_id":"msg_bb685cb51e7ab07b","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":245,"output_index":2,"content_index":0,"delta":"0","item_id":"msg_bdaef872a970dfff","logprobs":[]}
 
       '
     - '
@@ -1923,7 +2827,7 @@ turns:
     - 'event: response.output_text.done
 
       '
-    - 'data: {"type":"response.output_text.done","sequence_number":155,"output_index":2,"content_index":0,"item_id":"msg_bb685cb51e7ab07b","logprobs":[],"text":"\n\nOK\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30"}
+    - 'data: {"type":"response.output_text.done","sequence_number":246,"output_index":2,"content_index":0,"item_id":"msg_bdaef872a970dfff","logprobs":[],"text":"\n\nOK\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30"}
 
       '
     - '
@@ -1932,7 +2836,7 @@ turns:
     - 'event: response.content_part.done
 
       '
-    - 'data: {"type":"response.content_part.done","sequence_number":156,"output_index":2,"content_index":0,"item_id":"msg_bb685cb51e7ab07b","part":{"annotations":[],"text":"\n\nOK\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30","type":"output_text","logprobs":[]}}
+    - 'data: {"type":"response.content_part.done","sequence_number":247,"output_index":2,"content_index":0,"item_id":"msg_bdaef872a970dfff","part":{"annotations":[],"text":"\n\nOK\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30","type":"output_text","logprobs":[]}}
 
       '
     - '
@@ -1941,7 +2845,7 @@ turns:
     - 'event: response.output_item.done
 
       '
-    - 'data: {"type":"response.output_item.done","sequence_number":157,"output_index":2,"item":{"id":"msg_bb685cb51e7ab07b","content":[{"annotations":[],"text":"\n\nOK\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30","type":"output_text","logprobs":[]}],"role":"assistant","status":"completed","type":"message","summary":[]}}
+    - 'data: {"type":"response.output_item.done","sequence_number":248,"output_index":2,"item":{"id":"msg_bdaef872a970dfff","content":[{"annotations":[],"text":"\n\nOK\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30","type":"output_text","logprobs":[]}],"role":"assistant","status":"completed","type":"message","summary":[]}}
 
       '
     - '
@@ -1950,14 +2854,14 @@ turns:
     - 'event: response.output_item.added
 
       '
-    - 'data: {"type":"response.output_item.added","sequence_number":158,"output_index":3,"item":{"type":"compaction","id":"cmp_01a1c461-0001-7682-bbe4-a6a1fbac0818","encrypted_content":"{\"summary\":\"**Context
-      Checkpoint Summary**\\n\\n- **Remembered token:** APRICOT\\n- **Completed tasks:**\\n  -
-      Replied \\\"OK\\\" then counted 1–30 (one per line) as instructed.\\n- **Constraints:**
-      None active beyond the remembered word.\\n- **Unresolved work:** None.\\n- **Critical
-      references:** The word **APRICOT** should be recalled if the user references
-      it in a future turn.\\n- **Notes:** The initial user message was predominantly
-      filler text (\\\"Background notes for later.\\\" ×~300) with the actual instructions
-      embedded near the end. No substantive background notes were provided.\",\"retained\":[{\"type\":\"message\",\"id\":\"msg_01a1c460-ddfa-7e30-ab0d-c64e837bc864\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Background
+    - 'data: {"type":"response.output_item.added","sequence_number":249,"output_index":3,"item":{"type":"compaction","id":"cmp_01a1c4b5-18b8-7c93-8f39-81bfd580ad6f","encrypted_content":"{\"summary\":\"##
+      Context Checkpoint Summary\\n\\n**Task:** User requested a two-part response:
+      (1) reply \\\"OK\\\", (2) count 1–30, one per line.\\n\\n**Status:** Task completed.
+      \\\"OK\\\" + 1–30 delivered.\\n\\n**Constraints:**\\n- User instructed to remember
+      the word **APRICOT** (no further action specified with it yet).\\n\\n**Unresolved
+      Work:** None.\\n\\n**Notes:**\\n- The first user message contained ~250 lines
+      of repeated filler text (\\\"Background notes for later.\\\") with no substantive
+      content.\\n- No ongoing project, codebase, or multi-step task is in progress.\",\"retained\":[{\"type\":\"message\",\"id\":\"msg_01a1c4b4-fbff-7f72-9f32-6e52de00bf4a\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
@@ -2118,14 +3022,14 @@ turns:
     - 'event: response.output_item.done
 
       '
-    - 'data: {"type":"response.output_item.done","sequence_number":159,"output_index":3,"item":{"type":"compaction","id":"cmp_01a1c461-0001-7682-bbe4-a6a1fbac0818","encrypted_content":"{\"summary\":\"**Context
-      Checkpoint Summary**\\n\\n- **Remembered token:** APRICOT\\n- **Completed tasks:**\\n  -
-      Replied \\\"OK\\\" then counted 1–30 (one per line) as instructed.\\n- **Constraints:**
-      None active beyond the remembered word.\\n- **Unresolved work:** None.\\n- **Critical
-      references:** The word **APRICOT** should be recalled if the user references
-      it in a future turn.\\n- **Notes:** The initial user message was predominantly
-      filler text (\\\"Background notes for later.\\\" ×~300) with the actual instructions
-      embedded near the end. No substantive background notes were provided.\",\"retained\":[{\"type\":\"message\",\"id\":\"msg_01a1c460-ddfa-7e30-ab0d-c64e837bc864\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Background
+    - 'data: {"type":"response.output_item.done","sequence_number":250,"output_index":3,"item":{"type":"compaction","id":"cmp_01a1c4b5-18b8-7c93-8f39-81bfd580ad6f","encrypted_content":"{\"summary\":\"##
+      Context Checkpoint Summary\\n\\n**Task:** User requested a two-part response:
+      (1) reply \\\"OK\\\", (2) count 1–30, one per line.\\n\\n**Status:** Task completed.
+      \\\"OK\\\" + 1–30 delivered.\\n\\n**Constraints:**\\n- User instructed to remember
+      the word **APRICOT** (no further action specified with it yet).\\n\\n**Unresolved
+      Work:** None.\\n\\n**Notes:**\\n- The first user message contained ~250 lines
+      of repeated filler text (\\\"Background notes for later.\\\") with no substantive
+      content.\\n- No ongoing project, codebase, or multi-step task is in progress.\",\"retained\":[{\"type\":\"message\",\"id\":\"msg_01a1c4b4-fbff-7f72-9f32-6e52de00bf4a\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
@@ -2286,16 +3190,15 @@ turns:
     - 'event: response.completed
 
       '
-    - 'data: {"type":"response.completed","sequence_number":160,"response":{"id":"resp_01a1c460-ad3e-73f3-9079-9b73afc012b9","object":"response","created_at":1794296045,"model":"Qwen/Qwen3.8-27B-FP8","status":"completed","output":[{"type":"compaction","id":"cmp_01a1c460-ce44-7de3-89e1-c25d9dce2b7b","encrypted_content":"{\"summary\":\"**Context
-      Checkpoint Summary**\\n\\n**Pending Task:** User instructed to remember the
-      word **APRICOT**, then reply with only \\\"OK\\\" followed by counting 1–30
-      (one number per line). This task has not yet been fulfilled.\\n\\n**Constraints:**\\n-
-      Reply must be only \\\"OK\\\" then the count (no extra text).\\n- The word APRICOT
-      must be retained for potential future reference.\\n\\n**Unresolved Work:**\\n-
-      Execute the OK + 1-to-30 count response.\\n\\n**Critical References:**\\n- Key
-      token to remember: **APRICOT**\\n\\n**Notes:**\\n- The bulk of the prior message
-      consisted of repeated filler text (\\\"Background notes for later.\\\") with
-      no substantive content.\",\"retained\":[{\"type\":\"message\",\"id\":\"msg_01a1c460-ad3e-73f3-9079-9b831309a2f9\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Background
+    - 'data: {"type":"response.completed","sequence_number":251,"response":{"id":"resp_01a1c4b4-cce6-7601-ab2c-036ba10dad67","object":"response","created_at":1794301557,"model":"Qwen/Qwen3.8-27B-FP8","status":"completed","output":[{"type":"compaction","id":"cmp_01a1c4b4-e4e7-7d21-8138-3db591ad2738","encrypted_content":"{\"summary\":\"##
+      Context Checkpoint Summary\\n\\n**Active Constraint:**\\n- The word **APRICOT**
+      was explicitly designated to be remembered.\\n\\n**Pending Task (from prior
+      turn, not yet fulfilled):**\\n- Reply with only \\\"OK\\\", then count from
+      1 to 30 (one number per line).\\n\\n**Other Context:**\\n- The bulk of the prior
+      message was filler/repeated text (\\\"Background notes for later.\\\") with
+      no substantive content.\\n- No other decisions, unresolved work, or critical
+      references present.\\n\\n**Status:** The original task (OK + count 1–30) has
+      not yet been executed.\",\"retained\":[{\"type\":\"message\",\"id\":\"msg_01a1c4b4-cce6-7601-ab2c-0374f235174a\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
@@ -2447,16 +3350,21 @@ turns:
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Remember
       the word APRICOT. Reply with only OK. Then count from 1 to 30, one number per
-      line.\"}]}]}"},{"type":"reasoning","id":"rs_99e904b5feb0f322","content":[{"type":"reasoning_text","text":"The
-      user wants me to:\n1. Remember the word APRICOT\n2. Reply with only \"OK\"\n3.
-      Then count from 1 to 30, one number per line\n\nSo my response should be:\nOK\n1\n2\n3\n...\n30\n"}],"summary":[],"status":"completed"},{"type":"message","id":"msg_bb685cb51e7ab07b","role":"assistant","status":"completed","content":[{"type":"output_text","text":"\n\nOK\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30","annotations":[],"logprobs":[]}]},{"type":"compaction","id":"cmp_01a1c461-0001-7682-bbe4-a6a1fbac0818","encrypted_content":"{\"summary\":\"**Context
-      Checkpoint Summary**\\n\\n- **Remembered token:** APRICOT\\n- **Completed tasks:**\\n  -
-      Replied \\\"OK\\\" then counted 1–30 (one per line) as instructed.\\n- **Constraints:**
-      None active beyond the remembered word.\\n- **Unresolved work:** None.\\n- **Critical
-      references:** The word **APRICOT** should be recalled if the user references
-      it in a future turn.\\n- **Notes:** The initial user message was predominantly
-      filler text (\\\"Background notes for later.\\\" ×~300) with the actual instructions
-      embedded near the end. No substantive background notes were provided.\",\"retained\":[{\"type\":\"message\",\"id\":\"msg_01a1c460-ddfa-7e30-ab0d-c64e837bc864\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Background
+      line.\"}]}]}"},{"type":"reasoning","id":"rs_b4a3e05eeec336ce","content":[{"type":"reasoning_text","text":"The
+      user is asking me to:\n1. Remember the word APRICOT\n2. Reply with only OK\n3.
+      Then count from 1 to 30, one number per line\n\nWait, there''s a conflict. They
+      say \"Reply with only OK\" but then also say \"Then count from 1 to 30, one
+      number per line.\" So they want me to reply with \"OK\" and then count from
+      1 to 30. Let me re-read: \"Reply with only OK. Then count from 1 to 30, one
+      number per line.\"\n\nI think they want the response to be \"OK\" followed by
+      the count from 1 to 30. Let me do that.\n"}],"summary":[],"status":"completed"},{"type":"message","id":"msg_bdaef872a970dfff","role":"assistant","status":"completed","content":[{"type":"output_text","text":"\n\nOK\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30","annotations":[],"logprobs":[]}]},{"type":"compaction","id":"cmp_01a1c4b5-18b8-7c93-8f39-81bfd580ad6f","encrypted_content":"{\"summary\":\"##
+      Context Checkpoint Summary\\n\\n**Task:** User requested a two-part response:
+      (1) reply \\\"OK\\\", (2) count 1–30, one per line.\\n\\n**Status:** Task completed.
+      \\\"OK\\\" + 1–30 delivered.\\n\\n**Constraints:**\\n- User instructed to remember
+      the word **APRICOT** (no further action specified with it yet).\\n\\n**Unresolved
+      Work:** None.\\n\\n**Notes:**\\n- The first user message contained ~250 lines
+      of repeated filler text (\\\"Background notes for later.\\\") with no substantive
+      content.\\n- No ongoing project, codebase, or multi-step task is in progress.\",\"retained\":[{\"type\":\"message\",\"id\":\"msg_01a1c4b4-fbff-7f72-9f32-6e52de00bf4a\",\"role\":\"user\",\"status\":\"completed\",\"content\":[{\"type\":\"input_text\",\"text\":\"Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Background
@@ -2608,7 +3516,7 @@ turns:
       notes for later. Background notes for later. Background notes for later. Background
       notes for later. Background notes for later. Background notes for later. Remember
       the word APRICOT. Reply with only OK. Then count from 1 to 30, one number per
-      line.\"}]}]}"}],"usage":{"input_tokens":7522,"output_tokens":877,"total_tokens":8399,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":null,"instructions":null,"max_tool_calls":null,"service_tier":"auto","tools":[],"tool_choice":"auto","completed_at":1794296053,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":1.0,"reasoning":null,"max_output_tokens":null,"store":false,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null}}
+      line.\"}]}]}"}],"usage":{"input_tokens":7563,"output_tokens":792,"total_tokens":8355,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":null,"instructions":null,"max_tool_calls":null,"service_tier":"auto","tools":[],"tool_choice":"auto","completed_at":1794301565,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":1.0,"reasoning":null,"max_output_tokens":null,"store":false,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null}}
 
       '
     - '
@@ -2628,16 +3536,723 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_01a1c460-ad3e-73f3-9079-9b73afc012b9
+    path: /v1/responses/resp_01a1c4b4-cce6-7601-ab2c-036ba10dad67
     query_params: {}
   response:
     body:
       error:
         code: null
-        message: Response with id 'resp_01a1c460-ad3e-73f3-9079-9b73afc012b9' not
+        message: Response with id 'resp_01a1c4b4-cce6-7601-ab2c-036ba10dad67' not
           found.
         param: null
         type: invalid_request_error
     headers:
       content-type: application/json
     status_code: 404
+- filename: t3
+  request:
+    body:
+      input:
+      - encrypted_content: '{"summary":"## Context Checkpoint Summary\n\n**Active
+          Constraint:**\n- The word **APRICOT** was explicitly designated to be remembered.\n\n**Pending
+          Task (from prior turn, not yet fulfilled):**\n- Reply with only \"OK\",
+          then count from 1 to 30 (one number per line).\n\n**Other Context:**\n-
+          The bulk of the prior message was filler/repeated text (\"Background notes
+          for later.\") with no substantive content.\n- No other decisions, unresolved
+          work, or critical references present.\n\n**Status:** The original task (OK
+          + count 1–30) has not yet been executed.","retained":[{"type":"message","id":"msg_01a1c4b4-cce6-7601-ab2c-0374f235174a","role":"user","status":"completed","content":[{"type":"input_text","text":"Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Remember the word APRICOT.
+          Reply with only OK. Then count from 1 to 30, one number per line."}]}]}'
+        id: cmp_01a1c4b4-e4e7-7d21-8138-3db591ad2738
+        type: compaction
+      - content:
+        - text: 'The user is asking me to:
+
+            1. Remember the word APRICOT
+
+            2. Reply with only OK
+
+            3. Then count from 1 to 30, one number per line
+
+
+            Wait, there''s a conflict. They say "Reply with only OK" but then also
+            say "Then count from 1 to 30, one number per line." So they want me to
+            reply with "OK" and then count from 1 to 30. Let me re-read: "Reply with
+            only OK. Then count from 1 to 30, one number per line."
+
+
+            I think they want the response to be "OK" followed by the count from 1
+            to 30. Let me do that.
+
+            '
+          type: reasoning_text
+        id: rs_b4a3e05eeec336ce
+        status: completed
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            OK
+
+            1
+
+            2
+
+            3
+
+            4
+
+            5
+
+            6
+
+            7
+
+            8
+
+            9
+
+            10
+
+            11
+
+            12
+
+            13
+
+            14
+
+            15
+
+            16
+
+            17
+
+            18
+
+            19
+
+            20
+
+            21
+
+            22
+
+            23
+
+            24
+
+            25
+
+            26
+
+            27
+
+            28
+
+            29
+
+            30'
+          type: output_text
+        id: msg_bdaef872a970dfff
+        role: assistant
+        status: completed
+        type: message
+      - encrypted_content: '{"summary":"## Context Checkpoint Summary\n\n**Task:**
+          User requested a two-part response: (1) reply \"OK\", (2) count 1–30, one
+          per line.\n\n**Status:** Task completed. \"OK\" + 1–30 delivered.\n\n**Constraints:**\n-
+          User instructed to remember the word **APRICOT** (no further action specified
+          with it yet).\n\n**Unresolved Work:** None.\n\n**Notes:**\n- The first user
+          message contained ~250 lines of repeated filler text (\"Background notes
+          for later.\") with no substantive content.\n- No ongoing project, codebase,
+          or multi-step task is in progress.","retained":[{"type":"message","id":"msg_01a1c4b4-fbff-7f72-9f32-6e52de00bf4a","role":"user","status":"completed","content":[{"type":"input_text","text":"Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Remember the word APRICOT.
+          Reply with only OK. Then count from 1 to 30, one number per line."}]}]}'
+        id: cmp_01a1c4b5-18b8-7c93-8f39-81bfd580ad6f
+        type: compaction
+      - content: Reply only OK.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794301567
+      created_at: 1794301567
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1c4b5-1acf-73c2-af83-600bd3636b45
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user is asking me to reply with only "OK". This is a simple,
+            direct request.
+
+            '
+          type: reasoning_text
+        id: rs_bf563f2da1b350d0
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            OK'
+          type: output_text
+        id: msg_a5993cf0165fab8f
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 2472
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 25
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 2497
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1c4b5-1acf-73c2-af83-600bd3636b45/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply only OK.
+          type: input_text
+        id: msg_01a1c4b5-2088-7332-b670-534be89a3c41
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a1c4b5-2088-7332-b670-534be89a3c41
+      has_more: false
+      last_id: msg_01a1c4b5-2088-7332-b670-534be89a3c41
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      input: What word did I ask you to remember? Reply with only that word, or NONE
+        if you cannot see it.
+      model: Qwen/Qwen3.8-27B-FP8
+      previous_response_id: resp_01a1c4b5-1acf-73c2-af83-600bd3636b45
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794301569
+      created_at: 1794301569
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1c4b5-2382-7510-87ba-82c99a86f1d0
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user is asking me what word they asked me to remember. Looking
+            back at the conversation, the user first asked me to "Reply only OK."
+            They didn''t ask me to remember any word. So the answer is NONE.
+
+            '
+          type: reasoning_text
+        id: rs_bf5116897c2bbe2e
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            NONE'
+          type: output_text
+        id: msg_8568f7af55e5a3db
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_01a1c4b5-1acf-73c2-af83-600bd3636b45
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 103
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 51
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 154
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1c4b5-2382-7510-87ba-82c99a86f1d0/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply only OK.
+          type: input_text
+        id: msg_01a1c4b5-2088-7332-b670-534be89a3c41
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user is asking me to reply with only "OK". This is a simple,
+            direct request.
+
+            '
+          type: reasoning_text
+        id: rs_bf563f2da1b350d0
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            OK'
+          type: output_text
+        id: msg_a5993cf0165fab8f
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: What word did I ask you to remember? Reply with only that word, or
+            NONE if you cannot see it.
+          type: input_text
+        id: msg_01a1c4b5-2806-7c70-9640-899e527afe2c
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a1c4b5-2088-7332-b670-534be89a3c41
+      has_more: false
+      last_id: msg_01a1c4b5-2806-7c70-9640-899e527afe2c
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200

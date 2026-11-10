@@ -1,6 +1,6 @@
 //! Response storage operations and queries.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::sync::Arc;
 
@@ -193,6 +193,11 @@ impl ResponseStore {
 
         let previous_response_id = parent.and_then(|parent| parent.response_id.as_deref());
         let mut item_ids = parent.map(|parent| parent.history_item_ids.clone()).unwrap_or_default();
+        if let Some(parent_id) = previous_response_id {
+            // Deleting an ancestor since rehydration removed its rows from the parent's history; do not restore them.
+            let current: HashSet<_> = self.get(parent_id).await?.history_item_ids.into_iter().collect();
+            item_ids.retain(|id| current.contains(id));
+        }
         let new_items = new_items.iter().map(encode).collect::<StoreResult<Vec<_>>>()?;
         let snapshot_json = snapshot.map(String::try_from).transpose()?;
         let metadata_json = String::try_from(metadata)?;
@@ -282,6 +287,38 @@ mod tests {
         assert_eq!(items[1].id(), Some("msg_generated"));
         assert!(items[2].id().is_some_and(|id| id.starts_with("msg_")));
         assert_eq!(items[3].id(), Some("fc_supplied"));
+    }
+
+    #[tokio::test]
+    async fn deleting_an_ancestor_during_a_turn_does_not_restore_its_history() {
+        let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await.unwrap();
+        let store = ResponseStore::new(pool);
+        let metadata = ResponseMetadata::default();
+        let message = |id: &str| {
+            InOutItem::Input(
+                serde_json::from_value(serde_json::json!({"type": "message", "id": id, "role": "user", "content": id}))
+                    .unwrap(),
+            )
+        };
+        store
+            .persist("resp_a", None, vec![message("msg_a")], None, &metadata)
+            .await
+            .unwrap();
+        let (a, _) = store.rehydrate("resp_a").await.unwrap();
+        store
+            .persist("resp_b", Some(&a), vec![message("msg_b")], None, &metadata)
+            .await
+            .unwrap();
+        // C rehydrates B, then A is deleted before C persists.
+        let (b, _) = store.rehydrate("resp_b").await.unwrap();
+        store.delete("resp_a").await.unwrap();
+        store
+            .persist("resp_c", Some(&b), vec![message("msg_c")], None, &metadata)
+            .await
+            .unwrap();
+        let (_, history) = store.rehydrate("resp_c").await.unwrap();
+        let ids: Vec<_> = history.iter().map(InOutItem::id).collect();
+        assert_eq!(ids, [Some("msg_b"), Some("msg_c")]);
     }
 
     #[tokio::test]

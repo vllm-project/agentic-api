@@ -63,12 +63,18 @@ impl From<OutputItem> for InOutItem {
 }
 
 impl InOutItem {
-    /// What a turn stores of the items a client sent, as on `OpenAI`: a supplied compaction is used for the turn only.
-    /// Neither it nor the items before it are stored, except the user messages its window keeps (completed, with an
-    /// ID, after any earlier compaction). A compaction trigger asks for this turn's compaction and is not history.
+    /// What a turn stores of the items a client sent, as on `OpenAI`: history starts at the latest compaction. A
+    /// supplied compaction is used for the turn only, while one resolved from storage stays history. The items before
+    /// it are not stored, except the user messages its window keeps (completed, with an ID, after any earlier
+    /// compaction). A compaction trigger asks for this turn's compaction and is not history.
     #[must_use]
     pub(crate) fn filter_for_compaction(items: Vec<Self>) -> Vec<Self> {
-        let is_compaction = |item: &Self| matches!(item, Self::Input(InputItem::Compaction(_)));
+        let is_compaction = |item: &Self| {
+            matches!(
+                item,
+                Self::Input(InputItem::Compaction(_)) | Self::Output(OutputItem::Compaction(_))
+            )
+        };
         let latest = items.iter().rposition(is_compaction);
         let retained_start = latest.map_or(0, |latest| {
             items[..latest]
@@ -81,6 +87,7 @@ impl InOutItem {
             .enumerate()
             .filter(|(index, item)| match item {
                 Self::Input(InputItem::Compaction(_) | InputItem::CompactionTrigger) => false,
+                Self::Output(OutputItem::Compaction(_)) => latest == Some(*index),
                 _ if latest.is_none_or(|latest| *index > latest) => true,
                 Self::Input(InputItem::Message(message)) => {
                     *index >= retained_start

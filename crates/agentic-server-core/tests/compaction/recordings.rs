@@ -34,12 +34,12 @@ fn public_compaction_recordings_have_complete_turns_and_stream_lifecycles() {
     for provider in ["openai", "gateway"] {
         for (scenario, count) in [
             ("stale", 10),
-            ("in-turn-chain", 5),
-            ("in-turn-chain-stream", 5),
+            ("in-turn-chain", 9),
+            ("in-turn-chain-stream", 9),
             ("tool-loop", 10),
             ("standalone", 12),
             ("multi-agent", 5),
-            ("store-false", 2),
+            ("store-false", 6),
             ("mcp", 11),
         ] {
             let recording = cassette(&format!("compaction-{scenario}-{provider}.yaml"));
@@ -49,12 +49,10 @@ fn public_compaction_recordings_have_complete_turns_and_stream_lifecycles() {
                     || (scenario == "standalone" && index == 4)
                 {
                     400
-                } else if index + 1 == count {
-                    match scenario {
-                        "stale" => 400,
-                        "store-false" => 404,
-                        _ => 200,
-                    }
+                } else if scenario == "store-false" && index == 1 {
+                    404
+                } else if scenario == "stale" && index + 1 == count {
+                    400
                 } else {
                     200
                 };
@@ -246,6 +244,55 @@ fn recorded_stale_compaction_keeps_concurrent_turns_in_public_history() {
             compacting["output"].as_array().unwrap().last().unwrap()["id"]
         );
         assert_eq!(body(&turns[9])["error"]["type"], "invalid_request_error");
+    }
+}
+
+#[test]
+fn recorded_checkpoint_sent_back_as_input_stays_history_only_when_stored() {
+    let answer = |turn: &Turn| {
+        body(turn)["output"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["type"] == "message")
+            .unwrap()["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .trim()
+            .to_owned()
+    };
+    for provider in ["openai", "gateway"] {
+        // A compaction from an unstored turn is used for its turn only: neither the turn that sent it back (t4) nor
+        // its continuation (t6) keeps it.
+        let unstored = cassette(&format!("compaction-store-false-{provider}.yaml"));
+        let turns = &unstored.turns;
+        assert_eq!(kinds(&body(&turns[3])["data"]), ["message"], "{provider}");
+        assert_eq!(
+            kinds(&body(&turns[5])["data"]),
+            ["message", "message", "message"],
+            "{provider}"
+        );
+        if provider == "openai" {
+            assert_eq!(answer(&turns[4]), "NONE");
+        }
+        // A stored compaction sent back stays history, and the stored window starts at it (t7, t9).
+        for scenario in ["in-turn-chain", "in-turn-chain-stream"] {
+            let stored = cassette(&format!("compaction-{scenario}-{provider}.yaml"));
+            let turns = &stored.turns;
+            let compacting = body(&turns[1]);
+            let latest = &compacting["output"].as_array().unwrap().last().unwrap()["id"];
+            for (index, expected) in [
+                (6, &["compaction", "message"][..]),
+                (8, &["compaction", "message", "message", "message"][..]),
+            ] {
+                let listed = body(&turns[index]);
+                assert_eq!(kinds(&listed["data"]), expected, "{scenario}/{provider} t{index}");
+                assert_eq!(&listed["data"][0]["id"], latest, "{scenario}/{provider} t{index}");
+            }
+            if provider == "openai" {
+                assert_eq!(answer(&turns[7]), "APRICOT", "{scenario}");
+            }
+        }
     }
 }
 

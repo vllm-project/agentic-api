@@ -1293,12 +1293,12 @@ and provider. `COMPACTION_RECORD_SET=all|openai|gateway` selects providers (defa
 | Scenario | HTTP turns | Coverage |
 | --- | --- | --- |
 | `stale` | 10 | A compacting streamed conversation turn overlaps another stored turn; inspect conversation items, each turn's input, and a later continuation. |
-| `in-turn-chain` | 5 | Compaction output and input-item history across a stored response chain. |
-| `in-turn-chain-stream` | 5 | The same chain with the compacting turn streamed, including compaction output-item events. |
+| `in-turn-chain` | 9 | Compaction output and input-item history across a stored response chain, then the stored compaction sent back as input to a new stored turn and its continuation. |
+| `in-turn-chain-stream` | 9 | The same chain with the compacting turn streamed, including compaction output-item events. |
 | `tool-loop` | 10 | Compaction around a client function call, plus immediate and delayed async results after automatic compaction. |
 | `standalone` | 12 | Compact direct input, replay the window, compact a stored response, reject missing context, and inspect retained media through three stored continuations. |
 | `multi-agent` | 5 | Compaction and public history across a response chain with multi-agent execution enabled. |
-| `store-false` | 2 | Stream compaction output from an unstored turn, then verify retrieval fails. |
+| `store-false` | 6 | Stream compaction output from an unstored turn, verify retrieval fails, then send its compaction back as input to a stored turn and continue it. |
 | `mcp` | 11 | Discovery reuse, standalone and automatic compaction followed by rediscovery, widened/removed allowlists, and an empty discovery snapshot reused on continuation. |
 
 From the repository root, with recorder dependencies installed in `.venv` and vLLM listening on port 5050:
@@ -1307,7 +1307,7 @@ From the repository root, with recorder dependencies installed in `.venv` and vL
 cargo build --release --locked -p agentic-server --bin agentic-server
 
 # Run in a separate terminal with an isolated database.
-AGENTIC_API_HOME=/tmp/agentic-compaction AGENTIC_MCP_ALLOWED_HOSTS=developers.openai.com \
+AGENTIC_API_HOME=/tmp/agentic-compaction AGENTIC_MCP_ALLOWED_HOSTS=learn.microsoft.com \
   ./target/release/agentic-server --llm-api-base http://127.0.0.1:5050 \
   --gateway-host 127.0.0.1 --gateway-port 9000
 

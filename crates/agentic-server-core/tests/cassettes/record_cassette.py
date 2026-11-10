@@ -584,11 +584,31 @@ COMPACTION_THRESHOLD = [{"type": "compaction", "compact_threshold": 1000}]
 RECALL_PROMPT = "What word did I ask you to remember? Reply with only that word, or NONE if you cannot see it."
 
 
+def _record_checkpoint_replay(client: httpx.Client, proxy_url: str, model: str, checkpoint: dict) -> None:
+    """A client sends a compaction checkpoint back as input: a stored turn sends `checkpoint`'s output back, then its
+    input items, a `previous_response_id` continuation asking for the remembered word, and that turn's input items."""
+    def input_items(response: dict) -> None:
+        _item_request(client, proxy_url, "GET", f"/v1/responses/{response['id']}/input_items",
+                      params={"order": "asc"}, expected_status=None)
+
+    replayed = _observed_turn(client, proxy_url, {
+        "model": model, "store": True, "stream": False,
+        "input": checkpoint["output"] + [{"role": "user", "content": "Reply only OK."}],
+    })
+    input_items(replayed)
+    continued = _observed_turn(client, proxy_url, {
+        "model": model, "store": True, "stream": False, "previous_response_id": replayed["id"],
+        "input": RECALL_PROMPT,
+    })
+    input_items(continued)
+
+
 def _record_compaction_in_turn_chain(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
     """A `previous_response_id` chain whose turn B passes the compaction threshold.
 
     B (t2, streamed when recording with --stream) shows where the compaction items sit in its output; its input items
     (t3) show what it stored; C (t4) continues B, and its input items (t5) show where a later turn's history starts.
+    t6–t9 send B's stored compaction back as input ([`_record_checkpoint_replay`]).
     """
     def turn(prompt: str, previous: str | None = None, **extra: Any) -> dict:
         body = {"model": model, "store": True, "stream": False, "input": prompt, **extra}
@@ -606,6 +626,7 @@ def _record_compaction_in_turn_chain(client: httpx.Client, proxy_url: str, model
     input_items(compacting)
     follow_up = turn(RECALL_PROMPT, compacting["id"], context_management=COMPACTION_THRESHOLD)
     input_items(follow_up)
+    _record_checkpoint_replay(client, proxy_url, model, compacting)
 
 
 def _record_compaction_tool_loop(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
@@ -737,7 +758,7 @@ def _record_compaction_multi_agent(client: httpx.Client, proxy_url: str, model: 
 
 def _record_compaction_store_false(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
     """An unstored turn that passes the threshold (t1): its output still carries the compaction, and nothing is
-    stored, so retrieving it (t2) fails."""
+    stored, so retrieving it (t2) fails. t3–t6 send its compaction back as input ([`_record_checkpoint_replay`])."""
     response = _observed_turn(client, proxy_url, {
         "model": model, "store": False, "stream": stream,
         "input": COMPACTION_NOTES + " Then count from 1 to 30, one number per line.",
@@ -745,6 +766,7 @@ def _record_compaction_store_false(client: httpx.Client, proxy_url: str, model: 
     })
     _item_request(client, proxy_url, "GET", f"/v1/responses/{response.get('id', 'resp_missing')}",
                   expected_status=None)
+    _record_checkpoint_replay(client, proxy_url, model, response)
 
 
 def _record_compaction_mcp(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
@@ -787,11 +809,11 @@ def _record_compaction_mcp(client: httpx.Client, proxy_url: str, model: str, str
 
 COMPACTION_SCENARIOS: dict[str, tuple[Callable[..., None], int]] = {
     "compaction-mcp": (_record_compaction_mcp, 11),
-    "compaction-in-turn-chain": (_record_compaction_in_turn_chain, 5),
+    "compaction-in-turn-chain": (_record_compaction_in_turn_chain, 9),
     "compaction-tool-loop": (_record_compaction_tool_loop, 10),
     "compaction-standalone": (_record_compaction_standalone, 12),
     "compaction-multi-agent": (_record_compaction_multi_agent, 5),
-    "compaction-store-false": (_record_compaction_store_false, 2),
+    "compaction-store-false": (_record_compaction_store_false, 6),
 }
 
 
