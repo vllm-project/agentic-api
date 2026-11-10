@@ -693,8 +693,16 @@ goes through it, so it lowers the public records the model never read (search it
   `InOutItem::into_input_items` uses the existing output-to-input conversion and
   client-tool lowering for model history. Storage row markers and legacy decoding
   remain in `storage/`; there is no separate conversation-item enum.
+  `InOutItem::admit_all` (`item/item_id.rs`) is the one check every item a client sends passes, whatever its kind,
+  called once per endpoint that accepts items: Responses `input` in `ResponseHandler::resolve_input_items`, and
+  Conversations `items` in `ConversationHandler::create` and `create_items`. As on `OpenAI`, an item's ID must
+  begin with its kind's prefix, and a call or an output needs a non-empty `call_id` (`ClientCallId::validate`,
+  the same rule the pending-call ledger applies) while repeated ones are accepted. A refusal is a `ClientItemError` with `OpenAI`'s code (`invalid_value`, `empty_string`), parameter
+  (`input[N].id`, `items[N].call_id`) and message. Storage does not validate items, and upstream output is
+  not admitted: an empty `call_id` in stored history is refused by the ledger when a turn continues it.
   Item retrieval and listing return `InOutItem` directly. `into_public` assigns the
-  storage identity and expands shorthand messages on the returned item;
+  storage identity, gives an omitted status `OpenAI`'s value (a function call `in_progress`, an output
+  `completed`) and expands shorthand messages on the returned item;
   serialization uses the item types themselves, without an item-response wrapper.
   `ResponsesInput::input_items` uses `InOutItem::as_input` to borrow submitted input
   items and project outputs. The existing compaction-window selection accepts these
@@ -750,35 +758,32 @@ ResponsesInput                         ← append only
 ResponsesInput::model_input()          ← final upstream-visibility filter
 ```
 
-There are two adapters around that one policy:
+`OutputItem::to_input_item` is used in two places, and neither adds its own conversion:
 
-- `executor/gateway.rs::append_output_items_to_input` calls
-  `OutputItem::to_input_item` and appends the result to the current request before the
-  next round. Its handling of `ResponsesInput::Text` versus `ResponsesInput::Items` is
-  container mutation, not a second conversion policy.
+- The agent turn appends each round's output to the current request (`ResponsesInput`
+  implements `Extend<InputItem>`) before the next round.
 - `types/io/item.rs::InOutItem::into_input_items` uses the same method when
   rebuilding continuation input from persisted history. Already stored `InputItem`s
   pass through unchanged.
 
-Messages, reasoning, function calls, custom calls, tool-search calls, compaction
-items, and MCP list metadata have explicit continuation representations. Public
-`web_search_call` and `mcp_call` output items return `None`: gateway execution records
-the canonical model-facing function call and its `function_call_output` separately,
-so converting the public projection would duplicate the call or lose result details.
-This omission applies to gateway-emitted output records. Client-submitted
-`InputItem::WebSearchCall` and `InputItem::McpCall` remain input records throughout
-request conversion and storage replay.
-Gateway tool results are already `InputItem`s and are appended through
-`append_gateway_results`; they do not need an output-to-input conversion. Each result
-carries one `input`: the turn's history and the model's next-round input alike. A hosted
-(`execution: "server"`) search is the one tool whose input is its public pair: the executor
-records the `tool_search_call` and `tool_search_output` in round order, so they also return
-`None` here, and the storage writers skip an output whose id the turn's history already holds
-(`OutputItem::is_already_in_history`). Multi-agent rounds keep the pair in each agent's
-history. The upstream projection lowers the pair the same way live, on continuation, and on
-replay, so later prompts share the live round's prefix.
+Every output item keeps its public type: messages, reasoning, function, custom and shell
+calls, `web_search_call`, `mcp_call`, `code_interpreter_call`, tool-search calls and
+outputs (client and hosted), compaction items, and MCP list metadata. History stores
+exactly what the client received; the gateway's model-facing `function_call` /
+`function_call_output` pairs exist only in the inference input.
 
-Native upstream `code_interpreter_call` output items convert to typed continuation input. A gateway-executed code-interpreter call is marked internally and omitted by the same conversion because its model-facing function call and output are retained separately; storage preserves that origin outside the public wire shape.
+Gateway tool results are model-facing `InputItem`s appended for the next round only; the
+public output item of each call is what history keeps. A turn's history is built once, at
+persist: the request's own items, then its public output.
+
+`ResponsesInput::normalized_model_input` (`types/io/input/conversions.rs`) is the one place
+that lowers public items for the model: custom and shell calls become function calls, and
+`web_search_call`, `mcp_call` and `code_interpreter_call` become a function call and its
+output, through the `From` conversions in `types/io/web_search.rs` and
+`types/io/code_interpreter.rs`. A lowered gateway call takes the public item's ID as its
+`call_id` and is rebuilt from the public item, so on continuation the model sees the
+queries and sources of a web search (not the result text) and the combined logs of a code
+run. Hosted tool-search pairs are lowered by `SearchHistory::lower`.
 
 ### `events/` — parsing upstream SSE, and how to add a new event type
 
@@ -825,33 +830,42 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   for the two request copies' responsibilities.
 - **`rehydrate.rs`** — `rehydrate_conversation()` loads prior history from either the
   conversation store or the response store depending on which ID the request carries,
-  and builds the enriched `RequestContext`. It keeps the continued response's or conversation turn's
-  `ResponseMetadata` on the context (`rehydrated_metadata`), so `prepare.rs` restores tool-search state after
-  compaction without another storage read, and `persist.rs` builds the new turn's metadata (`prepare_metadata`)
-  from the same context. Rehydration retains internal
+  and builds the enriched `RequestContext`. Every source (a stored response, a session parent, or a
+  conversation turn) leaves its `ResponseCheckpoint` on the context (`checkpoint`): the continued turn's
+  metadata and its stored history rows. `prepare.rs` restores tool-search
+  state after compaction from it without another storage read, and persistence extends it: a response's history
+  is its parent's rows plus the new ones, so neither store reads the parent again. A conversation turn's response
+  keeps the history the turn continued, as OpenAI does, while its items are appended after whatever the
+  conversation holds when it is stored. A session keeps the same
+  checkpoint type in memory, with the history items, as the next turn's parent. A conversation is read in one
+  statement; a missing one is created for a stored turn and rejected for an unstored one. Client-supplied item IDs are checked and resolved against storage
+  in bounded query batches. Rehydration retains internal
   `InputItem::McpListTools` records so `ToolRegistry` can suppress repeated MCP
   discovery lifecycle output. After stored history and the new request input are
   combined, `pending_calls.rs` validates the complete continuation's function/custom
   call sequence. A request without stored history runs the same check when its input
   replays search items, since the ledger owns how client search calls and outputs pair;
   tool search keeps only the rules it alone sees (item ids, hosted pairs, output status).
-  Every call and call output must have a non-empty `call_id`; call IDs
-  must be unique across the sequence; and each output must resolve a call of the same
-  item kind. An output whose `call_id` matches no call is rejected with the `OpenAI`
-  unknown-call error; a second output for a resolved synchronous call or a
-  function/custom kind mismatch is an invalid request rather than evidence that the
-  call was resolved. Valid unresolved calls remain ordered by their original emission,
+  Every call and call output must have a non-empty `call_id`, and each output must resolve
+  an earlier call of the same item kind. As on `OpenAI` (the `call-ids` cassettes), a
+  `call_id` may repeat: a repeated call adds nothing, a call is answered once any output for
+  its `call_id` follows it, and further outputs are accepted. An output whose `call_id`
+  matches no call is rejected with the `OpenAI` unknown-call error; a function/custom kind
+  mismatch is an invalid request. Valid unresolved calls remain ordered by their original emission,
   and the first unresolved synchronous client-executed call produces the existing
   missing-output error. An async call (`async: true` on the call item) may stay
-  unresolved and accepts repeated outputs; it ends neither the resolved prefix used by
-  compaction nor the continuation. A compaction window (`model_items`,
-  `canonical_session_history`) shows the model an async call that was still open at its
-  checkpoint. Retained histories (`retain_window`, a session whose history compaction
-  replaces, and a multi-agent compaction, before its compaction item) also keep every async
+  unresolved; it ends neither the resolved prefix used by
+  compaction nor the continuation. A compaction window (`model_items`) shows the model an async
+  call that was still open at its checkpoint. `types/io/input/window.rs` owns the async-record
+  retention rule used by request replacement, multi-agent compaction, and session histories.
+  `executor/compaction/carry_over.rs` places the request's own retained records around its checkpoint.
+  The retained-window scanner keeps every async
   call and the last output that answers it, outside the model view, so a further output still
-  finds its call while repeated outputs do not accumulate. A compacted call's public form
+  finds its call while repeated outputs do not accumulate. Durable single-agent continuation separately trims
+  stored row references at automatic compaction, so this scanner does not guarantee retention across later stored
+  turns; the tool-loop cassettes cover immediate and delayed results at that boundary. A compacted call's public form
   comes from stored history, not from the current tool declarations.
-  Compaction replaces the request's own items, so it stores some of them again, as the
+  Standalone and explicit-trigger compaction replace the request's own items, so they store some of them again, as the
   request supplied them. Before the compaction item (the answered call and its output leave the
   window together) go outputs that answer calls made before the request, and the request's own
   answered async calls with the last output for each; after it go the async calls the request
@@ -936,13 +950,28 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   explicit root compaction. The run owner cancels and joins tasks when a run finishes or
   its retained owner cancels it; dropping an HTTP stream aborts them without joining.
   Interruption takes effect at the current round boundary. The contracts are described below.
-- **`persist.rs`** — `persist_response`/`persist_turn`, which apply the request's
-  storage policy (`should_persist`: a no-session `store: false` turn is not written) and
-  route to `ConversationHandler` or `ResponseHandler` in `modes/` depending on whether the
-  turn is conversation-scoped or response-scoped.
+- **`persist.rs`** — `persist`, the one path from a finished turn to storage (`persist_turn`
+  and `commit` are thin public wrappers). It applies the request's storage policy
+  (`should_persist`: a no-session `store: false` turn is not written; a standalone
+  compaction is always written), builds the turn's metadata and items, owns the session
+  checkpoint and transient-parent promotion, and routes to `ConversationHandler` or
+  `ResponseHandler` in `modes/`, which only write.
 - **`compaction.rs`** — `compact_response()` (the explicit `/v1/responses/compact`
   path) and `maybe_compact_context()` (automatic, threshold-triggered, called from the
-  round loop before each inference call).
+  round loop before each inference call and after a completed single-agent answer). Automatic compaction leaves
+  `new_input_items` intact and emits a public compaction output through the existing relay. Its `CompactionItem`
+  carries the summary and retained user messages; `ResponsesInput` expands that carried window only for the model.
+  On a later single-agent continuation, `ResponseCheckpoint::continue_from_compaction` trims the referenced history
+  rows to the latest compaction, so input-item listings begin there. Multi-agent continuation keeps public history
+  and restores its separate tree; its coordinator currently compacts only before inference, without a final pass.
+  All paths share `summarize_items`, which summarizes context and returns a typed `CompactedWindow`.
+  `compaction/carry_over.rs` selects and places the request's own async records kept through compaction;
+  tree replacement places async records before the checkpoint. MCP discovery is absorbed with the old window:
+  it is absent from standalone compact output and must run again on continuation. The shared
+  `ResponsesInput::mcp_list_tools` view in `types/io/input/window.rs` exposes only listings after the latest
+  checkpoint, for tool-search preparation, discovery reuse, and registry lifecycle suppression. Loaded deferred
+  tools remain in typed checkpoint metadata even when their search pair and discovery listing were summarized.
+  Model visibility remains in `types/io/input/window.rs`.
 - **`modes/conversation.rs`, `modes/response.rs`** — `ConversationHandler` and
   `ResponseHandler`. Thin, 1:1 wrappers around `storage::ConversationStore` /
   `storage::ResponseStore` that translate `RequestContext` into store calls and
@@ -989,7 +1018,7 @@ all persisted data comes from the enriched copy. Use the field-specific rules be
 | Populate public response `tool_choice` | `RequestContext::public_tool_choice()`: `original_request.tool_choice`, falling back to `enriched_request.tool_choice` when absent | Preserve the submitted or inherited selector across the public lifecycle. Retain an inherited value on the original copy before relaxing the enriched selector; see below. |
 | Store items/history | `new_input_items`, finalized output items, and the existing session/conversation persistence helpers | Neither request's entire `input` is a generic list of new rows to insert. Persisting enriched history wholesale would repeat prior items. |
 | Store the selector for later continuation | Move `original_request.tool_choice`, falling back to `enriched_request.tool_choice`, in every response/conversation metadata writer | Use the same precedence as `RequestContext::public_tool_choice()`, taking ownership because execution is complete. Never save the temporary `auto` introduced by internal tool execution as the next request's default. |
-| Store other effective settings for later continuation | `enriched_request.model`, `.tools`, and `.instructions` in `persist_prepared_turn` | Tool-search metadata supplies its own effective tools and loaded definitions. Persisting the original request wholesale would lose inherited settings and prepared tools. |
+| Store other effective settings for later continuation | `enriched_request.model`, `.tools`, and `.instructions` in `persist.rs::prepare_metadata` | Tool-search metadata supplies its own effective tools and loaded definitions. Persisting the original request wholesale would lose inherited settings and prepared tools. |
 | Retrieve an already stored public response | The stored `responses.snapshot` when present | Preserve the public payload that was returned. Do not rebuild its selector from a later-round inference setting. |
 
 ##### Mutation and conversion boundaries
@@ -1153,11 +1182,13 @@ stored tree continuation, so submitting a sibling's client tool output does not
 execute completed Python calls again. Feature, operator and readiness gates apply
 before inference, including when the tool declaration is inherited from storage.
 
-**Compaction.** Automatic compaction is per agent. `prepare_agent` supplies a default
-compaction threshold of 100,000 estimated tokens when none is configured. A
+**Compaction.** Automatic compaction is per agent. `prepare_agent` uses
+`RequestPayload::set_default_compact_threshold` to supply 100,000 estimated tokens when the first compaction policy
+has no threshold or is absent; `RequestPayload` owns the shared policy lookup. A
 `CompactionPlan` owns a resolved-prefix snapshot, agent identity and context generation.
 Its completion replaces that prefix only when the generation still matches
-(`CompactionCommit::Applied`); a stale result leaves current history intact. The
+(`CompactionCommit::Applied`); a stale result leaves current history intact. The commit returns the exact typed
+checkpoint it inserted, so automatic and explicit callers do not search the resulting history for it. The
 coordinator accounts for completed compaction work once even when the result is stale.
 Pending calls, unresolved suffixes and new mail are not discarded by prefix replacement.
 
@@ -1415,7 +1446,7 @@ declarations, custom/namespace shapes, tool choice, and tool-search metadata.
 Nonempty provider message IDs without the public `msg` prefix receive `msg_` during
 translation. Message events and final JSON/SSE snapshots use the same public ID;
 ingestion retains the provider's original identity for lifecycle validation. Client
-message-ID validation remains strict, so returned history can be submitted unchanged.
+item-ID validation (`InOutItem::admit`) remains strict, so returned history can be submitted unchanged.
 Output-text `logprobs` use the existing nullable-vector deserializer: missing and
 null values become an empty vector and serialize as `[]`. Wire normalization uses
 the same default so content parts agree with item and terminal snapshots;
@@ -1565,8 +1596,8 @@ round:
   permits are acquired. These permit waits do not count toward it, so it is not a
   deadline for the entire round or total call latency. Timeout, execution, and tool-config
   failures become failed tool outputs that can be fed back to the model instead of
-  failing the whole response. A tool registered as gateway-owned without an
-  implementation (currently file search) likewise produces an error tool result.
+  failing the whole response. A gateway-owned tool without an executable
+  binding likewise produces an error tool call output.
 - Parallel safety is a per-handler contract. `GatewayExecutor::supports_parallel_execution`
   defaults to `false`; registration turns that into a `GatewayBinding::self_exclusion`
   semaphore. The semaphore serializes only simultaneous calls to the **same
@@ -1607,9 +1638,11 @@ round:
   are therefore separate concerns.
 - `public_output_items` is the public projection: custom function calls become
   `custom_tool_call`; gateway-owned internal function calls become their handler's
-  `web_search_call`/`mcp_call` output; client-owned function calls remain function
-  calls. The original gateway function calls and `function_call_output` results are
-  retained separately for continuation persistence.
+  public item (`web_search_call`, `mcp_call`, `code_interpreter_call`); client-owned
+  function calls remain function calls. A gateway call no executor can run (a declared
+  `file_search`) leaves the public output, like a hidden `max_tool_calls` refusal. The
+  gateway's `function_call_output` results feed only the next round's model input;
+  history stores the public items.
 
 The round decision remains in `engine.rs`, after gateway execution:
 
@@ -1914,6 +1947,8 @@ for the five-minute lifetime, serialized-size budget, and crash recovery rules.
 - **`conversation.rs`, `response.rs`** — `ConversationStore` and `ResponseStore`: one
   typed function per operation, taking and returning `InOutItem` and storage types rather
   than rows (`create`, `get`, `get_or_create`, `rehydrate`, `persist`, and the item CRUD).
+  `ResponseStore::get` decodes `ResponseData` at the store boundary; handlers and executor callers receive the
+  typed value. Split commit reuses a checkpoint or loads only this parent row when its wire context omitted it.
   Conversation `rehydrate` is one query; response `rehydrate` reads the response row and then its
   history items. Conversation `persist` locks the conversation and appends the turn after whatever it holds
   then, as OpenAI does. A turn that answers the history's pending call fails with `conversation_locked` when another
@@ -2005,9 +2040,8 @@ RequestPayload::to_upstream_request
 
 `RequestPayload::to_upstream_request` is the only request-level seam that prepares
 tools for vLLM. New callers must use it rather than rebuilding function schemas or
-normalizing declarations in the executor. Declared placeholders that are not yet
-supported, currently file search, produce no upstream function declaration until they
-have a complete handler and execution path. Code interpreter has a fixed
+normalizing declarations in the executor. File search normalizes to a built-in
+function contract and binds the request's configured vector stores. Code interpreter has a fixed
 normalization contract in every build. Requests that declare it fail before
 inference unless the binary includes the `embedded-code-interpreter` feature,
 the operator enables it, and Eryx runtime readiness succeeds.
@@ -2031,18 +2065,28 @@ the operator enables it, and Eryx runtime readiness succeeds.
   `ToolDeclaration`. These are the declaration-level validation and normalization entry
   points used by `RequestPayload::to_upstream_request` on the converted declarations. Each supported variant's
   policy belongs to its corresponding `ToolHandler`: `FunctionHandler`,
-  `ToolSearchHandler`, `McpHandler`, `WebSearchHandler`, `WebFetchHandler`,
+  `ToolSearchHandler`, `McpHandler`, `WebSearchHandler`, `WebFetchHandler`, `FileSearchHandler`,
   `CodexNamespaceHandler`, `CustomHandler`, or `CodeInterpreterHandler`. Web search's fixed canonical builder
   is shared with `WebSearchHandler::normalize`; it remains one schema even though it has no
   per-declaration normalization state. The method name is plural because namespace and
   MCP declarations may expand to several model-visible function tools.
-  `FileSearch` remains an unsupported placeholder and normalizes to nothing. The
-  code interpreter normalizes to one fixed function contract in every build, while
+  The code interpreter normalizes to one fixed function contract in every build, while
   request validation rejects unavailable runtimes before upstream inference.
   Feature-enabled builds bind the ready private `CodeInterpreterExecutor` to the provider.
   `ToolDeclaration::declares_async` and `declares_unsupported_async` answer which
   declarations make a tool async and which carry `async` where it is not accepted;
   `GatewayExecutors::validate_declarations` rejects the latter with its declared index.
+- **`file_search/`** — `FileSearchHandler` normalizes the built-in declaration and
+  projects typed call items and citations. Citation validation uses the registry's
+  gateway ownership; native upstream annotations survive unrelated requests and
+  client-owned functions named `file_search`. Its shared `FileSearchService` handles
+  file ingestion and semantic, keyword, and hybrid retrieval against
+  injected `FileSearchRepository` and `FileBlobStore` implementations. The default
+  repository uses `storage::file_search`, while the default blob store uses local
+  files. `ExecutionContext::from_config` initializes these defaults; embedders may
+  install a service with alternate providers. The Files and vector
+  store HTTP handlers call this same service. See [file search](docs/api/file-search.md) for configuration,
+  resource limits, and optional PDF ingestion.
 - **`async_execution.rs`** — the model-visible hints for async client tools. A vLLM-served
   model stops at a call, so the gateway continues the response with the call pending.
   `FunctionHandler`, `CustomHandler`, and `CodexNamespaceHandler` normalization append
@@ -2077,6 +2121,7 @@ the operator enables it, and Eryx runtime readiness succeeds.
           call: &FunctionToolCall,
           params: &Self::ExecutionParams,
       ) -> GatewayToolEventPlan;
+      fn started_output(&self, call: &FunctionToolCall, params: &Self::ExecutionParams) -> Option<OutputItem>;
       fn public_output(
           &self,
           call: &FunctionToolCall,
@@ -2098,7 +2143,11 @@ the operator enables it, and Eryx runtime readiness succeeds.
   controls same-tool self-exclusion, `plan_gateway_events()` creates the typed public
   lifecycle projection (and, for a tool that knows its result when planning, the
   `PlannedResult` recorded instead of executing), and `public_output()` shapes the
-  completed/failed client-visible item. No hook builds model input: the gateway records
+  completed/failed client-visible item. Every handler implements `started_output()` and
+  `public_output()` itself, so every gateway call has a public item for the client and
+  history; `plan_gateway_events()` defaults to `started_output()`. A web search executor
+  registered with `with_gateway_executor` builds its items with the public
+  `web_search::started_output_item` and `web_search::output_item`. No hook builds model input: the gateway records
   the result's items, and the upstream projection lowers them.
   - **Client-owned** tools implement `ToolHandler` and have a translator association:
     see `function.rs` (`FunctionHandler`), `custom.rs` (`CustomHandler`), `codex.rs`
@@ -2109,8 +2158,8 @@ the operator enables it, and Eryx runtime readiness succeeds.
     gateway does not execute them.
   - **Gateway-owned / built-in** tools implement both traits: see `web_search/mod.rs`
     (`WebSearchHandler`, backed by the configured `WebSearchProvider` in `web_search/you.rs`,
-    `web_search/brave.rs`, `web_search/tavily.rs`, `web_search/searxng.rs`, or `web_search/serply.rs`) and
-    `mcp/handler.rs` (`McpHandler`, backed by `mcp/client.rs`'s MCP protocol client and `mcp/pool.rs`'s connection
+    `web_search/brave.rs`, `web_search/tavily.rs`, `web_search/searxng.rs`, `web_search/serply.rs`, or
+    `web_search/keenable.rs`) and `mcp/handler.rs` (`McpHandler`, backed by `mcp/client.rs`'s MCP protocol client and `mcp/pool.rs`'s connection
     pool).
     `web_fetch/mod.rs` (`WebFetchHandler`, Messages-only, backed by a `WebFetchBackend` —
     the built-in `web_fetch/http.rs` fetcher — with `web_fetch/policy.rs` for URL and
@@ -2162,11 +2211,11 @@ the operator enables it, and Eryx runtime readiness succeeds.
   `server_label`. Registry construction accepts the response's discovery history
   before materialization, so restored children can reuse the root's successful
   listing even when their forked message context omits it. Current declarations
-  and allowlists still validate the tools exposed for execution. Reusable
-  retained listings must cover an explicit `allowed_tools` set. Removing that
-  restriction cannot prove a public listing is complete, so request-declared
-  servers rediscover their catalog; configured servers can use their authoritative
-  discovery cache. Expanding a restriction beyond the listing also rediscovers.
+  and allowlists still validate the tools exposed for execution. Successful listings,
+  including empty listings, are reused for ordinary continuations. Expanding or
+  removing `allowed_tools` keeps that discovery snapshot, as on OpenAI; narrowing
+  permissions filters the available handlers. Compaction invalidates listings before
+  the latest checkpoint, so the next continuation discovers the server's tools again.
   Preparation appends newly discovered listings to the parent request's enriched input,
   so subsequent restored agents reuse them without a separate discovery history. Each
   agent's model context still comes from its own stored history. This also applies when
@@ -2250,7 +2299,7 @@ router, reusing the same core logic in-process.
 | Change the safe steering boundary | Existing completion validation in `executor/accumulator/{active,slot}.rs` + `executor/pipeline.rs` + `executor/engine/agent_turn.rs`; preserve one ingestion/finalization path and drain started tools |
 | Change client streaming order, buffering, or backpressure | `executor/relay.rs` and `executor/relay/`; keep parsing in `events/` and response assembly in `executor/accumulator/` |
 | Move streaming ingestion to a worker | Benchmark the equivalent inline and worker paths under [#245](https://github.com/vllm-project/agentic-api/issues/245) before changing executor placement |
-| Feed response output into the next inference round | `types/io/output.rs::OutputItem::to_input_item`; use `executor/gateway.rs::append_output_items_to_input` only to append those converted items |
+| Feed response output into the next inference round | `types/io/output.rs::OutputItem::to_input_item`, appended with `ResponsesInput::extend` |
 | Change continuation history visibility | `types/io/item.rs::InOutItem::into_input_items` → `types/io/output.rs::to_input_item` (preservation) → `types/io/input.rs::model_input` (upstream visibility; search items via `types/io/input/search_history.rs`) |
 | Add a CRUD operation beyond persist/rehydrate | `executor/modes/conversation.rs` or `modes/response.rs`, backed by `storage/conversation.rs` / `storage/response.rs` |
 | Change how output items are assembled from a stream | `executor/accumulator/` — extend the typed slot and transition matches through the existing `RoundIngestion` path |

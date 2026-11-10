@@ -3,7 +3,6 @@
 use crate::storage::{ConversationData, ConversationSnapshot, ConversationStore, ResponseMetadata, StorageError};
 use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
-use crate::types::io::OutputItem;
 use crate::types::io::{ItemPage, ListItemsResponse};
 use crate::types::request_response::ResponsePayload;
 
@@ -38,22 +37,6 @@ impl ConversationHandler {
         self.store.get_or_create(conv_id).await.map_err(ExecutorError::Storage)
     }
 
-    /// Gets an existing conversation.
-    ///
-    /// Reads `conversation` from `ctx.original_request`.
-    ///
-    /// # Errors
-    /// Returns `ExecutorError` if `conversation` is absent, the store is
-    /// disabled, the conversation does not exist, or the database query fails.
-    pub async fn get(&self, ctx: &RequestContext) -> ExecutorResult<ConversationData> {
-        let conv_id = ctx
-            .original_request
-            .conversation
-            .as_deref()
-            .ok_or_else(|| ExecutorError::InvalidRequest("conversation is required for get".into()))?;
-        self.store.get(conv_id).await.map_err(ExecutorError::Storage)
-    }
-
     /// Creates a tenant-owned conversation with its metadata and initial history.
     ///
     /// # Errors
@@ -69,6 +52,7 @@ impl ConversationHandler {
                 "a conversation accepts at most 20 initial items".into(),
             ));
         }
+        InOutItem::admit_all(items, "items")?;
         self.store
             .create(tenant_id, metadata, items)
             .await
@@ -113,11 +97,10 @@ impl ConversationHandler {
             .map_err(ExecutorError::Storage)
     }
 
-    /// Loads the conversation referenced by the request: its history items, storage version,
-    /// and the metadata of the turn at that version.
+    /// Loads the conversation referenced by the request: its history items and the checkpoint of its latest turn.
     ///
     /// # Errors
-    /// Returns `ExecutorError` if `conversation` is absent, the store is
+    /// Returns `ExecutorError` if `conversation` is absent or does not exist, the store is
     /// disabled, or the database query fails.
     pub async fn rehydrate(&self, ctx: &RequestContext) -> ExecutorResult<ConversationSnapshot> {
         let conv_id = ctx
@@ -143,6 +126,7 @@ impl ConversationHandler {
                 "items must contain between 1 and 20 items".into(),
             ));
         }
+        InOutItem::admit_all(&items, "items")?;
 
         self.store
             .create_items(tenant_id, conversation_id, items)
@@ -203,42 +187,30 @@ impl ConversationHandler {
             .map_err(ExecutorError::Storage)
     }
 
-    /// Persists one conversation turn: only the new items from this turn, with its snapshot and metadata.
-    ///
-    /// The store tracks sequence numbers and appends, so prior history must not be re-inserted.
+    /// Stores one conversation turn: only its own items, with its snapshot and metadata. The store tracks sequence
+    /// numbers and appends, so prior history is never re-inserted.
     ///
     /// # Errors
     /// Returns `ExecutorError` if `conversation` is absent on the context,
     /// the store is disabled, or the database operation fails.
     pub async fn persist(
         &self,
-        ctx: RequestContext,
-        output_items: Vec<OutputItem>,
+        ctx: &RequestContext,
+        items: Vec<InOutItem>,
         snapshot: Option<&ResponsePayload>,
-        metadata: ResponseMetadata,
+        metadata: &ResponseMetadata,
     ) -> ExecutorResult<()> {
         let conversation_id = ctx
             .conversation_id
+            .as_deref()
             .ok_or_else(|| ExecutorError::InvalidRequest("conversation is required for persist".into()))?;
+        let checkpoint = ctx
+            .checkpoint
+            .as_ref()
+            .ok_or_else(|| ExecutorError::InvalidRequest("conversation checkpoint is required for persist".into()))?;
 
-        let mut new_items = Vec::with_capacity(ctx.new_input_items.len() + output_items.len());
-        let output_items: Vec<_> = output_items
-            .into_iter()
-            .filter(|item| !item.is_already_in_history(&ctx.new_input_items))
-            .collect();
-        new_items.extend(ctx.new_input_items);
-        new_items.extend(output_items.into_iter().map(InOutItem::Output));
-
-        let checkpoint = ctx.checkpoint.unwrap_or_default();
         self.store
-            .persist(
-                &conversation_id,
-                &checkpoint,
-                &ctx.response_id,
-                new_items,
-                snapshot,
-                &metadata,
-            )
+            .persist(conversation_id, checkpoint, &ctx.response_id, items, snapshot, metadata)
             .await
             .map_err(|error| match error {
                 source @ StorageError::ConversationConflict { .. } => ExecutorError::ConversationLocked { source },
@@ -298,12 +270,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_disabled_store_returns_error() {
-        let result = disabled_handler().get(&make_ctx(Some("conv_1"))).await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
     async fn test_rehydrate_disabled_store_returns_error() {
         let result = disabled_handler().rehydrate(&make_ctx(Some("conv_1"))).await;
         assert!(result.is_err());
@@ -312,7 +278,7 @@ mod tests {
     #[tokio::test]
     async fn test_persist_missing_conv_id_returns_error() {
         let result = disabled_handler()
-            .persist(make_ctx(None), vec![], None, ResponseMetadata::default())
+            .persist(&make_ctx(None), vec![], None, &ResponseMetadata::default())
             .await;
         assert!(result.is_err());
     }
@@ -329,11 +295,14 @@ mod tests {
         let handler = ConversationHandler::new(store.clone());
         let mut ctx = make_ctx(Some(&conversation.conversation_id));
         ctx.new_input_items = ctx.original_request.input.clone().into_canonical_items();
+        ctx.checkpoint = Some(ResponseCheckpoint::default());
         ctx.enriched_request.tool_choice = Some(ToolChoice::Required);
         ctx.relax_tool_choice();
 
         let responses = crate::executor::ResponseHandler::new(crate::storage::ResponseStore::disabled());
-        crate::executor::persist::persist_prepared_turn(ctx, None, vec![], None, &handler, &responses).await?;
+        let exec = crate::executor::ExecutionContext::new(handler, responses, std::sync::Arc::default(), String::new());
+        let input_only = crate::executor::persist::TurnOutput::Empty;
+        crate::executor::persist::persist(ctx, input_only, None, &exec).await?;
 
         let snapshot = store.rehydrate(&conversation.conversation_id).await?;
         let metadata = snapshot.checkpoint.metadata.clone();
@@ -352,6 +321,7 @@ mod tests {
         let handler = ConversationHandler::new(store.clone());
         let mut ctx = make_ctx(Some(&conversation.conversation_id));
         ctx.new_input_items = ctx.original_request.input.clone().into_canonical_items();
+        ctx.checkpoint = Some(ResponseCheckpoint::default());
         let competing_items = Vec::from(&ResponsesInput::Text("competing input".into()))
             .into_iter()
             .map(InOutItem::Input)
@@ -368,7 +338,9 @@ mod tests {
             .await?;
 
         // OpenAI stores a turn after whatever the conversation gained while it ran.
-        handler.persist(ctx, vec![], None, ResponseMetadata::default()).await?;
+        handler
+            .persist(&ctx, ctx.new_input_items.clone(), None, &ResponseMetadata::default())
+            .await?;
 
         let snapshot = store.rehydrate(&conversation.conversation_id).await?;
         assert_eq!(snapshot.items.len(), 2);

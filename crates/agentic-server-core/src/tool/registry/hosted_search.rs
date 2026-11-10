@@ -18,7 +18,7 @@ use super::super::{CodexNamespaceHandler, ToolError, model_visible_namespace_mem
 use super::{CustomHandler, ToolEntry, ToolRegistry, ToolType};
 use crate::types::io::OutputItem;
 use crate::types::io::input::hosted_search_output_text;
-use crate::types::io::output::FunctionToolCall;
+use crate::types::io::output::{FunctionToolCall, GatewayCallStatus};
 use crate::types::io::{ToolSearchCall, ToolSearchOutputMessage};
 use crate::types::request_response::RequestPayload;
 use crate::types::tools::ResponsesTool;
@@ -315,13 +315,30 @@ impl GatewayExecutor for ToolSearchHandler {
     /// call, and the upstream projection shows the model its `tool_search` call and output.
     fn plan_gateway_events(&self, call: &FunctionToolCall, params: &Self::ExecutionParams) -> GatewayToolEventPlan {
         let output = ToolSearchOutputMessage::hosted(call, params.search_raw(&call.arguments));
-        GatewayToolEventPlan::new(Some(OutputItem::ToolSearchCall(ToolSearchCall::hosted(
-            call,
-            ToolSearchStatus::InProgress,
-        ))))
-        .with_planned_result(PlannedResult::search_pair(
+        GatewayToolEventPlan::new(self.started_output(call, params)).with_planned_result(PlannedResult::search_pair(
             ToolSearchCall::hosted(call, ToolSearchStatus::Completed),
             output,
         ))
+    }
+
+    fn started_output(&self, call: &FunctionToolCall, _params: &Self::ExecutionParams) -> Option<OutputItem> {
+        Some(OutputItem::ToolSearchCall(ToolSearchCall::hosted(
+            call,
+            ToolSearchStatus::InProgress,
+        )))
+    }
+
+    /// Never reached: the planned result already holds the completed call.
+    fn public_output(
+        &self,
+        call: &FunctionToolCall,
+        _output: &ToolOutput,
+        _status: GatewayCallStatus,
+        _params: &Self::ExecutionParams,
+    ) -> Option<OutputItem> {
+        Some(OutputItem::ToolSearchCall(ToolSearchCall::hosted(
+            call,
+            ToolSearchStatus::Completed,
+        )))
     }
 }

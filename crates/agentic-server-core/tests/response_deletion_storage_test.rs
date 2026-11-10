@@ -44,10 +44,14 @@ async fn item_count(pool: &DbPool) -> i64 {
 }
 
 async fn turn(store: &ResponseStore, id: &str, previous: Option<&str>) {
+    let parent = match previous {
+        Some(previous) => Some(store.get(previous).await.expect("parent").into()),
+        None => None,
+    };
     store
         .persist(
             id,
-            previous,
+            parent.as_ref(),
             vec![message(id), answer(&format!("msg_{id}"))],
             None,
             &ResponseMetadata::default(),
@@ -141,7 +145,7 @@ async fn deleting_a_conversation_latest_response_clears_its_pointer_and_keeps_it
         .unwrap();
     }
     let latest = |pool: Arc<DbPool>| async move {
-        conversation_model::get(&pool, id)
+        conversation_model::get_with_items(&pool, id)
             .await
             .unwrap()
             .unwrap()

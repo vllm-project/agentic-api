@@ -8,9 +8,10 @@ use tokio::sync::Notify;
 
 use super::{CheckpointBudget, CheckpointReservation, ExecutorError, ExecutorResult, SessionState};
 use super::{aggregate_budget_error, lock_state};
+use crate::executor::pending_calls::CallLedger;
 use crate::storage::{ResponseCheckpoint, ResponseMetadata};
 use crate::types::io::InOutItem;
-use crate::types::io::input::{async_records, retain_window};
+use crate::types::io::input::retain_window;
 use crate::types::io::{InputItem, OutputItem};
 use crate::types::websocket::SteeringRequiredInput;
 use crate::utils::common::serialized_size_up_to;
@@ -50,8 +51,8 @@ impl ResponseCheckpointPin {
     /// # Errors
     /// Rejects malformed call histories or obligation types not qualified for steering.
     pub fn required_steering_input(&self) -> ExecutorResult<Vec<SteeringRequiredInput>> {
-        crate::executor::pending_calls::pending_calls(self.history())?
-            .into_iter()
+        CallLedger::scan(self.history())?
+            .pending()
             .filter(|pending| !pending.async_execution)
             .map(|pending| {
                 pending
@@ -77,8 +78,7 @@ pub struct ResponseContinuation {
     pub(super) idle: Arc<Notify>,
     pub(crate) parent: Option<Arc<RetainedCheckpoint>>,
     pub(super) budget: Option<Arc<CheckpointBudget>>,
-    pub(super) history_replaced: bool,
-    pub(super) recorded_output_count: usize,
+    pub(super) compacted_output_count: usize,
     pub(super) finished: bool,
 }
 
@@ -92,6 +92,14 @@ pub(crate) struct RetainedCheckpoint {
     _reservation: Option<CheckpointReservation>,
 }
 
+impl RetainedCheckpoint {
+    /// Records the history rows the turn stored, once they are written.
+    pub(crate) fn with_history_item_ids(mut self, history_item_ids: Vec<String>) -> Self {
+        self.checkpoint.history_item_ids = history_item_ids;
+        self
+    }
+}
+
 impl Deref for RetainedCheckpoint {
     type Target = ResponseCheckpoint;
 
@@ -100,46 +108,24 @@ impl Deref for RetainedCheckpoint {
     }
 }
 
-/// Restore only the current canonical window, while preserving orchestration
-/// records that the model-facing projection would strip. Durable response chains
-/// can still reference superseded parent rows; those must not consume the session
-/// checkpoint budget or introduce obsolete pending calls after reconnecting.
-pub(in crate::executor) fn canonical_session_history(history: Vec<InputItem>) -> Vec<InputItem> {
-    // MCP discovery records stay so the registry knows which servers were already listed.
-    retain_window(history, |item| matches!(item, InputItem::McpListTools(_)))
-}
-
 impl ResponseContinuation {
-    /// The executor has replaced this turn's input with a canonical compacted window.
-    pub(crate) fn mark_history_replaced(&mut self) {
-        self.history_replaced = true;
+    /// An in-turn compaction summarized the turn's first `output_count` outputs; persistence must not store them.
+    pub(crate) fn mark_outputs_compacted(&mut self, output_count: usize) {
+        self.compacted_output_count = output_count;
     }
 
-    /// The loop has recorded these outputs in canonical inference-round order.
-    /// Public output remains complete, but persistence must not append it again.
-    pub(crate) fn mark_outputs_recorded(&mut self, output_count: usize) {
-        self.recorded_output_count = output_count;
-    }
-
+    /// Whether persistence stores this output. Async calls survive an absorbed prefix because their outputs may
+    /// arrive in a later request. MCP discovery must be performed again after compaction.
     pub(crate) fn retains_output(&self, index: usize, item: &OutputItem) -> bool {
-        (index >= self.recorded_output_count && !item.is_recorded_as_history())
-            || matches!(item, OutputItem::McpListTools(_))
+        index >= self.compacted_output_count || item.is_async_call()
     }
 
-    /// Retain orchestration records across compaction without restoring the old
-    /// model context. MCP discovery still needs to know which servers were listed,
-    /// and async calls with their outputs remain so a later output finds its call.
+    /// The parent's retained history, which this turn continues.
     pub(crate) fn parent_items(&self) -> impl Iterator<Item = &InputItem> {
-        let history = self.parent.as_ref().map_or(&[][..], |parent| parent.history.as_slice());
-        let records = if self.history_replaced {
-            async_records(history)
-        } else {
-            Vec::new()
-        };
-        history.iter().enumerate().filter_map(move |(index, item)| {
-            let kept = !self.history_replaced || matches!(item, InputItem::McpListTools(_)) || records[index];
-            kept.then_some(item)
-        })
+        self.parent
+            .as_ref()
+            .map_or(&[][..], |parent| parent.history.as_slice())
+            .iter()
     }
 
     pub(crate) fn checkpoint(
@@ -159,11 +145,11 @@ impl ResponseContinuation {
         }
         let checkpoint = ResponseCheckpoint {
             response_id: Some(response_id),
-            history: canonical_session_history(history),
             metadata,
             durable,
             history_item_ids: Vec::new(),
             requires_latest: false,
+            history: retain_window(history),
         };
         let (max_items, max_bytes) = {
             let state = lock_state(&self.state)?;

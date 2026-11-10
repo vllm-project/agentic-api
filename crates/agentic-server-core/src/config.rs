@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::Error;
 use crate::tool::McpServerEntry;
+use crate::types::file_search::FileSearchConfig;
 
 mod web_fetch;
 pub use web_fetch::{
@@ -334,11 +335,19 @@ pub enum WebSearchProviderKind {
     Tavily,
     Searxng,
     Serply,
+    Keenable,
 }
 
 impl WebSearchProviderKind {
     /// Every selectable provider, in the order operator-facing messages list them.
-    pub const ALL: &'static [Self] = &[Self::You, Self::Brave, Self::Tavily, Self::Searxng, Self::Serply];
+    pub const ALL: &'static [Self] = &[
+        Self::You,
+        Self::Brave,
+        Self::Tavily,
+        Self::Searxng,
+        Self::Serply,
+        Self::Keenable,
+    ];
 
     /// Environment variable that conventionally carries this provider's API key.
     #[must_use]
@@ -349,6 +358,7 @@ impl WebSearchProviderKind {
             Self::Tavily => "TAVILY_API_KEY",
             Self::Searxng => "SEARXNG_API_KEY",
             Self::Serply => "SERPLY_API_KEY",
+            Self::Keenable => "KEENABLE_API_KEY",
         }
     }
 
@@ -363,18 +373,19 @@ impl WebSearchProviderKind {
             Self::Brave => Some("https://api.search.brave.com"),
             Self::Tavily => Some("https://api.tavily.com"),
             Self::Serply => Some("https://api.serply.io"),
+            Self::Keenable => Some("https://api.keenable.ai"),
         }
     }
 
     /// Provider-imposed default ceiling on concurrent search requests. `None`
     /// inherits the gateway-wide limit. Brave's free plan allows roughly one
     /// request per second, so it defaults to serial queries; Tavily's plans
-    /// are metered per minute, Serply's per request, and SearXNG is
-    /// operator-hosted, so all three inherit the gateway limit.
+    /// are metered per minute, Serply's and Keenable's per request, and SearXNG
+    /// is operator-hosted, so all four inherit the gateway limit.
     #[must_use]
     pub const fn default_max_concurrent_queries(self) -> Option<NonZeroUsize> {
         match self {
-            Self::You | Self::Tavily | Self::Searxng | Self::Serply => None,
+            Self::You | Self::Tavily | Self::Searxng | Self::Serply | Self::Keenable => None,
             Self::Brave => Some(DEFAULT_BRAVE_MAX_CONCURRENT_QUERIES),
         }
     }
@@ -388,10 +399,11 @@ impl WebSearchProviderKind {
             Self::Tavily => "Tavily",
             Self::Searxng => "SearXNG",
             Self::Serply => "Serply",
+            Self::Keenable => "Keenable",
         }
     }
 
-    /// Configuration label (`you`, `brave`, `tavily`, `searxng`, `serply`) matching the serialized form.
+    /// Configuration label (`you`, `brave`, `tavily`, `searxng`, `serply`, `keenable`) matching the serialized form.
     #[must_use]
     pub const fn config_name(self) -> &'static str {
         match self {
@@ -400,6 +412,7 @@ impl WebSearchProviderKind {
             Self::Tavily => "tavily",
             Self::Searxng => "searxng",
             Self::Serply => "serply",
+            Self::Keenable => "keenable",
         }
     }
 
@@ -497,6 +510,7 @@ impl std::fmt::Debug for WebSearchProviderConfig {
 
 #[derive(Debug, Clone)]
 pub struct ToolRuntimeConfig {
+    pub file_search: FileSearchConfig,
     pub web_search: WebSearchProviderConfig,
     /// Settings of the built-in `web_fetch` executor; enabled by default.
     pub web_fetch: WebFetchConfig,
@@ -518,6 +532,7 @@ pub struct ToolRuntimeConfig {
 impl Default for ToolRuntimeConfig {
     fn default() -> Self {
         Self {
+            file_search: FileSearchConfig::default(),
             web_search: WebSearchProviderConfig::default(),
             web_fetch: WebFetchConfig::default(),
             mcp_servers: HashMap::default(),
@@ -730,6 +745,18 @@ mod tests {
         );
         assert_eq!(WebSearchProviderKind::Serply.default_max_concurrent_queries(), None);
         assert!(!WebSearchProviderKind::Serply.is_you());
+
+        assert_eq!(WebSearchProviderKind::Keenable.to_string(), "Keenable");
+        assert_eq!(
+            WebSearchProviderKind::Keenable.default_api_key_env(),
+            "KEENABLE_API_KEY"
+        );
+        assert_eq!(
+            WebSearchProviderKind::Keenable.default_base_url(),
+            Some("https://api.keenable.ai")
+        );
+        assert_eq!(WebSearchProviderKind::Keenable.default_max_concurrent_queries(), None);
+        assert!(!WebSearchProviderKind::Keenable.is_you());
     }
 
     #[test]
@@ -755,7 +782,7 @@ mod tests {
         let error = "bing".parse::<WebSearchProviderKind>().unwrap_err();
         assert_eq!(
             error.to_string(),
-            "unknown web_search provider \"bing\"; expected one of: you, brave, tavily, searxng, serply"
+            "unknown web_search provider \"bing\"; expected one of: you, brave, tavily, searxng, serply, keenable"
         );
 
         assert_eq!(

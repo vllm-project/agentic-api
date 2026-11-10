@@ -18,10 +18,12 @@ use agentic_core::executor::{
 use agentic_core::storage::{
     ConversationStore, ResponseMetadata, ResponseStore, StorageError, create_pool_with_schema,
 };
+use agentic_core::tool::web_search;
 use agentic_core::tool::{GatewayExecutor, ToolError, ToolHandler, ToolOutput, ToolType};
 use agentic_core::types::io::FunctionTool;
 use agentic_core::types::io::InOutItem;
-use agentic_core::types::io::output::{FunctionToolCall, GatewayCallStatus, OutputItem, WebSearchCall};
+use agentic_core::types::io::OutputItem;
+use agentic_core::types::io::output::{FunctionToolCall, GatewayCallStatus};
 use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
 use agentic_core::types::tools::WebSearchToolParam;
 use axum::{Json, Router, routing::post};
@@ -60,6 +62,20 @@ impl ToolHandler for LocalSearch {
 impl GatewayExecutor for LocalSearch {
     type ExecutionParams = WebSearchToolParam;
 
+    fn started_output(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> Option<OutputItem> {
+        web_search::started_output_item(call)
+    }
+
+    fn public_output(
+        &self,
+        call: &FunctionToolCall,
+        output: &ToolOutput,
+        status: GatewayCallStatus,
+        _params: &WebSearchToolParam,
+    ) -> Option<OutputItem> {
+        web_search::output_item(call, output, status.into())
+    }
+
     fn execute(
         &self,
         call_id: &str,
@@ -70,24 +86,6 @@ impl GatewayExecutor for LocalSearch {
         self.calls.fetch_add(1, Ordering::Relaxed);
         let call_id = call_id.to_owned();
         Box::pin(async move { Ok(ToolOutput::success(call_id, "local search result")) })
-    }
-
-    fn public_output(
-        &self,
-        call: &FunctionToolCall,
-        _output: &ToolOutput,
-        status: GatewayCallStatus,
-        _params: &WebSearchToolParam,
-    ) -> Option<OutputItem> {
-        Some(OutputItem::WebSearchCall(
-            WebSearchCall::try_new(
-                format!("ws_{}", call.id.strip_prefix("fc_").unwrap_or(&call.id)),
-                status.into(),
-                vec!["local".to_owned()],
-                Vec::new(),
-            )
-            .unwrap(),
-        ))
     }
 }
 
@@ -664,17 +662,28 @@ async fn session_commit_accepts_a_new_call_without_reading_disabled_storage() {
 }
 
 #[tokio::test]
-async fn session_commit_rejects_reused_call_id_against_pinned_history() {
+async fn session_continuation_accepts_a_call_id_the_pinned_history_already_used() {
     let exec = execution();
     let session = session();
     let parent = parent_with_call(&exec, &session).await;
     let ctx = resolved_continuation(&exec, &session, &parent).await;
     let payload = response(&ctx, json!([function_call("call_first")]));
-    let error = commit(ctx, payload, &exec).await.unwrap_err();
-    assert!(
-        matches!(&error, ExecutorError::InvalidRequest(message) if message.contains("continued history")),
-        "must reject the repeated call, not fail on a database lookup: {error:?}"
-    );
+    // As on OpenAI, a call_id may repeat: the turn is stored and a turn answering it continues.
+    let repeated = commit(ctx, payload, &exec).await.expect("the turn is stored").id;
+    let next = rehydrate_in_session(
+        request(
+            Some(&repeated),
+            json!([
+                {"type": "function_call_output", "call_id": "call_first", "output": "rainy"}
+            ]),
+        ),
+        &exec,
+        &session,
+    )
+    .await
+    .expect("a repeated call_id continues without reading disabled storage");
+    let history = serde_json::to_value(&next.enriched_request.input).unwrap();
+    assert_eq!(history.as_array().unwrap().len(), 5);
 }
 
 #[tokio::test]
@@ -715,6 +724,7 @@ async fn session_automatic_compaction_fits_the_replaced_history_budget() {
         model_message("resp_old", "obsolete assistant detail"),
         model_message("resp_summary", "compact summary"),
         model_message("resp_compacted", "new answer"),
+        model_message("resp_summary_after", "compact summary after the answer"),
     ])
     .await;
     let session = ResponseSession::new(NonZeroUsize::new(4).unwrap(), NonZeroUsize::new(100_000).unwrap());
@@ -727,17 +737,22 @@ async fn session_automatic_compaction_fits_the_replaced_history_budget() {
         .await
         .unwrap();
     let history = serde_json::to_value(&next.enriched_request.input).unwrap();
+    // The turn compacted again after answering; that latest compaction stands in for everything before it.
     assert_eq!(
         history.as_array().unwrap().len(),
-        5,
-        "four retained items plus the new user item"
+        2,
+        "the latest compaction item plus the new user item"
     );
     assert!(!history.to_string().contains("obsolete assistant detail"));
     assert_eq!(
-        history[2]["type"], "compaction",
+        history[0]["type"], "compaction",
         "retain canonical items, not model-normalized summaries"
     );
-    assert_eq!(model.requests.lock().await.len(), 3);
+    let projected = serde_json::to_value(next.enriched_request.input.model_input()).unwrap();
+    assert_eq!(projected[0]["content"][0]["text"], "first user");
+    assert_eq!(projected[1]["content"][0]["text"], "second user");
+    assert_eq!(projected[2]["content"][0]["text"], "compact summary after the answer");
+    assert_eq!(model.requests.lock().await.len(), 4);
     model.close().await;
 }
 
@@ -761,7 +776,10 @@ async fn session_compaction_trigger_replaces_history_before_retention() {
         .await
         .unwrap();
     let history = serde_json::to_value(&next.enriched_request.input).unwrap();
-    assert_eq!(history.as_array().unwrap().len(), 3);
+    // The compaction carries its window, the kept user message, which the model sees expanded before the summary.
+    assert_eq!(history.as_array().unwrap().len(), 2);
+    assert_eq!(history[0]["type"], "compaction");
+    assert!(history[0]["encrypted_content"].as_str().unwrap().contains("first user"));
     assert!(!history.to_string().contains("obsolete assistant detail"));
     assert_eq!(model.requests.lock().await.len(), 2);
     model.close().await;
@@ -773,6 +791,7 @@ async fn session_compacted_transient_parent_promotes_only_the_canonical_window()
         model_message("resp_old", "obsolete assistant detail"),
         model_message("resp_summary", "compact summary"),
         model_message("resp_compacted", "new answer"),
+        model_message("resp_summary_after", "compact summary after the answer"),
     ])
     .await;
     let pool = storage_pool().await;
@@ -790,20 +809,19 @@ async fn session_compacted_transient_parent_promotes_only_the_canonical_window()
         store.rehydrate(&second.id).await.unwrap().1,
     ))
     .unwrap();
-    assert_eq!(durable.as_array().unwrap().len(), 4);
-    assert!(!durable.to_string().contains("obsolete assistant detail"));
+    // The stored turn keeps the history it continued: the promoted parent, its own items and outputs, ending
+    // with the compaction made after the answer.
+    assert_eq!(durable.as_array().unwrap().len(), 6);
+    assert_eq!(durable[5]["type"], "compaction");
     let fresh = ResponseSession::new(NonZeroUsize::new(4).unwrap(), NonZeroUsize::new(100_000).unwrap());
     let mut continuation = request(Some(&second.id), json!("third user"));
     continuation.store = true;
     let restored = rehydrate_in_session(continuation, &model.exec, &fresh).await.unwrap();
-    assert_eq!(
-        serde_json::to_value(&restored.enriched_request.input)
-            .unwrap()
-            .as_array()
-            .unwrap()
-            .len(),
-        5
-    );
+    // A continuation restores only the window from the latest compaction.
+    let restored_input = serde_json::to_value(&restored.enriched_request.input).unwrap();
+    assert_eq!(restored_input.as_array().unwrap().len(), 2, "{restored_input}");
+    assert_eq!(restored_input[0]["type"], "compaction");
+    assert!(!restored_input.to_string().contains("obsolete assistant detail"));
     drop(restored);
     model.close().await;
     pool.close().await;
@@ -889,8 +907,9 @@ async fn session_tool_round_compaction_does_not_restore_superseded_output() {
         let mut payload = request(None, json!("short"));
         payload.store = store_durable;
         payload.tools = Some(serde_json::from_value(json!([{"type":"web_search_preview"}])).unwrap());
+        // Above the short final history, so the turn does not compact again after its answer.
         payload.context_management =
-            Some(serde_json::from_value(json!([{"type":"compaction", "compact_threshold":50}])).unwrap());
+            Some(serde_json::from_value(json!([{"type":"compaction", "compact_threshold":100}])).unwrap());
         let result = execute_local(&model, &session, payload).await;
         let public_output = serde_json::to_value(&result.output).unwrap();
         assert!(public_output.to_string().contains(&obsolete));
@@ -912,8 +931,8 @@ async fn session_tool_round_compaction_does_not_restore_superseded_output() {
             !history.to_string().contains(&obsolete),
             "pre-compaction output must remain public without returning to retained history: {history}"
         );
-        assert_eq!(history.as_array().unwrap().len(), 4);
-        assert_eq!(history[1]["type"], "compaction");
+        assert_eq!(history.as_array().unwrap().len(), 3);
+        assert_eq!(history[0]["type"], "compaction");
         if store_durable {
             let durable = InOutItem::into_input_items(store.rehydrate(&result.id).await.unwrap().1);
             let durable = serde_json::to_value(durable).unwrap();
@@ -1357,19 +1376,18 @@ async fn session_tool_round_preserves_reasoning_message_call_output_order() {
                 json!("message"),
                 json!("reasoning"),
                 json!("message"),
-                json!("function_call"),
-                json!("function_call_output"),
+                json!("web_search_call"),
                 json!("message"),
                 json!("message")
             ],
             "canonical continuation must preserve inference-round order: {history}"
         );
         assert!(history[2].to_string().contains("intermediate answer"));
-        assert!(history[5].to_string().contains("final answer"));
+        assert!(history[4].to_string().contains("final answer"));
         if store_durable {
             let durable = InOutItem::into_input_items(store.rehydrate(&result.id).await.unwrap().1);
             let durable = serde_json::to_value(durable).unwrap();
-            assert_eq!(durable, Value::Array(history.as_array().unwrap()[..6].to_vec()));
+            assert_eq!(durable, Value::Array(history.as_array().unwrap()[..5].to_vec()));
         }
         model.close().await;
     }
@@ -1406,13 +1424,12 @@ async fn session_mixed_tool_round_records_calls_once_before_client_continuation(
     .await
     .expect("the client call is retained exactly once despite the mixed round");
     let history = serde_json::to_value(&next.enriched_request.input).unwrap();
-    assert_eq!(history.as_array().unwrap().len(), 6);
+    assert_eq!(history.as_array().unwrap().len(), 5);
     assert!(history[1].to_string().contains("before the calls"));
-    assert_eq!(history[2]["call_id"], "call_search");
+    assert_eq!(history[2]["type"], "web_search_call");
     assert_eq!(history[3]["call_id"], "client");
     assert_eq!(history[4]["type"], "function_call_output");
-    assert_eq!(history[4]["call_id"], "call_search");
-    assert_eq!(history[5]["call_id"], "client");
+    assert_eq!(history[4]["call_id"], "client");
     model.close().await;
 }
 
@@ -1434,13 +1451,11 @@ async fn session_round_limit_retains_the_final_call_output_in_order() {
         .expect("round exhaustion must not leave an unanswered built-in call");
     let history = serde_json::to_value(&next.enriched_request.input).unwrap();
     let items = history.as_array().unwrap();
-    assert_eq!(items.len(), 32);
-    for (round, items) in items[1..31].as_chunks::<3>().0.iter().enumerate() {
+    assert_eq!(items.len(), 22);
+    for (round, items) in items[1..21].as_chunks::<2>().0.iter().enumerate() {
         assert_eq!(items[0]["type"], "message");
-        assert_eq!(items[1]["type"], "function_call");
-        assert_eq!(items[2]["type"], "function_call_output");
-        assert_eq!(items[1]["call_id"], format!("call_round_{round}"));
-        assert_eq!(items[2]["call_id"], items[1]["call_id"]);
+        assert_eq!(items[1]["type"], "web_search_call");
+        assert_eq!(items[1]["id"], format!("ws_round_{round}"));
     }
     model.close().await;
 }
@@ -1458,13 +1473,14 @@ async fn session_repeated_in_round_compaction_retains_only_the_latest_window() {
     let calls = with_local_search(&mut model);
     let session = ResponseSession::new(NonZeroUsize::new(3).unwrap(), NonZeroUsize::new(100_000).unwrap());
     let mut payload = search_request();
+    // Above the short final history, so the turn does not compact again after its answer.
     payload.context_management =
-        Some(serde_json::from_value(json!([{"type":"compaction", "compact_threshold":50}])).unwrap());
+        Some(serde_json::from_value(json!([{"type":"compaction", "compact_threshold":100}])).unwrap());
     let result = execute_local(&model, &session, payload).await;
     assert_eq!(
         result.output.len(),
-        5,
-        "both intermediate messages and search calls remain public"
+        7,
+        "both intermediate messages and search calls remain public, each compaction item before its round"
     );
     assert_eq!(calls.load(Ordering::Relaxed), 2);
     assert_eq!(model.requests.lock().await.len(), 5);
@@ -1472,10 +1488,12 @@ async fn session_repeated_in_round_compaction_retains_only_the_latest_window() {
         .await
         .unwrap();
     let history = serde_json::to_value(&next.enriched_request.input).unwrap();
-    assert_eq!(history.as_array().unwrap().len(), 4);
-    assert_eq!(history[1]["type"], "compaction");
-    assert_eq!(history[1]["encrypted_content"], "second summary");
-    assert!(history[2].to_string().contains("final answer"));
+    assert_eq!(history.as_array().unwrap().len(), 3);
+    assert_eq!(history[0]["type"], "compaction");
+    let projected = serde_json::to_value(next.enriched_request.input.model_input()).unwrap();
+    assert_eq!(projected[0]["content"][0]["text"], "short");
+    assert_eq!(projected[1]["content"][0]["text"], "second summary");
+    assert!(history[1].to_string().contains("final answer"));
     assert!(!history.to_string().contains("obsolete"));
     assert!(!history.to_string().contains("first summary"));
     model.close().await;
@@ -1488,6 +1506,7 @@ async fn session_compacted_durable_parent_restores_within_the_canonical_budget()
             model_message("resp_old", &"obsolete durable assistant detail".repeat(1_000)),
             model_message("resp_summary", "compact durable summary"),
             model_message("resp_compacted", "compacted answer"),
+            model_message("resp_summary_after", "durable summary after the answer"),
             model_message("resp_child", "new answer"),
         ])
         .await;
@@ -1531,8 +1550,9 @@ async fn session_compacted_durable_parent_restores_within_the_canonical_budget()
             .await
             .unwrap();
         let history = serde_json::to_value(&ctx.enriched_request.input).unwrap();
-        assert_eq!(history.as_array().unwrap().len(), 7);
-        assert_eq!(history[2]["type"], "compaction");
+        // The compaction made after the compacting turn's answer, then the child turn and the next user item.
+        assert_eq!(history.as_array().unwrap().len(), 4);
+        assert_eq!(history[0]["type"], "compaction");
         assert!(!history.to_string().contains("obsolete durable assistant detail"));
         assert!(
             store.get(&first.id).await.is_ok(),
@@ -1543,7 +1563,9 @@ async fn session_compacted_durable_parent_restores_within_the_canonical_budget()
 }
 
 #[tokio::test]
-async fn replayed_compaction_releases_superseded_session_history() {
+/// As on `OpenAI`, a compaction the client supplies is used for its turn only: it is not stored, so the next turn
+/// continues the history it replaced, including a call that history left unanswered.
+async fn replayed_compaction_is_used_for_its_turn_only() {
     let exec = execution();
     for pending_call in [false, true] {
         let session = ResponseSession::new(NonZeroUsize::new(2).unwrap(), NonZeroUsize::new(100_000).unwrap());
@@ -1569,23 +1591,31 @@ async fn replayed_compaction_releases_superseded_session_history() {
             &session,
         )
         .await
-        .expect("a replayed window supersedes old pending calls");
+        .expect("the replayed window is this turn's model input");
         let child = ctx.response_id.clone();
         let output = response(&ctx, json!([]));
-        commit(ctx, output, &exec)
-            .await
-            .expect("superseded history must not consume the checkpoint budget");
-        let ctx = rehydrate_in_session(request(Some(&child), json!([])), &exec, &session)
-            .await
-            .unwrap();
-        let items = serde_json::to_value(&ctx.enriched_request.input).unwrap();
-        assert_eq!(items.as_array().unwrap().len(), 1);
-        assert_eq!(items[0]["type"], "compaction");
+        commit(ctx, output, &exec).await.expect("the turn is stored");
+        let next = rehydrate_in_session(request(Some(&child), json!([])), &exec, &session).await;
+        if pending_call {
+            assert!(
+                matches!(next, Err(ExecutorError::Tool(_))),
+                "the old call is still unanswered"
+            );
+            continue;
+        }
+        let items = serde_json::to_value(&next.unwrap().enriched_request.input).unwrap();
+        assert!(
+            !items.to_string().contains("cmp_replayed"),
+            "the supplied compaction is not stored"
+        );
+        assert!(items.to_string().contains("obsolete answer"));
     }
 }
 
 #[tokio::test]
-async fn session_commit_validates_call_ids_against_replayed_compaction_window() {
+/// The replayed compaction is not stored, so the history it superseded is continued: the old and the new call share
+/// `call_first`, and one output answers both, as repeated call IDs are accepted.
+async fn session_continuation_keeps_history_a_replayed_compaction_superseded() {
     let exec = execution();
     let session = session();
     let parent = parent_with_call(&exec, &session).await;
@@ -1607,8 +1637,17 @@ async fn session_commit_validates_call_ids_against_replayed_compaction_window() 
         .expect("the old call is outside the effective history");
     let ctx = resolved_continuation(&exec, &session, &child.id).await;
     let items = serde_json::to_value(&ctx.enriched_request.input).unwrap();
-    assert_eq!(items.as_array().unwrap().len(), 3);
-    assert_eq!(items[0]["type"], "compaction");
-    assert_eq!(items[1]["type"], "function_call");
-    assert_eq!(items[2]["type"], "function_call_output");
+    let types = items
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["type"].as_str().unwrap_or("message"))
+        .collect::<Vec<_>>();
+    assert!(!types.contains(&"compaction"), "{types:?}");
+    assert_eq!(
+        types.iter().filter(|kind| **kind == "function_call").count(),
+        2,
+        "{types:?}"
+    );
+    assert_eq!(types.last(), Some(&"function_call_output"));
 }

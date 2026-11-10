@@ -2,8 +2,8 @@
   "version": 1,
   "baseline": {
     "crates/agentic-server-core/src/tool/registry.rs": 515,
-    "crates/agentic-server-core/src/tool/tool_search.rs": 1078,
-    "crates/agentic-server-core/src/types/io/output.rs": 1074,
+    "crates/agentic-server-core/src/tool/tool_search.rs": 1077,
+    "crates/agentic-server-core/src/types/io/output.rs": 1044,
     "crates/agentic-server-core/src/types/tools/params.rs": 537,
     "crates/agentic-server/src/auth.rs": 727
   },
@@ -15,10 +15,6 @@
     "crates/agentic-server-core/src/tool/registry.rs": {
       "limit": 567,
       "reason": "The web_fetch executor binds through the existing registry validation and executor registration flow, like the code interpreter; async client tools record their marker on the shared catalog entry."
-    },
-    "crates/agentic-server-core/src/types/io/output.rs": {
-      "limit": 1120,
-      "reason": "Open Responses omits absent encrypted reasoning content; this adds one serialization attribute to the canonical item type. Function and custom calls carry the typed async marker through the shared output-item conversions."
     },
     "crates/agentic-server-core/src/types/tools/params.rs": {
       "limit": 622,

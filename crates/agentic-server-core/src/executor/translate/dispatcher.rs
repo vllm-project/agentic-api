@@ -7,7 +7,7 @@ use crate::events::{EventFrame, EventPayload, SSEEventType, SSEItemType};
 use crate::executor::accumulator::AccumulatedFunctionCall;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::tool::{CodexNamespaceHandler, CustomHandler, FunctionHandler, ToolSearchHandler, ToolType, tool_search};
-use crate::types::io::OutputMessage;
+use crate::types::io::{OutputMessage, ReasoningOutput};
 use crate::utils::common::serialize_to_string;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -133,10 +133,12 @@ impl TranslationDispatcher {
             }),
         }?;
         for frame in &mut translated.frames {
-            if item_type == Some(SSEItemType::Message)
-                && let Some(Value::String(id)) = frame.wire.rest.get_mut("item_id")
-            {
-                OutputMessage::normalize_public_id(id);
+            if let Some(Value::String(id)) = frame.wire.rest.get_mut("item_id") {
+                match item_type {
+                    Some(SSEItemType::Message) => OutputMessage::normalize_public_id(id),
+                    Some(SSEItemType::Reasoning) => ReasoningOutput::normalize_public_id(id),
+                    _ => {}
+                }
             }
             self.context.restore_stream_event_wire(&mut frame.wire)?;
         }

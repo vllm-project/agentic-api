@@ -1,13 +1,18 @@
-//! Public Responses output shape for gateway-executed Python calls.
+//! Public Responses output shape for gateway-executed Python calls, and the model-facing call and output it stands for.
 
 use serde::{Deserialize, Serialize};
 
+use super::input::{FunctionToolResultMessage, InputFunctionToolCall};
 use super::multi_agent::AgentAttribution;
+use crate::tool::code_interpreter::CODE_INTERPRETER_FUNCTION_NAME;
+use crate::tool::code_interpreter::provider::{ExecutionOutput, ExecutionStatus};
+use crate::types::event::MessageStatus;
 
 /// One code-interpreter call exposed in a response.
 ///
 /// The gateway executes code interpreter itself: the model sees a `code_interpreter` function call, and this item is
-/// the public projection of that execution. It is never replayed upstream.
+/// the public projection of that execution. History keeps it, and the upstream projection lowers it back to that
+/// function call and its output.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct CodeInterpreterCall {
@@ -111,6 +116,57 @@ pub enum CodeInterpreterCallStreamEvent {
         output_index: u32,
         sequence_number: u64,
     },
+}
+
+/// The model-facing call a stored `code_interpreter_call` stands for, under the item's id.
+impl From<&CodeInterpreterCall> for InputFunctionToolCall {
+    fn from(call: &CodeInterpreterCall) -> Self {
+        Self {
+            agent: call.agent.clone(),
+            id: None,
+            call_id: call.id.clone(),
+            name: CODE_INTERPRETER_FUNCTION_NAME.to_owned(),
+            namespace: None,
+            arguments: serde_json::json!({ "code": call.code }).to_string(),
+            status: Some(MessageStatus::Completed),
+            async_execution: false,
+        }
+    }
+}
+
+/// The model-facing output of a stored `code_interpreter_call`. The public item keeps stdout and stderr as separate
+/// logs in that order, so the output joins them as stdout.
+impl From<&CodeInterpreterCall> for FunctionToolResultMessage {
+    fn from(call: &CodeInterpreterCall) -> Self {
+        let status = match call.status {
+            CodeInterpreterCallStatus::Completed => ExecutionStatus::Completed,
+            CodeInterpreterCallStatus::Failed => ExecutionStatus::Failed,
+            CodeInterpreterCallStatus::InProgress
+            | CodeInterpreterCallStatus::Interpreting
+            | CodeInterpreterCallStatus::Incomplete => ExecutionStatus::Incomplete,
+        };
+        let stdout = call
+            .outputs
+            .iter()
+            .flatten()
+            .filter_map(|output| match output {
+                CodeInterpreterCallOutput::Logs { logs } => Some(logs.as_str()),
+                CodeInterpreterCallOutput::Image { .. } => None,
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let output = ExecutionOutput {
+            status,
+            stdout,
+            stderr: String::new(),
+        };
+        Self {
+            id: None,
+            status: Some(MessageStatus::Completed),
+            call_id: call.id.clone(),
+            output: serde_json::to_string(&output).unwrap_or_default().into(),
+        }
+    }
 }
 
 #[cfg(test)]

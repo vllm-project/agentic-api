@@ -2,9 +2,8 @@
 
 use std::collections::HashSet;
 
-use crate::storage::{DbResponse, ResponseData, ResponseMetadata, ResponseStore, StorageError};
-use crate::types::io::OutputItem;
-use crate::types::io::{InOutItem, InputItem};
+use crate::storage::{ResponseCheckpoint, ResponseData, ResponseMetadata, ResponseStore, StorageError};
+use crate::types::io::InOutItem;
 use crate::types::io::{ItemOrder, ItemPage, ListItemsResponse};
 use crate::types::request_response::ResponsePayload;
 
@@ -48,26 +47,26 @@ impl ResponseHandler {
 
     /// Resolve client references without overwriting the stored item with supplied content.
     pub(crate) async fn resolve_input_items(&self, items: &mut [InOutItem]) -> ExecutorResult<()> {
+        InOutItem::admit_all(items, "input")?;
         let mut seen = HashSet::new();
-        for (index, item) in items.iter_mut().enumerate() {
+        for item in items.iter() {
             let Some(id) = item.id() else { continue };
             if !seen.insert(id.to_owned()) {
                 return Err(ExecutorError::UnsupportedValue {
-                    param: "input".into(),
+                    param: Some("input".into()),
                     code: None,
                     message: format!(
                         "Duplicate item found with id {id}. Remove duplicate items from your input and try again."
                     ),
                 });
             }
-            // Validate message identities at admission, never while persisting upstream outputs.
-            if matches!(
-                item,
-                InOutItem::Input(InputItem::Message(_)) | InOutItem::Output(OutputItem::Message(_))
-            ) {
-                item.validate_client_id(format!("input[{index}].id"))?;
-            }
-            if let Some(stored) = self.store.get_input_item(id).await? {
+        }
+        let mut stored = self
+            .store
+            .get_input_items_by_id(&seen.into_iter().collect::<Vec<_>>())
+            .await?;
+        for item in items {
+            if let Some(stored) = item.id().and_then(|id| stored.remove(id)) {
                 *item = stored.into_replayed_input();
             }
         }
@@ -114,7 +113,7 @@ impl ResponseHandler {
     /// # Errors
     /// Returns `ExecutorError` if `previous_response_id` is absent, the response
     /// is not found, the store is disabled, or the database query fails.
-    pub async fn get(&self, ctx: &RequestContext) -> ExecutorResult<DbResponse> {
+    pub async fn get(&self, ctx: &RequestContext) -> ExecutorResult<ResponseData> {
         let prev_id = ctx
             .original_request
             .previous_response_id
@@ -129,18 +128,6 @@ impl ResponseHandler {
         })
     }
 
-    /// Validates that the response for `previous_response_id` exists.
-    ///
-    /// Used in the `store=false` path where we only need to confirm the ID is
-    /// valid without loading any history.
-    ///
-    /// # Errors
-    /// Returns `ExecutorError` if `previous_response_id` is absent, the response
-    /// is not found, or the store is disabled.
-    pub async fn validate_exists(&self, ctx: &RequestContext) -> ExecutorResult<()> {
-        self.get(ctx).await.map(|_| ())
-    }
-
     /// Loads the previous response and its full history in one storage query.
     ///
     /// Returns `None` when the request does not continue a previous response.
@@ -148,7 +135,10 @@ impl ResponseHandler {
     /// # Errors
     /// Returns [`StorageError::PreviousResponseNotFound`] for an unknown `previous_response_id`, or
     /// `ExecutorError` if the store is disabled or the history is invalid.
-    pub async fn rehydrate(&self, ctx: &RequestContext) -> ExecutorResult<Option<(ResponseData, Vec<InOutItem>)>> {
+    pub async fn rehydrate(
+        &self,
+        ctx: &RequestContext,
+    ) -> ExecutorResult<Option<(ResponseCheckpoint, Vec<InOutItem>)>> {
         let Some(prev_id) = ctx.original_request.previous_response_id.as_deref() else {
             return Ok(None);
         };
@@ -162,72 +152,30 @@ impl ResponseHandler {
         Ok(Some((stored, history)))
     }
 
-    /// Completes response-scoped persistence and optional transient checkpoint retention.
-    ///
-    /// Normally only this turn's items are inserted; promoting a transient parent to a stored child requires its
-    /// full canonical history because there are no durable parent item IDs to reference.
+    /// Stores one response turn: its items, snapshot and metadata, extending the history rehydration captured in
+    /// `ctx.checkpoint`. Returns the turn's history rows.
     ///
     /// # Errors
-    /// Returns `ExecutorError` if the store is disabled or the database operation fails.
+    /// [`ExecutorError::Conflict`] when a turn is already stored under this response's id, or `ExecutorError` if the
+    /// store is disabled or the database operation fails.
     pub async fn persist(
         &self,
-        mut ctx: RequestContext,
-        output_items: Vec<OutputItem>,
+        ctx: &RequestContext,
+        items: Vec<InOutItem>,
         snapshot: Option<&ResponsePayload>,
-        metadata: ResponseMetadata,
-    ) -> ExecutorResult<()> {
-        let continuation = ctx.continuation.take();
-        let write_durable = continuation.is_none() || ctx.original_request.store;
-        let mut new_items = Vec::with_capacity(ctx.new_input_items.len() + output_items.len());
-        let output_items: Vec<_> = output_items
-            .into_iter()
-            .map(|item| {
-                let recorded = item.is_already_in_history(&ctx.new_input_items);
-                (item, recorded)
-            })
-            .collect();
-        new_items.extend(ctx.new_input_items);
-        new_items.extend(
-            output_items
-                .into_iter()
-                .enumerate()
-                .filter(|(index, (item, recorded))| {
-                    !recorded
-                        && continuation
-                            .as_ref()
-                            .is_none_or(|lease| lease.retains_output(*index, item))
-                })
-                .map(|(_, (item, _))| InOutItem::Output(item)),
-        );
-
-        let checkpoint = continuation
-            .as_ref()
-            .map(|lease| lease.checkpoint(ctx.response_id.clone(), &metadata, &new_items, write_durable))
-            .transpose()?;
-
-        // A stored child of a transient parent needs its complete canonical
-        // checkpoint, not a database reference to a response that was never stored.
-        let transient_parent = continuation
-            .as_ref()
-            .filter(|lease| lease.parent.as_ref().is_some_and(|parent| !parent.durable));
-        let previous_durable_id = if let Some(lease) = transient_parent {
-            if write_durable {
-                let mut full_items = lease.parent_items().cloned().map(InOutItem::Input).collect::<Vec<_>>();
-                full_items.append(&mut new_items);
-                new_items = full_items;
-            }
-            None
-        } else {
-            metadata.previous_response_id.as_deref()
-        };
-
-        let result = if write_durable {
-            self.store
-                .persist(&ctx.response_id, previous_durable_id, new_items, snapshot, &metadata)
-                .await
-        } else {
-            Ok(())
-        };
+        metadata: &ResponseMetadata,
+    ) -> ExecutorResult<Vec<String>> {
+        let result = self
+            .store
+            // A transient session parent has no stored history to extend.
+            .persist(
+                &ctx.response_id,
+                ctx.checkpoint.as_ref().filter(|checkpoint| checkpoint.durable),
+                items,
+                snapshot,
+                metadata,
+            )
+            .await;
         match result {
             Err(error) if error.is_unique_violation() => match self.store.get(&ctx.response_id).await {
                 Ok(_) => Err(ExecutorError::Conflict(format!(
@@ -237,13 +185,7 @@ impl ResponseHandler {
                 Err(not_found) if not_found.is_not_found() => Err(ExecutorError::Storage(error)),
                 Err(lookup_error) => Err(ExecutorError::Storage(lookup_error)),
             },
-            Err(error) => Err(ExecutorError::Storage(error)),
-            Ok(()) => {
-                if let Some((lease, checkpoint)) = continuation.zip(checkpoint) {
-                    lease.publish(checkpoint)?;
-                }
-                Ok(())
-            }
+            result => result.map_err(ExecutorError::Storage),
         }
     }
 }
@@ -285,12 +227,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_validate_exists_missing_prev_id_returns_error() {
-        let result = disabled_handler().validate_exists(&make_ctx(None)).await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
     async fn test_rehydrate_no_prev_id_returns_none() {
         let result = disabled_handler().rehydrate(&make_ctx(None)).await;
         assert!(result.unwrap().is_none());
@@ -305,7 +241,7 @@ mod tests {
     #[tokio::test]
     async fn test_persist_disabled_store_returns_error() {
         let result = disabled_handler()
-            .persist(make_ctx(None), vec![], None, ResponseMetadata::default())
+            .persist(&make_ctx(None), vec![], None, &ResponseMetadata::default())
             .await;
         assert!(result.is_err());
     }
@@ -324,11 +260,14 @@ mod tests {
         assert_eq!(ctx.enriched_request.tool_choice, Some(ToolChoice::Auto));
 
         let conversations = crate::executor::ConversationHandler::new(crate::storage::ConversationStore::disabled());
-        crate::executor::persist::persist_prepared_turn(ctx, None, vec![], None, &conversations, &handler)
+        let exec =
+            crate::executor::ExecutionContext::new(conversations, handler, std::sync::Arc::default(), String::new());
+        let input_only = crate::executor::persist::TurnOutput::Empty;
+        crate::executor::persist::persist(ctx, input_only, None, &exec)
             .await
             .unwrap();
 
-        let stored = ResponseData::try_from(store.get("resp_test").await.unwrap()).unwrap();
+        let stored = store.get("resp_test").await.unwrap();
         assert_eq!(stored.metadata.effective_tool_choice, ToolChoice::Required);
     }
 }

@@ -118,7 +118,7 @@ async fn postgres_migrations_and_state_survive_pool_restarts() {
     second_store
         .persist(
             &continuation_id,
-            Some(&response_id),
+            Some(&second_store.get(&response_id).await.expect("parent").into()),
             vec![input_item("second turn")],
             None,
             &metadata,

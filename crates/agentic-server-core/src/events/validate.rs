@@ -102,6 +102,9 @@ pub(crate) fn expected_item_type(frame: &EventFrame) -> Option<SSEItemType> {
         | SSEEventType::ReasoningPartDone
         | SSEEventType::ReasoningSummaryTextDelta
         | SSEEventType::ReasoningSummaryTextDone => Some(SSEItemType::Reasoning),
+        SSEEventType::FileSearchCallInProgress
+        | SSEEventType::FileSearchCallSearching
+        | SSEEventType::FileSearchCallCompleted => Some(SSEItemType::FileSearchCall),
         SSEEventType::WebSearchCallInProgress
         | SSEEventType::WebSearchCallSearching
         | SSEEventType::WebSearchCallCompleted => Some(SSEItemType::WebSearchCall),
@@ -130,8 +133,6 @@ pub(crate) fn expected_item_type(frame: &EventFrame) -> Option<SSEItemType> {
         | SSEEventType::ResponseSteerFailed
         | SSEEventType::OutputItemAdded
         | SSEEventType::OutputItemDone
-        | SSEEventType::FileSearchCallSearching
-        | SSEEventType::FileSearchCallCompleted
         | SSEEventType::Keepalive
         | SSEEventType::Other => None,
     }
@@ -154,37 +155,60 @@ pub(crate) fn output_item_identity<'a>(
     Ok((item_id, item_type))
 }
 
-pub(crate) fn ensure_supported_output_item_type(item_type: &str) -> Result<(), EventError> {
-    if item_type.parse::<SSEItemType>().is_ok() {
-        return Ok(());
+/// The status of an upstream response object.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum UpstreamStatus {
+    InProgress,
+    Completed,
+    Failed,
+    Incomplete,
+}
+
+/// What strict ingestion requires of an upstream response object, in a complete body or a `response.*` event.
+#[derive(Debug, Deserialize)]
+pub(crate) struct UpstreamResponse {
+    /// Missing reads as empty, which [`UpstreamResponse::decode`] rejects with the field's name.
+    #[serde(default)]
+    id: String,
+    pub(crate) status: UpstreamStatus,
+    /// Decoded only so that a `service_tier` that is not a string or null is rejected.
+    #[serde(default, rename = "service_tier")]
+    _service_tier: Option<String>,
+}
+
+impl UpstreamResponse {
+    /// Decodes the response object; `id` must be non-empty.
+    pub(crate) fn decode(response: &Value) -> Result<Self, EventError> {
+        let decoded =
+            Self::deserialize(response).map_err(|error| invalid(format!("upstream response is invalid: {error}")))?;
+        if decoded.id.is_empty() {
+            return Err(missing_field("upstream response", "id"));
+        }
+        Ok(decoded)
     }
-    Err(invalid(format!(
-        "upstream output item type '{item_type}' is unsupported"
-    )))
 }
 
 fn validate_response_event(frame: &EventFrame, event_name: &str) -> Result<(), EventError> {
-    let response = required_object(&frame.wire.rest, "response", event_name)?;
-    required_str(response, "id", "upstream response")?;
-    if response
-        .get("service_tier")
-        .is_some_and(|tier| !tier.is_null() && !tier.is_string())
-    {
-        return Err(invalid("upstream response has no valid 'service_tier'"));
-    }
-    let status = required_str(response, "status", "upstream response")?;
-    let expected_status = match frame.event_type {
-        SSEEventType::ResponseCreated | SSEEventType::ResponseInProgress => "in_progress",
-        SSEEventType::ResponseCompleted => "completed",
-        SSEEventType::ResponseFailed => "failed",
-        SSEEventType::ResponseIncomplete => "incomplete",
+    let response = frame
+        .wire
+        .rest
+        .get("response")
+        .filter(|response| response.is_object())
+        .ok_or_else(|| missing_field(event_name, "response"))?;
+    let status = UpstreamResponse::decode(response)?.status;
+    let expected = match frame.event_type {
+        SSEEventType::ResponseCreated | SSEEventType::ResponseInProgress => UpstreamStatus::InProgress,
+        SSEEventType::ResponseCompleted => UpstreamStatus::Completed,
+        SSEEventType::ResponseFailed => UpstreamStatus::Failed,
+        SSEEventType::ResponseIncomplete => UpstreamStatus::Incomplete,
         _ => return Ok(()),
     };
-    if status == expected_status {
+    if status == expected {
         return Ok(());
     }
     Err(invalid(format!(
-        "upstream stream event '{event_name}' has status '{status}', expected '{expected_status}'"
+        "upstream stream event '{event_name}' has status {status:?}, expected {expected:?}"
     )))
 }
 
@@ -309,6 +333,7 @@ fn validate_event_fields(
         | SSEEventType::ResponseSteerFailed
         | SSEEventType::OutputItemAdded
         | SSEEventType::OutputItemDone
+        | SSEEventType::FileSearchCallInProgress
         | SSEEventType::FileSearchCallSearching
         | SSEEventType::FileSearchCallCompleted
         | SSEEventType::WebSearchCallInProgress

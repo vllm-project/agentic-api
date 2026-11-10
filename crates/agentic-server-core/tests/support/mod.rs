@@ -7,6 +7,8 @@
 
 #![allow(dead_code)]
 
+pub mod replay;
+
 use std::fmt::Write as _;
 use std::sync::Arc;
 
@@ -29,20 +31,26 @@ use agentic_core::types::io::{OutputItem, OutputMessageContent};
 use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
 
 #[derive(Debug, Deserialize)]
-pub struct Cassette {
-    pub turns: Vec<Turn>,
+pub struct Cassette<B = TurnBody> {
+    pub turns: Vec<Turn<B>>,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct Turn {
-    pub request: TurnRequest,
+pub struct Turn<B = TurnBody> {
+    #[serde(default)]
+    pub filename: String,
+    pub request: TurnRequest<B>,
     pub response: TurnResponse,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct TurnRequest {
+pub struct TurnRequest<B = TurnBody> {
+    #[serde(default)]
+    pub method: String,
     pub path: String,
-    pub body: TurnBody,
+    #[serde(default)]
+    pub query_params: Value,
+    pub body: B,
 }
 
 #[derive(Debug, Deserialize, Default, PartialEq)]
@@ -725,6 +733,7 @@ pub fn output_text(payload: &ResponsePayload) -> String {
             | OutputItem::ToolSearchOutput(_)
             | OutputItem::CustomToolCall(_)
             | OutputItem::ShellCall(_)
+            | OutputItem::FileSearchCall(_)
             | OutputItem::WebSearchCall(_)
             | OutputItem::McpCall(_)
             | OutputItem::McpListTools(_)

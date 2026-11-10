@@ -49,6 +49,7 @@ than assuming that OpenAI and the gateway accept the same requests.
 | `edge-cases` | 23 | Unstored/missing IDs; missing parent; invalid, repeated and out-of-range query parameters; unknown and repeated includes; repeated deletion. |
 | `conversation` | 19 | Responses attached to a conversation, manual item insertion/deletion, snapshots before and after mutations, response deletion, conversation deletion. |
 | `replayed-items` | 14 | Generated-ID reuse, two copies of an ID with different content, wrong-prefix IDs, function call/output history without public item IDs, seed immutability after probes. |
+| `call-ids` | Up to 17 | Function call history whose `call_id` repeats in one input (two calls and outputs, two calls and one output, one call and two outputs, a call repeated after its output) or is empty; `previous_response_id` continuations that repeat a stored turn's forced call or send its output twice, plus a normal control; conversations created with a repeated or empty `call_id`, or appended to with a reused one, then a turn. Each request names its case in `x-run-id`; a conversation's follow-ups run only after it is created. JSON only. |
 | `tool-items` | 48 plus additional pages | Replay existing parallel builtin/client/mixed tools, shell, code interpreter, tool search, and the multi-agent review task; inspect complete input pages after each response and a final continuation. |
 
 From the worktree root, with an inference server already running:
@@ -141,7 +142,8 @@ other management scenarios default to 300 seconds.
 Repeated query values are retained as arrays in `request.query_params`; a single
 value remains a string. No observed response body or status is rewritten.
 
-The Rust tests require the five original suites for both providers in JSON and streaming mode.
+The Rust tests require the five original suites for both providers in JSON and streaming mode,
+plus the JSON-only `call-ids` suite, whose turns are paired across providers by their `x-run-id` case.
 They assert the recordings directly, then replay every management request through
 a local gateway process with only inference mocked. `RESPONSES_GATEWAY_BIN` can
 select an explicitly built binary; otherwise the tests use `agentic-server` from
@@ -150,12 +152,11 @@ the OpenAI reference. Log probabilities are excluded from item comparisons.
 The lifecycle suite also checks that the continuation retains the surviving child's
 history and new user message after parent deletion, and inspects the live gateway's
 upstream request to ensure the deleted parent's user message is not sent to inference.
-Client-supplied function-call status defaults remain deferred: OpenAI lists an
-omitted call status as `in_progress`; these comparisons tolerate its absence while
-checking other values. Function, custom, and shell result types retain their IDs
+Listed items get OpenAI's omitted statuses: a client function call is
+`in_progress` and a result is `completed`. Comparisons with recordings made
+before that tolerate their absence while checking other values. Function, custom, and shell result types retain their IDs
 and statuses. Stored results use `fc_`, `ctco_`, and `sho_` IDs respectively.
-Request input conversion fills omitted result statuses as `completed` before
-persistence, without changing explicit statuses or call execution states.
+Explicit statuses are kept.
 Gateway-created function results receive their identity and completed status at
 creation. Input-item listings return stored items without classifying gateway call/result
 pairs by their projected IDs. The gateway tool capture predates removal of that
@@ -794,6 +795,9 @@ configuration belongs to the running gateway. This refreshes client-facing
 captures; model, search, and MCP dependency captures remain separate.
 The Rust multi-agent contract test compares full-history continuation, delegated
 agents, web/MCP activity, and client shell outputs across both providers in JSON and SSE.
+Its dependency replay normalizes the MCP initialization client's string version, which changes with the
+gateway release. It still compares the client name, protocol version, capabilities, and tool arguments;
+missing or invalid client versions remain mismatches. The captured YAML is retained unchanged.
 
 ### Reasoning (gateway and OpenAI)
 
@@ -1283,7 +1287,79 @@ The `include` request is checked for success and unchanged item order and
 message shape; this text-only scenario does not exercise other `include`
 expansions or every Conversation Items API format.
 
-### Compaction replay (OpenAI)
+### Public compaction recordings (OpenAI and gateway)
+
+`record_compaction_cassettes.sh` uses the shared recorder's `items` mode to capture one flat cassette per scenario
+and provider. `COMPACTION_RECORD_SET=all|openai|gateway` selects providers (default `all`), and
+`COMPACTION_SCENARIO` selects a row below (default `all`).
+
+| Scenario | HTTP turns | Coverage |
+| --- | --- | --- |
+| `stale` | 10 | A compacting streamed conversation turn overlaps another stored turn; inspect conversation items, each turn's input, and a later continuation. |
+| `in-turn-chain` | 9 | Compaction output and input-item history across a stored response chain, then the stored compaction sent back as input to a new stored turn and its continuation. |
+| `in-turn-chain-stream` | 9 | The same chain with the compacting turn streamed, including compaction output-item events. |
+| `tool-loop` | 10 | Compaction around a client function call, plus immediate and delayed async results after automatic compaction. |
+| `standalone` | 12 | Compact direct input, replay the window, compact a stored response, reject missing context, and inspect retained media through three stored continuations. |
+| `multi-agent` | 5 | Compaction and public history across a response chain with multi-agent execution enabled. |
+| `store-false` | 6 | Stream compaction output from an unstored turn, verify retrieval fails, then send its compaction back as input to a stored turn and continue it. |
+| `mcp` | 11 | Discovery reuse, standalone and automatic compaction followed by rediscovery, widened/removed allowlists, and an empty discovery snapshot reused on continuation. |
+
+From the repository root, with recorder dependencies installed in `.venv` and vLLM listening on port 5050:
+
+```bash
+cargo build --release --locked -p agentic-server --bin agentic-server
+
+# Run in a separate terminal with an isolated database.
+AGENTIC_API_HOME=/tmp/agentic-compaction AGENTIC_MCP_ALLOWED_HOSTS=learn.microsoft.com \
+  ./target/release/agentic-server --llm-api-base http://127.0.0.1:5050 \
+  --gateway-host 127.0.0.1 --gateway-port 9000
+
+COMPACTION_RECORD_SET=gateway GATEWAY_MODEL=Qwen/Qwen3.8-27B-FP8 \
+  GATEWAY_URL=http://127.0.0.1:9000 PYTHON_BIN=.venv/bin/python \
+  bash crates/agentic-server-core/tests/cassettes/record_compaction_cassettes.sh
+
+.venv/bin/python scripts/validate-cassettes.py crates/agentic-server-core/tests/cassettes/compaction
+cargo test --locked -p agentic-server-core --test compaction_cassette_test
+```
+
+Set `GATEWAY_MODEL` to the exact served model alias. OpenAI recording requires `OPENAI_API_KEY`; `OPENAI_MODEL`
+defaults to `gpt-4.1`, while `MULTI_AGENT_OPENAI_MODEL` defaults to `gpt-5.6-sol` for the multi-agent beta and
+`TOOL_LOOP_OPENAI_MODEL` defaults to `gpt-6-astra` for async client tools.
+`RECORDER_PROXY_PORT` overrides port 7070. Gateway-only recording does not refresh the OpenAI reference files.
+
+The public contract tests inspect both providers' captures for statuses, stream ordering, compaction identity in
+continued input, pending tool identity, and concurrent public history. `compaction/replay.rs` also executes the
+seven original gateway scenarios through the current Rust executor and management handlers with fresh SQLite
+storage. It scripts inference from the captured text and tool calls, then checks generated public items, ID
+relationships, stored history, and SSE lifecycles against the captures. Compaction, retention, and persistence run
+live in Rust. The MCP scenario contacts the read-only OpenAI documentation MCP server during recording; the
+hosted-tool-search integration tests exercise discovery and calls against a local MCP server, including compacted
+stored and transient-session continuations. Qwen reasoning items are excluded from cross-provider item-kind
+comparisons, but their streamed lifecycle and recorded identities are still checked.
+
+The MCP reference omits `mcp_list_tools` from the standalone compact output. Replaying that output discovers tools
+again; replaying the uncompacted history does not. A completed automatic compaction also drops the old listing
+from the next turn's input and discovers tools again. This describes observable items, not the contents of OpenAI's
+opaque compaction payload.
+Ordinary follow-ups reuse the discovery snapshot, even when it is empty or the request widens/removes its
+`allowed_tools` restriction. Widening authorization does not expose tools absent from that snapshot until discovery
+runs again after compaction. Narrowing authorization still filters which cached tools are callable.
+
+Known difference in the multi-agent capture: OpenAI emits a compaction after the answer as well as before it; the
+gateway currently emits only the earlier compaction. That also changes the following turn's public input history.
+The multi-agent capture is checked for successful requests, not full output parity.
+
+Standalone turns t6–t12 expose a retained-media regression: OpenAI keeps the user image in each stored turn's
+public input items; the gateway drops it from the second stored turn's history and the third turn's model input.
+The gateway replay asserts retention from the OpenAI reference, so this case fails until the regression is fixed.
+
+The tool-loop capture also records a remaining async difference. Both providers reject an async result after
+compaction and an intervening continuation, with HTTP 400 identifying the missing call. When the result instead
+directly follows the compacting response, OpenAI also rejects it, while the gateway accepts it. The tests preserve
+both observations; they do not assert parity for that branch. Model text and compaction contents also differ.
+Reference: [OpenAI compaction](https://developers.openai.com/api/docs/guides/compaction).
+
+### Compaction inference replay (OpenAI)
 
 These recordings capture the non-streaming `/v1/responses` inference calls replayed by the compaction integration
 tests. The JSON inputs contain the exact model-facing item arrays, including the context-checkpoint prompt. Use the

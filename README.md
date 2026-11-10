@@ -54,7 +54,7 @@ flowchart LR
 ## ✨ Key Features
 
 - 🔄 **Stateful conversations**: the server manages history via `previous_response_id` or the [Conversations API](#-api-surface). No client-side message tracking, no replaying full transcripts.
-- 🛠️ **Server-side tool execution**: an explicit tool-ownership model (gateway / client / provider) decides exactly what runs where. Web search ships today via [You.com](https://you.com), [Brave Search](https://brave.com/search/api/), [Tavily](https://tavily.com), [Serply](https://serply.io), or a self-hosted [SearXNG](https://docs.searxng.org/) instance, alongside MCP tools and an opt-in [embedded code interpreter](#optional-embedded-code-interpreter); the model executes multi-step tool chains automatically.
+- 🛠️ **Server-side tool execution**: an explicit tool-ownership model (gateway / client / provider) decides exactly what runs where. Web search ships today via [You.com](https://you.com), [Brave Search](https://brave.com/search/api/), [Tavily](https://tavily.com), [Serply](https://serply.io), [Keenable](https://keenable.ai), or a self-hosted [SearXNG](https://docs.searxng.org/) instance, alongside MCP tools and an opt-in [embedded code interpreter](#optional-embedded-code-interpreter); the model executes multi-step tool chains automatically.
 - 🤝 **Multi-agent orchestration**: a stored Responses request can spawn and coordinate subagents server-side over HTTP, returning their attributed work in one response ([details](#-multi-agent-responses)).
 - 📡 **Every transport**: non-streaming HTTP, server-sent events for token streaming, and full **WebSocket** support for interactive clients, with `stream_id` multiplexing.
 - 🧰 **Codex and Claude Code ready**: accepts Codex-shaped Responses traffic and Anthropic Messages traffic, preserving the tool declarations and item shapes each client depends on.
@@ -147,24 +147,24 @@ permission checks and disables Codex approvals and sandboxing.
 
 ### Python distribution
 
-The `agentic-api` Python package is [available on PyPI](https://pypi.org/project/agentic-api/0.9.0/). Version 0.9.0
+The `agentic-api` Python package is [available on PyPI](https://pypi.org/project/agentic-api/0.10.0/). Version 0.10.0
 includes the Rust gateway, the `agentic` CLI, and a small Python launcher. Prebuilt wheels support Linux x86_64
 (glibc 2.17 or newer), macOS Intel, and macOS Apple Silicon; Python 3.10 or newer is required.
 
 With uv installed, run the packaged Rust CLI without a global installation:
 
 ```bash
-uvx --from agentic-api==0.9.0 agentic --version
-uvx --from agentic-api==0.9.0 agentic serve --upstream http://existing-vllm:8000
+uvx --from agentic-api==0.10.0 agentic --version
+uvx --from agentic-api==0.10.0 agentic serve --upstream http://existing-vllm:8000
 ```
 
 Or install the Python launcher, with the optional local inference runtime:
 
 ```bash
-python -m pip install agentic-api==0.9.0
+python -m pip install agentic-api==0.10.0
 agentic-api serve --vllm-base-url http://existing-vllm:8000
 
-python -m pip install "agentic-api[local]==0.9.0"
+python -m pip install "agentic-api[local]==0.10.0"
 agentic-api serve --model MODEL_ID
 ```
 
@@ -179,10 +179,10 @@ script needs machine-readable diagnostics.
 Use uv to install the published package or run the Python launcher without a global installation:
 
 ```bash
-uv pip install agentic-api==0.9.0
-uv pip install "agentic-api[local]==0.9.0"
-uvx --from agentic-api==0.9.0 agentic-api doctor
-uvx --from agentic-api==0.9.0 agentic-api serve --vllm-base-url http://existing-vllm:8000
+uv pip install agentic-api==0.10.0
+uv pip install "agentic-api[local]==0.10.0"
+uvx --from agentic-api==0.10.0 agentic-api doctor
+uvx --from agentic-api==0.10.0 agentic-api serve --vllm-base-url http://existing-vllm:8000
 ```
 
 The Rust-native `agentic` CLI remains supported for `run codex`, `run claude`, `serve`, and `validate`. For the full
@@ -241,6 +241,13 @@ AGENTIC_WEB_SEARCH_PROVIDER=serply SERPLY_API_KEY=<your-serply-api-key> \
   cargo run -p agentic-server -- --llm-api-base http://0.0.0.0:5050
 ```
 
+Or [Keenable](https://keenable.ai), which also works without an API key:
+
+```bash
+AGENTIC_WEB_SEARCH_PROVIDER=keenable \
+  cargo run -p agentic-server -- --llm-api-base http://0.0.0.0:5050
+```
+
 Or your own [SearXNG](https://docs.searxng.org/) instance, which needs no API key -- only its URL:
 
 ```bash
@@ -281,12 +288,12 @@ llm_api_base = "http://127.0.0.1:5050"
 # database_url = "postgresql://agentic-api@localhost/agentic_api"
 
 [web_search]
-# Search backend for the gateway-owned web_search tool: "you" (default), "brave", "tavily", "serply", or "searxng".
+# Search backend for the gateway-owned web_search tool: "you" (default), "brave", "tavily", "serply", "keenable", or "searxng".
 provider = "you"
 base_url = "https://ydc-index.io"
 api_key_env = "YOU_API_KEY"
 # Concurrent provider requests inside one batched web-search call; unset uses
-# the provider default (Brave: 1; You.com, Tavily, Serply and SearXNG: max_concurrent_gateway_calls).
+# the provider default (Brave: 1; You.com, Tavily, Serply, Keenable and SearXNG: max_concurrent_gateway_calls).
 # max_concurrent_queries = 1
 
 [web_fetch]
@@ -435,9 +442,9 @@ every provider.
 | Setting | Environment variable | `config.toml` key | Default |
 | :--- | :--- | :--- | :--- |
 | Provider | `AGENTIC_WEB_SEARCH_PROVIDER` | `[web_search] provider` | `you` |
-| API key | variable named by `api_key_env` | `[web_search] api_key_env` | `YOU_API_KEY` / `BRAVE_API_KEY` / `TAVILY_API_KEY` / `SERPLY_API_KEY` / `SEARXNG_API_KEY` (optional) |
-| Endpoint | `AGENTIC_WEB_SEARCH_BASE_URL` (or `YOU_API_BASE_URL` for You.com) | `[web_search] base_url` | none for You.com; `https://api.search.brave.com` for Brave; `https://api.tavily.com` for Tavily; `https://api.serply.io` for Serply; **required** for SearXNG |
-| Concurrent queries | `AGENTIC_WEB_SEARCH_MAX_CONCURRENT_QUERIES` | `[web_search] max_concurrent_queries` | You.com, Tavily, Serply and SearXNG inherit `max_concurrent_gateway_calls`; Brave `1` |
+| API key | variable named by `api_key_env` | `[web_search] api_key_env` | `YOU_API_KEY` / `BRAVE_API_KEY` / `TAVILY_API_KEY` / `SERPLY_API_KEY` / `KEENABLE_API_KEY` (optional) / `SEARXNG_API_KEY` (optional) |
+| Endpoint | `AGENTIC_WEB_SEARCH_BASE_URL` (or `YOU_API_BASE_URL` for You.com) | `[web_search] base_url` | none for You.com; `https://api.search.brave.com` for Brave; `https://api.tavily.com` for Tavily; `https://api.serply.io` for Serply; `https://api.keenable.ai` for Keenable; **required** for SearXNG |
+| Concurrent queries | `AGENTIC_WEB_SEARCH_MAX_CONCURRENT_QUERIES` | `[web_search] max_concurrent_queries` | You.com, Tavily, Serply, Keenable and SearXNG inherit `max_concurrent_gateway_calls`; Brave `1` |
 
 **You.com** (`provider = "you"`) is the default and behaves exactly as before: domain filters are applied by the
 provider, `count` accepts 1–100, and the You.com-specific `livecrawl`, `livecrawl_formats`, `crawl_timeout`, and
@@ -504,6 +511,22 @@ the key sent in the `X-Api-Key` header. The gateway adapts the shared tool contr
 - Each per-query `metadata[]` entry carries `"provider": "serply"` plus Serply's `ts` as `latency`.
 - Batched queries inherit the gateway concurrency limit. A rate-limited request (HTTP 429) fails that
   `web_search_call` without an automatic retry and reports the upstream `Retry-After` value.
+
+**Keenable** (`provider = "keenable"`) works without an API key: requests are `POST`s against
+`https://api.keenable.ai/v1/search/public` carrying an `X-Keenable-Title: vLLM Agentic API` header. With
+`KEENABLE_API_KEY` set they go to `https://api.keenable.ai/v1/search` with the key in the `X-API-Key` header instead.
+The gateway adapts the shared tool contract to Keenable:
+
+- The body carries only `query` and `max_results`; `count` is clamped to Keenable's maximum of 20.
+- Keenable has no server-side domain filter, so `allowed_domains` / `blocked_domains` (and the model's
+  `include_domains` / `exclude_domains`) are applied by the gateway on the response, and a filtered search can return
+  fewer than `count` results.
+- `freshness`, `country`, `language`, `safesearch`, and the You.com-specific arguments are ignored (logged at debug
+  level).
+- All hits land in `results.web` and `results.news` is always empty. A result's description is Keenable's `snippet`,
+  falling back to `description`, and `page_age` carries `published_at`.
+- Each per-query `metadata[]` entry carries `"provider": "keenable"`. A 401/403 names `KEENABLE_API_KEY` and a 429 is
+  reported with its `Retry-After` value, without an automatic retry.
 
 If you switch an existing deployment to Brave, Tavily, or Serply, update `api_key_env` if an older `config.toml` pins
 it (or remove it) and drop a You.com `base_url`; a mismatched key variable is reported in the failed `web_search_call`
@@ -690,7 +713,7 @@ Claude Code's own tools (Bash, Edit, Read, …) stay **client-owned** — Claude
 
 Current Claude Code versions declare Anthropic's native `web_search_20250305` server tool. Agentic API translates that
 declaration for the upstream model and executes the resulting search server-side against the configured search backend
-(You.com, Brave Search, Tavily, Serply, or SearXNG, see [Web search providers](#web-search-providers)); no MCP server or tool
+(You.com, Brave Search, Tavily, Serply, Keenable, or SearXNG, see [Web search providers](#web-search-providers)); no MCP server or tool
 alias is required:
 
 ```bash

@@ -81,8 +81,7 @@ impl Route {
     }
 }
 
-/// Terminal state of the execution itself, independent of whether the client
-/// received it.
+/// Terminal state of execution, independent of client delivery.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExecutionOutcome {
     /// The response reached a terminal `completed` status.
@@ -111,8 +110,7 @@ impl ExecutionOutcome {
 /// Whether the transport was handed everything the execution produced.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeliveryOutcome {
-    /// The payload, or the terminal streamed frame, was handed to the
-    /// transport. Whether the transport wrote it is the transport's span.
+    /// The payload or terminal frame was handed off; the transport records the write.
     Delivered,
     /// The stream was dropped before its terminal frame.
     Disconnected,
@@ -186,10 +184,16 @@ impl FailureCategory {
 }
 
 impl From<&ExecutorError> for FailureCategory {
-    /// Exhaustive on purpose: a new [`ExecutorError`] variant must choose its
-    /// category here rather than silently falling into a catch-all.
+    /// Exhaustive: every new [`ExecutorError`] variant chooses a category here.
     fn from(error: &ExecutorError) -> Self {
         match error {
+            ExecutorError::FileSearch(source) => match source.status_code() {
+                400 => Self::InvalidRequest,
+                404 => Self::NotFound,
+                409 => Self::Conflict,
+                502 => Self::UpstreamError,
+                _ => Self::Storage,
+            },
             ExecutorError::Storage(source) if source.is_not_found() => Self::NotFound,
             ExecutorError::Storage(_) => Self::Storage,
             ExecutorError::Persistence(_) => Self::Persistence,
@@ -203,6 +207,7 @@ impl From<&ExecutorError> for FailureCategory {
             ExecutorError::NotFound { .. } => Self::NotFound,
             ExecutorError::InvalidRequest(_)
             | ExecutorError::InvalidInput(_)
+            | ExecutorError::ClientItem(_)
             | ExecutorError::InvalidMaxToolCalls(_)
             | ExecutorError::InvalidPromptCacheOptions(_)
             | ExecutorError::UnsupportedValue { .. }

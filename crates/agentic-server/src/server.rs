@@ -17,11 +17,12 @@ use agentic_server::auth::{OidcAuthError, OidcAuthenticator, OidcConfig};
 use agentic_server::model_capabilities::ModelCapabilities;
 use agentic_server::rate_limit::RateLimitConfig;
 use agentic_server::telemetry::TelemetryError;
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, task::JoinSet};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 const GATEWAY_DRAIN_TIMEOUT: Duration = Duration::from_secs(8);
+const FILE_BLOB_CLEANUP_INTERVAL: Duration = Duration::from_secs(30);
 
 /// Transport-level gateway settings resolved before the server starts.
 ///
@@ -97,10 +98,32 @@ async fn serve_gateway(
     let websocket_tracker = state.websocket_tracker.clone();
     let messages_threads = state.exec_ctx.messages_threads.clone();
     let shutdown_on_error = shutdown_token.clone();
+    let cleanup_service = state.exec_ctx.file_search.clone();
     let router = build_router_with_auth(state, &server_config, authenticator);
     let listener = TcpListener::bind(&addr).await?;
     let addr = listener.local_addr()?;
     info!("gateway listening on {addr}");
+    let mut cleanup_workers = JoinSet::new();
+    if let Some(service) = cleanup_service {
+        let cleanup_shutdown = shutdown_token.clone();
+        cleanup_workers.spawn(async move {
+            let mut interval = tokio::time::interval_at(
+                tokio::time::Instant::now() + FILE_BLOB_CLEANUP_INTERVAL,
+                FILE_BLOB_CLEANUP_INTERVAL,
+            );
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                tokio::select! {
+                    () = cleanup_shutdown.cancelled() => break,
+                    _ = interval.tick() => {
+                        if let Err(error) = service.reconcile_blob_cleanup().await {
+                            warn!(%error, "file blob reconciliation failed; will retry");
+                        }
+                    }
+                }
+            }
+        });
+    }
     // Rate limiting tells callers apart by peer address when OIDC is off.
     let server = axum::serve(
         gateway_listener(listener),
@@ -126,6 +149,16 @@ async fn serve_gateway(
     };
     if result.is_err() {
         shutdown_on_error.cancel();
+    }
+    // JoinSet aborts its tasks if this server future is dropped early. On a
+    // normal exit, abort and join the periodic worker before returning.
+    cleanup_workers.abort_all();
+    while let Some(joined) = cleanup_workers.join_next().await {
+        if let Err(error) = joined
+            && !error.is_cancelled()
+        {
+            warn!(%error, "file blob reconciliation worker failed");
+        }
     }
     websocket_tracker.wait_until_idle().await;
     messages_threads.shutdown().await;

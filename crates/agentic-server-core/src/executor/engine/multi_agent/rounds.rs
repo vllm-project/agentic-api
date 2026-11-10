@@ -18,7 +18,7 @@ use crate::types::{
     agent::{AgentCompletion, AgentTurnKey},
     client_calls::{ClientCallId, ClientCallKind, ClientCallOwner, ClientCallRegistration},
     io::output::MessagePhase,
-    io::{InputItem, MultiAgentAction, OutputItem, OutputMessageContent, ResponsesInput},
+    io::{MultiAgentAction, OutputItem, OutputMessageContent, ResponsesInput},
     request_response::IncompleteDetails,
     tools::ToolSearchStatus,
 };
@@ -423,23 +423,14 @@ impl MultiAgentRun {
             .contexts
             .get_mut(&agent)
             .ok_or_else(|| invalid("compaction owner is missing"))?;
-        let commit = result.commit(context.generation, &mut context.stored.history);
-        if commit == CompactionCommit::Applied {
-            context.compacted_generation = Some(context.generation);
-            let item = context.stored.history.iter().rev().find_map(|item| {
-                if let InputItem::Compaction(item) = item {
-                    Some(item.clone())
-                } else {
-                    None
-                }
-            });
-            if let Some(item) = item {
-                let mut item = OutputItem::Compaction(item);
-                item.set_agent(attribution(&agent));
-                self.publish(item, pipeline).await?;
-            }
-        }
-        Ok(commit)
+        let Some(item) = result.commit(context.generation, &mut context.stored.history) else {
+            return Ok(CompactionCommit::Stale);
+        };
+        context.compacted_generation = Some(context.generation);
+        let mut item = OutputItem::Compaction(item);
+        item.set_agent(attribution(&agent));
+        self.publish(item, pipeline).await?;
+        Ok(CompactionCommit::Applied)
     }
 }
 

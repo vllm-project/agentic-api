@@ -13,10 +13,11 @@ use crate::executor::multi_agent::ValidatedTreeCheckpoint;
 use crate::executor::session::ResponseContinuation;
 use crate::executor::telemetry::ExecutorMetrics;
 use crate::storage::backend::redact_database_urls;
+use crate::storage::schema::verify_persistence_ready;
 use crate::storage::{
     ConversationStore, DatabaseBackend, ResponseCheckpoint, ResponseStore, create_pool_with_schema_and_configs,
 };
-use crate::tool::{GatewayExecutorRegistration, GatewayExecutors};
+use crate::tool::{GatewayExecutorRegistration, GatewayExecutors, file_search::FileSearchService};
 use crate::types::io::{InOutItem, ToolChoice};
 use crate::types::messages::GatewayToolMap;
 use crate::types::request_response::{RequestPayload, ResponsePayload};
@@ -37,16 +38,15 @@ pub struct RequestContext {
     /// Enriched request with rehydrated conversation history injected into `.input`.
     /// This is the request forwarded to the LLM.
     pub enriched_request: RequestPayload,
-    /// This turn's canonical input items for persistence, including built-in calls
-    /// and call outputs. Session execution also records each round's other output
-    /// items here in inference order; compaction can replace them with a new window.
+    /// This turn's input items and model-facing file-search context for persistence. An in-turn compaction can replace
+    /// them with its window; persistence then appends the turn's public output.
     pub new_input_items: Vec<InOutItem>,
     /// Our generated response ID (uuid7 with "resp_" prefix).
     pub response_id: String,
     /// Resolved conversation ID. `None` when `store=false` or non-conversational.
     pub conversation_id: Option<String>,
     /// The turn this request continues (a stored response, a conversation's latest turn, or a session parent), as
-    /// rehydration read it.
+    /// rehydration read it: its metadata and stored history, which persistence extends.
     pub checkpoint: Option<ResponseCheckpoint>,
     /// Optional transient-session lease and canonical parent snapshot. Never serialized.
     pub continuation: Option<ResponseContinuation>,
@@ -99,6 +99,8 @@ impl RequestContext {
 /// rather than stored here, keeping this context purely shared and immutable.
 #[derive(Clone, Debug)]
 pub struct ExecutionContext {
+    /// Shared in-tree file ingestion and retrieval, available when persistence is configured.
+    pub file_search: Option<FileSearchService>,
     pub conv_handler: ConversationHandler,
     pub resp_handler: ResponseHandler,
     pub client: Arc<reqwest::Client>,
@@ -134,12 +136,6 @@ impl ExecutionContext {
         format!("{}/v1/responses", self.llm_base_url)
     }
 
-    /// Returns the full URL for the `/v1/conversations` endpoint.
-    #[must_use]
-    pub fn conversations_url(&self) -> String {
-        format!("{}/v1/conversations", self.llm_base_url)
-    }
-
     #[must_use]
     pub fn new(
         conv_handler: ConversationHandler,
@@ -149,6 +145,7 @@ impl ExecutionContext {
     ) -> Self {
         let gateway_executors = GatewayExecutors::from_env(Arc::clone(&client));
         Self {
+            file_search: None,
             conv_handler,
             resp_handler,
             client,
@@ -185,6 +182,18 @@ impl ExecutionContext {
         self
     }
 
+    /// Installs one file search service for both the Files API and the
+    /// gateway-executed built-in tool.
+    #[must_use]
+    pub fn with_file_search_service(mut self, service: FileSearchService) -> Self {
+        self.gateway_executors
+            .insert(GatewayExecutorRegistration::FileSearch(Arc::new(
+                crate::tool::file_search::FileSearchHandler::new(service.clone()),
+            )));
+        self.file_search = Some(service);
+        self
+    }
+
     /// Seal the search results returned to Messages clients with `key`, so they
     /// stay readable across restarts and by every replica holding the same key.
     #[must_use]
@@ -211,13 +220,8 @@ impl ExecutionContext {
             return true;
         };
         matches!(
-            tokio::time::timeout(timeout, async {
-                crate::storage::schema::verify_persistence_ready(pool.as_ref())
-                    .await
-                    .is_ok()
-            })
-            .await,
-            Ok(true)
+            tokio::time::timeout(timeout, verify_persistence_ready(pool.as_ref())).await,
+            Ok(Ok(()))
         )
     }
 
@@ -264,7 +268,22 @@ impl ExecutionContext {
         let client = Arc::new(reqwest::Client::new());
         let gateway_executors = GatewayExecutors::from_config(Arc::clone(&client), &cfg.tools)
             .map_err(|error| Error::Config(format!("failed to validate configured gateway tool policies: {error}")))?;
+        let file_search =
+            FileSearchService::configured(Arc::clone(&pool), Arc::clone(&client), cfg.tools.file_search.clone())
+                .await
+                .map_err(|error| {
+                    tracing::error!(
+                        error = ?error,
+                        sqlite_vec_extension_path = ?cfg.tools.file_search.sqlite_vec_extension_path,
+                        "file search initialization failed"
+                    );
+                    Error::Config(error.public_message())
+                })?;
+        if let Err(error) = file_search.reconcile_blob_cleanup().await {
+            tracing::warn!(%error, "file blob reconciliation will retry while the gateway runs");
+        }
         Ok(Self {
+            file_search: None,
             conv_handler,
             resp_handler,
             client,
@@ -285,7 +304,8 @@ impl ExecutionContext {
             responses_config: cfg.responses,
             metrics: ExecutorMetrics::from_global(),
             storage_pool: Some(pool),
-        })
+        }
+        .with_file_search_service(file_search))
     }
 }
 

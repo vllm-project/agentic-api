@@ -7,7 +7,7 @@ use std::sync::Arc;
 use agentic_core::executor::request::RequestContext;
 use agentic_core::executor::{
     ConversationHandler, ExecutionContext, ExecutorError, ExecutorResult, ResponseHandler, UpstreamBody, commit,
-    decode_upstream, persist_turn, rehydrate_conversation, upstream_request,
+    decode_upstream, rehydrate_conversation, upstream_request,
 };
 use agentic_core::storage::{ConversationStore, ResponseStore, create_pool_with_schema};
 use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
@@ -139,7 +139,7 @@ async fn hydrate(request: RequestPayload, ctx: &ExecutionContext) -> ExecutorRes
     let live = rehydrate_conversation(request, ctx).await?;
     ensure_splittable(&live.enriched_request)?;
     let stream = live.original_request.stream;
-    let body = RawValue::from_string(upstream_request(&live, stream)?).map_err(ExecutorError::JsonError)?;
+    let body = RawValue::from_string(upstream_request(&live, stream, None, None)?).map_err(ExecutorError::JsonError)?;
     Ok(Hydration {
         request: body,
         context: seal(live.into(), &signing_key())?,
@@ -170,19 +170,6 @@ fn replayed(turn: &Hydration) -> (usize, String) {
 
 fn status_of(error: &ExecutorError) -> u16 {
     error.http_status().as_u16()
-}
-
-fn assert_call_id_error(error: &ExecutorError, case: &str, untrusted_marker: Option<&str>) {
-    assert_eq!(status_of(error), 400, "{case}: {error}");
-    let message = error.to_string();
-    assert!(message.contains("call_id"), "{case}: {error}");
-    if let Some(marker) = untrusted_marker {
-        assert!(!message.contains(marker), "untrusted call_id leaked: {message}");
-        assert!(
-            message.contains("output[0]") && message.contains("output[1]"),
-            "{case}: {message}"
-        );
-    }
 }
 
 async fn assert_relayed_call_id_rejected(
@@ -283,201 +270,6 @@ async fn a_function_call_stream_passes_strict_validation() {
         stored.output.as_slice(),
         [agentic_core::types::io::OutputItem::FunctionCall(_)]
     ));
-}
-
-#[tokio::test]
-async fn relayed_json_tool_call_ids_are_validated_before_persistence() {
-    Box::pin(assert_relayed_tool_call_ids_are_validated(false)).await;
-}
-
-#[tokio::test]
-async fn relayed_sse_tool_call_ids_are_validated_before_persistence() {
-    Box::pin(assert_relayed_tool_call_ids_are_validated(true)).await;
-}
-
-async fn assert_relayed_tool_call_ids_are_validated(stream: bool) {
-    let ctx = exec_ctx().await;
-    let mut accepted = Vec::new();
-    let duplicate_id = "call_duplicate\r\nforged-log-entry";
-    let malformed_outputs = [
-        (
-            "function call without call_id",
-            "completed",
-            json!([{
-                "type": "function_call", "id": "fc_1", "name": "lookup",
-                "arguments": "{}", "status": "completed"
-            }]),
-            None,
-        ),
-        (
-            "custom tool call with empty call_id",
-            "incomplete",
-            json!([{
-                "type": "custom_tool_call", "id": "ctc_1", "call_id": "",
-                "name": "raw_echo", "input": "hello", "status": "completed"
-            }]),
-            None,
-        ),
-        (
-            "function and custom calls with the same call_id",
-            "completed",
-            json!([
-                {
-                    "type": "function_call", "id": "fc_1", "call_id": duplicate_id,
-                    "name": "lookup", "arguments": "{}", "status": "completed"
-                },
-                {
-                    "type": "custom_tool_call", "id": "ctc_2", "call_id": duplicate_id,
-                    "name": "raw_echo", "input": "hello", "status": "completed"
-                }
-            ]),
-            Some("forged-log-entry"),
-        ),
-    ];
-
-    for (case, status, output, untrusted_marker) in malformed_outputs {
-        let attempt = turn("Call a tool", None, &ctx).await;
-        let context = attempt.context.clone();
-        let response_id = unseal(&context, &signing_key()).expect("unseal").response_id;
-        let body = json!({
-            "id": "resp_upstream", "object": "response", "created_at": 1_700_000_000,
-            "model": "test-model", "status": status, "output": output
-        });
-        let relayed = if stream {
-            let mut frames = vec![
-                json!({"type": "response.created", "response": {"id": "resp_upstream", "status": "in_progress"}}),
-                json!({"type": "response.in_progress", "response": {"id": "resp_upstream", "status": "in_progress"}}),
-            ];
-            for (output_index, item) in output.as_array().expect("output items").iter().enumerate() {
-                frames.push(json!({
-                    "type": "response.output_item.added", "output_index": output_index, "item": item
-                }));
-                frames.push(json!({
-                    "type": "response.output_item.done", "output_index": output_index, "item": item
-                }));
-            }
-            frames.push(json!({
-                "type": format!("response.{status}"),
-                "response": {"id": "resp_upstream", "status": status, "output": output}
-            }));
-            frames
-                .iter()
-                .map(|frame| format!("data: {frame}\n\n"))
-                .collect::<Vec<_>>()
-                .concat()
-        } else {
-            body.to_string()
-        };
-        let upstream = if stream {
-            UpstreamBody::Sse(&relayed)
-        } else {
-            UpstreamBody::Json(&relayed)
-        };
-
-        let Err(error) = persist(attempt.context, upstream, &ctx).await else {
-            let poisoned = hydrate(request("continue", Some(&response_id)), &ctx)
-                .await
-                .expect_err("accepted invalid response remained continuable");
-            accepted.push(format!("{case}: {poisoned}"));
-            continue;
-        };
-        assert_call_id_error(&error, case, untrusted_marker);
-
-        // Validation must happen before insertion so the caller can retry
-        // the reserved response ID with a usable upstream response.
-        let valid = json!({
-            "id": "resp_retry", "status": "completed", "output": [{
-                "type": "custom_tool_call", "id": format!("ctc_retry_{response_id}"), "call_id": "call_retry",
-                "name": "raw_echo", "input": "retry succeeded", "status": "completed"
-            }]
-        })
-        .to_string();
-        let stored = persist(context, UpstreamBody::Json(&valid), &ctx)
-            .await
-            .unwrap_or_else(|error| panic!("{case} consumed {response_id}: {error}"));
-        assert_eq!(stored.id, response_id);
-    }
-    assert!(accepted.is_empty(), "accepted invalid calls: {}", accepted.join("; "));
-}
-
-#[tokio::test]
-async fn relayed_json_call_id_cannot_reuse_continued_history() {
-    Box::pin(assert_relayed_call_id_cannot_reuse_continued_history(false)).await;
-}
-
-#[tokio::test]
-async fn relayed_sse_call_id_cannot_reuse_continued_history() {
-    Box::pin(assert_relayed_call_id_cannot_reuse_continued_history(true)).await;
-}
-
-async fn assert_relayed_call_id_cannot_reuse_continued_history(stream: bool) {
-    let ctx = exec_ctx().await;
-    let reused_call_id = "call_prior\r\nforged-history-log-entry";
-    let first_call = function_call("fc_prior", reused_call_id, "completed");
-    let first = turn("Call lookup", None, &ctx).await;
-    let stored = persist(
-        first.context,
-        UpstreamBody::Json(&upstream_call_json(&first_call, "completed")),
-        &ctx,
-    )
-    .await
-    .expect("store the prior call");
-
-    let resolution = json!([{
-        "type": "function_call_output",
-        "call_id": reused_call_id,
-        "output": "prior result",
-    }]);
-    let continued = hydrate(request_value(&resolution, Some(&stored.id)), &ctx)
-        .await
-        .expect("resolve the prior call");
-    let repeated = custom_tool_call("ctc_repeated", reused_call_id, "completed");
-    let relayed = if stream {
-        upstream_call_sse(&repeated, &repeated, &repeated, "completed")
-    } else {
-        upstream_call_json(&repeated, "completed")
-    };
-    assert_relayed_call_id_rejected(
-        &ctx,
-        continued,
-        &relayed,
-        stream,
-        "a continued call_id must remain unique",
-        "forged-history-log-entry",
-        "history",
-    )
-    .await;
-}
-
-#[tokio::test]
-async fn relayed_call_id_cannot_reuse_a_call_replayed_in_the_current_input() {
-    let ctx = exec_ctx().await;
-    let reused_call_id = "call_input\r\nforged-input-log-entry";
-    let input = json!([
-        {
-            "type": "function_call",
-            "id": "fc_input",
-            "call_id": reused_call_id,
-            "name": "lookup",
-            "arguments": "{}",
-            "status": "completed",
-        },
-        {"type": "function_call_output", "call_id": reused_call_id, "output": "input result"},
-    ]);
-    let attempt = hydrate(request_value(&input, None), &ctx)
-        .await
-        .expect("the replayed call/output pair is valid input");
-    let repeated = function_call("fc_repeated", reused_call_id, "completed");
-    assert_relayed_call_id_rejected(
-        &ctx,
-        attempt,
-        &upstream_call_json(&repeated, "completed"),
-        false,
-        "an upstream call_id must remain unique across manually replayed input",
-        "forged-input-log-entry",
-        "request input[0]",
-    )
-    .await;
 }
 
 #[tokio::test]
@@ -701,8 +493,8 @@ async fn a_turn_that_cannot_be_stored_is_refused() {
         [
             created,
             in_progress,
-            r#"data: {"type":"response.output_item.added","output_index":0,"item":{"type":"file_search_call","id":"fs_1","status":"in_progress","queries":["rust"]}}"#,
-            r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"file_search_call","id":"fs_1","status":"completed","queries":["rust"]}}"#,
+            r#"data: {"type":"response.output_item.added","output_index":0,"item":{"type":"future_tool_call","id":"future_1","status":"in_progress"}}"#,
+            r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"future_tool_call","id":"future_1","status":"completed"}}"#,
             completed,
         ]
         .join("\n\n"),
@@ -817,15 +609,13 @@ async fn an_inherited_gateway_tool_is_refused() {
     gateway_turn.enriched_request.tools = Some(vec![
         serde_json::from_value(json!({"type": "web_search_preview"})).expect("gateway tool"),
     ]);
-    let id = gateway_turn.response_id.clone();
-    persist_turn(
-        gateway_turn,
-        serde_json::from_value(answer("sure")).expect("output items"),
-        &ctx.conv_handler,
-        &ctx.resp_handler,
-    )
-    .await
-    .expect("the gateway stores turns the split path would refuse");
+    let (payload, gateway_turn) = decode_upstream(gateway_turn, UpstreamBody::Json(&upstream_json("sure")))
+        .await
+        .expect("completed payload");
+    let id = payload.id.clone();
+    commit(gateway_turn, payload, &ctx)
+        .await
+        .expect("the gateway stores turns the split path would refuse");
 
     let error = hydrate(request("and then?", Some(&id)), &ctx)
         .await

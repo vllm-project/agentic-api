@@ -11,9 +11,7 @@ use std::time::Duration;
 
 use agentic_core::executor::{ConversationHandler, ExecutionContext, ResponseHandler};
 use agentic_core::storage::pool::DbPool;
-use agentic_core::storage::{
-    ConversationStore, ResponseData, ResponseMetadata, ResponseStore, create_pool_with_schema,
-};
+use agentic_core::storage::{ConversationStore, ResponseMetadata, ResponseStore, create_pool_with_schema};
 use agentic_core::types::RequestPayload;
 use agentic_core::types::io::InOutItem;
 use axum::Router;
@@ -212,11 +210,7 @@ impl Fixture {
                 .expect("persist response fixture");
             json!({"previous_response_id":response_id})
         };
-        let stored = response_store
-            .get(response_id)
-            .await
-            .and_then(ResponseData::try_from)
-            .expect("stored response");
+        let stored = response_store.get(response_id).await.expect("stored response");
         assert_eq!(stored.history_item_ids.len(), 1);
         // Install exact wire JSON independently of typed parsing. This preserves
         // the file even on the old baseline, which would deserialize it as Unknown.
@@ -662,7 +656,8 @@ fn composed_upstream_request_cannot_bypass_file_validation() {
         continuation: None,
     };
     for stream in [false, true] {
-        let error = upstream_request(&ctx, stream).expect_err("direct typed upstream preparation must reject files");
+        let error = upstream_request(&ctx, stream, None, None)
+            .expect_err("direct typed upstream preparation must reject files");
         assert_eq!(error.http_status().as_u16(), 400);
         assert!(error.error_message().contains("input_file"));
     }
@@ -850,7 +845,11 @@ async fn automatic_compaction_summarizes_inlined_text_and_keeps_the_original() {
         .await;
     assert_eq!(status, reqwest::StatusCode::OK, "{body}");
     let captured = fixture.captured().await;
-    assert_eq!(captured.len(), 2, "summary and answer requests: {captured:?}");
+    assert_eq!(
+        captured.len(),
+        3,
+        "summary, answer, and summary-after-the-answer requests: {captured:?}"
+    );
     for request in &captured {
         let encoded = request.to_string();
         assert!(encoded.contains("hello from notes"), "{encoded}");

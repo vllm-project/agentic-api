@@ -8,7 +8,7 @@ Since 0.4.0 the gateway is also published to crates.io, so a container is not re
 toolchain (MSRV 1.98.1):
 
 ```console
-cargo install agentic-server --version 0.4.0 --locked
+cargo install agentic-server --version 0.10.0 --locked
 ```
 
 This installs two binaries: `agentic`, the harness CLI (`agentic serve` starts the gateway alone; `agentic run
@@ -16,9 +16,23 @@ claude|codex` starts it and launches a harness), and `agentic-server`, the stand
 same environment variables as the container below. The container remains the recommended path for Kubernetes and
 for hosts without a toolchain.
 
+## Use the published image
+
+The `v0.10.0` release image is available for Linux x86_64:
+
+```console
+docker pull vllm/agentic-api:v0.10.0
+```
+
+For an immutable deployment, pin the verified release digest:
+
+```text
+vllm/agentic-api@sha256:c0c650362b898b0e0ccccefeb2f751eb98772ee477b2dcc828f5c17d36211a6d
+```
+
 ## Build the image
 
-The multi-stage build pins its Rust and Debian bases by digest, uses BuildKit caches, and copies only `agentic-server` into the runtime stage. Dependabot proposes weekly digest updates so base-image changes remain explicit and reviewable.
+The multi-stage build pins its Rust and Debian bases by digest, uses BuildKit caches, and copies `agentic-server` and `agentic-llm-d` into the runtime stage. Dependabot proposes weekly digest updates so base-image changes remain explicit and reviewable.
 
 ```console
 DOCKER_BUILDKIT=1 docker build \
@@ -30,7 +44,7 @@ DOCKER_BUILDKIT=1 docker build \
 ```
 
 For a release build, pass the version being packaged instead of `dev` and tag the image to match, for example
-`OCI_VERSION="0.4.0"` with `--tag agentic-api:0.4.0`. That version tag (or, preferably, the digest recorded when
+`OCI_VERSION="v0.10.0"` with `--tag agentic-api:v0.10.0`. That version tag (or, preferably, the digest recorded when
 the image is pushed) is what an environment overlay such as the one in the
 [Kubernetes guide](kubernetes.md) should pin.
 
@@ -49,6 +63,8 @@ The image starts `agentic-server` in standalone mode. At minimum, set `LLM_API_B
 | `GATEWAY_PORT` | `9000` | Listen port |
 | `DATABASE_URL` | `$AGENTIC_API_HOME/agentic_api.db` | SQLite or PostgreSQL persistence URL |
 | `AGENTIC_API_HOME` | `/var/lib/agentic-api` | User configuration and default local-state directory |
+| `AGENTIC_FILES_STORAGE_DIR` | `$AGENTIC_API_HOME/files` | Local file bytes; mount persistent writable storage when using the Files API |
+| `AGENTIC_FILE_SEARCH_SQLITE_VEC_EXTENSION_PATH` | unset | Trusted sqlite-vec loadable extension for semantic search with a file-backed SQLite database |
 | `AGENTIC_MAX_REQUEST_BODY_SIZE_BYTES` | `10485760` | Maximum serialized request size for HTTP bodies and WebSocket messages; must be greater than zero |
 | `POSTGRES_MAX_CONNECTIONS` | `10` | Maximum PostgreSQL connections per gateway replica |
 | `POSTGRES_ACQUIRE_TIMEOUT_SECONDS` | `30` | Maximum wait for a PostgreSQL pool connection |
@@ -156,6 +172,15 @@ On a new PostgreSQL database, the first startup applies the migrations and then 
 
 Stored requests now fail if their response or conversation state cannot be persisted. For streaming requests, the gateway sends an error event instead of `response.completed`. Most client responses use the generic message `failed to persist response`; the underlying database error is written only to gateway logs. The exception is a conversation conflict: a turn that answers the conversation's pending tool call is refused when another turn, which had to answer the same call, was stored while it ran, with status `400`, type `invalid_request_error`, code `conversation_locked`, and param `conversation`. No part of the refused turn is persisted, so the client can retry the request against the conversation's latest state. This prevents clients from receiving a response ID that cannot be continued after a lock timeout or other database failure without exposing database schema or constraint details.
 
+The file search migration (`0008_file_search.sql`) adds four tables for files,
+vector stores, attachments, and chunks. Supervisor-managed deployments must apply
+this migration and grant the runtime role `SELECT`, `INSERT`, `UPDATE`, and `DELETE`
+on the new tables before starting the upgraded gateway. File metadata and
+embeddings use the same database as conversation state. Uploaded bytes use the
+local filesystem configured by `AGENTIC_FILES_STORAGE_DIR`. Mount persistent
+writable storage for the Files API, including PostgreSQL deployments. Replicas
+serving the same files must share that directory. See [file search](../api/file-search.md).
+
 `AGENTIC_API_SCHEMA_READY` keeps schema changes under supervisor control. Startup performs a read-only compatibility
 check and fails if the database was created by an earlier release, if required persistence columns, types,
 nullability, primary/foreign-key/CHECK constraints, or the conversation sequence index are missing, or if persistence integer
@@ -201,7 +226,7 @@ On `SIGTERM`, the gateway stops accepting connections and gives in-flight reques
 
 The image defaults to UID `10001` and GID `0`. Its working directory is setgid and the entrypoint uses a group-cooperative umask, so new SQLite files remain writable when OpenShift replaces the UID while retaining the group-0 permission model. Do not set a fixed `runAsUser` when the cluster assigns arbitrary UIDs.
 
-A volume mounted at `/var/lib/agentic-api` hides the ownership and mode stored in the image. For SQLite, configure the storage class or pod-level `fsGroup` so the mounted directory is writable by a supplemental group assigned to the container. The example below uses group 0 to match the image; if the cluster assigns a different permitted supplemental group, use that group and ensure the volume root is group-writable and setgid. PostgreSQL deployments do not need this pod-level filesystem setting.
+A volume mounted at `/var/lib/agentic-api` hides the ownership and mode stored in the image. For SQLite or local file storage, configure the storage class or pod-level `fsGroup` so the mounted directory is writable by a supplemental group assigned to the container. The example below uses group 0 to match the image; if the cluster assigns a different permitted supplemental group, use that group and ensure the volume root is group-writable and setgid. PostgreSQL deployments that do not use the Files API do not need this pod-level filesystem setting.
 
 Volumes initialized by an older image may contain SQLite files without group-write permission. Before rotating to an arbitrary UID, repair those volumes once as an administrator with `chmod -R g+rwX /var/lib/agentic-api`.
 
@@ -221,7 +246,7 @@ spec:
           type: RuntimeDefault
 ```
 
-Mount writable storage at `/var/lib/agentic-api` only when using SQLite. PostgreSQL deployments do not need a persistent filesystem for the gateway.
+Mount persistent writable storage at `/var/lib/agentic-api` when using SQLite or the Files API. With PostgreSQL, the file volume can instead be mounted at `AGENTIC_FILES_STORAGE_DIR`; replicas accessing the same files must share it. Back up that directory together with the database.
 
 For a replicated PostgreSQL deployment, use the
 [Kubernetes manifests and operational guide](kubernetes.md).

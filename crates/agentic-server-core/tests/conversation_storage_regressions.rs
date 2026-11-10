@@ -6,6 +6,7 @@ use agentic_core::types::conversations::ConversationMetadata;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use agentic_core::executor::{ConversationHandler, ExecutorError};
 use agentic_core::storage::models::{
     conversation as conversation_model, item as item_model, response as response_model,
 };
@@ -363,10 +364,9 @@ async fn item_operations_reject_another_tenant_and_another_conversations_cursor(
 
 #[tokio::test]
 async fn regression_invalid_item_id_rejects_entire_batch_before_writing() {
-    use agentic_core::storage::StorageError;
-
     let store = test_store().await;
-    let conversation = store
+    let handler = ConversationHandler::new(store.clone());
+    let conversation = handler
         .create("default_tenant", &ConversationMetadata::new(), &[])
         .await
         .unwrap();
@@ -376,7 +376,7 @@ async fn regression_invalid_item_id_rejects_entire_batch_before_writing() {
         }))
         .unwrap(),
     );
-    let error = store
+    let error = handler
         .create_items(
             "default_tenant",
             &conversation.conversation_id,
@@ -384,7 +384,7 @@ async fn regression_invalid_item_id_rejects_entire_batch_before_writing() {
         )
         .await
         .unwrap_err();
-    assert!(matches!(error, StorageError::InvalidItemId { param, .. } if param == "items[1].id"));
+    assert!(matches!(&error, ExecutorError::ClientItem(error) if error.param() == "items[1].id"));
     assert!(
         store
             .rehydrate(&conversation.conversation_id)
@@ -393,11 +393,11 @@ async fn regression_invalid_item_id_rejects_entire_batch_before_writing() {
             .items
             .is_empty()
     );
-    let error = store
+    let error = handler
         .create("default_tenant", &ConversationMetadata::new(), &[invalid])
         .await
         .unwrap_err();
-    assert!(matches!(error, StorageError::InvalidItemId { param, .. } if param == "items[0].id"));
+    assert!(matches!(&error, ExecutorError::ClientItem(error) if error.param() == "items[0].id"));
 }
 
 fn message_with_id(id: &str, text: &str) -> InOutItem {
@@ -541,7 +541,13 @@ async fn response_history_keeps_each_occurrence_of_a_public_id() {
     );
 
     responses
-        .persist("resp_next", Some("resp_replay"), vec![updated.clone()], None, &metadata)
+        .persist(
+            "resp_next",
+            Some(&responses.get("resp_replay").await.expect("parent").into()),
+            vec![updated.clone()],
+            None,
+            &metadata,
+        )
         .await
         .unwrap();
     let mut expected = replay;

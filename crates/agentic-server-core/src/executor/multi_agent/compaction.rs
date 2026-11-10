@@ -1,12 +1,13 @@
 //! Immutable compaction work and generation-checked canonical replacement.
-use crate::executor::compaction::{compact_items, estimate_history_tokens};
+use crate::executor::compaction::{CompactedWindow, estimate_history_tokens, summarize_items};
 use crate::executor::error::ExecutorResult;
 use crate::executor::inference::UpstreamHeaders;
-use crate::executor::pending_calls::resolved_prefix_len;
+use crate::executor::pending_calls::CallLedger;
 use crate::executor::request::ExecutionContext;
+use crate::executor::telemetry::stages::CompactionTrigger;
 use crate::types::agent::AgentIdentity;
 use crate::types::io::input::async_records;
-use crate::types::io::{InputItem, ResponseUsage, ResponsesInput};
+use crate::types::io::{CompactionItem, InputItem, ResponseUsage, ResponsesInput};
 use crate::types::request_response::RequestPayload;
 
 pub struct CompactionPlan {
@@ -20,9 +21,8 @@ pub struct CompactionResult {
     pub(super) agent: AgentIdentity,
     pub(super) generation: u64,
     pub(super) prefix_len: usize,
-    pub(super) replacement: Vec<InputItem>,
-    pub(super) usage: ResponseUsage,
-    pub(in crate::executor) service_tier: Option<String>,
+    pub(in crate::executor) window: Box<CompactedWindow>,
+    carried: Vec<InputItem>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,14 +38,7 @@ impl CompactionPlan {
         history: &[InputItem],
         request: &RequestPayload,
     ) -> ExecutorResult<Option<Self>> {
-        let threshold = request
-            .context_management
-            .as_deref()
-            .unwrap_or_default()
-            .iter()
-            .find(|entry| entry.type_ == "compaction")
-            .and_then(|entry| entry.compact_threshold);
-        let Some(threshold) = threshold else {
+        let Some(threshold) = request.compact_threshold() else {
             return Ok(None);
         };
         if estimate_history_tokens(history) <= threshold {
@@ -61,23 +54,14 @@ impl CompactionPlan {
         history: &[InputItem],
         request: &RequestPayload,
     ) -> ExecutorResult<Option<Self>> {
-        let end = resolved_prefix_len(history)?;
-        if end == 0 {
-            return Ok(None);
-        }
-        Ok(Some(Self {
+        let prefix = &history[..CallLedger::scan(history)?.resolved_prefix_len()];
+        Ok((!prefix.is_empty()).then(|| Self {
             agent: agent.clone(),
             generation,
-            prefix: history[..end].to_vec(),
+            prefix: prefix.to_vec(),
             request: RequestPayload {
-                model: request.model.clone(),
-                instructions: request.instructions.clone(),
                 tools: request.tools.clone(),
-                prompt_cache_key: request.prompt_cache_key.clone(),
-                prompt_cache_retention: request.prompt_cache_retention,
-                prompt_cache_options: request.prompt_cache_options,
-                service_tier: request.service_tier.clone(),
-                ..Default::default()
+                ..request.summary_settings()
             },
         }))
     }
@@ -88,37 +72,27 @@ impl CompactionPlan {
         auth: Option<&UpstreamHeaders>,
     ) -> ExecutorResult<CompactionResult> {
         let prefix_len = self.prefix.len();
-        let discovery = self
-            .prefix
-            .iter()
-            .filter(|item| matches!(item, InputItem::McpListTools(_)))
-            .cloned()
-            .collect::<Vec<_>>();
-        // Async calls and their last outputs stay with the summary: an open call's output can still
-        // arrive, and a further output for an answered call still finds its call. The model view
-        // shows them only while the call is open or answered again after the summary.
-        let async_records: Vec<InputItem> = self
+        let carried = self
             .prefix
             .iter()
             .zip(async_records(&self.prefix))
-            .filter(|(_, record)| *record)
-            .map(|(item, _)| item.clone())
+            .filter_map(|(item, keep)| keep.then_some(item))
+            .cloned()
             .collect();
-        let (mut replacement, usage, service_tier) =
-            compact_items(&self.request, ResponsesInput::from(self.prefix), exec, auth).await?;
-        let at = replacement
-            .iter()
-            .rposition(|item| matches!(item, InputItem::Compaction(_)))
-            .unwrap_or(replacement.len());
-        replacement.splice(at..at, async_records);
-        replacement.extend(discovery);
+        let window = summarize_items(
+            &self.request,
+            ResponsesInput::from(self.prefix),
+            exec,
+            auth,
+            CompactionTrigger::InputItem,
+        )
+        .await?;
         Ok(CompactionResult {
             agent: self.agent,
             generation: self.generation,
             prefix_len,
-            replacement,
-            usage,
-            service_tier,
+            window: Box::new(window),
+            carried,
         })
     }
 }
@@ -128,15 +102,20 @@ impl CompactionResult {
         &self.agent
     }
     pub(in crate::executor) fn usage(&self) -> ResponseUsage {
-        self.usage
+        self.window.usage
     }
 
-    pub(in crate::executor) fn commit(self, generation: u64, history: &mut Vec<InputItem>) -> CompactionCommit {
+    /// Apply a current result and return the exact checkpoint committed, or leave history untouched when stale.
+    pub(in crate::executor) fn commit(self, generation: u64, history: &mut Vec<InputItem>) -> Option<CompactionItem> {
         if self.generation != generation || self.prefix_len > history.len() {
-            return CompactionCommit::Stale;
+            return None;
         }
-        history.splice(..self.prefix_len, self.replacement);
-        CompactionCommit::Applied
+        let compaction = self.window.compaction;
+        let mut replacement = self.window.retained;
+        replacement.extend(self.carried);
+        replacement.push(InputItem::Compaction(compaction.clone()));
+        history.splice(..self.prefix_len, replacement);
+        Some(compaction)
     }
 }
 
@@ -149,14 +128,34 @@ mod tests {
             agent: AgentIdentity::root(),
             generation: 7,
             prefix_len: 1,
-            replacement: vec![],
-            usage: ResponseUsage::default(),
-            service_tier: None,
+            window: Box::new(CompactedWindow {
+                retained: vec![],
+                compaction: CompactionItem {
+                    agent: None,
+                    id: Some("cmp_new".into()),
+                    encrypted_content: "summary".into(),
+                },
+                usage: ResponseUsage::default(),
+                service_tier: None,
+            }),
+            carried: Vec::new(),
         };
-        let mut history = vec![InputItem::CompactionTrigger, InputItem::CompactionTrigger];
-        assert_eq!(result().commit(8, &mut history), CompactionCommit::Stale);
-        assert_eq!(history.len(), 2);
-        assert_eq!(result().commit(7, &mut history), CompactionCommit::Applied);
-        assert!(matches!(history.as_slice(), [InputItem::CompactionTrigger]));
+        let suffix = InputItem::Compaction(CompactionItem {
+            agent: None,
+            id: Some("cmp_suffix".into()),
+            encrypted_content: "later checkpoint".into(),
+        });
+        let mut history = vec![InputItem::CompactionTrigger, suffix];
+        let before = serde_json::to_value(&history).unwrap();
+        assert!(result().commit(8, &mut history).is_none());
+        assert_eq!(serde_json::to_value(&history).unwrap(), before);
+        let mut too_long = result();
+        too_long.prefix_len = 3;
+        assert!(too_long.commit(7, &mut history).is_none());
+        assert_eq!(serde_json::to_value(&history).unwrap(), before);
+        let committed = result().commit(7, &mut history).expect("current summary applies");
+        assert_eq!(committed.id.as_deref(), Some("cmp_new"));
+        assert_eq!(serde_json::to_value(&history[0]).unwrap()["id"], "cmp_new");
+        assert_eq!(serde_json::to_value(&history[1]).unwrap(), before[1]);
     }
 }
