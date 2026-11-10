@@ -25,7 +25,7 @@ use std::num::NonZeroUsize;
 #[cfg(test)]
 use either::Either;
 
-use super::compaction::{CompactionCarryOver, summarize_items};
+use super::compaction::summarize_items;
 use super::gateway::emit_response_start_events;
 use crate::executor::error::ExecutorResult;
 use crate::executor::persist::{TurnOutput, persist};
@@ -41,7 +41,7 @@ use crate::executor::telemetry::stages::CompactionTrigger;
 use crate::tool::{ToolSearchMetadata, ToolSearchState};
 #[cfg(test)]
 use crate::types::io::ResponsesInput;
-use crate::types::io::{InOutItem, OutputItem, ResponseUsage};
+use crate::types::io::{CompactionItem, OutputItem, ResponseUsage};
 #[cfg(test)]
 use crate::types::request_response::RequestPayload;
 use crate::types::request_response::{IncompleteDetails, ResponsePayload};
@@ -217,13 +217,7 @@ async fn run_compaction_trigger(
     {
         MultiAgentRun::compact_root(ctx, exec_ctx, auth).await?
     } else {
-        // Earlier open async calls stay visible through the compaction window. The request's late
-        // outputs and its own open calls would be dropped with the items this turn replaces, so they
-        // are stored again, before the compaction output.
-        let carried = CompactionCarryOver::new(
-            ctx.enriched_request.input.input_items(),
-            ctx.new_input_items.iter().filter_map(InOutItem::as_input),
-        );
+        // As with automatic compaction, the compaction item carries its window, and the turn keeps the items it was sent.
         let input = std::mem::take(&mut ctx.enriched_request.input);
         let window = summarize_items(
             &ctx.enriched_request,
@@ -233,17 +227,12 @@ async fn run_compaction_trigger(
             CompactionTrigger::InputItem,
         )
         .await?;
-        ctx.new_input_items = window
-            .retained
-            .into_iter()
-            .chain(carried.before)
-            .chain(carried.after)
-            .map(Into::into)
-            .collect();
-        if let Some(continuation) = &mut ctx.continuation {
-            continuation.mark_history_replaced();
-        }
-        (window.compaction, window.usage, window.service_tier)
+        let compaction = CompactionItem::carrying(
+            window.compaction.id,
+            window.compaction.encrypted_content,
+            window.retained,
+        )?;
+        (compaction, window.usage, window.service_tier)
     };
     let mut payload = ResponsePayload {
         id: ctx.response_id.clone(),
@@ -310,7 +299,7 @@ mod tests {
     use crate::executor::modes::{ConversationHandler, ResponseHandler};
     use crate::storage::{ConversationStore, ResponseStore, create_pool_with_schema};
     use crate::tool::{GatewayExecutorRegistration, McpDiscoveredHandler, McpHandler};
-    use crate::types::io::InputItem;
+    use crate::types::io::{InOutItem, InputItem};
     use crate::types::tools::{McpDiscoveredToolParam, ResponsesTool};
     use futures::StreamExt;
     use std::sync::Arc;

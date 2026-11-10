@@ -76,7 +76,7 @@ for provider in openai gateway; do
         record "$provider" in-turn-chain-stream compaction-in-turn-chain 5 "$model" --stream
     fi
     if selected tool-loop; then record "$provider" tool-loop compaction-tool-loop 10 "$tool_loop_model" --no-stream; fi
-    if selected standalone; then record "$provider" standalone compaction-standalone 5 "$model" --no-stream; fi
+    if selected standalone; then record "$provider" standalone compaction-standalone 12 "$model" --no-stream; fi
     if selected multi-agent; then
         record "$provider" multi-agent compaction-multi-agent 5 "$multi_agent_model" --no-stream
     fi

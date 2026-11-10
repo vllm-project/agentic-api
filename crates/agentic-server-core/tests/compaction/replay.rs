@@ -368,6 +368,15 @@ async fn replay(scenario: &str) {
             "compaction must use its original history snapshot"
         );
     }
+    if scenario == "standalone" {
+        let image_url = recording.turns[5].request.body["input"][0]["content"][1]["image_url"]
+            .as_str()
+            .unwrap();
+        assert!(
+            requests.last().unwrap()["input"].to_string().contains(image_url),
+            "the third stored response must still receive the retained image, as in the OpenAI reference"
+        );
+    }
 }
 
 async fn run(scenario: &str) {

@@ -1296,7 +1296,7 @@ and provider. `COMPACTION_RECORD_SET=all|openai|gateway` selects providers (defa
 | `in-turn-chain` | 5 | Compaction output and input-item history across a stored response chain. |
 | `in-turn-chain-stream` | 5 | The same chain with the compacting turn streamed, including compaction output-item events. |
 | `tool-loop` | 10 | Compaction around a client function call, plus immediate and delayed async results after automatic compaction. |
-| `standalone` | 5 | Compact direct input, replay the window, compact a stored response, and reject missing context. |
+| `standalone` | 12 | Compact direct input, replay the window, compact a stored response, reject missing context, and inspect retained media through three stored continuations. |
 | `multi-agent` | 5 | Compaction and public history across a response chain with multi-agent execution enabled. |
 | `store-false` | 2 | Stream compaction output from an unstored turn, then verify retrieval fails. |
 | `mcp` | 11 | Discovery reuse, standalone and automatic compaction followed by rediscovery, widened/removed allowlists, and an empty discovery snapshot reused on continuation. |
@@ -1345,6 +1345,10 @@ runs again after compaction. Narrowing authorization still filters which cached 
 Known difference in the multi-agent capture: OpenAI emits a compaction after the answer as well as before it; the
 gateway currently emits only the earlier compaction. That also changes the following turn's public input history.
 The multi-agent capture is checked for successful requests, not full output parity.
+
+Standalone turns t6–t12 expose a retained-media regression: OpenAI keeps the user image in each stored turn's
+public input items; the gateway drops it from the second stored turn's history and the third turn's model input.
+The gateway replay asserts retention from the OpenAI reference, so this case fails until the regression is fixed.
 
 The tool-loop capture also records a remaining async difference. Both providers reject an async result after
 compaction and an intervening continuation, with HTTP 400 identifying the missing call. When the result instead

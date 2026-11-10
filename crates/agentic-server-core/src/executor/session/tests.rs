@@ -443,8 +443,7 @@ fn compaction_replacement_drops_mcp_discovery_with_old_context() {
         .checkpoint("resp_1".to_owned(), &ResponseMetadata::default(), &items, false)
         .unwrap();
     lease.publish(parent).unwrap();
-    let mut lease = session.begin(Some("resp_1")).unwrap();
-    lease.mark_history_replaced();
+    let lease = session.begin(Some("resp_1")).unwrap();
     let compacted: Vec<InputItem> = serde_json::from_value(json!([
         {"type":"message", "role":"user", "id":"msg_kept", "status":"completed", "content":"retained user"},
         {"type":"compaction", "id":"cmp_1", "encrypted_content":"canonical summary"}

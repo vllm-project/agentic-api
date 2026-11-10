@@ -669,7 +669,7 @@ def _record_compaction_tool_loop(client: httpx.Client, proxy_url: str, model: st
 
 def _record_compaction_standalone(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
     """`/v1/responses/compact` with input (t1), a turn continuing its window (t2), with `previous_response_id` (t4,
-    after the stored turn t3), and with neither (t5)."""
+    after the stored turn t3), and with neither (t5). t6–t12 follow a retained image through three stored turns."""
     def compact(body: dict) -> dict:
         return _item_request(client, proxy_url, "POST", "/v1/responses/compact", body={"model": model, **body},
                              expected_status=None)
@@ -682,6 +682,29 @@ def _record_compaction_standalone(client: httpx.Client, proxy_url: str, model: s
     stored = _observed_turn(client, proxy_url, {"model": model, "store": True, "input": COMPACTION_NOTES})
     compact({"previous_response_id": stored["id"]})
     compact({})
+
+    # A generated 64x64 red PNG makes loss of retained media observable without inspecting opaque compaction data.
+    image_url = (
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAb0lEQVR4nO3PAQkAAAyEwO9feoshgn"
+        "ABdLep8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ"
+        "3I8QUNyPEFDcjxBQ3IPanc8OLDQitxAAAAAElFTkSuQmCC"
+    )
+    window = compact({"input": [{"role": "user", "content": [
+        {"type": "input_text", "text": COMPACTION_NOTES + " Remember this image for later."},
+        {"type": "input_image", "image_url": image_url, "detail": "low"},
+    ]}]})
+    previous = None
+    for _ in range(3):
+        request = {"model": model, "store": True, "stream": stream,
+                   "input": [{"role": "user", "content": "Reply only OK."}]}
+        if previous:
+            request["previous_response_id"] = previous
+        else:
+            request["input"] = window["output"] + request["input"]
+        continued = _observed_turn(client, proxy_url, request)
+        previous = continued["id"]
+        _item_request(client, proxy_url, "GET", f"/v1/responses/{previous}/input_items",
+                      params={"order": "asc", "limit": 100})
 
 
 def _record_compaction_multi_agent(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
@@ -766,7 +789,7 @@ COMPACTION_SCENARIOS: dict[str, tuple[Callable[..., None], int]] = {
     "compaction-mcp": (_record_compaction_mcp, 11),
     "compaction-in-turn-chain": (_record_compaction_in_turn_chain, 5),
     "compaction-tool-loop": (_record_compaction_tool_loop, 10),
-    "compaction-standalone": (_record_compaction_standalone, 5),
+    "compaction-standalone": (_record_compaction_standalone, 12),
     "compaction-multi-agent": (_record_compaction_multi_agent, 5),
     "compaction-store-false": (_record_compaction_store_false, 2),
 }

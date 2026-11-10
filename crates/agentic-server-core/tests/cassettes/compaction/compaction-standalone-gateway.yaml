@@ -184,8 +184,8 @@ turns:
     query_params: {}
   response:
     body:
-      created_at: 1794216262
-      id: resp_01a1bf9f-5bf5-7ed3-ac14-24df1eba4027
+      created_at: 1794230562
+      id: resp_01a1c079-9cd4-7d62-bd38-94565c35f30c
       object: response.compaction
       output:
       - content:
@@ -360,46 +360,35 @@ turns:
             for later. Background notes for later. Background notes for later. Remember
             the word APRICOT. Reply with only OK.
           type: input_text
-        id: msg_01a1bf9f-5bf5-7ed3-ac14-24e7117b5e78
+        id: msg_01a1c079-9cd5-7d92-af77-aacd1b378e12
         role: user
         status: completed
         type: message
       - encrypted_content: '**Context Checkpoint Summary**
 
 
-          **State:** No substantive task in progress. The conversation consists of:
+          - **Task attempted:** User provided repeated filler text ("Background notes
+          for later." ×200) with an embedded instruction to remember the word **APRICOT**
+          and reply with only "OK."
 
+          - **No substantive progress** was made in the prior turn.
 
-          1. A large block of repeated filler text ("Background notes for later."
-          × ~400 instances) with no actual content.
+          - **Constraints noted:** Word to remember: **APRICOT**.
 
-          2. An embedded instruction to remember the word **APRICOT**.
+          - **Unresolved:** None — no active task or problem was defined.
 
-          3. An instruction to reply with only "OK" (from the prior turn).
-
-
-          **Decisions:** None made.
-
-          **Constraints:** None established beyond the above.
-
-          **Unresolved work:** None.
-
-          **Critical references:** The word "APRICOT" was flagged for retention.
-
-
-          **Next model should:** Await a real task or prompt from the user. No active
-          thread to continue.'
-        id: cmp_01a1bf9f-7b82-7372-8ea2-45f90d063f30
+          - **Critical references:** None.'
+        id: cmp_01a1c079-afdb-7163-b511-418eb7d5c0d5
         type: compaction
       service_tier: auto
       usage:
         input_tokens: 2349
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 344
+        output_tokens: 193
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 2693
+        total_tokens: 2542
     headers:
       content-type: application/json
     status_code: 200
@@ -579,36 +568,25 @@ turns:
             for later. Background notes for later. Background notes for later. Remember
             the word APRICOT. Reply with only OK.
           type: input_text
-        id: msg_01a1bf9f-5bf5-7ed3-ac14-24e7117b5e78
+        id: msg_01a1c079-9cd5-7d92-af77-aacd1b378e12
         role: user
         status: completed
         type: message
       - encrypted_content: '**Context Checkpoint Summary**
 
 
-          **State:** No substantive task in progress. The conversation consists of:
+          - **Task attempted:** User provided repeated filler text ("Background notes
+          for later." ×200) with an embedded instruction to remember the word **APRICOT**
+          and reply with only "OK."
 
+          - **No substantive progress** was made in the prior turn.
 
-          1. A large block of repeated filler text ("Background notes for later."
-          × ~400 instances) with no actual content.
+          - **Constraints noted:** Word to remember: **APRICOT**.
 
-          2. An embedded instruction to remember the word **APRICOT**.
+          - **Unresolved:** None — no active task or problem was defined.
 
-          3. An instruction to reply with only "OK" (from the prior turn).
-
-
-          **Decisions:** None made.
-
-          **Constraints:** None established beyond the above.
-
-          **Unresolved work:** None.
-
-          **Critical references:** The word "APRICOT" was flagged for retention.
-
-
-          **Next model should:** Await a real task or prompt from the user. No active
-          thread to continue.'
-        id: cmp_01a1bf9f-7b82-7372-8ea2-45f90d063f30
+          - **Critical references:** None.'
+        id: cmp_01a1c079-afdb-7163-b511-418eb7d5c0d5
         type: compaction
       - content: What word did I ask you to remember? Reply with only that word, or
           NONE if you cannot see it.
@@ -626,11 +604,11 @@ turns:
   response:
     body:
       background: false
-      completed_at: 1794216264
-      created_at: 1794216264
+      completed_at: 1794230564
+      created_at: 1794230564
       error: null
       frequency_penalty: 0.0
-      id: resp_01a1bf9f-7bb3-7831-b40c-b129a3e4414e
+      id: resp_01a1c079-b00c-75b2-afdb-fb16e5f104bc
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -640,13 +618,13 @@ turns:
       object: response
       output:
       - content:
-        - text: 'The user is asking me what word they asked me to remember. In the
-            previous message, there was an instruction "Remember the word APRICOT."
-            So the answer is APRICOT.
+        - text: 'The user is asking me what word they asked me to remember. Looking
+            at the previous message, they asked me to remember the word APRICOT. I
+            should reply with only that word.
 
             '
           type: reasoning_text
-        id: rs_82a08b555913a6d1
+        id: rs_b989f14f80bedf5f
         summary: []
         type: reasoning
       - content:
@@ -657,7 +635,7 @@ turns:
 
             APRICOT'
           type: output_text
-        id: msg_819f38e64925e271
+        id: msg_a18f61e0133e09af
         role: assistant
         status: completed
         type: message
@@ -681,13 +659,13 @@ turns:
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 2486
+        input_tokens: 2440
         input_tokens_details:
           cached_tokens: 0
         output_tokens: 45
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 2531
+        total_tokens: 2485
     headers:
       content-type: application/json
     status_code: 200
@@ -857,11 +835,11 @@ turns:
   response:
     body:
       background: false
-      completed_at: 1794216266
-      created_at: 1794216266
+      completed_at: 1794230566
+      created_at: 1794230566
       error: null
       frequency_penalty: 0.0
-      id: resp_01a1bf9f-8374-7571-9d3c-f2ac3b4e54ea
+      id: resp_01a1c079-b7a3-7d30-8ac6-dd86476c04a6
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -871,12 +849,17 @@ turns:
       object: response
       output:
       - content:
-        - text: 'The user is asking me to remember the word "APRICOT" and to reply
-            with only "OK". This is a simple instruction.
+        - text: 'The user has sent a long message consisting of repeated "Background
+            notes for later." text, and at the very end they ask me to "Remember the
+            word APRICOT" and to "Reply with only OK."
+
+
+            This is a straightforward request. They want me to acknowledge with just
+            "OK".
 
             '
           type: reasoning_text
-        id: rs_ad3b485fc4285b3b
+        id: rs_b5ac9eaa565dad6e
         summary: []
         type: reasoning
       - content:
@@ -887,7 +870,7 @@ turns:
 
             OK'
           type: output_text
-        id: msg_adb40ac8e29cf3ca
+        id: msg_855457163a74f7ab
         role: assistant
         status: completed
         type: message
@@ -914,10 +897,10 @@ turns:
         input_tokens: 2302
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 33
+        output_tokens: 65
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 2335
+        total_tokens: 2367
     headers:
       content-type: application/json
     status_code: 200
@@ -925,7 +908,7 @@ turns:
   request:
     body:
       model: Qwen/Qwen3.8-27B-FP8
-      previous_response_id: resp_01a1bf9f-8374-7571-9d3c-f2ac3b4e54ea
+      previous_response_id: resp_01a1c079-b7a3-7d30-8ac6-dd86476c04a6
     headers:
       accept: '*/*'
       content-type: application/json
@@ -935,8 +918,8 @@ turns:
     query_params: {}
   response:
     body:
-      created_at: 1794216271
-      id: resp_01a1bf9f-8a0b-7a41-81b1-e6c05a4f2967
+      created_at: 1794230571
+      id: resp_01a1c079-c0ba-7d00-b1a6-7f65f75c4063
       object: response.compaction
       output:
       - content:
@@ -1111,34 +1094,33 @@ turns:
             for later. Background notes for later. Background notes for later. Remember
             the word APRICOT. Reply with only OK.
           type: input_text
-        id: msg_01a1bf9f-8a0c-7b73-a089-a6e6414f4c43
+        id: msg_01a1c079-c0bc-7a43-875f-20798d8cf653
         role: user
         status: completed
         type: message
       - encrypted_content: '**Context Checkpoint Summary**
 
 
-          - **Task:** User asked me to remember the word **APRICOT**.
+          - **Task:** User asked me to remember the word **APRICOT** for later retrieval.
 
-          - **Status:** Acknowledged. Word is retained in context.
+          - **Status:** Acknowledged with "OK."
 
-          - **Constraints:** User requested minimal responses ("Reply with only OK").
+          - **Pending:** User may ask for the word later in the conversation.
 
-          - **Unresolved work:** Awaiting user''s next prompt, likely to test recall
-          of "APRICOT."
+          - **Constraints:** None stated beyond the memory request.
 
-          - **Critical references:** The word APRICOT is the key item to preserve.'
-        id: cmp_01a1bf9f-9e6b-7ed0-ba44-50c11a7ebb7f
+          - **Unresolved work:** None. Awaiting next instruction.'
+        id: cmp_01a1c079-d3d3-7271-940a-14b71549fdf0
         type: compaction
       service_tier: auto
       usage:
-        input_tokens: 2388
+        input_tokens: 2420
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 206
+        output_tokens: 192
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 2594
+        total_tokens: 2612
     headers:
       content-type: application/json
     status_code: 200
@@ -1163,3 +1145,1246 @@ turns:
     headers:
       content-type: application/json
     status_code: 400
+- filename: t6
+  request:
+    body:
+      input:
+      - content:
+        - text: Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Remember
+            the word APRICOT. Reply with only OK. Remember this image for later.
+          type: input_text
+        - detail: low
+          image_url: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAb0lEQVR4nO3PAQkAAAyEwO9feoshgnABdLep8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3IPanc8OLDQitxAAAAAElFTkSuQmCC
+          type: input_image
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses/compact
+    query_params: {}
+  response:
+    body:
+      created_at: 1794230582
+      id: resp_01a1c079-d523-7cf3-84dd-a00f9d205cf2
+      object: response.compaction
+      output:
+      - content:
+        - text: Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Remember
+            the word APRICOT. Reply with only OK. Remember this image for later.
+          type: input_text
+        - detail: low
+          image_url: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAb0lEQVR4nO3PAQkAAAyEwO9feoshgnABdLep8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3IPanc8OLDQitxAAAAAElFTkSuQmCC
+          type: input_image
+        id: msg_01a1c079-d523-7cf3-84dd-a01d0e7b1798
+        role: user
+        status: completed
+        type: message
+      - encrypted_content: "**Context Handoff Summary**\n\n- **Task status:** No substantive\
+          \ task has been started. The prior user turn consisted of a filler block\
+          \ of repeated \"Background notes for later.\" (no actual notes) plus standing\
+          \ memory instructions and an image.\n\n- **Critical references to retain:**\n\
+          \  - Word to remember: **APRICOT**.\n  - Image to remember for later: a\
+          \ solid **red square** (uniform red, no other features).\n\n- **Constraints:**\n\
+          \  - The prior turn required replying **only \"OK\"** (superseded by the\
+          \ current compaction request, which requires returning only the summary).\n\
+          \  - Current turn: return **only the summary**, no extra commentary.\n\n\
+          - **Decisions made:** None beyond acknowledging the memory instructions.\n\
+          \n- **Unresolved / pending work:** No active work. Awaiting a future user\
+          \ prompt that will likely reference the stored word \"APRICOT\" and/or the\
+          \ red-square image."
+        id: cmp_01a1c079-fc5f-7f00-81c0-5c0aa74fc620
+        type: compaction
+      service_tier: auto
+      usage:
+        input_tokens: 2421
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 437
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 2858
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body:
+      input:
+      - content:
+        - text: Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Remember
+            the word APRICOT. Reply with only OK. Remember this image for later.
+          type: input_text
+        - detail: low
+          image_url: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAb0lEQVR4nO3PAQkAAAyEwO9feoshgnABdLep8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3IPanc8OLDQitxAAAAAElFTkSuQmCC
+          type: input_image
+        id: msg_01a1c079-d523-7cf3-84dd-a01d0e7b1798
+        role: user
+        status: completed
+        type: message
+      - encrypted_content: "**Context Handoff Summary**\n\n- **Task status:** No substantive\
+          \ task has been started. The prior user turn consisted of a filler block\
+          \ of repeated \"Background notes for later.\" (no actual notes) plus standing\
+          \ memory instructions and an image.\n\n- **Critical references to retain:**\n\
+          \  - Word to remember: **APRICOT**.\n  - Image to remember for later: a\
+          \ solid **red square** (uniform red, no other features).\n\n- **Constraints:**\n\
+          \  - The prior turn required replying **only \"OK\"** (superseded by the\
+          \ current compaction request, which requires returning only the summary).\n\
+          \  - Current turn: return **only the summary**, no extra commentary.\n\n\
+          - **Decisions made:** None beyond acknowledging the memory instructions.\n\
+          \n- **Unresolved / pending work:** No active work. Awaiting a future user\
+          \ prompt that will likely reference the stored word \"APRICOT\" and/or the\
+          \ red-square image."
+        id: cmp_01a1c079-fc5f-7f00-81c0-5c0aa74fc620
+        type: compaction
+      - content: Reply only OK.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794230584
+      created_at: 1794230584
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1c079-fd34-7172-8003-2de8f2a329d8
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants only "OK" as the reply. The prior context established
+            a constraint to reply with only OK, and now the user explicitly reinforces
+            that. So the output should be exactly OK, nothing else.
+
+            '
+          type: reasoning_text
+        id: rs_914326a246668f69
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            OK'
+          type: output_text
+        id: msg_b87c58ae3533a959
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 2589
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 47
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 2636
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1c079-fd34-7172-8003-2de8f2a329d8/input_items
+    query_params:
+      limit: '100'
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Background
+            notes for later. Background notes for later. Background notes for later.
+            Background notes for later. Background notes for later. Background notes
+            for later. Background notes for later. Background notes for later. Remember
+            the word APRICOT. Reply with only OK. Remember this image for later.
+          type: input_text
+        - detail: low
+          image_url: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAb0lEQVR4nO3PAQkAAAyEwO9feoshgnABdLep8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3IPanc8OLDQitxAAAAAElFTkSuQmCC
+          type: input_image
+        id: msg_01a1c079-d523-7cf3-84dd-a01d0e7b1798
+        role: user
+        status: completed
+        type: message
+      - encrypted_content: "**Context Handoff Summary**\n\n- **Task status:** No substantive\
+          \ task has been started. The prior user turn consisted of a filler block\
+          \ of repeated \"Background notes for later.\" (no actual notes) plus standing\
+          \ memory instructions and an image.\n\n- **Critical references to retain:**\n\
+          \  - Word to remember: **APRICOT**.\n  - Image to remember for later: a\
+          \ solid **red square** (uniform red, no other features).\n\n- **Constraints:**\n\
+          \  - The prior turn required replying **only \"OK\"** (superseded by the\
+          \ current compaction request, which requires returning only the summary).\n\
+          \  - Current turn: return **only the summary**, no extra commentary.\n\n\
+          - **Decisions made:** None beyond acknowledging the memory instructions.\n\
+          \n- **Unresolved / pending work:** No active work. Awaiting a future user\
+          \ prompt that will likely reference the stored word \"APRICOT\" and/or the\
+          \ red-square image."
+        id: cmp_01a1c079-fc5f-7f00-81c0-5c0aa74fc620
+        type: compaction
+      - content:
+        - text: Reply only OK.
+          type: input_text
+        id: msg_01a1c07a-04dc-78f0-abf0-1580fe472f15
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a1c079-d523-7cf3-84dd-a01d0e7b1798
+      has_more: false
+      last_id: msg_01a1c07a-04dc-78f0-abf0-1580fe472f15
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body:
+      input:
+      - content: Reply only OK.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      previous_response_id: resp_01a1c079-fd34-7172-8003-2de8f2a329d8
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794230586
+      created_at: 1794230586
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1c07a-0727-7521-9f35-9d7c15823320
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user is again requesting only "OK" as the reply. The constraint
+            is clear and consistent across turns. No elaboration, no extra text. The
+            output must be exactly OK.
+
+            '
+          type: reasoning_text
+        id: rs_bd6bfd8873368378
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            OK'
+          type: output_text
+        id: msg_ba658fc3a5b46714
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_01a1c079-fd34-7172-8003-2de8f2a329d8
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 2651
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 42
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 2693
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t10
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1c07a-0727-7521-9f35-9d7c15823320/input_items
+    query_params:
+      limit: '100'
+      order: asc
+  response:
+    body:
+      data:
+      - encrypted_content: "**Context Handoff Summary**\n\n- **Task status:** No substantive\
+          \ task has been started. The prior user turn consisted of a filler block\
+          \ of repeated \"Background notes for later.\" (no actual notes) plus standing\
+          \ memory instructions and an image.\n\n- **Critical references to retain:**\n\
+          \  - Word to remember: **APRICOT**.\n  - Image to remember for later: a\
+          \ solid **red square** (uniform red, no other features).\n\n- **Constraints:**\n\
+          \  - The prior turn required replying **only \"OK\"** (superseded by the\
+          \ current compaction request, which requires returning only the summary).\n\
+          \  - Current turn: return **only the summary**, no extra commentary.\n\n\
+          - **Decisions made:** None beyond acknowledging the memory instructions.\n\
+          \n- **Unresolved / pending work:** No active work. Awaiting a future user\
+          \ prompt that will likely reference the stored word \"APRICOT\" and/or the\
+          \ red-square image."
+        id: cmp_01a1c079-fc5f-7f00-81c0-5c0aa74fc620
+        type: compaction
+      - content:
+        - text: Reply only OK.
+          type: input_text
+        id: msg_01a1c07a-04dc-78f0-abf0-1580fe472f15
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants only "OK" as the reply. The prior context established
+            a constraint to reply with only OK, and now the user explicitly reinforces
+            that. So the output should be exactly OK, nothing else.
+
+            '
+          type: reasoning_text
+        id: rs_914326a246668f69
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            OK'
+          type: output_text
+        id: msg_b87c58ae3533a959
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Reply only OK.
+          type: input_text
+        id: msg_01a1c07a-0e75-7762-a531-0862d6b42951
+        role: user
+        status: completed
+        type: message
+      first_id: cmp_01a1c079-fc5f-7f00-81c0-5c0aa74fc620
+      has_more: false
+      last_id: msg_01a1c07a-0e75-7762-a531-0862d6b42951
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t11
+  request:
+    body:
+      input:
+      - content: Reply only OK.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      previous_response_id: resp_01a1c07a-0727-7521-9f35-9d7c15823320
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794230588
+      created_at: 1794230588
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1c07a-10ed-7432-b153-767ef7628808
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user keeps requesting only "OK". This is a simple, unambiguous
+            instruction. The correct output is exactly "OK" with nothing else — no
+            period, no extra whitespace or commentary.
+
+            '
+          type: reasoning_text
+        id: rs_a17440e846370fbc
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            OK'
+          type: output_text
+        id: msg_872652bdc0a79851
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_01a1c07a-0727-7521-9f35-9d7c15823320
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 369
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 43
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 412
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t12
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1c07a-10ed-7432-b153-767ef7628808/input_items
+    query_params:
+      limit: '100'
+      order: asc
+  response:
+    body:
+      data:
+      - encrypted_content: "**Context Handoff Summary**\n\n- **Task status:** No substantive\
+          \ task has been started. The prior user turn consisted of a filler block\
+          \ of repeated \"Background notes for later.\" (no actual notes) plus standing\
+          \ memory instructions and an image.\n\n- **Critical references to retain:**\n\
+          \  - Word to remember: **APRICOT**.\n  - Image to remember for later: a\
+          \ solid **red square** (uniform red, no other features).\n\n- **Constraints:**\n\
+          \  - The prior turn required replying **only \"OK\"** (superseded by the\
+          \ current compaction request, which requires returning only the summary).\n\
+          \  - Current turn: return **only the summary**, no extra commentary.\n\n\
+          - **Decisions made:** None beyond acknowledging the memory instructions.\n\
+          \n- **Unresolved / pending work:** No active work. Awaiting a future user\
+          \ prompt that will likely reference the stored word \"APRICOT\" and/or the\
+          \ red-square image."
+        id: cmp_01a1c079-fc5f-7f00-81c0-5c0aa74fc620
+        type: compaction
+      - content:
+        - text: Reply only OK.
+          type: input_text
+        id: msg_01a1c07a-04dc-78f0-abf0-1580fe472f15
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants only "OK" as the reply. The prior context established
+            a constraint to reply with only OK, and now the user explicitly reinforces
+            that. So the output should be exactly OK, nothing else.
+
+            '
+          type: reasoning_text
+        id: rs_914326a246668f69
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            OK'
+          type: output_text
+        id: msg_b87c58ae3533a959
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Reply only OK.
+          type: input_text
+        id: msg_01a1c07a-0e75-7762-a531-0862d6b42951
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user is again requesting only "OK" as the reply. The constraint
+            is clear and consistent across turns. No elaboration, no extra text. The
+            output must be exactly OK.
+
+            '
+          type: reasoning_text
+        id: rs_bd6bfd8873368378
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            OK'
+          type: output_text
+        id: msg_ba658fc3a5b46714
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Reply only OK.
+          type: input_text
+        id: msg_01a1c07a-14ff-7293-b042-b2620e55a4a9
+        role: user
+        status: completed
+        type: message
+      first_id: cmp_01a1c079-fc5f-7f00-81c0-5c0aa74fc620
+      has_more: false
+      last_id: msg_01a1c07a-14ff-7293-b042-b2620e55a4a9
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200

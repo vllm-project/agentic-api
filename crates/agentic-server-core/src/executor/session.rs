@@ -289,7 +289,6 @@ impl ResponseSession {
             idle: Arc::clone(&self.idle),
             parent,
             budget: self.budget.clone(),
-            history_replaced: false,
             compacted_output_count: 0,
             finished: false,
         };

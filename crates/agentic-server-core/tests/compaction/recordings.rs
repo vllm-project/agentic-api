@@ -37,7 +37,7 @@ fn public_compaction_recordings_have_complete_turns_and_stream_lifecycles() {
             ("in-turn-chain", 5),
             ("in-turn-chain-stream", 5),
             ("tool-loop", 10),
-            ("standalone", 5),
+            ("standalone", 12),
             ("multi-agent", 5),
             ("store-false", 2),
             ("mcp", 11),
@@ -45,11 +45,13 @@ fn public_compaction_recordings_have_complete_turns_and_stream_lifecycles() {
             let recording = cassette(&format!("compaction-{scenario}-{provider}.yaml"));
             assert_eq!(recording.turns.len(), count, "{scenario}/{provider}");
             for (index, turn) in recording.turns.iter().enumerate() {
-                let status = if scenario == "tool-loop" && (index == 8 || (index == 9 && provider == "openai")) {
+                let status = if (scenario == "tool-loop" && (index == 8 || (index == 9 && provider == "openai")))
+                    || (scenario == "standalone" && index == 4)
+                {
                     400
                 } else if index + 1 == count {
                     match scenario {
-                        "stale" | "standalone" => 400,
+                        "stale" => 400,
                         "store-false" => 404,
                         _ => 200,
                     }
@@ -259,6 +261,24 @@ fn recorded_standalone_windows_and_unstored_compaction_match_the_public_contract
         let compacted = body(&standalone.turns[0]);
         let replay = standalone.turns[1].request.body.input.as_array().unwrap();
         assert_eq!(&replay[..2], compacted["output"].as_array().unwrap());
+        // The provider reference retains the public image message across stored continuations.
+        // Gateway captures are evidence, not an expectation that its current media loss is correct.
+        if provider == "openai" {
+            for index in [7, 9, 11] {
+                assert!(
+                    body(&standalone.turns[index])["data"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|item| {
+                            item["role"] == "user"
+                                && item["content"]
+                                    .as_array()
+                                    .is_some_and(|content| content.iter().any(|part| part["type"] == "input_image"))
+                        })
+                );
+            }
+        }
         let unstored = cassette(&format!("compaction-store-false-{provider}.yaml"));
         assert!(!unstored.turns[0].request.body.store);
         assert_eq!(

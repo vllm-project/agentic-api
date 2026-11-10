@@ -112,6 +112,11 @@ async fn write_turn(
         TurnOutput::Response(payload) => (payload.output.as_slice(), ctx.original_request.store.then_some(payload)),
         TurnOutput::Empty | TurnOutput::Compaction => (&[][..], None),
     };
+    // As on OpenAI, a compaction the client sends is not stored: the turn uses it, and later turns keep the messages
+    // it was sent with. A standalone compaction stores the window it built.
+    if !matches!(output, TurnOutput::Compaction) {
+        ctx.new_input_items.retain(|item| !item.is_compaction_input());
+    }
     if ctx.original_request.conversation.is_some() {
         let items = turn_items(&mut ctx, output_items, None);
         return exec_ctx.conv_handler.persist(&ctx, items, snapshot, &metadata).await;
@@ -216,8 +221,12 @@ pub async fn commit(
         && ctx.continuation.is_none()
         && ctx.original_request.previous_response_id.is_some()
     {
-        // A split context omits the checkpoint. Load its parent row without rehydrating history a second time.
-        ctx.checkpoint = Some(exec_ctx.resp_handler.get(&ctx).await?.into());
+        // A split context omits the checkpoint. Load the parent with its history, so the turn's history starts where
+        // rehydration starts it: at the latest compaction a turn produced.
+        if let Some((mut checkpoint, history)) = exec_ctx.resp_handler.rehydrate(&ctx).await? {
+            checkpoint.continue_from_compaction(&history, &ctx.enriched_request);
+            ctx.checkpoint = Some(checkpoint);
+        }
     }
 
     Box::pin(persist(ctx, TurnOutput::Response(&payload), None, exec_ctx)).await?;

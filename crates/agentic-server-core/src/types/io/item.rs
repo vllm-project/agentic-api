@@ -63,6 +63,15 @@ impl From<OutputItem> for InOutItem {
 }
 
 impl InOutItem {
+    /// Whether the item is a compaction, or a request for one, that a client sent as input.
+    #[must_use]
+    pub(crate) fn is_compaction_input(&self) -> bool {
+        matches!(
+            self,
+            Self::Input(InputItem::Compaction(_) | InputItem::CompactionTrigger)
+        )
+    }
+
     /// Assign the stored public identity, give an omitted call or output status the one `OpenAI` returns, and expand
     /// shorthand message content. This consumes the returned copy; retained model history is not modified.
     #[must_use]

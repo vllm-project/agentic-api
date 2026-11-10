@@ -3,7 +3,6 @@
 use std::ops::Deref;
 use std::sync::{Arc, Mutex, Weak};
 
-use either::Either;
 use serde::Serialize;
 use tokio::sync::Notify;
 
@@ -12,7 +11,7 @@ use super::{aggregate_budget_error, lock_state};
 use crate::executor::pending_calls::CallLedger;
 use crate::storage::{ResponseCheckpoint, ResponseMetadata};
 use crate::types::io::InOutItem;
-use crate::types::io::input::{async_records, retain_window};
+use crate::types::io::input::retain_window;
 use crate::types::io::{InputItem, OutputItem};
 use crate::types::websocket::SteeringRequiredInput;
 use crate::utils::common::serialized_size_up_to;
@@ -79,7 +78,6 @@ pub struct ResponseContinuation {
     pub(super) idle: Arc<Notify>,
     pub(crate) parent: Option<Arc<RetainedCheckpoint>>,
     pub(super) budget: Option<Arc<CheckpointBudget>>,
-    pub(super) history_replaced: bool,
     pub(super) compacted_output_count: usize,
     pub(super) finished: bool,
 }
@@ -111,11 +109,6 @@ impl Deref for RetainedCheckpoint {
 }
 
 impl ResponseContinuation {
-    /// The executor has replaced this turn's input with a canonical compacted window.
-    pub(crate) fn mark_history_replaced(&mut self) {
-        self.history_replaced = true;
-    }
-
     /// An in-turn compaction summarized the turn's first `output_count` outputs; persistence must not store them.
     pub(crate) fn mark_outputs_compacted(&mut self, output_count: usize) {
         self.compacted_output_count = output_count;
@@ -127,19 +120,12 @@ impl ResponseContinuation {
         index >= self.compacted_output_count || item.is_async_call()
     }
 
-    /// Retain async records across compaction without restoring the old model context, so a later output finds its call.
+    /// The parent's retained history, which this turn continues.
     pub(crate) fn parent_items(&self) -> impl Iterator<Item = &InputItem> {
-        let history = self.parent.as_ref().map_or(&[][..], |parent| parent.history.as_slice());
-        if self.history_replaced {
-            Either::Left(
-                history
-                    .iter()
-                    .zip(async_records(history))
-                    .filter_map(|(item, keep)| keep.then_some(item)),
-            )
-        } else {
-            Either::Right(history.iter())
-        }
+        self.parent
+            .as_ref()
+            .map_or(&[][..], |parent| parent.history.as_slice())
+            .iter()
     }
 
     pub(crate) fn checkpoint(

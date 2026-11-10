@@ -63,20 +63,18 @@ fn retained_user_window(items: &[InputItem]) -> Vec<InputItem> {
 }
 
 impl ResponseCheckpoint {
-    /// Starts the history a turn continues at the latest compaction in `history`, the rows the checkpoint names: as on
-    /// `OpenAI`, a single-agent turn's input items begin with that compaction, which stands in for everything before
-    /// it. A multi-agent turn keeps its whole history, as on `OpenAI`.
+    /// Starts the history a turn continues at the latest compaction a turn produced in `history`, the rows the
+    /// checkpoint names: as on `OpenAI`, a single-agent turn's input items begin with that compaction, which carries
+    /// its window. A compaction the client supplied is not a starting point, and a multi-agent turn keeps its whole
+    /// history, as on `OpenAI`.
     pub(in crate::executor) fn continue_from_compaction(&mut self, history: &[InOutItem], request: &RequestPayload) {
         if self.metadata.multi_agent_tree.is_some() || request.multi_agent.as_ref().is_some_and(|config| config.enabled)
         {
             return;
         }
-        let latest = history.iter().rposition(|item| {
-            matches!(
-                item,
-                InOutItem::Input(InputItem::Compaction(_)) | InOutItem::Output(OutputItem::Compaction(_))
-            )
-        });
+        let latest = history
+            .iter()
+            .rposition(|item| matches!(item, InOutItem::Output(OutputItem::Compaction(_))));
         if let Some(start) = latest {
             self.history_item_ids.drain(..start);
         }
