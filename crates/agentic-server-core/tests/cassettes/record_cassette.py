@@ -749,8 +749,8 @@ def _record_compaction_store_false(client: httpx.Client, proxy_url: str, model: 
 
 def _record_compaction_mcp(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
     """Compare MCP discovery before compaction, after standalone compaction, and after automatic compaction."""
-    tools = [{"type": "mcp", "server_label": "openai_docs", "server_url": "https://developers.openai.com/mcp",
-              "allowed_tools": ["search_openai_docs"], "require_approval": "never"}]
+    tools = [{"type": "mcp", "server_label": "microsoft_learn", "server_url": "https://learn.microsoft.com/api/mcp",
+              "allowed_tools": ["microsoft_docs_search"], "require_approval": "never"}]
 
     def turn(input_value: Any, **extra: Any) -> dict:
         response = _observed_turn(client, proxy_url, {
@@ -774,10 +774,10 @@ def _record_compaction_mcp(client: httpx.Client, proxy_url: str, model: str, str
     continued = turn(followup, previous_response_id=automatic["id"])
     _item_request(client, proxy_url, "GET", f"/v1/responses/{continued['id']}/input_items",
                   params={"order": "asc"})
-    expanded = dict(tools[0], allowed_tools=["search_openai_docs", "fetch_openai_doc"])
+    expanded = dict(tools[0], allowed_tools=["microsoft_docs_search", "microsoft_docs_fetch"])
     unrestricted = {key: value for key, value in tools[0].items() if key != "allowed_tools"}
-    probe = ("Use fetch_openai_doc to read https://developers.openai.com/api/docs/guides/compaction then say DONE. "
-             "If that tool is unavailable, say UNAVAILABLE. Do not use search_openai_docs.")
+    probe = ("Use microsoft_docs_fetch to read https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/responses "
+             "then say DONE. If that tool is unavailable, say UNAVAILABLE. Do not use microsoft_docs_search.")
     for declaration in [expanded, unrestricted]:
         turn(probe, previous_response_id=first["id"], tools=[declaration])
     empty = [dict(tools[0], allowed_tools=["no_such_tool"])]

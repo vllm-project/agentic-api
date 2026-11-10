@@ -84,6 +84,9 @@ impl ResponseHandler {
             .get_input_items(response_id)
             .await?
             .ok_or_else(|| ExecutorError::Conflict(NOT_RETRIEVABLE.into()))?;
+        // The turn used a compaction the client supplied, and later turns still continue from it; OpenAI lists only the
+        // messages it came with.
+        items.retain(|item| !item.is_supplied_compaction());
         if page.order == ItemOrder::Desc {
             items.reverse();
         }

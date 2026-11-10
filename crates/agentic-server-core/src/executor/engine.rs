@@ -695,7 +695,12 @@ mod tests {
         let OutputItem::Compaction(item) = &response.output[0] else {
             panic!("expected exactly one compaction output item");
         };
-        assert_eq!(item.encrypted_content, "durable summary");
+        // As with automatic compaction, the item carries its window: the kept user message and the summary.
+        let window = item.carried_window().expect("the compaction carries its window");
+        assert!(matches!(window.first(), Some(InputItem::Message(message)) if message.role == "user"));
+        assert!(
+            matches!(window.last(), Some(InputItem::Compaction(summary)) if summary.encrypted_content == "durable summary")
+        );
         assert!(item.id.as_deref().is_some_and(|id| id.starts_with("cmp_")));
         assert_eq!(response.usage.as_ref().map(|usage| usage.total_tokens), Some(15));
 
@@ -1012,7 +1017,9 @@ mod tests {
             }
             if event_type == "response.output_item.done" && event["item"]["type"] == "compaction" {
                 compaction_done_count += 1;
-                assert_eq!(event["item"]["encrypted_content"], "durable summary");
+                let carried: serde_json::Value =
+                    serde_json::from_str(event["item"]["encrypted_content"].as_str().unwrap()).unwrap();
+                assert_eq!(carried["summary"], "durable summary");
             }
         }
 

@@ -63,13 +63,11 @@ impl From<OutputItem> for InOutItem {
 }
 
 impl InOutItem {
-    /// Whether the item is a compaction, or a request for one, that a client sent as input.
+    /// Whether the item is a compaction a client supplied as input, which a response's input items do not list, as
+    /// on `OpenAI`.
     #[must_use]
-    pub(crate) fn is_compaction_input(&self) -> bool {
-        matches!(
-            self,
-            Self::Input(InputItem::Compaction(_) | InputItem::CompactionTrigger)
-        )
+    pub(crate) fn is_supplied_compaction(&self) -> bool {
+        matches!(self, Self::Input(InputItem::Compaction(_)))
     }
 
     /// Assign the stored public identity, give an omitted call or output status the one `OpenAI` returns, and expand

@@ -776,7 +776,10 @@ async fn session_compaction_trigger_replaces_history_before_retention() {
         .await
         .unwrap();
     let history = serde_json::to_value(&next.enriched_request.input).unwrap();
-    assert_eq!(history.as_array().unwrap().len(), 3);
+    // The compaction carries its window, the kept user message, which the model sees expanded before the summary.
+    assert_eq!(history.as_array().unwrap().len(), 2);
+    assert_eq!(history[0]["type"], "compaction");
+    assert!(history[0]["encrypted_content"].as_str().unwrap().contains("first user"));
     assert!(!history.to_string().contains("obsolete assistant detail"));
     assert_eq!(model.requests.lock().await.len(), 2);
     model.close().await;
