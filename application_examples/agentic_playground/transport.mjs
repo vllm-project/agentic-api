@@ -21,6 +21,19 @@ export async function jsonRequest(settings, path, method = 'GET', body, signal) 
   return response.json();
 }
 
+export async function uploadFile(settings, blob, filename, signal) {
+  const body = new FormData();
+  body.append('purpose', 'assistants');
+  body.append('file', blob, filename);
+  const headers = authHeaders(settings);
+  delete headers['Content-Type']; // The browser supplies the multipart boundary.
+  const response = await fetch(`${settings.base}/v1/files`, { method: 'POST', headers, body, signal });
+  if (response.status === 404) throw new Error('This gateway does not expose the Files API. Rebuild agentic-server from the current branch and restart the playground, then load the sample again.');
+  const file = await (await checkResponse(response)).json();
+  if (!file.id) throw new Error('The upload response did not contain a file ID.');
+  return file.id;
+}
+
 // One serial lane stays open across prompts, including store:false continuations.
 export function createResponsesTransport() {
   let socket = null, endpoint = null, retainedId = null;
@@ -71,7 +84,7 @@ export function createResponsesTransport() {
           onEvent(data);
           if (data.type === 'response.created') responseId = data.response?.id;
           if (data.type === 'response.inject.failed') return finish(new Error(`Client output injection failed: ${data.error?.message || 'output was not accepted'}`));
-          if (liveClient && data.type === 'response.output_item.done' && ['function_call', 'custom_tool_call', 'shell_call', 'tool_search_call'].includes(data.item?.type)) {
+          if (liveClient && data.type === 'response.output_item.done' && ['function_call', 'custom_tool_call', 'tool_search_call'].includes(data.item?.type)) {
             if (!responseId || !data.item.call_id || liveCalls.has(data.item.call_id)) return finish(new Error('Invalid or repeated live client call.'));
             liveCalls.add(data.item.call_id);
             pendingExecutions++;

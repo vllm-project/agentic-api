@@ -1,13 +1,12 @@
 import { toolDeclarations } from './settings.mjs';
 
-export const clientKinds = ['function_call', 'custom_tool_call', 'shell_call', 'tool_search_call'];
+export const clientKinds = ['function_call', 'custom_tool_call', 'tool_search_call'];
 
 export function pendingCalls(response, resolved = new Set()) {
   return (response?.output || []).filter(item => clientKinds.includes(item.type) && item.call_id && !resolved.has(item.call_id));
 }
 
-export async function executeClientCall(call, settings, executeHandler, shellOutput, signal) {
-  if (call.type === 'shell_call') return shellOutput(call, signal);
+export async function executeClientCall(call, settings, executeHandler, signal) {
   if (call.type === 'tool_search_call') {
     // Discovery returns public declarations unchanged; the gateway validates identity and activates them.
     const tools = toolDeclarations(settings).filter(tool => tool.defer_loading
