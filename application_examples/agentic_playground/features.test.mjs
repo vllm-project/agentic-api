@@ -1,10 +1,47 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildRequest, createRun, applyEvent } from './protocol.mjs';
+import { buildRequest, createRun, applyEvent, teamPrompt } from './protocol.mjs';
 import { toolDeclarations, responseOptions, redact, mcpPresets } from './settings.mjs';
 import { executeClientCall, pendingCalls, sumUsage, mapLimited, withContinuation, compactionRequest } from './client-tools.mjs';
 
 const fn = { name: 'sum', handler: 'return args.a + args.b;', schema: '{"type":"object"}', namespace: 'math' };
+
+test('file search coexists with the other three team tools and survives continuation', () => {
+  const settings = {
+    model: 'demo', mode: 'team', mission: teamPrompt, concurrency: 4, multiAgent: true,
+    search: true, code: true, mcp: [mcpPresets[0]],
+    fileSearch: true, vectorStoreIds: ' vs_archive, vs_notes\nvs_archive ', fileSearchMaxResults: '5',
+  };
+  const request = buildRequest(settings);
+  assert.deepEqual(request.multi_agent, { enabled: true, max_concurrent_subagents: 4 });
+  assert.equal(request.input, teamPrompt);
+  assert.deepEqual(request.tools.map(tool => tool.type), ['web_search', 'code_interpreter', 'file_search', 'mcp']);
+  assert.deepEqual(request.tools[2], { type: 'file_search', vector_store_ids: ['vs_archive', 'vs_notes'], max_num_results: 5 });
+  assert.deepEqual(request.include, ['file_search_call.results']);
+  const next = buildRequest({ ...settings, previousResponseId: 'r_team', followup: 'Explain the retention requirement.' });
+  assert.deepEqual(next.tools, request.tools);
+  assert.deepEqual(next.include, request.include);
+  assert.equal(next.previous_response_id, 'r_team');
+  assert.equal(next.input, 'Explain the retention requirement.');
+  const hidden = buildRequest({ ...settings, fileSearchIncludeResults: false });
+  assert.equal(hidden.include, undefined);
+  assert.deepEqual(hidden.tools, request.tools);
+  const disabled = buildRequest({ ...settings, fileSearch: false, vectorStoreIds: '', fileSearchMaxResults: 'bad' });
+  assert.equal(disabled.tools.some(tool => tool.type === 'file_search'), false);
+  assert.equal(disabled.include, undefined);
+  assert.match(disabled.instructions, /File search is disabled/);
+});
+
+test('file search requires usable store IDs and a bounded result count before sending', () => {
+  const settings = { fileSearch: true, vectorStoreIds: 'vs_archive' };
+  for (const vectorStoreIds of ['', ' , \n ', Array.from({ length: 17 }, (_, i) => `vs_${i}`).join(','), 'é'.repeat(129)]) {
+    assert.throws(() => toolDeclarations({ ...settings, vectorStoreIds }), /vector store IDs/);
+  }
+  for (const fileSearchMaxResults of ['', 0, 51, 1.5, 'NaN']) {
+    assert.throws(() => toolDeclarations({ ...settings, fileSearchMaxResults }), /maximum results/);
+  }
+  assert.equal(toolDeclarations({ ...settings, fileSearchMaxResults: 50 })[0].max_num_results, 50);
+});
 
 test('tool budget and parallel tool calling are independent request fields', () => {
   const request = buildRequest({ model: 'demo', mode: 'prompt', mission: 'Hello', concurrency: 2, multiAgent: false, parallel: false, maxCalls: 4 });
@@ -49,7 +86,7 @@ test('custom tools pass text, and discovery returns configured deferred definiti
 test('discovery preserves complete declared functions and mixed namespaces without loading unrelated tools', async () => {
   const settings = {
     model: 'demo', mode: 'prompt', mission: 'Find a tool.', concurrency: 1, multiAgent: false,
-    toolSearch: true, shell: true,
+    toolSearch: true,
     functions: [
       { ...fn, namespace: '', name: 'deferred_sum', deferred: true, strict: true, description: 'Add two numbers.' },
       { ...fn, namespace: '', name: 'available_sum' },

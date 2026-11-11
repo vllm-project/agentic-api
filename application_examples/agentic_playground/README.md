@@ -2,7 +2,7 @@
 
 A buildless browser application that talks directly to Agentic API over HTTP/SSE or WebSocket. Explore multi-agent tasks,
 built-in tools, remote MCP, your own client functions, token usage, and conversation compaction. No coding harness
-or application backend is involved. The gateway runs agents and server tools; the page handles client tools and
+is involved. The gateway runs agents and server tools; the page handles client tools and
 submits their outputs through Responses continuations.
 
 ## Run locally
@@ -44,23 +44,19 @@ Enter a bearer token if required. Gateway and MCP credentials stay in page memor
 credential fields. Reloading the page clears configuration and history. Use matching HTTP/HTTPS schemes and allow
 the page's exact origin in gateway CORS configuration; `localhost` and `127.0.0.1` are different origins.
 
-## Try the demos
+## Four-agent demo
 
-- **Single agent (default):** edit the general prompt and select **Send prompt**. Multi-agent execution starts off,
-  with the concurrent-subagent setting at one.
-- **Two agents:** choose **Two-agent coding comparison**, keep the example prompt, and select **Send prompt**.
-  The coordinator researches a popular LeetCode problem, gives two solvers the same specification and examples,
-  asks them to execute solutions, then compares correctness, tests, efficiency, and clarity. Scores are the model's
-  assessment based on tool evidence. Delegation and tool use depend on the model; a prompt cannot guarantee them.
-- **Separate assignments:** select **Separate tasks for each agent** and edit each task card.
-- **Microsoft Learn:** expand **Remote MCP servers**, add Microsoft Learn, and select **Use demo prompt**.
-  The gateway discovers and executes the selected documentation tools. Disable Python and web search to focus on MCP.
-- **Client function:** expand **Client functions · JavaScript**, select **Use function demo**, and optionally
-  **Test handler**. The model calls `summarize_numbers`; the page executes your handler and sends the real result
-  back with `previous_response_id` until the model answers. You can edit the schema and handler or add more functions.
-- **Compaction:** complete a turn, add a follow-up, then select **Compact conversation**. Inspect the returned
-  checkpoint and its usage, and ask a question that depends on earlier context. The next request sends the returned
-  response ID. Compaction preserves the existing agent tree and stored continuation state.
+The page defaults to four agents using Python execution, web search, Microsoft Learn MCP, and file search.
+The prompt asks for a sorting algorithm, Azure Blob Storage documentation, and retention/ingest requirements from
+`archive-requirements.md`, with live progress and a short summary. The model chooses agent names.
+
+The tools and four concurrent subagents are enabled automatically. The sample vector store loads when its field is
+empty. Load your served model, then select **Send prompt**. Edit the prompt if needed, or select **Use example** to
+restore it. After completion, continue in the chat box.
+
+The **Workflow** dropdown also offers **General prompt**, **Two-agent coding comparison**, and
+**Separate tasks for each agent**. Choose a workflow to load its prompt, or use the task cards for separate
+assignments. **Use example** restores the selected workflow's example. Shell execution is not offered.
 
 ## Tools and settings
 
@@ -68,15 +64,15 @@ the page's exact origin in gateway CORS configuration; `localhost` and `127.0.0.
 | --- | --- |
 | `web_search` | Gateway-configured search provider |
 | `code_interpreter` | Gateway's embedded Python sandbox; fresh state on every call |
+| `file_search` | Gateway retrieval from uploaded documents in configured vector stores |
 | `mcp` | Remote HTTP MCP endpoint, allowed tool names, optional authorization and headers |
 | `function` | User-authored JavaScript handler with model-provided JSON arguments |
 | `custom` | User-authored handler receiving free-form text; constrained formats are not offered |
 | `namespace` | Groups client function declarations and routes calls by namespace and name |
 | `tool_search` | Client discovery returns the configured deferred client definitions |
-| `shell` | Pauses for you to run commands elsewhere and enter their actual outputs and exit codes |
 
-The browser does not execute shell commands or edit local repositories. `file_search` is not implemented by this
-gateway and is not offered. MCP uses `require_approval: "never"`, the gateway's supported approval mode; add servers
+The browser does not execute shell commands or edit local repositories.
+MCP uses `require_approval: "never"`, the gateway's supported approval mode; add servers
 and allowed tools you intend to execute automatically.
 
 JavaScript handlers run in a worker inside an opaque-origin sandboxed iframe. They receive only their arguments,
@@ -92,6 +88,64 @@ and reasoning summaries with multi-agent execution, so those controls are disabl
 The subagent limit controls team concurrency; the browser-function limit controls local client execution.
 The client continuation/injection limit bounds automatic follow-up requests or live WebSocket client outputs. Model support for sampling, reasoning, and
 structured output varies. The API tabs select Responses chains or durable Conversations; neither is a complete API administration console.
+
+## Conversation messages
+
+Sent prompts, root-agent mid-turn replies, and final answers appear in chat below live progress. The chat stage
+indicator uses the same root progress events as the detailed view, including Thinking and Waiting for agents.
+Tool outputs and subagent messages stay in the detailed view. Sending a follow-up immediately clears
+the composer and locks it for the whole turn, including client-tool waits. It unlocks after the final response or
+an error/disconnection. Enter sends; Shift+Enter adds a line. New session clears the transcript, and API tabs keep
+their transcripts separate. History remains in this tab and is cleared on reload.
+
+## File search demo
+
+Choose **Four-agent tool demo** or **Use example**. When the vector store field is empty, the playground
+finds the sample store on the configured gateway and fills in its ID automatically. If the sample is missing,
+it uploads [archive-requirements.md](archive-requirements.md), creates a vector store, and fills in the new ID
+after ingestion succeeds. Wait for **Sample document ready**, then select **Send prompt**.
+
+The sample store is marked with `metadata.playground_sample: "archive-requirements.md"` and reused across page
+reloads. After a database reset, reloading the page and choosing a demo creates a new sample store automatically.
+The lookup follows paginated store lists and ignores empty or unfinished stores. Manually entered IDs are preserved.
+**Load sample document** retries setup or replaces the field with the current sample store ID. Sending a prompt
+with file search enabled and an empty ID field also prepares the sample automatically.
+
+An HTTP 404 from `/v1/files` or `/v1/vector_stores` means the running gateway lacks the Files API: rebuild it using the command in
+[Run locally](#run-locally) and restart it. Launch scripts that reuse `target/release/agentic-server` do not
+automatically rebuild it when the checkout changes. When using `serve-playground.sh` or
+`serve-playground-https.sh`, set `KEEP_DB=1` to retain uploaded file metadata and vector stores across restarts.
+
+To prepare the sample manually instead, run these commands from the repository root, with the gateway at `localhost:8080`:
+
+```bash
+curl --fail-with-body http://localhost:8080/v1/files \
+  -F purpose=assistants \
+  -F file=@application_examples/agentic_playground/archive-requirements.md
+
+# Replace file_REPLACE with the file ID returned above.
+curl --fail-with-body http://localhost:8080/v1/vector_stores \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"playground-archive","file_ids":["file_REPLACE"],"metadata":{"playground_sample":"archive-requirements.md"}}'
+```
+
+For an authenticated gateway, add its bearer authorization header to both commands. Creating the vector store
+with `file_ids` ingests the document before the gateway returns success. Paste the returned **vector store ID**
+into **File search → Vector store IDs**. Existing stores can also be used; separate multiple IDs with commas or
+whitespace. The four-agent prompt expects the sample document to be present in one of those stores.
+
+**Enable file search** adds the `file_search` declaration with `vector_store_ids` and `max_num_results` (default 5,
+range 1–50). **Show retrieved passages** adds `include: ["file_search_call.results"]`, following the
+[Responses file search contract](https://developers.openai.com/api/docs/guides/tools-file-search).
+The activity view shows file search status and queries. Expand **View code, outputs & sources** to inspect
+filenames, file IDs, relevance scores, and retrieved text. File citations on answers show their source filenames.
+Disabling passage display omits retrieved text from the public call output; the model can still use retrieval.
+File search settings are sent again on follow-up requests.
+
+The gateway uses keyword retrieval without an embedding endpoint; no embedding service is needed for this sample.
+See the [file search guide](../../docs/api/file-search.md) for storage, embeddings, authentication, and deletion of
+the sample upload/vector store when finished. The playground can load this sample or use existing stores;
+it does not provide a general file-management interface.
 
 ## Responses and Conversations tabs
 
@@ -139,13 +193,17 @@ The Learn preset restricts calls to `microsoft_docs_search`, `microsoft_docs_fet
 
 ## Progress, tokens, and context
 
-Agent cards project **observed event types** (SSE over HTTP, JSON frames over WebSocket) into hints such as spawned, thinking, searching, executing Python,
-and using MCP. Each step shows its exact event type. Active progress bars are indeterminate because SSE does not
+Agent filters, tree buttons and evidence panels remain interactive while output streams. Large tool outputs are
+rendered when you expand their evidence panel. **Disconnect stream** is beside the run status at the top.
+
+Agent cards project **observed event types** (SSE over HTTP, JSON frames over WebSocket) into hints such as spawned,
+thinking, searching the web or files, executing Python, and using MCP. Each step shows its exact event type.
+Active progress bars are indeterminate because SSE does not
 provide a reliable percentage. Spawn confirmation comes from successful collaboration output, not merely a request.
 Client execution is separately labeled as browser activity. Thinking indicates reasoning activity, not access to
-hidden chain of thought. The agent count includes the root agent. The header has no decorative agent diagram. With multi-agent execution
-enabled and concurrency greater than one, a branching tree appears in Agent progress only after actual subagents
-are observed. Select a tree node to filter that agent’s detailed progress.
+hidden chain of thought. The agent count includes observed root activity. With multi-agent execution enabled,
+the tree shows `/root` from the start, then adds branches as actual subagents are observed. Select a tree node
+to filter that agent’s detailed progress; the full tree remains visible, with the selected node highlighted.
 
 Expand code/output/source details or the received-type inventory for more detail. Unattributed event types are
 listed separately. **Debug** contains the redacted request and latest 250 raw events, rather than filling the
@@ -179,6 +237,7 @@ No dependencies or build step are required to serve the application. Run offline
 ```bash
 node --test application_examples/agentic_playground/*.test.mjs
 node --check application_examples/agentic_playground/app.mjs
+python3 -m unittest discover -s application_examples/agentic_playground -p '*_test.py'
 ```
 
 Optional Chromium integration checks use synthetic API responses and do not call a model:
@@ -193,10 +252,13 @@ PLAYWRIGHT_MODULE=/tmp/agentic-playground-qa/node_modules/playwright/index.mjs \
 
 The browser check covers isolation, timeout/abort cleanup, client-tool continuation, token aggregation, compaction
 continuation, safe Markdown, tab isolation, HTTP ID chaining, WebSocket continuity/injection, observed agent trees,
-and mobile overflow. Live inference, search credentials, interpreter provisioning, and remote
+the four-agent demos, sample upload/indexing and retry, file search validation/evidence/citations/continuation,
+chat clearing/locking/history, stable clicks during a busy multi-agent stream, lazy evidence updates, and mobile overflow.
+Live inference, search credentials, interpreter provisioning, and remote
 MCP connectivity still need verification against your gateway.
 
 `protocol.mjs` handles SSE framing and item state; `progress.mjs` projects progress; `settings.mjs` builds declarations
-and settings; `client-tools.mjs` handles continuation outputs and usage; `sandbox.mjs` isolates handlers; `transport.mjs` handles HTTP and WebSocket lifecycles; `markdown.mjs` renders answers; `app.mjs`
+and settings; `client-tools.mjs` handles continuation outputs and usage;
+`sandbox.mjs` isolates handlers; `transport.mjs` handles HTTP and WebSocket lifecycles; `markdown.mjs` renders answers; `app.mjs`
 connects them to the UI. The page references the repository's `assets/Black-Main-Logo.svg` and
 `assets/Main-Brandmark.svg` directly through relative paths; no logo copies are maintained in the example.

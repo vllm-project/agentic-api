@@ -1,25 +1,34 @@
-import { apiBase, buildRequest, createRun, applyEvent, itemText, safeLink, comparisonPrompt } from './protocol.mjs';
+import { apiBase, buildRequest, createRun, applyEvent, itemText, safeLink, comparisonPrompt, teamPrompt } from './protocol.mjs';
 import { createSettingsUI, redact } from './settings.mjs';
 import { executeHandler } from './sandbox.mjs';
 import { clientKinds, pendingCalls, executeClientCall, mapLimited, sumUsage, withContinuation, compactionRequest, clientQueue } from './client-tools.mjs';
 import { renderMarkdown, downloadAnswer } from './markdown.mjs';
-import { createResponsesTransport, jsonRequest, authHeaders as headers, checkResponse } from './transport.mjs';
+import { createResponsesTransport, jsonRequest, authHeaders as headers, checkResponse, uploadFile } from './transport.mjs';
+
 
 const $ = id => document.getElementById(id);
+const generalPrompt = 'Implement a Python function that merges overlapping intervals. Execute examples and edge-case tests, then explain correctness and time/space complexity.';
 const sampleTasks = [
-  'Fix this Python function for Two Sum:\n\ndef two_sum(nums, target):\n    seen = {}\n    for i, n in enumerate(nums):\n        seen[n] = i\n        if target - n in seen:\n            return [seen[target - n], i]\n\nReproduce the bug, fix it, and execute tests for duplicates, negatives, and no solution. Research the algorithm if useful.',
-  'Implement merge_intervals(intervals) in Python. Merge overlapping or touching intervals without mutating the input. Research the sorting approach if useful. Execute tests covering unsorted input, nested intervals, touching endpoints, and an empty list. Explain complexity.',
+  'Implement two_sum(nums, target) in Python. Run examples covering duplicates, negatives, and no solution. Explain correctness and complexity.',
+  'Implement merge_intervals(intervals) in Python without mutating the input. Run examples covering unsorted input, nested intervals, touching endpoints, and an empty list.',
 ];
+let serial = 0;
 let controller = null;
 let run = createRun();
 let lastRequest = null;
 let sessionConfig = null;
 let previousResponseId = null;
 let history = [];
+let chatTurns = [];
+let activeChatTurn = null;
+const chatViews = new WeakMap();
 let started = 0;
 let timer = null;
-let frame = null;
-let serial = 0;
+let renderTimer = null;
+let renderedRun = null;
+const agentViews = new Map();
+let treeView = null;
+let renderedAnswer = null;
 let view = 'activity';
 let activeApi = 'responses';
 let conversationId = null;
@@ -42,19 +51,17 @@ function notice(message) {
   $('notice').hidden = !message;
 }
 
-// Keep both entry points: a coordinator prompt, or explicit per-agent assignments.
 const missionControls = node('div', undefined, 'mission-controls');
 const modeLabel = node('label', 'Workflow');
-const mode = node('select');
-mode.id = 'mode';
-mode.append(new Option('General prompt', 'prompt'), new Option('Two-agent coding comparison', 'mission'), new Option('Separate tasks for each agent', 'tasks'));
-modeLabel.append(mode);
+const mode = node('select'); mode.id = 'mode';
+mode.append(new Option('General prompt', 'prompt'), new Option('Two-agent coding comparison', 'mission'), new Option('Four-agent tool demo', 'team'), new Option('Separate tasks for each agent', 'tasks'));
+mode.value = 'team'; modeLabel.append(mode);
 const missionLabel = node('label', 'What should the agents do?');
 missionLabel.htmlFor = 'mission';
 const mission = node('textarea');
 mission.id = 'mission';
 mission.rows = 12;
-mission.value = 'Implement a Python function that merges overlapping intervals. Execute examples and edge-case tests, then explain correctness and time/space complexity.';
+mission.value = teamPrompt;
 mission.addEventListener('input', preview);
 missionControls.append(modeLabel, missionLabel, mission);
 $('tasks').before(missionControls);
@@ -64,25 +71,33 @@ roster.setAttribute('aria-live', 'polite');
 document.querySelector('.view-bar').before(roster);
 
 function setMode() {
-  if (mode.value !== 'prompt') {
-    settingsUI.setMultiAgent(true);
-    if (Number($('concurrency').value) < 2) $('concurrency').value = '2';
+  const separate = mode.value === 'tasks';
+  mission.hidden = missionLabel.hidden = separate;
+  $('tasks').hidden = $('add').hidden = !separate;
+  document.querySelector('.section-description').textContent = separate
+    ? 'Give each agent a focused task.' : 'Describe the goal once. Your coordinator takes it from here.';
+  settingsUI.setMultiAgent(mode.value !== 'prompt');
+  if (mode.value === 'team') loadTeamExample();
+  else {
+    $('concurrency').value = mode.value === 'prompt' ? '1' : '2';
+    if (mode.value === 'prompt') mission.value = generalPrompt;
     if (mode.value === 'mission') mission.value = comparisonPrompt;
   }
-  const singlePrompt = mode.value !== 'tasks';
-  mission.hidden = missionLabel.hidden = !singlePrompt;
-  $('tasks').hidden = $('add').hidden = singlePrompt;
-  document.querySelector('.section-description').textContent = singlePrompt
-    ? 'Describe what you want to do. Choose tools and settings, then watch the API work.'
-    : 'One focused problem per agent. Include code, expected behavior, or a failing test.';
   preview();
 }
 mode.addEventListener('change', setMode);
+
+function loadTeamExample() {
+  mission.value = teamPrompt;
+  settingsUI.setMultiAgent(true);
+  $('concurrency').value = '4';
+  $('search').checked = $('code').checked = $('store').checked = true;
+  settingsUI.enableTeamTools();
+  if (!settingsUI.read().vectorStoreIds.trim()) void settingsUI.loadFileSearchDemo();
+}
 const settingsContainer = node('div');
 $('run').before(settingsContainer);
-const settingsUI = createSettingsUI(settingsContainer, preview, prompt => {
-  mode.value = 'prompt'; mission.value = prompt; setMode();
-}, executeHandler, notice);
+const settingsUI = createSettingsUI(settingsContainer, preview, executeHandler, notice, prepareFileSearchDemo);
 
 const usagePanel = node('div', undefined, 'usage-panel');
 usagePanel.id = 'usage-panel';
@@ -118,23 +133,15 @@ function addTask(problem = '') {
   const card = node('div', undefined, 'task');
   const heading = node('div', undefined, 'task-header');
   heading.append(node('span', '', 'avatar'));
-  const label = node('label');
-  label.htmlFor = id;
-  const remove = node('button', '×', 'remove');
-  remove.type = 'button';
+  const label = node('label'); label.htmlFor = id;
+  const remove = node('button', '×', 'remove'); remove.type = 'button';
   remove.addEventListener('click', () => { card.remove(); numberTasks(); preview(); });
   heading.append(label, remove);
-  const textarea = node('textarea');
-  textarea.id = id;
-  textarea.rows = 7;
-  textarea.value = problem;
+  const textarea = node('textarea'); textarea.id = id; textarea.rows = 7; textarea.value = problem;
   textarea.placeholder = 'Describe the problem and what a correct solution should do…';
   textarea.addEventListener('input', preview);
-  card.append(heading, textarea);
-  $('tasks').append(card);
-  numberTasks();
+  card.append(heading, textarea); $('tasks').append(card); numberTasks();
 }
-
 function numberTasks() {
   [...$('tasks').children].forEach((card, i) => {
     card.querySelector('.avatar').textContent = String(i + 1).padStart(2, '0');
@@ -161,7 +168,37 @@ function config() {
 function preview() {
   if (controller) return;
   try { $('request-preview').textContent = JSON.stringify(redact(withContinuation(buildRequest(config()), continuation())), null, 2); }
-  catch { $('request-preview').textContent = 'Choose a model and fill in the task cards to preview the API request.'; }
+  catch (error) { $('request-preview').textContent = error.message; }
+}
+
+async function prepareFileSearchDemo() {
+  if (controller) throw new Error('Wait for the current operation to finish before loading the sample document.');
+  const settings = config();
+  controller = new AbortController();
+  const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(60000)]);
+  let uploadedId;
+  busy(true);
+  notice('Loading the sample vector store…');
+  try {
+    let after = '';
+    do {
+      const stores = await jsonRequest(settings, `/v1/vector_stores?limit=100${after ? `&after=${encodeURIComponent(after)}` : ''}`, 'GET', undefined, signal);
+      const existing = stores.data.find(store => store.metadata?.playground_sample === 'archive-requirements.md' && store.status === 'completed' && store.file_counts?.completed > 0);
+      if (existing) return existing.id;
+      if (!stores.has_more) break;
+      if (!stores.last_id || stores.last_id === after) throw new Error('The gateway returned an invalid vector store page.');
+      after = stores.last_id;
+    } while (true);
+    notice('Uploading and indexing the sample document…');
+    const sample = await checkResponse(await fetch(new URL('./archive-requirements.md', import.meta.url), { signal }));
+    uploadedId = await uploadFile(settings, await sample.blob(), 'archive-requirements.md', signal);
+    const store = await jsonRequest(settings, '/v1/vector_stores', 'POST', { name: 'playground-archive', file_ids: [uploadedId], metadata: { playground_sample: 'archive-requirements.md' } }, signal);
+    if (!store.id) throw new Error('The vector store response did not contain an ID.');
+    return store.id;
+  } catch (error) {
+    if (uploadedId) throw new Error(`Sample file ${uploadedId} was uploaded, but vector store setup failed: ${error.message}`);
+    throw error;
+  } finally { controller = null; busy(false); }
 }
 
 $('connect').addEventListener('click', async () => {
@@ -189,12 +226,14 @@ $('connect').addEventListener('click', async () => {
 
 function busy(value) {
   for (const input of document.querySelectorAll('.brief input, .brief textarea, .brief select, .brief button, .connection input, .connection button, .api-session button, .api-session input, .api-session select')) input.disabled = value;
-  numberTasks();
   $('disconnect').disabled = !value;
   $('download').disabled = value || !history.length;
   $('followup').disabled = value || !(previousResponseId || conversationId);
   $('send').disabled = value || !(previousResponseId || conversationId);
+  $('send').textContent = value ? 'Working…' : 'Send ↑';
+  $('followup').placeholder = value ? 'Waiting for the final response…' : 'Message the agents…';
   compactButton.disabled = value || !(previousResponseId || conversationId) || (activeApi === 'responses' && !checkpointStored && sessionConfig?.transport !== 'websocket');
+  numberTasks();
   if (!value) settingsUI.sync();
   document.querySelector('.results').dataset.running = String(value);
   $('run').firstChild.textContent = value ? 'Working… ' : 'Send prompt ';
@@ -202,12 +241,21 @@ function busy(value) {
 }
 
 function scheduleRender() {
-  if (frame === null) frame = requestAnimationFrame(() => { frame = null; render(); });
+  // Progress needs a few updates per second, not a complete redraw for every token.
+  if (renderTimer === null) renderTimer = setTimeout(() => { renderTimer = null; render(); }, 100);
+}
+
+function setText(element, text) {
+  if (element.textContent !== String(text)) element.textContent = text;
 }
 
 function linksFor(item, container) {
   const sources = [...(item.action?.sources || []), ...(item.content || []).flatMap(part => part?.annotations || [])];
   for (const source of sources) {
+    if (source.type === 'file_citation') {
+      container.append(node('p', `Source file: ${source.filename || source.file_id} · ${source.file_id}`, 'hint'));
+      continue;
+    }
     const href = safeLink(source.url);
     if (!href) continue;
     const link = node('a', source.title || source.url);
@@ -216,6 +264,16 @@ function linksFor(item, container) {
     link.rel = 'noopener noreferrer';
     container.append(link);
   }
+}
+
+function renderFileSearch(item, container) {
+  container.append(node('h4', 'File search'), node('p', (item.queries || []).join(', ') || 'Searching files…', 'hint'));
+  for (const result of item.results || []) {
+    const details = [result.file_id, result.score == null ? '' : `Score: ${result.score}`].filter(Boolean).join(' · ');
+    container.append(node('strong', result.filename || result.file_id || 'Retrieved passage'), node('p', details, 'hint'), node('pre', result.text || ''));
+  }
+  if (item.status === 'failed' || item.status === 'incomplete') container.append(node('p', `File search ${item.status}.`, 'hint'));
+  else if (item.status === 'completed' && !item.results?.length) container.append(node('p', item.results == null ? 'Retrieved passages were not included in the response.' : 'No matching passages.', 'hint'));
 }
 
 function renderItem(item) {
@@ -236,6 +294,8 @@ function renderItem(item) {
     for (const output of item.outputs || []) if (output.type === 'logs') card.append(node('pre', output.logs, 'logs'));
   } else if (item.type === 'web_search_call') {
     card.append(node('p', item.action?.query || (item.action?.queries || []).join(', ') || item.action?.url || 'Searching the web…', 'prose'));
+  } else if (item.type === 'file_search_call') {
+    renderFileSearch(item, card);
   } else if (item.type === 'multi_agent_call') {
     card.append(node('p', item.action?.replaceAll('_', ' ') || 'Collaboration', 'prose'));
     const details = node('details');
@@ -258,134 +318,265 @@ function agentLabel(agent) {
   return ({ solver_a: 'Agent A', solver_b: 'Agent B' })[name] || name.replaceAll('_', ' ');
 }
 
+function refreshEvidence(view) {
+  if (!view.details.open) return;
+  // Item replacements and the two streamed/client mutations invalidate visible evidence.
+  const snapshot = view.evidence.flatMap(item => [item, item.status, item.code, item.clientOutput]);
+  if (view.evidenceSnapshot?.length === snapshot.length && snapshot.every((value, i) => value === view.evidenceSnapshot[i])) return;
+  view.evidenceSnapshot = snapshot;
+  const blocks = view.evidence.map(item => {
+    const block = node('div', undefined, 'evidence-item');
+    if (item.type === 'code_interpreter_call') {
+      block.append(node('h4', 'Python execution'), node('pre', item.code || 'Preparing code…'));
+      for (const output of item.outputs || []) if (output.type === 'logs') block.append(node('pre', output.logs, 'logs'));
+    } else if (item.type === 'web_search_call') block.append(node('h4', 'Web search'), node('p', item.action?.query || (item.action?.queries || []).join(', ') || item.action?.url || 'Searching…', 'hint'));
+    else if (item.type === 'file_search_call') renderFileSearch(item, block);
+    else if (item.type === 'mcp_call') block.append(node('h4', `${item.server_label} · ${item.name}`), node('pre', item.output || (item.error ? JSON.stringify(item.error) : 'Waiting for tool output…')));
+    else if (item.type === 'mcp_list_tools') block.append(node('h4', `Tools from ${item.server_label}`), node('p', (item.tools || []).map(tool => tool.name).join(', ') || 'Discovering…', 'hint'));
+    else block.append(node('h4', item.name || item.type.replaceAll('_', ' ')), node('pre', item.clientOutput || item.arguments || item.input || JSON.stringify(item.action || {})));
+    linksFor(item, block);
+    return block;
+  });
+  view.evidenceBody.replaceChildren(...blocks);
+}
+
+function refreshEventTypes(details, body, types) {
+  if (!details.open) return;
+  const key = JSON.stringify([...(types || [])]);
+  if (body.dataset.counts === key) return;
+  body.dataset.counts = key;
+  body.replaceChildren(...[...(types || [])].map(([type, count]) => {
+    const line = node('div', undefined, 'sse-type'); line.append(node('span', type), node('span', `×${count}`)); return line;
+  }));
+}
+
 function renderAgent(agent) {
+  let view = agentViews.get(agent);
+  if (!view) {
+    const card = node('article', undefined, 'agent-progress');
+    card.dataset.agent = agent === '/root' ? 'coordinator' : agent.endsWith('solver_b') ? 'b' : 'a';
+    const header = node('div', undefined, 'agent-heading');
+    const avatar = node('span', agent === '/root' ? '◎' : agentLabel(agent).replace('Agent ', '').slice(0, 2).toUpperCase(), 'agent-avatar');
+    const title = node('div'); title.append(node('h3', agentLabel(agent)), node('small', agent));
+    const badge = node('span', '', 'agent-badge'), bar = node('progress'); bar.max = 1;
+    header.append(avatar, title, badge);
+    const list = node('ol', undefined, 'progress-steps'), hint = node('p', '', 'agent-hint'); hint.hidden = true;
+    card.append(header, bar, list, hint);
+    const details = node('details', undefined, 'agent-evidence'); details.dataset.detailKey = `evidence:${agent}`;
+    const summary = node('summary'), evidenceBody = node('div'); details.append(summary, evidenceBody);
+    const typesDetails = node('details', undefined, 'sse-types'); typesDetails.dataset.detailKey = `types:${agent}`;
+    const typesSummary = node('summary'), typesBody = node('div'); typesDetails.append(typesSummary, typesBody);
+    view = { card, badge, bar, list, hint, details, summary, evidenceBody, typesDetails, typesSummary, typesBody, evidence: [] };
+    details.addEventListener('toggle', () => {
+      if (details.open) refreshEvidence(view);
+      else { evidenceBody.replaceChildren(); view.evidenceSnapshot = null; }
+    });
+    typesDetails.addEventListener('toggle', () => refreshEventTypes(typesDetails, typesBody, run.eventTypes.get(agent)));
+    agentViews.set(agent, view);
+  }
   const steps = [...(run.progress.get(agent)?.values() || [])];
   const latest = steps.at(-1);
   const finished = latest?.label === 'Reporting the solution' && latest.status === 'done' && !['failed', 'incomplete', 'error', 'disconnected'].includes(run.status);
   const live = Boolean(controller) && !finished;
   const state = finished ? 'Finished' : live ? latest?.label || 'Starting' : run.status === 'completed' ? 'Turn completed' : 'Stopped';
-  const card = node('article', undefined, 'agent-progress');
-  card.dataset.agent = agent === '/root' ? 'coordinator' : agent.endsWith('solver_b') ? 'b' : 'a';
-  const header = node('div', undefined, 'agent-heading');
-  const avatar = node('span', agent === '/root' ? '◎' : agentLabel(agent).replace('Agent ', '').slice(0, 2).toUpperCase(), 'agent-avatar');
-  const title = node('div');
-  title.append(node('h3', agentLabel(agent)), node('small', agent));
-  const badge = node('span', state, 'agent-badge');
-  badge.dataset.live = String(live);
-  header.append(avatar, title, badge);
-  const bar = node('progress');
-  bar.max = 1;
-  if (!live) bar.value = finished || run.status === 'completed' ? 1 : 0;
-  bar.setAttribute('aria-label', `${agentLabel(agent)}: ${state}`);
-  card.append(header, bar);
-  const list = node('ol', undefined, 'progress-steps');
-  for (const step of steps.slice(-6)) {
-    const row = node('li');
-    row.dataset.state = step.status;
-    const icon = step.status === 'done' ? '✓' : step.status === 'failed' ? '!' : live ? '◌' : '–';
-    const content = node('div');
-    content.append(node('span', step.label));
-    if (step.detail) content.append(node('small', step.detail));
-    if (step.eventType) content.append(node('small', step.eventType, 'sse-hint'));
-    row.append(node('span', icon, 'step-icon'), content, node('span', step.status === 'done' ? 'Done' : step.status === 'failed' ? 'Failed' : live ? 'In progress' : 'Stopped', 'step-state'));
-    list.append(row);
+  setText(view.badge, state);
+  if (view.badge.dataset.live !== String(live)) view.badge.dataset.live = String(live);
+  if (live) { if (view.bar.hasAttribute('value')) view.bar.removeAttribute('value'); }
+  else if (!view.bar.hasAttribute('value') || view.bar.value !== Number(finished || run.status === 'completed')) view.bar.value = Number(finished || run.status === 'completed');
+  const label = `${agentLabel(agent)}: ${state}`;
+  if (view.bar.getAttribute('aria-label') !== label) view.bar.setAttribute('aria-label', label);
+  const recent = steps.slice(-6), stepsKey = JSON.stringify([recent, live]);
+  if (view.stepsKey !== stepsKey) {
+    view.stepsKey = stepsKey;
+    view.list.replaceChildren(...recent.map(step => {
+      const row = node('li'); row.dataset.state = step.status;
+      const icon = step.status === 'done' ? '✓' : step.status === 'failed' ? '!' : live ? '◌' : '–';
+      const content = node('div'); content.append(node('span', step.label));
+      if (step.detail) content.append(node('small', step.detail));
+      if (step.eventType) content.append(node('small', step.eventType, 'sse-hint'));
+      row.append(node('span', icon, 'step-icon'), content, node('span', step.status === 'done' ? 'Done' : step.status === 'failed' ? 'Failed' : live ? 'In progress' : 'Stopped', 'step-state'));
+      return row;
+    }));
+    if (!recent.length) view.list.append(node('li', 'Waiting for the next agent event…', 'hint'));
   }
-  if (!steps.length) list.append(node('li', 'Waiting for the next agent event…', 'hint'));
-  card.append(list);
   const items = [...run.items.values()].filter(item => item.agent?.agent_name === agent);
   const message = items.filter(item => item.type === 'message').at(-1);
-  if (message && itemText(message)) card.append(node('p', itemText(message).slice(0, 240) + (itemText(message).length > 240 ? '…' : ''), 'agent-hint'));
-  const evidence = items.filter(item => ['code_interpreter_call', 'web_search_call', 'mcp_call', 'mcp_list_tools', ...clientKinds].includes(item.type));
-  if (evidence.length) {
-    const details = node('details', undefined, 'agent-evidence');
-    details.dataset.detailKey = `evidence:${agent}`;
-    details.append(node('summary', `View code, outputs & sources (${evidence.length})`));
-    for (const item of evidence) {
-      const block = node('div', undefined, 'evidence-item');
-      if (item.type === 'code_interpreter_call') {
-        block.append(node('h4', 'Python execution'), node('pre', item.code || 'Preparing code…'));
-        for (const output of item.outputs || []) if (output.type === 'logs') block.append(node('pre', output.logs, 'logs'));
-      } else if (item.type === 'web_search_call') block.append(node('h4', 'Web search'), node('p', item.action?.query || (item.action?.queries || []).join(', ') || item.action?.url || 'Searching…', 'hint'));
-      else if (item.type === 'mcp_call') block.append(node('h4', `${item.server_label} · ${item.name}`), node('pre', item.output || (item.error ? JSON.stringify(item.error) : 'Waiting for tool output…')));
-      else if (item.type === 'mcp_list_tools') block.append(node('h4', `Tools from ${item.server_label}`), node('p', (item.tools || []).map(tool => tool.name).join(', ') || 'Discovering…', 'hint'));
-      else block.append(node('h4', item.name || item.type.replaceAll('_', ' ')), node('pre', item.clientOutput || item.arguments || item.input || JSON.stringify(item.action || {})));
-      linksFor(item, block);
-      details.append(block);
-    }
-    card.append(details);
+  const text = message ? itemText(message) : '';
+  view.hint.hidden = !text;
+  setText(view.hint, text.slice(0, 240) + (text.length > 240 ? '…' : ''));
+  view.evidence = items.filter(item => ['code_interpreter_call', 'web_search_call', 'file_search_call', 'mcp_call', 'mcp_list_tools', ...clientKinds].includes(item.type));
+  if (view.evidence.length) {
+    if (!view.card.contains(view.details)) view.card.append(view.details);
+    setText(view.summary, `View code, outputs & sources (${view.evidence.length})`);
+    refreshEvidence(view);
   }
   const types = run.eventTypes.get(agent);
   if (types?.size) {
-    const details = node('details', undefined, 'sse-types');
-    details.dataset.detailKey = `types:${agent}`;
-    details.append(node('summary', `Received SSE types (${types.size})`));
-    for (const [type, count] of types) { const line = node('div', undefined, 'sse-type'); line.append(node('span', type), node('span', `×${count}`)); details.append(line); }
-    card.append(details);
+    if (!view.card.contains(view.typesDetails)) view.card.append(view.typesDetails);
+    setText(view.typesSummary, `Received SSE types (${types.size})`);
+    refreshEventTypes(view.typesDetails, view.typesBody, types);
   }
-  return card;
+  return view.card;
 }
 
 function renderAgentTree() {
-  const diagram = node('section', undefined, 'agent-tree');
-  diagram.setAttribute('aria-label', 'Observed agent delegation tree');
-  diagram.append(node('h3', 'Live agent tree'), node('p', 'Branches appear when the API reports subagents. Select an agent to inspect its progress.', 'hint'));
   const agents = new Set(['/root', ...run.agents]);
-  const children = new Map();
-  for (const agent of agents) {
-    if (agent === '/root') continue;
-    let parent = agent.slice(0, agent.lastIndexOf('/'));
-    while (parent !== '/root' && !agents.has(parent)) parent = parent.slice(0, parent.lastIndexOf('/')) || '/root';
-    if (!children.has(parent)) children.set(parent, []);
-    children.get(parent).push(agent);
+  const key = [...agents].sort().join('\n');
+  if (treeView?.key !== key) {
+    const diagram = node('section', undefined, 'agent-tree'); diagram.setAttribute('aria-label', 'Observed agent delegation tree');
+    diagram.append(node('h3', 'Live agent tree'), node('p', 'Branches appear when the API reports subagents. Select an agent to inspect its progress.', 'hint'));
+    const children = new Map(), buttons = new Map();
+    for (const agent of agents) {
+      if (agent === '/root') continue;
+      let parent = agent.slice(0, agent.lastIndexOf('/'));
+      while (parent !== '/root' && !agents.has(parent)) parent = parent.slice(0, parent.lastIndexOf('/')) || '/root';
+      if (!children.has(parent)) children.set(parent, []);
+      children.get(parent).push(agent);
+    }
+    function branch(agent) {
+      const li = node('li'), button = node('button', undefined, 'tree-agent'); button.type = 'button';
+      const state = node('small');
+      button.append(node('span', agent === '/root' ? '◎' : agentLabel(agent).replace('Agent ', '').slice(0, 2).toUpperCase(), 'tree-avatar'), node('strong', agentLabel(agent)), node('span', agent, 'tree-path'), state);
+      button.addEventListener('click', () => { $('agent-filter').value = agent; render(); });
+      buttons.set(agent, { button, state }); li.append(button);
+      if (children.has(agent)) { const list = node('ul'); list.append(...children.get(agent).sort().map(branch)); li.append(list); }
+      return li;
+    }
+    const tree = node('ul', undefined, 'tree-root'); tree.append(branch('/root')); diagram.append(tree);
+    treeView = { key, diagram, buttons };
   }
-  function branch(agent) {
-    const li = node('li'), button = node('button', undefined, 'tree-agent'); button.type = 'button';
+  for (const [agent, { button, state }] of treeView.buttons) {
     const latest = [...(run.progress.get(agent)?.values() || [])].at(-1);
-    const state = latest?.status === 'active' && !controller ? 'Turn ended' : latest?.label || 'Agent observed';
-    button.append(node('span', agent === '/root' ? '◎' : agentLabel(agent).replace('Agent ', '').slice(0, 2).toUpperCase(), 'tree-avatar'), node('strong', agentLabel(agent)), node('small', state));
-    button.dataset.state = latest?.status || 'active';
-    button.addEventListener('click', () => { $('agent-filter').value = agent; render(); });
-    li.append(button);
-    if (children.has(agent)) { const list = node('ul'); list.append(...children.get(agent).sort().map(branch)); li.append(list); }
-    return li;
+    setText(state, latest?.status === 'active' && !controller ? 'Turn ended' : latest?.label || (run.agents.has(agent) ? 'Agent observed' : 'Waiting for agent events'));
+    if (button.dataset.state !== (latest?.status || 'active')) button.dataset.state = latest?.status || 'active';
+    const selected = String($('agent-filter').value === agent);
+    if (button.getAttribute('aria-pressed') !== selected) button.setAttribute('aria-pressed', selected);
   }
-  const tree = node('ul', undefined, 'tree-root'); tree.append(branch('/root')); diagram.append(tree);
-  return diagram;
+  return treeView.diagram;
 }
 
 function render() {
-  $('agent-count').textContent = run.agents.size;
-  $('tool-count').textContent = [...run.items.values()].filter(item => ['web_search_call', 'code_interpreter_call', 'mcp_call', ...clientKinds].includes(item.type)).length;
+  clearTimeout(renderTimer); renderTimer = null;
+  if (renderedRun !== run) {
+    const hadRun = renderedRun !== null;
+    renderedRun = run; agentViews.clear(); treeView = null; renderedAnswer = null;
+    if (hadRun || controller || run.eventCount) $('activity').replaceChildren(node('p', 'Send a prompt to watch live progress.', 'placeholder'));
+  }
+  setText($('agent-count'), run.agents.size);
+  setText($('tool-count'), [...run.items.values()].filter(item => ['web_search_call', 'file_search_call', 'code_interpreter_call', 'mcp_call', ...clientKinds].includes(item.type)).length);
   const summary = run.agents.size ? [...run.agents].map(agent => `${agentLabel(agent)}: ${run.activity.get(agent) || 'observed'}`).join(' · ') : controller ? 'Request sent. Waiting for agent events…' : 'Progress updates appear as the gateway reports them.';
-  if (roster.textContent !== summary) roster.textContent = summary;
+  setText(roster, summary);
   $('run-status').dataset.state = $('run-status').textContent.toLowerCase();
-  const selected = $('agent-filter').value;
-  $('agent-filter').replaceChildren(new Option('All agents', 'all'), ...[...run.agents].sort().map(agent => new Option(agent, agent)));
-  $('agent-filter').value = run.agents.has(selected) ? selected : 'all';
+  const filter = $('agent-filter');
+  for (const option of [...filter.options]) if (option.value !== 'all' && !run.agents.has(option.value)) option.remove();
+  const options = new Set([...filter.options].map(option => option.value));
+  for (const agent of run.agents) if (!options.has(agent)) filter.add(new Option(agent, agent));
+  if (!filter.value) filter.value = 'all';
   if (view === 'activity' && (run.eventCount || controller)) {
     const pane = $('activity');
-    const scrollTop = pane.scrollTop;
-    const expanded = new Set([...pane.querySelectorAll('details[open]')].map(details => details.dataset.detailKey));
-    const cards = [...run.agents].filter(agent => $('agent-filter').value === 'all' || agent === $('agent-filter').value).map(renderAgent);
+    const cards = [...run.agents].filter(agent => filter.value === 'all' || agent === filter.value).map(renderAgent);
     const unattributed = run.eventTypes.get('unattributed');
-    if (unattributed?.size && $('agent-filter').value === 'all') {
-      const details = node('details', undefined, 'sse-types global-events');
-      details.dataset.detailKey = 'unattributed';
-      details.append(node('summary', `Other received SSE types (${unattributed.size})`));
-      for (const [type, count] of unattributed) details.append(node('div', `${type} ×${count}`, 'sse-type'));
+    if (unattributed?.size && filter.value === 'all') {
+      let details = pane.querySelector('.global-events');
+      if (!details) {
+        details = node('details', undefined, 'sse-types global-events'); details.dataset.detailKey = 'unattributed';
+        const body = node('div'); details.append(node('summary'), body);
+        details.addEventListener('toggle', () => refreshEventTypes(details, body, run.eventTypes.get('unattributed')));
+      }
+      setText(details.firstElementChild, `Other received SSE types (${unattributed.size})`);
+      refreshEventTypes(details, details.lastElementChild, unattributed);
       cards.push(details);
     }
-    if ($('agent-filter').value === 'all' && sessionConfig?.multiAgent && sessionConfig.concurrency > 1 && [...run.agents].some(agent => agent.startsWith('/root/'))) cards.unshift(renderAgentTree());
-    pane.replaceChildren(...(cards.length ? cards : [node('p', 'Waiting for visible agent activity…', 'placeholder')]));
-    for (const details of pane.querySelectorAll('details')) details.open = expanded.has(details.dataset.detailKey);
-    pane.scrollTop = scrollTop;
+    if (sessionConfig?.multiAgent) cards.unshift(renderAgentTree());
+    if (!cards.length) cards.push(pane.querySelector('.placeholder') || node('p', 'Waiting for visible agent activity…', 'placeholder'));
+    const existing = [...pane.children];
+    if (existing.length !== cards.length || cards.some((card, i) => card !== existing[i])) {
+      const scrollTop = pane.scrollTop;
+      pane.replaceChildren(...cards);
+      pane.scrollTop = scrollTop;
+    }
   }
   if (view === 'answer') {
-    const messages = [...run.items.values()].filter(item => item.type === 'message' && item.agent?.agent_name === '/root');
-    const final = messages.filter(item => item.phase === 'final_answer').at(-1) || messages.at(-1);
-    $('answer').replaceChildren(...(final ? [renderItem(final)] : [node('p', 'The coordinator’s answer will appear here.', 'placeholder')]));
+    const final = finalMessage(), text = final ? itemText(final) : '';
+    const streaming = Boolean(controller) && final?.status !== 'completed' && run.status !== 'completed';
+    if (renderedAnswer?.item !== final || renderedAnswer?.text !== text || renderedAnswer?.streaming !== streaming) {
+      if (final && streaming) {
+        if (!renderedAnswer?.streaming || renderedAnswer.id !== final.id) $('answer').replaceChildren(node('p', '', 'prose'));
+        setText($('answer').firstElementChild, text || 'Writing…');
+      } else $('answer').replaceChildren(...(final ? [renderItem(final)] : [node('p', 'The coordinator’s answer will appear here.', 'placeholder')]));
+      renderedAnswer = { item: final, id: final?.id, text, streaming };
+    }
   }
-  if (view === 'api') $('events-preview').textContent = run.events.map(event => JSON.stringify(redact(event))).join('\n\n') || 'No events yet.';
+  if (view === 'api' && $('events-preview').parentElement.open) setText($('events-preview'), run.events.map(event => JSON.stringify(redact(event))).join('\n\n') || 'No events yet.');
+  if (activeChatTurn) {
+    const steps = run.progress.get('/root');
+    activeChatTurn.messages = [...run.items.values()]
+      .filter(item => item.type === 'message' && item.agent?.agent_name === '/root')
+      .map(item => ({ id: item.id, text: itemText(item), complete: item.status === 'completed' || steps?.get(item.id)?.status === 'done' }));
+    const latest = [...(steps?.values() || [])].at(-1);
+    activeChatTurn.stage = activeChatTurn.status === 'running'
+      ? $('run-status').textContent === 'Waiting for you' ? 'Waiting for you' : latest?.label || 'Waiting for the model'
+      : activeChatTurn.status === 'completed' ? 'Completed' : activeChatTurn.status === 'disconnected' ? 'Disconnected' : 'Error';
+    activeChatTurn.stageStatus = activeChatTurn.status === 'running'
+      ? $('run-status').textContent === 'Waiting for you' ? 'active' : latest?.status || 'active'
+      : activeChatTurn.status === 'completed' ? 'done' : 'failed';
+  }
+  renderChat();
+}
+
+function renderChat(forceScroll = false) {
+  const transcript = $('chat-history');
+  const followBottom = forceScroll || transcript.hidden || transcript.scrollHeight - transcript.clientHeight - transcript.scrollTop < 48;
+  const cards = [];
+  let changed = false;
+  for (const turn of chatTurns) {
+    let view = chatViews.get(turn);
+    if (!view) {
+      const user = node('article', undefined, 'chat-message chat-user');
+      user.append(node('strong', 'You'), node('p', turn.prompt));
+      const assistant = node('article', undefined, 'chat-message chat-assistant');
+      const body = node('div', undefined, 'chat-root-messages');
+      const stage = node('p', '', 'chat-stage'); stage.setAttribute('role', 'status');
+      assistant.append(node('strong', turn.multiAgent ? 'Root agent · /root' : 'Assistant'), body, stage);
+      view = { user, assistant, body, stage, messages: new Map() }; chatViews.set(turn, view);
+    }
+    const messages = turn.messages?.length ? turn.messages : turn.answer ? [{ id: 'answer', text: turn.answer, complete: true }] : [];
+    const messageNodes = [];
+    for (const message of messages) {
+      if (!message.text) continue;
+      let entry = view.messages.get(message.id);
+      if (!entry) { entry = { element: node('div', undefined, 'chat-root-message') }; view.messages.set(message.id, entry); }
+      const complete = message.complete || turn.status !== 'running';
+      if (entry.text !== message.text || entry.complete !== complete) {
+        if (complete) entry.element.replaceChildren(renderMarkdown(message.text));
+        else {
+          if (!entry.element.firstElementChild || entry.complete) entry.element.replaceChildren(node('p', '', 'chat-streaming-text'));
+          setText(entry.element.firstElementChild, message.text);
+        }
+        entry.text = message.text; entry.complete = complete; changed = true;
+      }
+      messageNodes.push(entry.element);
+    }
+    const existing = [...view.body.children];
+    if (existing.length !== messageNodes.length || messageNodes.some((element, i) => element !== existing[i])) {
+      view.body.replaceChildren(...messageNodes); changed = true;
+    }
+    const stage = turn.stage || (turn.status === 'running' ? 'Waiting for the model' : turn.status === 'completed' ? 'Completed' : 'Turn stopped');
+    const status = turn.stageStatus || (turn.status === 'running' ? 'active' : turn.status === 'completed' ? 'done' : 'failed');
+    if (view.stage.textContent !== stage || view.stage.dataset.state !== status) {
+      setText(view.stage, stage); view.stage.dataset.state = status; changed = true;
+    }
+    cards.push(view.user, view.assistant);
+  }
+  const existing = [...transcript.children];
+  if (existing.length !== cards.length || cards.some((card, i) => card !== existing[i])) { transcript.replaceChildren(...cards); changed = true; }
+  transcript.hidden = !chatTurns.length;
+  if (followBottom && (changed || forceScroll)) transcript.scrollTop = transcript.scrollHeight;
+}
+
+function finalMessage() {
+  const messages = [...run.items.values()].filter(item => item.type === 'message' && item.agent?.agent_name === '/root');
+  return messages.filter(item => item.phase === 'final_answer').at(-1) || messages.at(-1);
 }
 
 function continuation() { return { apiMode: activeApi, conversationId, previousResponseId }; }
@@ -404,14 +595,14 @@ function updateSessionHint() {
 }
 
 function snapshot() {
-  return { run, lastRequest, sessionConfig, previousResponseId, history, currentResponses, conversationId, conversationBase, checkpointStored,
+  return { run, lastRequest, sessionConfig, previousResponseId, history, chatTurns, currentResponses, conversationId, conversationBase, checkpointStored,
     status: $('run-status').textContent, elapsed: $('elapsed').textContent, continuationText: $('continuation').textContent,
     store: $('store').checked, transport: $('transport').value };
 }
 
 function restore(state = {}) {
   run = state.run || createRun(); lastRequest = state.lastRequest || null; sessionConfig = state.sessionConfig || null;
-  previousResponseId = state.previousResponseId || null; history = state.history || []; currentResponses = state.currentResponses || [];
+  previousResponseId = state.previousResponseId || null; history = state.history || []; chatTurns = state.chatTurns || []; renderChat(); currentResponses = state.currentResponses || [];
   conversationId = state.conversationId || null; conversationBase = state.conversationBase || null; checkpointStored = state.checkpointStored ?? true;
   $('run-status').textContent = state.status || 'Ready'; $('elapsed').textContent = state.elapsed || '—';
   $('continuation').textContent = state.continuationText || 'Send a prompt to begin.';
@@ -474,7 +665,7 @@ async function conversationAction(action) {
       const result = await jsonRequest(settings, action === 'create' ? '/v1/conversations' : `/v1/conversations/${encodeURIComponent(id)}`, action === 'create' ? 'POST' : 'GET', action === 'create' ? {} : undefined, controller.signal);
       if (!result.id) throw new Error('The API did not return a conversation ID.');
       // Keep the previous selection until the new conversation has been accepted.
-      run = createRun(); history = []; currentResponses = []; previousResponseId = null; lastRequest = null;
+      run = createRun(); history = []; chatTurns = []; renderChat(); currentResponses = []; previousResponseId = null; lastRequest = null;
       conversationId = result.id; conversationBase = settings.base; sessionConfig = settings; checkpointStored = true;
       $('conversation-id').value = conversationId; $('conversation-status').textContent = `Loaded ${conversationId}`;
       $('run-status').textContent = 'Ready'; $('elapsed').textContent = '—'; $('continuation').textContent = 'Send a prompt to continue this conversation.';
@@ -496,10 +687,18 @@ async function execute(followup = null) {
   try {
     settings = config();
     validateSession(settings);
+    if (settings.fileSearch && !settings.vectorStoreIds.trim()) {
+      if (!await settingsUI.loadFileSearchDemo()) return;
+      settings = config();
+    }
     request = buildRequest(followup === null ? settings : { ...settings, mode: 'prompt', mission: followup });
     request = withContinuation(request, continuation());
     if (!Number.isInteger(settings.maxContinuations) || settings.maxContinuations < 1 || settings.maxContinuations > 50) throw new Error('Client-tool continuation limit must be between 1 and 50.');
   } catch (error) { notice(error.message); return; }
+  const chatTurn = { prompt: request.input, status: 'running', multiAgent: settings.multiAgent };
+  chatTurns.push(chatTurn);
+  if (followup !== null) $('followup').value = '';
+  renderChat(true);
   compactionNotice.hidden = true;
   let parentStored = checkpointStored;
   const requests = [];
@@ -508,6 +707,7 @@ async function execute(followup = null) {
   lastRequest = request;
   run = createRun();
   run.singleAgent = !settings.multiAgent;
+  activeChatTurn = chatTurn;
   controller = new AbortController();
   started = performance.now();
   $('elapsed').textContent = '0s';
@@ -521,6 +721,7 @@ async function execute(followup = null) {
   busy(true);
   render();
   renderUsage();
+  if (followup === null) document.querySelector('.results').scrollIntoView({ block: 'start' });
   try {
     const turnSignal = controller.signal;
     const resolved = new Set();
@@ -531,10 +732,10 @@ async function execute(followup = null) {
       const owner = call.agent?.agent_name || '/root';
       if (!run.progress.has(owner)) run.progress.set(owner, new Map());
       const steps = run.progress.get(owner);
-      const label = call.type === 'shell_call' ? 'Waiting for your shell output' : `Running client tool · ${call.name || 'tool search'}`;
+      const label = `Running client tool · ${call.name || 'tool search'}`;
       steps.set(call.call_id, { id: call.call_id, label, status: 'active', eventType: 'client execution · browser' });
       scheduleRender();
-      const output = await executeClientCall(call, settings, executeHandler, requestShellOutput, turnSignal);
+      const output = await executeClientCall(call, settings, executeHandler, turnSignal);
       let failed = false;
       try { failed = Boolean(JSON.parse(output.output)?.error); } catch { /* Non-string outputs have a typed shape. */ }
       steps.set(call.call_id, { id: call.call_id, label, status: failed ? 'failed' : 'done', eventType: 'client execution · browser' });
@@ -575,7 +776,7 @@ async function execute(followup = null) {
     checkpointStored = request.store;
     compactionNotice.hidden = true;
     $('run-status').textContent = 'Completed';
-    $('followup').value = '';
+    chatTurn.status = 'completed'; chatTurn.answer = itemText(finalMessage() || {});
     $('continuation').textContent = previousResponseId ? `Response: ${previousResponseId}. The next prompt uses ${activeApi === 'conversations' ? 'the conversation ID' : 'this previous_response_id'} and your current settings.` : 'The API did not return a response ID.';
     if (activeApi === 'conversations') await refreshConversationItems(settings, false, controller.signal).catch(error => notice(`Turn saved; item refresh failed: ${error.message}`));
     const delegated = [...run.agents].some(agent => agent.startsWith('/root/'));
@@ -585,6 +786,7 @@ async function execute(followup = null) {
     controller.abort();
     $('run-status').textContent = aborted ? 'Disconnected' : 'Error';
     run.status = aborted ? 'disconnected' : 'error';
+    chatTurn.status = run.status; chatTurn.error = aborted ? 'Disconnected before the final response.' : error.message;
     notice(aborted ? 'Browser stream disconnected. This does not confirm cancellation of gateway work. Start a new run when ready.' : `${error.message} Check gateway configuration; the demo does not substitute simulated tool outputs.`);
     $('continuation').textContent = previousResponseId ? 'The previous completed response ID remains selected. Start a new session to clear it.' : 'No completed continuation checkpoint. Start a new session to retry.';
   } finally {
@@ -594,36 +796,10 @@ async function execute(followup = null) {
     controller = null;
     busy(false);
     render();
+    activeChatTurn = null;
     renderUsage();
+    if (followup !== null && !$('followup').disabled) $('followup').focus({ preventScroll: true });
   }
-}
-
-function requestShellOutput(call, signal) {
-  return new Promise((resolve, reject) => {
-    const form = node('form', undefined, 'manual-output');
-    form.append(node('h3', `${agentLabel(call.agent?.agent_name || '/root')} · shell output required`), node('p', 'Run these commands in your own environment and enter their actual outputs. This browser does not execute shell commands.', 'hint'));
-    const fields = (call.action?.commands || []).map((command, index) => {
-      form.append(node('pre', command));
-      const add = (title, type) => {
-        const label = node('label', title); const input = node(type === 'number' ? 'input' : 'textarea');
-        if (type === 'number') { input.type = type; input.required = true; input.step = 1; }
-        else input.rows = 2;
-        input.setAttribute('aria-label', `Command ${index + 1} ${title}`); label.append(input); form.append(label); return input;
-      };
-      return { stdout: add('Standard output', 'text'), stderr: add('Standard error', 'text'), exit: add('Exit code', 'number') };
-    });
-    const submit = node('button', 'Submit actual outputs', 'secondary'); submit.type = 'submit'; form.append(submit);
-    document.querySelector('.result-actions').before(form);
-    function abort() { form.remove(); reject(new DOMException('Aborted', 'AbortError')); }
-    signal.addEventListener('abort', abort, { once: true });
-    form.addEventListener('submit', event => {
-      event.preventDefault();
-      const output = fields.map(field => ({ stdout: field.stdout.value, stderr: field.stderr.value, outcome: { type: 'exit', exit_code: Number(field.exit.value) } }));
-      if (output.some(part => !Number.isInteger(part.outcome.exit_code))) return;
-      signal.removeEventListener('abort', abort); form.remove();
-      resolve({ type: 'shell_call_output', call_id: call.call_id, output });
-    });
-  });
 }
 
 compactButton.addEventListener('click', async () => {
@@ -661,14 +837,19 @@ compactButton.addEventListener('click', async () => {
 $('run').addEventListener('click', () => execute());
 $('disconnect').addEventListener('click', () => controller?.abort());
 $('followup-form').addEventListener('submit', event => { event.preventDefault(); if ((previousResponseId || conversationId) && $('followup').value.trim()) execute($('followup').value); });
+$('followup').addEventListener('keydown', event => {
+  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+    event.preventDefault();
+    if (!$('send').disabled) $('followup-form').requestSubmit();
+  }
+});
 $('add').addEventListener('click', () => { addTask(); preview(); });
 $('example').addEventListener('click', () => {
-  if (mode.value === 'mission') mission.value = comparisonPrompt;
-  else if (mode.value === 'prompt') mission.value = 'Implement a Python function that merges overlapping intervals. Execute examples and edge-case tests, then explain correctness and time/space complexity.';
-  else { $('tasks').replaceChildren(); sampleTasks.forEach(addTask); }
-  preview();
+  if (mode.value === 'tasks') { $('tasks').replaceChildren(); sampleTasks.forEach(addTask); }
+  setMode();
 });
 $('agent-filter').addEventListener('change', render);
+$('events-preview').parentElement.addEventListener('toggle', () => { if (view === 'api') render(); });
 for (const id of ['base', 'model', 'search', 'code', 'concurrency']) $(id).addEventListener('input', preview);
 const tabs = [...document.querySelectorAll('[data-view]')];
 for (const [index, tab] of tabs.entries()) {

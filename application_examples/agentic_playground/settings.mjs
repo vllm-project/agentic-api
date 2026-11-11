@@ -6,6 +6,14 @@ export const mcpPresets = [
 
 export function toolDeclarations(settings) {
   const tools = [];
+  if (settings.fileSearch) {
+    const ids = [...new Set((settings.vectorStoreIds || '').split(/[\s,]+/).filter(Boolean))];
+    if (!ids.length) throw new Error('File search needs a vector store. In File search, click Load sample document or enter existing vector store IDs.');
+    if (ids.length > 16 || ids.some(id => new TextEncoder().encode(id).length > 256)) throw new Error('File search requires 1–16 vector store IDs from this gateway (at most 256 bytes each).');
+    const maxResults = Number(settings.fileSearchMaxResults ?? 5);
+    if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 50) throw new Error('File search maximum results must be an integer from 1 to 50.');
+    tools.push({ type: 'file_search', vector_store_ids: ids, max_num_results: maxResults });
+  }
   const labels = new Set();
   for (const server of settings.mcp || []) {
     const url = new URL(server.url);
@@ -46,12 +54,12 @@ export function toolDeclarations(settings) {
   tools.push(...namespaces.values());
   if (settings.toolSearch) tools.push({ type: 'tool_search', execution: 'client', description: 'Find available client tools by their name or description.', parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'], additionalProperties: false } });
   if ((settings.functions || []).some(fn => fn.deferred) && !settings.toolSearch) throw new Error('Enable client tool discovery to use deferred functions.');
-  if (settings.shell) tools.push({ type: 'shell', environment: { type: 'local' } });
   return tools;
 }
 
 export function responseOptions(settings) {
   const result = {};
+  if (settings.fileSearch && settings.fileSearchIncludeResults !== false) result.include = ['file_search_call.results'];
   for (const [field, value, min, max, integer] of [
     ['max_output_tokens', settings.maxOutput, 1, 10000000, true],
     ['max_tool_calls', settings.maxCalls, 1, Number.MAX_SAFE_INTEGER, true],
@@ -85,7 +93,7 @@ export function redact(value) {
   return value;
 }
 
-export function createSettingsUI(parent, onChange, onPreset, onTest, notify) {
+export function createSettingsUI(parent, onChange, onTest, notify, onFileSetup) {
   const node = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
   let sequence = 0;
   function section(title) { const e = node('details', undefined, 'settings-section'); e.append(node('summary', title)); parent.append(e); return e; }
@@ -101,6 +109,27 @@ export function createSettingsUI(parent, onChange, onPreset, onTest, notify) {
     input.addEventListener('input', onChange); container.append(label); return input;
   }
   function button(container, title, action) { const b = node('button', title, 'secondary'); b.type = 'button'; b.addEventListener('click', action); container.append(b); return b; }
+  const fileSection = section('File search');
+  const fileSearch = field(fileSection, 'Enable file search', false, 'checkbox');
+  const vectorStoreIds = field(fileSection, 'Vector store IDs · comma or whitespace separated');
+  vectorStoreIds.placeholder = 'Paste IDs returned by this gateway';
+  const fileSearchMaxResults = field(fileSection, 'Maximum file search results', '5', 'number');
+  fileSearchMaxResults.min = 1; fileSearchMaxResults.max = 50;
+  const fileSearchIncludeResults = field(fileSection, 'Show retrieved passages', true, 'checkbox');
+  fileSection.append(node('p', 'The four-agent demo loads the sample vector store automatically. You can also enter IDs of your own vector stores on this gateway.', 'hint'));
+  async function loadFileSearchDemo() {
+    try {
+      const storeId = await onFileSetup();
+      vectorStoreIds.value = storeId;
+      fileSearch.checked = true;
+      onChange();
+      notify(`Sample document ready in ${storeId}. You can now send the four-agent demo prompt.`);
+      return true;
+    } catch (error) { notify(error.message); return false; }
+  }
+  button(fileSection, 'Load sample document', loadFileSearchDemo);
+  const fileSetup = node('a', 'Sample document and setup instructions ↗', 'hint');
+  fileSetup.href = './README.md#file-search-demo'; fileSetup.target = '_blank'; fileSetup.rel = 'noreferrer'; fileSection.append(fileSetup);
   const mcps = [], functions = [];
   const mcpSection = section('Remote MCP servers');
   mcpSection.append(node('p', 'The gateway connects to these servers and runs their allowed tools automatically. Hosts must be allowed in gateway configuration.', 'hint'));
@@ -121,7 +150,6 @@ export function createSettingsUI(parent, onChange, onPreset, onTest, notify) {
     mcps.push(row); onChange();
   }
   button(actions, 'Add selected server', () => addMcp(mcpPresets[Number(presetSelect.value)]));
-  button(actions, 'Use demo prompt', () => onPreset(mcpPresets[Number(presetSelect.value)].prompt));
   button(actions, 'Add custom', () => addMcp());
 
   const functionSection = section('Client functions · JavaScript');
@@ -150,10 +178,7 @@ export function createSettingsUI(parent, onChange, onPreset, onTest, notify) {
     functions.push(row); onChange();
   }
   button(functionActions, 'Add function', addFunction);
-  button(functionActions, 'Use function demo', () => { if (!functions.length) addFunction(); onPreset('Use summarize_numbers to calculate the count, minimum, maximum, and average of [2, 4, 8, 16]. Explain the output.'); });
   const toolSearch = field(functionSection, 'Enable client tool discovery (tool_search)', false, 'checkbox');
-  const shell = field(functionSection, 'Local shell · manually supply execution outputs', false, 'checkbox');
-  functionSection.append(node('p', 'Browsers cannot execute a local shell. When enabled, calls pause for you to run the commands elsewhere and supply their actual outputs. File search is not implemented by this gateway and is not offered.', 'hint'));
 
   const options = section('Responses settings');
   const multiAgent = field(options, 'Enable multi-agent execution', false, 'checkbox');
@@ -179,10 +204,22 @@ export function createSettingsUI(parent, onChange, onPreset, onTest, notify) {
   options.append(node('p', 'Responses transport and storage are selected above. Sampling and structured output support depend on the served model.', 'hint'));
   return {
     sync,
+    loadFileSearchDemo,
+    setVectorStore(id) { vectorStoreIds.value = id; onChange(); },
     setMultiAgent(value) { multiAgent.checked = value; sync(); },
+    enableTeamTools() {
+      fileSearch.checked = fileSearchIncludeResults.checked = true; fileSection.open = true;
+      const preset = mcpPresets[0];
+      if (!mcps.some(row => row.url.value.trim().replace(/\/$/, '') === preset.url)) {
+        let label = preset.label;
+        for (let suffix = 2; mcps.some(row => row.label.value === label); suffix++) label = `${preset.label}_${suffix}`;
+        addMcp({ ...preset, label });
+      }
+      mcpSection.open = true;
+    },
     read() {
       const values = list => list.map(row => Object.fromEntries(Object.entries(row).map(([key, input]) => [key, input.type === 'checkbox' ? input.checked : input.value])));
-      return { mcp: values(mcps), functions: values(functions), shell: shell.checked, toolSearch: toolSearch.checked, multiAgent: multiAgent.checked, parallel: parallel.checked, maxCalls: multiAgent.checked ? '' : maxCalls.value, toolChoice: toolChoice.value, maxOutput: maxOutput.value, temperature: temperature.value, topP: topP.value, effort: effort.value, summary: multiAgent.checked ? '' : summary.value, format: format.value, outputSchema: outputSchema.value, instructions: instructions.value, compactThreshold: compactThreshold.value, clientParallel: Number(clientParallel.value), maxContinuations: Number(maxContinuations.value) };
+      return { fileSearch: fileSearch.checked, vectorStoreIds: vectorStoreIds.value, fileSearchMaxResults: fileSearchMaxResults.value, fileSearchIncludeResults: fileSearchIncludeResults.checked, mcp: values(mcps), functions: values(functions), toolSearch: toolSearch.checked, multiAgent: multiAgent.checked, parallel: parallel.checked, maxCalls: multiAgent.checked ? '' : maxCalls.value, toolChoice: toolChoice.value, maxOutput: maxOutput.value, temperature: temperature.value, topP: topP.value, effort: effort.value, summary: multiAgent.checked ? '' : summary.value, format: format.value, outputSchema: outputSchema.value, instructions: instructions.value, compactThreshold: compactThreshold.value, clientParallel: Number(clientParallel.value), maxContinuations: Number(maxContinuations.value) };
     },
   };
 }

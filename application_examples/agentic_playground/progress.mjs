@@ -35,6 +35,9 @@ export function trackProgress(run, event, item) {
   if (item?.type === 'web_search_call') {
     step(agent, item.id, 'Searching the web', toolStatus(item.status, done), item.action?.query || (item.action?.queries || []).join(', '));
   }
+  if (item?.type === 'file_search_call') {
+    step(agent, item.id, 'Searching files', toolStatus(item.status, done), (item.queries || []).join(', '));
+  }
   if (item?.type === 'code_interpreter_call') {
     const label = item.status === 'in_progress' ? 'Preparing Python' : 'Running Python';
     step(agent, item.id, label, toolStatus(item.status, done), 'Code interpreter');
@@ -45,8 +48,8 @@ export function trackProgress(run, event, item) {
   if (item?.type === 'mcp_call') step(agent, item.id, `MCP · ${item.name}`, item.error ? 'failed' : toolStatus(item.status, done), item.server_label);
   if (item?.type === 'mcp_list_tools') step(agent, item.id, 'Discovering MCP tools', item.error ? 'failed' : toolStatus(item.status, done), item.server_label);
   if (item?.type === 'compaction') step(agent, item.id || 'compaction', 'Compacting context', done ? 'done' : 'active');
-  if (['function_call', 'custom_tool_call', 'shell_call', 'tool_search_call'].includes(item?.type)) {
-    step(agent, item.call_id, item.type === 'shell_call' ? 'Waiting for shell output' : item.type === 'tool_search_call' ? 'Discovering client tools' : `Client function · ${item.name}`, 'active', done ? 'Waiting for client execution' : 'Receiving tool arguments');
+  if (['function_call', 'custom_tool_call', 'tool_search_call'].includes(item?.type)) {
+    step(agent, item.call_id, item.type === 'tool_search_call' ? 'Discovering client tools' : `Client function · ${item.name}`, 'active', done ? 'Waiting for client execution' : 'Receiving tool arguments');
   }
   if (item?.type === 'multi_agent_call') {
     const labels = { spawn_agent: 'Spawning an agent', wait_agent: 'Waiting for agents', send_message: 'Sending a message', followup_task: 'Assigning follow-up work', list_agents: 'Checking the team', interrupt_agent: 'Requesting interruption' };
