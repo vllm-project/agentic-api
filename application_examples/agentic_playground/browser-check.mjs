@@ -109,7 +109,10 @@ const server = http.createServer(async (req,res) => {
     const pathname = new URL(req.url,'http://localhost').pathname;
     const file = pathname.endsWith('/') ? `${pathname}index.html` : pathname;
     res.setHeader('Content-Type',file.endsWith('.mjs')?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.svg')?'image/svg+xml':'text/html');
-    res.end(await readFile(root+file));
+    let content = await readFile(root+file);
+    if (file.endsWith('index.html')) content = content.toString().replace('<script type="module" src="app.mjs"></script>',
+      `<script>document.getElementById('base').value=location.origin;document.getElementById('token').value='demo-token';</script><script type="module" src="app.mjs"></script>`);
+    res.end(content);
   } catch(error) {res.statusCode=500;res.end(error.message);}
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -120,8 +123,11 @@ try {
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(`${base}/application_examples/agentic_playground/`);
   await page.locator('#mode').waitFor();
-  assert.equal(await page.getByLabel('Enable multi-agent execution',{exact:true}).isChecked(),false);
-  assert.equal(await page.locator('#concurrency').inputValue(),'1');
+  assert.equal(await page.getByLabel('Enable multi-agent execution',{exact:true}).isChecked(),true);
+  assert.equal(await page.locator('#concurrency').inputValue(),'4');
+  await page.waitForFunction(()=>!document.getElementById('run').disabled);
+  await page.locator('#mode').selectOption('prompt');
+  await page.getByLabel('Enable file search',{exact:true}).uncheck();
   assert.equal(await page.locator('#store').isChecked(),true);
   const sandbox = await page.evaluate(async()=> {
     const {executeHandler}=await import('./sandbox.mjs');
@@ -136,7 +142,8 @@ try {
   assert.equal(sandbox.blocked,'true');assert.equal(sandbox.timedOut,true);assert.equal(sandbox.aborted,true);assert.equal(sandbox.frames,0);
   await page.locator('#base').fill(base);await page.locator('#model').fill('demo');
   await page.getByText('Client functions · JavaScript',{exact:true}).click();
-  await page.getByRole('button',{name:'Use function demo',exact:true}).click();
+  await page.getByRole('button',{name:'Add function',exact:true}).click();
+  await page.locator('#mission').fill('Use summarize_numbers to summarize [2, 4, 8, 16].');
   await page.getByText('Responses settings',{exact:true}).click();
   await page.getByLabel('Enable multi-agent execution',{exact:true}).uncheck();
   await page.locator('#search').uncheck();await page.locator('#code').uncheck();
@@ -154,7 +161,7 @@ try {
   assert.equal(await page.locator('#followup').inputValue(),'');
   assert.equal(await page.locator('#send').isDisabled(),true);
   assert.equal(await page.locator('.chat-user').last().innerText(),'You\n\nWhat was the average?');
-  assert.match(await page.locator('.chat-assistant').last().innerText(),/Working on your message/);
+  await page.locator('.chat-assistant').last().getByText('Reporting the solution',{exact:true}).waitFor();
   await page.waitForTimeout(100); releaseChat();
   await page.waitForFunction(()=>document.getElementById('run-status').textContent==='Completed'&&!document.getElementById('send').disabled);
   assert.match(await page.locator('.chat-assistant').last().innerText(),/7.5/);
@@ -205,6 +212,7 @@ try {
   await page.getByLabel('Enable client tool discovery (tool_search)',{exact:true}).uncheck();
 
   // Browser-native WebSocket events, with a mocked server at the transport boundary.
+  await page.locator('#token').fill('');
   let connections=0, wsCount=0; const frames=[];
   await page.routeWebSocket('**/v1/responses', ws=> {
     connections++;
@@ -263,12 +271,12 @@ try {
   assert.deepEqual(errors,[]);
 
   // A fresh four-agent demo validates setup, streams file evidence, and keeps retrieval on follow-up.
+  setupRequests.length = 0;
   const teamPage = await browser.newPage({viewport:{width:1440,height:1100}});
   teamPage.on('pageerror', error=>errors.push(error.message));
   await teamPage.goto(`${base}/application_examples/agentic_playground/`);
   await teamPage.locator('#base').fill(base); await teamPage.locator('#model').fill('demo');
   await teamPage.locator('#token').fill('demo-token');
-  await teamPage.locator('#mode').selectOption('team');
   await teamPage.waitForFunction(()=>!document.getElementById('run').disabled&&document.getElementById('notice').textContent.includes('does not expose the Files API'));
   assert.equal(await teamPage.locator('#concurrency').inputValue(),'4');
   assert.equal(await teamPage.getByLabel('Enable multi-agent execution',{exact:true}).isChecked(),true);
@@ -337,12 +345,11 @@ try {
   // The four-agent workflow reuses automatic sample setup and sends all four tools with brief progress instructions.
   const reusePage = await browser.newPage();
   reusePage.on('pageerror',error=>errors.push(error.message));
+  const beforeReuse = setupRequests.length, beforeLookup = storeLookups.length;
+  olderSamplePage = true;
   await reusePage.goto(`${base}/application_examples/agentic_playground/`);
   await reusePage.locator('#base').fill(base); await reusePage.locator('#token').fill('demo-token');
   await reusePage.locator('#model').fill('demo');
-  const beforeReuse = setupRequests.length, beforeLookup = storeLookups.length;
-  olderSamplePage = true;
-  await reusePage.locator('#mode').selectOption('team');
   await reusePage.waitForFunction(()=>!document.getElementById('run').disabled&&document.getElementById('notice').textContent.includes('Sample document ready'));
   assert.equal(await reusePage.getByLabel('Vector store IDs · comma or whitespace separated',{exact:true}).inputValue(),'vs_archive');
   assert.equal(setupRequests.length,beforeReuse);
@@ -363,9 +370,9 @@ try {
   assert.doesNotMatch(reusedRequest.instructions,/implement a fix, run tests, inspect failures, and retry/);
   assert.equal(setupRequests.length,beforeReuse);
   await reusePage.getByLabel('Vector store IDs · comma or whitespace separated',{exact:true}).fill('');
-  await reusePage.getByRole('button',{name:'Use file search demo',exact:true}).click();
+  await reusePage.getByRole('button',{name:'Load sample document',exact:true}).click();
   await reusePage.waitForFunction(()=>!document.getElementById('run').disabled&&document.getElementById('notice').textContent.includes('Sample document ready'));
-  assert.equal(await reusePage.locator('#mode').inputValue(),'prompt');
+  assert.equal(await reusePage.locator('#mode').inputValue(),'team');
   assert.equal(await reusePage.getByLabel('Vector store IDs · comma or whitespace separated',{exact:true}).inputValue(),'vs_archive');
   assert.equal(setupRequests.length,beforeReuse);
 
@@ -373,7 +380,6 @@ try {
   sampleStore = null; olderSamplePage = false; sampleStoreId = 'vs_after_reset';
   await reusePage.reload();
   await reusePage.locator('#base').fill(base); await reusePage.locator('#token').fill('demo-token');
-  await reusePage.locator('#mode').selectOption('team');
   await reusePage.waitForFunction(()=>!document.getElementById('run').disabled&&document.getElementById('notice').textContent.includes('Sample document ready'));
   assert.equal(await reusePage.getByLabel('Vector store IDs · comma or whitespace separated',{exact:true}).inputValue(),'vs_after_reset');
   assert.deepEqual(setupRequests.slice(beforeReuse),['/v1/files','/v1/vector_stores']);
@@ -396,7 +402,7 @@ try {
       stressStream=setInterval(()=>{for(let i=0;i<5;i++)stressSend({type:'response.output_text.delta',item_id:'stress_message_'+i,content_index:0,delta:'working ',agent:{agent_name:'/root/worker_'+i}});},12);
     }));
     await stressPage.goto(`${base}/application_examples/agentic_playground/`);
-    await stressPage.locator('#model').fill('demo');await stressPage.locator('#transport').selectOption('websocket');
+    await stressPage.locator('#model').fill('demo');await stressPage.locator('#token').fill('');await stressPage.locator('#transport').selectOption('websocket');
     await stressPage.getByText('Responses settings',{exact:true}).click();
     await stressPage.getByLabel('Enable multi-agent execution',{exact:true}).check();await stressPage.locator('#concurrency').selectOption('5');
     await stressPage.locator('#run').click();await stressPage.locator('.agent-evidence').first().waitFor();
@@ -428,6 +434,55 @@ try {
     await stressPage.waitForFunction(()=>document.getElementById('run-status').textContent==='Disconnected');
     assert.equal(await stressPage.locator('#run').isEnabled(),true);
   } finally {clearInterval(stressStream);await stressPage.close();}
+  // Automatic sample IDs follow the normalized gateway URL; manual IDs belong to the user.
+  const gatewayPage = await browser.newPage();
+  gatewayPage.on('pageerror', error=>errors.push(error.message));
+  const otherBase = 'http://gateway-b.test';
+  const otherRequests = [], otherLookups = [];
+  await gatewayPage.route(`${otherBase}/**`, async route=>{
+    const request = route.request();
+    const headers = {'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'content-type, authorization'};
+    if (request.method() === 'OPTIONS') return route.fulfill({status:204,headers});
+    if (request.url().includes('/v1/vector_stores?')) {
+      otherLookups.push(request.url());
+      return route.fulfill({headers,json:{data:[{id:'vs_gateway_b',metadata:{playground_sample:'archive-requirements.md'},status:'completed',file_counts:{completed:1}}],has_more:false}});
+    }
+    assert.equal(request.url(),`${otherBase}/v1/responses`);
+    otherRequests.push(request.postDataJSON());
+    const answer = {...message,agent:{agent_name:'/root'}};
+    return route.fulfill({headers,contentType:'text/event-stream',body:[
+      {type:'response.created',response:{id:'gateway_b_response'}},
+      {type:'response.output_item.done',item:answer},
+      {type:'response.completed',response:{id:'gateway_b_response',status:'completed',usage,output:[answer]}},
+    ].map(event=>`data: ${JSON.stringify(event)}\n\n`).join('')});
+  });
+  await gatewayPage.goto(`${base}/application_examples/agentic_playground/`);
+  await gatewayPage.waitForFunction(()=>!document.getElementById('run').disabled);
+  const gatewayIds = gatewayPage.getByLabel('Vector store IDs · comma or whitespace separated',{exact:true});
+  assert.equal(await gatewayIds.inputValue(),'vs_after_reset');
+  await gatewayPage.locator('#base').fill(`${base}/v1/`);
+  assert.equal(await gatewayIds.inputValue(),'vs_after_reset');
+  await gatewayPage.locator('#base').fill(otherBase);
+  assert.equal(await gatewayIds.inputValue(),'');
+  await gatewayPage.locator('#model').fill('demo');
+  await gatewayPage.locator('#run').click();
+  await gatewayPage.waitForFunction(()=>document.getElementById('run-status').textContent==='Completed'&&!document.getElementById('run').disabled);
+  assert.equal(otherLookups.length,1);
+  assert.deepEqual(otherRequests[0].tools.find(tool=>tool.type==='file_search').vector_store_ids,['vs_gateway_b']);
+  assert.equal(await gatewayIds.inputValue(),'vs_gateway_b');
+  await gatewayPage.locator('#new-session').click();
+  // Explicitly typing even the same ID makes it a manual selection.
+  await gatewayIds.fill('vs_gateway_b');
+  await gatewayPage.locator('#base').fill(base);
+  assert.equal(await gatewayIds.inputValue(),'vs_gateway_b');
+  await gatewayIds.fill('vs_manual');
+  await gatewayPage.locator('#base').fill(otherBase);
+  assert.equal(await gatewayIds.inputValue(),'vs_manual');
+  await gatewayPage.locator('#run').click();
+  await gatewayPage.waitForFunction(()=>document.getElementById('run-status').textContent==='Completed'&&!document.getElementById('run').disabled);
+  assert.equal(otherLookups.length,1);
+  assert.deepEqual(otherRequests[1].tools.find(tool=>tool.type==='file_search').vector_store_ids,['vs_manual']);
+  await gatewayPage.close();
   assert.deepEqual(errors,[]);
-  console.log('PASS browser: sandbox success/network isolation/timeout/abort, function continuation, deferred discovery declaration equality, usage, stored compaction, safe Markdown, API tab isolation, HTTP ID chaining, WebSocket continuity and injection, observed agent tree, four-agent demo with progress instructions, file search automatic setup/reuse/pagination/database reset/retry/authentication/evidence/citations/continuation, mobile overflow, chat input clearing/locking/history, stable clickable controls and lazy evidence under a busy five-agent stream');
+  console.log('PASS browser: sandbox success/network isolation/timeout/abort, function continuation, deferred discovery declaration equality, usage, stored compaction, safe Markdown, API tab isolation, HTTP ID chaining, WebSocket continuity and injection, observed agent tree, four-agent demo with progress instructions, file search automatic setup/reuse/pagination/database reset/gateway switching/manual IDs/retry/authentication/evidence/citations/continuation, mobile overflow, chat input clearing/locking/history, stable clickable controls and lazy evidence under a busy five-agent stream');
 } finally {await browser.close();server.close();}

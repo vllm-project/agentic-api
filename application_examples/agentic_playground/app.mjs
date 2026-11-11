@@ -154,12 +154,13 @@ function numberTasks() {
 }
 
 function config() {
+  const base = apiBase($('base').value.trim());
   return {
-    base: apiBase($('base').value.trim()), token: $('token').value.trim(), model: $('model').value,
+    base, token: $('token').value.trim(), model: $('model').value,
     search: $('search').checked, code: $('code').checked, concurrency: Number($('concurrency').value),
     mode: mode.value, mission: mission.value,
     tasks: [...$('tasks').querySelectorAll('textarea')].map(input => ({ problem: input.value })),
-    ...settingsUI.read(),
+    ...settingsUI.read(base),
     apiMode: activeApi, transport: activeApi === 'responses' ? $('transport').value : 'http',
     store: activeApi === 'responses' ? $('store').checked : true,
   };
@@ -184,7 +185,7 @@ async function prepareFileSearchDemo() {
     do {
       const stores = await jsonRequest(settings, `/v1/vector_stores?limit=100${after ? `&after=${encodeURIComponent(after)}` : ''}`, 'GET', undefined, signal);
       const existing = stores.data.find(store => store.metadata?.playground_sample === 'archive-requirements.md' && store.status === 'completed' && store.file_counts?.completed > 0);
-      if (existing) return existing.id;
+      if (existing) return { id: existing.id, base: settings.base };
       if (!stores.has_more) break;
       if (!stores.last_id || stores.last_id === after) throw new Error('The gateway returned an invalid vector store page.');
       after = stores.last_id;
@@ -194,7 +195,7 @@ async function prepareFileSearchDemo() {
     uploadedId = await uploadFile(settings, await sample.blob(), 'archive-requirements.md', signal);
     const store = await jsonRequest(settings, '/v1/vector_stores', 'POST', { name: 'playground-archive', file_ids: [uploadedId], metadata: { playground_sample: 'archive-requirements.md' } }, signal);
     if (!store.id) throw new Error('The vector store response did not contain an ID.');
-    return store.id;
+    return { id: store.id, base: settings.base };
   } catch (error) {
     if (uploadedId) throw new Error(`Sample file ${uploadedId} was uploaded, but vector store setup failed: ${error.message}`);
     throw error;

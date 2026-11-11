@@ -50,6 +50,9 @@ The page defaults to four agents using Python execution, web search, Microsoft L
 The prompt asks for a sorting algorithm, Azure Blob Storage documentation, and retention/ingest requirements from
 `archive-requirements.md`, with live progress and a short summary. The model chooses agent names.
 
+Automatically loaded sample vector-store IDs belong to the gateway that supplied them. Changing the gateway URL
+clears those IDs; the next send loads a sample store on the new gateway. Manually entered IDs are preserved.
+
 The tools and four concurrent subagents are enabled automatically. The sample vector store loads when its field is
 empty. Load your served model, then select **Send prompt**. Edit the prompt if needed, or select **Use example** to
 restore it. After completion, continue in the chat box.

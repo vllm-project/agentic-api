@@ -112,6 +112,8 @@ export function createSettingsUI(parent, onChange, onTest, notify, onFileSetup) 
   const fileSection = section('File search');
   const fileSearch = field(fileSection, 'Enable file search', false, 'checkbox');
   const vectorStoreIds = field(fileSection, 'Vector store IDs · comma or whitespace separated');
+  let automaticStore = null;
+  vectorStoreIds.addEventListener('input', () => { automaticStore = null; });
   vectorStoreIds.placeholder = 'Paste IDs returned by this gateway';
   const fileSearchMaxResults = field(fileSection, 'Maximum file search results', '5', 'number');
   fileSearchMaxResults.min = 1; fileSearchMaxResults.max = 50;
@@ -119,11 +121,12 @@ export function createSettingsUI(parent, onChange, onTest, notify, onFileSetup) 
   fileSection.append(node('p', 'The four-agent demo loads the sample vector store automatically. You can also enter IDs of your own vector stores on this gateway.', 'hint'));
   async function loadFileSearchDemo() {
     try {
-      const storeId = await onFileSetup();
-      vectorStoreIds.value = storeId;
+      const store = await onFileSetup();
+      automaticStore = store;
+      vectorStoreIds.value = store.id;
       fileSearch.checked = true;
       onChange();
-      notify(`Sample document ready in ${storeId}. You can now send the four-agent demo prompt.`);
+      notify(`Sample document ready in ${store.id}. You can now send the four-agent demo prompt.`);
       return true;
     } catch (error) { notify(error.message); return false; }
   }
@@ -205,7 +208,7 @@ export function createSettingsUI(parent, onChange, onTest, notify, onFileSetup) 
   return {
     sync,
     loadFileSearchDemo,
-    setVectorStore(id) { vectorStoreIds.value = id; onChange(); },
+    setVectorStore(id) { automaticStore = null; vectorStoreIds.value = id; onChange(); },
     setMultiAgent(value) { multiAgent.checked = value; sync(); },
     enableTeamTools() {
       fileSearch.checked = fileSearchIncludeResults.checked = true; fileSection.open = true;
@@ -217,7 +220,11 @@ export function createSettingsUI(parent, onChange, onTest, notify, onFileSetup) 
       }
       mcpSection.open = true;
     },
-    read() {
+    read(base) {
+      if (automaticStore && base && automaticStore.base !== base) {
+        if (vectorStoreIds.value === automaticStore.id) vectorStoreIds.value = '';
+        automaticStore = null;
+      }
       const values = list => list.map(row => Object.fromEntries(Object.entries(row).map(([key, input]) => [key, input.type === 'checkbox' ? input.checked : input.value])));
       return { fileSearch: fileSearch.checked, vectorStoreIds: vectorStoreIds.value, fileSearchMaxResults: fileSearchMaxResults.value, fileSearchIncludeResults: fileSearchIncludeResults.checked, mcp: values(mcps), functions: values(functions), toolSearch: toolSearch.checked, multiAgent: multiAgent.checked, parallel: parallel.checked, maxCalls: multiAgent.checked ? '' : maxCalls.value, toolChoice: toolChoice.value, maxOutput: maxOutput.value, temperature: temperature.value, topP: topP.value, effort: effort.value, summary: multiAgent.checked ? '' : summary.value, format: format.value, outputSchema: outputSchema.value, instructions: instructions.value, compactThreshold: compactThreshold.value, clientParallel: Number(clientParallel.value), maxContinuations: Number(maxContinuations.value) };
     },
