@@ -123,7 +123,8 @@ The Files API accepts binary uploads independently of search ingestion. Files
 are limited to 20 MiB, and the configured gateway request-body limit also applies
 to multipart uploads and vector-store JSON requests. The default request-body
 limit is 10 MiB; raise `server.max_request_body_size_bytes` for larger uploads.
-Uploads must use purpose `assistants` or `user_data`. Attaching a
+Uploads must use purpose `assistants`, `user_data`, or `vision`. Use `vision` for images
+referenced from Responses input. Attaching a
 file to a vector store validates its format: UTF-8 text, Markdown, CSV, JSON, source
 files, and other supported text formats work in the default build. The default
 chunk size is 800 tokens with a 400-token overlap. Override it with:
@@ -153,6 +154,24 @@ PDFs must contain extractable text; scanned PDFs require OCR before ingestion.
 Encrypted PDFs and documents exceeding parsing, decompression, or extracted-text
 limits are rejected. The default build can store and download PDFs, but returns
 an actionable error when a PDF is attached for ingestion.
+
+## Reference uploads from Responses input
+
+A message `input_image` can reference an uploaded image with `file_id` instead of an
+inline `image_url`, and a message `input_file` can reference an uploaded text file with
+`file_id` instead of inline `file_data`. Before inference, the gateway reads the file from
+the same store and substitutes a base64 data URL in the model-facing request. The
+client's reference remains in stored response and conversation history, so a continuation
+resolves it again; deleting the file makes a later continuation fail with 404.
+
+An `input_image` reference must resolve to a file with an `image/*` media type; upload
+those files with purpose `vision`. An `input_file` reference is subject to the same UTF-8
+text media-type and filename rules as inline `file_data`, and the uploaded filename
+supplies the `File: <name>` prefix when the part omits one. A part must use `file_id` or
+its inline field, not both. `file_url` is never fetched.
+
+Hydration adds at most 64 MiB of resolved data URLs to one request. Exceeding that limit
+returns HTTP 413 with error code `body_too_large`.
 
 ## Search directly
 

@@ -223,12 +223,12 @@ independent WebSocket lanes, async calls, and steering have distinct semantics.
   injection ([#300](https://github.com/vllm-project/agentic-api/issues/300)) and
   stateless requests ([#393](https://github.com/vllm-project/agentic-api/issues/393))
   remain.
-- **File search:** add the Files and Vector Stores APIs, indexed retrieval, and a
-  gateway-executed `file_search` tool with OpenAI-compatible streaming events
-  ([#34](https://github.com/vllm-project/agentic-api/pull/34)). Resolve `file_id`
-  references in Responses input against the same file store
-  ([#356](https://github.com/vllm-project/agentic-api/issues/356)). Until then,
-  `file_search` declarations are accepted but not offered to the model.
+- **File search:** the Files and Vector Stores APIs, indexed retrieval, and a
+  gateway-executed `file_search` tool with OpenAI-compatible streaming events are
+  in place ([#34](https://github.com/vllm-project/agentic-api/pull/34)). Responses
+  message `input_image` and `input_file` `file_id` references resolve against the
+  same file store ([#356](https://github.com/vllm-project/agentic-api/issues/356)).
+  PostgreSQL/pgvector indexing remains separate.
 - **Computer use:** add typed computer calls, ordered actions, screenshots, and
   explicit execution-location handling through the existing feature issue
   ([#171](https://github.com/vllm-project/agentic-api/issues/171)).

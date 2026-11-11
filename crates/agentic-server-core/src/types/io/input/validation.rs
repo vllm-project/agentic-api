@@ -64,16 +64,19 @@ enum MessageContentError {
 }
 
 impl InputMessageContent {
-    fn validate(&self) -> Result<(), MessageContentError> {
+    fn validate(&self, allow_file_id: bool) -> Result<(), MessageContentError> {
         match self {
             Self::Text(_) => Ok(()),
             Self::Parts(parts) if parts.is_empty() => Err(MessageContentError::Empty),
             Self::Parts(parts) => parts.iter().enumerate().try_for_each(|(part_index, part)| {
                 let kind = match part {
                     InputContent::InputFile(file) => {
-                        return file
-                            .validate()
-                            .map_err(|reason| MessageContentError::UnsupportedFile { part_index, reason });
+                        let result = if allow_file_id {
+                            file.validate_allow_file_id()
+                        } else {
+                            file.validate()
+                        };
+                        return result.map_err(|reason| MessageContentError::UnsupportedFile { part_index, reason });
                     }
                     InputContent::Unknown(kind) => kind,
                     InputContent::InputText(_)
@@ -92,18 +95,18 @@ impl InputMessageContent {
 }
 
 impl InputItem {
-    fn validate(&self) -> Result<(), MessageContentError> {
+    fn validate(&self, allow_file_id: bool) -> Result<(), MessageContentError> {
         match self {
-            Self::Message(message) => message.content.validate(),
+            Self::Message(message) => message.content.validate(allow_file_id),
             _ => Ok(()),
         }
     }
 }
 
 impl InOutItem {
-    fn validate(&self) -> Result<(), MessageContentError> {
+    fn validate(&self, allow_file_id: bool) -> Result<(), MessageContentError> {
         match self {
-            Self::Input(item) => item.validate(),
+            Self::Input(item) => item.validate(allow_file_id),
             Self::Output(OutputItem::Message(message)) if message.content.is_empty() => Err(MessageContentError::Empty),
             Self::Output(_) => Ok(()),
         }
@@ -123,10 +126,27 @@ impl ResponsesInput {
     /// message content type the typed executor cannot convey, or a message
     /// file that is not an inline base64 UTF-8 text file.
     pub fn validate(&self) -> Result<(), InputValidationError> {
+        self.validate_impl(false)
+    }
+
+    /// Validate message content before file references are resolved.
+    ///
+    /// Like [`Self::validate`], except that a message `input_file` may carry `file_id` for
+    /// rehydration to resolve. Every other unsupported message-file form is still rejected here.
+    ///
+    /// # Errors
+    /// Returns the item and content-part location of an empty message array, a
+    /// message content type the typed executor cannot convey, or an inline message
+    /// file that is not a base64 UTF-8 text file.
+    pub(crate) fn validate_before_hydration(&self) -> Result<(), InputValidationError> {
+        self.validate_impl(true)
+    }
+
+    fn validate_impl(&self, allow_file_id: bool) -> Result<(), InputValidationError> {
         match self {
             Self::Text(_) => Ok(()),
             Self::Items(items) => items.iter().enumerate().try_for_each(|(item_index, item)| {
-                item.validate()
+                item.validate(allow_file_id)
                     .map_err(|source| InputValidationError { item_index, source })
             }),
         }
@@ -175,6 +195,46 @@ mod tests {
         let message = error.to_string();
         assert!(message.starts_with("input[1].content[1]: input_file with file_url is not supported"));
         assert!(!message.contains("example.invalid"), "{message}");
+    }
+
+    #[test]
+    fn file_references_pass_before_hydration_but_not_strict_validation() {
+        let input: ResponsesInput = serde_json::from_value(json!([
+            {"role":"user", "content":[{"type":"input_file", "file_id":"file-1"}]}
+        ]))
+        .unwrap();
+        assert!(matches!(
+            input.validate().unwrap_err().source,
+            MessageContentError::UnsupportedFile {
+                reason: InputFileError::FileId,
+                ..
+            }
+        ));
+        input.validate_before_hydration().unwrap();
+    }
+
+    #[test]
+    fn hydration_phase_still_rejects_other_unsupported_files() {
+        for (part, expected) in [
+            (
+                json!({"type":"input_file", "file_url":"https://example.invalid/a.txt"}),
+                InputFileError::FileUrl,
+            ),
+            (
+                json!({"type":"input_file", "filename":"a.txt"}),
+                InputFileError::MissingData,
+            ),
+            (
+                json!({"type":"input_file", "file_data":"data:application/pdf;base64,AA=="}),
+                InputFileError::NotText,
+            ),
+        ] {
+            let input: ResponsesInput = serde_json::from_value(json!([{"role":"user", "content":[part]}])).unwrap();
+            assert!(matches!(
+                input.validate_before_hydration().unwrap_err().source,
+                MessageContentError::UnsupportedFile { reason, .. } if reason == expected
+            ));
+        }
     }
 
     #[test]

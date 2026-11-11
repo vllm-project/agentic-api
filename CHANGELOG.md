@@ -4,6 +4,13 @@ All notable changes to Agentic API are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Resolve Responses message `input_image` and `input_file` `file_id` references from the Files API before
+  inference, so stateless backends receive the referenced media inline. Stored history keeps the client's
+  reference, an `input_image` must reference an `image/*` upload, and resolved content is limited to 64 MiB
+  per request. Upload purpose `vision` is now accepted (#356).
+
 ## [0.10.0] - 2026-11-09
 
 ### Upgrade notes

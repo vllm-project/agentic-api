@@ -6,10 +6,12 @@ use crate::executor::modes::{ConversationHandler, ResponseHandler};
 use crate::executor::pending_calls::{CallLedger, PendingCall};
 use crate::storage::{ConversationStore, ResponseCheckpoint, ResponseMetadata, ResponseStore, create_pool_with_schema};
 use crate::tool::ToolError;
+use crate::tool::file_search::FileSearchService;
 use crate::types::agent::{AgentIdentity, AgentTurnId, AgentTurnKey};
 use crate::types::agent_tree::{AgentPhase, AgentState, StoredAgent, StoredClientCall, StoredTreeSnapshot};
 use crate::types::client_calls::{ClientCallId, ClientCallKind, ClientCallOwner};
 use crate::types::conversations::ConversationMetadata;
+use crate::types::file_search::FileSearchConfig;
 use crate::types::io::InOutItem;
 use crate::types::io::MultiAgentConfig;
 use crate::types::io::output::{McpListTools, OutputItem};
@@ -931,5 +933,133 @@ async fn overlapping_multi_agent_turns_keep_the_first_turns_pending_call() -> Re
             .iter()
             .any(|call| call.call_id.as_str() == "call_first" && !call.resolved)
     );
+    Ok(())
+}
+
+async fn file_execution_context() -> (ExecutionContext, FileSearchService, tempfile::TempDir) {
+    let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
+    let files = tempfile::tempdir().unwrap();
+    let config = FileSearchConfig {
+        files_storage_dir: Some(files.path().to_owned()),
+        ..FileSearchConfig::default()
+    };
+    let service = FileSearchService::new(pool, Arc::new(reqwest::Client::new()), config).unwrap();
+    let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled())
+        .with_file_search_service(service.clone());
+    (exec_ctx, service, files)
+}
+
+#[tokio::test]
+async fn rehydration_hydrates_file_references_without_changing_canonical_input() {
+    let (exec_ctx, service, _files) = file_execution_context().await;
+    let text = service
+        .upload_file("notes.txt", "text/plain", "assistants", b"hello".to_vec())
+        .await
+        .unwrap();
+    let image = service
+        .upload_file("plot.png", "image/png", "vision", b"png".to_vec())
+        .await
+        .unwrap();
+    let (text_id, image_id) = (text.id.clone(), image.id.clone());
+    let request: RequestPayload = serde_json::from_value(serde_json::json!({
+        "model": "test",
+        "input": [{"role": "user", "content": [
+            {"type": "input_text", "text": "read these"},
+            {"type": "input_file", "file_id": text_id},
+            {"type": "input_image", "file_id": image_id}
+        ]}]
+    }))
+    .unwrap();
+
+    let ctx = rehydrate_conversation(request, &exec_ctx).await.unwrap();
+
+    let canonical = serde_json::to_value(&ctx.new_input_items).unwrap();
+    assert_eq!(canonical[0]["content"][1]["file_id"], text.id);
+    assert!(canonical[0]["content"][1].get("file_data").is_none());
+    assert_eq!(canonical[0]["content"][2]["file_id"], image.id);
+    let original = serde_json::to_value(&ctx.original_request.input).unwrap();
+    assert_eq!(original[0]["content"][1]["file_id"], text.id);
+    assert!(original[0]["content"][1].get("file_data").is_none());
+
+    let model = serde_json::to_value(&ctx.enriched_request.input).unwrap();
+    assert!(
+        model[0]["content"][1]["file_data"]
+            .as_str()
+            .unwrap()
+            .starts_with("data:text/plain;base64,")
+    );
+    assert!(model[0]["content"][1].get("file_id").is_none());
+    assert!(
+        model[0]["content"][2]["image_url"]
+            .as_str()
+            .unwrap()
+            .starts_with("data:image/png;base64,")
+    );
+    assert!(model[0]["content"][2].get("file_id").is_none());
+
+    let upstream = serde_json::to_value(ctx.enriched_request.to_upstream_request(false).unwrap()).unwrap();
+    assert_eq!(
+        upstream["input"][0]["content"][1],
+        serde_json::json!({"type": "input_text", "text": "File: notes.txt\nhello"})
+    );
+    assert!(
+        upstream["input"][0]["content"][2]["image_url"]
+            .as_str()
+            .unwrap()
+            .starts_with("data:image/png;base64,")
+    );
+    assert_eq!(upstream["input"][0]["content"][2]["detail"], "auto");
+}
+
+#[tokio::test]
+async fn rehydration_rejects_file_references_without_a_file_store() {
+    let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
+    let request: RequestPayload = serde_json::from_value(serde_json::json!({
+        "model": "test",
+        "input": [{"role": "user", "content": [
+            {"type": "input_file", "file_id": "file-01a15d85-a1db-76f3-918e-b31d6819a316"}
+        ]}]
+    }))
+    .unwrap();
+    let error = rehydrate_conversation(request, &exec_ctx).await.unwrap_err();
+    assert!(
+        matches!(error, ExecutorError::InvalidRequest(ref message) if message.contains("gateway file store")),
+        "{error}"
+    );
+}
+
+#[tokio::test]
+async fn continuation_hydrates_file_references_from_stored_history() -> Result<(), Box<dyn std::error::Error>> {
+    let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
+    let files = tempfile::tempdir()?;
+    let config = FileSearchConfig {
+        files_storage_dir: Some(files.path().to_owned()),
+        ..FileSearchConfig::default()
+    };
+    let service = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), config)?;
+    let text = service
+        .upload_file("notes.txt", "text/plain", "assistants", b"stored text".to_vec())
+        .await?;
+    let stored: InOutItem = serde_json::from_value(serde_json::json!({
+        "type": "message", "role": "user", "content": [
+            {"type": "input_file", "file_id": text.id}
+        ]
+    }))?;
+    let response_store = ResponseStore::new(pool);
+    response_store
+        .persist("resp_prior", None, vec![stored], None, &ResponseMetadata::default())
+        .await?;
+    let exec_ctx = execution_context(ConversationStore::disabled(), response_store).with_file_search_service(service);
+
+    let ctx = rehydrate_conversation(request(None, Some("resp_prior")), &exec_ctx).await?;
+
+    let model = serde_json::to_value(&ctx.enriched_request.input)?;
+    assert!(
+        model[0]["content"][0]["file_data"]
+            .as_str()
+            .unwrap()
+            .starts_with("data:text/plain;base64,")
+    );
+    assert!(model[0]["content"][0].get("file_id").is_none());
     Ok(())
 }

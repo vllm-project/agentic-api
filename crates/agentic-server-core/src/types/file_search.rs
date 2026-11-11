@@ -1,9 +1,11 @@
 //! Typed contracts for durable files, vector stores, and retrieval.
 
 mod config;
+mod content;
 mod filter;
 mod id;
 pub use config::FileSearchConfig;
+pub use content::FileContent;
 pub(crate) use id::cancelled_upload_error;
 pub use id::validate_file_id;
 

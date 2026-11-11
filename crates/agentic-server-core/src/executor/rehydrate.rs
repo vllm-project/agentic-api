@@ -5,6 +5,8 @@
 
 use std::convert::identity;
 
+mod files;
+
 use super::session::{ResponseContinuation, ResponseSession};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::multi_agent::{CheckpointLimits, ValidatedTreeCheckpoint};
@@ -30,8 +32,9 @@ use crate::utils::uuid7_str;
 /// - no ids:                 normalize the complete history supplied by the client
 ///
 /// # Errors
-/// Returns [`ExecutorError`] if storage is unavailable, a referenced ID does not exist,
-/// or the new/resolved input contains unsupported message files.
+/// Returns [`ExecutorError`] if storage is unavailable, a referenced ID or file does not
+/// exist, or the new/resolved input contains unsupported message files or an unresolvable
+/// `file_id` reference.
 pub async fn rehydrate_conversation(
     request: RequestPayload,
     exec_ctx: &ExecutionContext,
@@ -74,7 +77,7 @@ pub(crate) async fn rehydrate_with_continuation(
         exec_ctx
             .gateway_executors
             .validate_declarations(request.tool_declarations().as_deref())?;
-        request.input.validate()?;
+        request.input.validate_before_hydration()?;
         let response_id = uuid7_str("resp_");
         // Persistence keeps the public items. Tool lowering belongs to the enriched
         // inference copy, including when a later turn loads these items from storage.
@@ -129,6 +132,7 @@ pub(crate) async fn rehydrate_with_continuation(
         exec_ctx
             .gateway_executors
             .validate_declarations(ctx.enriched_request.tool_declarations().as_deref())?;
+        files::hydrate_file_references(&mut ctx.enriched_request.input, exec_ctx.file_search.as_ref()).await?;
         ctx.enriched_request.input.validate()?;
         validate_multi_agent_request(&ctx.enriched_request)?;
         Ok(ctx)

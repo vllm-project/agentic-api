@@ -682,7 +682,8 @@ goes through it, so it lowers the public records the model never read (search it
   Message-file conversion belongs to `input/file_text.rs`: supported inline UTF-8
   text files become model-facing text with their `prompt_cache_breakpoint` retained.
   Canonical history keeps the original file; unrelated file extensions are not copied
-  onto the text part.
+  onto the text part. A `file_id` reference is resolved during rehydration, so this
+  conversion sees the stored file's base64 data URL.
 
 - **`types/io/item.rs`** — `InOutItem` is the shared input/output union used by
   `ResponsesInput::Items`, conversation requests/resources, and retained history.
@@ -830,7 +831,10 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   for the two request copies' responsibilities.
 - **`rehydrate.rs`** — `rehydrate_conversation()` loads prior history from either the
   conversation store or the response store depending on which ID the request carries,
-  and builds the enriched `RequestContext`. Every source (a stored response, a session parent, or a
+  and builds the enriched `RequestContext`. Message `input_image` and `input_file`
+  `file_id` references in the enriched input are resolved against the file store into
+  base64 data URLs before final validation; the client's reference stays in
+  `original_request` and canonical history. Every source (a stored response, a session parent, or a
   conversation turn) leaves its `ResponseCheckpoint` on the context (`checkpoint`): the continued turn's
   metadata and its stored history rows. `prepare.rs` restores tool-search
   state after compaction from it without another storage read, and persistence extends it: a response's history
