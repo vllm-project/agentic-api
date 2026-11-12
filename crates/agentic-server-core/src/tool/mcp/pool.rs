@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::net::Ipv6Addr;
 use std::sync::Arc;
 
 use reqwest::Url;
@@ -230,17 +231,32 @@ fn validate_request_server_url_with_allowed_hosts(value: &str, allowed_hosts: &[
 }
 
 fn is_allowed_request_host(host: &url::Host<&str>, allowed_hosts: &[String]) -> bool {
-    match host {
-        url::Host::Domain(host) => host.eq_ignore_ascii_case("localhost") || host_allowed(host, allowed_hosts),
-        url::Host::Ipv4(address) => address.is_loopback() || host_allowed(&address.to_string(), allowed_hosts),
-        url::Host::Ipv6(address) => address.is_loopback() || host_allowed(&address.to_string(), allowed_hosts),
-    }
+    let loopback = match host {
+        url::Host::Domain(host) => host.eq_ignore_ascii_case("localhost"),
+        url::Host::Ipv4(address) => address.is_loopback(),
+        url::Host::Ipv6(address) => address.is_loopback(),
+    };
+    loopback || host_allowed(host, allowed_hosts)
 }
 
-fn host_allowed(host: &str, allowed_hosts: &[String]) -> bool {
+/// Whether an allowlist entry names `host`, compared as the URL parser
+/// normalizes hosts: `[fd00::1]`, `fd00::1` and `FD00:0:0::1` are the same
+/// address, and an internationalized name matches its punycode form.
+fn host_allowed(host: &url::Host<&str>, allowed_hosts: &[String]) -> bool {
+    let host = host.to_owned();
     allowed_hosts
         .iter()
-        .any(|allowed_host| allowed_host.eq_ignore_ascii_case(host))
+        .filter_map(|allowed_host| parse_allowed_host(allowed_host))
+        .any(|allowed_host| allowed_host == host)
+}
+
+/// An allowlist entry as a URL host; a bare IPv6 address needs no brackets.
+fn parse_allowed_host(value: &str) -> Option<url::Host> {
+    let value = value.trim();
+    if let Ok(address) = value.parse::<Ipv6Addr>() {
+        return Some(url::Host::Ipv6(address));
+    }
+    url::Host::parse(value).ok()
 }
 
 pub(crate) fn allowed_hosts_from_env() -> Vec<String> {
@@ -356,6 +372,47 @@ mod tests {
             .is_ok()
         );
         assert!(validate_request_server_url_with_allowed_hosts("https://mcp.example.com/mcp", &[]).is_err());
+    }
+
+    #[test]
+    fn request_server_url_matches_allowlisted_ipv6_in_any_spelling() {
+        for allowed in ["fd00::10", "[fd00::10]", "FD00:0:0:0:0:0:0:10", " [FD00::10] "] {
+            assert!(
+                validate_request_server_url_with_allowed_hosts("http://[fd00::10]:8000/mcp", &[allowed.to_owned()])
+                    .is_ok(),
+                "{allowed:?} must allow fd00::10"
+            );
+        }
+        assert!(
+            validate_request_server_url_with_allowed_hosts("http://[fd00::11]:8000/mcp", &["[fd00::10]".to_owned()])
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn request_server_url_matches_allowlisted_hosts_as_the_url_parser_normalizes_them() {
+        for (url, allowed) in [
+            ("https://MCP.Example.COM/mcp", "mcp.example.com"),
+            ("https://mcp.example.com/mcp", " MCP.example.com "),
+            ("https://xn--bcher-kva.example/mcp", "b\u{fc}cher.example"),
+            ("https://b\u{fc}cher.example/mcp", "b\u{fc}cher.example"),
+            ("http://10.0.0.5:8000/mcp", "10.0.0.5"),
+        ] {
+            assert!(
+                validate_request_server_url_with_allowed_hosts(url, &[allowed.to_owned()]).is_ok(),
+                "{allowed:?} must allow {url}"
+            );
+        }
+        for (url, allowed) in [
+            ("https://mcp.example.com/mcp", "mcp.example.com:443"),
+            ("https://other.example.com/mcp", "mcp.example.com"),
+            ("http://10.0.0.6:8000/mcp", "10.0.0.5"),
+        ] {
+            assert!(
+                validate_request_server_url_with_allowed_hosts(url, &[allowed.to_owned()]).is_err(),
+                "{allowed:?} must not allow {url}"
+            );
+        }
     }
 
     #[test]
