@@ -138,11 +138,17 @@ impl FromStr for Freshness {
             "week" => Ok(Self::Week),
             "month" => Ok(Self::Month),
             "year" => Ok(Self::Year),
-            _ => parse_freshness_range(value).ok_or_else(|| {
-                ToolError::Config(
+            _ => match parse_freshness_range(value) {
+                Some(Self::Range { from, to }) if from > to => Err(ToolError::Config(format!(
+                    "web_search freshness range starts after it ends: {} is after {}",
+                    from.format(DATE_FORMAT),
+                    to.format(DATE_FORMAT)
+                ))),
+                Some(range) => Ok(range),
+                None => Err(ToolError::Config(
                     "web_search freshness must be day, week, month, year, or YYYY-MM-DDtoYYYY-MM-DD".to_owned(),
-                )
-            }),
+                )),
+            },
         }
     }
 }
@@ -327,6 +333,26 @@ mod tests {
                 "invalid tool config: web_search freshness must be day, week, month, year, or YYYY-MM-DDtoYYYY-MM-DD"
             );
         }
+    }
+
+    #[test]
+    fn freshness_rejects_a_range_that_ends_before_it_starts() {
+        let error = "2024-02-29to2024-01-05"
+            .parse::<Freshness>()
+            .expect_err("reversed range");
+        assert_eq!(
+            error.to_string(),
+            "invalid tool config: web_search freshness range starts after it ends: 2024-02-29 is after 2024-01-05"
+        );
+        let error = WebSearchArguments::from_json(r#"{"query":"q","freshness":"2024-02-29to2024-01-05"}"#).unwrap_err();
+        assert!(error.to_string().contains("starts after it ends"));
+
+        // A single-day range is inclusive on both ends and stays valid.
+        let day = NaiveDate::from_ymd_opt(2024, 2, 29).unwrap();
+        assert_eq!(
+            "2024-02-29to2024-02-29".parse::<Freshness>().unwrap(),
+            Freshness::Range { from: day, to: day }
+        );
     }
 
     #[test]
