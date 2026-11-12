@@ -24,3 +24,29 @@ fn batch_requests_match_wire_contract() {
     assert_eq!(request.items.len(), 1);
     assert!(serde_json::from_value::<CreateItemRequest>(json!({"item":{"role":"user", "content":"hello"}})).is_err());
 }
+
+#[test]
+fn metadata_limits_match_openai() {
+    let entries = |count: usize| (0..count).map(|i| (format!("k{i}"), "v".to_owned())).collect();
+    assert_eq!(validate_metadata(&ConversationMetadata::new()), Ok(()));
+    assert_eq!(validate_metadata(&entries(16)), Ok(()));
+    assert_eq!(validate_metadata(&entries(17)), Err(MetadataError::TooManyEntries(17)));
+
+    let one = |key: String, value: String| ConversationMetadata::from([(key, value)]);
+    assert_eq!(validate_metadata(&one("k".repeat(64), "v".repeat(512))), Ok(()));
+    assert_eq!(
+        validate_metadata(&one(String::new(), "v".into())),
+        Err(MetadataError::InvalidKeyLength(0))
+    );
+    assert_eq!(
+        validate_metadata(&one("k".repeat(65), "v".into())),
+        Err(MetadataError::InvalidKeyLength(65))
+    );
+    assert_eq!(
+        validate_metadata(&one("k".into(), "v".repeat(513))),
+        Err(MetadataError::ValueTooLong {
+            key: "k".into(),
+            len: 513
+        })
+    );
+}

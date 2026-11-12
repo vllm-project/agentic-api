@@ -164,3 +164,50 @@ async fn rejects_oversized_batches_and_invalid_limits() {
     }
     handle.abort();
 }
+
+#[tokio::test]
+async fn regression_conversation_metadata_limits() {
+    let state = test_state_with_storage("http://127.0.0.1:1").await;
+    let (url, handle) = spawn_gateway(state).await;
+    let client = reqwest::Client::new();
+    let too_many: serde_json::Map<String, Value> = (0..17).map(|i| (format!("k{i}"), json!("v"))).collect();
+    let invalid = [
+        json!(too_many),
+        json!({"k".repeat(65): "v"}),
+        json!({"": "v"}),
+        json!({"k": "v".repeat(513)}),
+    ];
+    let conv_id = create_conversation_with_items(&url, vec![]).await;
+    for metadata in invalid {
+        for target in [
+            format!("{url}/v1/conversations"),
+            format!("{url}/v1/conversations/{conv_id}"),
+        ] {
+            let response = client
+                .post(&target)
+                .json(&json!({"metadata": metadata}))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{target}");
+            let body: Value = response.json().await.unwrap();
+            assert_eq!(body["error"]["type"], "invalid_request_error", "{body}");
+            assert_eq!(body["error"]["code"], "invalid_value", "{body}");
+            assert_eq!(body["error"]["param"], "metadata", "{body}");
+        }
+    }
+
+    let at_limit: serde_json::Map<String, Value> =
+        (0..16).map(|i| (format!("{i:0>64}"), json!("v".repeat(512)))).collect();
+    let response = client
+        .post(format!("{url}/v1/conversations/{conv_id}"))
+        .json(&json!({"metadata": at_limit}))
+        .send()
+        .await
+        .unwrap();
+    let status = response.status();
+    let body: Value = response.json().await.unwrap();
+    handle.abort();
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["metadata"].as_object().unwrap().len(), 16);
+}

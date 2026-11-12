@@ -1,13 +1,22 @@
 //! Conversation storage handler — owns all conversation store operations.
 
 use crate::storage::{ConversationData, ConversationSnapshot, ConversationStore, ResponseMetadata, StorageError};
-use crate::types::conversations::ConversationMetadata;
+use crate::types::conversations::{ConversationMetadata, validate_metadata};
 use crate::types::io::InOutItem;
 use crate::types::io::{ItemPage, ListItemsResponse};
 use crate::types::request_response::ResponsePayload;
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::request::RequestContext;
+
+/// Rejects metadata over its limits as `OpenAI` does: an `invalid_value` on `metadata`.
+fn check_metadata(metadata: &ConversationMetadata) -> ExecutorResult<()> {
+    validate_metadata(metadata).map_err(|error| ExecutorError::UnsupportedValue {
+        param: Some("metadata".into()),
+        code: Some("invalid_value"),
+        message: error.to_string(),
+    })
+}
 
 /// Handles all conversation store operations: creation, rehydration, and persistence.
 #[derive(Clone, Debug)]
@@ -40,7 +49,7 @@ impl ConversationHandler {
     /// Creates a tenant-owned conversation with its metadata and initial history.
     ///
     /// # Errors
-    /// Returns an error if more than 20 items are supplied or storage fails.
+    /// Returns an error if more than 20 items are supplied, the metadata breaks its limits, or storage fails.
     pub async fn create(
         &self,
         tenant_id: &str,
@@ -52,6 +61,7 @@ impl ConversationHandler {
                 "a conversation accepts at most 20 initial items".into(),
             ));
         }
+        check_metadata(metadata)?;
         InOutItem::admit_all(items, "items")?;
         self.store
             .create(tenant_id, metadata, items)
@@ -73,13 +83,14 @@ impl ConversationHandler {
     /// Updates metadata on a tenant-owned conversation.
     ///
     /// # Errors
-    /// Returns an error if the conversation does not exist or storage fails.
+    /// Returns an error if the metadata breaks its limits, the conversation does not exist, or storage fails.
     pub async fn update_metadata(
         &self,
         tenant_id: &str,
         conversation_id: &str,
         metadata: ConversationMetadata,
     ) -> ExecutorResult<ConversationData> {
+        check_metadata(&metadata)?;
         self.store
             .update_metadata(tenant_id, conversation_id, metadata)
             .await

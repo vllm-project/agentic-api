@@ -22,6 +22,7 @@ mod files;
 mod setup;
 use crate::{
     storage::file_search::{Collection, FilePublicationFailure, PreparedAttachment, StoredChunk, StoredVectorStore},
+    types::conversations::validate_metadata,
     types::file_search::{
         AttachFileRequest, ChunkingStrategy, CreateVectorStoreRequest, DeleteObject, FileAttributes, FileCounts,
         FileObject, FileSearchError, ListParams, ListResponse, SearchMode, SearchQuery, SearchRequest, SearchResponse,
@@ -103,13 +104,8 @@ impl FileSearchService {
         if request.name.as_ref().is_some_and(|name| name.len() > 256) {
             return invalid("vector store name must not exceed 256 bytes");
         }
-        if request.metadata.len() > 16
-            || request
-                .metadata
-                .iter()
-                .any(|(key, value)| key.is_empty() || key.len() > 64 || value.len() > 512)
-        {
-            return invalid("metadata accepts at most 16 entries, with 1 to 64 byte keys and values up to 512 bytes");
+        if let Err(error) = validate_metadata(&request.metadata) {
+            return invalid(&error.to_string());
         }
         if request.file_ids.len() > 16
             || request.file_ids.iter().collect::<HashSet<_>>().len() != request.file_ids.len()
