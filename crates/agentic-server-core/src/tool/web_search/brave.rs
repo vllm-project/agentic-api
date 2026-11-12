@@ -529,6 +529,28 @@ mod tests {
     }
 
     #[test]
+    fn request_filters_results_by_declared_subpath_entries() {
+        let config = WebSearchToolParam {
+            filters: Some(DomainFilters {
+                allowed_domains: None,
+                blocked_domains: Some(vec!["example.com/private".to_owned()]),
+            }),
+            ..WebSearchToolParam::default()
+        };
+        let request = BraveSearchRequest::from_args_and_config("q", &args(r#"{"query":"q"}"#), &config).unwrap();
+        let response: BraveSearchResponse = serde_json::from_str(
+            r#"{"web": {"results": [
+                {"url": "https://example.com/private/report"},
+                {"url": "https://example.com/public/post"}
+            ]}}"#,
+        )
+        .unwrap();
+        let response = response.into_provider_response("q", &request.domain_filter);
+        let urls = response.web.iter().map(|r| r.url.as_str()).collect::<Vec<_>>();
+        assert_eq!(urls, ["https://example.com/public/post"]);
+    }
+
+    #[test]
     fn request_rejects_conflicting_domain_lists() {
         let error = BraveSearchRequest::from_args_and_config(
             "q",

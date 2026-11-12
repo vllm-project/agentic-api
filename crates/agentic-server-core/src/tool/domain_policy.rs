@@ -2,7 +2,7 @@
 //!
 //! A `web_search` or `web_fetch` declaration may name `allowed_domains` and
 //! `blocked_domains` ([`DomainFilters`]). This module owns the [`DomainFilter`]
-//! that decides whether a URL's host is admitted — web search applies it to
+//! that decides whether a URL is admitted — web search applies it to
 //! results, web fetch to the requested URL and to every redirect hop — and the
 //! host-name rule a `web_fetch` entry must satisfy to match anything
 //! ([`validate_domain_entry`], [`validate_domain_filters`]). `web_search` keeps
@@ -79,21 +79,34 @@ pub(crate) fn validate_domain_filters(tool: &str, filters: Option<&DomainFilters
     Ok(())
 }
 
-/// Admits URLs by host against declared allow and block lists.
+/// Admits URLs against declared allow and block lists.
 ///
 /// A host matches a domain when it equals the domain or ends with `.{domain}`
-/// (label boundary), compared case-insensitively after IDNA normalization. A
-/// URL without a parseable host cannot be checked, so it is refused whenever
-/// any list is active (fail closed). An allowlist whose entries normalize to
-/// nothing admits no host rather than every host.
+/// (label boundary), compared case-insensitively after IDNA normalization. An
+/// entry may carry a path after the host, as Anthropic's web search documents
+/// (`example.com/blog`): it then also requires the URL path to start with that
+/// path, where `*` in the path matches any run of characters
+/// (`example.com/*/articles`). Only `web_search` admits such entries;
+/// `web_fetch` refuses them when it validates its declaration. A URL without a
+/// parseable host cannot be checked, so it is refused whenever any list is
+/// active (fail closed). An allowlist whose entries normalize to nothing admits
+/// no host rather than every host.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct DomainFilter {
-    include: Vec<String>,
-    exclude: Vec<String>,
+    include: Vec<DomainRule>,
+    exclude: Vec<DomainRule>,
     /// An allowlist was declared but none of its entries normalizes to a
     /// domain, so nothing can match it: the filter fails closed instead of
     /// widening to every host.
     deny_all: bool,
+}
+
+/// One normalized list entry: a host and an optional path prefix pattern.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DomainRule {
+    host: String,
+    /// The entry's path, starting with `/`; `None` matches every path.
+    path: Option<String>,
 }
 
 impl DomainFilter {
@@ -123,15 +136,25 @@ impl DomainFilter {
         if self.deny_all {
             return false;
         }
-        let Some(host) = url_host(url) else {
+        let Some((host, path)) = url_host_and_path(url) else {
             return self.is_empty();
         };
-        let matches = |domain: &String| host_matches_domain(&host, domain);
+        let matches = |rule: &DomainRule| rule.matches(&host, &path);
         (self.include.is_empty() || self.include.iter().any(matches)) && !self.exclude.iter().any(matches)
     }
 }
 
-fn normalize_domains(domains: Option<&[String]>) -> Vec<String> {
+impl DomainRule {
+    fn matches(&self, host: &str, path: &str) -> bool {
+        host_matches_domain(host, &self.host)
+            && self
+                .path
+                .as_deref()
+                .is_none_or(|pattern| path_matches_prefix(path, pattern))
+    }
+}
+
+fn normalize_domains(domains: Option<&[String]>) -> Vec<DomainRule> {
     domains
         .unwrap_or_default()
         .iter()
@@ -139,26 +162,55 @@ fn normalize_domains(domains: Option<&[String]>) -> Vec<String> {
         .collect()
 }
 
-/// Lowercases and IDNA-normalizes a configured domain. Entries that are not a
-/// valid host are kept verbatim (lowercased) so a typo fails closed instead of
-/// silently widening an allowlist.
-fn normalize_domain(domain: &str) -> Option<String> {
-    let trimmed = domain.trim().trim_end_matches('.');
-    if trimmed.is_empty() {
+/// Lowercases and IDNA-normalizes a configured entry's host and keeps its path,
+/// if any, verbatim. Entries that are not a valid host, including any entry
+/// with a scheme, are kept verbatim (lowercased) so a typo fails closed instead
+/// of silently widening an allowlist.
+fn normalize_domain(domain: &str) -> Option<DomainRule> {
+    let trimmed = domain.trim();
+    let (host, path) = match trimmed.find('/') {
+        Some(index) if !trimmed.contains("://") => trimmed.split_at(index),
+        _ => (trimmed, ""),
+    };
+    let host = host.trim_end_matches('.');
+    if host.is_empty() {
         return None;
     }
-    Some(Host::parse(trimmed).map_or_else(|_| trimmed.to_ascii_lowercase(), |host| host.to_string()))
+    let host = Host::parse(host).map_or_else(|_| host.to_ascii_lowercase(), |host| host.to_string());
+    // A bare `/` (or `/*`) names every path on the host.
+    let path = (!path.trim_end_matches('*').trim_end_matches('/').is_empty()).then(|| path.to_owned());
+    Some(DomainRule { host, path })
 }
 
-fn url_host(url: &str) -> Option<String> {
-    url::Url::parse(url)
-        .ok()?
-        .host()
-        .map(|host| host.to_string().trim_end_matches('.').to_owned())
+fn url_host_and_path(url: &str) -> Option<(String, String)> {
+    let url = url::Url::parse(url).ok()?;
+    let host = url.host()?.to_string().trim_end_matches('.').to_owned();
+    Some((host, url.path().to_owned()))
 }
 
 fn host_matches_domain(host: &str, domain: &str) -> bool {
     host == domain || host.strip_suffix(domain).is_some_and(|prefix| prefix.ends_with('.'))
+}
+
+/// Whether `path` starts with `pattern`, where each `*` in the pattern matches
+/// any run of characters (including none) and anything may follow the pattern.
+fn path_matches_prefix(path: &str, pattern: &str) -> bool {
+    let mut pieces = pattern.split('*');
+    let Some(first) = pieces.next() else {
+        return true;
+    };
+    let Some(mut rest) = path.strip_prefix(first) else {
+        return false;
+    };
+    for piece in pieces {
+        // Leftmost placement leaves the most room for later pieces, and the
+        // implicit trailing wildcard absorbs whatever follows the last one.
+        let Some(index) = rest.find(piece) else {
+            return false;
+        };
+        rest = &rest[index + piece.len()..];
+    }
+    true
 }
 
 #[cfg(test)]
@@ -248,6 +300,52 @@ mod tests {
         let blocklist_only = DomainFilter::new(None, Some(&["example.com".to_owned()]));
         assert!(blocklist_only.allows("https://example.org/"));
         assert!(!blocklist_only.allows("https://sub.example.com/"));
+    }
+
+    #[test]
+    fn domain_filter_entries_with_a_path_match_urls_under_that_path() {
+        let allowlist = DomainFilter::new(Some(&["Example.COM/blog".to_owned()]), None);
+        assert!(allowlist.allows("https://example.com/blog"));
+        assert!(allowlist.allows("https://example.com/blog/post-1"));
+        assert!(allowlist.allows("https://docs.example.com/blog/post-1?page=2"));
+        assert!(!allowlist.allows("https://example.com/"));
+        assert!(!allowlist.allows("https://example.com/news/blog"));
+        assert!(!allowlist.allows("https://example.org/blog/post-1"));
+
+        // A blocked path blocks only that path; the rest of the host stays admitted.
+        let blocklist = DomainFilter::new(None, Some(&["example.com/blog".to_owned()]));
+        assert!(!blocklist.allows("https://example.com/blog/post-1"));
+        assert!(!blocklist.allows("https://www.example.com/blog"));
+        assert!(blocklist.allows("https://example.com/docs"));
+        assert!(blocklist.allows("https://example.org/blog/post-1"));
+
+        // A host-only entry and a path entry combine as alternatives.
+        let mixed = DomainFilter::new(Some(&["example.com/blog".to_owned(), "example.org".to_owned()]), None);
+        assert!(mixed.allows("https://example.com/blog/a"));
+        assert!(mixed.allows("https://example.org/anything"));
+        assert!(!mixed.allows("https://example.com/docs"));
+    }
+
+    #[test]
+    fn domain_filter_path_wildcards_match_any_run_of_characters() {
+        let filter = DomainFilter::new(Some(&["example.com/*/articles".to_owned()]), None);
+        assert!(filter.allows("https://example.com/en/articles"));
+        assert!(filter.allows("https://example.com/en/us/articles/42"));
+        assert!(!filter.allows("https://example.com/en/posts"));
+        assert!(!filter.allows("https://example.com/articles"));
+
+        // A bare or wildcard-only path names the whole host.
+        for entry in ["example.com/", "example.com/*", "example.com/**"] {
+            let filter = DomainFilter::new(Some(&[entry.to_owned()]), None);
+            assert!(filter.allows("https://example.com/"), "{entry}");
+            assert!(filter.allows("https://docs.example.com/any/path"), "{entry}");
+            assert!(!filter.allows("https://example.org/"), "{entry}");
+        }
+
+        assert!(path_matches_prefix("/a/b/c", "/a*c"));
+        assert!(path_matches_prefix("/a/c/c", "/a*c*c"));
+        assert!(!path_matches_prefix("/a/b", "/a*c"));
+        assert!(!path_matches_prefix("/b/a", "/a"));
     }
 
     #[test]
