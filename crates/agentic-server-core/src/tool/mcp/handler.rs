@@ -16,7 +16,7 @@ use crate::types::io::output::{
     FunctionToolCall, GatewayCallStatus, McpCall, McpCallError, McpCallStatus, McpListTool, McpListTools, OutputItem,
 };
 use crate::types::io::{FunctionTool, ResponsesInput};
-use crate::types::tools::{McpDiscoveredToolParam, McpToolParam};
+use crate::types::tools::{McpApprovalMode, McpApprovalPolicy, McpDiscoveredToolParam, McpToolParam};
 use crate::utils::common::{deserialize_from_str, deserialize_from_str_opt, serialize_to_string, stable_name_hash};
 use crate::utils::uuid7_str;
 
@@ -288,14 +288,15 @@ impl ToolHandler for McpHandler {
                 "MCP connector_id is not supported; configure server_url instead".to_owned(),
             ));
         }
-        if params
-            .require_approval
-            .as_deref()
-            .is_some_and(|policy| policy != "never")
-        {
-            return Err(ToolError::Config(
-                "MCP require_approval supports only 'never'; approval gating is not yet supported".to_owned(),
-            ));
+        if let Some(policy) = &params.require_approval {
+            if *policy == McpApprovalPolicy::Mode(McpApprovalMode::Always) {
+                return Err(ToolError::Config(
+                    "MCP require_approval supports only 'never'; approval gating is not yet supported".to_owned(),
+                ));
+            }
+            policy
+                .validate()
+                .map_err(|error| ToolError::Config(error.to_string()))?;
         }
         Ok(())
     }
@@ -518,6 +519,17 @@ mod tests {
                     "require_approval": "always"}),
                 "MCP require_approval supports only 'never'; approval gating is not yet supported",
             ),
+            (
+                serde_json::json!({"server_label": "counter", "server_url": "http://127.0.0.1:8000/mcp",
+                    "require_approval": {"never": {"read_only": true}}}),
+                "MCP require_approval filters match tools by tool_names only; read_only is not supported",
+            ),
+            (
+                serde_json::json!({"server_label": "counter", "server_url": "http://127.0.0.1:8000/mcp",
+                    "require_approval": {"always": {"tool_names": ["increment"]},
+                        "never": {"tool_names": ["increment"]}}}),
+                "MCP require_approval lists tool 'increment' under both always and never",
+            ),
         ] {
             let params = serde_json::from_value::<McpToolParam>(param).expect("MCP tool param");
             let error = handler.validate(&params).expect_err(message);
@@ -528,6 +540,12 @@ mod tests {
         handler
             .validate(&unset)
             .expect("whether the server is configured is the executors' check");
+        let filtered = serde_json::from_value::<McpToolParam>(serde_json::json!({"server_label": "counter",
+            "server_url": "http://127.0.0.1:8000/mcp", "require_approval": {"never": {"tool_names": ["increment"]}}}))
+        .expect("MCP tool param");
+        handler
+            .validate(&filtered)
+            .expect("whether the filter covers the server's tools is the discovery check");
     }
 
     #[test]

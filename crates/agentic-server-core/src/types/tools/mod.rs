@@ -6,6 +6,8 @@
 pub mod code_interpreter;
 /// Domain lists shared by the web tools' declarations.
 pub mod domain;
+/// The `require_approval` policy of an MCP declaration.
+pub mod mcp_approval;
 /// This module contains only serde shapes (serialization/deserialization types).
 pub mod params;
 /// Tool-search declaration parameters.
@@ -15,6 +17,9 @@ pub mod web_fetch;
 
 pub use code_interpreter::{CodeInterpreterCallArguments, CodeInterpreterCallArgumentsError};
 pub use domain::DomainFilters;
+pub use mcp_approval::{
+    McpApprovalFilter, McpApprovalMode, McpApprovalPolicy, McpApprovalPolicyError, McpApprovalToolFilter,
+};
 pub use params::{
     CodeInterpreterToolParam, CodexNamespaceMember, CodexNamespaceToolParam, CustomToolParam, EmptyToolNameError,
     FileSearchToolParam, FunctionToolParam, LocalShellEnvironment, McpDiscoveredToolParam, McpToolParam,

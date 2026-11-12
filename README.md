@@ -597,6 +597,11 @@ Configured `allowed_tools` form the maximum tool set; request-provided `allowed_
 `require_approval = "never"` lets requests omit that field. If a label exists in `config.toml`, a request cannot
 override it with `server_url`; otherwise the existing request-declared HTTP MCP flow remains available.
 
+The gateway has no MCP approval step yet. A request's `require_approval` may be `"never"` or a filter object such as
+`{"never": {"tool_names": ["read"]}}`; a tool that the filter's `never.tool_names` does not list needs approval, as in
+the Responses API, so the request fails with a 400 if the server exposes such a tool. Narrow `allowed_tools` to the
+listed tools in that case. `"always"` and `read_only` filters are rejected.
+
 ### Optional embedded code interpreter
 
 The Eryx code interpreter is excluded from default builds. To opt in from source, prepare the platform-specific Eryx 0.8 runtime and then enable the Cargo feature:
