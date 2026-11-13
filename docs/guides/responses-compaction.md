@@ -142,10 +142,14 @@ reaches the model as:
 {"type": "input_text", "text": "File: notes.txt\nhello"}
 ```
 
-Stored response and conversation history and compacted windows keep the client's original `input_file`; inline
-text is decoded again and a `file_id` is resolved again on each continuation. The file counts toward the request
-body limit (`max_request_body_size_bytes`) in its base64 form, and the decoded text counts toward the model's
-context length. Resolved file references are limited to 64 MiB of base64 data URLs per request.
+Stored response and conversation history keep the client's original `input_file`; inline text is decoded again
+and a `file_id` is resolved again on each continuation. Compaction summarizes the resolved model-facing input,
+so a compacted window can contain the resolved base64 data URL for any retained message that references a
+file; multi-agent tree snapshots can likewise retain the resolved form and count it toward their retained-byte
+budget. Inline `file_data` counts toward the request body limit (`max_request_body_size_bytes`) in its base64
+form; a `file_id` reference does not, because the client body carries only the reference. The decoded text
+counts toward the model's context length. Resolved file references are limited to 64 MiB of base64 data URLs
+per request.
 
 Every other message file is rejected with HTTP 400 `invalid_request_error` (or the equivalent WebSocket error)
 before inference and before anything is stored. The message gives the reason without echoing the file: a

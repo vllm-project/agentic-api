@@ -6,7 +6,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::tool::file_search::FileSearchService;
-use crate::types::file_search::FileContent;
+use crate::types::file_search::{FileContent, FileSearchError};
 use crate::types::io::{InOutItem, InputContent, InputItem, InputMessageContent, ResponsesInput};
 
 /// Maximum resolved media, as base64 data URLs, added to one request.
@@ -20,26 +20,19 @@ struct ResolvedFile {
 }
 
 impl ResolvedFile {
-    /// Builds the data URL for a stored file, or `None` when its content type cannot form one.
+    /// Builds the data URL for a stored file, or `None` when its content type is not a media type.
     fn new(file: FileContent) -> Option<Self> {
-        let media_type = file.content_type.split(';').next().unwrap_or_default().trim();
-        if media_type.is_empty()
-            || media_type
-                .chars()
-                .any(|character| character == ',' || character.is_whitespace() || character.is_control())
-        {
-            return None;
-        }
+        let media_type = normalized_media_type(&file.content_type)?;
         let mut data_url = String::with_capacity(
             "data:".len() + media_type.len() + ";base64,".len() + file.bytes.len().div_ceil(3) * 4,
         );
         data_url.push_str("data:");
-        data_url.push_str(media_type);
+        data_url.push_str(&media_type);
         data_url.push_str(";base64,");
         STANDARD.encode_string(&file.bytes, &mut data_url);
         Some(Self {
             filename: file.filename,
-            media_type: media_type.to_owned(),
+            media_type,
             data_url,
         })
     }
@@ -47,8 +40,24 @@ impl ResolvedFile {
     fn is_image(&self) -> bool {
         self.media_type
             .split_once('/')
-            .is_some_and(|(kind, subtype)| kind.eq_ignore_ascii_case("image") && !subtype.is_empty())
+            .is_some_and(|(kind, subtype)| kind == "image" && !subtype.is_empty())
     }
+}
+
+/// The media type of a stored content type, lowercased, when it is a valid `type/subtype` token.
+///
+/// Parameters after the first `;` are dropped. A stored value that cannot form a safe data-URL
+/// prefix is rejected rather than forwarded.
+fn normalized_media_type(content_type: &str) -> Option<String> {
+    let media_type = content_type.split(';').next().unwrap_or_default().trim();
+    let (kind, subtype) = media_type.split_once('/')?;
+    let is_token = |part: &str| {
+        !part.is_empty()
+            && part
+                .chars()
+                .all(|character| character.is_ascii_alphanumeric() || "!#$%&'*+-.^_`|~".contains(character))
+    };
+    (is_token(kind) && is_token(subtype)).then(|| media_type.to_ascii_lowercase())
 }
 
 /// Replace message `input_image` and `input_file` file references with base64 data URLs.
@@ -175,7 +184,11 @@ async fn resolve_at(
     if let Some(file) = cache.get(file_id) {
         return Ok(file.clone());
     }
-    let file = ResolvedFile::new(file_search.read_file(file_id).await?).ok_or_else(|| {
+    let content = file_search
+        .read_file(file_id)
+        .await
+        .map_err(|error| part_file_error(error, item_index, part_index))?;
+    let file = ResolvedFile::new(content).ok_or_else(|| {
         part_error(
             item_index,
             part_index,
@@ -184,6 +197,17 @@ async fn resolve_at(
     })?;
     cache.insert(file_id.to_owned(), file.clone());
     Ok(file)
+}
+
+/// Adds the part position to a user-facing file-store error while keeping its status.
+fn part_file_error(error: FileSearchError, item_index: usize, part_index: usize) -> ExecutorError {
+    let prefixed = |message: String| format!("input[{item_index}].content[{part_index}]: {message}");
+    match error {
+        FileSearchError::InvalidRequest(message) => FileSearchError::InvalidRequest(prefixed(message)).into(),
+        FileSearchError::NotFound(message) => FileSearchError::NotFound(prefixed(message)).into(),
+        FileSearchError::Conflict(message) => FileSearchError::Conflict(prefixed(message)).into(),
+        other => other.into(),
+    }
 }
 
 fn charge(total: &mut usize, max_bytes: usize, bytes: usize) -> ExecutorResult<()> {
@@ -245,7 +269,7 @@ mod tests {
             .unwrap();
         let mut input = message(&json!([
             {"type": "input_image", "file_id": &image.id, "detail": "high", "extra": "keep"},
-            {"type": "input_file", "file_id": &text.id},
+            {"type": "input_file", "file_id": &text.id, "prompt_cache_breakpoint": {"mode": "explicit"}},
             {"type": "input_file", "file_id": &text.id, "filename": "client.txt"}
         ]));
 
@@ -265,6 +289,7 @@ mod tests {
             format!("data:text/plain;base64,{}", STANDARD.encode(b"hello"))
         );
         assert_eq!(parts[1]["filename"], "notes.txt");
+        assert_eq!(parts[1]["prompt_cache_breakpoint"], json!({"mode": "explicit"}));
         assert!(parts[1].get("file_id").is_none());
         assert_eq!(parts[2]["filename"], "client.txt");
         input.validate().unwrap();
@@ -299,13 +324,36 @@ mod tests {
     #[tokio::test]
     async fn rejects_an_invalid_stored_content_type() {
         let (service, _files) = file_search().await;
-        let file = service
-            .upload_file("notes.txt", "text/plain,evil", "assistants", b"hello".to_vec())
+        for content_type in ["text/plain,evil", "data:text/plain"] {
+            let file = service
+                .upload_file("notes.txt", content_type, "assistants", b"hello".to_vec())
+                .await
+                .unwrap();
+            let mut input = message(&json!([{"type": "input_file", "file_id": &file.id}]));
+            let error = hydrate_file_references(&mut input, Some(&service)).await.unwrap_err();
+            assert!(
+                invalid_message(error).contains("invalid content type"),
+                "{content_type}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn normalizes_the_stored_media_type() {
+        let (service, _files) = file_search().await;
+        let image = service
+            .upload_file("plot.png", "IMAGE/PNG", "vision", b"png".to_vec())
             .await
             .unwrap();
-        let mut input = message(&json!([{"type": "input_file", "file_id": &file.id}]));
-        let error = hydrate_file_references(&mut input, Some(&service)).await.unwrap_err();
-        assert!(invalid_message(error).contains("invalid content type"));
+        let mut input = message(&json!([{"type": "input_image", "file_id": &image.id}]));
+        hydrate_file_references(&mut input, Some(&service)).await.unwrap();
+        let value = serde_json::to_value(&input).unwrap();
+        assert_eq!(
+            value[0]["content"][0]["image_url"],
+            format!("data:image/png;base64,{}", STANDARD.encode(b"png"))
+        );
+        assert!(value[0]["content"][0].get("file_id").is_none());
+        input.validate().unwrap();
     }
 
     #[tokio::test]
@@ -314,10 +362,14 @@ mod tests {
         let id = format!("file-{}", uuid::Uuid::now_v7());
         let mut input = message(&json!([{"type": "input_file", "file_id": &id}]));
         let error = hydrate_file_references(&mut input, Some(&service)).await.unwrap_err();
-        assert!(matches!(
-            error,
-            ExecutorError::FileSearch(crate::types::file_search::FileSearchError::NotFound(_))
-        ));
+        assert!(
+            matches!(
+                error,
+                ExecutorError::FileSearch(crate::types::file_search::FileSearchError::NotFound(ref message))
+                    if message.contains("input[0].content[0]: ") && !message.contains(id.as_str())
+            ),
+            "{error}"
+        );
     }
 
     #[tokio::test]

@@ -20,7 +20,8 @@ impl fmt::Display for InputValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "input[{}].content", self.item_index)?;
         if let MessageContentError::UnsupportedPart { part_index, .. }
-        | MessageContentError::UnsupportedFile { part_index, .. } = &self.source
+        | MessageContentError::UnsupportedFile { part_index, .. }
+        | MessageContentError::UnsupportedImageReference { part_index } = &self.source
         {
             write!(f, "[{part_index}]")?;
         }
@@ -58,6 +59,11 @@ enum MessageContentError {
     #[error("{reason}")]
     UnsupportedFile { part_index: usize, reason: InputFileError },
     #[error(
+        "input_image with file_id is not supported on this path; the gateway resolves file references only \
+         during request rehydration, so send image_url instead"
+    )]
+    UnsupportedImageReference { part_index: usize },
+    #[error(
         "reasoning item contains encrypted state without plaintext reasoning content and cannot be replayed to vLLM"
     )]
     EncryptedReasoning,
@@ -78,9 +84,14 @@ impl InputMessageContent {
                         };
                         return result.map_err(|reason| MessageContentError::UnsupportedFile { part_index, reason });
                     }
+                    InputContent::InputImage(image) => {
+                        if !allow_file_id && image.file_id.is_some() {
+                            return Err(MessageContentError::UnsupportedImageReference { part_index });
+                        }
+                        return Ok(());
+                    }
                     InputContent::Unknown(kind) => kind,
                     InputContent::InputText(_)
-                    | InputContent::InputImage(_)
                     | InputContent::OutputText(_)
                     | InputContent::Refusal(_)
                     | InputContent::ReasoningText(_) => return Ok(()),
@@ -210,6 +221,21 @@ mod tests {
                 ..
             }
         ));
+        input.validate_before_hydration().unwrap();
+    }
+
+    #[test]
+    fn image_references_pass_before_hydration_but_not_strict_validation() {
+        let input: ResponsesInput = serde_json::from_value(json!([
+            {"role":"user", "content":[{"type":"input_image", "file_id":"file-1"}]}
+        ]))
+        .unwrap();
+        let error = input.validate().unwrap_err();
+        assert!(matches!(
+            error.source,
+            MessageContentError::UnsupportedImageReference { part_index: 0 }
+        ));
+        assert!(error.to_string().contains("input[0].content[0]: "), "{error}");
         input.validate_before_hydration().unwrap();
     }
 

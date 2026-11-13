@@ -19,6 +19,8 @@ executor and shared persistence layer.
 6. Rehydration resolves message `input_image` and `input_file` `file_id` references
    from the same service into base64 data URLs for the model-facing request. Canonical
    history keeps the client's reference, so each continuation resolves it again.
+   Compaction and multi-agent snapshots derive from the resolved copy, so they can
+   retain the data URL instead of the reference.
 
 ## Boundaries
 

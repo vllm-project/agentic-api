@@ -162,7 +162,10 @@ inline `image_url`, and a message `input_file` can reference an uploaded text fi
 `file_id` instead of inline `file_data`. Before inference, the gateway reads the file from
 the same store and substitutes a base64 data URL in the model-facing request. The
 client's reference remains in stored response and conversation history, so a continuation
-resolves it again; deleting the file makes a later continuation fail with 404.
+resolves it again; deleting the file makes a later continuation fail with 404. Compaction
+summarizes the resolved model-facing input, so a compacted window can contain the resolved
+data URL rather than the reference, and a multi-agent tree snapshot can retain the resolved
+form as well.
 
 An `input_image` reference must resolve to a file with an `image/*` media type; upload
 those files with purpose `vision`. An `input_file` reference is subject to the same UTF-8

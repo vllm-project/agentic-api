@@ -1063,3 +1063,41 @@ async fn continuation_hydrates_file_references_from_stored_history() -> Result<(
     assert!(model[0]["content"][0].get("file_id").is_none());
     Ok(())
 }
+
+#[tokio::test]
+async fn continuation_reports_a_deleted_file_reference() -> Result<(), Box<dyn std::error::Error>> {
+    let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
+    let files = tempfile::tempdir()?;
+    let config = FileSearchConfig {
+        files_storage_dir: Some(files.path().to_owned()),
+        ..FileSearchConfig::default()
+    };
+    let service = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), config)?;
+    let text = service
+        .upload_file("notes.txt", "text/plain", "assistants", b"stored text".to_vec())
+        .await?;
+    let stored: InOutItem = serde_json::from_value(serde_json::json!({
+        "type": "message", "role": "user", "content": [
+            {"type": "input_file", "file_id": text.id}
+        ]
+    }))?;
+    let response_store = ResponseStore::new(pool);
+    response_store
+        .persist("resp_prior", None, vec![stored], None, &ResponseMetadata::default())
+        .await?;
+    service.delete_file(&text.id).await?;
+    let exec_ctx = execution_context(ConversationStore::disabled(), response_store).with_file_search_service(service);
+
+    let error = rehydrate_conversation(request(None, Some("resp_prior")), &exec_ctx)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(
+            error,
+            ExecutorError::FileSearch(crate::types::file_search::FileSearchError::NotFound(ref message))
+                if message.contains("input[0].content[0]: ")
+        ),
+        "{error}"
+    );
+    Ok(())
+}
