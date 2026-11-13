@@ -906,11 +906,11 @@ Design and migration decisions are tracked as ADRs in [docs/adr/](docs/adr/), wi
 - [x] **Server-side tool execution**: explicit ownership, web search, web fetch, MCP, and code interpreter built in
 - [x] **Messages API**: Claude Code support with a server-side gateway tool loop
 - [x] **Conversations API**: OpenAI-compatible conversation and item management
-- [ ] **Multi-agent Responses**: stateful and stateless HTTP execution ship today; WebSocket injection is next
-- [ ] **File search**: Files and Vector Stores APIs with a gateway-executed `file_search` tool
+- [x] **Multi-agent Responses**: stateful and stateless execution over HTTP and WebSocket
+- [x] **File search**: Files and vector-store APIs with a gateway-executed `file_search` tool
 - [ ] **Stateful Messages**: Messages continuation on the same persistence and execution primitives
 - [ ] **Interactions API**: durable, higher-level agentic workflows
-- [ ] **Production hardening**: tenant-scoped state, gateway metrics, cached-prefix continuation
+- [ ] **Production hardening**: tenant-scoped state and cached-prefix continuation
 
 ______________________________________________________________________
 
