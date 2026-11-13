@@ -23,6 +23,10 @@ pub enum StorageError {
     #[error("Previous response with id '{id}' not found.")]
     PreviousResponseNotFound { id: String },
 
+    /// Rehydration cannot find a referenced conversation.
+    #[error("Conversation with id '{id}' not found.")]
+    ConversationNotFound { id: String },
+
     /// A pagination cursor no longer identifies an item in the conversation.
     #[error("No item found with id '{id}'")]
     ItemCursorNotFound { id: String },
@@ -95,6 +99,7 @@ impl StorageError {
             Self::NotFound { .. }
                 | Self::ResponseNotFound { .. }
                 | Self::PreviousResponseNotFound { .. }
+                | Self::ConversationNotFound { .. }
                 | Self::ItemCursorNotFound { .. }
         )
     }
@@ -128,6 +133,7 @@ impl StorageError {
             Self::ResponseNotFound { id } | Self::PreviousResponseNotFound { id } => {
                 Some(("Response".to_owned(), id.clone()))
             }
+            Self::ConversationNotFound { id } => Some(("Conversation".to_owned(), id.clone())),
             _ => None,
         }
     }

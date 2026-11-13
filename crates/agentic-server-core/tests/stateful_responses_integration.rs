@@ -735,15 +735,27 @@ async fn is_continuable(exec_ctx: &ExecutionContext, id: &str) -> bool {
 async fn unknown_conversation_id_is_not_created_implicitly() {
     let fixture = TestFixture::new(&[]).await;
     let exec_ctx = Arc::clone(&fixture.exec_ctx);
-    for store in [false, true] {
-        let request = make_request("start", store, false, None, Some("conv_does_not_exist".to_owned()));
+    let conversation_id = "conv_does_not_exist";
+    for store in [true, false] {
+        let request = make_request("start", store, false, None, Some(conversation_id.to_owned()));
         let error = rehydrate_conversation(request, &exec_ctx)
             .await
             .expect_err("an unknown conversation id must not hydrate");
-        match error {
-            ExecutorError::Storage(storage_error) if storage_error.is_not_found() => {}
-            other => panic!("expected a not-found storage error, got {other}"),
-        }
+        let storage_error = match error {
+            ExecutorError::Storage(StorageError::ConversationNotFound { id }) => {
+                assert_eq!(id, conversation_id);
+                StorageError::ConversationNotFound { id }
+            }
+            other => panic!("expected a conversation-not-found storage error, got {other}"),
+        };
+        let envelope_error = ExecutorError::Storage(storage_error);
+        assert_eq!(envelope_error.http_status(), 404);
+        assert_eq!(envelope_error.error_type(), "invalid_request_error");
+        assert_eq!(envelope_error.error_param(), Some("conversation"));
+        assert_eq!(
+            envelope_error.error_message(),
+            format!("Conversation with id '{conversation_id}' not found.")
+        );
     }
 }
 
