@@ -10,6 +10,7 @@ use std::time::Duration;
 use agentic_core::McpServerEntry;
 use agentic_core::config::{CONFIG_FILE_NAME, CodeInterpreterRuntimeConfig, WebSearchProviderKind};
 use agentic_core::error::Error;
+use agentic_core::tool::mcp::pool::parse_allowed_host;
 use agentic_server::model_capabilities::{InputModalities, ModelCapabilities, ModelOverride, SupportedReasoningLevels};
 use serde::{Deserialize, Serialize};
 
@@ -78,6 +79,23 @@ pub(crate) struct McpFileConfig {
 impl McpFileConfig {
     fn is_empty(&self) -> bool {
         self.allowed_hosts.is_empty()
+    }
+
+    /// Every entry must parse as a host now, the same way the server parses it
+    /// at startup, so an entry such as `mcp.example.com:443` is reported here
+    /// instead of never matching a request.
+    fn validate(&self, path: &Path) -> Result<(), Error> {
+        match self
+            .allowed_hosts
+            .iter()
+            .find_map(|host| parse_allowed_host(host).err())
+        {
+            Some(error) => Err(Error::Config(format!(
+                "configuration file {} contains an invalid [mcp].allowed_hosts entry: {error}",
+                path.display()
+            ))),
+            None => Ok(()),
+        }
     }
 }
 
@@ -434,12 +452,7 @@ impl FileConfig {
                 path.display()
             )));
         }
-        if let Some(host) = self.mcp.allowed_hosts.iter().find(|host| host.trim().is_empty()) {
-            return Err(Error::Config(format!(
-                "configuration file {} contains an empty MCP allowed host: {host:?}",
-                path.display()
-            )));
-        }
+        self.mcp.validate(path)?;
         for (model_id, model) in &self.models {
             if model_id.trim().is_empty() {
                 return Err(Error::Config(format!(
@@ -868,6 +881,23 @@ mod tests {
 
         let error = FileConfig::load(home.path()).expect_err("an empty model ID must fail");
         assert!(error.to_string().contains("empty model ID"), "{error}");
+    }
+
+    #[test]
+    fn rejects_mcp_allowed_hosts_that_are_not_a_host() {
+        for entry in ["  ", "mcp.example.com:443", "https://mcp.example.com"] {
+            let home = tempdir().expect("temp home");
+            fs::write(
+                home.path().join("config.toml"),
+                format!("[mcp]\nallowed_hosts = [\"mcp.example.com\", {entry:?}]\n"),
+            )
+            .expect("write config");
+
+            let error = FileConfig::load(home.path()).expect_err("an unparseable allowed host must fail");
+            let message = error.to_string();
+            assert!(message.contains("invalid [mcp].allowed_hosts entry"), "{message}");
+            assert!(message.contains(&format!("{entry:?}")), "{message}");
+        }
     }
 
     #[test]

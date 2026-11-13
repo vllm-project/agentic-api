@@ -88,10 +88,10 @@ pub struct McpClientPool {
 
 impl McpClientPool {
     pub async fn from_params(params: &[McpToolParam]) -> Self {
-        Self::from_params_with_allowed_hosts(params, &allowed_hosts_from_env()).await
+        Self::from_params_with_allowed_hosts(params, &allowed_hosts_from_env_or_none()).await
     }
 
-    pub async fn from_params_with_allowed_hosts(params: &[McpToolParam], allowed_hosts: &[String]) -> Self {
+    pub async fn from_params_with_allowed_hosts(params: &[McpToolParam], allowed_hosts: &[url::Host]) -> Self {
         let servers: HashMap<String, McpServerEntry> = params
             .iter()
             .filter_map(|param| server_entry_from_param(param, allowed_hosts))
@@ -168,7 +168,7 @@ impl McpClientPool {
 
 pub(crate) fn server_entry_from_param(
     param: &McpToolParam,
-    allowed_hosts: &[String],
+    allowed_hosts: &[url::Host],
 ) -> Option<(String, McpServerEntry)> {
     let Some(server_label) = clean_string(Some(&param.server_label)) else {
         tracing::debug!("MCP tool param has no server_label");
@@ -209,7 +209,7 @@ fn request_headers(param: &McpToolParam) -> Option<HashMap<String, String>> {
     (!headers.is_empty()).then_some(headers)
 }
 
-fn validate_request_server_url_with_allowed_hosts(value: &str, allowed_hosts: &[String]) -> Result<String, String> {
+fn validate_request_server_url_with_allowed_hosts(value: &str, allowed_hosts: &[url::Host]) -> Result<String, String> {
     let url = Url::parse(value).map_err(|error| format!("invalid URL: {error}"))?;
     match url.scheme() {
         "http" | "https" => {}
@@ -230,46 +230,74 @@ fn validate_request_server_url_with_allowed_hosts(value: &str, allowed_hosts: &[
     ))
 }
 
-fn is_allowed_request_host(host: &url::Host<&str>, allowed_hosts: &[String]) -> bool {
+fn is_allowed_request_host(host: &url::Host<&str>, allowed_hosts: &[url::Host]) -> bool {
     let loopback = match host {
         url::Host::Domain(host) => host.eq_ignore_ascii_case("localhost"),
         url::Host::Ipv4(address) => address.is_loopback(),
         url::Host::Ipv6(address) => address.is_loopback(),
     };
-    loopback || host_allowed(host, allowed_hosts)
+    loopback || allowed_hosts.contains(&host.to_owned())
 }
 
-/// Whether an allowlist entry names `host`, compared as the URL parser
-/// normalizes hosts: `[fd00::1]`, `fd00::1` and `FD00:0:0::1` are the same
-/// address, and an internationalized name matches its punycode form.
-fn host_allowed(host: &url::Host<&str>, allowed_hosts: &[String]) -> bool {
-    let host = host.to_owned();
-    allowed_hosts
-        .iter()
-        .filter_map(|allowed_host| parse_allowed_host(allowed_host))
-        .any(|allowed_host| allowed_host == host)
-}
-
-/// An allowlist entry as a URL host; a bare IPv6 address needs no brackets.
-fn parse_allowed_host(value: &str) -> Option<url::Host> {
-    let value = value.trim();
-    if let Ok(address) = value.parse::<Ipv6Addr>() {
-        return Some(url::Host::Ipv6(address));
+/// Parses one MCP allowlist entry into the host form `Url::parse` gives a
+/// `server_url`, so the request check only compares hosts: names are
+/// lowercased and IDNA-encoded, and `[fd00::1]`, `fd00::1` and
+/// `FD00:0:0::1` are the same address.
+///
+/// An entry is a host only. Anything a URL host cannot hold, such as a port
+/// (`mcp.example.com:443`) or a scheme (`https://mcp.example.com`), is an error
+/// so a misconfigured entry is reported at startup instead of never matching.
+///
+/// # Errors
+///
+/// Returns a message naming the entry when it is blank or not a valid host.
+pub fn parse_allowed_host(value: &str) -> Result<url::Host, String> {
+    let entry = value.trim();
+    if entry.is_empty() {
+        return Err(format!("MCP allowed host {value:?} is empty"));
     }
-    url::Host::parse(value).ok()
+    if let Ok(address) = entry.parse::<Ipv6Addr>() {
+        return Ok(url::Host::Ipv6(address));
+    }
+    url::Host::parse(entry).map_err(|error| {
+        format!("MCP allowed host {value:?} is not a host name or IP address ({error}); list hosts without a scheme, port or path")
+    })
 }
 
-pub(crate) fn allowed_hosts_from_env() -> Vec<String> {
+/// Parses a comma-separated allowlist, as `AGENTIC_MCP_ALLOWED_HOSTS` holds it.
+/// Empty items between commas are ignored.
+///
+/// # Errors
+///
+/// Returns the [`parse_allowed_host`] error of the first invalid entry.
+pub fn parse_allowed_hosts(value: &str) -> Result<Vec<url::Host>, String> {
+    value
+        .split(',')
+        .filter(|entry| !entry.trim().is_empty())
+        .map(parse_allowed_host)
+        .collect()
+}
+
+/// The allowlist from `AGENTIC_MCP_ALLOWED_HOSTS`.
+///
+/// # Errors
+///
+/// Returns the [`parse_allowed_host`] error of the first invalid entry.
+pub(crate) fn allowed_hosts_from_env() -> Result<Vec<url::Host>, String> {
     parse_allowed_hosts(&std::env::var(MCP_ALLOWED_HOSTS_ENV).unwrap_or_default())
 }
 
-fn parse_allowed_hosts(value: &str) -> Vec<String> {
-    value
-        .split(',')
-        .map(str::trim)
-        .filter(|host| !host.is_empty())
-        .map(str::to_owned)
-        .collect()
+/// The environment allowlist for constructors that cannot fail. An invalid
+/// entry is logged and the allowlist is left empty, so only loopback hosts are
+/// allowed rather than a partial list.
+pub(crate) fn allowed_hosts_from_env_or_none() -> Vec<url::Host> {
+    allowed_hosts_from_env().unwrap_or_else(|error| {
+        tracing::error!(
+            error,
+            "{MCP_ALLOWED_HOSTS_ENV} is invalid; only loopback MCP hosts are allowed"
+        );
+        Vec::new()
+    })
 }
 
 fn clean_string(value: Option<&str>) -> Option<String> {
@@ -282,7 +310,8 @@ fn clean_string(value: Option<&str>) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        McpServerEntry, parse_allowed_hosts, server_entry_from_param, validate_request_server_url_with_allowed_hosts,
+        McpServerEntry, parse_allowed_host, parse_allowed_hosts, server_entry_from_param,
+        validate_request_server_url_with_allowed_hosts,
     };
     use crate::types::tools::McpToolParam;
 
@@ -362,14 +391,15 @@ mod tests {
         assert!(error.contains("not allowed"));
     }
 
+    fn hosts(entries: &[&str]) -> Vec<url::Host> {
+        entries.iter().map(|entry| parse_allowed_host(entry).unwrap()).collect()
+    }
+
     #[test]
     fn request_server_url_uses_supplied_allowlist() {
         assert!(
-            validate_request_server_url_with_allowed_hosts(
-                "https://mcp.example.com/mcp",
-                &["mcp.example.com".to_owned()]
-            )
-            .is_ok()
+            validate_request_server_url_with_allowed_hosts("https://mcp.example.com/mcp", &hosts(&["mcp.example.com"]))
+                .is_ok()
         );
         assert!(validate_request_server_url_with_allowed_hosts("https://mcp.example.com/mcp", &[]).is_err());
     }
@@ -378,13 +408,13 @@ mod tests {
     fn request_server_url_matches_allowlisted_ipv6_in_any_spelling() {
         for allowed in ["fd00::10", "[fd00::10]", "FD00:0:0:0:0:0:0:10", " [FD00::10] "] {
             assert!(
-                validate_request_server_url_with_allowed_hosts("http://[fd00::10]:8000/mcp", &[allowed.to_owned()])
+                validate_request_server_url_with_allowed_hosts("http://[fd00::10]:8000/mcp", &hosts(&[allowed]))
                     .is_ok(),
                 "{allowed:?} must allow fd00::10"
             );
         }
         assert!(
-            validate_request_server_url_with_allowed_hosts("http://[fd00::11]:8000/mcp", &["[fd00::10]".to_owned()])
+            validate_request_server_url_with_allowed_hosts("http://[fd00::11]:8000/mcp", &hosts(&["[fd00::10]"]))
                 .is_err()
         );
     }
@@ -399,19 +429,33 @@ mod tests {
             ("http://10.0.0.5:8000/mcp", "10.0.0.5"),
         ] {
             assert!(
-                validate_request_server_url_with_allowed_hosts(url, &[allowed.to_owned()]).is_ok(),
+                validate_request_server_url_with_allowed_hosts(url, &hosts(&[allowed])).is_ok(),
                 "{allowed:?} must allow {url}"
             );
         }
         for (url, allowed) in [
-            ("https://mcp.example.com/mcp", "mcp.example.com:443"),
             ("https://other.example.com/mcp", "mcp.example.com"),
             ("http://10.0.0.6:8000/mcp", "10.0.0.5"),
         ] {
             assert!(
-                validate_request_server_url_with_allowed_hosts(url, &[allowed.to_owned()]).is_err(),
+                validate_request_server_url_with_allowed_hosts(url, &hosts(&[allowed])).is_err(),
                 "{allowed:?} must not allow {url}"
             );
+        }
+    }
+
+    #[test]
+    fn allowed_host_parser_rejects_entries_that_are_not_a_host() {
+        for entry in [
+            "",
+            "   ",
+            "mcp.example.com:443",
+            "https://mcp.example.com",
+            "mcp.example.com/mcp",
+            "mcp example.com",
+        ] {
+            let error = parse_allowed_host(entry).unwrap_err();
+            assert!(error.contains(&format!("{entry:?}")), "{error}");
         }
     }
 
@@ -428,10 +472,16 @@ mod tests {
     }
 
     #[test]
-    fn allowed_host_parser_trims_and_discards_empty_entries() {
+    fn allowed_host_list_parser_trims_and_discards_empty_entries() {
         assert_eq!(
-            parse_allowed_hosts(" Example.COM, ,api.test "),
-            vec!["Example.COM", "api.test"]
+            parse_allowed_hosts(" Example.COM, ,api.test,[::2] ").unwrap(),
+            hosts(&["example.com", "api.test", "::2"])
         );
+    }
+
+    #[test]
+    fn allowed_host_list_parser_rejects_an_invalid_entry() {
+        let error = parse_allowed_hosts("mcp.example.com, mcp.example.com:443").unwrap_err();
+        assert!(error.contains("\" mcp.example.com:443\""), "{error}");
     }
 }

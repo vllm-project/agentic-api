@@ -62,7 +62,7 @@ pub struct GatewayExecutors {
     mcp_configs: HashMap<String, super::mcp::McpServerEntry>,
     mcp_clients: Arc<RwLock<HashMap<String, Arc<super::mcp::McpClient>>>>,
     mcp_discovered: Arc<RwLock<HashMap<String, Vec<McpDiscoveredHandler>>>>,
-    mcp_allowed_hosts: Vec<String>,
+    mcp_allowed_hosts: Vec<url::Host>,
     web_search: Option<Arc<WebSearchExecutor>>,
     file_search: Option<Arc<FileSearchExecutor>>,
     pub(crate) include_file_search_results: bool,
@@ -82,7 +82,7 @@ impl GatewayExecutors {
             mcp_configs: HashMap::new(),
             mcp_clients: Arc::new(RwLock::new(HashMap::new())),
             mcp_discovered: Arc::new(RwLock::new(HashMap::new())),
-            mcp_allowed_hosts: super::mcp::pool::allowed_hosts_from_env(),
+            mcp_allowed_hosts: super::mcp::pool::allowed_hosts_from_env_or_none(),
             web_search: Some(Arc::new(WebSearchHandler::from_env(client))),
             web_fetch: Some(Arc::new(WebFetchHandler::from_config(
                 &WebFetchConfig::default(),
@@ -116,6 +116,11 @@ impl GatewayExecutors {
             .map_err(|error| ToolError::Config(error.to_string()))?;
         #[cfg(not(feature = "embedded-code-interpreter"))]
         let code_interpreter = None;
+        let mcp_allowed_hosts = if config.mcp_allowed_hosts.is_empty() {
+            super::mcp::pool::allowed_hosts_from_env().map_err(ToolError::Config)?
+        } else {
+            config.mcp_allowed_hosts.clone()
+        };
         let executors = Self {
             file_search: None,
             include_file_search_results: false,
@@ -123,11 +128,7 @@ impl GatewayExecutors {
             mcp_configs: config.mcp_servers.clone(),
             mcp_clients: Arc::new(RwLock::new(HashMap::new())),
             mcp_discovered: Arc::new(RwLock::new(HashMap::new())),
-            mcp_allowed_hosts: if config.mcp_allowed_hosts.is_empty() {
-                super::mcp::pool::allowed_hosts_from_env()
-            } else {
-                config.mcp_allowed_hosts.clone()
-            },
+            mcp_allowed_hosts,
             web_search: Some(Arc::new(WebSearchHandler::from_config(
                 client,
                 &config.web_search,

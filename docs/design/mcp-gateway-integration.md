@@ -115,7 +115,9 @@ are defaults for a request that leaves `defer_loading` or `server_description` u
 behind hosted tool search until a search loads them, so such a request must declare hosted `tool_search`.
 
 Request-provided URLs allow loopback hosts by default. Additional trusted hostnames may be configured through
-`AGENTIC_MCP_ALLOWED_HOSTS` from the process environment or the `config.toml` `[mcp].allowed_hosts` array. URL
+`AGENTIC_MCP_ALLOWED_HOSTS` from the process environment or the `config.toml` `[mcp].allowed_hosts` array. Each
+entry is a host name or IP address without a scheme, port or path; entries are parsed once at startup as URL hosts,
+an entry that does not parse stops startup, and a request's `server_url` host is compared with them as parsed. URL
 validation, pinned DNS addresses, disabled automatic proxy discovery, and disabled redirects prevent later routing
 changes from bypassing the configured trust boundary.
 

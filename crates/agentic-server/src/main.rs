@@ -15,6 +15,7 @@ use agentic_core::config::{
     PostgresConfig, SqliteConfig, SqliteTempStore, ToolRuntimeConfig, ensure_agentic_api_home, normalize_base_url,
 };
 use agentic_core::error::Error;
+use agentic_core::tool::mcp::pool::{parse_allowed_host, parse_allowed_hosts};
 use agentic_core::types::file_search::FileSearchConfig;
 use agentic_server::auth::OidcConfig;
 use agentic_server::telemetry::{self, DEFAULT_SHUTDOWN_TIMEOUT, TelemetryConfig, TelemetryError, TelemetryGuard};
@@ -439,8 +440,16 @@ fn build_config(llm_api_base: String, common: &CommonArgs, file: &FileConfig) ->
     };
     let web_search = resolve_web_search_config(&file.web_search, environment_value)?;
     let web_fetch = resolve_web_fetch_config(&file.web_fetch, environment_value)?;
-    let mcp_allowed_hosts = environment_value("AGENTIC_MCP_ALLOWED_HOSTS")
-        .map_or_else(|| file.mcp.allowed_hosts.clone(), |value| parse_comma_separated(&value));
+    let mcp_allowed_hosts = match environment_value("AGENTIC_MCP_ALLOWED_HOSTS") {
+        Some(value) => parse_allowed_hosts(&value),
+        None => file
+            .mcp
+            .allowed_hosts
+            .iter()
+            .map(|host| parse_allowed_host(host))
+            .collect(),
+    }
+    .map_err(|error| Error::Config(format!("invalid MCP allowed hosts: {error}")))?;
     let max_concurrent_gateway_calls_default = file
         .tools
         .max_concurrent_gateway_calls
