@@ -39,7 +39,7 @@ use super::{
     null_as_default, read_response_limited,
 };
 use crate::config::WebSearchProviderKind;
-use crate::tool::domain_policy::DomainFilter;
+use crate::tool::domain_policy::{DomainFilter, EntryPaths};
 use crate::tool::handler::ToolError;
 use crate::types::tools::{WebSearchContextSize, WebSearchToolParam};
 
@@ -267,7 +267,11 @@ impl SearxngSearchRequest {
             time_range: args.freshness.and_then(searxng_time_range),
             language: args.language.as_deref().and_then(searxng_language),
             safesearch: args.safesearch.as_deref().and_then(searxng_safesearch),
-            domain_filter: DomainFilter::new(include_domains.as_deref(), exclude_domains.as_deref()),
+            domain_filter: DomainFilter::new(
+                include_domains.as_deref(),
+                exclude_domains.as_deref(),
+                EntryPaths::of_web_search(config),
+            ),
         })
     }
 }

@@ -20,7 +20,7 @@ use serde_json::{Value, json};
 use crate::executor::{ExecutorError, ExecutorResult};
 use crate::tool::ToolHandler;
 use crate::tool::declaration::web_search_config;
-use crate::tool::domain_policy::EXCLUSIVE_LISTS_RULE;
+use crate::tool::domain_policy::{EXCLUSIVE_LISTS_RULE, EntryPaths, validate_domain_entry};
 use crate::tool::web_fetch::{self, WebFetchErrorCode, WebFetchHandler};
 use crate::tool::web_search::WebSearchHandler;
 use crate::types::io::FunctionTool;
@@ -92,37 +92,35 @@ fn undefined_setting(version: NativeToolVersion, setting: &str) -> ExecutorError
     invalid(format!("{} does not define {setting}", version.type_name))
 }
 
-fn validate_domain_list(tool: &Value, tool_name: &str, field: &str) -> ExecutorResult<()> {
+/// Each entry must parse under the domain policy's entry rule, so a malformed
+/// entry gets Anthropic's 400 instead of matching nothing. For `web_search`
+/// that is a host name or address, optionally followed by a path, with `*` only
+/// in the path (`*.example.com` and `ex*.com` are refused); `web_fetch` entries
+/// stay host names, as its handler requires.
+fn validate_domain_list(tool: &Value, tool_name: &str, field: &str, paths: EntryPaths) -> ExecutorResult<()> {
     let Some(value) = tool.get(field) else {
         return Ok(());
     };
-    let valid = value.as_array().is_some_and(|domains| {
-        domains.iter().all(|domain| {
-            domain.as_str().is_some_and(|domain| {
-                let domain = domain.trim();
-                !domain.is_empty()
-                    && !domain.contains("://")
-                    && !domain.starts_with('/')
-                    && !domain.chars().any(char::is_whitespace)
-            })
-        })
-    });
-    if valid {
-        Ok(())
-    } else {
-        Err(invalid(format!(
-            "{tool_name} {field} must be an array of non-empty strings"
-        )))
+    let shape_error = || invalid(format!("{tool_name} {field} must be an array of non-empty strings"));
+    let domains = value.as_array().ok_or_else(shape_error)?;
+    for domain in domains {
+        let domain = domain.as_str().ok_or_else(shape_error)?;
+        if domain.trim().is_empty() {
+            return Err(shape_error());
+        }
+        validate_domain_entry(domain, paths)
+            .map_err(|reason| invalid(format!("{tool_name} {field} entry {domain:?} {reason}")))?;
     }
+    Ok(())
 }
 
 /// `allowed_domains` and `blocked_domains` must each be well formed and are
-/// mutually exclusive, as Anthropic documents for every server tool. What an
-/// entry must look like to match anything is the tool layer's rule
-/// (`domain_policy`), applied where the handler validates its declaration.
-fn validate_domain_list_shape(tool: &Value, tool_name: &str) -> ExecutorResult<()> {
-    validate_domain_list(tool, tool_name, "allowed_domains")?;
-    validate_domain_list(tool, tool_name, "blocked_domains")?;
+/// mutually exclusive, as Anthropic documents for every server tool. Each
+/// entry is parsed with the tool layer's entry parser (`domain_policy`), the
+/// same one the result filter is built from.
+fn validate_domain_list_shape(tool: &Value, tool_name: &str, paths: EntryPaths) -> ExecutorResult<()> {
+    validate_domain_list(tool, tool_name, "allowed_domains", paths)?;
+    validate_domain_list(tool, tool_name, "blocked_domains", paths)?;
     let has_entries = |field: &str| {
         tool.get(field)
             .and_then(Value::as_array)
@@ -286,7 +284,7 @@ fn normalize_web_search_declaration(
         return Ok(None);
     }
     let version = declared_version(WEB_SEARCH_EXECUTOR, NATIVE_WEB_SEARCH_VERSIONS, tool_type)?;
-    validate_domain_list_shape(tool, WEB_SEARCH_EXECUTOR)?;
+    validate_domain_list_shape(tool, WEB_SEARCH_EXECUTOR, EntryPaths::Allowed)?;
     validate_user_location(tool)?;
     validate_allowed_callers(tool, WEB_SEARCH_EXECUTOR, version)?;
     validate_use_cache(tool, WEB_SEARCH_EXECUTOR, version)?;
@@ -316,7 +314,7 @@ fn normalize_web_fetch_declaration(tool: &Value, max_uses: &mut Option<usize>) -
             "{tool_type} declarations must be named {WEB_FETCH_EXECUTOR}"
         )));
     }
-    validate_domain_list_shape(tool, WEB_FETCH_EXECUTOR)?;
+    validate_domain_list_shape(tool, WEB_FETCH_EXECUTOR, EntryPaths::Refused)?;
     validate_allowed_callers(tool, WEB_FETCH_EXECUTOR, version)?;
     if let Some(citations) = tool.get("citations") {
         match citations.get("enabled").and_then(Value::as_bool) {
@@ -487,6 +485,50 @@ mod tests {
     }
 
     #[test]
+    fn native_web_search_domain_entries_follow_anthropics_rule() {
+        let search = |field: &str, entry: &str| {
+            json!({"model": "m", "max_tokens": 8, "messages": [], "tools": [
+                {"type": "web_search_20250305", "name": "web_search", field: [entry]}
+            ]})
+        };
+        for entry in [
+            "example.com/blog",
+            "example.com/*",
+            "example.com/*/articles",
+            "docs.example.com",
+        ] {
+            for field in ["allowed_domains", "blocked_domains"] {
+                assert!(
+                    normalize_native_server_tools(&mut search(field, entry)).is_ok(),
+                    "{field} {entry}"
+                );
+            }
+        }
+        for (entry, reason) in [
+            (
+                "*.example.com",
+                "must not use a wildcard (*) in the host, only in the path after it",
+            ),
+            (
+                "ex*.com",
+                "must not use a wildcard (*) in the host, only in the path after it",
+            ),
+            (
+                "https://example.com/blog",
+                "must be a host name, optionally followed by a path, without a scheme",
+            ),
+            ("example.com/*/a/*", "may use the wildcard (*) at most once"),
+            ("example.com:8080/blog", "is not a host name"),
+            ("/blog", "is not a host name"),
+        ] {
+            assert_eq!(
+                invalid_request(&mut search("allowed_domains", entry)),
+                format!("web_search allowed_domains entry {entry:?} {reason}")
+            );
+        }
+    }
+
+    #[test]
     fn upstream_normalization_reports_whether_it_changed_the_body() {
         let mut request = fetch_request(&json!({}));
         assert!(normalize_native_server_tools_for_upstream(&mut request).unwrap());
@@ -525,7 +567,7 @@ mod tests {
             ),
             (
                 json!({"allowed_domains": ["https://example.com"]}),
-                "web_fetch allowed_domains must be",
+                "web_fetch allowed_domains entry \"https://example.com\" must be a host name without a scheme or path",
             ),
             (json!({"blocked_domains": [""]}), "web_fetch blocked_domains must be"),
             (

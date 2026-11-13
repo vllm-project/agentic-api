@@ -36,7 +36,7 @@ use super::{
     null_as_default, read_response_limited,
 };
 use crate::config::WebSearchProviderKind;
-use crate::tool::domain_policy::DomainFilter;
+use crate::tool::domain_policy::{DomainFilter, DomainList, EntryPaths, provider_domains};
 use crate::tool::handler::ToolError;
 use crate::types::tools::{WebSearchContextSize, WebSearchToolParam};
 
@@ -253,7 +253,14 @@ impl SerplySearchRequest {
             Some(freshness) => serply_tbs(freshness),
             None => None,
         };
-        push_site_operators(&mut q, include_domains.as_deref(), exclude_domains.as_deref());
+        // `site:` takes the host of a path entry; the client-side filter
+        // narrows the results to the path.
+        let paths = EntryPaths::of_web_search(config);
+        push_site_operators(
+            &mut q,
+            provider_domains(include_domains.clone(), DomainList::Allowed, paths).as_deref(),
+            provider_domains(exclude_domains.clone(), DomainList::Blocked, paths).as_deref(),
+        );
 
         Ok(Self {
             q,
@@ -267,7 +274,7 @@ impl SerplySearchRequest {
                 .as_deref()
                 .filter(|value| value.eq_ignore_ascii_case("strict"))
                 .map(|_| "active"),
-            domain_filter: DomainFilter::new(include_domains.as_deref(), exclude_domains.as_deref()),
+            domain_filter: DomainFilter::new(include_domains.as_deref(), exclude_domains.as_deref(), paths),
         })
     }
 }
@@ -658,6 +665,30 @@ mod tests {
         assert_eq!(request.q, "q -site:a.com -site:b.com");
         assert!(!request.domain_filter.allows("https://docs.a.com/x"));
         assert!(request.domain_filter.allows("https://c.com/x"));
+    }
+
+    #[test]
+    fn path_entries_become_host_site_operators() {
+        let declared = |allowed: Option<Vec<String>>, blocked: Option<Vec<String>>| WebSearchToolParam {
+            filters: Some(DomainFilters {
+                allowed_domains: allowed,
+                blocked_domains: blocked,
+            }),
+            path_entries: true,
+            ..WebSearchToolParam::default()
+        };
+        let query = args(r#"{"query":"q"}"#);
+        let config = declared(Some(vec!["example.com/blog".to_owned(), "docs.rs".to_owned()]), None);
+        let request = SerplySearchRequest::from_args_and_config("q", &query, &config).unwrap();
+        assert_eq!(request.q, "q site:example.com OR site:docs.rs");
+        assert!(request.domain_filter.allows("https://example.com/blog/post"));
+        assert!(!request.domain_filter.allows("https://example.com/docs"));
+
+        let config = declared(None, Some(vec!["example.com/private".to_owned()]));
+        let request = SerplySearchRequest::from_args_and_config("q", &query, &config).unwrap();
+        assert_eq!(request.q, "q");
+        assert!(!request.domain_filter.allows("https://example.com/private/x"));
+        assert!(request.domain_filter.allows("https://example.com/docs"));
     }
 
     #[test]

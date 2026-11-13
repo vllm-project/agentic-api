@@ -253,6 +253,7 @@ pub(crate) fn web_search_config(tool: &ToolParam) -> WebSearchToolParam {
         filters,
         user_location,
         unsupported_async: None,
+        path_entries: true,
     }
 }
 
@@ -350,6 +351,7 @@ mod tests {
                 Some("Paris".to_owned()),
                 "{tool_type}"
             );
+            assert!(param.path_entries, "Anthropic entries may carry a path: {tool_type}");
         }
 
         for version in NATIVE_WEB_SEARCH_VERSIONS {

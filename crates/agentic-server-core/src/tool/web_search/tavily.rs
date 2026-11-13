@@ -35,7 +35,7 @@ use super::{
     null_as_default, read_response_limited,
 };
 use crate::config::WebSearchProviderKind;
-use crate::tool::domain_policy::DomainFilter;
+use crate::tool::domain_policy::{DomainFilter, DomainList, EntryPaths, provider_domains};
 use crate::tool::handler::ToolError;
 use crate::types::tools::{WebSearchContextSize, WebSearchToolParam};
 
@@ -254,7 +254,8 @@ impl TavilySearchRequest {
         log_ignored_arguments(args, config);
         let (time_range, start_date, end_date) = args.freshness.map(tavily_freshness).unwrap_or_default();
         let filter_by_published_date = args.freshness.is_some();
-        let domain_filter = DomainFilter::new(include_domains.as_deref(), exclude_domains.as_deref());
+        let paths = EntryPaths::of_web_search(config);
+        let domain_filter = DomainFilter::new(include_domains.as_deref(), exclude_domains.as_deref(), paths);
 
         Ok(Self {
             body: TavilySearchBody {
@@ -265,8 +266,10 @@ impl TavilySearchRequest {
                 time_range,
                 start_date,
                 end_date,
-                include_domains: include_domains.unwrap_or_default(),
-                exclude_domains: exclude_domains.unwrap_or_default(),
+                // Tavily takes the host of a path entry; the client-side filter
+                // narrows the results to the path.
+                include_domains: provider_domains(include_domains, DomainList::Allowed, paths).unwrap_or_default(),
+                exclude_domains: provider_domains(exclude_domains, DomainList::Blocked, paths).unwrap_or_default(),
                 language: args.language.as_deref().map(tavily_language),
                 safe_search: args.safesearch.as_deref().map(tavily_safe_search),
                 include_published_date: true,
@@ -656,6 +659,39 @@ mod tests {
     }
 
     #[test]
+    fn path_entries_send_their_host_and_leave_the_path_to_the_client_side_filter() {
+        let declared = |allowed: Option<Vec<String>>, blocked: Option<Vec<String>>| WebSearchToolParam {
+            filters: Some(DomainFilters {
+                allowed_domains: allowed,
+                blocked_domains: blocked,
+            }),
+            path_entries: true,
+            ..WebSearchToolParam::default()
+        };
+        let query = args(r#"{"query":"q"}"#);
+        let config = declared(Some(vec!["example.com/blog".to_owned()]), None);
+        let request = TavilySearchRequest::from_args_and_config("q", &query, &config).unwrap();
+        assert_eq!(
+            body_json(&request)["include_domains"],
+            serde_json::json!(["example.com"])
+        );
+        assert!(request.domain_filter.allows("https://example.com/blog/post"));
+        assert!(!request.domain_filter.allows("https://example.com/docs"));
+
+        let config = declared(
+            None,
+            Some(vec!["example.com/private".to_owned(), "spam.example".to_owned()]),
+        );
+        let request = TavilySearchRequest::from_args_and_config("q", &query, &config).unwrap();
+        assert_eq!(
+            body_json(&request)["exclude_domains"],
+            serde_json::json!(["spam.example"])
+        );
+        assert!(!request.domain_filter.allows("https://example.com/private/x"));
+        assert!(request.domain_filter.allows("https://example.com/docs"));
+    }
+
+    #[test]
     fn request_rejects_conflicting_domain_lists() {
         let error = TavilySearchRequest::from_args_and_config(
             "q",
@@ -761,7 +797,7 @@ mod tests {
             ]}"#,
         )
         .unwrap();
-        let filter = DomainFilter::new(Some(&["example.com".to_owned()]), None);
+        let filter = DomainFilter::new(Some(&["example.com".to_owned()]), None, EntryPaths::Refused);
         let response = response.into_provider_response("q", &filter);
         let urls: Vec<_> = response.web.iter().map(|r| r.url.as_str()).collect();
         assert_eq!(urls, ["https://docs.example.com/a", "https://EXAMPLE.COM./c"]);

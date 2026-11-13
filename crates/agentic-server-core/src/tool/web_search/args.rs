@@ -359,11 +359,25 @@ mod tests {
         retain_allowed_results(&DomainFilter::default(), &mut results);
         assert_eq!(results.len(), 2);
 
-        retain_allowed_results(&DomainFilter::new(None, Some(&["b.example".to_owned()])), &mut results);
+        retain_allowed_results(
+            &DomainFilter::new(
+                None,
+                Some(&["b.example".to_owned()]),
+                crate::tool::domain_policy::EntryPaths::Refused,
+            ),
+            &mut results,
+        );
         assert_eq!(results.len(), 1, "blocklist drops the uncheckable result");
         assert_eq!(results[0].url, "https://a.example/");
 
-        retain_allowed_results(&DomainFilter::new(Some(&["a.example".to_owned()]), None), &mut results);
+        retain_allowed_results(
+            &DomainFilter::new(
+                Some(&["a.example".to_owned()]),
+                None,
+                crate::tool::domain_policy::EntryPaths::Refused,
+            ),
+            &mut results,
+        );
         assert_eq!(results.len(), 1);
     }
 }

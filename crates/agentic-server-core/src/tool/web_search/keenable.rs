@@ -34,7 +34,7 @@ use super::{
     null_as_default, read_response_limited,
 };
 use crate::config::WebSearchProviderKind;
-use crate::tool::domain_policy::DomainFilter;
+use crate::tool::domain_policy::{DomainFilter, EntryPaths};
 use crate::tool::handler::ToolError;
 use crate::types::tools::{WebSearchContextSize, WebSearchToolParam};
 
@@ -218,7 +218,11 @@ impl KeenableSearchRequest {
             ));
         }
         log_ignored_arguments(args, config);
-        let domain_filter = DomainFilter::new(include_domains.as_deref(), exclude_domains.as_deref());
+        let domain_filter = DomainFilter::new(
+            include_domains.as_deref(),
+            exclude_domains.as_deref(),
+            EntryPaths::of_web_search(config),
+        );
 
         Ok(Self {
             body: KeenableSearchBody {

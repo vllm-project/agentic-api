@@ -29,7 +29,7 @@ use super::{
     null_as_default, read_response_limited,
 };
 use crate::config::WebSearchProviderKind;
-use crate::tool::domain_policy::DomainFilter;
+use crate::tool::domain_policy::{DomainFilter, EntryPaths};
 use crate::tool::handler::ToolError;
 use crate::types::tools::{WebSearchContextSize, WebSearchToolParam};
 
@@ -240,7 +240,11 @@ impl BraveSearchRequest {
             // Brave expects lowercase codes such as `en`, `pt-br`, `zh-hans`.
             search_lang: args.language.as_deref().map(str::to_ascii_lowercase),
             safesearch: args.safesearch.clone(),
-            domain_filter: DomainFilter::new(include_domains.as_deref(), exclude_domains.as_deref()),
+            domain_filter: DomainFilter::new(
+                include_domains.as_deref(),
+                exclude_domains.as_deref(),
+                EntryPaths::of_web_search(config),
+            ),
         })
     }
 }
@@ -535,6 +539,7 @@ mod tests {
                 allowed_domains: None,
                 blocked_domains: Some(vec!["example.com/private".to_owned()]),
             }),
+            path_entries: true,
             ..WebSearchToolParam::default()
         };
         let request = BraveSearchRequest::from_args_and_config("q", &args(r#"{"query":"q"}"#), &config).unwrap();
@@ -675,7 +680,7 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let filter = DomainFilter::new(Some(&["example.com".to_owned()]), None);
+        let filter = DomainFilter::new(Some(&["example.com".to_owned()]), None, EntryPaths::Refused);
         let response = response.into_provider_response("q", &filter);
         let urls = |results: &[WebSearchResult]| results.iter().map(|r| r.url.clone()).collect::<Vec<_>>();
         assert_eq!(

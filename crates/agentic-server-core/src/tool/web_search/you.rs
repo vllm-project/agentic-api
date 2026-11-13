@@ -9,12 +9,13 @@ use std::sync::Arc;
 
 use serde::Deserialize;
 
-use super::args::{Freshness, WebSearchArguments, clean_string, clean_vec, validate_count};
+use super::args::{Freshness, WebSearchArguments, clean_string, clean_vec, retain_allowed_results, validate_count};
 use super::{
     ApiKey, WebSearchProvider, WebSearchProviderMetadata, WebSearchProviderResponse, WebSearchResult, clean_base_url,
     null_as_default, read_response_limited,
 };
 use crate::config::WebSearchProviderKind;
+use crate::tool::domain_policy::{DomainFilter, DomainList, EntryPaths, provider_domains};
 use crate::tool::handler::ToolError;
 use crate::types::tools::{WebSearchContextSize, WebSearchToolParam};
 
@@ -91,7 +92,7 @@ impl WebSearchProvider for YouSearchProvider {
             let response_text = read_response_limited(resp, WebSearchProviderKind::You).await?;
             let response: YouSearchResponse = serde_json::from_str(&response_text)
                 .map_err(|e| ToolError::Execution(format!("You.com search returned invalid JSON: {e}")))?;
-            Ok(response.into_provider_response(&request.query))
+            Ok(response.into_provider_response(&request.query, &request.domain_filter))
         })
     }
 }
@@ -112,6 +113,10 @@ struct YouSearchRequest {
     include_domains: Option<Vec<String>>,
     exclude_domains: Option<Vec<String>>,
     boost_domains: Option<Vec<String>>,
+    /// Re-checks results against path entries, which You.com receives as
+    /// hosts. Empty unless the declaration's entries may carry a path, since
+    /// host lists are applied by You.com itself.
+    domain_filter: DomainFilter,
 }
 
 impl YouSearchRequest {
@@ -191,6 +196,12 @@ impl YouSearchRequest {
             .and_then(|location| clean_string(location.country.as_deref()))
             .or_else(|| args.country.clone())
             .map(|value| value.to_ascii_uppercase());
+        let paths = EntryPaths::of_web_search(config);
+        let domain_filter = if paths == EntryPaths::Allowed {
+            DomainFilter::new(include_domains.as_deref(), exclude_domains.as_deref(), paths)
+        } else {
+            DomainFilter::default()
+        };
 
         Ok(Self {
             query: query.trim().to_owned(),
@@ -202,9 +213,10 @@ impl YouSearchRequest {
             livecrawl: args.livecrawl.clone(),
             livecrawl_formats: args.livecrawl_formats.clone(),
             crawl_timeout,
-            include_domains,
-            exclude_domains,
+            include_domains: provider_domains(include_domains, DomainList::Allowed, paths),
+            exclude_domains: provider_domains(exclude_domains, DomainList::Blocked, paths),
             boost_domains,
+            domain_filter,
         })
     }
 }
@@ -250,10 +262,14 @@ struct YouSearchMetadata {
 }
 
 impl YouSearchResponse {
-    fn into_provider_response(self, query: &str) -> WebSearchProviderResponse {
+    fn into_provider_response(self, query: &str, domain_filter: &DomainFilter) -> WebSearchProviderResponse {
+        let mut web = self.results.web;
+        let mut news = self.results.news;
+        retain_allowed_results(domain_filter, &mut web);
+        retain_allowed_results(domain_filter, &mut news);
         WebSearchProviderResponse {
-            web: self.results.web,
-            news: self.results.news,
+            web,
+            news,
             metadata: WebSearchProviderMetadata {
                 provider: WebSearchProviderKind::You,
                 query: self.metadata.query.unwrap_or_else(|| query.to_owned()),
@@ -341,12 +357,66 @@ mod tests {
                 ..WebSearchUserLocation::default()
             }),
             unsupported_async: None,
+            path_entries: false,
         };
         let args = args(r#"{"query":"rust","country":"us","include_domains":["other.example"]}"#);
         let request = YouSearchRequest::from_args_and_config("rust", &args, &config).unwrap();
         assert_eq!(request.count, Some(WebSearchContextSize::Low.default_count()));
         assert_eq!(request.country.as_deref(), Some("DE"));
         assert_eq!(request.include_domains, Some(vec!["docs.example".to_owned()]));
+    }
+
+    #[test]
+    fn path_entries_send_their_host_and_filter_results_client_side() {
+        let declared = |allowed: Option<&[&str]>, blocked: Option<&[&str]>| WebSearchToolParam {
+            filters: Some(DomainFilters {
+                allowed_domains: allowed.map(|entries| entries.iter().map(|e| (*e).to_owned()).collect()),
+                blocked_domains: blocked.map(|entries| entries.iter().map(|e| (*e).to_owned()).collect()),
+            }),
+            path_entries: true,
+            ..WebSearchToolParam::default()
+        };
+        let response = || -> YouSearchResponse {
+            serde_json::from_str(
+                r#"{"results": {"web": [
+                    {"url": "https://example.com/blog/post", "title": "a"},
+                    {"url": "https://example.com/private/x", "title": "b"},
+                    {"url": "https://example.org/", "title": "c"}
+                ]}}"#,
+            )
+            .unwrap()
+        };
+        let urls =
+            |response: WebSearchProviderResponse| response.web.into_iter().map(|result| result.url).collect::<Vec<_>>();
+
+        let config = declared(Some(&["example.com/blog", "example.org", "Example.com/docs"]), None);
+        let request = YouSearchRequest::from_args_and_config("q", &args(r#"{"query":"q"}"#), &config).unwrap();
+        assert_eq!(
+            request.include_domains,
+            Some(vec!["example.com".to_owned(), "example.org".to_owned()])
+        );
+        assert_eq!(
+            urls(response().into_provider_response("q", &request.domain_filter)),
+            ["https://example.com/blog/post", "https://example.org/"]
+        );
+
+        // A blocked path is not sent: You.com would block the whole host.
+        let config = declared(None, Some(&["example.com/private", "spam.example"]));
+        let request = YouSearchRequest::from_args_and_config("q", &args(r#"{"query":"q"}"#), &config).unwrap();
+        assert_eq!(request.exclude_domains, Some(vec!["spam.example".to_owned()]));
+        assert_eq!(
+            urls(response().into_provider_response("q", &request.domain_filter)),
+            ["https://example.com/blog/post", "https://example.org/"]
+        );
+
+        // A Responses declaration keeps its lists as declared and You.com's own filtering.
+        let config = WebSearchToolParam {
+            path_entries: false,
+            ..declared(None, Some(&["example.com/private"]))
+        };
+        let request = YouSearchRequest::from_args_and_config("q", &args(r#"{"query":"q"}"#), &config).unwrap();
+        assert_eq!(request.exclude_domains, Some(vec!["example.com/private".to_owned()]));
+        assert!(request.domain_filter.is_empty());
     }
 
     #[test]
@@ -396,7 +466,7 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let mapped = response.into_provider_response("rust");
+        let mapped = response.into_provider_response("rust", &DomainFilter::default());
         assert_eq!(mapped.news, Vec::new());
         assert_eq!(mapped.metadata.provider, WebSearchProviderKind::You);
         assert_eq!(mapped.metadata.query, "rust");
@@ -419,7 +489,7 @@ mod tests {
     #[test]
     fn response_tolerates_missing_envelope_sections() {
         let response: YouSearchResponse = serde_json::from_str("{}").unwrap();
-        let mapped = response.into_provider_response("rust");
+        let mapped = response.into_provider_response("rust", &DomainFilter::default());
         assert!(mapped.web.is_empty());
         assert!(mapped.news.is_empty());
         assert_eq!(mapped.metadata.query, "rust");
@@ -427,7 +497,12 @@ mod tests {
         assert_eq!(mapped.metadata.latency, None);
 
         let response: YouSearchResponse = serde_json::from_str(r#"{"results": null, "metadata": null}"#).unwrap();
-        assert!(response.into_provider_response("rust").web.is_empty());
+        assert!(
+            response
+                .into_provider_response("rust", &DomainFilter::default())
+                .web
+                .is_empty()
+        );
     }
 
     #[test]
@@ -439,7 +514,7 @@ mod tests {
             r#"{"metadata":{"query":null}}"#,
         ] {
             let response: YouSearchResponse = serde_json::from_str(json).unwrap();
-            let mapped = response.into_provider_response("rust");
+            let mapped = response.into_provider_response("rust", &DomainFilter::default());
             assert_eq!(
                 serde_json::to_string(&mapped.metadata).unwrap(),
                 r#"{"query":"rust"}"#,

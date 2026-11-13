@@ -294,6 +294,13 @@ pub struct WebSearchToolParam {
     #[serde(default, rename = "async", skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "openapi", schema(ignore))]
     pub unsupported_async: Option<bool>,
+    /// Whether `filters` entries may carry a path after the host. Anthropic's
+    /// web search documents `example.com/blog`, so the Messages adapter sets
+    /// this for the entries it validated; `OpenAI` documents host names only, so
+    /// a Responses declaration leaves it unset and an entry with a path keeps
+    /// matching nothing. Never read from or written to the wire.
+    #[serde(skip)]
+    pub path_entries: bool,
 }
 
 /// The only `OpenAI` container selector supported by the gateway.

@@ -350,7 +350,7 @@ mod tests {
     async fn an_internal_address_is_refused_directly_and_through_a_redirect() {
         let (hits, port) = origin().await;
         let backend = HttpFetchBackend::with_address_policy(WebFetchConfig::default(), admit_all_but_the_stand_in);
-        let filter = DomainFilter::new(None, None);
+        let filter = DomainFilter::default();
 
         let direct = Url::parse(&format!("http://{STAND_IN_INTERNAL}:{port}/internal")).unwrap();
         let error = backend.fetch(&direct, &filter).await.unwrap_err();
@@ -386,13 +386,10 @@ mod tests {
             .with_timeout(Duration::from_millis(50));
         let backend = HttpFetchBackend::new(config);
         let url = Url::parse(&format!("http://127.0.0.1:{port}/slow")).unwrap();
-        let error = tokio::time::timeout(
-            Duration::from_secs(30),
-            backend.fetch(&url, &DomainFilter::new(None, None)),
-        )
-        .await
-        .expect("the fetch must stop at its deadline")
-        .unwrap_err();
+        let error = tokio::time::timeout(Duration::from_secs(30), backend.fetch(&url, &DomainFilter::default()))
+            .await
+            .expect("the fetch must stop at its deadline")
+            .unwrap_err();
         assert!(matches!(error, FetchFailure::TimedOut), "{error:?}");
     }
 
