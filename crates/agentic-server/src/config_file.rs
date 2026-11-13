@@ -10,7 +10,7 @@ use std::time::Duration;
 use agentic_core::McpServerEntry;
 use agentic_core::config::{CONFIG_FILE_NAME, CodeInterpreterRuntimeConfig, WebSearchProviderKind};
 use agentic_core::error::Error;
-use agentic_core::tool::mcp::pool::parse_allowed_host;
+use agentic_core::tool::mcp::pool::{deserialize_allowed_hosts, serialize_allowed_hosts};
 use agentic_server::model_capabilities::{InputModalities, ModelCapabilities, ModelOverride, SupportedReasoningLevels};
 use serde::{Deserialize, Serialize};
 
@@ -72,30 +72,18 @@ impl WebFetchFileConfig {
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct McpFileConfig {
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub allowed_hosts: Vec<String>,
+    /// Parsed while the file loads, so an entry that is not a host fails there.
+    #[serde(
+        skip_serializing_if = "Vec::is_empty",
+        deserialize_with = "deserialize_allowed_hosts",
+        serialize_with = "serialize_allowed_hosts"
+    )]
+    pub allowed_hosts: Vec<url::Host>,
 }
 
 impl McpFileConfig {
     fn is_empty(&self) -> bool {
         self.allowed_hosts.is_empty()
-    }
-
-    /// Every entry must parse as a host now, the same way the server parses it
-    /// at startup, so an entry such as `mcp.example.com:443` is reported here
-    /// instead of never matching a request.
-    fn validate(&self, path: &Path) -> Result<(), Error> {
-        match self
-            .allowed_hosts
-            .iter()
-            .find_map(|host| parse_allowed_host(host).err())
-        {
-            Some(error) => Err(Error::Config(format!(
-                "configuration file {} contains an invalid [mcp].allowed_hosts entry: {error}",
-                path.display()
-            ))),
-            None => Ok(()),
-        }
     }
 }
 
@@ -452,7 +440,6 @@ impl FileConfig {
                 path.display()
             )));
         }
-        self.mcp.validate(path)?;
         for (model_id, model) in &self.models {
             if model_id.trim().is_empty() {
                 return Err(Error::Config(format!(
@@ -612,7 +599,7 @@ mod tests {
                 max_concurrent_queries: None,
             },
             mcp: McpFileConfig {
-                allowed_hosts: vec!["mcp.example.com".to_owned()],
+                allowed_hosts: vec![url::Host::Domain("mcp.example.com".to_owned())],
             },
             server: ServerFileConfig {
                 max_request_body_size_bytes: std::num::NonZeroUsize::new(20 * 1024 * 1024),
@@ -666,7 +653,10 @@ mod tests {
         assert_eq!(config.web_search.provider, None);
         assert_eq!(config.web_search.api_key_env.as_deref(), Some("YOU_API_KEY"));
         assert_eq!(config.web_search.max_concurrent_queries, None);
-        assert_eq!(config.mcp.allowed_hosts, vec!["mcp.example.com"]);
+        assert_eq!(
+            config.mcp.allowed_hosts,
+            vec![url::Host::Domain("mcp.example.com".to_owned())]
+        );
         assert!(matches!(config.mcp_servers["remote"], McpServerEntry::Http { .. }));
         assert_eq!(
             config.mcp_servers["remote"].allowed_tools(),
@@ -895,8 +885,9 @@ mod tests {
 
             let error = FileConfig::load(home.path()).expect_err("an unparseable allowed host must fail");
             let message = error.to_string();
-            assert!(message.contains("invalid [mcp].allowed_hosts entry"), "{message}");
-            assert!(message.contains(&format!("{entry:?}")), "{message}");
+            assert!(message.contains("failed to parse configuration file"), "{message}");
+            assert!(message.contains("allowed_hosts"), "{message}");
+            assert!(message.contains(&format!("MCP allowed host {entry:?}")), "{message}");
         }
     }
 

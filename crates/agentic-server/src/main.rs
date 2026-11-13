@@ -15,7 +15,7 @@ use agentic_core::config::{
     PostgresConfig, SqliteConfig, SqliteTempStore, ToolRuntimeConfig, ensure_agentic_api_home, normalize_base_url,
 };
 use agentic_core::error::Error;
-use agentic_core::tool::mcp::pool::{parse_allowed_host, parse_allowed_hosts};
+use agentic_core::tool::mcp::pool::parse_allowed_hosts;
 use agentic_core::types::file_search::FileSearchConfig;
 use agentic_server::auth::OidcConfig;
 use agentic_server::telemetry::{self, DEFAULT_SHUTDOWN_TIMEOUT, TelemetryConfig, TelemetryError, TelemetryGuard};
@@ -440,16 +440,7 @@ fn build_config(llm_api_base: String, common: &CommonArgs, file: &FileConfig) ->
     };
     let web_search = resolve_web_search_config(&file.web_search, environment_value)?;
     let web_fetch = resolve_web_fetch_config(&file.web_fetch, environment_value)?;
-    let mcp_allowed_hosts = match environment_value("AGENTIC_MCP_ALLOWED_HOSTS") {
-        Some(value) => parse_allowed_hosts(&value),
-        None => file
-            .mcp
-            .allowed_hosts
-            .iter()
-            .map(|host| parse_allowed_host(host))
-            .collect(),
-    }
-    .map_err(|error| Error::Config(format!("invalid MCP allowed hosts: {error}")))?;
+    let mcp_allowed_hosts = environment_mcp_allowed_hosts()?.unwrap_or_else(|| file.mcp.allowed_hosts.clone());
     let max_concurrent_gateway_calls_default = file
         .tools
         .max_concurrent_gateway_calls
@@ -517,13 +508,12 @@ fn gateway_options<'a>(
     })
 }
 
-fn generated_file_config(llm_api_base: String) -> FileConfig {
-    FileConfig {
+fn generated_file_config(llm_api_base: String) -> Result<FileConfig, Error> {
+    Ok(FileConfig {
         llm_api_base: Some(llm_api_base),
         web_search: generated_web_search_file_config(environment_value),
         mcp: McpFileConfig {
-            allowed_hosts: environment_value("AGENTIC_MCP_ALLOWED_HOSTS")
-                .map_or_else(Vec::new, |value| parse_comma_separated(&value)),
+            allowed_hosts: environment_mcp_allowed_hosts()?.unwrap_or_default(),
         },
         server: generated_server_file_config(environment_value),
         tools: ToolsFileConfig {
@@ -537,7 +527,15 @@ fn generated_file_config(llm_api_base: String) -> FileConfig {
         responses: generated_responses_file_config(),
         mcp_servers: HashMap::new(),
         ..FileConfig::default()
-    }
+    })
+}
+
+/// `AGENTIC_MCP_ALLOWED_HOSTS` parsed into hosts, or `None` when it is unset.
+fn environment_mcp_allowed_hosts() -> Result<Option<Vec<url::Host>>, Error> {
+    environment_value("AGENTIC_MCP_ALLOWED_HOSTS")
+        .map(|value| parse_allowed_hosts(&value))
+        .transpose()
+        .map_err(|error| Error::Config(format!("invalid AGENTIC_MCP_ALLOWED_HOSTS: {error}")))
 }
 
 fn environment_value(name: &str) -> Option<String> {
@@ -548,15 +546,6 @@ fn clean_value(value: Option<String>) -> Option<String> {
     value
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
-}
-
-fn parse_comma_separated(value: &str) -> Vec<String> {
-    value
-        .split(',')
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_owned)
-        .collect()
 }
 
 /// Upper bound for stopping the runtime once the gateway has drained. Request
@@ -622,7 +611,7 @@ async fn run(
                 )
             })?;
             if config_file_missing {
-                file_config = generated_file_config(base.clone()).create_or_load(&agentic_home)?;
+                file_config = generated_file_config(base.clone())?.create_or_load(&agentic_home)?;
             }
             let config = build_config(normalize_base_url(&base), &common, &file_config)?;
             let gateway = gateway_options(&common, &file_config, oidc_config)?;
@@ -637,7 +626,7 @@ async fn run(
             }
             if config_file_missing {
                 file_config =
-                    generated_file_config(format!("http://127.0.0.1:{port}")).create_or_load(&agentic_home)?;
+                    generated_file_config(format!("http://127.0.0.1:{port}"))?.create_or_load(&agentic_home)?;
             }
             let config = build_config(
                 normalize_base_url(&format!("http://127.0.0.1:{port}")),
