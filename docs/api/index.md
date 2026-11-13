@@ -461,10 +461,11 @@ Background mode is tracked in
 [#357](https://github.com/vllm-project/agentic-api/issues/357). This matrix
 contributes to [#314](https://github.com/vllm-project/agentic-api/issues/314).
 
-Typed execution still ignores other members the gateway does not model,
-including `top_logprobs`, `user`, `safety_identifier`, `stream_options`, and vLLM
-sampling extensions such as `top_k`, `min_p`, `seed`, and `stop`. Reporting effective parameters is tracked in
-[#434](https://github.com/vllm-project/agentic-api/issues/434).
+Members the gateway does not model, including `top_logprobs`, `user`,
+`safety_identifier`, `stream_options`, and vLLM sampling extensions such as
+`top_k`, `min_p`, `seed`, and `stop`, are forwarded upstream unchanged. The
+upstream decides whether it honors them; reporting the effective parameters is
+tracked in [#434](https://github.com/vllm-project/agentic-api/issues/434).
 
 #### Prompt-cache usage compatibility
 

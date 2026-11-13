@@ -39,8 +39,10 @@ Core work:
 
 Status: one typed path now carries history from rehydration to persistence
 ([#500](https://github.com/vllm-project/agentic-api/issues/500): [#501](https://github.com/vllm-project/agentic-api/pull/501), [#502](https://github.com/vllm-project/agentic-api/pull/502), [#503](https://github.com/vllm-project/agentic-api/pull/503), [#505](https://github.com/vllm-project/agentic-api/pull/505), [#506](https://github.com/vllm-project/agentic-api/pull/506)). Stored history
-holds client-facing items only, conversation turns append like OpenAI instead of
-failing on concurrent writes, and compaction output, continuation, and MCP
+holds client-facing items only, ordinary conversation turns append like OpenAI
+instead of failing on concurrent writes (a turn that answers a pending call, or
+runs with multi-agent enabled, still requires the latest turn), and compaction
+output, continuation, and MCP
 discovery follow the recorded OpenAI behavior.
 `DELETE /v1/responses/{id}` and `GET /v1/responses/{id}/input_items` are
 available ([#466](https://github.com/vllm-project/agentic-api/pull/466)), and HTTP `store: false` requests run through

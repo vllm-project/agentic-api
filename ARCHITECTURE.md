@@ -1971,7 +1971,8 @@ Stored history is the client-facing record of a turn: the items the client sent 
 in that order. Model-facing shapes (the gateway's lowered `function_call` / `function_call_output` pairs, the assistant summary a
 compaction item becomes, upstream-specific item forms) are never stored. They are built for each upstream request at the one
 lowering point, `ResponsesInput::normalized_model_input`. `input_items`, conversation items, and continuation all read
-the same rows, so stored history is exactly what `input_items` and conversation items return. A change that stores a model-facing item, or a second
+the same rows, so they share one client-facing representation (`input_items` lists a turn's history without its own
+output). A change that stores a model-facing item, or a second
 copy of history in another shape, breaks that contract; the `file_search` path is the one leftover
 ([#482](https://github.com/vllm-project/agentic-api/issues/482)).
 
@@ -1990,9 +1991,10 @@ What a continuation sees, and therefore what each turn's list holds, follows Ope
 
 - **Compaction.** A single-agent continuation starts at the latest compaction a turn produced
   (`ResponseCheckpoint::continue_from_compaction` trims `history_item_ids`), so the list restarts at every
-  compaction. Automatic compaction and `compaction_trigger` carry their retained window (user messages, including
-  media, and open async calls) inside the compaction item; standalone `/v1/responses/compact` stores the window it
-  built. A compacting turn keeps its own original input. Multi-agent continuations keep their full public history,
+  compaction. Automatic compaction and `compaction_trigger` carry their retained user messages, including media,
+  inside the compaction item; standalone `/v1/responses/compact` stores the window it built. Open async calls are not
+  part of the item: automatic compaction keeps them as separate items next to it, and the standalone window returns
+  them in their public form, so replaying the compaction item alone does not restore pending call IDs. A compacting turn keeps its own original input. Multi-agent continuations keep their full public history,
   with the agent tree in `responses.metadata`.
 - **Compaction sent back as input.** `InOutItem::filter_for_compaction` decides what a turn stores of a request that
   carries a compaction. One from an unstored turn is used for that turn only: it and the items before it are not
@@ -2003,7 +2005,8 @@ What a continuation sees, and therefore what each turn's list holds, follows Ope
 - **Deletion.** Deleting a response removes its rows from every descendant's `history_item_ids`, and a turn that
   was running at the time does not restore them.
 - **Conversations.** A conversation turn stores the history it started from plus its own items, appended at commit
-  after whatever the conversation holds then.
+  after whatever the conversation holds then. A turn that answers a pending call, or runs with multi-agent enabled,
+  must still continue the latest turn, and is refused with `conversation_locked` otherwise.
 
 Evidence for each rule lives in the OpenAI and gateway cassettes (`compaction/`, `responses/`, `conversations/`). A
 change to what is persisted needs the same: record OpenAI with the recorder, then the gateway, and assert both.
