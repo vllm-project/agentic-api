@@ -8,6 +8,7 @@ mod support;
 use agentic_core::executor::request::RequestContext;
 use agentic_core::executor::{ExecutionContext, ExecutorError, commit, execute, persist_turn, rehydrate_conversation};
 use agentic_core::storage::StorageError;
+use agentic_core::types::conversations::ConversationMetadata;
 use agentic_core::types::io::InOutItem;
 use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
 use agentic_core::types::tools::{FunctionToolParam, NonEmptyToolName};
@@ -728,6 +729,24 @@ async fn is_continuable(exec_ctx: &ExecutionContext, id: &str) -> bool {
     }
 }
 
+/// A turn references an existing conversation; an unknown `conversation` id is rejected as not-found instead of
+/// being created implicitly (#155), for both stored and unstored turns.
+#[tokio::test]
+async fn unknown_conversation_id_is_not_created_implicitly() {
+    let fixture = TestFixture::new(&[]).await;
+    let exec_ctx = Arc::clone(&fixture.exec_ctx);
+    for store in [false, true] {
+        let request = make_request("start", store, false, None, Some("conv_does_not_exist".to_owned()));
+        let error = rehydrate_conversation(request, &exec_ctx)
+            .await
+            .expect_err("an unknown conversation id must not hydrate");
+        match error {
+            ExecutorError::Storage(storage_error) if storage_error.is_not_found() => {}
+            other => panic!("expected a not-found storage error, got {other}"),
+        }
+    }
+}
+
 #[tokio::test]
 async fn tool_search_previous_response_continuation_omits_tools_after_first_turn() {
     let fixture = TestFixture::new_with_responses(vec![
@@ -1306,7 +1325,19 @@ async fn assert_plaintext_reasoning_replay(stream: bool, conversation: bool, opa
         follow_up,
     ])
     .await;
-    let conversation_id = conversation.then(|| "conv_reasoning_replay".to_owned());
+    let conversation_id = if conversation {
+        Some(
+            fixture
+                .exec_ctx
+                .conv_handler
+                .create("default_tenant", &ConversationMetadata::new(), &[])
+                .await
+                .expect("create conversation")
+                .conversation_id,
+        )
+    } else {
+        None
+    };
     let first = run_response(
         make_request("historical user", true, stream, None, conversation_id.clone()),
         Arc::clone(&fixture.exec_ctx),
@@ -1392,7 +1423,19 @@ async fn assert_summary_only_reasoning_not_replayed(stream: bool, conversation: 
         text_response("follow-up answer")
     };
     let fixture = TestFixture::new_with_responses(vec![reasoning_response(stream, &[], false), follow_up]).await;
-    let conversation_id = conversation.then(|| format!("conv_summary_only_{stream}"));
+    let conversation_id = if conversation {
+        Some(
+            fixture
+                .exec_ctx
+                .conv_handler
+                .create("default_tenant", &ConversationMetadata::new(), &[])
+                .await
+                .expect("create conversation")
+                .conversation_id,
+        )
+    } else {
+        None
+    };
     let first = run_response(
         make_request("historical user", true, stream, None, conversation_id.clone()),
         Arc::clone(&fixture.exec_ctx),

@@ -21,22 +21,6 @@ impl ConversationHandler {
         Self { store }
     }
 
-    /// Gets an existing conversation or creates one.
-    ///
-    /// Reads `conversation` from `ctx.original_request`.
-    ///
-    /// # Errors
-    /// Returns `ExecutorError` if `conversation` is absent, the store is
-    /// disabled, or the database query fails.
-    pub async fn get_or_create(&self, ctx: &RequestContext) -> ExecutorResult<ConversationData> {
-        let conv_id = ctx
-            .original_request
-            .conversation
-            .as_deref()
-            .ok_or_else(|| ExecutorError::InvalidRequest("conversation is required for get_or_create".into()))?;
-        self.store.get_or_create(conv_id).await.map_err(ExecutorError::Storage)
-    }
-
     /// Creates a tenant-owned conversation with its metadata and initial history.
     ///
     /// # Errors
@@ -252,20 +236,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_or_create_missing_id_returns_error() {
-        let result = disabled_handler().get_or_create(&make_ctx(None)).await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
     async fn test_rehydrate_missing_id_returns_error() {
         let result = disabled_handler().rehydrate(&make_ctx(None)).await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_get_or_create_disabled_store_returns_error() {
-        let result = disabled_handler().get_or_create(&make_ctx(Some("conv_1"))).await;
         assert!(result.is_err());
     }
 
