@@ -73,8 +73,11 @@ pub(crate) fn validate_url(raw: &str) -> Result<Url, UrlRejection> {
 /// (100.64/10), link-local (which covers the cloud metadata address
 /// 169.254.169.254), multicast, broadcast, benchmarking, documentation, IETF
 /// protocol assignments (192.0.0/24), and reserved ranges; for IPv6 also
-/// unique-local, site-local, local-use NAT64, and every transition form that
-/// embeds a refused IPv4 address.
+/// unique-local, site-local, local-use NAT64, discard-only and dummy (`100::/63`), the
+/// IETF protocol assignments block (`2001::/23`, minus the anycast and other
+/// prefixes the IANA special-purpose registry marks globally reachable),
+/// SRv6 SIDs (`5f00::/16`), both documentation prefixes (`2001:db8::/32` and
+/// `3fff::/20`), and every transition form that embeds a refused IPv4 address.
 #[must_use]
 pub(crate) fn is_public_ip(ip: IpAddr) -> bool {
     match ip {
@@ -122,7 +125,31 @@ fn is_public_v6(ip: Ipv6Addr) -> bool {
         || (first & 0xfe00) == 0xfc00
         || (first & 0xffc0) == 0xfe80
         || (first & 0xffc0) == 0xfec0
-        || (first == 0x2001 && segments[1] == 0x0db8))
+        || (segments[..3] == [0x100, 0, 0] && segments[3] <= 1)
+        || is_ietf_protocol_assignment_v6(ip)
+        || first == 0x5f00
+        || (first == 0x2001 && segments[1] == 0x0db8)
+        || (first == 0x3fff && segments[1] <= 0x0fff))
+}
+
+/// Whether an address is in the IETF protocol assignments block (`2001::/23`)
+/// and not one of the prefixes inside it that the IANA IPv6 special-purpose
+/// address registry marks globally reachable. The block also holds Teredo,
+/// benchmarking (`2001:2::/48`), and the deprecated ORCHID prefix, all refused.
+fn is_ietf_protocol_assignment_v6(ip: Ipv6Addr) -> bool {
+    let segments = ip.segments();
+    if segments[0] != 0x2001 || segments[1] >= 0x0200 {
+        return false;
+    }
+    // Globally reachable per the registry: PCP, TURN, and DNS-SD SRP anycast
+    // (`2001:1::1` to `2001:1::3`), AMT (`2001:3::/32`), ORCHIDv2
+    // (`2001:20::/28`), drone remote ID DETs (`2001:30::/28`), and AS112-v6
+    // (`2001:4:112::/48`).
+    let globally_reachable = matches!(
+        segments[1..],
+        [1, 0, 0, 0, 0, 0, 1..=3] | [3 | 0x0020..=0x003f, ..] | [4, 0x0112, ..]
+    );
+    !globally_reachable
 }
 
 /// Resolve a URL host to the socket addresses the backend may connect to.
@@ -273,6 +300,16 @@ mod tests {
             "64:ff9b:1::808:808",
             "2002:0a00:0001::1",
             "2002:c0a8:0101::1",
+            "3fff::1",
+            "3fff:fff:ffff::1",
+            "100::1",
+            "100:0:0:1::1",
+            "2001::1",
+            "2001:2::1",
+            "2001:10::1",
+            "2001:1::4",
+            "2001:1ff::1",
+            "5f00::1",
         ] {
             let ip: IpAddr = refused.parse().unwrap();
             assert!(!is_public_ip(ip), "{refused} must be refused");
@@ -285,6 +322,16 @@ mod tests {
             "2002:0808:0808::1",
             "2001:db9::1",
             "fb00::1",
+            "3fff:1000::1",
+            "100:0:0:2::1",
+            "2001:1::1",
+            "2001:1::3",
+            "2001:3::1",
+            "2001:4:112::1",
+            "2001:20::1",
+            "2001:3f::1",
+            "2001:200::1",
+            "5f01::1",
         ] {
             let ip: IpAddr = allowed.parse().unwrap();
             assert!(is_public_ip(ip), "{allowed} must be allowed");
