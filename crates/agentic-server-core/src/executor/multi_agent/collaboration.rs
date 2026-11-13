@@ -120,7 +120,7 @@ pub(in crate::executor) fn tools() -> Vec<UpstreamTool> {
         ),
         (
             "list_agents",
-            "List the entire team and its statuses, including yourself, ancestors and siblings. Call with exactly {}: this tool accepts no arguments or wrapper fields. Entries are not necessarily your children; canonical paths show parentage.",
+            "List the entire team and its statuses, including yourself, ancestors and siblings. Each entry also reports that agent's last_task_message (the latest assigned task, or null). Call with exactly {}: this tool accepts no arguments or wrapper fields. Entries are not necessarily your children; canonical paths show parentage.",
             json!({}),
             vec![],
         ),

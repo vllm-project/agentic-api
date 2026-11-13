@@ -105,12 +105,16 @@ impl MultiAgentRun {
                 agents: self
                     .registry
                     .agents()
-                    .map(|agent| AgentListing {
-                        agent_name: agent.identity.to_string(),
-                        agent_status: listing_status(
-                            agent.state,
-                            self.contexts[agent.identity].stored.final_answer.as_deref(),
-                        ),
+                    .map(|agent| {
+                        let last_task = &self.contexts[agent.identity].stored.last_task;
+                        AgentListing {
+                            agent_name: agent.identity.to_string(),
+                            agent_status: listing_status(
+                                agent.state,
+                                self.contexts[agent.identity].stored.final_answer.as_deref(),
+                            ),
+                            last_task_message: (!last_task.is_empty()).then(|| last_task.clone()),
+                        }
                     })
                     .collect(),
             })),

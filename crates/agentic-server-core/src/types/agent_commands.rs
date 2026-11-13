@@ -98,6 +98,9 @@ pub enum AgentListingStatus {
 pub struct AgentListing {
     pub agent_name: String,
     pub agent_status: AgentListingStatus,
+    /// The latest task message assigned to this agent; `null` when none has been assigned.
+    #[serde(default)]
+    pub last_task_message: Option<String>,
 }
 
 impl MultiAgentAction {
@@ -172,5 +175,33 @@ mod tests {
         ] {
             assert!(AgentCommand::parse(action, arguments).is_err());
         }
+    }
+
+    #[test]
+    fn agent_listing_serializes_last_task_message_as_nullable() {
+        use serde_json::json;
+        let without_task = AgentListing {
+            agent_name: "/root".into(),
+            agent_status: AgentListingStatus::Running,
+            last_task_message: None,
+        };
+        assert_eq!(
+            serde_json::to_value(&without_task).unwrap(),
+            json!({"agent_name": "/root", "agent_status": "running", "last_task_message": null})
+        );
+
+        let with_task = AgentListing {
+            agent_name: "/root/worker".into(),
+            agent_status: AgentListingStatus::Running,
+            last_task_message: Some("bounded assignment".into()),
+        };
+        assert_eq!(
+            serde_json::to_value(&with_task).unwrap()["last_task_message"],
+            json!("bounded assignment")
+        );
+
+        // A persisted/observed entry without the new field still decodes as `None`.
+        let decoded: AgentListing = serde_json::from_str(r#"{"agent_name":"/root","agent_status":"running"}"#).unwrap();
+        assert_eq!(decoded.last_task_message, None);
     }
 }

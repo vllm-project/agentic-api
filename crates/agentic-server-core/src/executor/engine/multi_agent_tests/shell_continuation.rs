@@ -39,9 +39,11 @@ pub(super) fn shell_review_output(request: &Value) -> Option<Vec<Value>> {
             let listing: Value = serde_json::from_str(result["output"].as_str().unwrap()).unwrap();
             let agents = listing["agents"].as_array().unwrap();
             assert_eq!(agents.len(), 2);
-            assert!(agents.contains(&json!({"agent_name":"/root", "agent_status":"running"})));
+            assert!(agents.contains(&json!({"agent_name":"/root", "agent_status":"running",
+                "last_task_message": null})));
             assert!(agents.contains(&json!({"agent_name":"/root/shell_worker",
-                "agent_status":{"completed":"shell result is 55"}})));
+                "agent_status":{"completed":"shell result is 55"},
+                "last_task_message":"run printf 55"})));
             vec![message("combined shell result is 55")]
         } else {
             // Listing ignores model-generated wrappers and returns the actual tree.
