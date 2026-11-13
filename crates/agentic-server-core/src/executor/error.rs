@@ -3,6 +3,7 @@ use thiserror::Error;
 
 use crate::StorageError;
 use crate::tool::ToolError;
+use crate::types::conversations::InvalidMetadata;
 use crate::types::file_search::FileSearchError;
 use crate::types::io::ClientItemError;
 use crate::types::io::input::InputValidationError;
@@ -127,6 +128,9 @@ pub enum ExecutorError {
     /// The request's `max_tool_calls` is not an integer of at least one.
     #[error(transparent)]
     InvalidMaxToolCalls(#[from] MaxToolCallsError),
+    /// Request `metadata` over the `OpenAI` limits.
+    #[error(transparent)]
+    InvalidMetadata(#[from] InvalidMetadata),
     /// A rejected request parameter value, with its public code and parameter name; `None` is reported as a `null`
     /// parameter.
     #[error("{message}")]
@@ -222,6 +226,7 @@ impl ExecutorError {
             | Self::ClientItem(_)
             | Self::InvalidPromptCacheOptions(_)
             | Self::InvalidMaxToolCalls(_)
+            | Self::InvalidMetadata(_)
             | Self::UnsupportedValue { .. }
             | Self::UnsupportedParameter(_)
             | Self::JsonError(_) => StatusCode::BAD_REQUEST,
@@ -269,6 +274,7 @@ impl ExecutorError {
             | Self::ClientItem(_)
             | Self::InvalidPromptCacheOptions(_)
             | Self::InvalidMaxToolCalls(_)
+            | Self::InvalidMetadata(_)
             | Self::UnsupportedValue { .. }
             | Self::UnsupportedParameter(_)
             | Self::ParseError(_)
@@ -310,6 +316,7 @@ impl ExecutorError {
             Self::ResourceLimitExceeded { .. } => "response_resource_limit_exceeded",
             Self::InvalidPromptCacheOptions(PromptCacheOptionsError::Unsupported) => "unsupported_parameter",
             Self::InvalidMaxToolCalls(error) => error.code(),
+            Self::InvalidMetadata(error) => error.code(),
             Self::UnsupportedValue { code, .. } => code.unwrap_or("unsupported_value"),
             Self::UnsupportedParameter(error) => error.code(),
             Self::Tool(ToolError::UnknownParameter { .. }) => "unknown_parameter",
@@ -332,6 +339,7 @@ impl ExecutorError {
             Self::Tool(ToolError::MissingOutput { .. } | ToolError::UnknownCallOutput { .. }) => Some("input"),
             Self::InvalidPromptCacheOptions(_) => Some("prompt_cache_options"),
             Self::InvalidMaxToolCalls(_) => Some(MAX_TOOL_CALLS_PARAM),
+            Self::InvalidMetadata(error) => Some(error.param()),
             Self::UnsupportedParameter(error) => Some(error.param()),
             Self::McpListToolsFailed(_) => Some("tools"),
             _ => None,

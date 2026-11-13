@@ -34,11 +34,14 @@ impl TryFrom<StorageDbConversation> for ConversationData {
     type Error = StorageError;
 
     fn try_from(row: StorageDbConversation) -> Result<Self, Self::Error> {
+        // Decoded from the inner map: rows saved before the metadata limits
+        // were enforced must still load.
         let metadata = row
             .metadata
             .as_deref()
             .map(serde_json::from_str)
             .transpose()?
+            .map(ConversationMetadata::from_stored)
             .unwrap_or_default();
         Ok(Self {
             conversation_id: row.id,
@@ -59,6 +62,8 @@ pub(in crate::storage) fn encode_metadata(metadata: &ConversationMetadata) -> St
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
 
     fn row(metadata: Option<&str>) -> StorageDbConversation {
@@ -81,6 +86,14 @@ mod tests {
     }
 
     #[test]
+    fn metadata_stored_over_the_limits_still_loads() {
+        let pairs: BTreeMap<String, String> = (0..17).map(|i| (format!("k{i}"), "v".repeat(600))).collect();
+        let encoded = serde_json::to_string(&pairs).unwrap();
+        let conversation = ConversationData::try_from(row(Some(&encoded))).unwrap();
+        assert_eq!(conversation.metadata.len(), 17);
+    }
+
+    #[test]
     fn missing_metadata_is_empty() {
         assert!(ConversationData::try_from(row(None)).unwrap().metadata.is_empty());
     }
@@ -96,7 +109,8 @@ mod tests {
 
     #[test]
     fn metadata_round_trips_through_its_column() {
-        let metadata = ConversationMetadata::from([("topic".to_owned(), "billing".to_owned())]);
+        let metadata =
+            ConversationMetadata::try_from(BTreeMap::from([("topic".to_owned(), "billing".to_owned())])).unwrap();
         let encoded = encode_metadata(&metadata).unwrap();
         let decoded = ConversationData::try_from(row(Some(&encoded))).unwrap();
         assert_eq!(decoded.metadata, metadata);

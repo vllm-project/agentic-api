@@ -26,27 +26,64 @@ fn batch_requests_match_wire_contract() {
 }
 
 #[test]
-fn metadata_limits_match_openai() {
-    let entries = |count: usize| (0..count).map(|i| (format!("k{i}"), "v".to_owned())).collect();
-    assert_eq!(validate_metadata(&ConversationMetadata::new()), Ok(()));
-    assert_eq!(validate_metadata(&entries(16)), Ok(()));
-    assert_eq!(validate_metadata(&entries(17)), Err(MetadataError::TooManyEntries(17)));
-
-    let one = |key: String, value: String| ConversationMetadata::from([(key, value)]);
-    assert_eq!(validate_metadata(&one("k".repeat(64), "v".repeat(512))), Ok(()));
+fn metadata_limits_are_enforced_while_parsing() {
+    let pairs = |count: usize| {
+        (0..count)
+            .map(|i| (format!("k{i}"), "v".to_owned()))
+            .collect::<BTreeMap<_, _>>()
+    };
+    let one = |key: String, value: String| BTreeMap::from([(key, value)]);
+    assert_eq!(ConversationMetadata::try_from(pairs(16)).map(|m| m.len()), Ok(16));
     assert_eq!(
-        validate_metadata(&one(String::new(), "v".into())),
-        Err(MetadataError::InvalidKeyLength(0))
+        ConversationMetadata::try_from(pairs(17)),
+        Err(InvalidMetadata::TooManyPairs(17))
+    );
+    assert!(ConversationMetadata::try_from(one("k".repeat(64), "v".repeat(512))).is_ok());
+    // The limits count characters, as OpenAI documents them, not bytes.
+    assert!(ConversationMetadata::try_from(one("\u{4e2d}".repeat(64), "\u{4e2d}".repeat(512))).is_ok());
+    assert_eq!(
+        ConversationMetadata::try_from(one(String::new(), "v".into())),
+        Err(InvalidMetadata::KeyLength(0))
     );
     assert_eq!(
-        validate_metadata(&one("k".repeat(65), "v".into())),
-        Err(MetadataError::InvalidKeyLength(65))
+        ConversationMetadata::try_from(one("k".repeat(65), "v".into())),
+        Err(InvalidMetadata::KeyLength(65))
     );
     assert_eq!(
-        validate_metadata(&one("k".into(), "v".repeat(513))),
-        Err(MetadataError::ValueTooLong {
+        ConversationMetadata::try_from(one("k".into(), "\u{4e2d}".repeat(513))),
+        Err(InvalidMetadata::ValueTooLong {
             key: "k".into(),
-            len: 513
+            chars: 513
         })
     );
+    let error = InvalidMetadata::TooManyPairs(17);
+    assert_eq!((error.param(), error.code()), ("metadata", "invalid_value"));
+
+    // Every request that carries the type rejects invalid metadata while it is decoded.
+    let too_many = serde_json::Value::Object((0..17).map(|i| (format!("k{i}"), json!("v"))).collect());
+    let error = serde_json::from_value::<UpdateConversationRequest>(json!({"metadata": too_many.clone()})).unwrap_err();
+    assert!(error.to_string().contains("at most 16 key-value pairs"), "{error}");
+    assert!(serde_json::from_value::<CreateConversationRequest>(json!({"metadata": too_many.clone()})).is_err());
+    assert!(
+        serde_json::from_value::<crate::types::request_response::RequestPayload>(
+            json!({"model": "m", "input": "hi", "metadata": too_many.clone()})
+        )
+        .is_err()
+    );
+    assert!(
+        serde_json::from_value::<crate::types::file_search::CreateVectorStoreRequest>(json!({"metadata": too_many}))
+            .is_err()
+    );
+    let request: UpdateConversationRequest = serde_json::from_value(json!({"metadata": {"k": "v"}})).unwrap();
+    assert_eq!(serde_json::to_value(&request).unwrap(), json!({"metadata": {"k": "v"}}));
+}
+
+#[test]
+fn returned_conversations_decode_stored_metadata_unchecked() {
+    let too_many = serde_json::Value::Object((0..17).map(|i| (format!("k{i}"), json!("v"))).collect());
+    let response: ConversationResponse = serde_json::from_value(
+        json!({"id": "conv_1", "object": "conversation", "created_at": 1, "metadata": too_many}),
+    )
+    .unwrap();
+    assert_eq!(response.metadata.len(), 17);
 }

@@ -49,6 +49,8 @@ pub struct StandardResponseFields {
     #[serde(default = "default_stored_response")]
     pub store: bool,
     pub background: bool,
+    /// Stored snapshots may predate the metadata limits, so they decode unchecked.
+    #[serde(deserialize_with = "ConversationMetadata::deserialize_stored")]
     pub metadata: ConversationMetadata,
     pub safety_identifier: Option<String>,
     pub prompt_cache_key: Option<String>,

@@ -209,6 +209,7 @@ impl From<&ExecutorError> for FailureCategory {
             | ExecutorError::InvalidInput(_)
             | ExecutorError::ClientItem(_)
             | ExecutorError::InvalidMaxToolCalls(_)
+            | ExecutorError::InvalidMetadata(_)
             | ExecutorError::InvalidPromptCacheOptions(_)
             | ExecutorError::UnsupportedValue { .. }
             | ExecutorError::UnsupportedParameter(_) => Self::InvalidRequest,

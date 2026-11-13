@@ -6,51 +6,123 @@ use serde::{Deserialize, Serialize};
 
 use super::io::InOutItem;
 
-/// String key-value metadata, as `OpenAI` defines it for conversations and responses alike.
-pub type ConversationMetadata = BTreeMap<String, String>;
-
 /// Most key-value pairs one metadata object may hold.
-pub const MAX_METADATA_ENTRIES: usize = 16;
-/// Longest metadata key, in bytes.
-pub const MAX_METADATA_KEY_BYTES: usize = 64;
-/// Longest metadata value, in bytes.
-pub const MAX_METADATA_VALUE_BYTES: usize = 512;
+pub const MAX_METADATA_PAIRS: usize = 16;
+/// Longest metadata key, in characters.
+pub const MAX_METADATA_KEY_CHARS: usize = 64;
+/// Longest metadata value, in characters.
+pub const MAX_METADATA_VALUE_CHARS: usize = 512;
 
-/// Why a metadata object breaks the limits `OpenAI` documents for it.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum MetadataError {
-    #[error("metadata accepts at most {MAX_METADATA_ENTRIES} key-value pairs, but got {0}")]
-    TooManyEntries(usize),
-    #[error("metadata keys must contain 1 to {MAX_METADATA_KEY_BYTES} bytes, but got a key of {0} bytes")]
-    InvalidKeyLength(usize),
-    #[error(
-        "metadata values must contain at most {MAX_METADATA_VALUE_BYTES} bytes, but the value of {key:?} has {len}"
-    )]
-    ValueTooLong { key: String, len: usize },
+/// String key-value metadata, as `OpenAI` defines it for conversations,
+/// responses and vector stores: at most 16 pairs, keys of 1 to 64 characters
+/// and values of at most 512 characters.
+///
+/// The limits are checked when the value is decoded, like [`ItemLimit`], so a
+/// request carrying invalid metadata cannot be parsed and every type holding
+/// this one gets the rule. Rows stored before the limits were enforced are
+/// read back with [`Self::deserialize_stored`], which decodes the inner map
+/// without checking it.
+///
+/// [`ItemLimit`]: super::io::ItemLimit
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "BTreeMap<String, String>", into = "BTreeMap<String, String>")]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct ConversationMetadata(BTreeMap<String, String>);
+
+impl ConversationMetadata {
+    /// Metadata without pairs.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self(BTreeMap::new())
+    }
+
+    /// The pairs as a map.
+    #[must_use]
+    pub fn into_inner(self) -> BTreeMap<String, String> {
+        self.0
+    }
+
+    /// Decodes stored metadata from its inner map without checking the limits,
+    /// so metadata saved before they were enforced still loads. For fields of
+    /// stored or returned objects only; requests decode through `TryFrom`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the deserializer's error when the value is not a string map.
+    pub fn deserialize_stored<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        BTreeMap::deserialize(deserializer).map(Self)
+    }
+
+    /// Wraps a stored map without checking the limits; see [`Self::deserialize_stored`].
+    #[must_use]
+    pub(crate) fn from_stored(pairs: BTreeMap<String, String>) -> Self {
+        Self(pairs)
+    }
 }
 
-/// Checks `metadata` against the `OpenAI` limits: at most 16 pairs, keys of 1 to 64 bytes and values of at most
-/// 512 bytes.
-///
-/// # Errors
-///
-/// Returns the first limit the object breaks.
-pub fn validate_metadata(metadata: &ConversationMetadata) -> Result<(), MetadataError> {
-    if metadata.len() > MAX_METADATA_ENTRIES {
-        return Err(MetadataError::TooManyEntries(metadata.len()));
+impl std::ops::Deref for ConversationMetadata {
+    type Target = BTreeMap<String, String>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
-    for (key, value) in metadata {
-        if key.is_empty() || key.len() > MAX_METADATA_KEY_BYTES {
-            return Err(MetadataError::InvalidKeyLength(key.len()));
+}
+
+impl TryFrom<BTreeMap<String, String>> for ConversationMetadata {
+    type Error = InvalidMetadata;
+
+    fn try_from(pairs: BTreeMap<String, String>) -> Result<Self, Self::Error> {
+        if pairs.len() > MAX_METADATA_PAIRS {
+            return Err(InvalidMetadata::TooManyPairs(pairs.len()));
         }
-        if value.len() > MAX_METADATA_VALUE_BYTES {
-            return Err(MetadataError::ValueTooLong {
-                key: key.clone(),
-                len: value.len(),
-            });
+        for (key, value) in &pairs {
+            let key_chars = key.chars().count();
+            if key_chars == 0 || key_chars > MAX_METADATA_KEY_CHARS {
+                return Err(InvalidMetadata::KeyLength(key_chars));
+            }
+            let value_chars = value.chars().count();
+            if value_chars > MAX_METADATA_VALUE_CHARS {
+                return Err(InvalidMetadata::ValueTooLong {
+                    key: key.clone(),
+                    chars: value_chars,
+                });
+            }
         }
+        Ok(Self(pairs))
     }
-    Ok(())
+}
+
+impl From<ConversationMetadata> for BTreeMap<String, String> {
+    fn from(metadata: ConversationMetadata) -> Self {
+        metadata.0
+    }
+}
+
+/// Metadata that breaks the limits `OpenAI` documents for it.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum InvalidMetadata {
+    #[error("metadata accepts at most {MAX_METADATA_PAIRS} key-value pairs, but got {0}")]
+    TooManyPairs(usize),
+    #[error("metadata keys must have 1 to {MAX_METADATA_KEY_CHARS} characters, but got a key of {0} characters")]
+    KeyLength(usize),
+    #[error(
+        "metadata values must have at most {MAX_METADATA_VALUE_CHARS} characters, but the value of {key:?} has {chars}"
+    )]
+    ValueTooLong { key: String, chars: usize },
+}
+
+impl InvalidMetadata {
+    /// Request parameter the error is reported on.
+    #[must_use]
+    pub fn param(&self) -> &'static str {
+        "metadata"
+    }
+
+    /// Machine-readable code for invalid metadata.
+    #[must_use]
+    pub fn code(&self) -> &'static str {
+        "invalid_value"
+    }
 }
 
 /// Request to create a new conversation.
@@ -88,7 +160,7 @@ pub struct ConversationResponse {
     pub created_at: i64,
 
     /// Metadata as a JSON object.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "ConversationMetadata::deserialize_stored")]
     pub metadata: ConversationMetadata,
 }
 

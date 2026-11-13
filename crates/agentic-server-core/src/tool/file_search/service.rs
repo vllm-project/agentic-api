@@ -22,7 +22,6 @@ mod files;
 mod setup;
 use crate::{
     storage::file_search::{Collection, FilePublicationFailure, PreparedAttachment, StoredChunk, StoredVectorStore},
-    types::conversations::validate_metadata,
     types::file_search::{
         AttachFileRequest, ChunkingStrategy, CreateVectorStoreRequest, DeleteObject, FileAttributes, FileCounts,
         FileObject, FileSearchError, ListParams, ListResponse, SearchMode, SearchQuery, SearchRequest, SearchResponse,
@@ -104,9 +103,6 @@ impl FileSearchService {
         if request.name.as_ref().is_some_and(|name| name.len() > 256) {
             return invalid("vector store name must not exceed 256 bytes");
         }
-        if let Err(error) = validate_metadata(&request.metadata) {
-            return invalid(&error.to_string());
-        }
         if request.file_ids.len() > 16
             || request.file_ids.iter().collect::<HashSet<_>>().len() != request.file_ids.len()
         {
@@ -122,7 +118,7 @@ impl FileSearchService {
             usage_bytes: 0,
             file_counts: FileCounts::default(),
             status: "completed".into(),
-            metadata: request.metadata,
+            metadata: request.metadata.into_inner(),
         };
         let mut attachments = Vec::new();
         let mut dimensions = None;

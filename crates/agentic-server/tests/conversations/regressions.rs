@@ -197,6 +197,27 @@ async fn regression_conversation_metadata_limits() {
         }
     }
 
+    // The Responses request carries the same type and is rejected the same way before any upstream call.
+    let response = client
+        .post(format!("{url}/v1/responses"))
+        .json(&json!({"model": "m", "input": "hi", "metadata": {"k": "v".repeat(513)}}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "invalid_value", "{body}");
+    assert_eq!(body["error"]["param"], "metadata", "{body}");
+
+    // Limits count characters: a 200-character value of three-byte characters is accepted.
+    let response = client
+        .post(format!("{url}/v1/conversations/{conv_id}"))
+        .json(&json!({"metadata": {"k": "\u{4e2d}".repeat(200)}}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
     let at_limit: serde_json::Map<String, Value> =
         (0..16).map(|i| (format!("{i:0>64}"), json!("v".repeat(512)))).collect();
     let response = client

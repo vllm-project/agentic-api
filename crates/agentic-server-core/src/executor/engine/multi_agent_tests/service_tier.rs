@@ -115,7 +115,7 @@ async fn final_root_tier_controls_json_sse_and_stored_snapshot() {
                     stream,
                     parallel_tool_calls: Some(true),
                     temperature: Some(0.4),
-                    metadata: Some([("review".to_owned(), "multi-agent".to_owned())].into()),
+                    metadata: Some(serde_json::from_value(serde_json::json!({"review": "multi-agent"})).unwrap()),
                     service_tier: Some("priority".into()),
                     prompt_cache_retention: Some(crate::types::request_response::PromptCacheRetention::TwentyFourHours),
                     prompt_cache_options: cache_options

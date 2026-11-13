@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -11,6 +12,7 @@ use axum::response::Response;
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
 use http::StatusCode;
+use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use tracing::{debug, warn};
 
@@ -19,6 +21,7 @@ use agentic_core::proxy::{
     ProxyAuth, ProxyBody, ProxyRequest, ProxyResponse, ProxyStreamRequest, error_response_for_auth,
     proxy_request_with_path, proxy_stream_with_path,
 };
+use agentic_core::types::conversations::ConversationMetadata;
 
 use crate::app::AppState;
 
@@ -215,7 +218,7 @@ impl UploadOverflow {
 #[allow(clippy::result_large_err)]
 pub(super) async fn read_json<T: DeserializeOwned>(body: Body, limit: NonZeroUsize) -> Result<T, Response> {
     let bytes = read_bytes(body, limit).await?;
-    serde_json::from_slice::<T>(&bytes).map_err(|error| executor_error_response(ExecutorError::from(error)))
+    extract_json(&bytes)
 }
 
 pub(super) fn extract_store(bytes: &[u8]) -> bool {
@@ -227,7 +230,23 @@ pub(super) fn extract_store(bytes: &[u8]) -> bool {
 
 #[allow(clippy::result_large_err)]
 pub(super) fn extract_json<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, Response> {
-    serde_json::from_slice::<T>(bytes).map_err(|error| executor_error_response(ExecutorError::from(error)))
+    serde_json::from_slice::<T>(bytes).map_err(|error| executor_error_response(json_error(bytes, error)))
+}
+
+/// The error for a body that did not decode. A top-level `metadata` that breaks
+/// the limits [`ConversationMetadata`] enforces while parsing is reported as
+/// that typed error, so the envelope carries its `param` and `code` instead of
+/// a bare parse message; anything else stays a JSON error.
+fn json_error(bytes: &[u8], error: serde_json::Error) -> ExecutorError {
+    #[derive(Deserialize)]
+    struct MetadataOnly {
+        metadata: Option<BTreeMap<String, String>>,
+    }
+    serde_json::from_slice::<MetadataOnly>(bytes)
+        .ok()
+        .and_then(|body| body.metadata)
+        .and_then(|pairs| ConversationMetadata::try_from(pairs).err())
+        .map_or_else(|| ExecutorError::from(error), ExecutorError::from)
 }
 
 pub(super) fn error_response(status: StatusCode, error_type: &str, message: &str) -> Response {
