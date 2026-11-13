@@ -99,8 +99,7 @@ AGENTIC_WEB_SEARCH_PROVIDER=brave BRAVE_API_KEY=<your-brave-api-key> \
   cargo run -p agentic-server -- --llm-api-base http://127.0.0.1:5050
 ```
 
-Or run the published package without building: `uvx --from agentic-api agentic serve --upstream http://127.0.0.1:5050`
-([Python installation](docs/guides/python-installation.md)).
+Or use the published package instead of building (see [Python installation](#-python-installation)).
 
 **3. Make a stateful call:**
 
@@ -131,6 +130,32 @@ The model defaults to the first one the upstream lists. SQLite is the default st
 postgresql://...` for a shared session. See the [quickstart guide](docs/guides/quickstart.md) and
 [harness CLI testing](docs/guides/harness-cli-testing.md), including
 [Claude Code with a self-hosted model](docs/guides/harness-cli-testing.md#claude-code-with-a-self-hosted-model).
+
+## 🐍 Python installation
+
+The [`agentic-api` package on PyPI](https://pypi.org/project/agentic-api/0.10.0/) bundles the Rust gateway, the
+`agentic` CLI, and a small Python launcher. Wheels cover Linux x86_64 (glibc 2.17+), macOS Intel, and macOS Apple
+Silicon on Python 3.10+.
+
+```bash
+uvx --from agentic-api==0.10.0 agentic --version
+uvx --from agentic-api==0.10.0 agentic serve --upstream http://existing-vllm:8000
+
+python -m pip install agentic-api==0.10.0                # remote mode, no vLLM
+python -m pip install "agentic-api[local]==0.10.0"       # also installs the pinned vLLM runtime
+```
+
+With uv:
+
+```bash
+uv pip install agentic-api==0.10.0
+uv pip install "agentic-api[local]==0.10.0"
+uvx --from agentic-api==0.10.0 agentic-api doctor
+uvx --from agentic-api==0.10.0 agentic-api serve --vllm-base-url http://existing-vllm:8000
+```
+
+See [Python installation and workflows](docs/guides/python-installation.md) for managed vLLM, `doctor` output, and
+known-good model profiles.
 
 ## 🤖 Codex on your own GPUs
 
