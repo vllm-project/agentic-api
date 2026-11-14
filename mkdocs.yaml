@@ -109,6 +109,9 @@ nav:
   - Guides:
     - Quickstart: guides/quickstart.md
     - Python Installation: guides/python-installation.md
+    - Configuration: guides/configuration.md
+    - Web Search Providers: guides/web-search.md
+    - Messages Server Tools: guides/messages-server-tools.md
     - Claude Code with self-hosted models: guides/harness-cli-testing.md
     - Responses Compaction: guides/responses-compaction.md
     - Codex Desktop: guides/codex-desktop.md
