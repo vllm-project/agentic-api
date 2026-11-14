@@ -12,7 +12,7 @@ use tracing::Instrument as _;
 
 #[cfg(test)]
 use crate::config::DEFAULT_MAX_UPSTREAM_JSON_BYTES;
-use crate::config::DEFAULT_MAX_UPSTREAM_SSE_LINE_BYTES;
+use crate::config::{DEFAULT_MAX_UPSTREAM_SSE_LINE_BYTES, UpstreamTimeouts};
 use crate::executor::error::{ExecutorError, ExecutorResult, ResourceLimit};
 use crate::proxy::processed_response_headers;
 
@@ -41,6 +41,25 @@ pub(super) const DONE_MARKER: &str = "data: [DONE]\n\n";
 #[cfg(test)]
 pub(super) const MAX_SSE_LINE_BYTES: usize = DEFAULT_MAX_UPSTREAM_SSE_LINE_BYTES;
 
+fn llm_transport_error(is_timeout: bool) -> ExecutorError {
+    ExecutorError::LLMTransport {
+        status: if is_timeout {
+            http::StatusCode::GATEWAY_TIMEOUT
+        } else {
+            http::StatusCode::BAD_GATEWAY
+        },
+        message: if is_timeout { "LLM timeout" } else { "LLM unavailable" },
+    }
+}
+
+fn classify_reqwest_error(source: reqwest::Error) -> ExecutorError {
+    if source.is_timeout() {
+        llm_transport_error(true)
+    } else {
+        ExecutorError::NetworkError(source)
+    }
+}
+
 /// Fetch the next raw bytes chunk from a streaming response.
 ///
 /// Returns `Ok(Some(bytes))` on data, `Ok(None)` when the stream ends cleanly,
@@ -56,7 +75,7 @@ where
             ExecutorError::StreamError("chunk timeout: no data received within the configured window".into())
         })?
     };
-    item.transpose().map_err(ExecutorError::NetworkError)
+    item.transpose().map_err(classify_reqwest_error)
 }
 
 #[cfg(test)]
@@ -128,8 +147,10 @@ pub(super) const MAX_ERROR_RESPONSE_BYTES: usize = 1024 * 1024;
 /// Shared by both the blocking path (caller consumes a bounded byte stream) and
 /// the streaming path (caller reads `.bytes_stream()`). Maps connect/timeout failures and
 /// non-2xx status codes to [`ExecutorError::LLMRequest`] and connection
-/// failures to [`ExecutorError::LLMTransport`]. The chunk timeout also bounds error-body
-/// reads after headers arrive; unreadable bodies are discarded while retaining status and headers.
+/// failures to [`ExecutorError::LLMTransport`]. The response-header deadline bounds
+/// `send`, while the request deadline continues through the response body. The chunk
+/// timeout also bounds error-body reads after headers arrive; unreadable bodies are
+/// discarded while retaining status and headers.
 pub(super) async fn send_request(
     client: &reqwest::Client,
     url: &str,
@@ -137,10 +158,19 @@ pub(super) async fn send_request(
     auth: Option<&str>,
     forwarded_headers: Option<&reqwest::header::HeaderMap>,
     chunk_timeout: Duration,
+    upstream_timeouts: UpstreamTimeouts,
 ) -> ExecutorResult<reqwest::Response> {
-    send_request_traced(client, url, body, auth, forwarded_headers, chunk_timeout)
-        .instrument(super::telemetry::stages::http_client(url))
-        .await
+    send_request_traced(
+        client,
+        url,
+        body,
+        auth,
+        forwarded_headers,
+        chunk_timeout,
+        upstream_timeouts,
+    )
+    .instrument(super::telemetry::stages::http_client(url))
+    .await
 }
 
 async fn send_request_traced(
@@ -150,36 +180,36 @@ async fn send_request_traced(
     auth: Option<&str>,
     forwarded_headers: Option<&reqwest::header::HeaderMap>,
     chunk_timeout: Duration,
+    upstream_timeouts: UpstreamTimeouts,
 ) -> ExecutorResult<reqwest::Response> {
     let mut headers = forwarded_headers.cloned().unwrap_or_default();
     super::telemetry::stages::inject_context(&mut headers);
     headers
         .entry(reqwest::header::CONTENT_TYPE)
         .or_insert(reqwest::header::HeaderValue::from_static("application/json"));
-    let mut req = client.post(url).headers(headers).body(body);
+    let mut req = client
+        .post(url)
+        .headers(headers)
+        .body(body)
+        .timeout(upstream_timeouts.total);
     if let Some(key) = auth {
         req = req.bearer_auth(key);
     }
 
-    let resp = req
-        .send()
-        .await
-        .inspect_err(|e| {
-            tracing::Span::current().record("error.type", if e.is_timeout() { "timeout" } else { "transport" });
+    let resp = match tokio::time::timeout(upstream_timeouts.response_header, req.send()).await {
+        Ok(Ok(resp)) => resp,
+        Ok(Err(error)) => {
+            let is_timeout = error.is_timeout();
+            tracing::Span::current().record("error.type", if is_timeout { "timeout" } else { "transport" });
             tracing::Span::current().record("otel.status_code", "ERROR");
-        })
-        .map_err(|e| ExecutorError::LLMTransport {
-            status: if e.is_timeout() {
-                http::StatusCode::GATEWAY_TIMEOUT
-            } else {
-                http::StatusCode::BAD_GATEWAY
-            },
-            message: if e.is_timeout() {
-                "LLM timeout"
-            } else {
-                "LLM unavailable"
-            },
-        })?;
+            return Err(llm_transport_error(is_timeout));
+        }
+        Err(_) => {
+            tracing::Span::current().record("error.type", "timeout");
+            tracing::Span::current().record("otel.status_code", "ERROR");
+            return Err(llm_transport_error(true));
+        }
+    };
 
     tracing::Span::current().record("http.response.status_code", i64::from(resp.status().as_u16()));
     if !resp.status().is_success() {
@@ -220,6 +250,7 @@ pub(super) async fn fetch_response_json(
         client,
         auth.as_ref(),
         DEFAULT_MAX_UPSTREAM_JSON_BYTES,
+        UpstreamTimeouts::default(),
     )
     .await
 }
@@ -230,10 +261,20 @@ pub(super) async fn fetch_response_json_limited(
     client: &reqwest::Client,
     auth: Option<&UpstreamHeaders>,
     max_upstream_json_bytes: usize,
+    upstream_timeouts: UpstreamTimeouts,
 ) -> ExecutorResult<String> {
     let (auth, headers) = auth.map_or((None, None), UpstreamHeaders::transport_parts);
-    let resp = send_request(client, url, upstream_json, auth, headers, Duration::ZERO).await?;
-    // Preserve the reqwest::Error as the typed source (NetworkError).
+    let resp = send_request(
+        client,
+        url,
+        upstream_json,
+        auth,
+        headers,
+        Duration::ZERO,
+        upstream_timeouts,
+    )
+    .await?;
+    // Preserve non-timeout reqwest errors as typed NetworkError sources.
     response_text_limited(resp, Duration::ZERO, max_upstream_json_bytes).await
 }
 
@@ -244,8 +285,18 @@ pub(super) async fn fetch_response_json_with_headers(
     client: &reqwest::Client,
     headers: &reqwest::header::HeaderMap,
     max_upstream_json_bytes: usize,
+    upstream_timeouts: UpstreamTimeouts,
 ) -> ExecutorResult<(String, http::HeaderMap)> {
-    let resp = send_request(client, url, upstream_json, None, Some(headers), Duration::ZERO).await?;
+    let resp = send_request(
+        client,
+        url,
+        upstream_json,
+        None,
+        Some(headers),
+        Duration::ZERO,
+        upstream_timeouts,
+    )
+    .await?;
     let response_headers = processed_response_headers(resp.headers());
     let body = response_text_limited(resp, Duration::ZERO, max_upstream_json_bytes).await?;
     Ok((body, response_headers))
@@ -257,7 +308,7 @@ pub(super) async fn fetch_response_json_with_headers(
 ///
 /// # Errors
 /// Each stream item is `Result<String, ExecutorError>`. The stream yields `Err` on:
-/// - [`ExecutorError::LLMTransport`] — connect timeout (504) or connection failure (502)
+/// - [`ExecutorError::LLMTransport`] — connect/header/body timeout (504) or connection failure (502)
 /// - [`ExecutorError::LLMRequest`] — non-2xx HTTP status from the backend
 /// - [`ExecutorError::NetworkError`] — network failure while reading the response body
 pub fn call_inference(
@@ -293,6 +344,7 @@ pub fn call_inference_limited(
         auth.map(UpstreamHeaders::Bearer),
         chunk_timeout,
         max_sse_line_bytes,
+        UpstreamTimeouts::default(),
     )
 }
 
@@ -303,6 +355,7 @@ pub(super) fn call_inference_with_headers_limited(
     auth: Option<UpstreamHeaders>,
     chunk_timeout: Duration,
     max_sse_line_bytes: usize,
+    upstream_timeouts: UpstreamTimeouts,
 ) -> impl Stream<Item = Result<String, ExecutorError>> + Send + 'static {
     stream! {
         let (auth, headers) = auth.as_ref().map_or((None, None), UpstreamHeaders::transport_parts);
@@ -313,6 +366,7 @@ pub(super) fn call_inference_with_headers_limited(
             auth,
             headers,
             chunk_timeout,
+            upstream_timeouts,
         ).await {
             Ok(r) => r,
             Err(e) => { yield Err(e); return; }
@@ -585,6 +639,7 @@ mod tests {
             None,
             None,
             Duration::ZERO,
+            UpstreamTimeouts::default(),
         )
         .await
         .expect_err("non-success response must fail");
@@ -594,6 +649,110 @@ mod tests {
         };
         assert_eq!(status, StatusCode::BAD_GATEWAY);
         assert!(body.is_empty());
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn response_header_wait_has_a_deadline() {
+        let app = axum::Router::new().route(
+            "/v1/responses",
+            post(|| async {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                "{}"
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/v1/responses", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+        let error = send_request(
+            &reqwest::Client::new(),
+            &url,
+            "{}".to_owned(),
+            None,
+            None,
+            Duration::ZERO,
+            UpstreamTimeouts::new(Duration::from_millis(20), Duration::from_secs(2)),
+        )
+        .await
+        .expect_err("withheld response headers must time out");
+
+        assert!(matches!(
+            error,
+            ExecutorError::LLMTransport {
+                status: StatusCode::GATEWAY_TIMEOUT,
+                ..
+            }
+        ));
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn total_deadline_stops_a_trickling_stream() {
+        let app = axum::Router::new().route(
+            "/v1/responses",
+            post(|| async {
+                let chunks = async_stream::stream! {
+                    loop {
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                        yield Ok::<_, Infallible>(Bytes::from_static(b"data: {}\n\n"));
+                    }
+                };
+                Response::builder()
+                    .header("content-type", "text/event-stream")
+                    .body(Body::from_stream(chunks))
+                    .unwrap()
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/v1/responses", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+        let results = call_inference_with_headers_limited(
+            "{}".to_owned(),
+            url,
+            Arc::new(reqwest::Client::new()),
+            None,
+            Duration::from_millis(50),
+            MAX_SSE_LINE_BYTES,
+            UpstreamTimeouts::new(Duration::from_millis(100), Duration::from_millis(200)),
+        )
+        .collect::<Vec<_>>()
+        .await;
+
+        assert!(
+            results.iter().any(Result::is_ok),
+            "ordinary streaming data must still flow"
+        );
+        assert!(matches!(
+            results.last(),
+            Some(Err(ExecutorError::LLMTransport {
+                status: StatusCode::GATEWAY_TIMEOUT,
+                ..
+            }))
+        ));
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn finite_json_body_completes_before_deadline() {
+        let app = axum::Router::new().route("/v1/responses", post(|| async { r#"{"ok":true}"# }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/v1/responses", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+        let body = fetch_response_json_limited(
+            "{}".to_owned(),
+            &url,
+            &reqwest::Client::new(),
+            None,
+            DEFAULT_MAX_UPSTREAM_JSON_BYTES,
+            UpstreamTimeouts::new(Duration::from_secs(1), Duration::from_secs(2)),
+        )
+        .await
+        .expect("finite JSON response must remain supported");
+
+        assert_eq!(body, r#"{"ok":true}"#);
         server.abort();
     }
 }

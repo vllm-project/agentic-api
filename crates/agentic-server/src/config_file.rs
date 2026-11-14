@@ -213,7 +213,7 @@ impl ModelFileConfig {
     }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 #[allow(clippy::struct_field_names)]
 pub(crate) struct ResponsesFileConfig {
@@ -227,15 +227,17 @@ pub(crate) struct ResponsesFileConfig {
     pub max_upstream_sse_line_bytes: Option<NonZeroUsize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_stream_event_bytes: Option<NonZeroUsize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub upstream_connect_timeout_s: Option<NonZeroU64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub upstream_response_header_timeout_s: Option<NonZeroU64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub upstream_total_timeout_s: Option<NonZeroU64>,
 }
 
 impl ResponsesFileConfig {
     fn is_empty(&self) -> bool {
-        self.prompt_cache_options_supported.is_none()
-            && self.max_retained_bytes.is_none()
-            && self.max_upstream_json_bytes.is_none()
-            && self.max_upstream_sse_line_bytes.is_none()
-            && self.max_stream_event_bytes.is_none()
+        self == &Self::default()
     }
 }
 
@@ -1302,6 +1304,9 @@ mod tests {
                 "max_upstream_json_bytes = 4194304\n",
                 "max_upstream_sse_line_bytes = 4194304\n",
                 "max_stream_event_bytes = 4194304\n",
+                "upstream_connect_timeout_s = 5\n",
+                "upstream_response_header_timeout_s = 60\n",
+                "upstream_total_timeout_s = 600\n",
             ),
         )
         .expect("write config");
@@ -1330,6 +1335,18 @@ mod tests {
         assert_eq!(
             config.responses.max_stream_event_bytes.map(std::num::NonZeroUsize::get),
             Some(4_194_304)
+        );
+        assert_eq!(
+            config.responses.upstream_connect_timeout_s.map(NonZeroU64::get),
+            Some(5)
+        );
+        assert_eq!(
+            config.responses.upstream_response_header_timeout_s.map(NonZeroU64::get),
+            Some(60)
+        );
+        assert_eq!(
+            config.responses.upstream_total_timeout_s.map(NonZeroU64::get),
+            Some(600)
         );
     }
 }

@@ -883,7 +883,9 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   `TranslationContext`, passes the shared retained-data budget into ingestion, and
   passes each live JSON or SSE body to `AgentPipeline`. It does not charge SSE wire bytes.
 - **`inference.rs`** — `call_inference()`: the raw HTTP/SSE transport to vLLM. No
-  parsing beyond splitting `data: ...` lines and stopping at `[DONE]`.
+  parsing beyond splitting `data: ...` lines and stopping at `[DONE]`. Typed inference
+  uses explicit connect and response-header deadlines plus a per-round total deadline;
+  body byte ceilings and streaming progress timeouts remain independent limits.
 - **`pipeline.rs`, `pipeline/`** — `AgentPipeline`, the request-owned entry point for
   both response body formats. `RoundIngestion` owns the synchronous per-round semantic
   core; its `StreamRelay` (`relay.rs`, `relay/`) owns awaited, ordered client delivery

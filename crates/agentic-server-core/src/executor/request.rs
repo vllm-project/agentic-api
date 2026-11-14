@@ -265,7 +265,12 @@ impl ExecutionContext {
 
         let conv_handler = ConversationHandler::new(ConversationStore::new(pool.clone()));
         let resp_handler = ResponseHandler::new(ResponseStore::new(pool.clone()));
-        let client = Arc::new(reqwest::Client::new());
+        let client = Arc::new(
+            reqwest::Client::builder()
+                .connect_timeout(cfg.responses.upstream_connect_timeout())
+                .build()
+                .map_err(|error| Error::Config(format!("failed to build upstream HTTP client: {error}")))?,
+        );
         let gateway_executors = GatewayExecutors::from_config(Arc::clone(&client), &cfg.tools)
             .map_err(|error| Error::Config(format!("failed to validate configured gateway tool policies: {error}")))?;
         let file_search =

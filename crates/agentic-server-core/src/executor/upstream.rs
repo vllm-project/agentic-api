@@ -124,6 +124,7 @@ pub(super) async fn fetch_blocking_payload(
         &exec_ctx.client,
         auth,
         exec_ctx.responses_config.max_upstream_json_bytes,
+        exec_ctx.responses_config.upstream_timeouts(),
     )
     .await?;
     agent.run_with_json_body(
@@ -191,6 +192,7 @@ pub(super) async fn fetch_stream_payload(
         auth.cloned(),
         exec_ctx.streaming_timeout,
         exec_ctx.responses_config.max_upstream_sse_line_bytes,
+        exec_ctx.responses_config.upstream_timeouts(),
     );
     agent
         .run_with_stream_body(

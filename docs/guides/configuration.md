@@ -68,6 +68,12 @@ max_upstream_sse_line_bytes = 16777216
 # Defaults to 16 MiB (16777216).
 max_stream_event_bytes = 16777216
 
+# Finite deadlines for typed upstream inference connections, response headers,
+# and complete inference rounds. Values are positive seconds.
+upstream_connect_timeout_s = 10
+upstream_response_header_timeout_s = 600
+upstream_total_timeout_s = 3600
+
 [models."Qwen/Qwen3-VL-8B-Instruct"]
 # Input modalities to advertise for this served model ID.
 # Accepted values are "text" and "text" + "image"; text is always required.
@@ -138,7 +144,7 @@ credential variable. `AGENTIC_WEB_SEARCH_PROVIDER`, `AGENTIC_WEB_SEARCH_BASE_URL
 name. The MCP allowlist is used only for request-declared remote MCP URLs; configured `[mcp_servers]` entries are trusted
 operator configuration.
 
-`[responses]` configures independent response resource limits across inference, transport, and client delivery:
+`[responses]` configures response resource limits and upstream deadlines across inference, transport, and delivery:
 - `max_retained_bytes` (`AGENTIC_MAX_RETAINED_RESPONSE_BYTES`, default 8 MiB): bounds cumulative logical retained
   response data across all rounds of a turn and gateway tool outputs. Unlike raw wire bytes, it is invariant to
   upstream SSE chunking (1-byte deltas, coarse chunks, and non-streaming JSON consume identical logical budget).
@@ -149,6 +155,12 @@ operator configuration.
   event delivered to the client, including full `response.output_item.done` snapshots and terminal `response.completed`.
   The WebSocket transport applies the same limit to each routed event (its `stream_id` member counts toward it), and
   the executor validates the terminal event against that transport limit before persisting the response.
+- `upstream_connect_timeout_s` (`AGENTIC_UPSTREAM_CONNECT_TIMEOUT_S`, default 10 seconds): bounds connection setup for
+  the shared typed-executor HTTP client.
+- `upstream_response_header_timeout_s` (`AGENTIC_UPSTREAM_RESPONSE_HEADER_TIMEOUT_S`, default 600 seconds): bounds the
+  wait for response headers in each typed inference round, preserving the existing long-prefill allowance.
+- `upstream_total_timeout_s` (`AGENTIC_UPSTREAM_TOTAL_TIMEOUT_S`, default 3600 seconds): bounds each complete typed
+  inference round, including a streaming or JSON response body, even while the upstream continues sending data.
 
 Validation enforces that `max_stream_event_bytes`, `max_upstream_sse_line_bytes`, and `max_upstream_json_bytes` each
 exceed `max_retained_bytes` by proportional wire headroom (`max(64 KiB, max_retained_bytes / 4)`) to account for JSON
@@ -156,6 +168,9 @@ serialization overhead, escaping, and message envelopes. When sizing gateway mem
 in-flight buffers multiply per active streaming request: a stream in flight may hold an upstream line buffer (up to
 `max_upstream_sse_line_bytes`), its parsed AST, an outbound channel event (up to `max_stream_event_bytes`), and retained
 turn state (`max_retained_bytes`).
+The timeout values must satisfy `upstream_connect_timeout_s <= upstream_response_header_timeout_s <=
+upstream_total_timeout_s`; they cannot be disabled with zero. The existing streaming chunk timeout remains an
+independent progress bound within the total deadline.
 
 With that file in place, inject only the secret when starting the server:
 

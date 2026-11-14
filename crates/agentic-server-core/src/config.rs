@@ -33,10 +33,14 @@ pub const DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS: NonZeroUsize = NonZeroUsize::new
 pub const DEFAULT_BRAVE_MAX_CONCURRENT_QUERIES: NonZeroUsize = NonZeroUsize::new(1).expect("default is nonzero");
 
 mod responses;
+pub(crate) use responses::UpstreamTimeouts;
 pub use responses::{
     DEFAULT_MAX_RETAINED_RESPONSE_BYTES, DEFAULT_MAX_STREAM_EVENT_BYTES, DEFAULT_MAX_UPSTREAM_JSON_BYTES,
-    DEFAULT_MAX_UPSTREAM_SSE_LINE_BYTES, MAX_RETAINED_RESPONSE_BYTES_ENV, MAX_STREAM_EVENT_BYTES_ENV,
-    MAX_UPSTREAM_JSON_BYTES_ENV, MAX_UPSTREAM_SSE_LINE_BYTES_ENV, MIN_WIRE_HEADROOM_BYTES, ResponsesConfig,
+    DEFAULT_MAX_UPSTREAM_SSE_LINE_BYTES, DEFAULT_UPSTREAM_CONNECT_TIMEOUT_S,
+    DEFAULT_UPSTREAM_RESPONSE_HEADER_TIMEOUT_S, DEFAULT_UPSTREAM_TOTAL_TIMEOUT_S, MAX_RETAINED_RESPONSE_BYTES_ENV,
+    MAX_STREAM_EVENT_BYTES_ENV, MAX_UPSTREAM_JSON_BYTES_ENV, MAX_UPSTREAM_SSE_LINE_BYTES_ENV, MIN_WIRE_HEADROOM_BYTES,
+    ResponsesConfig, UPSTREAM_CONNECT_TIMEOUT_S_ENV, UPSTREAM_RESPONSE_HEADER_TIMEOUT_S_ENV,
+    UPSTREAM_TOTAL_TIMEOUT_S_ENV,
 };
 
 /// Conservative operator-owned defaults for the opt-in code interpreter.
@@ -876,6 +880,7 @@ mod tests {
             max_upstream_json_bytes: 2 * 1024 * 1024,
             max_upstream_sse_line_bytes: 2 * 1024 * 1024,
             max_stream_event_bytes: 2 * 1024 * 1024,
+            ..ResponsesConfig::default()
         };
         assert!(valid.validate().is_ok());
 
@@ -898,7 +903,16 @@ mod tests {
             max_upstream_json_bytes: 4 * 1024 * 1024 + 64 * 1024,
             max_upstream_sse_line_bytes: 5 * 1024 * 1024,
             max_stream_event_bytes: 5 * 1024 * 1024,
+            ..ResponsesConfig::default()
         };
         assert!(borderline.validate().is_err());
+
+        let invalid_deadlines = ResponsesConfig {
+            upstream_connect_timeout_s: NonZeroU64::new(30).unwrap(),
+            upstream_response_header_timeout_s: NonZeroU64::new(20).unwrap(),
+            upstream_total_timeout_s: NonZeroU64::new(10).unwrap(),
+            ..ResponsesConfig::default()
+        };
+        assert!(invalid_deadlines.validate().is_err());
     }
 }

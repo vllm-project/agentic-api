@@ -128,6 +128,7 @@ async fn open_round(
             None,
             Some(upstream.headers()),
             exec_ctx.streaming_timeout,
+            exec_ctx.responses_config.upstream_timeouts(),
         )
         .await
     }

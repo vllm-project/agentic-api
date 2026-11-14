@@ -146,6 +146,7 @@ async fn run_messages_loop_traced(
             &exec_ctx.client,
             &upstream.headers,
             exec_ctx.responses_config.max_upstream_json_bytes,
+            exec_ctx.responses_config.upstream_timeouts(),
         )
         .instrument(super::telemetry::stages::inference_round(round))
         .await;
