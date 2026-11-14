@@ -15,6 +15,18 @@
 #                  compacts that file (decoded text plus the checkpoint prompt),
 #                  then a follow-up on the compacted window built from the
 #                  recorded summary; non-streaming, like tests/cassettes/compaction
+#   files-text     Files API: upload notes.txt, retrieve it, reference it by
+#                  `input_file.file_id`, continue by previous_response_id,
+#                  delete it and retry, and use it as `input_image` (rejected)
+#   files-image    Files API: the same lifecycle for `red-blue-64.png` through
+#                  `input_image.file_id`, including the wrong-type rejection
+#   files-errors   invalid uploads (purpose, missing file, missing purpose) and
+#                  the missing-file errors for metadata, content, and delete
+#
+# The files scenarios are recorded with `record_cassette.py --mode files`; the
+# gateway set needs the text model for files-text/files-errors and
+# FILES_IMAGE_MODEL for files-image. Select them explicitly:
+#   TEXT_FILE_SCENARIOS="files-text files-image files-errors"
 #
 # The compaction summary and follow-up are recorded directly against the model
 # server (VLLM_URL, files named `vllm`) or OpenAI, because the gateway makes
@@ -36,6 +48,8 @@ GATEWAY_URL="${GATEWAY_URL:-http://localhost:9000}"
 VLLM_URL="${VLLM_URL:-http://localhost:8000}"
 MODEL="${MODEL:-Qwen/Qwen2.5-3B-Instruct}"
 MODEL_SLUG="$(echo "$MODEL" | tr '/: ' '---')"
+FILES_IMAGE_MODEL="${FILES_IMAGE_MODEL:-Qwen/Qwen2.5-VL-3B-Instruct}"
+FILES_IMAGE_MODEL_SLUG="$(echo "$FILES_IMAGE_MODEL" | tr '/: ' '---')"
 OPENAI_MODEL="${OPENAI_MODEL:-gpt-4o}"
 OPENAI_MODEL_SLUG="$(echo "$OPENAI_MODEL" | tr '/: ' '---')"
 TEXT_FILE_RECORD_SET="${TEXT_FILE_RECORD_SET:-all}"
@@ -290,6 +304,110 @@ record_compaction() {
   stage "$follow_up_file" "$follow_up_output"
 }
 
+# The Files API scenarios record a lifecycle rather than a single answer. A
+# successful reference response must answer from the uploaded content (the
+# marker or the two image colors); error turns are evidence in their own right
+# and are printed rather than rejected, so a provider-specific status, code, or
+# message is recorded instead of turning into a mismatch.
+validate_files_scenario() {
+  local scenario="$1"
+  local file="$2"
+  local provider="$3"
+
+  python - "$scenario" "$file" "$provider" "$MARKER" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+import yaml
+
+scenario, path, provider, marker = sys.argv[1:5]
+turns = (yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}).get("turns") or []
+if not turns:
+    raise SystemExit(f"ERROR: {path} recorded no turns")
+
+expected_words = {
+    "text": [marker],
+    "image": ["red", "blue"],
+    "errors": [],
+}[scenario]
+
+
+def response_text(turn: dict) -> str:
+    body = (turn.get("response") or {}).get("body") or {}
+    return "".join(
+        part.get("text", "")
+        for item in body.get("output") or []
+        if isinstance(item, dict) and item.get("type") == "message"
+        for part in item.get("content") or []
+        if isinstance(part, dict) and part.get("type") == "output_text"
+    )
+
+
+answers = []
+errors = []
+uploads = 0
+for index, turn in enumerate(turns, start=1):
+    request = turn.get("request") or {}
+    response = turn.get("response") or {}
+    status = response.get("status_code")
+    if request.get("path") == "/v1/files" and request.get("method") == "POST" and status == 200:
+        uploads += 1
+    if scenario == "errors":
+        if status is None or status < 400:
+            raise SystemExit(f"ERROR: files-errors turn {index} is not an error response: HTTP {status}")
+        errors.append((index, status, response.get("body")))
+        continue
+    if request.get("path") != "/v1/responses":
+        continue
+    if status == 200:
+        text = response_text(turn)
+        answers.append(text)
+        missing = [word for word in expected_words if word.lower() not in text.lower()]
+        if missing:
+            raise SystemExit(
+                f"ERROR: turn {index} answer is missing {missing}; the model did not read the file: {text!r}"
+            )
+    else:
+        errors.append((index, status, response.get("body")))
+
+if scenario != "errors" and uploads == 0:
+    raise SystemExit(f"ERROR: {path} has no successful Files API upload")
+if scenario != "errors" and provider == "gateway" and len(answers) < 2:
+    raise SystemExit(
+        f"ERROR: the gateway recording must answer both the file reference and its continuation; "
+        f"got {len(answers)} successful response(s)"
+    )
+
+for text in answers:
+    print(f"answer: {text.strip()!r}")
+for index, status, body in errors:
+    print(f"  [turn {index} -> HTTP {status}: {json.dumps(body, sort_keys=True)}]")
+PY
+}
+
+record_files_scenario() {
+  local scenario="$1"
+  local provider="$2"
+  local endpoint_flag="$3"
+  local endpoint="$4"
+  local model="$5"
+  local output="$6"
+  local temporary_output
+
+  temporary_output="$(mktemp "$STAGING_DIR/.text-file-cassette.XXXXXX")"
+  if ! python "$RECORDER" --mode files --files-scenario "$scenario" --turns 1 --model "$model" \
+    "$endpoint_flag" "$endpoint" --max-output-tokens "$MAX_OUTPUT_TOKENS" --output "$temporary_output"; then
+    rm -f -- "$temporary_output"
+    return 1
+  fi
+  if ! validate_files_scenario "$scenario" "$temporary_output" "$provider"; then
+    rm -f -- "$temporary_output"
+    return 1
+  fi
+  stage "$temporary_output" "$output"
+}
+
 record_provider_suite() {
   local provider="$1"
   local conversation_flag="$2"
@@ -299,6 +417,10 @@ record_provider_suite() {
   local model="$6"
   local model_slug="$7"
   local compact_label="$8"
+  local files_image_model="$OPENAI_MODEL"
+  [[ "$provider" == "gateway" ]] && files_image_model="$FILES_IMAGE_MODEL"
+  local files_image_slug
+  files_image_slug="$(echo "$files_image_model" | tr '/: ' '---')"
   local scenario
   local mode
 
@@ -319,6 +441,21 @@ record_provider_suite() {
         record_compaction "$model_flag" "$model_endpoint" "$model" \
           "$BASE_DIR/text-file-compact-${compact_label}-${model_slug}-nonstreaming.yaml" \
           "$BASE_DIR/text-file-compact-followup-${compact_label}-${model_slug}-nonstreaming.yaml"
+        ;;
+      files-text)
+        bold "$provider files API: text reference lifecycle (non-streaming)"
+        record_files_scenario text "$provider" "$conversation_flag" "$conversation_endpoint" "$model" \
+          "$BASE_DIR/files-api-text-${provider}-${model_slug}.yaml"
+        ;;
+      files-image)
+        bold "$provider files API: image reference lifecycle (non-streaming)"
+        record_files_scenario image "$provider" "$conversation_flag" "$conversation_endpoint" \
+          "$files_image_model" "$BASE_DIR/files-api-image-${provider}-${files_image_slug}.yaml"
+        ;;
+      files-errors)
+        bold "$provider files API: invalid uploads and missing files (non-streaming)"
+        record_files_scenario errors "$provider" "$conversation_flag" "$conversation_endpoint" "$model" \
+          "$BASE_DIR/files-api-errors-${provider}-${model_slug}.yaml"
         ;;
       *)
         echo "ERROR: unknown scenario $scenario" >&2

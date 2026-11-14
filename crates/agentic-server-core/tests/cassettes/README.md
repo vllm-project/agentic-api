@@ -1142,6 +1142,41 @@ requires both sets: it replays the gateway and OpenAI recordings and checks that
 model-facing file turn and summary input for both. A different model changes the file names; update
 `GATEWAY_MODEL_SLUG` or `OPENAI_MODEL_SLUG` in `text_file_input_test.rs` to match.
 
+### Files API references (gateway, and OpenAI through the same script)
+
+`files-api-*.yaml` record the Files API lifecycle behind Responses `input_file.file_id` and `input_image.file_id`.
+They use the same directory and script as the inline `input_file` scenarios; `record_cassette.py --mode files`
+records multipart uploads as `body_base64` and binary `/content` responses as base64, so a cassette keeps the exact
+bytes and boundary.
+
+| Scenario | Model | What it records |
+|---|---|---|
+| `files-text` | `Qwen/Qwen2.5-3B-Instruct` | upload `notes.txt` (`user_data`), metadata and content retrieval, an `input_file.file_id` answer, a `previous_response_id` continuation, delete, the post-delete continuation and re-reference (`404 not_found`), `notes.txt` as `input_image` (`400`), delete |
+| `files-image` | `Qwen/Qwen2.5-VL-3B-Instruct` | upload `red-blue-64.png` (`vision`), retrieval, an `input_image.file_id` answer (`Red, Blue`), a continuation, delete, the post-delete continuation (`404`), `notes.txt` as `input_image` (`400`), delete |
+| `files-errors` | `Qwen/Qwen2.5-3B-Instruct` | invalid purpose, missing `file`, missing multipart body, and missing-file metadata, content, and delete (`404`) |
+
+**Recorded configuration.** vLLM 0.33.0 (`vllm/vllm-openai:latest`) serving `Qwen/Qwen2.5-3B-Instruct` for
+`files-text`/`files-errors` and `Qwen/Qwen2.5-VL-3B-Instruct` for `files-image`, with the gateway on port 9000. On a
+6 GB GPU the VLM needs `--max-model-len 1024 --max-num-seqs 1 --max-num-batched-tokens 1024
+--gpu-memory-utilization 0.95 --enforce-eager --limit-mm-per-prompt '{"image": 1}'`; without the per-prompt image
+limit its multimodal profiling reserves the KV budget during startup.
+
+```bash
+TEXT_FILE_RECORD_SET=gateway TEXT_FILE_SCENARIOS="files-text files-image files-errors" \
+MODEL=Qwen/Qwen2.5-3B-Instruct FILES_IMAGE_MODEL=Qwen/Qwen2.5-VL-3B-Instruct \
+GATEWAY_URL=http://localhost:9000 \
+bash crates/agentic-server-core/tests/cassettes/record_text_file_input_cassettes.sh
+
+# OpenAI reference set, when OPENAI_API_KEY is available.
+TEXT_FILE_RECORD_SET=openai TEXT_FILE_SCENARIOS="files-text files-image files-errors" \
+OPENAI_API_KEY=sk-... bash crates/agentic-server-core/tests/cassettes/record_text_file_input_cassettes.sh
+```
+
+The script validates each recording before promoting it: every successful reference answer must contain `PAPAYA-7`
+(text) or `red` and `blue` (image), the gateway set must contain both the reference answer and its continuation, and
+every `files-errors` turn must be an error. Error status, code, and message are recorded verbatim as the evidence;
+only successful answers are checked against the fixture content.
+
 ### Custom tool (gateway and OpenAI)
 
 This records an unformatted freeform custom tool, including the

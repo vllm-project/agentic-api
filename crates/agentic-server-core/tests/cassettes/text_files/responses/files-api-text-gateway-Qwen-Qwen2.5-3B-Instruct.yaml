@@ -1,0 +1,359 @@
+turns:
+- filename: t1
+  request:
+    body_base64: LS0xZjNmMzZmMGE4N2M5MmFhNmY0MWJiZDQ5MzNiYzk3ZQ0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tMWYzZjM2ZjBhODdjOTJhYTZmNDFiYmQ0OTMzYmM5N2UNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJub3Rlcy50eHQiDQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW4NCg0KRGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg0KLS0xZjNmMzZmMGE4N2M5MmFhNmY0MWJiZDQ5MzNiYzk3ZS0tDQo=
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      content-type: multipart/form-data; boundary=1f3f36f0a87c92aa6f41bbd4933bc97e
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      bytes: 91
+      created_at: 1794617823
+      filename: notes.txt
+      id: file-01a1d78e-cf9a-73d1-b6d4-dd1a20cae0ee
+      object: file
+      purpose: user_data
+      status: processed
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/files/file-01a1d78e-cf9a-73d1-b6d4-dd1a20cae0ee
+    query_params: {}
+  response:
+    body:
+      bytes: 91
+      created_at: 1794617823
+      filename: notes.txt
+      id: file-01a1d78e-cf9a-73d1-b6d4-dd1a20cae0ee
+      object: file
+      purpose: user_data
+      status: processed
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/files/file-01a1d78e-cf9a-73d1-b6d4-dd1a20cae0ee/content
+    query_params: {}
+  response:
+    body_base64: RGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg==
+    body_encoding: base64
+    headers:
+      content-type: application/octet-stream
+    status_code: 200
+- filename: t4
+  request:
+    body:
+      input:
+      - content:
+        - text: What is the release codeword in the attached file? Reply with only
+            the codeword.
+          type: input_text
+        - file_id: file-01a1d78e-cf9a-73d1-b6d4-dd1a20cae0ee
+          type: input_file
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-3B-Instruct
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794617823
+      created_at: 1794617823
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1d78e-cfc3-72d1-a570-4daee34a6330
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen2.5-3B-Instruct
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_a4a7f5f07edd3929
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 82
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 80
+        output_tokens: 7
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 89
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      input: What was the release codeword in the file I attached earlier? Reply with
+        only the codeword.
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-3B-Instruct
+      previous_response_id: resp_01a1d78e-cfc3-72d1-a570-4daee34a6330
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794617823
+      created_at: 1794617823
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1d78e-d162-7ae2-9c23-d8735529e8a3
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen2.5-3B-Instruct
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_92fb2e2cb91cf278
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_01a1d78e-cfc3-72d1-a570-4daee34a6330
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 120
+        input_tokens_details:
+          cache_write_tokens: 32
+          cached_tokens: 80
+        output_tokens: 7
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 127
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/files/file-01a1d78e-cf9a-73d1-b6d4-dd1a20cae0ee
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: file-01a1d78e-cf9a-73d1-b6d4-dd1a20cae0ee
+      object: file.deleted
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body:
+      input: What was the release codeword in the file I attached earlier? Reply with
+        only the codeword.
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-3B-Instruct
+      previous_response_id: resp_01a1d78e-cfc3-72d1-a570-4daee34a6330
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: not_found
+        message: 'input[0].content[1]: File not found'
+        type: not_found
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t8
+  request:
+    body:
+      input:
+      - content:
+        - text: What is the release codeword in the attached file? Reply with only
+            the codeword.
+          type: input_text
+        - file_id: file-01a1d78e-cf9a-73d1-b6d4-dd1a20cae0ee
+          type: input_file
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-3B-Instruct
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: not_found
+        message: 'input[0].content[1]: File not found'
+        type: not_found
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t9
+  request:
+    body_base64: LS01ODlkYWQwOWYwZmZmMDExNzVhMmM0MWZjZGZjYzgxOQ0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tNTg5ZGFkMDlmMGZmZjAxMTc1YTJjNDFmY2RmY2M4MTkNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJub3Rlcy50eHQiDQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW4NCg0KRGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg0KLS01ODlkYWQwOWYwZmZmMDExNzVhMmM0MWZjZGZjYzgxOS0tDQo=
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      content-type: multipart/form-data; boundary=589dad09f0fff01175a2c41fcdfcc819
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      bytes: 91
+      created_at: 1794617824
+      filename: notes.txt
+      id: file-01a1d78e-d3b4-7bf2-8878-a9a13c0be484
+      object: file
+      purpose: user_data
+      status: processed
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t10
+  request:
+    body:
+      input:
+      - content:
+        - text: Which two colors are in the image? Reply with only the two color names.
+          type: input_text
+        - file_id: file-01a1d78e-d3b4-7bf2-8878-a9a13c0be484
+          type: input_image
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-3B-Instruct
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_request_error
+        message: 'invalid request: input[0].content[1]: input_image.file_id must reference
+          a file with an image media type'
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t11
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/files/file-01a1d78e-d3b4-7bf2-8878-a9a13c0be484
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: file-01a1d78e-d3b4-7bf2-8878-a9a13c0be484
+      object: file.deleted
+    headers:
+      content-type: application/json
+    status_code: 200

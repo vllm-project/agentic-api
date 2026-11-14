@@ -119,6 +119,43 @@ def _filter_response_headers(headers) -> dict:
     }
 
 
+def _media_type(content_type: str) -> str:
+    """Return the lowercased media type without parameters."""
+    return content_type.split(";", 1)[0].strip().lower()
+
+
+def _is_json_media_type(media_type: str) -> bool:
+    return media_type == "application/json" or media_type.endswith("+json")
+
+
+def _is_text_media_type(media_type: str) -> bool:
+    return media_type.startswith("text/") or media_type in {
+        "application/xml",
+        "application/x-www-form-urlencoded",
+    }
+
+
+def _record_request_body(raw_body: bytes, content_type: str) -> dict[str, Any]:
+    """Record JSON bodies as parsed data and everything else as raw base64.
+
+    Multipart uploads are not UTF-8 JSON, so a cassette must keep their exact
+    bytes, including the boundary, for replay.
+    """
+    if not raw_body:
+        return {"body": {}}
+    media_type = _media_type(content_type)
+    if _is_json_media_type(media_type) or not media_type:
+        try:
+            return {"body": json.loads(raw_body.decode("utf-8"))}
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            if media_type:
+                raise
+    return {
+        "body_base64": base64.b64encode(raw_body).decode("ascii"),
+        "body_encoding": "base64",
+    }
+
+
 def _turn_number(output_file: Path) -> int:
     if not output_file.exists():
         return 1
@@ -204,7 +241,8 @@ async def proxy_request(request: Request, path: str) -> Response:
         target_url += f"?{request.query_params}"
 
     raw_body = await request.body()
-    parsed_body = json.loads(raw_body.decode("utf-8")) if raw_body else {}
+    request_body = _record_request_body(raw_body, request.headers.get("content-type", ""))
+    parsed_body = request_body.get("body", {})
 
     query_params = {}
     for key in request.query_params:
@@ -216,7 +254,7 @@ async def proxy_request(request: Request, path: str) -> Response:
             "method": request.method,
             "path": f"/{path}",
             "query_params": query_params,
-            "body": parsed_body,
+            **request_body,
             "headers": _filter_request_headers(request.headers),
         },
         "response": {},
@@ -226,7 +264,7 @@ async def proxy_request(request: Request, path: str) -> Response:
         k: v for k, v in request.headers.items() if k.lower() not in {"host", RECORDING_TURN_HEADER}
     }
 
-    if parsed_body.get("stream", False):
+    if isinstance(parsed_body, dict) and parsed_body.get("stream", False):
 
         async def _stream() -> AsyncGenerator[str, None]:
             async with http_client.stream(
@@ -289,14 +327,20 @@ async def proxy_request(request: Request, path: str) -> Response:
             )
         except httpx.RequestError as error:
             return _record_transport_error(output_file, turn, error)
-        media_type = response.headers.get("content-type", "application/json")
-        try:
-            body: Any = response.json()
-        except ValueError:
-            body = response.text
-        turn["response"]["body"] = body
+        content_type = response.headers.get("content-type", "application/json")
+        media_type = _media_type(content_type)
         turn["response"]["status_code"] = response.status_code
-        turn["response"]["headers"] = {"content-type": media_type}
+        turn["response"]["headers"] = {"content-type": content_type}
+        if _is_json_media_type(media_type):
+            try:
+                turn["response"]["body"] = response.json()
+            except ValueError:
+                turn["response"]["body"] = response.text
+        elif _is_text_media_type(media_type):
+            turn["response"]["body"] = response.text
+        else:
+            turn["response"]["body_base64"] = base64.b64encode(response.content).decode("ascii")
+            turn["response"]["body_encoding"] = "base64"
         _append_turn(output_file, turn, ordered=sent_turn is not None)
         print(f"  [recorded turn {turn_num} -> {output_file.name}]")
         return Response(
@@ -1718,6 +1762,287 @@ def _send(
     )
 
 
+FILES_TEXT_FIXTURE = Path(__file__).resolve().parent / "text_files" / "inputs" / "notes.txt"
+FILES_IMAGE_FIXTURE = Path(__file__).resolve().parent / "images" / "inputs" / "red-blue-64.png"
+FILES_TEXT_PROMPT = "What is the release codeword in the attached file? Reply with only the codeword."
+FILES_IMAGE_PROMPT = "Which two colors are in the image? Reply with only the two color names."
+FILES_TEXT_FOLLOW_UP = "What was the release codeword in the file I attached earlier? Reply with only the codeword."
+FILES_IMAGE_FOLLOW_UP = "Which two colors were in the image? Reply with only the two color names."
+FILES_MISSING_ID = "file-00000000-0000-7000-8000-000000000000"
+
+
+def _files_upload(
+    client: httpx.Client,
+    proxy_url: str,
+    filename: str,
+    content: bytes,
+    content_type: str,
+    purpose: str,
+) -> dict[str, Any]:
+    response = client.post(
+        f"{proxy_url}/v1/files",
+        files={"file": (filename, content, content_type)},
+        data={"purpose": purpose},
+        timeout=_http_timeout(proxy_client=True),
+    )
+    click.echo(
+        f"  [POST /v1/files ({filename}, {content_type}, purpose={purpose}) "
+        f"-> HTTP {response.status_code}]"
+    )
+    try:
+        payload = response.json()
+    except ValueError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _files_request(
+    client: httpx.Client,
+    proxy_url: str,
+    method: str,
+    path: str,
+    **kwargs: Any,
+) -> httpx.Response:
+    response = client.request(
+        method,
+        f"{proxy_url}{path}",
+        timeout=_http_timeout(proxy_client=True),
+        **kwargs,
+    )
+    click.echo(f"  [{method} {path} -> HTTP {response.status_code}]")
+    return response
+
+
+def _responses_text_from_payload(payload: Any) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    return "".join(
+        part.get("text", "")
+        for item in payload.get("output") or []
+        if isinstance(item, dict) and item.get("type") == "message"
+        for part in item.get("content") or []
+        if isinstance(part, dict) and part.get("type") == "output_text"
+    )
+
+
+def _files_response(
+    client: httpx.Client,
+    proxy_url: str,
+    body: dict[str, Any],
+) -> tuple[httpx.Response, Any]:
+    response = client.post(
+        f"{proxy_url}/v1/responses",
+        json=body,
+        timeout=_http_timeout(proxy_client=True),
+    )
+    click.echo(f"  [POST /v1/responses -> HTTP {response.status_code}]")
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+    text = _responses_text_from_payload(payload)
+    if text:
+        click.echo(f"    answer: {text.strip()!r}")
+    return response, payload
+
+
+def _files_response_body(
+    model: str,
+    input_value: Any,
+    max_output_tokens: int | None,
+    previous_response_id: str | None = None,
+) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "model": model,
+        "store": True,
+        "stream": False,
+        "input": input_value,
+    }
+    if previous_response_id is not None:
+        body["previous_response_id"] = previous_response_id
+    if max_output_tokens:
+        body["max_output_tokens"] = max_output_tokens
+    return body
+
+
+def _files_message(parts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [{"type": "message", "role": "user", "content": parts}]
+
+
+def _record_files_text(
+    client: httpx.Client,
+    proxy_url: str,
+    model: str,
+    max_output_tokens: int | None,
+) -> None:
+    notes = FILES_TEXT_FIXTURE.read_bytes()
+    uploaded = _files_upload(client, proxy_url, "notes.txt", notes, "text/plain", "user_data")
+    file_id = uploaded.get("id")
+    if not isinstance(file_id, str):
+        click.echo("  [text upload did not return a file id; skipping text references]", err=True)
+        return
+    _files_request(client, proxy_url, "GET", f"/v1/files/{file_id}")
+    _files_request(client, proxy_url, "GET", f"/v1/files/{file_id}/content")
+
+    body = _files_response_body(
+        model,
+        _files_message(
+            [
+                {"type": "input_text", "text": FILES_TEXT_PROMPT},
+                {"type": "input_file", "file_id": file_id},
+            ]
+        ),
+        max_output_tokens,
+    )
+    _, payload = _files_response(client, proxy_url, body)
+    response_id = payload.get("id") if isinstance(payload, dict) else None
+    if isinstance(response_id, str):
+        _files_response(
+            client,
+            proxy_url,
+            _files_response_body(model, FILES_TEXT_FOLLOW_UP, max_output_tokens, response_id),
+        )
+
+    _files_request(client, proxy_url, "DELETE", f"/v1/files/{file_id}")
+    if isinstance(response_id, str):
+        _files_response(
+            client,
+            proxy_url,
+            _files_response_body(model, FILES_TEXT_FOLLOW_UP, max_output_tokens, response_id),
+        )
+    _files_response(
+        client,
+        proxy_url,
+        _files_response_body(
+            model,
+            _files_message(
+                [
+                    {"type": "input_text", "text": FILES_TEXT_PROMPT},
+                    {"type": "input_file", "file_id": file_id},
+                ]
+            ),
+            max_output_tokens,
+        ),
+    )
+
+    wrong = _files_upload(client, proxy_url, "notes.txt", notes, "text/plain", "user_data")
+    wrong_id = wrong.get("id")
+    if isinstance(wrong_id, str):
+        _files_response(
+            client,
+            proxy_url,
+            _files_response_body(
+                model,
+                _files_message(
+                    [
+                        {"type": "input_text", "text": FILES_IMAGE_PROMPT},
+                        {"type": "input_image", "file_id": wrong_id},
+                    ]
+                ),
+                max_output_tokens,
+            ),
+        )
+        _files_request(client, proxy_url, "DELETE", f"/v1/files/{wrong_id}")
+
+
+def _record_files_image(
+    client: httpx.Client,
+    proxy_url: str,
+    model: str,
+    max_output_tokens: int | None,
+) -> None:
+    image = FILES_IMAGE_FIXTURE.read_bytes()
+    uploaded = _files_upload(client, proxy_url, "colors.png", image, "image/png", "vision")
+    file_id = uploaded.get("id")
+    if not isinstance(file_id, str):
+        click.echo("  [image upload did not return a file id; skipping image references]", err=True)
+        return
+    _files_request(client, proxy_url, "GET", f"/v1/files/{file_id}")
+    _files_request(client, proxy_url, "GET", f"/v1/files/{file_id}/content")
+
+    body = _files_response_body(
+        model,
+        _files_message(
+            [
+                {"type": "input_text", "text": FILES_IMAGE_PROMPT},
+                {"type": "input_image", "file_id": file_id},
+            ]
+        ),
+        max_output_tokens,
+    )
+    _, payload = _files_response(client, proxy_url, body)
+    response_id = payload.get("id") if isinstance(payload, dict) else None
+    if isinstance(response_id, str):
+        _files_response(
+            client,
+            proxy_url,
+            _files_response_body(model, FILES_IMAGE_FOLLOW_UP, max_output_tokens, response_id),
+        )
+
+    _files_request(client, proxy_url, "DELETE", f"/v1/files/{file_id}")
+    if isinstance(response_id, str):
+        _files_response(
+            client,
+            proxy_url,
+            _files_response_body(model, FILES_IMAGE_FOLLOW_UP, max_output_tokens, response_id),
+        )
+
+    notes = FILES_TEXT_FIXTURE.read_bytes()
+    wrong = _files_upload(client, proxy_url, "notes.txt", notes, "text/plain", "user_data")
+    wrong_id = wrong.get("id")
+    if isinstance(wrong_id, str):
+        _files_response(
+            client,
+            proxy_url,
+            _files_response_body(
+                model,
+                _files_message(
+                    [
+                        {"type": "input_text", "text": FILES_IMAGE_PROMPT},
+                        {"type": "input_image", "file_id": wrong_id},
+                    ]
+                ),
+                max_output_tokens,
+            ),
+        )
+        _files_request(client, proxy_url, "DELETE", f"/v1/files/{wrong_id}")
+
+
+def _record_files_errors(client: httpx.Client, proxy_url: str) -> None:
+    notes = FILES_TEXT_FIXTURE.read_bytes()
+    _files_upload(client, proxy_url, "notes.txt", notes, "text/plain", "bogus")
+    client.post(
+        f"{proxy_url}/v1/files",
+        files={"file": ("notes.txt", notes, "text/plain")},
+        timeout=_http_timeout(proxy_client=True),
+    )
+    click.echo("  [POST /v1/files without purpose -> recorded]")
+    client.post(
+        f"{proxy_url}/v1/files",
+        data={"purpose": "user_data"},
+        timeout=_http_timeout(proxy_client=True),
+    )
+    click.echo("  [POST /v1/files without file -> recorded]")
+    _files_request(client, proxy_url, "GET", f"/v1/files/{FILES_MISSING_ID}")
+    _files_request(client, proxy_url, "GET", f"/v1/files/{FILES_MISSING_ID}/content")
+    _files_request(client, proxy_url, "DELETE", f"/v1/files/{FILES_MISSING_ID}")
+
+
+def run_files(
+    client: httpx.Client,
+    proxy_url: str,
+    model: str,
+    scenario: str,
+    max_output_tokens: int | None,
+) -> None:
+    if scenario in {"text", "all"}:
+        _record_files_text(client, proxy_url, model, max_output_tokens)
+    if scenario in {"image", "all"}:
+        _record_files_image(client, proxy_url, model, max_output_tokens)
+    if scenario in {"errors", "all"}:
+        _record_files_errors(client, proxy_url)
+
+
 def _prompt(label: str) -> str:
     if not sys.stdin.isatty():
         line = sys.stdin.readline()
@@ -2507,7 +2832,7 @@ def run_responses(
 )
 @click.option(
     "--mode",
-    type=click.Choice(["conv", "isolation", "mixed", "responses", "messages", "store_true_then_store_false", "items"]),
+    type=click.Choice(["conv", "isolation", "mixed", "responses", "messages", "store_true_then_store_false", "items", "files"]),
     default="conv",
     show_default=True,
     help="Recording mode.",
@@ -2517,6 +2842,13 @@ def run_responses(
     type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "concurrent-writes", "stale-compaction", *COMPACTION_SCENARIOS, "competing-tool-outputs", "overlapping-multi-agent", "store-false", "multi-agent-store-false", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items", "response-call-ids"]),
     default="continuation",
     help="Fixed Conversation Items or Responses API scenario (for --mode items).",
+)
+@click.option(
+    "--files-scenario",
+    type=click.Choice(["text", "image", "errors", "all"]),
+    default="all",
+    show_default=True,
+    help="Fixed Files API scenario (for --mode files).",
 )
 @click.option(
     "--branch-from",
@@ -2719,6 +3051,7 @@ def main(
     mode: str,
     branch_from: tuple[int, ...],
     items_scenario: str,
+    files_scenario: str,
     branch_turn_number: tuple[int, ...],
     stream: bool,
     transport: str,
@@ -2807,6 +3140,17 @@ def main(
             raise click.UsageError("--mode items does not support --append.")
     if mode == "items" and branch_from:
         raise click.UsageError("--mode items has scripted branches; omit --branch-from.")
+    if mode == "files":
+        if turns != 1:
+            raise click.UsageError("--mode files requires --turns 1.")
+        if no_store:
+            raise click.UsageError("--mode files records stored responses; omit --no-store.")
+        if input_file:
+            raise click.UsageError("--mode files does not support --input-file.")
+        if transport != "http":
+            raise click.UsageError("--mode files requires HTTP transport.")
+        if vllm_url:
+            raise click.UsageError("--mode files requires --gateway or --openai, not --vllm.")
     if branch_turn_number and not branch_from:
         raise click.UsageError("--branch-turn-number requires --branch-from.")
     if len(branch_turn_number) > len(branch_from):
@@ -3072,6 +3416,14 @@ def main(
                         request_overrides=request_overrides,
                         auto_tool_continuations=auto_tool_continuations,
                         max_tool_calls=max_tool_calls,
+                    )
+                elif mode == "files":
+                    run_files(
+                        client,
+                        proxy_url,
+                        model,
+                        files_scenario,
+                        response_max_output_tokens,
                     )
                 elif mode == "messages":
                     run_messages(

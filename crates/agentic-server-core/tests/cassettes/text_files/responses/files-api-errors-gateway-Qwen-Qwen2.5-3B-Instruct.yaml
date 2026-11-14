@@ -1,0 +1,115 @@
+turns:
+- filename: t1
+  request:
+    body_base64: LS02MmMyZmNjNTRkYzllMDRhNzdjNDc3ODgyYjA5MWM2Zg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQpib2d1cw0KLS02MmMyZmNjNTRkYzllMDRhNzdjNDc3ODgyYjA5MWM2Zg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJmaWxlIjsgZmlsZW5hbWU9Im5vdGVzLnR4dCINCkNvbnRlbnQtVHlwZTogdGV4dC9wbGFpbg0KDQpEZXBsb3ltZW50IGNoZWNrbGlzdAotIFJlZ2lvbjogZXUtd2VzdAotIFJlbGVhc2UgY29kZXdvcmQ6IFBBUEFZQS03Ci0gT3duZXI6IHBsYXRmb3JtIHRlYW0KDQotLTYyYzJmY2M1NGRjOWUwNGE3N2M0Nzc4ODJiMDkxYzZmLS0NCg==
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      content-type: multipart/form-data; boundary=62c2fcc54dc9e04a77c477882b091c6f
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_request_error
+        message: file purpose must be assistants, user_data, or vision
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t2
+  request:
+    body_base64: LS1jYmM1ZDI4OWY3NmY1MGIwMDQ0MzE0NTA3YjI0MDMwYg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJmaWxlIjsgZmlsZW5hbWU9Im5vdGVzLnR4dCINCkNvbnRlbnQtVHlwZTogdGV4dC9wbGFpbg0KDQpEZXBsb3ltZW50IGNoZWNrbGlzdAotIFJlZ2lvbjogZXUtd2VzdAotIFJlbGVhc2UgY29kZXdvcmQ6IFBBUEFZQS03Ci0gT3duZXI6IHBsYXRmb3JtIHRlYW0KDQotLWNiYzVkMjg5Zjc2ZjUwYjAwNDQzMTQ1MDdiMjQwMzBiLS0NCg==
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      content-type: multipart/form-data; boundary=cbc5d289f76f50b0044314507b24030b
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_request_error
+        message: Both file and purpose are required
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t3
+  request:
+    body_base64: cHVycG9zZT11c2VyX2RhdGE=
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      content-type: application/x-www-form-urlencoded
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_request_error
+        message: Expected multipart/form-data with file and purpose fields
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t4
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/files/file-00000000-0000-7000-8000-000000000000
+    query_params: {}
+  response:
+    body:
+      error:
+        code: not_found
+        message: File not found
+        type: not_found
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t5
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/files/file-00000000-0000-7000-8000-000000000000/content
+    query_params: {}
+  response:
+    body:
+      error:
+        code: not_found
+        message: File not found
+        type: not_found
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t6
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/files/file-00000000-0000-7000-8000-000000000000
+    query_params: {}
+  response:
+    body:
+      error:
+        code: not_found
+        message: File not found
+        type: not_found
+    headers:
+      content-type: application/json
+    status_code: 404
