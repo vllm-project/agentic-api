@@ -7,7 +7,7 @@ use agentic_core::tool::{GatewayExecutors, ToolOwnership, ToolRegistry, ToolType
 use agentic_core::types::io::output::McpListTools;
 use agentic_core::types::io::{ItemPage, McpCall, OutputItem, ToolChoice};
 use agentic_core::types::request_response::RequestPayload;
-use agentic_core::types::tools::ResponsesTool;
+use agentic_core::types::tools::{McpApprovalMode, McpApprovalPolicy, ResponsesTool};
 use axum::Router;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
@@ -638,6 +638,91 @@ async fn mcp_declarations_stay_public_on_streaming_lifecycle_snapshots() {
     assert_lowered_forecast_upstream(&bodies[0], "streaming turn");
 }
 
+fn forecast_request_with_approval(stream: bool, server_url: &str, policy: &Value) -> RequestPayload {
+    serde_json::from_value(json!({
+        "model": "test-model", "input": "forecast Tokyo", "stream": stream, "store": true,
+        "tools": [{"type": "mcp", "server_label": "stub", "server_url": server_url, "require_approval": policy}]
+    }))
+    .expect("MCP request with an approval filter")
+}
+
+/// A `require_approval` filter that lets every exposed tool run without approval executes the call and keeps the
+/// filter in the stored response; one that gates an exposed tool is a 400 before any inference request (in a
+/// stream, its only event).
+#[tokio::test]
+async fn mcp_approval_filters_run_ungated_tools_and_reject_gated_ones() {
+    let mcp_url = spawn_forecast_mcp().await;
+    let ungated = json!({"never": {"tool_names": ["forecast"]}});
+    for stream in [false, true] {
+        let fixture = support::TestFixture::new_with_responses(mcp_inference_responses(
+            stream,
+            "mcp__stub__forecast",
+            &json!({"city": "Tokyo"}),
+        ))
+        .await;
+        let response =
+            complete_mcp_response(forecast_request_with_approval(stream, &mcp_url, &ungated), &fixture).await;
+        let call = response["output"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["type"] == "mcp_call")
+            .expect("the ungated MCP call runs");
+        assert_eq!(call["name"], "forecast");
+        assert_eq!(call["status"], "completed");
+        assert_eq!(call["output"], "forecast result");
+        assert_eq!(response["tools"][0]["require_approval"], ungated);
+        let stored = fixture
+            .exec_ctx
+            .resp_handler
+            .get_snapshot(response["id"].as_str().unwrap())
+            .await
+            .expect("stored response");
+        assert_eq!(
+            serde_json::to_value(&stored).unwrap()["tools"][0]["require_approval"],
+            ungated
+        );
+    }
+
+    for policy in [
+        json!({"never": {"tool_names": ["other"]}}),
+        json!({"always": {"tool_names": ["forecast"]}}),
+        json!({}),
+    ] {
+        for stream in [false, true] {
+            let fixture = support::TestFixture::new_with_responses(Vec::new()).await;
+            let gated = "MCP server 'stub' requires approval for tool 'forecast'";
+            match ExecuteRequest::new(
+                forecast_request_with_approval(stream, &mcp_url, &policy),
+                Arc::clone(&fixture.exec_ctx),
+            )
+            .run()
+            .await
+            {
+                Err(error) => {
+                    assert!(!stream, "{policy}: discovery runs inside the stream");
+                    assert_eq!(error.http_status(), StatusCode::BAD_REQUEST, "{policy}");
+                    assert!(error.to_string().contains(gated), "{error}");
+                }
+                Ok(Either::Right(events)) => {
+                    let chunks: Vec<_> = events.collect().await;
+                    let events = support::streamed_sse_events(&chunks);
+                    assert_eq!(events.len(), 1, "{policy}: {events:?}");
+                    assert_eq!(events[0]["type"], "error");
+                    assert_eq!(events[0]["status"], 400);
+                    assert!(
+                        events[0]["error"]["message"].as_str().unwrap().contains(gated),
+                        "{}",
+                        events[0]
+                    );
+                }
+                Ok(Either::Left(response)) => panic!("{policy} gates forecast: {}", response.id),
+            }
+            assert!(fixture.request_bodies().await.is_empty(), "no inference for {policy}");
+        }
+    }
+}
+
 #[tokio::test]
 async fn mcp_declarations_stay_public_in_json_and_stored_responses() {
     let mcp_url = spawn_forecast_mcp().await;
@@ -853,7 +938,10 @@ fn native_mcp_declaration_uses_server_identity_without_a_tool_name() {
         param.allowed_tools.as_deref(),
         Some(["increment".to_owned()].as_slice())
     );
-    assert_eq!(param.require_approval.as_deref(), Some("never"));
+    assert_eq!(
+        param.require_approval,
+        Some(McpApprovalPolicy::Mode(McpApprovalMode::Never))
+    );
 }
 
 #[test]

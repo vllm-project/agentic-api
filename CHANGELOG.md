@@ -4,6 +4,16 @@ All notable changes to Agentic API are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- An MCP declaration's `require_approval` is now typed (`McpApprovalPolicy`) and parses the Responses API filter
+  object as well as `"always"` and `"never"` (part of #145). There is still no approval step, so a request is
+  accepted only when no tool it can call needs approval: `"never"`, or a filter whose `never.tool_names` lists every
+  tool discovery returns (narrow `allowed_tools` if needed). A discovered tool the filter gates fails the request
+  with a 400 naming the server and tool; `"always"`, `read_only` filters, and a tool listed under both `always` and
+  `never` are rejected by request validation. Before, any object form failed to deserialize.
+  `agentic_core`: `McpToolParam::require_approval` is `Option<McpApprovalPolicy>` instead of `Option<String>`.
+
 ## [0.10.0] - 2026-11-09
 
 ### Upgrade notes

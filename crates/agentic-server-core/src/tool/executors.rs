@@ -283,9 +283,32 @@ impl GatewayExecutors {
     ///
     /// # Errors
     ///
-    /// Returns a configuration error for an invalid declaration, and an
-    /// execution error when the server cannot connect.
+    /// Returns a configuration error for an invalid declaration or for a discovered tool that the declaration's
+    /// `require_approval` gates, since the gateway has no approval step yet, and an execution error when the server
+    /// cannot connect.
     pub(crate) async fn mcp_server_tools(
+        &mut self,
+        param: &McpToolParam,
+        listing: Option<McpListTools>,
+    ) -> Result<McpServerToolSet, ToolError> {
+        let tool_set = self.discover_mcp_server_tools(param, listing).await?;
+        if let Some(policy) = &param.require_approval
+            && let Some(gated) = tool_set
+                .discovered_handlers
+                .iter()
+                .find(|handler| policy.requires_approval(&handler.param.tool_name))
+        {
+            return Err(ToolError::Config(format!(
+                "MCP server '{}' requires approval for tool '{}'; approval gating is not yet supported, so list the \
+                 tool in require_approval.never.tool_names or leave it out of allowed_tools",
+                param.server_label.trim(),
+                gated.param.tool_name
+            )));
+        }
+        Ok(tool_set)
+    }
+
+    async fn discover_mcp_server_tools(
         &mut self,
         param: &McpToolParam,
         listing: Option<McpListTools>,
