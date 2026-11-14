@@ -109,7 +109,7 @@ vision-token usage depends on the model and image processor, so choose a thresho
 ## File inputs
 
 Message content parts with `type: "input_file"` are parsed without dropping `file_data`, `file_id`, `file_url`,
-or `filename`. The typed Responses executor accepts a message file only when `file_data` carries an inline UTF-8
+or `filename`. The typed Responses executor accepts a message file when `file_data` carries an inline UTF-8
 text file, sent as either:
 
 - a base64 data URL with a text media type: `text/*`, `application/json`, `application/xml`, `application/yaml`,
@@ -124,6 +124,10 @@ text file, sent as either:
   some clients send for TypeScript, is accepted with a `.ts`, `.mts`, or `.cts` filename.
 
 Content that passes these checks must still decode as UTF-8, so binary data is rejected even with a text filename.
+A `file_id` instead references an uploaded file from the Files API. Rehydration reads it from the gateway file
+store and substitutes its base64 data URL, using the media type and filename stored with the upload. The stored
+file must satisfy the same text media-type and filename rules. An `input_image` `file_id` is resolved the same way
+and must reference an `image/*` upload. A `file_url` is never fetched.
 
 The file is decoded only in the request sent to the model, where it becomes an `input_text` part in the same
 position. When `filename` is set, the text starts with a `File: <filename>` line, so this part:
@@ -138,14 +142,20 @@ reaches the model as:
 {"type": "input_text", "text": "File: notes.txt\nhello"}
 ```
 
-Stored response and conversation history and compacted windows keep the client's original `input_file`; the text
-is decoded again on each continuation. The file counts toward the request body limit
-(`max_request_body_size_bytes`) in its base64 form, and the decoded text counts toward the model's context length.
+Stored response and conversation history keep the client's original `input_file`; inline text is decoded again
+and a `file_id` is resolved again on each continuation. Compaction summarizes the resolved model-facing input,
+so a compacted window can contain the resolved base64 data URL for any retained message that references a
+file; multi-agent tree snapshots can likewise retain the resolved form and count it toward their retained-byte
+budget. Inline `file_data` counts toward the request body limit (`max_request_body_size_bytes`) in its base64
+form; a `file_id` reference does not, because the client body carries only the reference. The decoded text
+counts toward the model's context length. Resolved file references are limited to 64 MiB of base64 data URLs
+per request.
 
 Every other message file is rejected with HTTP 400 `invalid_request_error` (or the equivalent WebSocket error)
-before inference and before anything is stored. The message gives the reason without echoing the file: `file_id`
-(file IDs cannot be used in Responses input), `file_url` (the gateway does not fetch files), a missing `file_data`,
-a non-text file such as a PDF, a data URL that is not base64-encoded, invalid base64, or content that is not valid UTF-8.
+before inference and before anything is stored. The message gives the reason without echoing the file: a
+`file_id` that cannot be resolved (the file was deleted, or this gateway has no file store), `file_url` (the
+gateway does not fetch files), a missing `file_data`, a non-text file such as a PDF, a data URL that is not
+base64-encoded, invalid base64, or content that is not valid UTF-8.
 Extract text from PDFs and other documents client-side and send it as `input_text`, or send pages as
 `input_image`. The same validation applies to files restored from response/conversation history, explicit and
 automatic compaction, `compaction_trigger`, and WebSocket `generate: false` requests.
@@ -156,8 +166,8 @@ does not load or persist state.
 Structured function/custom tool call outputs containing files retain their existing pass-through behavior.
 
 API `input_file` content is distinct from mentioning a local filename in Codex or asking a client-executed read tool
-to read a file. A local file mention is not a file upload, and this gateway does not resolve local paths or implement
-a file-ID resolver, OCR, or document parser.
+to read a file. A local file mention is not a file upload, and this gateway does not resolve local paths, fetch
+`file_url`, or implement OCR or document parsing for `input_file`.
 
 ## Local plaintext limitation
 

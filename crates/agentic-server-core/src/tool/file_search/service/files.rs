@@ -1,7 +1,7 @@
 //! File upload, retrieval, and deletion operations.
 
 use super::{
-    Arc, CancellationToken, Collection, DeleteObject, FileObject, FilePublicationFailure, FileSearchError,
+    Arc, CancellationToken, Collection, DeleteObject, FileContent, FileObject, FilePublicationFailure, FileSearchError,
     FileSearchService, ListParams, ListResponse, MAX_FILE_BYTES, OwnedSemaphorePermit, decode_content, deleted,
     invalid, page, size_i64, validate_file_id, validate_list,
 };
@@ -32,8 +32,8 @@ impl FileSearchService {
         if filename.is_empty() || filename.len() > 255 || filename.chars().any(char::is_control) {
             return invalid("filename must contain 1 to 255 bytes without control characters");
         }
-        if !matches!(purpose, "assistants" | "user_data") {
-            return invalid("file search accepts purpose assistants or user_data");
+        if !matches!(purpose, "assistants" | "user_data" | "vision") {
+            return invalid("file purpose must be assistants, user_data, or vision");
         }
         if bytes.is_empty() || bytes.len() > MAX_FILE_BYTES {
             return invalid("file must contain 1 byte to 20 MiB");
@@ -136,10 +136,23 @@ impl FileSearchService {
     /// # Errors
     /// Returns not-found, resource-limit, or storage errors.
     pub async fn file_content(&self, id: &str) -> Result<Vec<u8>, FileSearchError> {
+        Ok(self.read_file(id).await?.bytes)
+    }
+
+    /// Reads a stored file and the metadata needed to inline it in a request.
+    ///
+    /// # Errors
+    /// Returns not-found, resource-limit, or storage errors.
+    pub async fn read_file(&self, id: &str) -> Result<FileContent, FileSearchError> {
         let permit = self.permit()?;
         validate_file_id(id)?;
         let file = self.storage.file(id).await?;
-        self.read_content(id, file.object.bytes, file.content, permit).await
+        let bytes = self.read_content(id, file.object.bytes, file.content, permit).await?;
+        Ok(FileContent {
+            filename: file.object.filename,
+            content_type: file.content_type,
+            bytes,
+        })
     }
 
     /// Atomically deletes metadata, attachments, and chunks, then removes the local blob.

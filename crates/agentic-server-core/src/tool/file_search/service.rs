@@ -23,9 +23,9 @@ mod setup;
 use crate::{
     storage::file_search::{Collection, FilePublicationFailure, PreparedAttachment, StoredChunk, StoredVectorStore},
     types::file_search::{
-        AttachFileRequest, ChunkingStrategy, CreateVectorStoreRequest, DeleteObject, FileAttributes, FileCounts,
-        FileObject, FileSearchError, ListParams, ListResponse, SearchMode, SearchQuery, SearchRequest, SearchResponse,
-        VectorStoreFileObject, VectorStoreObject, invalid, validate_attributes, validate_file_id,
+        AttachFileRequest, ChunkingStrategy, CreateVectorStoreRequest, DeleteObject, FileAttributes, FileContent,
+        FileCounts, FileObject, FileSearchError, ListParams, ListResponse, SearchMode, SearchQuery, SearchRequest,
+        SearchResponse, VectorStoreFileObject, VectorStoreObject, invalid, validate_attributes, validate_file_id,
     },
 };
 

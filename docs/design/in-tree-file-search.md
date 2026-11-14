@@ -16,6 +16,11 @@ executor and shared persistence layer.
    `file_search` built-in tool. Both routes use the same Rust search service.
 5. The existing tool loop supplies retrieved content to inference and exposes
    `file_search_call` output items, results on request, and file citations.
+6. Rehydration resolves message `input_image` and `input_file` `file_id` references
+   from the same service into base64 data URLs for the model-facing request. Canonical
+   history keeps the client's reference, so each continuation resolves it again.
+   Compaction and multi-agent snapshots derive from the resolved copy, so they can
+   retain the data URL instead of the reference.
 
 ## Boundaries
 
@@ -88,6 +93,8 @@ Types live at `crate::types::file_search`:
 - `SearchResult`: `file_id: String`, `filename: String`, `score: f64`,
   `attributes: FileAttributes`, `content: Vec<SearchContent>`.
 - `SearchContent`: `type_: String` (wire name `type`) and `text: String`.
+- `FileContent`: `filename`, `content_type`, and `bytes`, returned when rehydration
+  reads a stored file for inlining.
 - `CreateVectorStoreRequest`, `AttachFileRequest`, `FileObject`,
   `VectorStoreObject`, `VectorStoreFileObject`, `DeleteObject`,
   `ListResponse<T>` provide the corresponding OpenAI-shaped payloads.
@@ -101,6 +108,7 @@ pub async fn upload_file(&self, filename: &str, content_type: &str, purpose: &st
 pub async fn list_files(&self, params: &ListParams) -> Result<ListResponse<FileObject>, FileSearchError>;
 pub async fn get_file(&self, id: &str) -> Result<FileObject, FileSearchError>;
 pub async fn file_content(&self, id: &str) -> Result<Vec<u8>, FileSearchError>;
+pub async fn read_file(&self, id: &str) -> Result<FileContent, FileSearchError>;
 pub async fn delete_file(&self, id: &str) -> Result<DeleteObject, FileSearchError>;
 pub async fn create_vector_store(&self, request: CreateVectorStoreRequest) -> Result<VectorStoreObject, FileSearchError>;
 pub async fn list_vector_stores(&self, params: &ListParams) -> Result<ListResponse<VectorStoreObject>, FileSearchError>;
@@ -124,7 +132,9 @@ Use deterministic real SQL and fixture files, mocking only inference and embeddi
 HTTP boundaries. Cover persistence across service recreation, deletion, malformed
 input, transactional ingestion failure, Unicode chunk boundaries, semantic search
 independent of lexical overlap, filter isolation, global ordering/limits, empty
-results, embedding failures, and streamed/blocking Responses tool loops. Existing
+results, embedding failures, streamed/blocking Responses tool loops, and
+file-reference hydration from new input and restored history, including image and
+text validation, missing files, and the per-request budget. Existing
 cassettes remain unchanged; new captured cassettes require the recorder workflow.
 Run focused tests, the full workspace suite, Clippy, formatting, OpenAPI checks, and
 all pre-commit hooks before publishing a PR.

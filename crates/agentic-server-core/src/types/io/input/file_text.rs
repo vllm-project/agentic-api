@@ -102,6 +102,20 @@ impl InputFileContent {
             .map(drop)
             .map_err(|_| InputFileError::NotUtf8)
     }
+
+    /// Check the inline form before request hydration, which resolves a `file_id` reference.
+    ///
+    /// A reference-only part is accepted here; hydration rejects it when it cannot resolve the
+    /// reference or when the part also carries inline content.
+    ///
+    /// # Errors
+    /// Returns why an inline file cannot be inlined, as [`Self::validate`] does.
+    pub(super) fn validate_allow_file_id(&self) -> Result<(), InputFileError> {
+        if self.file_id.is_some() {
+            return Ok(());
+        }
+        self.validate()
+    }
 }
 
 /// The model-facing text of an inline text file, prefixed with
@@ -276,12 +290,13 @@ mod tests {
     fn rejects_references_and_missing_data() {
         let reference = file(json!({"file_id":"file_1", "file_data":"aGk=", "filename":"a.txt"}));
         assert_eq!(text(&reference), Err(InputFileError::FileId));
+        assert_eq!(reference.validate_allow_file_id(), Ok(()));
         let url = file(json!({"file_url":"https://example.invalid/a.txt"}));
         assert_eq!(text(&url), Err(InputFileError::FileUrl));
-        assert_eq!(
-            text(&file(json!({"filename":"a.txt"}))),
-            Err(InputFileError::MissingData)
-        );
+        assert_eq!(url.validate_allow_file_id(), Err(InputFileError::FileUrl));
+        let missing = file(json!({"filename":"a.txt"}));
+        assert_eq!(text(&missing), Err(InputFileError::MissingData));
+        assert_eq!(missing.validate_allow_file_id(), Err(InputFileError::MissingData));
     }
 
     #[test]

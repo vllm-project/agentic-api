@@ -221,6 +221,39 @@ impl FileBlobStore for PausedBlobs {
 }
 
 #[tokio::test]
+async fn read_file_returns_bytes_and_metadata_for_a_vision_upload() {
+    let service = service().await;
+    let file = service
+        .upload_file("plot.png", "image/png; charset=binary", "vision", b"png".to_vec())
+        .await
+        .unwrap();
+    let content = service.read_file(&file.id).await.unwrap();
+    assert_eq!(content.filename, "plot.png");
+    assert_eq!(content.content_type, "image/png; charset=binary");
+    assert_eq!(content.bytes, b"png");
+    assert_eq!(service.file_content(&file.id).await.unwrap(), b"png");
+    assert_eq!(
+        service
+            .read_file("file-01a15d85-a1db-76f3-918e-b31d6819a316")
+            .await
+            .unwrap_err()
+            .status_code(),
+        404
+    );
+}
+
+#[tokio::test]
+async fn unknown_upload_purpose_is_rejected() {
+    let service = service().await;
+    let error = service
+        .upload_file("notes.txt", "text/plain", "batch", b"text".to_vec())
+        .await
+        .unwrap_err();
+    assert_eq!(error.status_code(), 400);
+    assert!(error.public_message().contains("vision"));
+}
+
+#[tokio::test]
 async fn injected_blob_store_shares_the_sql_search_service() {
     let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
     let blobs = Arc::new(MemoryBlobs::default());
