@@ -12,10 +12,22 @@ use http::{HeaderMap, StatusCode};
 use tokio::net::{TcpListener, TcpSocket};
 use tokio::sync::Mutex;
 
+use agentic_core::types::session_id::{ScopedSessionId, SessionTenant};
 use common::{spawn_gateway, test_config, test_state};
 
 const CLAUDE_CODE_CACHE_CONTROL_REQUEST: &[u8] =
     include_bytes!("../../agentic-server-core/tests/fixtures/claude-code-cache-control-request.json");
+
+/// Request headers as (name, value) pairs; repeated names become repeated lines.
+type HeaderPairs<'a, V> = &'a [(&'a str, V)];
+/// A forwarding case: name, request headers, request body, and the expected `X-Session-ID`.
+type ForwardCase<'a> = (&'a str, HeaderPairs<'a, &'a str>, &'a [u8], Option<&'a str>);
+
+fn default_tenant_session(client_session_id: &str) -> String {
+    ScopedSessionId::new(SessionTenant::Default, client_session_id)
+        .as_str()
+        .to_owned()
+}
 
 #[derive(Clone, Debug)]
 struct RecordedRequest {
@@ -124,6 +136,10 @@ async fn messages_forwards_raw_body_query_headers_and_open_beta_list() {
         "future-beta-unknown,web-search-2025-03-05"
     );
     assert_eq!(requests[0].headers["x-claude-code-session-id"], "session-1");
+    assert_eq!(
+        requests[0].headers["x-session-id"],
+        default_tenant_session("session-1").as_str()
+    );
     assert_eq!(requests[0].headers["x-claude-code-agent-id"], "agent-1");
     assert_eq!(requests[0].headers["x-api-key"], "anthropic-key");
     assert!(!requests[0].headers.contains_key("connection"));
@@ -431,6 +447,10 @@ async fn messages_gateway_loop_forwards_query_and_open_headers() {
         "future-beta-unknown,interleaved-thinking-2025-05-14"
     );
     assert_eq!(requests[0].headers["x-claude-code-session-id"], "session-loop");
+    assert_eq!(
+        requests[0].headers["x-session-id"],
+        default_tenant_session("session-loop").as_str()
+    );
     assert_eq!(requests[0].headers["x-claude-code-agent-id"], "agent-loop");
     assert_eq!(requests[0].headers["x-api-key"], "anthropic-key");
     assert!(!requests[0].headers.contains_key("accept-encoding"));
@@ -482,6 +502,10 @@ async fn messages_gateway_stream_forwards_query_and_open_headers() {
     assert_eq!(requests[0].headers["anthropic-version"], "2023-06-01");
     assert_eq!(requests[0].headers["anthropic-beta"], "future-beta-unknown");
     assert_eq!(requests[0].headers["x-claude-code-session-id"], "session-stream");
+    assert_eq!(
+        requests[0].headers["x-session-id"],
+        default_tenant_session("session-stream").as_str()
+    );
     assert_eq!(requests[0].headers["x-api-key"], "anthropic-key");
 }
 
@@ -598,6 +622,167 @@ async fn gateway_messages_reject_invalid_selectors_before_inference() {
     assert!(
         requests.lock().await.is_empty(),
         "invalid selectors must not bypass the loop through proxying"
+    );
+    gateway.abort();
+    upstream.abort();
+    let _ = gateway.await;
+    let _ = upstream.await;
+}
+
+#[tokio::test]
+async fn messages_forward_one_tenant_scoped_session_id() {
+    let (llm_url, requests, upstream) =
+        spawn_recording_upstream(StatusCode::OK, "application/json", r#"{"id":"msg_1"}"#).await;
+    let (gateway_url, gateway) = spawn_gateway(test_state(&test_config(&llm_url))).await;
+    let messages_body = |session_id: Option<&str>| {
+        let mut body =
+            serde_json::json!({"model": "test", "max_tokens": 8, "messages": [{"role": "user", "content": "hi"}]});
+        if let Some(session_id) = session_id {
+            body["vllm_xargs"] = serde_json::json!({"session_id": session_id});
+        }
+        serde_json::to_vec(&body).unwrap()
+    };
+    let (plain, xargs_s1, xargs_s2, xargs_empty) = (
+        messages_body(None),
+        messages_body(Some("s1")),
+        messages_body(Some("s2")),
+        messages_body(Some("")),
+    );
+    let scoped = default_tenant_session("s1");
+    let cases: [ForwardCase<'_>; 12] = [
+        (
+            "claude code",
+            &[("x-claude-code-session-id", "s1")],
+            &plain,
+            Some(&scoped),
+        ),
+        ("generic", &[("X-Session-ID", "s1")], &plain, Some(&scoped)),
+        (
+            "matching",
+            &[("x-claude-code-session-id", "s1"), ("x-session-id", "s1")],
+            &plain,
+            Some(&scoped),
+        ),
+        (
+            "empty generic",
+            &[("x-claude-code-session-id", "s1"), ("x-session-id", "")],
+            &plain,
+            Some(&scoped),
+        ),
+        ("missing", &[], &plain, None),
+        (
+            "empty",
+            &[("x-claude-code-session-id", ""), ("x-session-id", "")],
+            &plain,
+            None,
+        ),
+        ("body", &[], &xargs_s1, Some(&scoped)),
+        ("empty body value", &[], &xargs_empty, None),
+        ("header over body", &[("x-session-id", "s1")], &xargs_s2, Some(&scoped)),
+        (
+            "count_tokens",
+            &[("x-claude-code-session-id", "s1")],
+            &plain,
+            Some(&scoped),
+        ),
+        ("count_tokens missing", &[], &plain, None),
+        ("count_tokens body", &[], &xargs_s1, Some(&scoped)),
+    ];
+
+    for (case, headers, body, expected) in cases {
+        let path = if case.starts_with("count_tokens") {
+            "/v1/messages/count_tokens"
+        } else {
+            "/v1/messages"
+        };
+        let mut request = reqwest::Client::new()
+            .post(format!("{gateway_url}{path}"))
+            .body(body.to_vec());
+        for (name, value) in headers {
+            request = request.header(*name, *value);
+        }
+        let response = request.send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "{case}");
+
+        let recorded = requests.lock().await.pop().expect("upstream request");
+        assert_eq!(recorded.uri, path, "{case}");
+        assert_eq!(recorded.body.as_ref(), body, "{case}: body must stay verbatim");
+        let forwarded: Vec<_> = recorded.headers.get_all("x-session-id").iter().collect();
+        match expected {
+            Some(expected) => assert_eq!(forwarded, [expected], "{case}"),
+            None => assert!(forwarded.is_empty(), "{case}: no session must be forwarded"),
+        }
+        let claude = headers.iter().find(|(name, _)| *name == "x-claude-code-session-id");
+        assert_eq!(
+            recorded
+                .headers
+                .get("x-claude-code-session-id")
+                .map(|v| v.to_str().unwrap()),
+            claude.map(|(_, value)| *value),
+            "{case}: x-claude-code-session-id must pass through unchanged"
+        );
+    }
+    gateway.abort();
+    upstream.abort();
+    let _ = gateway.await;
+    let _ = upstream.await;
+}
+
+#[tokio::test]
+async fn messages_reject_conflicting_or_invalid_session_ids_before_upstream() {
+    let (llm_url, requests, upstream) =
+        spawn_recording_upstream(StatusCode::OK, "application/json", r#"{"id":"unexpected"}"#).await;
+    let (gateway_url, gateway) = spawn_gateway(test_state(&test_config(&llm_url))).await;
+    let proxy = serde_json::json!({"model":"test", "max_tokens":8, "messages":[{"role":"user", "content":"hi"}]});
+    let gateway_loop = serde_json::json!({"model":"test", "max_tokens":8, "stream":false,
+        "messages":[{"role":"user", "content":"hi"}],
+        "tools":[{"name":"web_search", "input_schema":{"type":"object"}}]});
+    let gateway_stream = serde_json::json!({"model":"test", "max_tokens":8, "stream":true,
+        "messages":[{"role":"user", "content":"hi"}],
+        "tools":[{"name":"web_search", "input_schema":{"type":"object"}}]});
+    let targets = [
+        ("proxy", "/v1/messages", &proxy),
+        ("gateway loop", "/v1/messages", &gateway_loop),
+        ("gateway stream", "/v1/messages", &gateway_stream),
+        ("count_tokens", "/v1/messages/count_tokens", &proxy),
+    ];
+    let invalid: [(&str, HeaderPairs<&[u8]>); 6] = [
+        (
+            "cross-header",
+            &[("x-claude-code-session-id", b"s1"), ("X-Session-ID", b"s2")],
+        ),
+        ("repeated", &[("x-session-id", b"s1"), ("x-session-id", b"s2")]),
+        ("non-ascii", &[("x-claude-code-session-id", "s\u{e9}".as_bytes())]),
+        ("too long", &[("x-session-id", &[b's'; 257])]),
+        (
+            "hop-by-hop X-Session-ID",
+            &[("x-claude-code-session-id", b"s1"), ("connection", b"X-Session-ID")],
+        ),
+        (
+            "hop-by-hop claude code header",
+            &[
+                ("x-claude-code-session-id", b"s1"),
+                ("connection", b"keep-alive, x-claude-code-session-id"),
+            ],
+        ),
+    ];
+
+    for (target, path, body) in targets {
+        for (case, headers) in invalid {
+            let mut request = reqwest::Client::new().post(format!("{gateway_url}{path}")).json(body);
+            for (name, value) in headers {
+                request = request.header(*name, http::HeaderValue::from_bytes(value).unwrap());
+            }
+            let response = request.send().await.unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{target}, {case}");
+            let body: serde_json::Value = response.json().await.unwrap();
+            assert_eq!(body["type"], "error", "{target}, {case}");
+            assert_eq!(body["error"]["type"], "invalid_request_error", "{target}, {case}");
+        }
+    }
+    assert!(
+        requests.lock().await.is_empty(),
+        "a request with conflicting or invalid session ids must not reach the upstream"
     );
     gateway.abort();
     upstream.abort();
