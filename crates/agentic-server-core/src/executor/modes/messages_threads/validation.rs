@@ -81,7 +81,7 @@ pub(super) fn cache_breakpoints(request: &MessagesRequest) -> usize {
         + request.tools.as_ref().map_or(0, |tools| {
             tools
                 .iter()
-                .filter(|tool| tool.fields().cache_control.as_ref().is_some())
+                .filter(|tool| tool.cache_control().as_ref().is_some())
                 .count()
         })
         + request

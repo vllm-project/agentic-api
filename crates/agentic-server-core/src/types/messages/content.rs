@@ -1,7 +1,7 @@
 //! Shared lossless Messages blocks for requests and durable thread history.
 
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::collections::HashMap;
 
 use super::parameters::{CacheControl, RequestField};
@@ -80,6 +80,26 @@ pub enum KnownContentBlock {
         #[serde(flatten)]
         extra: HashMap<String, Value>,
     },
+    McpToolUse {
+        id: String,
+        name: String,
+        server_name: String,
+        input: Map<String, Value>,
+        #[serde(default, skip_serializing_if = "RequestField::is_missing")]
+        cache_control: RequestField<CacheControl>,
+        #[serde(flatten)]
+        extra: HashMap<String, Value>,
+    },
+    McpToolResult {
+        tool_use_id: String,
+        content: ToolResultContent,
+        #[serde(default)]
+        is_error: bool,
+        #[serde(default, skip_serializing_if = "RequestField::is_missing")]
+        cache_control: RequestField<CacheControl>,
+        #[serde(flatten)]
+        extra: HashMap<String, Value>,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -129,28 +149,31 @@ pub struct Citation {
 
 impl ContentBlock {
     pub(crate) fn cache_breakpoints(&self) -> usize {
-        match self {
+        let (cache_control, content) = match self {
             Self::Known(
                 KnownContentBlock::Text { cache_control, .. }
                 | KnownContentBlock::Thinking { cache_control, .. }
                 | KnownContentBlock::RedactedThinking { cache_control, .. }
-                | KnownContentBlock::ToolUse { cache_control, .. },
-            ) => usize::from(cache_control.as_ref().is_some()),
+                | KnownContentBlock::ToolUse { cache_control, .. }
+                | KnownContentBlock::McpToolUse { cache_control, .. },
+            ) => (cache_control, None),
             Self::Known(KnownContentBlock::ToolResult {
                 cache_control, content, ..
-            }) => {
-                usize::from(cache_control.as_ref().is_some())
-                    + match content.as_ref() {
-                        Some(ToolResultContent::Text(_)) | None => 0,
-                        Some(ToolResultContent::Blocks(blocks)) => blocks
-                            .iter()
-                            .filter(|block| block.cache_control.as_ref().is_some())
-                            .count(),
-                    }
+            }) => (cache_control, content.as_ref()),
+            Self::Known(KnownContentBlock::McpToolResult {
+                cache_control, content, ..
+            }) => (cache_control, Some(content)),
+            Self::Known(KnownContentBlock::Unknown) => return 0,
+            Self::Provider(block) => (&block.cache_control, None),
+        };
+        usize::from(cache_control.as_ref().is_some())
+            + match content {
+                Some(ToolResultContent::Text(_)) | None => 0,
+                Some(ToolResultContent::Blocks(blocks)) => blocks
+                    .iter()
+                    .filter(|block| block.cache_control.as_ref().is_some())
+                    .count(),
             }
-            Self::Known(KnownContentBlock::Unknown) => 0,
-            Self::Provider(block) => usize::from(block.cache_control.as_ref().is_some()),
-        }
     }
 
     pub(crate) fn is_compaction(&self) -> bool {
@@ -167,6 +190,12 @@ impl utoipa::PartialSchema for ContentBlock {
         };
 
         let str_type = || ObjectBuilder::new().schema_type(SchemaType::new(Type::String));
+
+        let cache_control = || {
+            AnyOfBuilder::new()
+                .item(utoipa::openapi::Ref::from_schema_name("CacheControl"))
+                .item(ObjectBuilder::new().schema_type(SchemaType::new(Type::Null)))
+        };
 
         AnyOfBuilder::new()
             .item(
@@ -200,7 +229,42 @@ impl utoipa::PartialSchema for ContentBlock {
                     .required("tool_use_id")
                     .property("content", utoipa::openapi::Ref::from_schema_name("ToolResultContent")),
             )
-            .item(ObjectBuilder::new().property("type", str_type()).required("type"))
+            .item(
+                ObjectBuilder::new()
+                    .property("type", str_type().enum_values(Some(["mcp_tool_use"])))
+                    .required("type")
+                    .property("id", str_type())
+                    .required("id")
+                    .property("name", str_type())
+                    .required("name")
+                    .property("server_name", str_type())
+                    .required("server_name")
+                    .property("input", ObjectBuilder::new().schema_type(SchemaType::new(Type::Object)))
+                    .required("input")
+                    .property("cache_control", cache_control()),
+            )
+            .item(
+                ObjectBuilder::new()
+                    .property("type", str_type().enum_values(Some(["mcp_tool_result"])))
+                    .required("type")
+                    .property("tool_use_id", str_type())
+                    .required("tool_use_id")
+                    .property(
+                        "is_error",
+                        ObjectBuilder::new().schema_type(SchemaType::new(Type::Boolean)),
+                    )
+                    .property("content", utoipa::openapi::Ref::from_schema_name("ToolResultContent"))
+                    .required("content")
+                    .property("cache_control", cache_control()),
+            )
+            .item(
+                ObjectBuilder::new()
+                    .property(
+                        "type",
+                        str_type().pattern(Some("^(?!(?:mcp_tool_use|mcp_tool_result)$)")),
+                    )
+                    .required("type"),
+            )
             .into()
     }
 }
@@ -230,6 +294,8 @@ mod tests {
             json!({"type":"document","source":{"type":"text","media_type":"text/plain","data":"proof"},"citations":{"enabled":true}}),
             json!({"type":"server_tool_use","id":"server-t","name":"search","input":{"q":"q"}}),
             json!({"type":"future_block","opaque":{"nested":[1,null,"雪"]}}),
+            json!({"type":"mcp_tool_use","id":"m","name":"echo","server_name":"test","input":{"text":"雪"},"cache_control":null,"opaque":{"keep":true}}),
+            json!({"type":"mcp_tool_result","tool_use_id":"m","is_error":false,"content":[{"type":"text","text":"ok","cache_control":{"type":"ephemeral"},"opaque":true}],"extension":null}),
         ] {
             let block: ContentBlock = serde_json::from_value(value.clone()).unwrap();
             assert_eq!(serde_json::to_value(block).unwrap(), value);
@@ -242,6 +308,11 @@ mod tests {
             json!({"type":"tool_use","name":"missing-id"}),
             json!({"type":"redacted_thinking","data":42}),
             json!({"type":"text","text":"a","citations":42}),
+            json!({"type":"mcp_tool_use","id":"m","name":"echo","input":{}}),
+            json!({"type":"mcp_tool_use","id":"m","name":"echo","server_name":"s","input":[]}),
+            json!({"type":"mcp_tool_result","is_error":false,"content":[]}),
+            json!({"type":"mcp_tool_result","tool_use_id":"m","is_error":false}),
+            json!({"type":"mcp_tool_result","tool_use_id":"m","is_error":null,"content":[]}),
         ] {
             assert!(serde_json::from_value::<ContentBlock>(value).is_err());
         }

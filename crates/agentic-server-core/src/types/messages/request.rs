@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize, de::IgnoredAny};
 use serde_json::Value;
 
-use super::content::ContentBlock;
+use super::content::{ContentBlock, KnownContentBlock};
 use super::parameters::{
     CacheControl, CompactionConfig, Container, ContextManagement, Fallbacks, McpServer, RequestField, ThinkingConfig,
 };
@@ -68,6 +68,8 @@ pub struct MessagesRequest {
 /// declaring a gateway tool must not escape validation through the proxy path.
 #[derive(Deserialize)]
 pub(crate) struct MessagesToolDeclarations {
+    #[serde(default)]
+    pub mcp_servers: Option<Vec<McpServer>>,
     #[serde(default)]
     pub tools: Option<Vec<ToolParam>>,
     #[serde(default)]
@@ -227,6 +229,20 @@ pub struct MessageParam {
 pub enum MessageContent {
     Text(String),
     Blocks(Vec<ContentBlock>),
+}
+
+impl MessageContent {
+    pub(crate) fn has_mcp_blocks(&self) -> bool {
+        match self {
+            Self::Text(_) => false,
+            Self::Blocks(blocks) => blocks.iter().any(|block| {
+                matches!(
+                    block,
+                    ContentBlock::Known(KnownContentBlock::McpToolUse { .. } | KnownContentBlock::McpToolResult { .. })
+                )
+            }),
+        }
+    }
 }
 
 #[cfg(feature = "openapi")]

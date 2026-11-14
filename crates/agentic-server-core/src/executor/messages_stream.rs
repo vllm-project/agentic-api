@@ -20,10 +20,11 @@
 
 mod blocks;
 mod ingestion;
+mod round;
 mod server_tools;
 mod wire;
 use blocks::BufferedBlock;
-use ingestion::Frame;
+use round::{complete_round, execute_round};
 use wire::{error_sse, executor_error_sse, sse};
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -34,20 +35,19 @@ use futures::StreamExt;
 use serde_json::{Value, json};
 use tracing::Instrument as _;
 
-use crate::executor::error::{ExecutorError, ExecutorResult};
+use crate::executor::error::ExecutorResult;
 use crate::executor::inference::{BoxStream, response_lines, send_request};
 use crate::executor::messages_context::MessagesRequestContext;
-use crate::executor::messages_round::{MessagesRoundDecision, decide_round};
+use crate::executor::messages_round::MessagesRoundDecision;
 use crate::executor::messages_server_tools::{NativeServerTools, ServerToolView};
-use crate::executor::messages_threads::ThreadRetention;
-use crate::executor::messages_tools::{execute_gateway_calls, request_gateway_map};
-use crate::executor::messages_usage::{MessagesUsageTotals, has_fallback};
+use crate::executor::messages_tools::{request_gateway_map, resume_pending_mcp};
+use crate::executor::messages_usage::MessagesUsageTotals;
 use crate::executor::request::ExecutionContext;
 use crate::executor::telemetry::metrics::{Stage, StageTimer};
 use crate::executor::telemetry::{Api, ExecutionSpan, FailureCategory, InstrumentedStream, Route};
 use crate::proxy::processed_response_headers;
 use crate::tool::ToolRegistry;
-use crate::types::messages::tool_call::MessagesToolCall;
+use crate::types::messages::GatewayToolResult;
 use crate::types::messages::tool_seam;
 
 // Shared with the non-streaming loop so the two Messages loops can't drift.
@@ -79,6 +79,29 @@ pub async fn run_messages_stream(
         execution.not_delivered();
         return Err(error);
     }
+    let key = exec_ctx.messages_result_key()?;
+    let view = ServerToolView {
+        native: ctx.native_server_tools(),
+        key,
+    };
+    let gateway_map = request_gateway_map(ctx.gateway_tools_or(&exec_ctx.messages_gateway_tools), &registry);
+    let resumed = match resume_pending_mcp(
+        &mut ctx,
+        &registry,
+        &gateway_map,
+        view,
+        &exec_ctx.gateway_scheduler_policy,
+        &exec_ctx.metrics,
+    )
+    .await
+    {
+        Ok(results) => results,
+        Err(error) => {
+            execution.failed(&error);
+            execution.not_delivered();
+            return Err(error);
+        }
+    };
     // Send the first upstream request before the handler commits an HTTP 200,
     // so initial vLLM errors retain their original status and body.
     let opened = open_round(&ctx, &exec_ctx, &upstream, 0).instrument(span.clone()).await;
@@ -92,7 +115,8 @@ pub async fn run_messages_stream(
     };
     let response_headers = processed_response_headers(first_round.response.headers());
     let clock = execution.clock().clone();
-    let body = messages_stream_body(ctx, registry, exec_ctx, upstream, first_round, execution);
+    let acc = MessagesStreamAccumulator::for_request(&ctx, gateway_map, resumed);
+    let body = messages_stream_body(ctx, registry, exec_ctx, upstream, first_round, execution, acc);
     Ok(MessagesResponse {
         body: Box::pin(InstrumentedStream::delivering(body, span, clock)),
         headers: response_headers,
@@ -152,12 +176,12 @@ fn messages_stream_body(
     upstream: MessagesUpstream,
     first_round: OpenRound,
     mut execution: ExecutionSpan,
+    mut acc: MessagesStreamAccumulator,
 ) -> BoxStream {
     Box::pin(stream! {
         // The key was resolved before the stream opened; this cannot fail.
         let Ok(key) = exec_ctx.messages_result_key() else { return };
         let view = ServerToolView { native: ctx.native_server_tools(), key };
-        let mut acc = MessagesStreamAccumulator::for_request(&ctx, &registry, &exec_ctx);
         let mut prepared_response = Some(first_round);
         let clock = execution.clock().clone();
         let mut rounds = exec_ctx.metrics.rounds(Api::Messages);
@@ -198,7 +222,7 @@ fn messages_stream_body(
                 clock.upstream_data();
                 let frames = acc.push(&line);
                 let text = acc.pushed_text;
-                for out in frames {
+                for (out, text) in frames.into_iter().map(|out| (out, text)).chain(acc.release_pending_results()) {
                     clock.client_event(text);
                     yield out;
                 }
@@ -225,7 +249,7 @@ fn messages_stream_body(
             match decision {
                 MessagesRoundDecision::ContinueGateway => {}
                 MessagesRoundDecision::ReturnClient | MessagesRoundDecision::Finish => {
-                    if let Err(error) = complete_round(&mut ctx, &acc, decision).await {
+                    if let Err(error) = complete_round(&mut ctx, &mut acc, decision).await {
                         execution.failed(&error);
                         execution.delivered();
                         yield executor_error_sse(&error);
@@ -241,7 +265,7 @@ fn messages_stream_body(
                 }
             }
             // The round runs its calls: show them before they execute.
-            for (out, text) in acc.release_held(true) {
+            for (out, text) in acc.release_held(true, true) {
                 clock.client_event(text);
                 yield out;
             }
@@ -264,59 +288,6 @@ fn messages_stream_body(
         execution.delivered();
         yield error_sse(&format!("gateway tool loop exceeded {MAX_GATEWAY_TOOL_ROUNDS} rounds"));
     })
-}
-
-/// Publish only after ingestion has established a completed round, before the
-/// runner releases the public terminal. Assembly remains owned by ingestion.
-async fn complete_round(
-    ctx: &mut MessagesRequestContext,
-    acc: &MessagesStreamAccumulator,
-    decision: MessagesRoundDecision,
-) -> ExecutorResult<()> {
-    if ctx.thread_message_id().is_some() {
-        if !acc.has_completed_round() {
-            return Err(ExecutorError::StreamError(
-                "upstream Messages stream ended before message_stop".to_owned(),
-            ));
-        }
-        let content = acc.terminal_content();
-        let stop_reason = decision
-            .visible_stop_reason(acc.stop_reason())
-            .filter(|_| !acc.fallback);
-        let has_tool_call = acc.blocks.values().any(|block| block.block["type"] == "tool_use");
-        let retention = ThreadRetention::for_response(stop_reason, has_tool_call);
-        ctx.complete_thread(&content, retention).await?;
-    }
-    Ok(())
-}
-
-/// Execute a completed round's gateway calls and append the round for the next
-/// inference; returns the result blocks the client is shown.
-async fn execute_round(
-    acc: &mut MessagesStreamAccumulator,
-    ctx: &mut MessagesRequestContext,
-    registry: &ToolRegistry,
-    exec_ctx: &ExecutionContext,
-    view: ServerToolView<'_>,
-) -> ExecutorResult<Vec<Frame>> {
-    // Reconstruct the FULL assistant turn (thinking/text/signature + gateway
-    // tool_use, in order) for the next round's history — not just the gateway
-    // tool_use (F3, streaming half). The gateway calls are derived from the
-    // same buffered blocks for dispatch.
-    let (assistant_content, calls) = acc.take_round();
-    let executed = execute_gateway_calls(
-        calls,
-        ctx,
-        registry,
-        &acc.gateway_map,
-        view,
-        &exec_ctx.gateway_scheduler_policy,
-        &exec_ctx.metrics,
-    )
-    .await;
-    let (results, tool_results) = acc.record_executed(executed);
-    ctx.append_round(&assistant_content, tool_results)?;
-    Ok(results)
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -373,12 +344,20 @@ struct MessagesStreamAccumulator {
     native: NativeServerTools,
     /// Events held since this round's first native call, in arrival order.
     held: Vec<Value>,
+    /// Results of prior mixed-round MCP calls, shown after `message_start`.
+    pending_mcp_results: Vec<GatewayToolResult>,
 }
 
 impl MessagesStreamAccumulator {
-    fn for_request(ctx: &MessagesRequestContext, registry: &ToolRegistry, exec_ctx: &ExecutionContext) -> Self {
+    /// Initialize request-scoped ownership and projection state.
+    fn for_request(
+        ctx: &MessagesRequestContext,
+        gateway_map: tool_seam::GatewayToolMap,
+        resumed: Vec<GatewayToolResult>,
+    ) -> Self {
         Self {
-            gateway_map: request_gateway_map(&exec_ctx.messages_gateway_tools, registry),
+            gateway_map,
+            pending_mcp_results: resumed,
             native: ctx.native_server_tools(),
             thread_message_id: ctx.thread_message_id().map(str::to_owned),
             ..Self::default()
@@ -397,54 +376,6 @@ impl MessagesStreamAccumulator {
         // F6: clear the previous round's terminal so a clean-EOF round can't
         // re-emit a stale stop_reason.
         self.final_message_delta = None;
-    }
-
-    /// Retain only the terminal round's visible blocks. Executed rounds are
-    /// already owned by the context's model-facing conversation.
-    fn terminal_content(&self) -> Value {
-        Value::Array(
-            self.blocks
-                .values()
-                .filter(|block| !block.is_gateway_tool)
-                .map(BufferedBlock::completed_block)
-                .collect(),
-        )
-    }
-
-    /// Consume this round's buffered blocks, returning (full assistant content in
-    /// order, gateway calls to dispatch). The assistant content preserves
-    /// `thinking`/`text`/`signature` and the gateway `tool_use` blocks (F3); the
-    /// calls are the gateway `tool_use` blocks reconstructed for dispatch.
-    fn take_round(&mut self) -> (Vec<Value>, Vec<MessagesToolCall>) {
-        // This round's terminal is suppressed; its usage joins the final one's.
-        self.usage.commit();
-        let blocks = std::mem::take(&mut self.blocks);
-        let mut assistant_content = Vec::with_capacity(blocks.len());
-        let mut calls = Vec::new();
-        for buffered in blocks.into_values() {
-            let (block, call) = buffered.into_parts();
-            assistant_content.push(block);
-            if let Some(call) = call {
-                calls.push(call);
-            }
-        }
-        (assistant_content, calls)
-    }
-
-    /// Only ingestion's completed round may ask the shared execution policy.
-    fn round_decision(&self, ctx: &MessagesRequestContext) -> MessagesRoundDecision {
-        if !self.has_completed_round() {
-            return MessagesRoundDecision::Finish;
-        }
-        decide_round(
-            ctx,
-            self.stop_reason(),
-            self.has_client_tool_use,
-            self.blocks
-                .values()
-                .filter(|block| block.is_gateway_tool)
-                .filter_map(|block| block.block["name"].as_str()),
-        )
     }
 
     fn has_error(&self) -> bool {
@@ -497,6 +428,7 @@ mod tests {
     use super::*;
     use crate::executor::gateway::GatewaySchedulerPolicy;
     use crate::executor::messages_server_tools::sealing::process_result_key;
+    use crate::executor::messages_tools::execute_gateway_calls;
     use crate::executor::telemetry::metrics::ExecutorMetrics;
 
     fn line(v: &Value) -> String {

@@ -10,11 +10,10 @@ use tracing::debug;
 use agentic_core::executor::telemetry::Api;
 use agentic_core::executor::{
     ExecutorError, MessagesRequestContext, MessagesUpstream, ParsedMessagesRequest, declares_native_web_fetch,
-    may_carry_gateway_server_tool_blocks, normalize_native_server_tools_for_upstream, replay_server_tool_blocks,
-    run_messages_loop, run_messages_stream,
+    may_carry_gateway_server_tool_blocks, normalize_native_server_tools_for_upstream, prepare_messages_count_tokens,
+    replay_server_tool_blocks, run_messages_loop, run_messages_stream,
 };
 use agentic_core::proxy::{ProxyAuth, ProxyRequest, error_response_for_auth, upstream_request_headers};
-use agentic_core::tool::{ToolRegistry, registry_tools};
 use agentic_core::types::messages::thread::MESSAGE_THREADS_BETA;
 
 use super::super::common::{
@@ -64,17 +63,16 @@ async fn execute_messages(
     state: &AppState,
     headers: &HeaderMap,
     query: Option<&str>,
-    ctx: MessagesRequestContext,
+    mut ctx: MessagesRequestContext,
 ) -> Response {
     // Build the request-scoped registry from the declared tools (M6). Gateway
     // ownership (incl. configured aliases like Claude Code's `WebSearch`) is
     // resolved against the operator-configured map.
     let gateway_map = &state.exec_ctx.messages_gateway_tools;
-    let mut tools = registry_tools(ctx.tools(), gateway_map);
     let mut executors = state.exec_ctx.gateway_executors.clone();
-    let registry = match ToolRegistry::build_with_handlers(&mut tools, &mut executors).await {
+    let registry = match ctx.prepare_registry(gateway_map, &mut executors).await {
         Ok(r) => r,
-        Err(e) => return messages_error_response(ExecutorError::from(e)),
+        Err(e) => return messages_error_response(e),
     };
 
     let upstream = MessagesUpstream::new(
@@ -288,6 +286,12 @@ pub async fn count_tokens(State(state): State<AppState>, request: Request) -> Re
             ReplayedBody::Unchanged => {}
             ReplayedBody::Refused(response) => return response,
         }
+    }
+    let mut executors = state.exec_ctx.gateway_executors.clone();
+    match prepare_messages_count_tokens(&bytes, &state.exec_ctx.messages_gateway_tools, &mut executors).await {
+        Ok(Some(body)) => bytes = Bytes::from(body),
+        Ok(None) => {}
+        Err(error) => return messages_error_response(error),
     }
     proxy_messages(&state, parts, bytes, "/v1/messages/count_tokens").await
 }

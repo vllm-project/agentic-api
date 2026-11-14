@@ -3,6 +3,7 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::fmt;
 #[cfg(feature = "openapi")]
 use utoipa::{
     PartialSchema, ToSchema,
@@ -137,13 +138,25 @@ pub enum CacheControlKind {
     Other(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct McpServer {
     #[serde(flatten)]
     pub configuration: McpServerFingerprint,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authorization_token: Option<String>,
+}
+
+impl fmt::Debug for McpServer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("McpServer")
+            .field("name", &self.configuration.name)
+            .field(
+                "authorization_token",
+                &self.authorization_token.as_ref().map(|_| "[redacted]"),
+            )
+            .finish_non_exhaustive()
+    }
 }
 
 /// Includes all configuration fields, but cannot contain an authorization token.

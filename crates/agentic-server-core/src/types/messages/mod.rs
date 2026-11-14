@@ -7,6 +7,7 @@
 //! These Anthropic wire types are shared by the handler, loop, and tool seam.
 
 pub mod content;
+pub mod mcp;
 pub mod parameters;
 pub mod request;
 pub mod server_tools;
