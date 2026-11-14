@@ -515,7 +515,9 @@ pub struct ToolRuntimeConfig {
     /// Settings of the built-in `web_fetch` executor; enabled by default.
     pub web_fetch: WebFetchConfig,
     pub mcp_servers: HashMap<String, McpServerEntry>,
-    pub mcp_allowed_hosts: Vec<String>,
+    /// Hosts a request-declared MCP `server_url` may name besides loopback,
+    /// parsed once with [`crate::tool::mcp::pool::parse_allowed_host`].
+    pub mcp_allowed_hosts: Vec<url::Host>,
     pub messages_gateway_tool_aliases: Option<String>,
     /// Operator-only limits for the opt-in code interpreter. A default config
     /// is disabled and does not make the tool available.

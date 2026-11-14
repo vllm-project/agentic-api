@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::net::Ipv6Addr;
 use std::sync::Arc;
 
 use reqwest::Url;
@@ -86,11 +87,9 @@ pub struct McpClientPool {
 }
 
 impl McpClientPool {
-    pub async fn from_params(params: &[McpToolParam]) -> Self {
-        Self::from_params_with_allowed_hosts(params, &allowed_hosts_from_env()).await
-    }
-
-    pub async fn from_params_with_allowed_hosts(params: &[McpToolParam], allowed_hosts: &[String]) -> Self {
+    /// Connects the request-declared servers whose `server_url` is loopback or
+    /// names one of `allowed_hosts`, the list parsed once at startup.
+    pub async fn from_params_with_allowed_hosts(params: &[McpToolParam], allowed_hosts: &[url::Host]) -> Self {
         let servers: HashMap<String, McpServerEntry> = params
             .iter()
             .filter_map(|param| server_entry_from_param(param, allowed_hosts))
@@ -167,7 +166,7 @@ impl McpClientPool {
 
 pub(crate) fn server_entry_from_param(
     param: &McpToolParam,
-    allowed_hosts: &[String],
+    allowed_hosts: &[url::Host],
 ) -> Option<(String, McpServerEntry)> {
     let Some(server_label) = clean_string(Some(&param.server_label)) else {
         tracing::debug!("MCP tool param has no server_label");
@@ -208,7 +207,7 @@ fn request_headers(param: &McpToolParam) -> Option<HashMap<String, String>> {
     (!headers.is_empty()).then_some(headers)
 }
 
-fn validate_request_server_url_with_allowed_hosts(value: &str, allowed_hosts: &[String]) -> Result<String, String> {
+fn validate_request_server_url_with_allowed_hosts(value: &str, allowed_hosts: &[url::Host]) -> Result<String, String> {
     let url = Url::parse(value).map_err(|error| format!("invalid URL: {error}"))?;
     match url.scheme() {
         "http" | "https" => {}
@@ -229,31 +228,91 @@ fn validate_request_server_url_with_allowed_hosts(value: &str, allowed_hosts: &[
     ))
 }
 
-fn is_allowed_request_host(host: &url::Host<&str>, allowed_hosts: &[String]) -> bool {
-    match host {
-        url::Host::Domain(host) => host.eq_ignore_ascii_case("localhost") || host_allowed(host, allowed_hosts),
-        url::Host::Ipv4(address) => address.is_loopback() || host_allowed(&address.to_string(), allowed_hosts),
-        url::Host::Ipv6(address) => address.is_loopback() || host_allowed(&address.to_string(), allowed_hosts),
+fn is_allowed_request_host(host: &url::Host<&str>, allowed_hosts: &[url::Host]) -> bool {
+    let loopback = match host {
+        url::Host::Domain(host) => host.eq_ignore_ascii_case("localhost"),
+        url::Host::Ipv4(address) => address.is_loopback(),
+        url::Host::Ipv6(address) => address.is_loopback(),
+    };
+    loopback || allowed_hosts.contains(&host.to_owned())
+}
+
+/// Parses one MCP allowlist entry into the host form `Url::parse` gives a
+/// `server_url`, so the request check only compares hosts: names are
+/// lowercased and IDNA-encoded, and `[fd00::1]`, `fd00::1` and
+/// `FD00:0:0::1` are the same address.
+///
+/// An entry is a host only. Anything a URL host cannot hold, such as a port
+/// (`mcp.example.com:443`) or a scheme (`https://mcp.example.com`), is an error
+/// so a misconfigured entry is reported at startup instead of never matching.
+///
+/// # Errors
+///
+/// Returns a message naming the entry when it is blank or not a valid host.
+pub fn parse_allowed_host(value: &str) -> Result<url::Host, String> {
+    let entry = value.trim();
+    if entry.is_empty() {
+        return Err(format!("MCP allowed host {value:?} is empty"));
     }
+    if let Ok(address) = entry.parse::<Ipv6Addr>() {
+        return Ok(url::Host::Ipv6(address));
+    }
+    url::Host::parse(entry).map_err(|error| {
+        format!("MCP allowed host {value:?} is not a host name or IP address ({error}); list hosts without a scheme, port or path")
+    })
 }
 
-fn host_allowed(host: &str, allowed_hosts: &[String]) -> bool {
-    allowed_hosts
-        .iter()
-        .any(|allowed_host| allowed_host.eq_ignore_ascii_case(host))
+/// Parses a comma-separated allowlist, as `AGENTIC_MCP_ALLOWED_HOSTS` holds it.
+/// Empty items between commas are ignored.
+///
+/// # Errors
+///
+/// Returns the [`parse_allowed_host`] error of the first invalid entry.
+pub fn parse_allowed_hosts(value: &str) -> Result<Vec<url::Host>, String> {
+    value
+        .split(',')
+        .filter(|entry| !entry.trim().is_empty())
+        .map(parse_allowed_host)
+        .collect()
 }
 
-pub(crate) fn allowed_hosts_from_env() -> Vec<String> {
+/// The allowlist from `AGENTIC_MCP_ALLOWED_HOSTS`, for a
+/// [`crate::config::ToolRuntimeConfig`] that carries none.
+///
+/// # Errors
+///
+/// Returns the [`parse_allowed_host`] error of the first invalid entry.
+pub(crate) fn allowed_hosts_from_env() -> Result<Vec<url::Host>, String> {
     parse_allowed_hosts(&std::env::var(MCP_ALLOWED_HOSTS_ENV).unwrap_or_default())
 }
 
-fn parse_allowed_hosts(value: &str) -> Vec<String> {
-    value
-        .split(',')
-        .map(str::trim)
-        .filter(|host| !host.is_empty())
-        .map(str::to_owned)
+/// `deserialize_with` for a configuration list of allowed hosts: each entry is
+/// parsed with [`parse_allowed_host`], so an invalid entry fails the load.
+///
+/// # Errors
+///
+/// Returns the [`parse_allowed_host`] error of the first invalid entry.
+pub fn deserialize_allowed_hosts<'de, D>(deserializer: D) -> Result<Vec<url::Host>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Vec::<String>::deserialize(deserializer)?
+        .iter()
+        .map(|entry| parse_allowed_host(entry).map_err(serde::de::Error::custom))
         .collect()
+}
+
+/// `serialize_with` pair of [`deserialize_allowed_hosts`]: writes each host in
+/// the form [`parse_allowed_host`] reads back.
+///
+/// # Errors
+///
+/// Returns the serializer's error.
+pub fn serialize_allowed_hosts<S>(hosts: &[url::Host], serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.collect_seq(hosts.iter().map(ToString::to_string))
 }
 
 fn clean_string(value: Option<&str>) -> Option<String> {
@@ -266,7 +325,8 @@ fn clean_string(value: Option<&str>) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        McpServerEntry, parse_allowed_hosts, server_entry_from_param, validate_request_server_url_with_allowed_hosts,
+        McpServerEntry, deserialize_allowed_hosts, parse_allowed_host, parse_allowed_hosts, serialize_allowed_hosts,
+        server_entry_from_param, validate_request_server_url_with_allowed_hosts,
     };
     use crate::types::tools::McpToolParam;
 
@@ -346,16 +406,72 @@ mod tests {
         assert!(error.contains("not allowed"));
     }
 
+    fn hosts(entries: &[&str]) -> Vec<url::Host> {
+        entries.iter().map(|entry| parse_allowed_host(entry).unwrap()).collect()
+    }
+
     #[test]
     fn request_server_url_uses_supplied_allowlist() {
         assert!(
-            validate_request_server_url_with_allowed_hosts(
-                "https://mcp.example.com/mcp",
-                &["mcp.example.com".to_owned()]
-            )
-            .is_ok()
+            validate_request_server_url_with_allowed_hosts("https://mcp.example.com/mcp", &hosts(&["mcp.example.com"]))
+                .is_ok()
         );
         assert!(validate_request_server_url_with_allowed_hosts("https://mcp.example.com/mcp", &[]).is_err());
+    }
+
+    #[test]
+    fn request_server_url_matches_allowlisted_ipv6_in_any_spelling() {
+        for allowed in ["fd00::10", "[fd00::10]", "FD00:0:0:0:0:0:0:10", " [FD00::10] "] {
+            assert!(
+                validate_request_server_url_with_allowed_hosts("http://[fd00::10]:8000/mcp", &hosts(&[allowed]))
+                    .is_ok(),
+                "{allowed:?} must allow fd00::10"
+            );
+        }
+        assert!(
+            validate_request_server_url_with_allowed_hosts("http://[fd00::11]:8000/mcp", &hosts(&["[fd00::10]"]))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn request_server_url_matches_allowlisted_hosts_as_the_url_parser_normalizes_them() {
+        for (url, allowed) in [
+            ("https://MCP.Example.COM/mcp", "mcp.example.com"),
+            ("https://mcp.example.com/mcp", " MCP.example.com "),
+            ("https://xn--bcher-kva.example/mcp", "b\u{fc}cher.example"),
+            ("https://b\u{fc}cher.example/mcp", "b\u{fc}cher.example"),
+            ("http://10.0.0.5:8000/mcp", "10.0.0.5"),
+        ] {
+            assert!(
+                validate_request_server_url_with_allowed_hosts(url, &hosts(&[allowed])).is_ok(),
+                "{allowed:?} must allow {url}"
+            );
+        }
+        for (url, allowed) in [
+            ("https://other.example.com/mcp", "mcp.example.com"),
+            ("http://10.0.0.6:8000/mcp", "10.0.0.5"),
+        ] {
+            assert!(
+                validate_request_server_url_with_allowed_hosts(url, &hosts(&[allowed])).is_err(),
+                "{allowed:?} must not allow {url}"
+            );
+        }
+    }
+
+    #[test]
+    fn allowed_host_parser_rejects_entries_that_are_not_a_host() {
+        for entry in [
+            "",
+            "   ",
+            "mcp.example.com:443",
+            "https://mcp.example.com",
+            "mcp.example.com/mcp",
+            "mcp example.com",
+        ] {
+            let error = parse_allowed_host(entry).unwrap_err();
+            assert!(error.contains(&format!("{entry:?}")), "{error}");
+        }
     }
 
     #[test]
@@ -371,10 +487,48 @@ mod tests {
     }
 
     #[test]
-    fn allowed_host_parser_trims_and_discards_empty_entries() {
+    fn allowed_host_list_parser_trims_and_discards_empty_entries() {
         assert_eq!(
-            parse_allowed_hosts(" Example.COM, ,api.test "),
-            vec!["Example.COM", "api.test"]
+            parse_allowed_hosts(" Example.COM, ,api.test,[::2] ").unwrap(),
+            hosts(&["example.com", "api.test", "::2"])
         );
+    }
+
+    #[test]
+    fn allowed_host_list_parser_rejects_an_invalid_entry() {
+        let error = parse_allowed_hosts("mcp.example.com, mcp.example.com:443").unwrap_err();
+        assert!(error.contains("\" mcp.example.com:443\""), "{error}");
+    }
+
+    #[derive(Debug, serde::Deserialize, serde::Serialize)]
+    struct AllowedHosts {
+        #[serde(
+            deserialize_with = "deserialize_allowed_hosts",
+            serialize_with = "serialize_allowed_hosts"
+        )]
+        hosts: Vec<url::Host>,
+    }
+
+    #[test]
+    fn allowed_hosts_deserialize_as_hosts_and_serialize_back() {
+        let parsed: AllowedHosts =
+            serde_json::from_value(serde_json::json!({"hosts": [" Example.COM ", "FD00:0:0::1", "[::2]", "10.0.0.1"]}))
+                .unwrap();
+        assert_eq!(parsed.hosts, hosts(&["example.com", "fd00::1", "::2", "10.0.0.1"]));
+
+        let written = serde_json::to_value(&parsed).unwrap();
+        assert_eq!(
+            written,
+            serde_json::json!({"hosts": ["example.com", "[fd00::1]", "[::2]", "10.0.0.1"]})
+        );
+        let reread: AllowedHosts = serde_json::from_value(written).unwrap();
+        assert_eq!(reread.hosts, parsed.hosts);
+    }
+
+    #[test]
+    fn allowed_hosts_deserializer_rejects_an_invalid_entry() {
+        let error = serde_json::from_value::<AllowedHosts>(serde_json::json!({"hosts": ["https://mcp.example.com"]}))
+            .unwrap_err();
+        assert!(error.to_string().contains("\"https://mcp.example.com\""), "{error}");
     }
 }
