@@ -838,7 +838,7 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   keeps the history the turn continued, as OpenAI does, while its items are appended after whatever the
   conversation holds when it is stored. A session keeps the same
   checkpoint type in memory, with the history items, as the next turn's parent. A conversation is read in one
-  statement; a missing one is created for a stored turn and rejected for an unstored one. Client-supplied item IDs are checked and resolved against storage
+  statement; a missing one is rejected with a 404 for both stored and unstored turns. Client-supplied item IDs are checked and resolved against storage
   in bounded query batches. Rehydration retains internal
   `InputItem::McpListTools` records so `ToolRegistry` can suppress repeated MCP
   discovery lifecycle output. After stored history and the new request input are
@@ -980,7 +980,7 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   `storage::conversation`/`storage::response` directly. Today they only cover what the
   pipeline and retrieval need. Each handler has one `rehydrate` and one `persist`; `persist` takes the turn's
   output items, its snapshot, and the `ResponseMetadata` that `persist.rs` builds, including any multi-agent tree.
-  Lookups and retrieval are separate methods (`get`, `get_or_create`, `create`, `retrieve`, `validate_exists`);
+  Lookups and retrieval are separate methods (`get`, `create`, `retrieve`, `validate_exists`);
   **any new CRUD operation
   beyond persist/rehydrate belongs here**, added as a new method that delegates to the corresponding store.
 - **`error.rs`** — `ExecutorError`, with the mapping methods (`http_status()`,
@@ -1946,7 +1946,7 @@ for the five-minute lifetime, serialized-size budget, and crash recovery rules.
   but it is never serialized to vLLM.
 - **`conversation.rs`, `response.rs`** — `ConversationStore` and `ResponseStore`: one
   typed function per operation, taking and returning `InOutItem` and storage types rather
-  than rows (`create`, `get`, `get_or_create`, `rehydrate`, `persist`, and the item CRUD).
+  than rows (`create`, `get`, `rehydrate`, `persist`, and the item CRUD).
   `ResponseStore::get` decodes `ResponseData` at the store boundary; handlers and executor callers receive the
   typed value. Split commit reuses a checkpoint or loads only this parent row when its wire context omitted it.
   Conversation `rehydrate` is one query; response `rehydrate` reads the response row and then its

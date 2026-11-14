@@ -978,19 +978,3 @@ async fn test_tool_search_conversation_metadata_matches_snapshot_version() {
     assert_eq!(metadata.model, "latest-model");
     assert_eq!(metadata.tool_search_loaded_tools.as_deref().map(<[_]>::len), Some(1));
 }
-
-#[tokio::test]
-async fn test_conversation_get_or_create_same_id() {
-    let pool = setup_pool().await;
-    let store = ConversationStore::new(pool);
-
-    let conv_id = "test_conv_idempotent";
-
-    let first = store.get_or_create(conv_id).await.expect("first get_or_create failed");
-
-    let second = store.get_or_create(conv_id).await.expect("second get_or_create failed");
-
-    // Should return the same conversation
-    assert_eq!(first.conversation_id, second.conversation_id);
-    assert_eq!(first.created_at, second.created_at);
-}

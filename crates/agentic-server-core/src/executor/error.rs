@@ -277,7 +277,8 @@ impl ExecutorError {
             | Self::Storage(
                 StorageError::ItemCursorNotFound { .. }
                 | StorageError::ResponseNotFound { .. }
-                | StorageError::PreviousResponseNotFound { .. },
+                | StorageError::PreviousResponseNotFound { .. }
+                | StorageError::ConversationNotFound { .. },
             ) => "invalid_request_error",
             Self::Storage(e) if e.is_not_found() => "not_found",
             Self::Storage(e) if e.is_validation() => "invalid_request_error",
@@ -327,7 +328,9 @@ impl ExecutorError {
             Self::UnsupportedValue { param, .. } => param.as_deref(),
             Self::Storage(StorageError::ItemAlreadyInConversation) => Some("items"),
             Self::Storage(StorageError::ItemCursorNotFound { .. }) => Some("after"),
-            Self::ConversationLocked { .. } => Some("conversation"),
+            Self::ConversationLocked { .. } | Self::Storage(StorageError::ConversationNotFound { .. }) => {
+                Some("conversation")
+            }
             Self::Storage(StorageError::PreviousResponseNotFound { .. }) => Some("previous_response_id"),
             Self::Tool(ToolError::MissingOutput { .. } | ToolError::UnknownCallOutput { .. }) => Some("input"),
             Self::InvalidPromptCacheOptions(_) => Some("prompt_cache_options"),
@@ -347,7 +350,8 @@ impl ExecutorError {
                 error @ (StorageError::ItemAlreadyInConversation
                 | StorageError::ItemCursorNotFound { .. }
                 | StorageError::ResponseNotFound { .. }
-                | StorageError::PreviousResponseNotFound { .. }),
+                | StorageError::PreviousResponseNotFound { .. }
+                | StorageError::ConversationNotFound { .. }),
             ) => error.to_string(),
             Self::Storage(StorageError::Database(_)) => "Internal server error".to_owned(),
             Self::Tool(
