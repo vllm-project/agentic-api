@@ -7,7 +7,7 @@ use super::code_interpreter::CodeInterpreterHandler;
 use super::declaration::ToolDeclaration;
 use super::file_search::handler::{FileSearchExecutor, FileSearchHandler};
 use super::mcp::handler::McpServerToolSet;
-use super::mcp::pool::server_entry_from_param;
+use super::mcp::pool::{allowed_hosts_from_env, server_entry_from_param};
 use super::mcp::{McpClientPool, McpDiscoveredHandler, McpHandler};
 use super::normalize::code_interpreter_unavailable_error;
 use super::web_fetch::{WebFetchExecutor, WebFetchHandler};
@@ -62,7 +62,7 @@ pub struct GatewayExecutors {
     mcp_configs: HashMap<String, super::mcp::McpServerEntry>,
     mcp_clients: Arc<RwLock<HashMap<String, Arc<super::mcp::McpClient>>>>,
     mcp_discovered: Arc<RwLock<HashMap<String, Vec<McpDiscoveredHandler>>>>,
-    mcp_allowed_hosts: Vec<String>,
+    mcp_allowed_hosts: Vec<url::Host>,
     web_search: Option<Arc<WebSearchExecutor>>,
     file_search: Option<Arc<FileSearchExecutor>>,
     pub(crate) include_file_search_results: bool,
@@ -73,6 +73,11 @@ pub struct GatewayExecutors {
 }
 
 impl GatewayExecutors {
+    /// Default executors for embedders without a [`ToolRuntimeConfig`].
+    ///
+    /// Request-declared MCP servers are limited to loopback hosts here; the
+    /// `AGENTIC_MCP_ALLOWED_HOSTS` allowlist is parsed once with the rest of
+    /// the configuration and applied through [`Self::from_config`].
     #[must_use]
     pub fn from_env(client: Arc<reqwest::Client>) -> Self {
         Self {
@@ -82,7 +87,7 @@ impl GatewayExecutors {
             mcp_configs: HashMap::new(),
             mcp_clients: Arc::new(RwLock::new(HashMap::new())),
             mcp_discovered: Arc::new(RwLock::new(HashMap::new())),
-            mcp_allowed_hosts: super::mcp::pool::allowed_hosts_from_env(),
+            mcp_allowed_hosts: Vec::new(),
             web_search: Some(Arc::new(WebSearchHandler::from_env(client))),
             web_fetch: Some(Arc::new(WebFetchHandler::from_config(
                 &WebFetchConfig::default(),
@@ -99,7 +104,9 @@ impl GatewayExecutors {
     ///
     /// # Errors
     ///
-    /// Invalid policy configuration is returned as an error. Connection and
+    /// Invalid policy configuration is returned as an error, including an
+    /// invalid `AGENTIC_MCP_ALLOWED_HOSTS` entry when `config` carries no MCP
+    /// allowlist and the environment is read instead. Connection and
     /// discovery happen when a configured server is requested.
     pub fn from_config(client: Arc<reqwest::Client>, config: &ToolRuntimeConfig) -> Result<Self, ToolError> {
         config
@@ -116,6 +123,11 @@ impl GatewayExecutors {
             .map_err(|error| ToolError::Config(error.to_string()))?;
         #[cfg(not(feature = "embedded-code-interpreter"))]
         let code_interpreter = None;
+        let mcp_allowed_hosts = if config.mcp_allowed_hosts.is_empty() {
+            allowed_hosts_from_env().map_err(ToolError::Config)?
+        } else {
+            config.mcp_allowed_hosts.clone()
+        };
         let executors = Self {
             file_search: None,
             include_file_search_results: false,
@@ -123,11 +135,7 @@ impl GatewayExecutors {
             mcp_configs: config.mcp_servers.clone(),
             mcp_clients: Arc::new(RwLock::new(HashMap::new())),
             mcp_discovered: Arc::new(RwLock::new(HashMap::new())),
-            mcp_allowed_hosts: if config.mcp_allowed_hosts.is_empty() {
-                super::mcp::pool::allowed_hosts_from_env()
-            } else {
-                config.mcp_allowed_hosts.clone()
-            },
+            mcp_allowed_hosts,
             web_search: Some(Arc::new(WebSearchHandler::from_config(
                 client,
                 &config.web_search,
