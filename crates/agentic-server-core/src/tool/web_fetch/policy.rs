@@ -73,8 +73,11 @@ pub(crate) fn validate_url(raw: &str) -> Result<Url, UrlRejection> {
 /// (100.64/10), link-local (which covers the cloud metadata address
 /// 169.254.169.254), multicast, broadcast, benchmarking, documentation, IETF
 /// protocol assignments (192.0.0/24), and reserved ranges; for IPv6 also
-/// unique-local, site-local, local-use NAT64, and every transition form that
-/// embeds a refused IPv4 address.
+/// unique-local, site-local, local-use NAT64, the discard-only and dummy
+/// prefixes (`100::/63`), `SRv6` SIDs (`5f00::/16`), both documentation
+/// prefixes (`2001:db8::/32` and `3fff::/20`), the non-globally-reachable
+/// part of the IETF protocol assignments block (`2001::/23`), and every
+/// transition form that embeds a refused IPv4 address.
 #[must_use]
 pub(crate) fn is_public_ip(ip: IpAddr) -> bool {
     match ip {
@@ -122,7 +125,34 @@ fn is_public_v6(ip: Ipv6Addr) -> bool {
         || (first & 0xfe00) == 0xfc00
         || (first & 0xffc0) == 0xfe80
         || (first & 0xffc0) == 0xfec0
-        || (first == 0x2001 && segments[1] == 0x0db8))
+        || (first == 0x2001 && segments[1] == 0x0db8)
+        || (segments[..3] == [0x0100, 0, 0] && segments[3] <= 1)
+        || first == 0x5f00
+        || (first == 0x3fff && segments[1] <= 0x0fff)
+        || is_non_global_ietf_assignment_v6(ip))
+}
+
+/// Whether an address in the IETF protocol assignments block (`2001::/23`) is not globally
+/// reachable according to the IANA IPv6 special-purpose address registry. The block holds
+/// Teredo (`2001::/32`), benchmarking (`2001:2::/48`) and the deprecated ORCHID prefix
+/// (`2001:10::/28`), which are refused; the small set of assignments the registry marks
+/// globally reachable stays allowed.
+fn is_non_global_ietf_assignment_v6(ip: Ipv6Addr) -> bool {
+    let segments = ip.segments();
+    if segments[0] != 0x2001 || segments[1] >= 0x0200 {
+        return false;
+    }
+    let second = segments[1];
+    let globally_reachable = match second {
+        // PCP, TURN and DNS-SD anycast are exactly the three addresses 2001:1::1..=3.
+        0x0001 => segments[2..7].iter().all(|&segment| segment == 0) && matches!(segments[7], 1..=3),
+        // AMT (`2001:3::/32`); ORCHIDv2 (`2001:20::/28`) and Drone DETs (`2001:30::/28`), together `2001:20::/27`.
+        0x0003 | 0x0020..=0x003f => true,
+        // AS112-v6 is only `2001:4:112::/48`.
+        0x0004 => segments[2] == 0x0112,
+        _ => false,
+    };
+    !globally_reachable
 }
 
 /// Resolve a URL host to the socket addresses the backend may connect to.
