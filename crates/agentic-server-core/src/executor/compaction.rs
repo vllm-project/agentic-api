@@ -268,6 +268,7 @@ pub async fn compact_response(
         prompt_cache_key: request.prompt_cache_key,
         prompt_cache_retention: request.prompt_cache_retention,
         prompt_cache_options: request.prompt_cache_options,
+        cache_salt: request.cache_salt,
         ..RequestPayload::default()
     };
     let ctx = rehydrate_conversation(payload, exec_ctx).await?;
@@ -1045,6 +1046,33 @@ mod tests {
                 request["prompt_cache_options"],
                 serde_json::json!({"mode":"explicit","ttl":"30m"})
             );
+        }
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn cache_salt_survives_automatic_and_snapshot_compaction() {
+        use crate::executor::multi_agent::CompactionPlan;
+        use crate::types::agent::AgentIdentity;
+        let (exec, requests, server) = mock_execution_context(ResponseStore::disabled()).await;
+        let mut ctx = context_with_threshold(ResponsesInput::from(vec![user_message(&"context ".repeat(100))]), 1);
+        ctx.enriched_request.cache_salt = Some("tenant-a".to_owned());
+        assert!(maybe_compact_context(&mut ctx, &exec, None).await.unwrap().is_some());
+        assert_eq!(ctx.enriched_request.cache_salt.as_deref(), Some("tenant-a"));
+        let plan = CompactionPlan::prepare_explicit(
+            &AgentIdentity::root(),
+            0,
+            &[user_message("remember context")],
+            &ctx.enriched_request,
+        )
+        .unwrap()
+        .unwrap();
+        ctx.enriched_request.cache_salt = Some("tenant-b".to_owned());
+        plan.execute(&exec, None).await.unwrap();
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 2);
+        for request in requests.iter() {
+            assert_eq!(request["cache_salt"], "tenant-a");
         }
         server.abort();
     }

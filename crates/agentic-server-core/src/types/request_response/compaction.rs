@@ -37,6 +37,8 @@ pub struct CompactRequest {
     pub prompt_cache_options: Option<PromptCacheOptions>,
     #[serde(default)]
     pub prompt_cache_key: Option<String>,
+    #[serde(default)]
+    pub cache_salt: Option<String>,
     /// Compatibility fields sent by current SDK and Codex clients.
     #[serde(flatten)]
     pub compatibility: HashMap<String, Value>,
@@ -88,7 +90,7 @@ impl<T: ?Sized, C> RequestPayload<T, C> {
 
 impl RequestPayload {
     /// The settings a compaction summary request keeps from this request: the model, instructions, prompt-cache
-    /// settings and service tier. It offers no tools and stores nothing.
+    /// settings, `cache_salt` and service tier. It offers no tools and stores nothing.
     #[must_use]
     pub fn summary_settings(&self) -> Self {
         Self {
@@ -98,6 +100,7 @@ impl RequestPayload {
             prompt_cache_retention: self.prompt_cache_retention,
             prompt_cache_options: self.prompt_cache_options,
             service_tier: self.service_tier.clone(),
+            cache_salt: self.cache_salt.clone(),
             ..Self::default()
         }
     }
