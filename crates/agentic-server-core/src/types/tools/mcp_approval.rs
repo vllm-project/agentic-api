@@ -26,27 +26,37 @@ pub enum McpApprovalMode {
     Never,
 }
 
-/// The object form of [`McpApprovalPolicy`].
+/// The object form of [`McpApprovalPolicy`]. It serializes as the Responses API echoes it: both sides, `null` when
+/// absent.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct McpApprovalFilter {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub always: Option<McpApprovalToolFilter>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub never: Option<McpApprovalToolFilter>,
 }
 
-/// The tools one side of an [`McpApprovalFilter`] matches.
+/// The tools one side of an [`McpApprovalFilter`] matches. It serializes as the Responses API echoes it: `read_only`
+/// is `null` and `tool_names` is `[]` when the declaration leaves them out.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct McpApprovalToolFilter {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, serialize_with = "serialize_tool_names")]
     pub tool_names: Option<Vec<String>>,
     /// Matching by the MCP `readOnlyHint` annotation; parsed so validation can reject it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub read_only: Option<bool>,
+}
+
+#[allow(clippy::ref_option)] // serde's serialize_with passes a reference to the field.
+fn serialize_tool_names<S>(names: &Option<Vec<String>>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    names.as_deref().unwrap_or_default().serialize(serializer)
 }
 
 /// A policy shape the gateway does not support.
@@ -126,15 +136,35 @@ mod tests {
     }
 
     #[test]
-    fn string_and_filter_forms_round_trip_unchanged() {
-        for value in [
-            json!("never"),
-            json!("always"),
-            json!({"never": {"tool_names": ["ask_question", "read_wiki_structure"]}}),
-            json!({"always": {"tool_names": ["delete"]}, "never": {"tool_names": ["read"]}}),
-            json!({}),
-        ] {
+    fn string_forms_round_trip_and_filters_serialize_as_the_responses_api_echoes_them() {
+        for value in [json!("never"), json!("always")] {
             assert_eq!(serde_json::to_value(policy(value.clone())).unwrap(), value);
+        }
+        // As in tests/cassettes/mcp/mcp-approval-openai-gpt-5.6-sol-nonstreaming.yaml.
+        for (value, echoed) in [
+            (
+                json!({"never": {"tool_names": ["ask_question", "read_wiki_structure"]}}),
+                json!({"always": null,
+                       "never": {"read_only": null, "tool_names": ["ask_question", "read_wiki_structure"]}}),
+            ),
+            (
+                json!({"always": {"tool_names": ["delete"]}, "never": {"tool_names": ["read"]}}),
+                json!({"always": {"read_only": null, "tool_names": ["delete"]},
+                       "never": {"read_only": null, "tool_names": ["read"]}}),
+            ),
+            (
+                json!({"never": {"read_only": true}}),
+                json!({"always": null, "never": {"read_only": true, "tool_names": []}}),
+            ),
+            (json!({}), json!({"always": null, "never": null})),
+        ] {
+            let echo = serde_json::to_value(policy(value.clone())).unwrap();
+            assert_eq!(echo, echoed, "{value}");
+            assert_eq!(
+                serde_json::to_value(policy(echo)).unwrap(),
+                echoed,
+                "{value}: the echo parses back"
+            );
         }
         assert_eq!(policy(json!("never")), McpApprovalPolicy::Mode(McpApprovalMode::Never));
         assert_eq!(

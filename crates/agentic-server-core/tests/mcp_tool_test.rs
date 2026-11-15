@@ -646,13 +646,14 @@ fn forecast_request_with_approval(stream: bool, server_url: &str, policy: &Value
     .expect("MCP request with an approval filter")
 }
 
-/// A `require_approval` filter that lets every exposed tool run without approval executes the call and keeps the
-/// filter in the stored response; one that gates an exposed tool is a 400 before any inference request (in a
-/// stream, its only event).
+/// A `require_approval` filter that lets every exposed tool run without approval executes the call and echoes the
+/// filter, in the response and the stored one, as `OpenAI` does; one that gates an exposed tool is a 400 before any
+/// inference request (in a stream, its only event).
 #[tokio::test]
 async fn mcp_approval_filters_run_ungated_tools_and_reject_gated_ones() {
     let mcp_url = spawn_forecast_mcp().await;
     let ungated = json!({"never": {"tool_names": ["forecast"]}});
+    let echoed = json!({"always": null, "never": {"read_only": null, "tool_names": ["forecast"]}});
     for stream in [false, true] {
         let fixture = support::TestFixture::new_with_responses(mcp_inference_responses(
             stream,
@@ -671,7 +672,7 @@ async fn mcp_approval_filters_run_ungated_tools_and_reject_gated_ones() {
         assert_eq!(call["name"], "forecast");
         assert_eq!(call["status"], "completed");
         assert_eq!(call["output"], "forecast result");
-        assert_eq!(response["tools"][0]["require_approval"], ungated);
+        assert_eq!(response["tools"][0]["require_approval"], echoed);
         let stored = fixture
             .exec_ctx
             .resp_handler
@@ -680,7 +681,7 @@ async fn mcp_approval_filters_run_ungated_tools_and_reject_gated_ones() {
             .expect("stored response");
         assert_eq!(
             serde_json::to_value(&stored).unwrap()["tools"][0]["require_approval"],
-            ungated
+            echoed
         );
     }
 
@@ -720,6 +721,147 @@ async fn mcp_approval_filters_run_ungated_tools_and_reject_gated_ones() {
             }
             assert!(fixture.request_bodies().await.is_empty(), "no inference for {policy}");
         }
+    }
+}
+
+const APPROVAL_OPENAI: &str = "mcp-approval-openai-gpt-5.6-sol-nonstreaming.yaml";
+const APPROVAL_GATEWAY: &str = "mcp-approval-gateway-gpt-5.6-sol-nonstreaming.yaml";
+
+/// The `require_approval` recordings (`MCP_RECORD_CASE=approval`): one non-streaming turn per form against the
+/// Microsoft Learn MCP server, the same declaration and input on both providers.
+fn approval_recordings() -> (support::Cassette, support::Cassette) {
+    let openai = load_mcp_cassette(APPROVAL_OPENAI);
+    let gateway = load_mcp_cassette(APPROVAL_GATEWAY);
+    assert_eq!(openai.turns.len(), 8);
+    assert_eq!(gateway.turns.len(), 8);
+    for (openai, gateway) in openai.turns.iter().zip(&gateway.turns) {
+        assert_eq!(openai.filename, gateway.filename);
+        assert_eq!(
+            openai.request.body.tools, gateway.request.body.tools,
+            "{}",
+            openai.filename
+        );
+        assert_eq!(
+            openai.request.body.input, gateway.request.body.input,
+            "{}",
+            openai.filename
+        );
+    }
+    (openai, gateway)
+}
+
+fn recorded_body(turn: &support::Turn) -> &Value {
+    turn.response.body.as_ref().expect("non-streaming response body")
+}
+
+fn recorded_items<'a>(turn: &'a support::Turn, kind: &str) -> Vec<&'a Value> {
+    recorded_body(turn)["output"]
+        .as_array()
+        .expect("output array")
+        .iter()
+        .filter(|item| item["type"] == kind)
+        .collect()
+}
+
+/// `OpenAI` answers each form with what `McpApprovalPolicy::requires_approval` decides for the tool the model
+/// called: an `mcp_approval_request` when it needs approval, a completed `mcp_call` when not. A tool that
+/// `never.tool_names` leaves out needs approval (t4, t6), and one under both sides does too (t8). t7's `read_only`
+/// filter is the form the policy does not decide (the gateway rejects it); `OpenAI` ran the read-only tool.
+#[test]
+fn openai_approval_recordings_follow_the_policy_default() {
+    let (openai, _) = approval_recordings();
+    for turn in &openai.turns {
+        let name = &turn.filename;
+        assert_eq!(turn.response.status_code, Some(200), "{name}");
+        assert_eq!(recorded_body(turn)["status"], "completed", "{name}");
+        let requests = recorded_items(turn, "mcp_approval_request");
+        let calls = recorded_items(turn, "mcp_call");
+        let (item, gated) = match (requests.as_slice(), calls.as_slice()) {
+            ([request], []) => (*request, true),
+            ([], [call]) => (*call, false),
+            _ => panic!("{name}: expected one mcp_approval_request or one mcp_call"),
+        };
+        if !gated {
+            assert_eq!(item["status"], "completed", "{name}");
+        }
+        if name == "t7" {
+            assert!(!gated, "{name}: never.read_only runs the read-only tool");
+            continue;
+        }
+        let policy: McpApprovalPolicy =
+            serde_json::from_value(turn.request.body.tools[0]["require_approval"].clone()).expect("policy");
+        let tool = item["name"].as_str().expect("tool name");
+        assert_eq!(policy.requires_approval(tool), gated, "{name}: {tool}");
+    }
+}
+
+/// Both providers echo the declared policy the same way: string forms unchanged, a filter with both sides (`null`
+/// when absent) and each side's `read_only` (`null`) and `tool_names` (`[]` when absent).
+#[test]
+fn approval_policy_echo_matches_openai() {
+    let (openai, gateway) = approval_recordings();
+    for (openai, gateway) in openai.turns.iter().zip(&gateway.turns) {
+        let name = &openai.filename;
+        let echoed = &recorded_body(openai)["tools"][0]["require_approval"];
+        let policy: McpApprovalPolicy =
+            serde_json::from_value(openai.request.body.tools[0]["require_approval"].clone()).expect("policy");
+        assert_eq!(&serde_json::to_value(&policy).unwrap(), echoed, "{name}");
+        if gateway.response.status_code == Some(200) {
+            assert_eq!(
+                &recorded_body(gateway)["tools"][0]["require_approval"],
+                echoed,
+                "{name}"
+            );
+        }
+    }
+}
+
+/// The gateway completes the forms that leave every callable tool ungated (t1, t3) with `OpenAI`'s listing and call,
+/// and answers the others with a 400 where `OpenAI` returned an `mcp_approval_request` (t2, t4, t6, t8) or ran a
+/// tool the filter leaves ungated (t5, t7): with no approval step yet, a request is refused when a tool it can call
+/// needs approval.
+#[test]
+fn gateway_approval_recordings_complete_ungated_forms_and_reject_the_rest() {
+    let (openai, gateway) = approval_recordings();
+    let gated = |tool: &str| format!("MCP server 'microsoft_learn' requires approval for tool '{tool}'");
+    let expected = [
+        ("t1", None),
+        ("t2", Some("MCP require_approval supports only 'never'".to_owned())),
+        ("t3", None),
+        ("t4", Some(gated("microsoft_docs_fetch"))),
+        ("t5", Some(gated("microsoft_code_sample_search"))),
+        ("t6", Some(gated("microsoft_docs_search"))),
+        ("t7", Some("read_only is not supported".to_owned())),
+        (
+            "t8",
+            Some("lists tool 'microsoft_docs_search' under both always and never".to_owned()),
+        ),
+    ];
+    for ((openai, gateway), (name, rejection)) in openai.turns.iter().zip(&gateway.turns).zip(expected) {
+        assert_eq!(gateway.filename, name);
+        let Some(message) = rejection else {
+            assert_eq!(gateway.response.status_code, Some(200), "{name}");
+            let openai_output = response_output(openai);
+            let gateway_output = response_output(gateway);
+            assert_list_tools_output_matches_openai(&openai_output, &gateway_output);
+            let (openai_calls, gateway_calls) = (mcp_calls(&openai_output), mcp_calls(&gateway_output));
+            assert_eq!((openai_calls.len(), gateway_calls.len()), (1, 1), "{name}");
+            assert_eq!(gateway_calls[0].name, openai_calls[0].name, "{name}");
+            assert_eq!(gateway_calls[0].status, openai_calls[0].status, "{name}");
+            assert_eq!(
+                normalized_json_string(&gateway_calls[0].arguments),
+                normalized_json_string(&openai_calls[0].arguments),
+                "{name}"
+            );
+            continue;
+        };
+        assert_eq!(gateway.response.status_code, Some(400), "{name}");
+        let error = &recorded_body(gateway)["error"];
+        assert_eq!(error["type"], "invalid_request_error", "{name}");
+        assert!(
+            error["message"].as_str().expect("error message").contains(&message),
+            "{name}: {error}"
+        );
     }
 }
 
