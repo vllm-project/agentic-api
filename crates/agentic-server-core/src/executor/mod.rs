@@ -31,7 +31,6 @@ mod pending_calls;
 mod pipeline;
 mod relay;
 mod response_budget;
-mod response_capabilities;
 mod upstream;
 
 pub use compaction::compact_response;

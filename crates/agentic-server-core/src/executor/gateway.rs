@@ -1739,7 +1739,7 @@ mod tests {
                 Some(serde_json::json!({"read_only": false})),
             )],
         );
-        let discovered_output = crate::tool::mcp::handler::list_tools_output_item(&list_tools);
+        let discovered_output = OutputItem::McpListTools(list_tools.clone());
         let public_output =
             super::public_output_items(&[discovered_output], &ToolRegistry::default(), &[]).expect("public output");
         let plans = super::mcp_list_tools_event_plans(&public_output, 0);

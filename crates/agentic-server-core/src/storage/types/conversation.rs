@@ -7,7 +7,7 @@ use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 
 /// Rehydrated conversation items together with the checkpoint a turn continues.
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ConversationSnapshot {
     /// Rehydrated input and output items in stored order.
     pub items: Vec<InOutItem>,

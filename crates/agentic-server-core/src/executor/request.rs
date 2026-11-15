@@ -20,6 +20,7 @@ use crate::storage::{
 use crate::tool::{GatewayExecutorRegistration, GatewayExecutors, file_search::FileSearchService};
 use crate::types::io::{InOutItem, ToolChoice};
 use crate::types::messages::GatewayToolMap;
+use crate::types::model_capabilities::ModelCapabilities;
 use crate::types::request_response::{RequestPayload, ResponsePayload};
 
 /// Env var configuring client-tool → gateway-executor aliases for `/v1/messages`
@@ -46,7 +47,7 @@ pub struct RequestContext {
     /// Resolved conversation ID. `None` when `store=false` or non-conversational.
     pub conversation_id: Option<String>,
     /// The turn this request continues (a stored response, a conversation's latest turn, or a session parent), as
-    /// rehydration read it.
+    /// rehydration read it: its metadata and stored history, which persistence extends.
     pub checkpoint: Option<ResponseCheckpoint>,
     /// Optional transient-session lease and canonical parent snapshot. Never serialized.
     pub continuation: Option<ResponseContinuation>,
@@ -123,6 +124,7 @@ pub struct ExecutionContext {
     /// Bounded-concurrency policy applied to gateway-owned calls in each round.
     pub(crate) gateway_scheduler_policy: GatewaySchedulerPolicy,
     pub responses_config: ResponsesConfig,
+    pub model_capabilities: ModelCapabilities,
     /// Execution, stage, token, and timing instruments. Defaults to the
     /// globally registered meter provider at construction time.
     pub metrics: ExecutorMetrics,
@@ -134,12 +136,6 @@ impl ExecutionContext {
     #[must_use]
     pub fn responses_url(&self) -> String {
         format!("{}/v1/responses", self.llm_base_url)
-    }
-
-    /// Returns the full URL for the `/v1/conversations` endpoint.
-    #[must_use]
-    pub fn conversations_url(&self) -> String {
-        format!("{}/v1/conversations", self.llm_base_url)
     }
 
     #[must_use]
@@ -163,6 +159,7 @@ impl ExecutionContext {
             streaming_timeout: streaming_timeout_from_env(),
             gateway_scheduler_policy: GatewaySchedulerPolicy::default(),
             responses_config: ResponsesConfig::default(),
+            model_capabilities: ModelCapabilities::default(),
             metrics: ExecutorMetrics::from_global(),
             storage_pool: None,
         }
@@ -179,6 +176,13 @@ impl ExecutionContext {
     #[must_use]
     pub fn with_responses_config(mut self, responses_config: ResponsesConfig) -> Self {
         self.responses_config = responses_config;
+        self
+    }
+
+    /// Use the same configured capabilities for request admission and catalog projection.
+    #[must_use]
+    pub fn with_model_capabilities(mut self, model_capabilities: ModelCapabilities) -> Self {
+        self.model_capabilities = model_capabilities;
         self
     }
 
@@ -289,7 +293,7 @@ impl ExecutionContext {
             tracing::warn!(%error, "file blob reconciliation will retry while the gateway runs");
         }
         Ok(Self {
-            file_search: Some(file_search),
+            file_search: None,
             conv_handler,
             resp_handler,
             client,
@@ -307,10 +311,12 @@ impl ExecutionContext {
             messages_threads,
             streaming_timeout: streaming_timeout_from_env(),
             gateway_scheduler_policy: GatewaySchedulerPolicy::new(cfg.tools.max_concurrent_gateway_calls),
-            responses_config: cfg.responses.clone(),
+            responses_config: cfg.responses,
+            model_capabilities: cfg.model_capabilities.clone(),
             metrics: ExecutorMetrics::from_global(),
             storage_pool: Some(pool),
-        })
+        }
+        .with_file_search_service(file_search))
     }
 }
 

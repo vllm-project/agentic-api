@@ -103,11 +103,14 @@ fn bench_conversation_rehydrate(c: &mut Criterion, rt: &Runtime, store: &Convers
     group.finish();
 }
 
-/// Continue a fixed parent with one new turn; each sample writes a new response ID.
+/// Continue a fixed parent, as rehydration loaded it, with one new turn; each sample writes a new response ID.
 fn bench_response_persist(c: &mut Criterion, rt: &Runtime, store: &ResponseStore) {
     let mut group = c.benchmark_group("response_persist");
     for items in HISTORY_ITEMS {
-        let parent = rt.block_on(seed_response(store, items));
+        let parent: ResponseCheckpoint = rt.block_on(async {
+            let id = seed_response(store, items).await;
+            store.get(&id).await.expect("parent").into()
+        });
         group.bench_with_input(BenchmarkId::from_parameter(items), &parent, |b, parent| {
             b.to_async(rt).iter_batched(
                 || (next_id("resp_"), turn()),

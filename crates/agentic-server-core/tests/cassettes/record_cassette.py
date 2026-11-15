@@ -21,7 +21,7 @@ Modes:
               previous_response_id. Supports --openai, --vllm, and --gateway backends.
   items       Records flat conversation/item API steps. Select --items-scenario
               continuation, deletion, branch, pagination, edge-cases, concurrent-writes,
-              competing-tool-outputs, or overlapping-multi-agent.
+              stale-compaction, competing-tool-outputs, or overlapping-multi-agent.
 
 Usage:
     python tests/cassettes/record_cassette.py --turns 2 --no-stream --output path/to/cassette.yaml
@@ -541,6 +541,282 @@ WEATHER_TOOL = {
 }
 
 
+def _record_stale_compaction(client: httpx.Client, proxy_url: str, model: str) -> None:
+    """Commit a plain turn C while streamed turn B compacts the history it rehydrated before C.
+
+    B's summary cannot include C's reply (VIOLET). D then asks for that reply, showing whether it survives in
+    the history a later turn sees. t10 probes whether explicit compaction accepts a conversation.
+    """
+    _number_requests_in_send_order(client)
+    conversation = _create_conversation(client, proxy_url)
+    items_path = f"/v1/conversations/{conversation}/items"
+    ascending = {"order": "asc"}
+
+    def turn(prompt: str, during: Callable[[], None] | None = None, **extra: Any) -> dict:
+        body = {"model": model, "conversation": conversation, "store": True, "stream": during is not None,
+                "input": [{"role": "user", "content": prompt}], **extra}
+        return _observed_turn(client, proxy_url, body, during)
+
+    def request(method: str, path: str, **kwargs: Any) -> dict:
+        return _item_request(client, proxy_url, method, path, expected_status=None, **kwargs)
+
+    # Enough history for a 1,000-token threshold under both OpenAI's tokenizer and the gateway's estimate.
+    turn("Background notes for later. " * 450 + "Remember the word APRICOT. Reply with only OK.")
+    side: dict = {}
+    streamed = turn(
+        "Count from 1 to 120, one number per line, digits only.",
+        lambda: side.update(turn("Reply with only the word VIOLET.")),
+        context_management=[{"type": "compaction", "compact_threshold": 1000}],
+    )
+    request("GET", items_path, params=ascending)
+    inputs = lambda response: _input_items_or_conversation(request, response, items_path)
+    inputs(streamed)
+    inputs(side)
+    inputs(turn("Earlier in this conversation you replied with a single color word. "
+                "Reply with only that word, or NONE if you cannot see it."))
+    request("POST", "/v1/responses/compact", body={"model": model, "conversation": conversation})
+
+
+
+# Enough history for a 1,000-token threshold under both OpenAI's tokenizer and the gateway's estimate.
+COMPACTION_NOTES = "Background notes for later. " * 450 + "Remember the word APRICOT. Reply with only OK."
+COMPACTION_THRESHOLD = [{"type": "compaction", "compact_threshold": 1000}]
+RECALL_PROMPT = "What word did I ask you to remember? Reply with only that word, or NONE if you cannot see it."
+
+
+def _record_checkpoint_replay(client: httpx.Client, proxy_url: str, model: str, checkpoint: dict) -> None:
+    """A client sends a compaction checkpoint back as input: a stored turn sends `checkpoint`'s output back, then its
+    input items, a `previous_response_id` continuation asking for the remembered word, and that turn's input items."""
+    def input_items(response: dict) -> None:
+        _item_request(client, proxy_url, "GET", f"/v1/responses/{response['id']}/input_items",
+                      params={"order": "asc"}, expected_status=None)
+
+    replayed = _observed_turn(client, proxy_url, {
+        "model": model, "store": True, "stream": False,
+        "input": checkpoint["output"] + [{"role": "user", "content": "Reply only OK."}],
+    })
+    input_items(replayed)
+    continued = _observed_turn(client, proxy_url, {
+        "model": model, "store": True, "stream": False, "previous_response_id": replayed["id"],
+        "input": RECALL_PROMPT,
+    })
+    input_items(continued)
+
+
+def _record_compaction_in_turn_chain(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
+    """A `previous_response_id` chain whose turn B passes the compaction threshold.
+
+    B (t2, streamed when recording with --stream) shows where the compaction items sit in its output; its input items
+    (t3) show what it stored; C (t4) continues B, and its input items (t5) show where a later turn's history starts.
+    t6–t9 send B's stored compaction back as input ([`_record_checkpoint_replay`]).
+    """
+    def turn(prompt: str, previous: str | None = None, **extra: Any) -> dict:
+        body = {"model": model, "store": True, "stream": False, "input": prompt, **extra}
+        if previous:
+            body["previous_response_id"] = previous
+        return _observed_turn(client, proxy_url, body)
+
+    def input_items(response: dict) -> dict:
+        return _item_request(client, proxy_url, "GET", f"/v1/responses/{response['id']}/input_items",
+                             params={"order": "asc"}, expected_status=None)
+
+    first = turn(COMPACTION_NOTES)
+    compacting = turn("Count from 1 to 60, one number per line, digits only.", first["id"],
+                      stream=stream, context_management=COMPACTION_THRESHOLD)
+    input_items(compacting)
+    follow_up = turn(RECALL_PROMPT, compacting["id"], context_management=COMPACTION_THRESHOLD)
+    input_items(follow_up)
+    _record_checkpoint_replay(client, proxy_url, model, compacting)
+
+
+def _record_compaction_tool_loop(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
+    """Compaction around a client function call: B (t2) calls get_weather after compacting, and C (t3) answers the
+    call while the history still passes the threshold. C's input items (t4) show the call and output kept.
+    An async call (t5) remains pending across compaction (t6) and another turn (t7). Inspect that turn's input (t8),
+    then submit the result late (t9) and on a separate branch immediately after compaction (t10)."""
+    def turn(input_value: Any, previous: str, **extra: Any) -> dict:
+        body = {"model": model, "store": True, "stream": stream, "input": input_value, "previous_response_id": previous,
+                "tools": [WEATHER_TOOL], "parallel_tool_calls": False, "context_management": COMPACTION_THRESHOLD,
+                **extra}
+        return _observed_turn(client, proxy_url, body)
+
+    first = _observed_turn(client, proxy_url, {"model": model, "store": True, "input": COMPACTION_NOTES})
+    calling = turn("What is the weather in Paris? Use the get_weather tool.", first["id"], tool_choice="required")
+    call = next((item for item in calling.get("output", []) if item.get("type") == "function_call"), None)
+    if call is None:
+        raise RuntimeError(f"turn B made no get_weather call: {calling}")
+    answered = turn([{"type": "function_call_output", "call_id": call["call_id"], "output": "18 degrees and sunny"}],
+                    calling["id"], tool_choice="none")
+    _item_request(client, proxy_url, "GET", f"/v1/responses/{answered['id']}/input_items",
+                  params={"order": "asc"}, expected_status=None)
+
+    fixtures = Path(__file__).parent / "async_tools"
+    prompts = json.loads((fixtures / "prompts.json").read_text())
+    async_request = {
+        "model": model, "store": True, "stream": False, "max_output_tokens": 8192,
+        "tools": json.loads((fixtures / "tools.json").read_text())["weather_async"],
+    }
+    pending = _observed_turn(client, proxy_url, {
+        **async_request, "input": prompts["weather_start"], "instructions": prompts["instructions"]["weather"],
+    })
+    async_calls = [item for item in pending.get("output", []) if item.get("type") == "function_call"
+                   and item.get("name") == "get_weather" and item.get("async") is True]
+    if pending.get("status") != "completed" or len(async_calls) != 1:
+        raise RuntimeError("async compaction requires one completed response with an async weather call")
+    compacting = _observed_turn(client, proxy_url, {
+        **async_request, "previous_response_id": pending["id"], "context_management": COMPACTION_THRESHOLD,
+        "input": COMPACTION_NOTES + " Do not call any tools. The weather lookup is still running; reply only OK.",
+    })
+    if compacting.get("status") != "completed" or not any(
+        item.get("type") == "compaction" for item in compacting.get("output", [])
+    ):
+        raise RuntimeError("the pending async call's follow-up did not complete compaction")
+    continued = _observed_turn(client, proxy_url, {
+        **async_request, "previous_response_id": compacting["id"],
+        "input": "The weather result is still pending. Do not call any tools. Reply only WAITING.",
+    })
+    if continued.get("status") != "completed":
+        raise RuntimeError("continuation after compaction did not complete")
+    _item_request(client, proxy_url, "GET", f"/v1/responses/{continued['id']}/input_items",
+                  params={"order": "asc"})
+    result = [
+        {"type": "function_call_output", "call_id": async_calls[0]["call_id"], "output": prompts["weather_output"]},
+        {"type": "message", "role": "user", "content": prompts["weather_ask"]},
+    ]
+    for previous in [continued["id"], compacting["id"]]:
+        # Record rejection as evidence too; do not turn the current gateway behavior into an expectation.
+        _observed_turn(client, proxy_url, {**async_request, "previous_response_id": previous, "input": result})
+
+
+def _record_compaction_standalone(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
+    """`/v1/responses/compact` with input (t1), a turn continuing its window (t2), with `previous_response_id` (t4,
+    after the stored turn t3), and with neither (t5). t6–t12 follow a retained image through three stored turns."""
+    def compact(body: dict) -> dict:
+        return _item_request(client, proxy_url, "POST", "/v1/responses/compact", body={"model": model, **body},
+                             expected_status=None)
+
+    window = compact({"input": [{"role": "user", "content": COMPACTION_NOTES}]})
+    _observed_turn(client, proxy_url, {
+        "model": model, "store": False, "stream": stream,
+        "input": window.get("output", []) + [{"role": "user", "content": RECALL_PROMPT}],
+    })
+    stored = _observed_turn(client, proxy_url, {"model": model, "store": True, "input": COMPACTION_NOTES})
+    compact({"previous_response_id": stored["id"]})
+    compact({})
+
+    # A generated 64x64 red PNG makes loss of retained media observable without inspecting opaque compaction data.
+    image_url = (
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAb0lEQVR4nO3PAQkAAAyEwO9feoshgn"
+        "ABdLep8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ"
+        "3I8QUNyPEFDcjxBQ3IPanc8OLDQitxAAAAAElFTkSuQmCC"
+    )
+    window = compact({"input": [{"role": "user", "content": [
+        {"type": "input_text", "text": COMPACTION_NOTES + " Remember this image for later."},
+        {"type": "input_image", "image_url": image_url, "detail": "low"},
+    ]}]})
+    previous = None
+    for _ in range(3):
+        request = {"model": model, "store": True, "stream": stream,
+                   "input": [{"role": "user", "content": "Reply only OK."}]}
+        if previous:
+            request["previous_response_id"] = previous
+        else:
+            request["input"] = window["output"] + request["input"]
+        continued = _observed_turn(client, proxy_url, request)
+        previous = continued["id"]
+        _item_request(client, proxy_url, "GET", f"/v1/responses/{previous}/input_items",
+                      params={"order": "asc", "limit": 100})
+
+
+def _record_compaction_multi_agent(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
+    """The in-turn chain with `multi_agent` enabled: B (t2) passes the threshold; its input items (t3), C (t4) and
+    C's input items (t5) show what a multi-agent compaction outputs and stores."""
+    # Only the Responses API accepts the multi-agent beta.
+    client.event_hooks["request"].append(
+        lambda sent: sent.headers.__setitem__("OpenAI-Beta", "responses_multi_agent=v1")
+        if sent.url.path == "/v1/responses" else None
+    )
+
+    def turn(prompt: str, previous: str | None = None, **extra: Any) -> dict:
+        body = {"model": model, "store": True, "stream": False, "input": prompt, "multi_agent": {"enabled": True},
+                **extra}
+        if previous:
+            body["previous_response_id"] = previous
+        return _observed_turn(client, proxy_url, body)
+
+    def input_items(response: dict) -> dict:
+        return _item_request(client, proxy_url, "GET", f"/v1/responses/{response['id']}/input_items",
+                             params={"order": "asc"}, expected_status=None)
+
+    first = turn(COMPACTION_NOTES)
+    compacting = turn("Count from 1 to 60, one number per line, digits only.", first["id"],
+                      stream=stream, context_management=COMPACTION_THRESHOLD)
+    input_items(compacting)
+    follow_up = turn(RECALL_PROMPT, compacting["id"], context_management=COMPACTION_THRESHOLD)
+    input_items(follow_up)
+
+
+def _record_compaction_store_false(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
+    """An unstored turn that passes the threshold (t1): its output still carries the compaction, and nothing is
+    stored, so retrieving it (t2) fails. t3–t6 send its compaction back as input ([`_record_checkpoint_replay`])."""
+    response = _observed_turn(client, proxy_url, {
+        "model": model, "store": False, "stream": stream,
+        "input": COMPACTION_NOTES + " Then count from 1 to 30, one number per line.",
+        "context_management": COMPACTION_THRESHOLD,
+    })
+    _item_request(client, proxy_url, "GET", f"/v1/responses/{response.get('id', 'resp_missing')}",
+                  expected_status=None)
+    _record_checkpoint_replay(client, proxy_url, model, response)
+
+
+def _record_compaction_mcp(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
+    """Compare MCP discovery before compaction, after standalone compaction, and after automatic compaction."""
+    tools = [{"type": "mcp", "server_label": "microsoft_learn", "server_url": "https://learn.microsoft.com/api/mcp",
+              "allowed_tools": ["microsoft_docs_search"], "require_approval": "never"}]
+
+    def turn(input_value: Any, **extra: Any) -> dict:
+        response = _observed_turn(client, proxy_url, {
+            "model": model, "store": True, "stream": stream, "input": input_value, "tools": tools,
+            "max_output_tokens": 4096, **extra,
+        })
+        if response.get("status") != "completed":
+            raise RuntimeError(f"MCP compaction probe did not complete: {response.get('incomplete_details')}")
+        return response
+
+    prompt = "Remember the word APRICOT. Do not call any tools. Reply only READY."
+    first = turn(prompt)
+    history = [{"role": "user", "content": prompt}, *first["output"]]
+    compacted = _item_request(client, proxy_url, "POST", "/v1/responses/compact",
+                              body={"model": model, "input": history})
+    followup = [{"role": "user", "content": RECALL_PROMPT + " Do not call any tools."}]
+    turn([*history, *followup])
+    turn([*compacted["output"], *followup])
+    automatic = turn(COMPACTION_NOTES + " Do not call any tools.", previous_response_id=first["id"],
+                     context_management=COMPACTION_THRESHOLD)
+    continued = turn(followup, previous_response_id=automatic["id"])
+    _item_request(client, proxy_url, "GET", f"/v1/responses/{continued['id']}/input_items",
+                  params={"order": "asc"})
+    expanded = dict(tools[0], allowed_tools=["microsoft_docs_search", "microsoft_docs_fetch"])
+    unrestricted = {key: value for key, value in tools[0].items() if key != "allowed_tools"}
+    probe = ("Use microsoft_docs_fetch to read https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/responses "
+             "then say DONE. If that tool is unavailable, say UNAVAILABLE. Do not use microsoft_docs_search.")
+    for declaration in [expanded, unrestricted]:
+        turn(probe, previous_response_id=first["id"], tools=[declaration])
+    empty = [dict(tools[0], allowed_tools=["no_such_tool"])]
+    empty_response = turn(prompt, tools=empty)
+    turn(prompt, previous_response_id=empty_response["id"], tools=empty)
+
+
+COMPACTION_SCENARIOS: dict[str, tuple[Callable[..., None], int]] = {
+    "compaction-mcp": (_record_compaction_mcp, 11),
+    "compaction-in-turn-chain": (_record_compaction_in_turn_chain, 9),
+    "compaction-tool-loop": (_record_compaction_tool_loop, 10),
+    "compaction-standalone": (_record_compaction_standalone, 12),
+    "compaction-multi-agent": (_record_compaction_multi_agent, 5),
+    "compaction-store-false": (_record_compaction_store_false, 6),
+}
+
+
 def _record_competing_tool_outputs(client: httpx.Client, proxy_url: str, model: str) -> None:
     """Resolve one pending function call twice: streamed turn B (21) and, while B streams, turn C (5).
 
@@ -703,10 +979,14 @@ def run_items(
             raise click.UsageError("--items-scenario concurrent-writes streams turn B; use --stream.")
         _record_concurrent_writes(client, proxy_url, model)
         return
-    if scenario in ("competing-tool-outputs", "overlapping-multi-agent"):
+    if scenario in COMPACTION_SCENARIOS:
+        COMPACTION_SCENARIOS[scenario][0](client, proxy_url, model, stream)
+        return
+    if scenario in ("stale-compaction", "competing-tool-outputs", "overlapping-multi-agent"):
         if not stream:
             raise click.UsageError(f"--items-scenario {scenario} streams turn B; use --stream.")
         record = {
+            "stale-compaction": _record_stale_compaction,
             "competing-tool-outputs": _record_competing_tool_outputs,
             "overlapping-multi-agent": _record_overlapping_multi_agent,
         }[scenario]
@@ -2234,7 +2514,7 @@ def run_responses(
 )
 @click.option(
     "--items-scenario",
-    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "concurrent-writes", "competing-tool-outputs", "overlapping-multi-agent", "store-false", "multi-agent-store-false", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items", "response-call-ids"]),
+    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "concurrent-writes", "stale-compaction", *COMPACTION_SCENARIOS, "competing-tool-outputs", "overlapping-multi-agent", "store-false", "multi-agent-store-false", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items", "response-call-ids"]),
     default="continuation",
     help="Fixed Conversation Items or Responses API scenario (for --mode items).",
 )
@@ -2515,6 +2795,8 @@ def main(
                           6 if items_scenario == "branch" else
                           19 if items_scenario == "edge-cases" else
                           22 if items_scenario == "concurrent-writes" else
+                          10 if items_scenario == "stale-compaction" else
+                          COMPACTION_SCENARIOS[items_scenario][1] if items_scenario in COMPACTION_SCENARIOS else
                           9 if items_scenario == "competing-tool-outputs" else
                           7 if items_scenario == "overlapping-multi-agent" else 5)
         if turns != expected_turns:

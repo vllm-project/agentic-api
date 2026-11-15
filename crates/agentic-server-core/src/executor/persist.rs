@@ -112,6 +112,10 @@ async fn write_turn(
         TurnOutput::Response(payload) => (payload.output.as_slice(), ctx.original_request.store.then_some(payload)),
         TurnOutput::Empty | TurnOutput::Compaction => (&[][..], None),
     };
+    // A standalone compaction stores the window it built.
+    if !matches!(output, TurnOutput::Compaction) {
+        ctx.new_input_items = InOutItem::filter_for_compaction(std::mem::take(&mut ctx.new_input_items));
+    }
     if ctx.original_request.conversation.is_some() {
         let items = turn_items(&mut ctx, output_items, None);
         return exec_ctx.conv_handler.persist(&ctx, items, snapshot, &metadata).await;
@@ -129,17 +133,18 @@ async fn write_turn(
         .as_ref()
         .filter(|lease| lease.parent.as_ref().is_some_and(|parent| !parent.durable));
     // A stored child of a transient parent stores the parent's full history: there is no stored parent to extend.
-    if let Some(lease) = transient_parent {
-        ctx.original_request.previous_response_id = None;
-        if durable {
-            items.splice(0..0, lease.parent_items().cloned().map(InOutItem::Input));
-        }
+    if let Some(lease) = transient_parent
+        && durable
+    {
+        items.splice(0..0, lease.parent_items().cloned().map(InOutItem::Input));
     }
-    if durable {
-        exec_ctx.resp_handler.persist(&ctx, items, snapshot, &metadata).await?;
-    }
+    let history_item_ids = if durable {
+        exec_ctx.resp_handler.persist(&ctx, items, snapshot, &metadata).await?
+    } else {
+        Vec::new()
+    };
     if let Some((lease, checkpoint)) = continuation.zip(checkpoint) {
-        lease.publish(checkpoint)?;
+        lease.publish(checkpoint.with_history_item_ids(history_item_ids))?;
     }
     Ok(())
 }
@@ -192,7 +197,7 @@ fn prepare_metadata(ctx: &mut RequestContext, tool_search_metadata: Option<ToolS
 /// [`ExecutorError::InvalidRequest`] for unusable IDs or an unfinished response,
 /// [`ExecutorError::Conflict`] for an id already stored, or a storage error.
 pub async fn commit(
-    ctx: RequestContext,
+    mut ctx: RequestContext,
     payload: ResponsePayload,
     exec_ctx: &ExecutionContext,
 ) -> ExecutorResult<ResponsePayload> {
@@ -209,6 +214,18 @@ pub async fn commit(
             "upstream response status '{}' is not terminal",
             payload.status
         )));
+    }
+    if matches!(status, ResponseStatus::Completed | ResponseStatus::Incomplete)
+        && ctx.checkpoint.is_none()
+        && ctx.continuation.is_none()
+        && ctx.original_request.previous_response_id.is_some()
+    {
+        // A split context omits the checkpoint. Load the parent with its history, so the turn's history starts where
+        // rehydration starts it: at the latest compaction a turn produced.
+        if let Some((mut checkpoint, history)) = exec_ctx.resp_handler.rehydrate(&ctx).await? {
+            checkpoint.continue_from_compaction(&history, &ctx.enriched_request);
+            ctx.checkpoint = Some(checkpoint);
+        }
     }
 
     Box::pin(persist(ctx, TurnOutput::Response(&payload), None, exec_ctx)).await?;

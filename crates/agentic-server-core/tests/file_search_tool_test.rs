@@ -11,6 +11,8 @@ use either::Either;
 use futures::StreamExt;
 use serde_json::{Value, json};
 
+#[path = "file_search_tool_test/citations.rs"]
+mod citations;
 mod support;
 
 async fn fixture() -> (FileSearchService, String, String, tempfile::TempDir) {
@@ -67,13 +69,17 @@ fn search_call() -> Value {
 }
 
 fn upstream(items: Vec<Value>, streaming: bool) -> support::MockResponse {
+    upstream_with_deltas(items, streaming, &[])
+}
+
+fn upstream_with_deltas(items: Vec<Value>, streaming: bool, deltas: &[String]) -> support::MockResponse {
     let response = json!({"id":"resp_upstream","object":"response","created_at":0,"model":"test-model","status":"completed","output":items});
     if !streaming {
         return support::MockResponse::Json(response.to_string());
     }
     let mut events = vec![
-        json!({"type":"response.created","response":{"id":"resp_upstream","status":"in_progress"}}),
-        json!({"type":"response.in_progress","response":{"id":"resp_upstream","status":"in_progress"}}),
+        json!({"type":"response.created","response":{"id":"resp_upstream","status":"in_progress","output":[]}}),
+        json!({"type":"response.in_progress","response":{"id":"resp_upstream","status":"in_progress","output":[]}}),
     ];
     for (index, item) in items.into_iter().enumerate() {
         let mut started = item.clone();
@@ -85,7 +91,12 @@ fn upstream(items: Vec<Value>, streaming: bool) -> support::MockResponse {
         if item["type"] == "message" {
             let text = item["content"][0]["text"].as_str().unwrap();
             events.push(json!({"type":"response.content_part.added","output_index":index,"content_index":0,"item_id":item["id"],"part":{"type":"output_text","text":"","annotations":[]}}));
-            events.push(json!({"type":"response.output_text.delta","output_index":index,"content_index":0,"item_id":item["id"],"delta":text}));
+            let default_delta = [text.to_owned()];
+            let deltas = if deltas.is_empty() { &default_delta } else { deltas };
+            assert_eq!(deltas.concat(), text);
+            for delta in deltas {
+                events.push(json!({"type":"response.output_text.delta","output_index":index,"content_index":0,"item_id":item["id"],"delta":delta}));
+            }
             events.push(json!({"type":"response.output_text.done","output_index":index,"content_index":0,"item_id":item["id"],"text":text}));
             events.push(json!({"type":"response.content_part.done","output_index":index,"content_index":0,"item_id":item["id"],"part":item["content"][0]}));
         }

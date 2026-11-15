@@ -158,8 +158,10 @@ read-only boundary review while planning or reviewing these changes.
 
 #### Storage change rules
 
-Read [Schema, migrations, and where data goes](ARCHITECTURE.md#schema-migrations-and-where-data-goes) before changing
-the schema, a migration, or what is persisted. Model SQL stays portable across SQLite and PostgreSQL; backend
+Read [What a turn persists](ARCHITECTURE.md#what-a-turn-persists) and
+[Schema, migrations, and where data goes](ARCHITECTURE.md#schema-migrations-and-where-data-goes) before changing
+the schema, a migration, or what is persisted. Stored history holds client-facing items only; model-facing shapes are
+built at the one lowering point for each request and are never stored. Model SQL stays portable across SQLite and PostgreSQL; backend
 differences belong in `storage/pool.rs` and `storage/schema.rs`. Keep `responses.metadata` to what a continuation
 needs, and give data read by another path its own column. Use
 [`.agents/skills/storage-schema-change/SKILL.md`](.agents/skills/storage-schema-change/SKILL.md) as the checklist.

@@ -1,6 +1,7 @@
 use std::time::Duration;
 
-use agentic_core::config::ResponsesModelPolicy;
+use agentic_core::types::model_capabilities::{ModelCapabilities, ModelOverride, SupportedReasoningLevels};
+use agentic_core::types::{ReasoningEffortLevel, ServiceTier};
 use futures::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use tokio::net::TcpStream;
@@ -14,27 +15,42 @@ const CACHE_DISABLED: &str = "cache-disabled-fixture";
 
 async fn configured_state(upstream_url: &str, global_cache_support: bool) -> StorageBackedState {
     let mut fixture = storage_backed_state(upstream_url).await;
-    let config = &mut Arc::get_mut(&mut fixture.state.exec_ctx).unwrap().responses_config;
-    config.prompt_cache_options_supported = global_cache_support;
-    config.model_policies.insert(
-        ASTRA.to_owned(),
-        ResponsesModelPolicy {
-            // Sampling, logprobs, and effort follow the public Astra model and migration guides.
-            // The tier allowlist is specific to this test deployment.
-            sampling_supported: Some(false),
-            logprobs_supported: Some(false),
-            reasoning_efforts: Some(["low", "medium", "high", "xhigh", "max"].map(str::to_owned).into()),
-            service_tiers: Some(vec!["default".to_owned(), "priority".to_owned()]),
-            prompt_cache_options_supported: Some(true),
-            prompt_cache_retention_supported: Some(false),
-        },
-    );
-    config.model_policies.insert(
-        CACHE_DISABLED.to_owned(),
-        ResponsesModelPolicy {
-            prompt_cache_options_supported: Some(false),
-            ..ResponsesModelPolicy::default()
-        },
+    let exec_ctx = Arc::get_mut(&mut fixture.state.exec_ctx).unwrap();
+    exec_ctx.responses_config.prompt_cache_options_supported = global_cache_support;
+    exec_ctx.model_capabilities = ModelCapabilities::new(
+        [
+            (
+                ASTRA.to_owned(),
+                ModelOverride {
+                    // Sampling, logprobs, and effort follow the public Astra model and migration guides.
+                    // The tier allowlist is specific to this test deployment.
+                    sampling_supported: Some(false),
+                    logprobs_supported: Some(false),
+                    supported_reasoning_levels: Some(
+                        SupportedReasoningLevels::try_new(&[
+                            ReasoningEffortLevel::Low,
+                            ReasoningEffortLevel::Medium,
+                            ReasoningEffortLevel::High,
+                            ReasoningEffortLevel::Xhigh,
+                            ReasoningEffortLevel::Max,
+                        ])
+                        .unwrap(),
+                    ),
+                    service_tiers: Some(vec![ServiceTier::Default, ServiceTier::Priority]),
+                    prompt_cache_options_supported: Some(true),
+                    prompt_cache_retention_supported: Some(false),
+                    ..ModelOverride::default()
+                },
+            ),
+            (
+                CACHE_DISABLED.to_owned(),
+                ModelOverride {
+                    prompt_cache_options_supported: Some(false),
+                    ..ModelOverride::default()
+                },
+            ),
+        ]
+        .into(),
     );
     fixture
 }
@@ -48,7 +64,7 @@ fn regional_rejection() -> Value {
     }})
 }
 
-async fn capture_upstream() -> (String, Arc<Mutex<Vec<Value>>>, tokio::task::JoinHandle<()>) {
+async fn capture_upstream() -> (String, Arc<Mutex<Vec<String>>>, tokio::task::JoinHandle<()>) {
     let requests = Arc::new(Mutex::new(Vec::new()));
     let captured = Arc::clone(&requests);
     let app = Router::new().route(
@@ -68,7 +84,7 @@ async fn capture_upstream() -> (String, Arc<Mutex<Vec<Value>>>, tokio::task::Joi
                             "content":[{"type":"output_text","text":"checkpoint summary","annotations":[]}]}]}))
                     .into_response()
                 };
-                captured.lock().await.push(request);
+                captured.lock().await.push(String::from_utf8(body.to_vec()).unwrap());
                 response
             }
         }),
@@ -168,7 +184,12 @@ async fn http_applies_configured_restrictions_without_changing_other_models() {
     let response = post_json(&client, &responses, &unset).await;
     assert_eq!(response.status(), StatusCode::OK, "{}", response.text().await.unwrap());
 
-    let requests = captured.lock().await;
+    let requests: Vec<Value> = captured
+        .lock()
+        .await
+        .iter()
+        .map(|body| serde_json::from_str(body).unwrap())
+        .collect();
     assert_eq!(requests.len(), 5);
     for request in &requests[..4] {
         assert_eq!(request["model"], VLLM);
@@ -177,6 +198,7 @@ async fn http_applies_configured_restrictions_without_changing_other_models() {
         }
     }
     assert_eq!(requests[4]["model"], ASTRA);
+    assert_eq!(requests[4].get("top_logprobs"), Some(&Value::Null));
     gateway.abort();
     upstream.abort();
 }
@@ -205,11 +227,110 @@ async fn http_preserves_upstream_regional_errors_after_policy_admission() {
             assert_eq!(response.json::<Value>().await.unwrap(), regional_rejection());
         }
     }
-    let requests = captured.lock().await;
+    let requests: Vec<Value> = captured
+        .lock()
+        .await
+        .iter()
+        .map(|body| serde_json::from_str(body).unwrap())
+        .collect();
     assert_eq!(requests.len(), 2, "upstream rejection must not cause a tier retry");
-    for request in requests.iter() {
+    for request in &requests {
         assert_eq!(request["model"], ASTRA);
         assert_eq!(request["service_tier"], "priority");
+    }
+    gateway.abort();
+    upstream.abort();
+}
+
+#[tokio::test]
+async fn http_rejects_malformed_capability_fields_even_without_a_model_override() {
+    let (url, captured, upstream) = capture_upstream().await;
+    let fixture = configured_state(&url, false).await;
+    let (url, gateway) = spawn_gateway(fixture.state.clone()).await;
+    let client = reqwest::Client::new();
+    for stream in [false, true] {
+        for store in [false, true] {
+            for fields in [
+                json!({"reasoning":{"effort":"hgih"}}),
+                json!({"service_tier":"custom"}),
+                json!({"top_logprobs":"3"}),
+                json!({"top_logprobs":1.5}),
+                json!({"top_logprobs":true}),
+                json!({"top_logprobs":[]}),
+                json!({"top_logprobs":{}}),
+                json!({"top_logprobs":9_223_372_036_854_775_808_u64}),
+            ] {
+                let mut request = json!({"model":VLLM,"input":"hi","store":store,"stream":stream});
+                request
+                    .as_object_mut()
+                    .unwrap()
+                    .extend(fields.as_object().unwrap().clone());
+                let response = post_json(&client, &format!("{url}/v1/responses"), &request).await;
+                let status = response.status();
+                let body: Value = response.json().await.unwrap();
+                assert_eq!(status, StatusCode::BAD_REQUEST, "{fields}: {body}");
+                assert_eq!(body["error"]["type"], "invalid_request_error", "{fields}: {body}");
+            }
+        }
+    }
+    let compact = post_json(
+        &client,
+        &format!("{url}/v1/responses/compact"),
+        &json!({"model":VLLM,"input":"hi","service_tier":"custom"}),
+    )
+    .await;
+    assert_eq!(compact.status(), StatusCode::BAD_REQUEST);
+    assert!(captured.lock().await.is_empty(), "invalid wire types reached upstream");
+    gateway.abort();
+    upstream.abort();
+}
+
+#[tokio::test]
+async fn http_preserves_top_logprobs_presence_and_provider_integer_values() {
+    let (url, captured, upstream) = capture_upstream().await;
+    let fixture = configured_state(&url, false).await;
+    let (url, gateway) = spawn_gateway(fixture.state.clone()).await;
+    let client = reqwest::Client::new();
+    let mut expected = Vec::new();
+    for stream in [false, true] {
+        for store in [false, true] {
+            for value in [
+                None,
+                Some(Value::Null),
+                Some(json!(-1)),
+                Some(json!(0)),
+                Some(json!(21)),
+            ] {
+                let mut request = json!({"model":VLLM,"input":"hi","store":store,"stream":stream,
+                    "include":["message.output_text.logprobs"],"reasoning":{"effort":"none"},
+                    "service_tier":"fast","chat_template_kwargs":{"enable_thinking":false}});
+                if let Some(value) = &value {
+                    request["top_logprobs"] = value.clone();
+                }
+                let response = post_json(&client, &format!("{url}/v1/responses"), &request).await;
+                let status = response.status();
+                let body = response.text().await.unwrap();
+                assert_eq!(status, StatusCode::OK, "{request}: {body}");
+                if stream {
+                    assert!(body.contains("response.completed"), "{body}");
+                }
+                expected.push(value);
+            }
+        }
+    }
+    let requests = captured.lock().await;
+    assert_eq!(requests.len(), expected.len());
+    for (raw, value) in requests.iter().zip(&expected) {
+        let request: Value = serde_json::from_str(raw).unwrap();
+        assert_eq!(request.get("top_logprobs"), value.as_ref(), "{raw}");
+        assert_eq!(
+            raw.matches("\"top_logprobs\":").count(),
+            usize::from(value.is_some()),
+            "{raw}"
+        );
+        assert_eq!(request["reasoning"]["effort"], "none");
+        assert_eq!(request["service_tier"], "fast");
+        assert_eq!(request["chat_template_kwargs"], json!({"enable_thinking":false}));
     }
     gateway.abort();
     upstream.abort();
@@ -235,7 +356,7 @@ async fn websocket_result(ws: &mut WebSocketStream<MaybeTlsStream<TcpStream>>, r
 }
 
 #[tokio::test]
-async fn websocket_policy_rejection_preserves_transient_parent_for_retry() {
+async fn websocket_admission_rejection_preserves_transient_parent_for_retry() {
     let (url, captured, upstream) = capture_upstream().await;
     let fixture = configured_state(&url, false).await;
     let (url, gateway) = spawn_gateway(fixture.state.clone()).await;
@@ -253,14 +374,34 @@ async fn websocket_policy_rejection_preserves_transient_parent_for_retry() {
     let mut continuation = json!({"type":"response.create","model":ASTRA,"input":"follow-up","store":false,
         "previous_response_id":parent["response"]["id"]});
     for generate in [false, true] {
-        let mut invalid = continuation.clone();
-        invalid["generate"] = json!(generate);
-        invalid["reasoning"] = json!({"effort":"none"});
-        let error = websocket_result(&mut ws, &invalid).await;
-        assert_eq!(error["type"], "error", "{error}");
-        assert_eq!(error["status"], 400, "{error}");
-        assert_eq!(error["error"]["param"], "reasoning.effort", "{error}");
-        assert_eq!(error["error"]["code"], "unsupported_value", "{error}");
+        for (param, code, fields) in [
+            (
+                "reasoning.effort",
+                "unsupported_value",
+                json!({"reasoning":{"effort":"none"}}),
+            ),
+            ("service_tier", "unsupported_value", json!({"service_tier":"flex"})),
+            ("top_logprobs", "unsupported_value", json!({"top_logprobs":3})),
+            ("background", "unsupported_value", json!({"background":true})),
+            ("prompt", "unsupported_parameter", json!({"prompt":{"id":"template"}})),
+            (
+                "tool_choice",
+                "unsupported_value",
+                json!({"tool_choice":{"type":"mcp","server_label":"test"}}),
+            ),
+        ] {
+            let mut invalid = continuation.clone();
+            invalid["generate"] = json!(generate);
+            invalid
+                .as_object_mut()
+                .unwrap()
+                .extend(fields.as_object().unwrap().clone());
+            let error = websocket_result(&mut ws, &invalid).await;
+            assert_eq!(error["type"], "error", "{error}");
+            assert_eq!(error["status"], 400, "{error}");
+            assert_eq!(error["error"]["param"], param, "{error}");
+            assert_eq!(error["error"]["code"], code, "{error}");
+        }
     }
     continuation["reasoning"] = json!({"effort":"high"});
     let retried = websocket_result(&mut ws, &continuation).await;
@@ -277,7 +418,12 @@ async fn websocket_policy_rejection_preserves_transient_parent_for_retry() {
             .contains("Priority is unavailable in the configured region."),
         "{regional_error}"
     );
-    let requests = captured.lock().await;
+    let requests: Vec<Value> = captured
+        .lock()
+        .await
+        .iter()
+        .map(|body| serde_json::from_str(body).unwrap())
+        .collect();
     assert_eq!(requests.len(), 3);
     assert_eq!(requests[0]["prompt_cache_options"], options);
     assert_eq!(requests[0]["reasoning"]["effort"], "low");
@@ -318,7 +464,12 @@ async fn compact_uses_current_model_policy_with_stored_history() {
     let status = response.status();
     let body = response.text().await.unwrap();
     assert_eq!(status, StatusCode::OK, "{body}");
-    let requests = captured.lock().await;
+    let requests: Vec<Value> = captured
+        .lock()
+        .await
+        .iter()
+        .map(|body| serde_json::from_str(body).unwrap())
+        .collect();
     assert_eq!(requests.len(), 2);
     assert_eq!(requests[0]["model"], VLLM);
     assert_eq!(requests[1]["model"], ASTRA);

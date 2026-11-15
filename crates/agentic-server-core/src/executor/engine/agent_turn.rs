@@ -21,15 +21,15 @@ use crate::executor::gateway::{
     execute_and_emit_output_calls, public_output_items, relay_round_events,
 };
 use crate::executor::pipeline::AgentPipeline;
-use crate::executor::rehydrate::prepare_reasoning_for_vllm;
 use crate::executor::request::ExecutionContext;
 use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::telemetry::metrics::Stage;
+use crate::executor::telemetry::stages::inference_round;
 use crate::executor::upstream::{fetch_blocking_payload, fetch_stream_payload};
 use crate::executor::{inference::UpstreamHeaders, relay::Release};
-use crate::tool::{ToolRegistry, mcp, record_discovered_mcp_tools, responses_declarations};
+use crate::tool::{ToolRegistry, record_discovered_mcp_tools, responses_declarations};
 use crate::types::io::input::InputFunctionToolCall;
-use crate::types::io::{InOutItem, InputItem, OutputItem, ResponsesInput};
+use crate::types::io::{InOutItem, InputItem, OutputItem, ResponseUsage, ResponsesInput};
 use crate::types::request_response::ResponsePayload;
 
 /// Outcome of inspecting one inference round's output, deciding whether the
@@ -99,13 +99,6 @@ pub(super) async fn build_tool_registry(
     Ok(registry)
 }
 
-fn prepare_initial_reasoning_for_vllm(input: &mut ResponsesInput, round: usize, compacted: bool) -> ExecutorResult<()> {
-    if round == 0 && !compacted {
-        return prepare_reasoning_for_vllm(input);
-    }
-    Ok(())
-}
-
 /// One agent's tool registry and execution state, retained across its rounds.
 ///
 /// The caller supplies the retained-byte budget so descendants can share the
@@ -113,7 +106,7 @@ fn prepare_initial_reasoning_for_vllm(input: &mut ResponsesInput, round: usize, 
 /// therefore remain shared across independently constructed turns as well.
 pub(super) struct AgentTurn<'a> {
     pub(super) pipeline: &'a mut AgentPipeline,
-    registry: ToolRegistry,
+    pub(super) registry: ToolRegistry,
     exec_ctx: &'a ExecutionContext,
     max_rounds: NonZeroUsize,
     next_round: usize,
@@ -151,7 +144,8 @@ impl AgentExecutionState {
         let output = self
             .registry
             .mcp_list_tool_items()
-            .map(mcp::handler::list_tools_output_item)
+            .cloned()
+            .map(OutputItem::McpListTools)
             .collect();
         self.registry.clear_mcp_list_tool_items();
         output
@@ -212,13 +206,6 @@ impl<'a> AgentTurn<'a> {
         })
     }
 
-    pub(super) fn discovery_output(&self) -> Vec<OutputItem> {
-        self.registry
-            .mcp_list_tool_items()
-            .map(mcp::handler::list_tools_output_item)
-            .collect()
-    }
-
     /// Advance through one inference round and its gateway-executed tools.
     /// The turn owns round numbering; the engine supplies the public output
     /// offset and shared budget. Registry and pipeline state survive each step.
@@ -243,23 +230,21 @@ impl<'a> AgentTurn<'a> {
             .multi_agent
             .as_ref()
             .is_some_and(|config| config.enabled);
-        // The tree coordinator commits multi-agent summaries by generation.
-        let compaction_usage = if multi_agent {
+        // The tree coordinator commits multi-agent summaries by generation. A compaction item is the round's first
+        // output, as on OpenAI; the model's output follows it.
+        let (compaction, compaction_usage) = if multi_agent {
             None
         } else {
-            maybe_compact_context(&mut self.pipeline.request, self.exec_ctx, auth).await?
-        };
-        if compaction_usage.is_some()
+            self.compact(output_offset, auth).await?
+        }
+        .unzip();
+        if compaction.is_some()
             && let Some(continuation) = &mut self.pipeline.request.continuation
         {
             continuation.mark_outputs_compacted(output_offset);
         }
-        prepare_initial_reasoning_for_vllm(
-            &mut self.pipeline.request.enriched_request.input,
-            round,
-            compaction_usage.is_some(),
-        )?;
-        let round_span = crate::executor::telemetry::stages::inference_round(round);
+        let output_offset = output_offset + usize::from(compaction.is_some());
+        let round_span = inference_round(round);
         let timer = self.exec_ctx.metrics.stage(Stage::Inference);
         let fetched = if stream_upstream {
             fetch_stream_payload(
@@ -295,6 +280,7 @@ impl<'a> AgentTurn<'a> {
         accumulate_usage(&mut round_usage, payload.usage.take());
         payload.usage = round_usage;
         if matches!(payload.status.as_str(), "error" | "failed") {
+            payload.output.splice(0..0, compaction);
             // A failed round skips tool execution, but its deferred public events
             // (including upstream diagnostics) still precede the terminal event.
             let (ctx, relay) = self.pipeline.parts_mut();
@@ -312,6 +298,7 @@ impl<'a> AgentTurn<'a> {
             .execute_round_output(&current_output, output_offset, response_budget)
             .await?;
         payload.output = public_output_items(&current_output, &self.registry, &gateway_results)?;
+        payload.output.splice(0..0, compaction);
         if self.tool_call_budget.has_refused() {
             self.pipeline.withhold_builtin_tools();
         }
@@ -325,6 +312,42 @@ impl<'a> AgentTurn<'a> {
         // Loads persist with the response whatever this round decided.
         self.load_hosted_tools(&hosted_loads).await?;
         Ok(RoundResult { payload, decision })
+    }
+
+    /// Compacts the turn's model input together with its final output once they pass the compaction threshold, as
+    /// `OpenAI` does after answering, so the next turn starts from that summary. The compaction item is presented at
+    /// `output_offset` as the turn's last output.
+    pub(super) async fn compact_after_turn(
+        &mut self,
+        final_output: &[OutputItem],
+        output_offset: usize,
+        auth: Option<&UpstreamHeaders>,
+    ) -> ExecutorResult<Option<(OutputItem, ResponseUsage)>> {
+        // A compaction this round made is already the start of the model input.
+        let answer = final_output
+            .iter()
+            .filter(|item| !matches!(item, OutputItem::Compaction(_)))
+            .filter_map(OutputItem::to_input_item);
+        self.pipeline.request.enriched_request.input.extend(answer);
+        self.compact(output_offset, auth).await
+    }
+
+    /// Compacts the model input once it passes the compaction threshold, and presents the compaction item at
+    /// `output_offset` of the public output.
+    async fn compact(
+        &mut self,
+        output_offset: usize,
+        auth: Option<&UpstreamHeaders>,
+    ) -> ExecutorResult<Option<(OutputItem, ResponseUsage)>> {
+        let Some((item, usage)) = maybe_compact_context(&mut self.pipeline.request, self.exec_ctx, auth).await? else {
+            return Ok(None);
+        };
+        let item = OutputItem::Compaction(item);
+        self.pipeline
+            .relay_mut()
+            .present_compaction(&item, output_offset)
+            .await?;
+        Ok(Some((item, usage)))
     }
 
     fn round_decision(

@@ -8,7 +8,7 @@ use crate::types::io::ClientItemError;
 use crate::types::io::input::InputValidationError;
 use crate::types::io::output::McpListTools;
 use crate::types::request_response::{
-    MAX_TOOL_CALLS_PARAM, MaxToolCallsError, PromptCacheOptionsError, UnsupportedParameterError, UpstreamRequestError,
+    MAX_TOOL_CALLS_PARAM, MaxToolCallsError, UnsupportedParameterError, UpstreamRequestError,
 };
 use crate::utils::common::serialize_to_vec_or_default;
 
@@ -127,19 +127,17 @@ pub enum ExecutorError {
     /// The request's `max_tool_calls` is not an integer of at least one.
     #[error(transparent)]
     InvalidMaxToolCalls(#[from] MaxToolCallsError),
-    /// A rejected request parameter value, with its public code and parameter name.
+    /// A rejected request parameter value, with its public code and parameter name; `None` is reported as a `null`
+    /// parameter.
     #[error("{message}")]
     UnsupportedValue {
-        param: String,
+        param: Option<String>,
         code: Option<&'static str>,
         message: String,
     },
     /// A recognized request member this gateway cannot honour (`background: true`, `prompt`).
     #[error(transparent)]
     UnsupportedParameter(#[from] UnsupportedParameterError),
-
-    #[error(transparent)]
-    InvalidPromptCacheOptions(#[from] PromptCacheOptionsError),
 
     /// The request exceeds a documented transport or component size budget.
     #[error("{0}")]
@@ -173,6 +171,7 @@ impl From<UpstreamRequestError> for ExecutorError {
     fn from(error: UpstreamRequestError) -> Self {
         match error {
             UpstreamRequestError::Input(error) => error.into(),
+            UpstreamRequestError::Parameter(error) => error.into(),
             UpstreamRequestError::Tool(error) => error.into(),
         }
     }
@@ -219,7 +218,6 @@ impl ExecutorError {
             | Self::InvalidRequest(_)
             | Self::InvalidInput(_)
             | Self::ClientItem(_)
-            | Self::InvalidPromptCacheOptions(_)
             | Self::InvalidMaxToolCalls(_)
             | Self::UnsupportedValue { .. }
             | Self::UnsupportedParameter(_)
@@ -266,7 +264,6 @@ impl ExecutorError {
             | Self::InvalidRequest(_)
             | Self::InvalidInput(_)
             | Self::ClientItem(_)
-            | Self::InvalidPromptCacheOptions(_)
             | Self::InvalidMaxToolCalls(_)
             | Self::UnsupportedValue { .. }
             | Self::UnsupportedParameter(_)
@@ -307,7 +304,6 @@ impl ExecutorError {
             Self::Storage(StorageError::ItemAlreadyInConversation) => "item_already_in_conversation",
             Self::PayloadTooLarge(_) => "body_too_large",
             Self::ResourceLimitExceeded { .. } => "response_resource_limit_exceeded",
-            Self::InvalidPromptCacheOptions(PromptCacheOptionsError::Unsupported) => "unsupported_parameter",
             Self::InvalidMaxToolCalls(error) => error.code(),
             Self::UnsupportedValue { code, .. } => code.unwrap_or("unsupported_value"),
             Self::UnsupportedParameter(error) => error.code(),
@@ -322,13 +318,13 @@ impl ExecutorError {
     pub fn error_param(&self) -> Option<&str> {
         match self.client_visible_error() {
             Self::ClientItem(error) => Some(error.param()),
-            Self::Tool(ToolError::UnknownParameter { param }) | Self::UnsupportedValue { param, .. } => Some(param),
+            Self::Tool(ToolError::UnknownParameter { param }) => Some(param),
+            Self::UnsupportedValue { param, .. } => param.as_deref(),
             Self::Storage(StorageError::ItemAlreadyInConversation) => Some("items"),
             Self::Storage(StorageError::ItemCursorNotFound { .. }) => Some("after"),
             Self::ConversationLocked { .. } => Some("conversation"),
             Self::Storage(StorageError::PreviousResponseNotFound { .. }) => Some("previous_response_id"),
             Self::Tool(ToolError::MissingOutput { .. } | ToolError::UnknownCallOutput { .. }) => Some("input"),
-            Self::InvalidPromptCacheOptions(_) => Some("prompt_cache_options"),
             Self::InvalidMaxToolCalls(_) => Some(MAX_TOOL_CALLS_PARAM),
             Self::UnsupportedParameter(error) => Some(error.param()),
             Self::McpListToolsFailed(_) => Some("tools"),
@@ -377,7 +373,7 @@ impl ExecutorError {
             error.insert("param".to_owned(), serde_json::json!(param));
         } else if matches!(
             self.client_visible_error(),
-            Self::Storage(StorageError::ResponseNotFound { .. })
+            Self::Storage(StorageError::ResponseNotFound { .. }) | Self::UnsupportedValue { param: None, .. }
         ) {
             error.insert("param".to_owned(), serde_json::Value::Null);
         }
@@ -639,7 +635,7 @@ mod tests {
     #[test]
     fn unsupported_value_matches_openai_error_envelope() {
         let error = ExecutorError::UnsupportedValue {
-            param: "multi_agent".into(),
+            param: Some("multi_agent".into()),
             code: Some("unsupported_value"),
             message: "Async parallel tool calls are not yet supported in multi-agent mode.".into(),
         };

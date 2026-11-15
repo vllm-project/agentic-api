@@ -133,6 +133,35 @@ test('Python call status and actual logs come from API items', () => {
   assert.equal(run.items.get('ci_1').agent.agent_name, '/root/test');
 });
 
+test('file search progress retains subagent attribution and authoritative passages', () => {
+  const run = createRun();
+  const agent = '/root/file_researcher';
+  const item = { id: 'fs_1', type: 'file_search_call', status: 'in_progress', queries: ['archive retention'], results: null };
+  applyEvent(run, { type: 'response.output_item.added', agent: { agent_name: agent }, item });
+  for (const status of ['in_progress', 'searching', 'completed']) {
+    applyEvent(run, { type: `response.file_search_call.${status}`, item_id: item.id });
+    assert.equal(run.items.get(item.id).status, status);
+    assert.equal(run.activity.get(agent), `File search: ${status}`);
+    assert.equal(run.progress.get(agent).get(item.id).status, status === 'completed' ? 'done' : 'active');
+  }
+  assert.equal(run.progress.get(agent).get(item.id).label, 'Searching files');
+  assert.equal(run.progress.get(agent).get(item.id).detail, 'archive retention');
+  const results = [{ file_id: 'file_archive', filename: 'archive-requirements.md', score: 0.9, text: 'Retain documents for 90 days.' }];
+  applyEvent(run, { ...terminal, response: { ...terminal.response, output: [{ ...item, status: 'completed', results }] } });
+  assert.equal(run.items.get(item.id).agent.agent_name, agent);
+  assert.deepEqual(run.items.get(item.id).results, results);
+  assert.equal(run.progress.get(agent).get(item.id).status, 'done');
+});
+
+test('failed and incomplete file searches remain failed in final snapshots', () => {
+  for (const status of ['failed', 'incomplete']) {
+    const run = createRun(); run.singleAgent = true;
+    applyEvent(run, { ...terminal, response: { ...terminal.response, output: [{ id: 'fs_failed', type: 'file_search_call', status, queries: [], results: [] }] } });
+    assert.equal(run.progress.get('/root').get('fs_failed').status, 'failed');
+    assert.equal(run.items.get('fs_failed').status, status);
+  }
+});
+
 test('diagnostic event history is bounded', () => {
   const run = createRun();
   for (let i = 0; i < 400; i++) applyEvent(run, { type: 'response.created', sequence_number: i });

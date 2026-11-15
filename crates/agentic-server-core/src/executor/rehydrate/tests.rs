@@ -29,14 +29,11 @@ fn session_history_without_compaction_is_unchanged() {
     ]))
     .unwrap();
     let expected = serde_json::to_value(&history).unwrap();
-    assert_eq!(
-        serde_json::to_value(canonical_session_history(history)).unwrap(),
-        expected
-    );
+    assert_eq!(serde_json::to_value(retain_window(history)).unwrap(), expected);
 }
 
 #[test]
-fn restored_session_keeps_canonical_compaction_and_mcp_discovery() {
+fn restored_session_keeps_canonical_compaction_and_drops_old_mcp_discovery() {
     let history: Vec<InputItem> = serde_json::from_value(serde_json::json!([
         {"type":"mcp_list_tools", "id":"mcpl_1", "server_label":"counter", "tools":[]},
         {"type":"message", "role":"assistant", "content":"obsolete detail"},
@@ -48,16 +45,16 @@ fn restored_session_keeps_canonical_compaction_and_mcp_discovery() {
         {"type":"function_call_output", "call_id":"live", "output":"live result"}
     ]))
     .unwrap();
-    let history = canonical_session_history(history);
-    assert_eq!(history.len(), 5);
-    assert!(matches!(history[0], InputItem::McpListTools(_)));
-    assert!(matches!(&history[2], InputItem::Compaction(item)
+    let history = retain_window(history);
+    assert_eq!(history.len(), 4);
+    assert!(matches!(&history[1], InputItem::Compaction(item)
         if item.id.as_deref() == Some("cmp_latest") && item.encrypted_content == "latest summary"));
     assert!(pending_calls(&history).unwrap().is_empty());
     let serialized = serde_json::to_value(&history).unwrap();
-    assert_eq!(serialized[1]["id"], "msg_keep");
+    assert_eq!(serialized[0]["id"], "msg_keep");
+    assert_eq!(serialized[2]["call_id"], "live");
     assert_eq!(serialized[3]["call_id"], "live");
-    assert_eq!(serialized[4]["call_id"], "live");
+    assert!(!serialized.to_string().contains("mcp_list_tools"));
     assert!(!serialized.to_string().contains("obsolete"));
 }
 
@@ -74,141 +71,15 @@ fn restored_session_uses_the_latest_window_and_preserves_live_pending_calls() {
         {"type":"function_call", "call_id":"live", "name":"lookup", "arguments":"{}"}
     ]))
     .unwrap();
-    let history = canonical_session_history(history);
+    let history = retain_window(history);
     let serialized = serde_json::to_value(&history).unwrap();
-    assert_eq!(history.len(), 5);
-    assert_eq!(serialized[0]["id"], "mcpl_old");
-    assert_eq!(serialized[1]["id"], "msg_keep");
-    assert_eq!(serialized[2]["id"], "mcpl_new");
-    assert_eq!(serialized[3]["id"], "cmp_new");
+    assert_eq!(history.len(), 3);
+    assert_eq!(serialized[0]["id"], "msg_keep");
+    assert_eq!(serialized[1]["id"], "cmp_new");
+    assert!(!serialized.to_string().contains("mcp_list_tools"));
     let pending = pending_calls(&history).unwrap();
     assert_eq!(pending.len(), 1);
     assert_eq!(pending[0].call_id.as_str(), "live");
-}
-
-fn reasoning_item(content: &[&str], encrypted_content: Option<&str>) -> InputItem {
-    InputItem::Reasoning(ReasoningOutput {
-        agent: None,
-        id: "rs_prior".to_owned(),
-        content: content.iter().map(|text| ReasoningTextContent::new(*text)).collect(),
-        summary: vec![crate::types::ReasoningSummaryContent::new("public summary")],
-        encrypted_content: encrypted_content
-            .map(|text| crate::types::OpaqueReasoning::try_from(text.to_owned()).unwrap()),
-        status: Some(crate::types::ReasoningStatus::Completed),
-    })
-}
-
-#[test]
-fn plaintext_reasoning_is_normalized_for_both_vllm_paths() {
-    let mut input = ResponsesInput::from(vec![reasoning_item(
-        &["first continuation part", "second continuation part"],
-        Some("opaque-provider-state"),
-    )]);
-
-    prepare_reasoning_for_vllm(&mut input).expect("plaintext reasoning is replayable");
-
-    let ResponsesInput::Items(items) = input else {
-        panic!("expected structured input");
-    };
-    let InOutItem::Input(InputItem::Reasoning(reasoning)) = &items[0] else {
-        panic!("expected reasoning item");
-    };
-    assert_eq!(reasoning.id, "rs_prior");
-    assert_eq!(reasoning.content.len(), 1);
-    assert_eq!(
-        reasoning.content[0].text,
-        "first continuation part\nsecond continuation part"
-    );
-    assert!(reasoning.summary.is_empty());
-    assert_eq!(reasoning.status, Some(crate::types::ReasoningStatus::Completed));
-    assert_eq!(reasoning.encrypted_content, None);
-}
-
-#[test]
-fn encrypted_reasoning_requires_nonempty_plaintext_content() {
-    for content in [Vec::new(), vec![""], vec!["", ""]] {
-        let mut input = ResponsesInput::from(vec![reasoning_item(&content, Some("opaque-provider-state"))]);
-
-        let error = prepare_reasoning_for_vllm(&mut input).expect_err("encrypted-only reasoning must not reach vLLM");
-
-        assert_eq!(error.http_status(), http::StatusCode::BAD_REQUEST);
-        assert!(
-            error
-                .to_string()
-                .contains("encrypted state without plaintext reasoning content")
-        );
-        assert!(!error.to_string().contains("opaque-provider-state"));
-    }
-}
-
-#[test]
-fn plaintext_reasoning_with_null_encrypted_state_is_normalized_without_summary() {
-    let item = reasoning_item(&["plaintext continuation"], None);
-    let mut input = ResponsesInput::from(vec![item]);
-
-    prepare_reasoning_for_vllm(&mut input).expect("null encrypted state is valid");
-
-    let ResponsesInput::Items(items) = input else {
-        panic!("expected structured input");
-    };
-    let InOutItem::Input(InputItem::Reasoning(reasoning)) = &items[0] else {
-        panic!("expected reasoning item");
-    };
-    assert_eq!(
-        reasoning.content[0].type_,
-        crate::types::ReasoningTextKind::ReasoningText
-    );
-    assert_eq!(reasoning.content[0].text, "plaintext continuation");
-    assert!(reasoning.summary.is_empty());
-    assert_eq!(reasoning.encrypted_content, None);
-}
-
-#[test]
-fn summary_only_reasoning_without_opaque_state_is_removed_from_vllm_copy() {
-    for input in [
-        r#"[{"type":"reasoning","summary":[{"type":"summary_text","text":"public summary"}]}]"#,
-        r#"[{"type":"reasoning","summary":[{"type":"summary_text","text":"public summary"}],"encrypted_content":null}]"#,
-    ] {
-        let mut input: ResponsesInput = serde_json::from_str(input).unwrap();
-
-        prepare_reasoning_for_vllm(&mut input).expect("summary-only reasoning has no usable vLLM state");
-
-        let ResponsesInput::Items(items) = input else {
-            panic!("expected structured input");
-        };
-        assert!(
-            items.is_empty(),
-            "a reasoning summary must never be promoted to reasoning text"
-        );
-    }
-}
-
-#[test]
-fn validation_failure_does_not_partially_mutate_input() {
-    let valid = reasoning_item(&["plaintext continuation"], Some("first-opaque-state"));
-    let invalid = reasoning_item(&[], Some("second-opaque-state"));
-    let mut input = ResponsesInput::from(vec![valid.clone(), invalid]);
-
-    prepare_reasoning_for_vllm(&mut input).expect_err("the complete input must validate before normalization");
-
-    let ResponsesInput::Items(items) = input else {
-        panic!("expected structured input");
-    };
-    let (InOutItem::Input(InputItem::Reasoning(actual)), InputItem::Reasoning(expected)) = (&items[0], &valid) else {
-        panic!("expected reasoning items");
-    };
-    assert_eq!(actual.content[0].text, expected.content[0].text);
-    assert_eq!(actual.summary, expected.summary);
-    assert_eq!(actual.encrypted_content, expected.encrypted_content);
-}
-
-#[test]
-fn text_input_is_unchanged() {
-    let mut input = ResponsesInput::Text("plain user input".to_owned());
-
-    prepare_reasoning_for_vllm(&mut input).expect("text input contains no reasoning item");
-
-    assert!(matches!(input, ResponsesInput::Text(ref text) if text == "plain user input"));
 }
 
 fn request(conversation_id: Option<&str>, previous_response_id: Option<&str>) -> RequestPayload {
@@ -332,7 +203,7 @@ fn multi_agent_rejects_async_tools_only_with_explicit_parallel_tool_calls() {
             param,
             code,
             message,
-        } if param == "multi_agent" && code == Some("unsupported_value") && message == "Async parallel tool calls are not yet supported in multi-agent mode."
+        } if param.as_deref() == Some("multi_agent") && code == Some("unsupported_value") && message == "Async parallel tool calls are not yet supported in multi-agent mode."
     ));
     for (parallel, async_tool) in [
         (serde_json::json!(false), true),
@@ -345,7 +216,7 @@ fn multi_agent_rejects_async_tools_only_with_explicit_parallel_tool_calls() {
 }
 
 #[tokio::test]
-async fn inherited_multi_agent_rejects_max_tool_calls() {
+async fn inherited_multi_agent_preserves_checkpoint_and_validates_limits() {
     let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await.unwrap();
     let response_store = ResponseStore::new(pool.clone());
     let conversation_store = ConversationStore::new(pool);
@@ -377,8 +248,13 @@ async fn inherited_multi_agent_rejects_max_tool_calls() {
         }),
         ..Default::default()
     };
+    let items: Vec<InOutItem> = serde_json::from_value(serde_json::json!([
+        {"role": "user", "content": "retained public history"},
+        {"type": "compaction", "id": "cmp_tree", "encrypted_content": "summary"}
+    ]))
+    .unwrap();
     response_store
-        .persist("resp_tree", None, Vec::new(), None, &metadata)
+        .persist("resp_tree", None, items.clone(), None, &metadata)
         .await
         .unwrap();
     conversation_store
@@ -386,7 +262,7 @@ async fn inherited_multi_agent_rejects_max_tool_calls() {
             &conversation.conversation_id,
             &ResponseCheckpoint::default(),
             "resp_conversation_tree",
-            Vec::new(),
+            items,
             None,
             &metadata,
         )
@@ -399,12 +275,17 @@ async fn inherited_multi_agent_rejects_max_tool_calls() {
             (Some(conversation.conversation_id.as_str()), None),
         ] {
             // No explicit multi_agent: admission must check again after restoring the tree.
-            let mut request = request(conversation_id, previous);
-            request.stream = stream;
-            request.max_tool_calls = Some(MaxToolCalls::new(NonZeroU64::new(5).unwrap()));
-            let error = rehydrate_conversation(request, &exec_ctx).await.unwrap_err();
+            let mut payload = request(conversation_id, previous);
+            payload.stream = stream;
+            payload.max_tool_calls = Some(MaxToolCalls::new(NonZeroU64::new(5).unwrap()));
+            let error = rehydrate_conversation(payload, &exec_ctx).await.unwrap_err();
             assert!(matches!(error, ExecutorError::InvalidRequest(message)
                 if message == "max_tool_calls is not supported with multi_agent"));
+            let ctx = rehydrate_conversation(request(conversation_id, previous), &exec_ctx)
+                .await
+                .unwrap();
+            assert!(ctx.enriched_request.multi_agent.unwrap().enabled);
+            assert_eq!(ctx.checkpoint.unwrap().history_item_ids.len(), 2);
         }
     }
 }
@@ -562,6 +443,16 @@ async fn conversation_rehydration_remembers_listed_mcp_servers() -> Result<(), B
             .iter()
             .all(|item| !matches!(item, InOutItem::Input(InputItem::McpListTools(_))))
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn request_without_continuation_has_no_checkpoint() -> Result<(), Box<dyn std::error::Error>> {
+    let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
+
+    let ctx = rehydrate_conversation(request(None, None), &exec_ctx).await?;
+
+    assert!(ctx.checkpoint.is_none());
     Ok(())
 }
 
@@ -778,6 +669,24 @@ async fn stored_code_interpreter_call_reaches_the_model_as_its_function_call() -
         assert_eq!(model_input[1]["type"], "function_call_output");
         assert_eq!(model_input[2]["role"], "user");
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn previous_response_rehydration_checkpoints_the_parent() -> Result<(), Box<dyn std::error::Error>> {
+    let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
+    let response_store = ResponseStore::new(pool);
+    response_store
+        .persist("resp_prior", None, Vec::new(), None, &ResponseMetadata::default())
+        .await?;
+    let exec_ctx = execution_context(ConversationStore::disabled(), response_store);
+
+    let ctx = rehydrate_conversation(request(None, Some("resp_prior")), &exec_ctx).await?;
+
+    assert!(
+        ctx.checkpoint
+            .is_some_and(|checkpoint| checkpoint.response_id.as_deref() == Some("resp_prior"))
+    );
     Ok(())
 }
 

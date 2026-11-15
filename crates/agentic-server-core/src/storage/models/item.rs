@@ -174,8 +174,8 @@ async fn create_in_tx_with_next_conversation_seq(
          ) \
          INSERT INTO items (id, metadata, data, created_at, conversation_id, seq, public_id, tenant_id) \
          SELECT CASE WHEN source.id IS NULL THEN incoming.id ELSE incoming.entry_id END, \
-                CASE WHEN source.id IS NULL THEN incoming.metadata ELSE source.metadata END, \
-                COALESCE(source.data, incoming.data), COALESCE(source.created_at, incoming.created_at), \
+                COALESCE(source.metadata, incoming.metadata), COALESCE(source.data, incoming.data), \
+                COALESCE(source.created_at, incoming.created_at), \
                 incoming.conversation_id, incoming.seq, COALESCE(source.public_id, incoming.id), owner.tenant_id \
          FROM incoming CROSS JOIN owner \
          LEFT JOIN source_rows ON source_rows.incoming_seq = incoming.seq \
@@ -236,15 +236,29 @@ pub async fn get_items(pool: &DbPool, ids: &[String]) -> DbResult<Vec<Item>> {
     Ok(rows)
 }
 
-/// Find the original stored item carrying a public identity.
+/// Resolve each public ID to its original stored row, ordered by creation time and then row ID.
 ///
 /// # Errors
-/// Returns an error if the database query fails.
-pub async fn get_by_public_id(pool: &DbPool, id: &str) -> DbResult<Option<Item>> {
-    sqlx::query_as::<_, Item>("SELECT * FROM items WHERE public_id = $1 ORDER BY created_at, id LIMIT 1")
-        .bind(id)
-        .fetch_optional(pool)
-        .await
+/// Returns `DbResult::Err` if the database query fails.
+pub async fn get_items_by_public_id(pool: &DbPool, ids: &[String]) -> DbResult<Vec<Item>> {
+    let mut rows = Vec::with_capacity(ids.len());
+    for batch in ids.chunks(MAX_BIND_PARAMETERS) {
+        let placeholders = (1..=batch.len())
+            .map(|index| format!("(${index})"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "WITH requested (public_id) AS (VALUES {placeholders}) \
+             SELECT items.* FROM requested JOIN items ON items.id = \
+             (SELECT id FROM items WHERE public_id = requested.public_id ORDER BY created_at, id LIMIT 1)"
+        );
+        let mut query = sqlx::query_as::<_, Item>(&sql);
+        for id in batch {
+            query = query.bind(id);
+        }
+        rows.extend(query.fetch_all(pool).await?);
+    }
+    Ok(rows)
 }
 
 /// List a page using keyset pagination with (seq, id) ordering.
@@ -350,6 +364,7 @@ pub async fn detach_from_conversation_in_tx(
 mod tests {
     use super::super::conversation;
     use super::*;
+    use crate::storage::create_pool_with_schema;
     use crate::utils::common::{utcnow_str, uuid7_str};
 
     fn row(public_id: String) -> Item {
@@ -421,6 +436,44 @@ mod tests {
         assert_ne!(created[0].id, created[1].id);
         assert_eq!(created[0].public_id, "item_repeated");
         assert_eq!(created[1].public_id, "item_repeated");
+    }
+
+    #[tokio::test]
+    async fn public_id_lookup_returns_original_rows_across_batches() {
+        let database_url = std::env::var("TEST_POSTGRES_URL").unwrap_or_else(|_| "sqlite::memory:".into());
+        let pool = create_pool_with_schema(Some(&database_url)).await.unwrap();
+        let prefix = uuid7_str("lookup_");
+        let mut items = (0..=MAX_BIND_PARAMETERS)
+            .map(|index| row(format!("{prefix}_{index}")))
+            .collect::<Vec<_>>();
+        let mut ids = items.iter().map(|item| item.public_id.clone()).collect::<Vec<_>>();
+        // Insert later timestamps first, then tied originals in reverse row-ID order.
+        let public_id = ids[0].clone();
+        items[0].created_at = 2;
+        for _ in 0..1_000 {
+            let mut repeated = row(public_id.clone());
+            repeated.created_at = 2;
+            items.push(repeated);
+        }
+        for suffix in ["b", "a"] {
+            let mut original = row(public_id.clone());
+            original.id = format!("{prefix}_{suffix}");
+            original.created_at = 1;
+            original.data = format!(r#"{{"original":"{suffix}"}}"#);
+            items.push(original);
+        }
+        let mut transaction = pool.begin().await.unwrap();
+        create_in_tx(&mut transaction, items, None).await.unwrap();
+        transaction.commit().await.unwrap();
+        ids.push(format!("{prefix}_missing"));
+
+        let found = get_items_by_public_id(&pool, &ids).await.unwrap();
+        assert_eq!(found.len(), MAX_BIND_PARAMETERS + 1, "one row per found public ID");
+        let original = found.iter().find(|item| item.public_id == public_id).unwrap();
+        assert_eq!(original.id, format!("{prefix}_a"));
+        assert_eq!(original.data, r#"{"original":"a"}"#);
+        assert!(get_items_by_public_id(&pool, &[]).await.unwrap().is_empty());
+        pool.close().await;
     }
 
     #[tokio::test]

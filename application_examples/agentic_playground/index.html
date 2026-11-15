@@ -63,14 +63,14 @@
     <div class="workspace">
       <section class="brief panel">
         <div class="section-heading"><div><p class="eyebrow">01 / THE CHALLENGE</p><h2>Set the mission</h2></div><button id="example" class="text-button">Use example ↻</button></div>
-        <p class="section-description">Describe the goal once. Your coordinator takes it from here.</p>
-        <div id="tasks"></div>
-        <button id="add" class="add-button">＋ Add an agent</button>
+        <p class="section-description">Run four agents with Python, web search, Microsoft Learn MCP, and file search.</p>
+        <div id="tasks" hidden></div>
+        <button id="add" class="add-button" hidden>＋ Add an agent</button>
         <div class="tools">
           <h3>Give your agents tools</h3>
           <label class="toggle"><input id="search" type="checkbox" checked><span>Web search<small>Research the problem and find references</small></span><span class="tool-icon">↗</span></label>
           <label class="toggle"><input id="code" type="checkbox" checked><span>Python execution<small>Run solutions and check test outputs</small></span><span class="tool-icon">&lt;/&gt;</span></label>
-          <label class="concurrency">Concurrent subagents<select id="concurrency"><option selected>1</option><option>2</option><option>3</option><option>4</option><option>8</option></select></label>
+          <label class="concurrency">Concurrent subagents<select id="concurrency"><option selected>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>8</option></select></label>
           <p class="hint">Python runs in a fresh sandbox. Enable the interpreter on your gateway to execute code.</p>
         </div>
         <button id="run" class="primary">Send prompt <span>↗</span></button>
@@ -78,7 +78,7 @@
       </section>
 
       <section class="results panel" data-running="false">
-        <div class="section-heading"><div><p class="eyebrow">02 / THE TEAM AT WORK</p><h2>Follow the progress</h2></div><span id="run-status" class="badge" role="status">Ready</span></div>
+        <div class="section-heading"><div><p class="eyebrow">02 / THE TEAM AT WORK</p><h2>Follow the progress</h2></div><div class="run-controls"><span id="run-status" class="badge" role="status">Ready</span><button id="disconnect" class="text-button" disabled>Disconnect stream</button></div></div>
         <div class="metrics">
           <div><strong id="agent-count">0</strong><span>agents observed</span></div>
           <div><strong id="tool-count">0</strong><span>tool calls</span></div>
@@ -106,10 +106,12 @@
           <details><summary id="request-label">Request · POST /v1/responses</summary><pre id="request-preview"></pre></details>
           <details><summary>Raw streaming events · latest 250</summary><pre id="events-preview">No events yet.</pre></details>
         </div>
-        <div class="result-actions"><button id="disconnect" class="text-button" disabled>Disconnect stream</button><button id="download" class="text-button" disabled>Download run ↓</button></div>
+        <div class="result-actions"><button id="download" class="text-button" disabled>Download run ↓</button></div>
+        <div id="chat-history" class="chat-history" role="log" aria-label="Conversation" aria-live="polite" hidden></div>
         <form id="followup-form">
-          <label for="followup">Keep the conversation going</label>
-          <div class="followup-row"><input id="followup" placeholder="Try another edge case, or ask about a solution…" disabled><button id="send" class="secondary" disabled>Send ↗</button></div>
+          <label for="followup">Message the agents</label>
+          <div class="followup-row"><textarea id="followup" rows="2" placeholder="Message the agents…" disabled></textarea><button id="send" class="secondary" disabled>Send ↑</button></div>
+          <p class="hint">Enter to send · Shift+Enter for a new line</p>
           <p id="continuation" class="hint">Follow-ups become available when the run completes.</p>
         </form>
       </section>

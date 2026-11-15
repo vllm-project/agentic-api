@@ -106,8 +106,12 @@ jobs:
           set -euo pipefail
           branch="release-prep/v$RELEASE_VERSION"
 
-          if git ls-remote --exit-code --heads origin "refs/heads/$branch" >/dev/null 2>&1; then
-            echo "::error::Branch $branch already exists"
+          # A maintainer can pre-create this branch when repository rules prevent
+          # GITHUB_TOKEN from creating refs. Only reuse the exact selected base.
+          base_sha="$(git rev-parse HEAD)"
+          branch_sha="$(git ls-remote --heads origin "refs/heads/$branch" | cut -f1)"
+          if [ -n "$branch_sha" ] && [ "$branch_sha" != "$base_sha" ]; then
+            echo "::error::Branch $branch already contains work or points to a different base; inspect its PR"
             exit 1
           fi
 
@@ -118,7 +122,7 @@ jobs:
           git push origin "HEAD:refs/heads/$branch"
           echo "name=$branch" >> "$GITHUB_OUTPUT"
 
-      - name: Open release PR
+      - name: Open release PR or report maintainer action
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ inputs.version }}
@@ -139,8 +143,22 @@ jobs:
           - cargo test
           EOF
           )"
-          gh pr create \
+          if output="$(gh pr create \
             --base main \
             --head "$RELEASE_BRANCH" \
             --title "chore: prepare release v$RELEASE_VERSION" \
-            --body "$body"
+            --body "$body" 2>&1)"; then
+            printf '%s\n' "$output"
+          elif [[ "$output" == *"GitHub Actions is not permitted to create or approve pull requests"* ]]; then
+            echo "::notice::Release validation and branch preparation succeeded; a maintainer must open the PR"
+            create_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/main...$RELEASE_BRANCH?expand=1"
+            {
+              echo "## Maintainer action required"
+              echo "Repository policy prevents GitHub Actions from opening pull requests."
+              echo "The validated version commit was pushed to \`$RELEASE_BRANCH\`."
+              echo "[Open the v$RELEASE_VERSION release PR]($create_url) against main, then review its diff and checks."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf '%s\n' "$output" >&2
+            exit 1
+          fi

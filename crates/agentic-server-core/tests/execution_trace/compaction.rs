@@ -6,7 +6,12 @@ async fn compaction_traces_distinguish_triggers_and_state_sources_without_conten
     for trigger in ["context_management", "input_item", "explicit"] {
         let traces = Traces::new();
         let responses = match trigger {
-            "context_management" => vec![text_response("private summary"), text_response("answer")],
+            // Automatic compaction summarizes before the round and again after the answer.
+            "context_management" => vec![
+                text_response("private summary"),
+                text_response("answer"),
+                text_response("private summary"),
+            ],
             "input_item" => vec![text_response("prior answer"), text_response("private summary")],
             _ => vec![text_response("private summary")],
         };
@@ -62,28 +67,32 @@ async fn compaction_traces_distinguish_triggers_and_state_sources_without_conten
             vec!["agentic.compaction", "agentic.persist", "agentic.execute"]
         };
         let spans = traces.finished_by_name(&names).await;
-        let compaction = spans.iter().find(|span| span.name == "agentic.compaction").unwrap();
-        assert_eq!(
-            attribute(compaction, "agentic.compaction.trigger"),
-            Some(&Value::from(trigger))
-        );
-        assert_eq!(
-            attribute(compaction, "agentic.compaction.operation"),
-            Some(&Value::from("summarize"))
-        );
+        let compactions: Vec<_> = spans.iter().filter(|span| span.name == "agentic.compaction").collect();
+        let expected = if trigger == "context_management" { 2 } else { 1 };
+        assert_eq!(compactions.len(), expected, "{trigger}");
         let parent = spans
             .iter()
             .find(|span| span.name == "agentic.execute")
             .map_or_else(|| traces.root_span_id(), |span| span.span_context.span_id());
-        assert_eq!(compaction.parent_span_id, parent);
-        assert_eq!(
-            spans
-                .iter()
-                .filter(|span| span.name == "http.client.request"
-                    && span.parent_span_id == compaction.span_context.span_id())
-                .count(),
-            1
-        );
+        for compaction in compactions {
+            assert_eq!(
+                attribute(compaction, "agentic.compaction.trigger"),
+                Some(&Value::from(trigger))
+            );
+            assert_eq!(
+                attribute(compaction, "agentic.compaction.operation"),
+                Some(&Value::from("summarize"))
+            );
+            assert_eq!(compaction.parent_span_id, parent);
+            assert_eq!(
+                spans
+                    .iter()
+                    .filter(|span| span.name == "http.client.request"
+                        && span.parent_span_id == compaction.span_context.span_id())
+                    .count(),
+                1
+            );
+        }
         let rehydrate = spans.iter().find(|span| span.name == "agentic.rehydrate").unwrap();
         let persist = spans.iter().find(|span| span.name == "agentic.persist").unwrap();
         assert_eq!(

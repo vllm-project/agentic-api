@@ -8,7 +8,6 @@ use agentic_core::config::{
     MAX_UPSTREAM_JSON_BYTES_ENV, MAX_UPSTREAM_SSE_LINE_BYTES_ENV, ResponsesConfig,
 };
 use agentic_core::error::Error;
-use std::collections::BTreeMap;
 use std::num::NonZeroUsize;
 
 pub(crate) fn resolve_responses_config(file: &ResponsesFileConfig) -> Result<ResponsesConfig, Error> {
@@ -34,7 +33,6 @@ pub(crate) fn resolve_responses_config(file: &ResponsesFileConfig) -> Result<Res
         parse_env_nonzero_usize(MAX_STREAM_EVENT_BYTES_ENV, max_stream_event_bytes_default)?.get();
     let responses_config = ResponsesConfig {
         prompt_cache_options_supported: file.prompt_cache_options_supported.unwrap_or(false),
-        model_policies: file.models.clone(),
         max_retained_bytes,
         max_upstream_json_bytes,
         max_upstream_sse_line_bytes,
@@ -47,7 +45,6 @@ pub(crate) fn resolve_responses_config(file: &ResponsesFileConfig) -> Result<Res
 pub(crate) fn generated_responses_file_config() -> ResponsesFileConfig {
     ResponsesFileConfig {
         prompt_cache_options_supported: None,
-        models: BTreeMap::new(),
         max_retained_bytes: environment_value(MAX_RETAINED_RESPONSE_BYTES_ENV)
             .and_then(|value| value.parse::<NonZeroUsize>().ok()),
         max_upstream_json_bytes: environment_value(MAX_UPSTREAM_JSON_BYTES_ENV)
@@ -63,42 +60,41 @@ pub(crate) fn generated_responses_file_config() -> ResponsesFileConfig {
 mod tests {
     use super::*;
     use crate::config_file::FileConfig;
+    use agentic_core::types::ServiceTier;
 
     #[test]
-    fn responses_models_load_separately_from_the_catalog() {
+    fn model_capabilities_share_one_configuration_with_the_catalog() {
         let input = r#"
             [responses]
             prompt_cache_options_supported = true
 
-            [responses.models."gpt-6-astra"]
+            [models."gpt-6-astra"]
             sampling_supported = false
             logprobs_supported = false
-            reasoning_efforts = ["low", "medium", "high", "xhigh", "max"]
+            supported_reasoning_levels = ["none", "minimal", "low", "high"]
             service_tiers = ["default"]
             prompt_cache_options_supported = false
             prompt_cache_retention_supported = false
-
-            [models."gpt-6-astra"]
-            supported_reasoning_levels = ["low"]
         "#;
         let file: FileConfig = toml::from_str(input).unwrap();
         let config = resolve_responses_config(&file.responses).unwrap();
         assert!(config.prompt_cache_options_supported);
-        let policy = &config.model_policies["gpt-6-astra"];
+        let capabilities = file.model_capabilities();
+        let policy = capabilities.for_model("gpt-6-astra").unwrap();
         assert_eq!(policy.sampling_supported, Some(false));
         assert_eq!(policy.logprobs_supported, Some(false));
-        assert_eq!(policy.reasoning_efforts.as_ref().unwrap().len(), 5);
-        assert_eq!(policy.service_tiers.as_deref(), Some(&["default".to_owned()][..]));
+        assert_eq!(policy.supported_reasoning_levels.as_ref().unwrap().as_slice().len(), 4);
+        assert_eq!(
+            capabilities.resolve_reasoning_levels("gpt-6-astra"),
+            policy.supported_reasoning_levels.as_ref().unwrap().as_slice(),
+        );
+        assert_eq!(policy.service_tiers.as_deref(), Some(&[ServiceTier::Default][..]));
         assert_eq!(policy.prompt_cache_options_supported, Some(false));
         assert_eq!(policy.prompt_cache_retention_supported, Some(false));
-        assert_eq!(
-            toml::from_str::<FileConfig>(&toml::to_string(&file).unwrap())
-                .unwrap()
-                .responses
-                .models,
-            config.model_policies
-        );
-        assert!(toml::from_str::<FileConfig>("[responses.models.astra]\nlogprob_supported = false").is_err());
+        let restored: FileConfig = toml::from_str(&toml::to_string(&file).unwrap()).unwrap();
+        assert_eq!(restored.model_capabilities().for_model("gpt-6-astra"), Some(policy));
+        assert!(toml::from_str::<FileConfig>("[responses.models.astra]\nlogprobs_supported = false").is_err());
+        assert!(toml::from_str::<FileConfig>("[models.astra]\nlogprob_supported = false").is_err());
     }
 
     #[test]

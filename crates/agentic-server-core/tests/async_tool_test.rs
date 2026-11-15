@@ -488,6 +488,7 @@ async fn compaction_in_a_later_response_keeps_the_pending_async_call() {
         model_response(false, &[message_item("msg_1", "Started the lookup.")]),
         support::text_response("Summary: a Paris weather lookup is pending."),
         model_response(false, &[message_item("msg_2", "A compact umbrella.")]),
+        support::text_response("Summary: a Paris weather lookup is pending; a compact umbrella."),
         model_response(false, &[message_item("msg_3", "Paris is clear and 22 C.")]),
     ])
     .await;
@@ -530,6 +531,7 @@ async fn compaction_inside_the_response_keeps_the_pending_async_call() {
             model_response(stream, &[call_item(WEATHER_TOOL, "call_1", r#"{"city":"Paris"}"#)]),
             support::text_response("Summary: a Paris weather lookup is pending."),
             model_response(stream, &[message_item("msg_1", "Started the lookup.")]),
+            support::text_response("Summary: a Paris weather lookup is pending."),
             model_response(stream, &[message_item("msg_2", "Paris is clear and 22 C.")]),
         ])
         .await;
@@ -700,6 +702,8 @@ async fn a_late_output_delivered_with_compaction_is_kept() {
                     false,
                     &[message_item("msg_2", "Paris is clear and 22 C.")],
                 ));
+                // The turn's answer passes the threshold too, so it compacts once more after answering.
+                responses.push(support::text_response("Summary: Paris is clear and 22 C."));
             }
             responses.push(model_response(false, &[message_item("msg_3", "Take sunglasses.")]));
             let fixture = support::TestFixture::new_with_responses(responses).await;
@@ -773,6 +777,7 @@ async fn a_late_output_survives_compaction_in_two_rounds() {
             model_response(false, &[call_item("get_time", "call_2", r#"{"city":"Paris"}"#)]),
             support::text_response("Summary: weather arrived; a time lookup is pending."),
             model_response(false, &[message_item("msg_2", "Clear and 22 C; checking the time.")]),
+            support::text_response("Summary: clear and 22 C; a time lookup is pending."),
             model_response(false, &[message_item("msg_3", "Take sunglasses.")]),
         ]);
         let fixture = support::TestFixture::new_with_responses(responses).await;
@@ -930,6 +935,7 @@ async fn a_repeated_output_after_compaction_keeps_its_call() {
         model_response(false, &[message_item("msg_1", "Started the lookup.")]),
         support::text_response("Summary: the Paris weather arrived: clear, 22 C."),
         model_response(false, &[message_item("msg_2", "Paris is clear and 22 C.")]),
+        support::text_response("Summary: Paris is clear and 22 C."),
         model_response(false, &[message_item("msg_3", "Now it is rainy and 9 C.")]),
     ])
     .await;
@@ -971,6 +977,7 @@ async fn a_repeated_output_finds_a_call_supplied_with_its_output_in_a_compacting
     let fixture = support::TestFixture::new_with_responses(vec![
         support::text_response("Summary: the Paris weather arrived: clear, 22 C."),
         model_response(false, &[message_item("msg_1", "Paris is clear and 22 C.")]),
+        support::text_response("Summary: Paris is clear and 22 C."),
         model_response(false, &[message_item("msg_2", "Now it is rainy and 9 C.")]),
     ])
     .await;
@@ -1012,6 +1019,7 @@ async fn a_repeated_output_after_compaction_in_a_session_keeps_its_call() {
         model_response(false, &[message_item("msg_1", "Started the lookup.")]),
         support::text_response("Summary: the Paris weather arrived: clear, 22 C."),
         model_response(false, &[message_item("msg_2", "Paris is clear and 22 C.")]),
+        support::text_response("Summary: Paris is clear and 22 C."),
         model_response(false, &[message_item("msg_3", "Now it is rainy and 9 C.")]),
     ])
     .await;
@@ -1184,6 +1192,7 @@ async fn a_late_custom_output_delivered_with_compaction_is_kept() {
         model_response(false, &[message_item("msg_1", "Started.")]),
         support::text_response("Summary: the echo returned HI."),
         model_response(false, &[message_item("msg_2", "Echo said HI.")]),
+        support::text_response("Summary: the echo said HI."),
         model_response(false, &[message_item("msg_3", "Done.")]),
     ])
     .await;

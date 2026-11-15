@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Rust toolchain (MSRV 1.85)
+- Rust toolchain (MSRV 1.98.1)
 - [pre-commit](https://pre-commit.com/)
 
 ## Building

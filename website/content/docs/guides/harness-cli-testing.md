@@ -303,6 +303,82 @@ Match the log level rather than the word `error`: Codex closes its WebSocket wit
 `exec` finishes, which the gateway logs as a `WARN ... WebSocket protocol error: Connection reset without closing
 handshake` line per run. That line is expected; anything at `ERROR` level is not.
 
+## Messages threads and real Claude Code smoke test
+
+Build the gateway and run the installed Claude Code CLI against an isolated gateway
+and a deterministic Messages backend:
+
+```bash
+cargo build -p agentic-server --bin agentic-server --features vendored-openssl
+python3 scripts/tests/messages-claude-cli-e2e-test.py --trace-file /tmp/messages-cli-sqlite.json
+```
+
+The script creates a thread, restarts the gateway, and continues from the database.
+It then runs the real CLI, makes it execute `Read`, and verifies the returned tool
+result reaches the upstream. It records HTTP methods, protocol versions, content
+types, and thread directives without logging prompts or authentication headers.
+It exercises protocol compatibility rather than live-model answer quality.
+
+For PostgreSQL, pass `--database-url` with an isolated test database. The same test
+also runs against a temporary SQLite file by default. The child gateway uses a
+separate temporary `AGENTIC_API_HOME`, and the smoke test checks that startup writes
+its configuration there. For storage and HTTP tests,
+set `TEST_POSTGRES_URL` to an isolated PostgreSQL server with permission to create
+databases; each test creates its own UUID-named database:
+
+```bash
+cargo test -p agentic-server-core --test messages_thread_storage_test
+cargo test -p agentic-server --test messages_threads_test
+```
+
+In observed Claude Code 2.1.296 normal and `--bare` gateway runs, and a normal
+2.1.317 run after updating the installed CLI, inference used HTTP POST
+`/v1/messages?beta=true` with SSE responses and no WebSocket upgrade. The CLI sent
+full history on its second request and did not send a `thread` directive in this
+default configuration. The test reports `cli_used_threads` explicitly; the independent
+create/continue probes verify durable thread recovery even when that value is false.
+Pass `--full-cli` to exercise normal startup with the same isolated configuration.
+
+The installed 2.1.317 binary also exposes an undocumented
+`CLAUDE_CODE_TETHER_LIVE=1` opt-in. Exercise it only in the test child process with:
+
+```bash
+python3 scripts/tests/messages-claude-cli-e2e-test.py --full-cli --experimental-cli-threads \
+  --require-cli-threads \
+  --trace-file /tmp/messages-cli-thread-opt-in.json
+```
+
+The gateway implements a compatibility extension for Claude Code's beta identifier
+`claude-code-20250219`. It accepts repeated, unchanged `system` and `tools` on a
+continuation and removes the reserved billing-attribution block before retaining
+or forwarding the prompt. Changed instructions or tools still fail before the
+parent is consumed. Ordinary thread requests follow
+[Anthropic's create-only field rules](https://platform.claude.com/docs/en/build-with-claude/message-threads#what-to-send-on-each-request).
+
+The trace distinguishes `cli_sent_incremental_turn` from
+`cli_incremental_turn_verified`: the latter requires exactly two inference
+requests, both successful, with the continuation referencing the create response
+ID and containing only the new `tool_result` message. Full-history recovery cannot
+satisfy this check. `--require-cli-threads` makes this a required assertion.
+
+Use `--experimental-cli-inherited-fields` instead of `--experimental-cli-threads`
+to also exercise the installed CLI's separate inherited-field gate. The test seeds
+`tengu_quiet_heron` in disposable CLI configuration and permits reading that cache
+while telemetry is disabled. In this mode the CLI omits `tools` and the stored
+system prompt but retains one `system` attribution block. The trace records its
+shape as `system_shape[].cli_attribution` without recording the text.
+
+These opt-ins are internal CLI implementation details and may change between
+versions. They affect only the test child process and disposable configuration.
+The tests do not change the user's normal Claude configuration or rewrite requests
+between the CLI and gateway. Both modes are exercised against SQLite and PostgreSQL
+with database restart recovery and a real `Read` tool execution. The backend is a
+deterministic fixture; live Anthropic inference is not part of this smoke test.
+
+This does not establish which transports other Claude Code features use. See
+[Anthropic's gateway compatibility guide](https://code.claude.com/docs/en/llm-gateway-protocol)
+for the supported inference formats.
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |

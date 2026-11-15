@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use crate::types::io::input::{SearchHistory, is_search_item, model_items};
+use crate::types::io::input::{SearchHistory, expand_carried_windows, is_search_item, model_items};
 use crate::types::io::{
     CodeInterpreterCallOutput, InputContent, InputFileContent, InputItem, InputMessageContent, ReasoningOutput,
     ReasoningStatus, ResponsesInput, ToolCallOutput, ToolOutputContent,
@@ -242,7 +242,9 @@ pub(crate) fn estimate_input_tokens(input: &ResponsesInput) -> u64 {
             estimate.add_text(text);
             estimate.total_tokens()
         }
-        ResponsesInput::Items(_) => InputTokenEstimate::from_items(input.input_items().collect()).total_tokens(),
+        ResponsesInput::Items(_) => {
+            InputTokenEstimate::from_items(expand_carried_windows(input.input_items())).total_tokens()
+        }
     }
 }
 

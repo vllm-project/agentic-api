@@ -39,7 +39,7 @@ impl ListItemsQuery {
     pub(super) fn parse(raw: Option<&str>) -> Result<Self, Box<Response>> {
         let invalid = |param: &str, code: Option<&'static str>, message: String| {
             Box::new(executor_error_response(ExecutorError::UnsupportedValue {
-                param: param.to_owned(),
+                param: Some(param.to_owned()),
                 code,
                 message,
             }))

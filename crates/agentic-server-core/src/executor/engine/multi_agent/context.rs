@@ -20,7 +20,6 @@ use crate::types::{
     agent_tree::{StoredAgent, StoredTreeSnapshot},
     client_calls::{ClientToolOutput, ClientToolOutputBatch},
     io::{InputItem, InputMessage, InputMessageContent, OutputItem, ResponsesInput},
-    request_response::ContextManagement,
 };
 use crate::utils::common::serialized_size_up_to;
 
@@ -273,15 +272,7 @@ pub(super) async fn prepare_agent(
     request.input.validate()?;
     request.previous_response_id = None;
     request.conversation = None;
-    let management = request.context_management.get_or_insert_with(Vec::new);
-    if let Some(entry) = management.iter_mut().find(|entry| entry.type_ == "compaction") {
-        entry.compact_threshold.get_or_insert(DEFAULT_COMPACT_THRESHOLD);
-    } else {
-        management.push(ContextManagement {
-            type_: "compaction".into(),
-            compact_threshold: Some(DEFAULT_COMPACT_THRESHOLD),
-        });
-    }
+    request.set_default_compact_threshold(DEFAULT_COMPACT_THRESHOLD);
     let tool_search = ToolSearchHandler::prepare_request(
         &mut request,
         &stored.loaded_tools,

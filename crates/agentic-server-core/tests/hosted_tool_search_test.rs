@@ -528,7 +528,9 @@ async fn stateless_hosted_mcp_search_preserves_loads_and_discovery_across_turns(
             // Disabled stores also ensure neither request can depend on durable history or agent-tree state.
             let context = context(llm_url);
             let mut server = deferred_mcp(&mcp_url, Some("Echo and reverse tools."));
-            server["allowed_tools"] = json!(["echo", "reverse"]);
+            if stream {
+                server["allowed_tools"] = json!(["echo", "reverse"]);
+            }
             let tools = json!([{"type":"tool_search"}, server]);
             let mut history = vec![json!({"role":"user", "content":"Echo something."})];
             for turn in 0..2 {
@@ -1075,10 +1077,12 @@ async fn unreachable_mcp_server_fails_the_request_like_openai() {
 /// listing is empty and the request completes.
 #[tokio::test]
 async fn allowed_tools_matching_nothing_lists_no_tools_and_completes() {
-    let (mcp_url, _, _) = spawn_mcp().await;
+    let (mcp_url, _, listings) = spawn_mcp().await;
     let (llm_url, requests) = spawn_llm(vec![
         upstream("up_1", json!([message("first")])),
         upstream("up_2", json!([message("second")])),
+        upstream("up_3", json!([message("third")])),
+        upstream("up_4", json!([message("fourth")])),
     ])
     .await;
     for deferred in [true, false] {
@@ -1098,9 +1102,19 @@ async fn allowed_tools_matching_nothing_lists_no_tools_and_completes() {
         assert_eq!(items[0]["type"], "mcp_list_tools");
         assert_eq!(items[0]["tools"], json!([]));
         assert!(items[0].get("error").is_none_or(Value::is_null));
+        let mut history = vec![json!({"role":"user", "content":"weather?"})];
+        history.extend(items);
+        history.push(json!({"role":"user", "content":"continue"}));
+        let followup = run(request(&json!(history), &tools), context(llm_url.clone())).await;
+        assert!(output(&followup).iter().all(|item| item["type"] != "mcp_list_tools"));
     }
     let requests = requests.lock().await;
-    assert_eq!(requests.len(), 2);
+    assert_eq!(requests.len(), 4);
+    assert_eq!(
+        listings.load(Ordering::SeqCst),
+        2,
+        "one listing for each independent history"
+    );
     assert!(
         tool_names(&requests[1]).iter().all(|name| !name.starts_with("mcp__")),
         "no MCP tool is offered"
@@ -2181,7 +2195,7 @@ async fn tool_choice_cannot_force_an_unloaded_mcp_tool() {
 
 #[tokio::test]
 async fn continuation_offers_only_the_mcp_tools_not_loaded_yet() {
-    let (mcp_url, _, _) = spawn_mcp().await;
+    let (mcp_url, _, listings) = spawn_mcp().await;
     let (llm_url, requests) = spawn_llm(vec![
         upstream(
             "up_1",
@@ -2217,12 +2231,119 @@ async fn continuation_offers_only_the_mcp_tools_not_loaded_yet() {
         .map(|member| member["name"].as_str().unwrap_or_default().to_owned())
         .collect();
     assert_eq!(members, ["reverse"]);
+    assert_eq!(
+        listings.load(Ordering::SeqCst),
+        1,
+        "ordinary follow-ups must not call tools/list"
+    );
     let requests = requests.lock().await;
     assert_eq!(tool_names(&requests[2]), ["tool_search", "mcp__stub__echo"]);
     assert_eq!(
         tool_names(&requests[3]),
         ["tool_search", "mcp__stub__echo", "mcp__stub__reverse"]
     );
+}
+
+#[tokio::test]
+async fn compacted_mcp_continuations_rediscover_without_forgetting_loaded_tools() {
+    for use_session in [false, true] {
+        for automatic in [false, true] {
+            let case = format!("session={use_session}, automatic={automatic}");
+            let (mcp_url, calls, listings) = spawn_mcp().await;
+            let echo = function_call("s1", "tool_search", &json!({"paths": ["mcp_stub"], "query": "echo"}));
+            let reverse = function_call("s2", "tool_search", &json!({"paths": ["mcp_stub"]}));
+            let call = function_call("r1", "mcp__stub__reverse", &json!({"text": "hello"}));
+            let mut scripted = vec![
+                upstream("up_search", json!([echo])),
+                upstream("up_first", json!([message("echo loaded")])),
+                upstream("up_summary", json!([message("Echo loaded; continue with reverse.")])),
+            ];
+            if automatic {
+                scripted.extend([
+                    upstream("up_compacting", json!([message("compact now")])),
+                    upstream("up_final_summary", json!([message("Echo loaded.")])),
+                ]);
+            }
+            scripted.extend([
+                upstream("up_remaining", json!([reverse])),
+                upstream("up_call", json!([call])),
+                upstream("up_done", json!([message("done")])),
+                upstream("up_followup", json!([message("still done")])),
+            ]);
+            let (llm_url, requests) = spawn_llm(scripted).await;
+            let context = durable_context(llm_url).await;
+            let session = ResponseSession::new(NonZeroUsize::new(100).unwrap(), NonZeroUsize::new(100_000).unwrap());
+            let server = deferred_mcp(&mcp_url, None);
+            let tools = json!([{"type": "tool_search"}, server]);
+            let mut previous = None;
+            for turn in 0..4 {
+                let input = if turn == 1 && !automatic {
+                    json!([{"type": "compaction_trigger"}])
+                } else {
+                    json!("continue")
+                };
+                let mut payload = json!({"model": "test", "store": !use_session, "input": input,
+                    "previous_response_id": previous});
+                if turn == 0 {
+                    payload["tools"] = tools.clone();
+                }
+                if turn == 1 && automatic {
+                    payload["context_management"] = json!([{"type": "compaction", "compact_threshold": 1}]);
+                } else if turn > 1 {
+                    // The next turn observes the compacted checkpoint without compacting again.
+                    payload["context_management"] = json!([]);
+                }
+                let execution = ExecuteRequest::new(serde_json::from_value(payload).unwrap(), Arc::clone(&context));
+                let execution = if use_session {
+                    execution.with_session(&session, None).unwrap()
+                } else {
+                    execution
+                };
+                let Either::Left(response) = execution.run().await.expect(&case) else {
+                    panic!("expected blocking response");
+                };
+                session.wait_until_idle().await.unwrap();
+                let items = output(&response);
+                let discoveries = items.iter().filter(|item| item["type"] == "mcp_list_tools").count();
+                assert_eq!(discoveries, usize::from(turn == 0 || turn == 2), "{case}, turn={turn}");
+                if turn == 1 {
+                    assert!(
+                        items.iter().any(|item| item["type"] == "compaction"),
+                        "{case}: {items:?}"
+                    );
+                }
+                if turn == 2 {
+                    let loaded = items.iter().find(|item| item["type"] == "tool_search_output").unwrap();
+                    let members = loaded["tools"][0]["tools"].as_array().unwrap();
+                    assert_eq!(members.len(), 1, "{case}: echo is already loaded");
+                    assert_eq!(members[0]["name"], "reverse", "{case}");
+                    assert!(
+                        items
+                            .iter()
+                            .any(|item| item["type"] == "mcp_call" && item["status"] == "completed")
+                    );
+                }
+                previous = Some(response.id);
+            }
+            assert_eq!(listings.load(Ordering::SeqCst), 2, "{case}: one new discovery");
+            assert_eq!(calls.load(Ordering::SeqCst), 1, "{case}");
+            let requests = requests.lock().await;
+            let followup = 3 + 2 * usize::from(automatic);
+            let names = tool_names(&requests[followup]);
+            assert_eq!(names, ["tool_search", "mcp__stub__echo"], "{case}");
+            assert_eq!(
+                tool_names(&requests[followup + 1]),
+                ["tool_search", "mcp__stub__echo", "mcp__stub__reverse"],
+                "{case}"
+            );
+            assert!(
+                requests.iter().all(|request| request["input"]
+                    .as_array()
+                    .is_none_or(|items| items.iter().all(|item| item["type"] != "mcp_list_tools"))),
+                "{case}"
+            );
+        }
+    }
 }
 
 #[tokio::test]

@@ -6,6 +6,8 @@
 //! the tools and assistant turn; see [`super::tool_seam`] and
 //! [`crate::executor::messages_loop`].
 
+pub use crate::types::ReasoningEffortLevel;
+
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize, de::IgnoredAny};
@@ -93,39 +95,6 @@ pub struct OutputConfig {
 pub enum ReasoningEffort {
     Level(ReasoningEffortLevel),
     Other(String),
-}
-
-/// Effort tiers understood by the gateway: the Anthropic/OpenAI standard
-/// `low`/`medium`/`high`/`max` plus the `xhigh` top tier used by Qwen chat templates.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[serde(rename_all = "lowercase")]
-pub enum ReasoningEffortLevel {
-    Low,
-    Medium,
-    High,
-    Xhigh,
-    Max,
-}
-
-impl ReasoningEffortLevel {
-    /// The wire spelling of this level, matching its serialized form.
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Low => "low",
-            Self::Medium => "medium",
-            Self::High => "high",
-            Self::Xhigh => "xhigh",
-            Self::Max => "max",
-        }
-    }
-}
-
-impl std::fmt::Display for ReasoningEffortLevel {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(self.as_str())
-    }
 }
 
 #[cfg(feature = "openapi")]

@@ -1,8 +1,8 @@
 //! MCP list-tools lifecycle state: which servers this request listed, and what history already holds.
 
 use super::{ToolRegistry, ToolType};
+use crate::types::io::ResponsesInput;
 use crate::types::io::output::McpListTools;
-use crate::types::io::{InOutItem, InputItem, ResponsesInput};
 
 impl ToolRegistry {
     #[must_use]
@@ -13,17 +13,12 @@ impl ToolRegistry {
     }
 
     pub(crate) fn cache_listed_mcp_tools(&mut self, input: &ResponsesInput) {
-        if let ResponsesInput::Items(items) = input {
-            for item in items.iter().filter_map(InOutItem::as_input) {
-                let InputItem::McpListTools(list_tools) = &*item else {
-                    continue;
-                };
-                // Only a currently declared MCP server can emit discovery in
-                // this request. Ignore history for labels absent from the
-                // current registry instead of turning it into a new candidate.
-                if let Some(items) = self.mcp_list_tools_items.get_mut(&list_tools.server_label) {
-                    items.push(list_tools.clone());
-                }
+        for list_tools in input.mcp_list_tools() {
+            // Only a currently declared MCP server can emit discovery in
+            // this request. Ignore history for labels absent from the
+            // current registry instead of turning it into a new candidate.
+            if let Some(items) = self.mcp_list_tools_items.get_mut(&list_tools.server_label) {
+                items.push(list_tools.clone());
             }
         }
     }

@@ -86,9 +86,19 @@ Add a compaction policy to an ordinary Responses request:
 
 The gateway first rehydrates any conversation or previous-response history. Before every inference round, including
 rounds after gateway-managed tool output, it estimates the model-facing input size and compacts when that estimate is
-greater than `compact_threshold`. Inference then continues using the compacted window. `context_management` is local
-executor configuration and is not sent to vLLM. If compaction runs, the response usage is the saturating sum of every
-summary call and all answer/tool-loop inference rounds.
+greater than `compact_threshold`. Inference then continues using the compacted window. A single-agent turn also
+checks the threshold after its completed answer. Each compaction appears in the response's `output` and, when
+streaming, in the output-item lifecycle at the point it ran. A turn can therefore return a compaction item, its
+answer, and a second compaction item. A pending synchronous client tool call is returned without that final pass.
+
+Automatic compaction preserves the turn's submitted input items. A later single-agent continuation's input history
+starts at the latest compaction item; that item carries the retained user messages and summary needed by the model.
+Pass compaction items back unchanged. Multi-agent continuations keep their public history and restore each agent's
+compacted context from the stored tree. Multi-agent execution currently checks before inference rounds only; it does
+not yet perform the final pass after an answer that appears in the OpenAI reference recording.
+
+`context_management` is local executor configuration and is not sent to vLLM. If compaction runs, the response usage
+is the saturating sum of every summary call and all answer/tool-loop inference rounds.
 
 The estimate is deterministic but is not a model-specific tokenizer. Textual fields are aggregated as UTF-8 bytes,
 divided by four and rounded up, with fixed allowances for Responses item and content-part framing. Each image receives
@@ -99,29 +109,50 @@ vision-token usage depends on the model and image processor, so choose a thresho
 ## File inputs
 
 Message content parts with `type: "input_file"` are parsed without dropping `file_data`, `file_id`, `file_url`,
-or `filename`, but the typed Responses executor does not support resolving or reading those files. It returns an
-HTTP 400 `invalid_request_error` (or the equivalent WebSocket error) before inference. The same validation applies
-to files restored from response/conversation history, explicit and automatic compaction, `compaction_trigger`,
-and WebSocket `generate: false` requests. Use supported `input_text` or `input_image` content instead.
+or `filename`. The typed Responses executor accepts a message file only when `file_data` carries an inline UTF-8
+text file, sent as either:
 
-HTTP `store: false` requests use the same typed executor and file-input validation. Without `previous_response_id`
-or `conversation`, clients supply the complete item history in `input`; the gateway does not load or persist state.
-Structured function/custom tool call outputs containing files retain their existing pass-through behavior.
+- a base64 data URL with a text media type: `text/*`, `application/json`, `application/xml`, `application/yaml`,
+  any `+json` or `+xml` type such as `application/ld+json`, or a text `application/*` type such as
+  `application/javascript`, `application/typescript`, `application/x-sh`, `application/sql`, or
+  `application/toml`. For example, `data:text/plain;base64,aGVsbG8=`. Media type parameters such as `charset` are
+  ignored. A text media type is accepted with or without a filename; or
+- raw base64, or a data URL with any other media type except `application/pdf`, `image/*`, `audio/*`, and
+  `video/*`, together with a text `filename`: one whose extension is a common text, config, or source code type
+  such as `.txt`, `.md`, `.csv`, `.json`, `.yaml`, `.toml`, `.log`, `.py`, `.rb`, `.cs`, `.tsx`, or `.ps1`, or a
+  conventional name such as `Dockerfile`, `Makefile`, `LICENSE`, `.gitignore`, or `.env`. `video/mp2t`, which
+  some clients send for TypeScript, is accepted with a `.ts`, `.mts`, or `.cts` filename.
 
-API `input_file` content is distinct from mentioning a local filename in Codex or asking a client-executed read tool
-to read a file. A local file mention is not a file upload, and this gateway does not resolve local paths or implement
-a file-ID resolver, OCR, or document parser.
+Content that passes these checks must still decode as UTF-8, so binary data is rejected even with a text filename.
 
-## File inputs
+The file is decoded only in the request sent to the model, where it becomes an `input_text` part in the same
+position. When `filename` is set, the text starts with a `File: <filename>` line, so this part:
 
-Message content parts with `type: "input_file"` are parsed without dropping `file_data`, `file_id`, `file_url`,
-or `filename`, but the typed Responses executor does not support resolving or reading those files. It returns an
-HTTP 400 `invalid_request_error` (or the equivalent WebSocket error) before inference. The same validation applies
-to files restored from response/conversation history, explicit and automatic compaction, `compaction_trigger`,
-and WebSocket `generate: false` requests. Use supported `input_text` or `input_image` content instead.
+```json
+{"type": "input_file", "filename": "notes.txt", "file_data": "data:text/plain;base64,aGVsbG8="}
+```
 
-HTTP `store: false` requests use the same typed executor and file-input validation. Without `previous_response_id`
-or `conversation`, clients supply the complete item history in `input`; the gateway does not load or persist state.
+reaches the model as:
+
+```json
+{"type": "input_text", "text": "File: notes.txt\nhello"}
+```
+
+Stored response and conversation history and compacted windows keep the client's original `input_file`; the text
+is decoded again on each continuation. The file counts toward the request body limit
+(`max_request_body_size_bytes`) in its base64 form, and the decoded text counts toward the model's context length.
+
+Every other message file is rejected with HTTP 400 `invalid_request_error` (or the equivalent WebSocket error)
+before inference and before anything is stored. The message gives the reason without echoing the file: `file_id`
+(file IDs cannot be used in Responses input), `file_url` (the gateway does not fetch files), a missing `file_data`,
+a non-text file such as a PDF, a data URL that is not base64-encoded, invalid base64, or content that is not valid UTF-8.
+Extract text from PDFs and other documents client-side and send it as `input_text`, or send pages as
+`input_image`. The same validation applies to files restored from response/conversation history, explicit and
+automatic compaction, `compaction_trigger`, and WebSocket `generate: false` requests.
+
+HTTP `store: false` requests use the same typed executor, inline text-file normalization, and file-input validation.
+Without `previous_response_id` or `conversation`, clients supply the complete item history in `input`; the gateway
+does not load or persist state.
 Structured function/custom tool call outputs containing files retain their existing pass-through behavior.
 
 API `input_file` content is distinct from mentioning a local filename in Codex or asking a client-executed read tool
@@ -133,7 +164,9 @@ a file-ID resolver, OCR, or document parser.
 The wire field is named `encrypted_content` for Responses compatibility, but summaries generated by this local
 implementation are **plaintext and are not encrypted**. Treat the field as conversation content when logging,
 storing, transmitting, or applying data-retention controls. The gateway converts it to assistant context only for the
-model-facing vLLM request; the public and stored item remains a `compaction` item.
+model-facing vLLM request; the public and stored item remains a `compaction` item. An automatic single-agent
+checkpoint encodes its summary and retained user messages together as plaintext JSON inside this field, including
+any retained media. This encoding is internal; clients should replay the complete item without inspecting or editing it.
 
 OpenAI-generated encrypted compaction items are not decryptable or interoperable with this implementation. If one is
 submitted, its `encrypted_content` bytes are treated literally as plaintext assistant context.

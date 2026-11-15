@@ -315,7 +315,7 @@ async fn input_items_exclude_own_output_items_that_carry_no_wire_id() {
     let own = harness.page(first_id, "?order=asc").await;
     assert_eq!(own["data"].as_array().unwrap().len(), 1, "{own}");
     assert_eq!(texts(&own), ["first"]);
-    // The same item, under its generated ID, is input to the next turn.
+    // The same item, under its generated ID, is input to the next turn, whose history starts at that compaction.
     let next = harness.page(second["id"].as_str().unwrap(), "?order=asc").await;
     let types: Vec<&str> = next["data"]
         .as_array()
@@ -323,8 +323,8 @@ async fn input_items_exclude_own_output_items_that_carry_no_wire_id() {
         .iter()
         .map(|item| item["type"].as_str().unwrap())
         .collect();
-    assert_eq!(types, ["message", "compaction", "message", "message"], "{next}");
-    assert!(next["data"][1]["id"].as_str().unwrap().starts_with("cmp_"));
+    assert_eq!(types, ["compaction", "message", "message"], "{next}");
+    assert!(next["data"][0]["id"].as_str().unwrap().starts_with("cmp_"));
 
     // Conversation turns exclude appended outputs without wire IDs too.
     let conversation: Value = harness

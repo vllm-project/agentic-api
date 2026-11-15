@@ -25,10 +25,8 @@ use std::num::NonZeroUsize;
 #[cfg(test)]
 use either::Either;
 
-use super::compaction::{CompactionCarryOver, compact_items};
-use super::gateway::{
-    compaction_event_plans, emit_gateway_completed_events, emit_gateway_start_events, emit_response_start_events,
-};
+use super::compaction::summarize_items;
+use super::gateway::emit_response_start_events;
 use crate::executor::error::ExecutorResult;
 use crate::executor::persist::{TurnOutput, persist};
 use crate::executor::pipeline::AgentPipeline;
@@ -39,8 +37,11 @@ use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::response_budget::MAX_EXECUTOR_RESPONSE_BYTES;
 use crate::executor::telemetry::Api;
 use crate::executor::telemetry::metrics::RoundCounter;
+use crate::executor::telemetry::stages::CompactionTrigger;
 use crate::tool::{ToolSearchMetadata, ToolSearchState};
-use crate::types::io::{InOutItem, InputItem, OutputItem, ResponseUsage, ResponsesInput};
+#[cfg(test)]
+use crate::types::io::ResponsesInput;
+use crate::types::io::{CompactionItem, OutputItem, ResponseUsage};
 #[cfg(test)]
 use crate::types::request_response::RequestPayload;
 use crate::types::request_response::{IncompleteDetails, ResponsePayload};
@@ -65,9 +66,7 @@ async fn run_until_gateway_tools_complete(
         let payload = run_compaction_trigger(&mut agent.request, exec_ctx, auth).await?;
         let relay = agent.relay_mut();
         emit_response_start_events(&payload, relay).await?;
-        let event_plans = compaction_event_plans(&payload.output, 0);
-        emit_gateway_start_events(&event_plans, relay).await?;
-        emit_gateway_completed_events(&payload.output, &event_plans, relay).await?;
+        relay.present_compaction(&payload.output[0], 0).await?;
         return Ok((payload, tool_search_metadata));
     }
     Box::pin(
@@ -141,7 +140,12 @@ impl<'a> SingleAgentRun<'a> {
     async fn new(agent: &'a mut AgentPipeline, exec_ctx: &'a ExecutionContext) -> ExecutorResult<Self> {
         let response_budget = ExecutorResponseBudget::with_limit(exec_ctx.responses_config.max_retained_bytes);
         let root = AgentTurn::new(agent, exec_ctx, &response_budget, MAX_GATEWAY_TOOL_ROUNDS, None).await?;
-        let output = root.discovery_output();
+        let output = root
+            .registry
+            .mcp_list_tool_items()
+            .cloned()
+            .map(OutputItem::McpListTools)
+            .collect();
         Ok(Self {
             root,
             response_budget,
@@ -163,14 +167,29 @@ impl<'a> SingleAgentRun<'a> {
                 .run_round(self.output.len(), auth, stream_upstream, &self.response_budget)
                 .await?;
             accumulate_usage(&mut self.usage, payload.usage.take());
-            self.output.append(&mut payload.output);
             match decision {
-                RoundDecision::Continue => continue,
+                RoundDecision::Continue => {
+                    self.output.append(&mut payload.output);
+                    continue;
+                }
                 RoundDecision::Incomplete(reason) => {
                     "incomplete".clone_into(&mut payload.status);
                     payload.incomplete_details = Some(IncompleteDetails { reason: Some(reason) });
+                    self.output.append(&mut payload.output);
                 }
-                RoundDecision::Done | RoundDecision::RequiresClientAction | RoundDecision::UpstreamTerminal => {}
+                RoundDecision::Done if payload.status == "completed" => {
+                    let final_output = std::mem::take(&mut payload.output);
+                    let output_offset = self.output.len() + final_output.len();
+                    let compaction = self.root.compact_after_turn(&final_output, output_offset, auth).await?;
+                    self.output.extend(final_output);
+                    if let Some((item, usage)) = compaction {
+                        self.output.push(item);
+                        accumulate_usage(&mut self.usage, Some(usage));
+                    }
+                }
+                RoundDecision::Done | RoundDecision::RequiresClientAction | RoundDecision::UpstreamTerminal => {
+                    self.output.append(&mut payload.output);
+                }
             }
             finalize_loop(&mut payload, self.output, self.usage, &self.root.pipeline.request);
             return Ok((payload, self.root.pipeline.take_tool_search_metadata()));
@@ -198,27 +217,22 @@ async fn run_compaction_trigger(
     {
         MultiAgentRun::compact_root(ctx, exec_ctx, auth).await?
     } else {
-        let input = std::mem::replace(&mut ctx.enriched_request.input, ResponsesInput::Items(Vec::new()));
-        // Earlier open async calls stay visible through the compaction window. The request's late
-        // outputs and its own open calls would be dropped with the items this turn replaces, so they
-        // are stored again, before the compaction output.
-        let carried = CompactionCarryOver::new(
-            input.input_items(),
-            ctx.new_input_items.iter().filter_map(InOutItem::as_input),
-            &[],
+        // As with automatic compaction, the compaction item carries its window, and the turn keeps the items it was sent.
+        let input = std::mem::take(&mut ctx.enriched_request.input);
+        let window = summarize_items(
+            &ctx.enriched_request,
+            input,
+            exec_ctx,
+            auth,
+            CompactionTrigger::InputItem,
         )
-        .stored
-        .into_inputs();
-        let (mut compacted, usage, service_tier) = compact_items(&ctx.enriched_request, input, exec_ctx, auth).await?;
-        let Some(InputItem::Compaction(compaction)) = compacted.pop() else {
-            unreachable!("compact_items always appends a compaction item");
-        };
-        compacted.extend(carried);
-        ctx.new_input_items = compacted.into_iter().map(Into::into).collect();
-        if let Some(continuation) = &mut ctx.continuation {
-            continuation.mark_history_replaced();
-        }
-        (compaction, usage, service_tier)
+        .await?;
+        let compaction = CompactionItem::carrying(
+            window.compaction.id,
+            window.compaction.encrypted_content,
+            window.retained,
+        )?;
+        (compaction, window.usage, window.service_tier)
     };
     let mut payload = ResponsePayload {
         id: ctx.response_id.clone(),
@@ -285,6 +299,7 @@ mod tests {
     use crate::executor::modes::{ConversationHandler, ResponseHandler};
     use crate::storage::{ConversationStore, ResponseStore, create_pool_with_schema};
     use crate::tool::{GatewayExecutorRegistration, McpDiscoveredHandler, McpHandler};
+    use crate::types::io::{InOutItem, InputItem};
     use crate::types::tools::{McpDiscoveredToolParam, ResponsesTool};
     use futures::StreamExt;
     use std::sync::Arc;
@@ -680,7 +695,12 @@ mod tests {
         let OutputItem::Compaction(item) = &response.output[0] else {
             panic!("expected exactly one compaction output item");
         };
-        assert_eq!(item.encrypted_content, "durable summary");
+        // As with automatic compaction, the item carries its window: the kept user message and the summary.
+        let window = item.carried_window().expect("the compaction carries its window");
+        assert!(matches!(window.first(), Some(InputItem::Message(message)) if message.role == "user"));
+        assert!(
+            matches!(window.last(), Some(InputItem::Compaction(summary)) if summary.encrypted_content == "durable summary")
+        );
         assert!(item.id.as_deref().is_some_and(|id| id.starts_with("cmp_")));
         assert_eq!(response.usage.as_ref().map(|usage| usage.total_tokens), Some(15));
 
@@ -997,7 +1017,9 @@ mod tests {
             }
             if event_type == "response.output_item.done" && event["item"]["type"] == "compaction" {
                 compaction_done_count += 1;
-                assert_eq!(event["item"]["encrypted_content"], "durable summary");
+                let carried: serde_json::Value =
+                    serde_json::from_str(event["item"]["encrypted_content"].as_str().unwrap()).unwrap();
+                assert_eq!(carried["summary"], "durable summary");
             }
         }
 

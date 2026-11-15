@@ -211,6 +211,14 @@ fn normalize(value: &mut Value) {
 
 // Compare typed collaboration arguments independently of JSON formatting.
 fn normalize_request(body: &mut Value) {
+    // The MCP client reports the current package version, independently of the recording's release.
+    // Keep the version's presence/type and the rest of the initialization contract observable.
+    if body["jsonrpc"] == "2.0"
+        && body["method"] == "initialize"
+        && let Some(Value::String(version)) = body.pointer_mut("/params/clientInfo/version")
+    {
+        *version = "replayed-client-version".into();
+    }
     normalize(body);
     let Some(input) = body["input"].as_array_mut() else {
         return;
@@ -243,6 +251,49 @@ fn normalize_request(body: &mut Value) {
             item["arguments"] = json!(serde_json::to_string(&command).unwrap());
         }
     }
+}
+
+#[test]
+fn mcp_initialization_allows_release_version_changes_without_hiding_contract_changes() {
+    let fixture = json!({"jsonrpc":"2.0", "id":0, "method":"initialize", "params":{
+        "protocolVersion":"2025-06-18", "capabilities":{},
+        "clientInfo":{"name":"agentic-api", "version":"0.9.0"}}});
+    let mut expected = fixture.clone();
+    normalize_request(&mut expected);
+    let mut actual = fixture.clone();
+    actual["params"]["clientInfo"]["version"] = json!("0.10.0");
+    normalize_request(&mut actual);
+    assert_eq!(expected, actual);
+    for (path, value) in [
+        ("/params/clientInfo/version", Value::Null),
+        ("/params/clientInfo/version", json!(10)),
+        ("/params/clientInfo/name", json!("different-client")),
+        ("/params/protocolVersion", json!("different-protocol")),
+        ("/params/capabilities", json!({"roots":{}})),
+    ] {
+        let mut changed = fixture.clone();
+        *changed.pointer_mut(path).unwrap() = value;
+        normalize_request(&mut changed);
+        assert_ne!(expected, changed, "{path} must remain observable");
+    }
+    let mut missing = fixture.clone();
+    missing["params"]["clientInfo"]
+        .as_object_mut()
+        .unwrap()
+        .remove("version");
+    normalize_request(&mut missing);
+    assert_ne!(expected, missing);
+
+    let mut tool_call = fixture;
+    tool_call["method"] = json!("tools/call");
+    let mut changed = tool_call.clone();
+    changed["params"]["clientInfo"]["version"] = json!("different-argument");
+    normalize_request(&mut tool_call);
+    normalize_request(&mut changed);
+    assert_ne!(
+        tool_call, changed,
+        "tool arguments must not be normalized as initialization"
+    );
 }
 
 #[test]
@@ -339,8 +390,8 @@ async fn replay(State(state): State<Arc<Mutex<Replay>>>, method: Method, uri: Ur
             }
             let mut expected = turn.request.body.clone();
             let mut actual = body.clone();
-            normalize(&mut expected);
-            normalize(&mut actual);
+            normalize_request(&mut expected);
+            normalize_request(&mut actual);
             expected == actual
         })
     });

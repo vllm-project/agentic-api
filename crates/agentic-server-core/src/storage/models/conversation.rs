@@ -49,17 +49,6 @@ pub async fn get_or_create(pool: &DbPool, id: &str) -> DbResult<Conversation> {
     .await
 }
 
-/// Get a conversation by ID.
-///
-/// # Errors
-/// Returns `DbResult::Err` if the database query fails.
-pub async fn get(pool: &DbPool, id: &str) -> DbResult<Option<Conversation>> {
-    sqlx::query_as::<_, Conversation>("SELECT * FROM conversations WHERE id = $1")
-        .bind(id)
-        .fetch_optional(pool)
-        .await
-}
-
 /// What rehydration reads from a conversation in one statement.
 #[derive(Debug)]
 pub struct ConversationHistory {
@@ -138,7 +127,7 @@ pub async fn get_with_items(pool: &DbPool, id: &str) -> DbResult<Option<Conversa
 /// Locks an existing conversation for the lifetime of the transaction.
 ///
 /// `PostgreSQL` takes a row lock without writing the row. `SQLite` uses a no-op
-/// update to acquire its database-wide write lock, which serializes persistence
+/// update to acquire its database-wide write lock, which serializes writes
 /// across all conversations. Both protect sequence allocation when multiple
 /// gateway replicas store turns or change items concurrently, but with different lock granularity.
 ///

@@ -14,7 +14,6 @@ mod checkpoint;
 mod steering;
 
 pub(crate) use checkpoint::RetainedCheckpoint;
-pub(super) use checkpoint::canonical_session_history;
 pub use checkpoint::{ResponseCheckpointPin, ResponseContinuation};
 pub use steering::{SteeringQueue, SteeringSuccessorPublication, SteeringSuccessorReservation};
 
@@ -290,7 +289,6 @@ impl ResponseSession {
             idle: Arc::clone(&self.idle),
             parent,
             budget: self.budget.clone(),
-            history_replaced: false,
             compacted_output_count: 0,
             finished: false,
         };

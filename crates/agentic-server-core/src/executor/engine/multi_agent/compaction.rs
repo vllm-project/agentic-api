@@ -3,9 +3,7 @@ use super::{MultiAgentRun, invalid, registry_error, restore_agents};
 use crate::executor::inference::UpstreamHeaders;
 use crate::executor::{
     error::ExecutorResult,
-    multi_agent::{
-        CheckpointLimits, CompactionCommit, CompactionPlan, ValidatedTreeCheckpoint, collaboration::attribution,
-    },
+    multi_agent::{CheckpointLimits, CompactionPlan, ValidatedTreeCheckpoint, collaboration::attribution},
     request::{ExecutionContext, RequestContext},
     response_budget::ExecutorResponseBudget,
 };
@@ -37,23 +35,13 @@ impl MultiAgentRun {
         root.history.retain(|item| !item.is_compaction_trigger());
         let plan = CompactionPlan::prepare_explicit(&root.identity, 0, &root.history, &ctx.enriched_request)?
             .ok_or_else(|| invalid("no resolved root context available for compaction"))?;
-        let result = plan.execute(exec, auth).await?;
+        let mut result = plan.execute(exec, auth).await?;
         let usage = result.usage();
-        let service_tier = result.service_tier.clone();
-        if result.commit(0, &mut root.history) != CompactionCommit::Applied {
-            return Err(invalid("root context changed during explicit compaction"));
-        }
-        let compaction = root
-            .history
-            .iter_mut()
-            .rev()
-            .find_map(|item| match item {
-                InputItem::Compaction(item) => Some(item),
-                _ => None,
-            })
-            .expect("compaction plan inserts a compaction item");
-        compaction.agent = Some(attribution(&root.identity));
-        let compaction = compaction.clone();
+        let service_tier = result.window.service_tier.take();
+        result.window.compaction.agent = Some(attribution(&root.identity));
+        let compaction = result
+            .commit(0, &mut root.history)
+            .ok_or_else(|| invalid("root context changed during explicit compaction"))?;
         for agent in &mut restored.agents {
             restored.registry.checkpoint_agent(agent).map_err(registry_error)?;
         }

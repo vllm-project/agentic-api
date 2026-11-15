@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-09-30",
+  "checkedAt": "2026-11-09",
   "defaultVersion": "latest",
   "versions": [
     {
@@ -20,8 +20,32 @@
         "observability",
         "getting-started",
         "api",
+        "file-search",
         "codex-desktop",
         "community",
+        "llmd",
+        "kubernetes",
+        "kind",
+        "github-oidc",
+        "releases"
+      ]
+    },
+    {
+      "id": "v0.10.0",
+      "label": "v0.10.0",
+      "channel": "release",
+      "ref": "v0.10.0",
+      "sourceRef": "b0f491e024ff73339b16e6f83a301041a51257d7",
+      "hostedBaseUrl": null,
+      "sections": [
+        "overview",
+        "api",
+        "file-search",
+        "codex-desktop",
+        "developing",
+        "community",
+        "sglang",
+        "dynamo",
         "llmd",
         "kubernetes",
         "kind",

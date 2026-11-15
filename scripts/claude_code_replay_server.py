@@ -13,8 +13,6 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
-import yaml
-
 
 @dataclass(frozen=True)
 class ReplayTurn:
@@ -24,6 +22,8 @@ class ReplayTurn:
 
 
 def load_turns(path: Path) -> list[ReplayTurn]:
+    import yaml
+
     document = yaml.safe_load(path.read_text())
     return [
         ReplayTurn(

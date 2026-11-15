@@ -140,6 +140,27 @@ extend.
 - Document behavior as it stabilizes, especially where compatibility or tool
   ownership rules are subtle.
 
+### Open Responses compatibility follow-ups
+
+The gateway passes the 17 published Open Responses acceptance cases when run
+sequentially against a vLLM-backed deployment. The following work remains before
+claiming broader compatibility:
+
+- Normalize `store=false` HTTP responses and model input through the same typed
+  compatibility path as stored responses. The current proxy path forwards the
+  request and response without applying gateway response normalization
+  ([#433](https://github.com/vllm-project/agentic-api/issues/433)).
+- Report effective response parameters from the actual upstream execution. A
+  schema-complete response must not silently substitute gateway defaults for
+  model or backend defaults
+  ([#434](https://github.com/vllm-project/agentic-api/issues/434)).
+- Run the acceptance suite under concurrent HTTP and WebSocket traffic with
+  representative vLLM capacity, and make timeouts and resource limits explicit
+  ([#435](https://github.com/vllm-project/agentic-api/issues/435)).
+- Add the published acceptance suite to repeatable compatibility validation and
+  extend coverage beyond its finite set of cases
+  ([#435](https://github.com/vllm-project/agentic-api/issues/435)).
+
 ## Responses API Compatibility and Interactive Execution
 
 The [GPT-6 Astra API guide](https://developers.openai.com/api/docs/guides/latest-model#gpt-6-astra-update-api-and-model-parameters)

@@ -1,3 +1,7 @@
+#[path = "compaction/recordings.rs"]
+mod recordings;
+#[path = "compaction/replay.rs"]
+mod replay;
 mod support;
 
 use agentic_core::types::conversations::ConversationMetadata;
@@ -272,10 +276,13 @@ async fn compacted_window_round_trips_with_recorded_followup() {
 async fn automatic_compaction_replays_both_rounds_and_accumulates_usage() {
     let summary = cassette("compact-basic-gpt-4o-nonstreaming.yaml");
     let followup = cassette("compact-followup-gpt-4o-nonstreaming.yaml");
-    let expected_usage = recorded_total_tokens(&summary.turns[0]) + recorded_total_tokens(&followup.turns[0]);
+    // The answer keeps the history above the threshold, so the turn compacts once more after answering; the
+    // recorded summary stands in for that second summary.
+    let expected_usage = 2 * recorded_total_tokens(&summary.turns[0]) + recorded_total_tokens(&followup.turns[0]);
     let fixture = TestFixture::new_with_responses(vec![
         cassette_response(&summary.turns[0]),
         cassette_response(&followup.turns[0]),
+        cassette_response(&summary.turns[0]),
     ])
     .await;
 
@@ -295,9 +302,23 @@ async fn automatic_compaction_replays_both_rounds_and_accumulates_usage() {
         response.usage.as_ref().map(|usage| usage.total_tokens),
         Some(expected_usage)
     );
+    let output_types: Vec<_> = response
+        .output
+        .iter()
+        .map(|item| serde_json::to_value(item).unwrap()["type"].clone())
+        .collect();
+    assert_eq!(output_types, ["compaction", "message", "compaction"]);
     let requests = fixture.request_bodies().await;
-    assert_eq!(requests.len(), 2);
+    assert_eq!(requests.len(), 3);
     assert_eq!(requests[0]["input"], summary.turns[0].request.body.input);
+    // The end-of-turn summary covers the compacted window and the turn's answer, then asks for the summary.
+    let last_summary = requests[2]["input"].as_array().expect("summary input");
+    let [.., answer, prompt] = last_summary.as_slice() else {
+        panic!("summary input: {last_summary:?}");
+    };
+    assert_eq!(prompt["content"], COMPACTION_PROMPT);
+    assert_eq!(answer["content"][0]["text"], output_text(&response));
+    assert!(requests[2].get("tools").is_none());
     assert!(
         requests
             .iter()
@@ -419,7 +440,9 @@ async fn tool_search_automatic_compaction_restores_only_loaded_definition_on_con
             .await
             .expect("automatic tool-search compaction"),
     );
-    assert_eq!(serde_json::to_value(&first.output[0]).unwrap()["name"], "get_weather");
+    // The compaction item is the round's first output, then the model's call.
+    assert_eq!(serde_json::to_value(&first.output[0]).unwrap()["type"], "compaction");
+    assert_eq!(serde_json::to_value(&first.output[1]).unwrap()["name"], "get_weather");
     let final_response = unwrap_blocking(
         execute(
             tool_search_request(

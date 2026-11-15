@@ -580,6 +580,44 @@ a:focus-visible {
 .section {
   padding-block: 90px;
 }
+.release-updates {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  gap: 48px;
+  padding-block: 52px;
+  border-bottom: 1px solid var(--border);
+}
+.release-updates h2 {
+  margin-top: 16px;
+  font-size: 32px;
+}
+.release-updates p,
+.release-highlights {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.7;
+}
+.release-highlights {
+  margin: 0;
+  padding-left: 20px;
+}
+.release-highlights li + li {
+  margin-top: 10px;
+}
+.release-highlights strong,
+.release-upgrade strong {
+  color: var(--foreground);
+}
+.release-upgrade {
+  margin: 20px 0 0;
+}
+@media (max-width: 760px) {
+  .release-updates {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+    padding-block: 36px;
+  }
+}
 .section-heading {
   display: flex;
   justify-content: space-between;

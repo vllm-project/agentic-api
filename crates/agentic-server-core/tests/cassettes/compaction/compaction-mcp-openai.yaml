@@ -1,0 +1,1431 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Remember the word APRICOT. Do not call any tools. Reply only READY.
+      max_output_tokens: 4096
+      model: gpt-4.1
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794296182
+      created_at: 1794296181
+      error: null
+      frequency_penalty: 0.0
+      id: resp_019c269a7248b303006af2c974dfb087d2994fc09f501ef3e9
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_019c269a7248b303006af2c975115887d28f147cf94100d596
+        server_label: microsoft_learn
+        tools:
+        - annotations:
+            read_only: true
+          description: 'Search official Microsoft/Azure documentation to find the
+            most relevant and trustworthy content for a user''s query. This tool returns
+            up to 10 high-quality content chunks (each max 500 tokens), extracted
+            from Microsoft Learn and other official sources. Each result includes
+            the article title, URL, and a self-contained content excerpt optimized
+            for fast retrieval and reasoning. Always use this tool to quickly ground
+            your answers in accurate, first-party Microsoft/Azure knowledge.
+
+
+            ## Follow-up Pattern
+
+            To ensure completeness, use microsoft_docs_fetch when high-value pages
+            are identified by search. The fetch tool complements search by providing
+            the full detail. This is a required step for comprehensive results.'
+          input_schema:
+            properties:
+              query:
+                default: null
+                description: a query or topic about Microsoft/Azure products, services,
+                  platforms, developer tools, frameworks, or APIs
+                type: string
+            type: object
+          name: microsoft_docs_search
+        type: mcp_list_tools
+      - content:
+        - annotations: []
+          logprobs: []
+          text: READY
+          type: output_text
+        id: msg_019c269a7248b303006af2c976d29087d29045f745621931b8
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        headers: null
+        require_approval: never
+        server_description: null
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 220
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 3
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 223
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - content: Remember the word APRICOT. Do not call any tools. Reply only READY.
+        role: user
+      - id: mcpl_019c269a7248b303006af2c975115887d28f147cf94100d596
+        server_label: microsoft_learn
+        tools:
+        - annotations:
+            read_only: true
+          description: 'Search official Microsoft/Azure documentation to find the
+            most relevant and trustworthy content for a user''s query. This tool returns
+            up to 10 high-quality content chunks (each max 500 tokens), extracted
+            from Microsoft Learn and other official sources. Each result includes
+            the article title, URL, and a self-contained content excerpt optimized
+            for fast retrieval and reasoning. Always use this tool to quickly ground
+            your answers in accurate, first-party Microsoft/Azure knowledge.
+
+
+            ## Follow-up Pattern
+
+            To ensure completeness, use microsoft_docs_fetch when high-value pages
+            are identified by search. The fetch tool complements search by providing
+            the full detail. This is a required step for comprehensive results.'
+          input_schema:
+            properties:
+              query:
+                default: null
+                description: a query or topic about Microsoft/Azure products, services,
+                  platforms, developer tools, frameworks, or APIs
+                type: string
+            type: object
+          name: microsoft_docs_search
+        type: mcp_list_tools
+      - content:
+        - annotations: []
+          logprobs: []
+          text: READY
+          type: output_text
+        id: msg_019c269a7248b303006af2c976d29087d29045f745621931b8
+        role: assistant
+        status: completed
+        type: message
+      model: gpt-4.1
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses/compact
+    query_params: {}
+  response:
+    body:
+      created_at: 1794296185
+      id: resp_019c269a7248b303016af2c977c19087d296de83a0a11787e9
+      image:
+        context_compression: disabled
+      object: response.compaction
+      output:
+      - content:
+        - text: Remember the word APRICOT. Do not call any tools. Reply only READY.
+          type: input_text
+        id: msg_019c269a7248b303016af2c977c91c87d286a6589ef4062fd9
+        role: user
+        status: completed
+        type: message
+      - encrypted_content: gAAAAABq8sl5382MV3RXM4TNWZJNagVejLGiTealsaLcAfV2UX1v_R6YE3Kibp51qgvAOBd7xdbuC-dX-HR9j3Mr1QVE_RKTNKfdnfQRChnwBkkLte-wlmGK-EAS_203QBxDemswwsloxNqP8rqitV8XcAm8wqwDEBCKI72CVBWRGAVqVHMtsMBbyNjKpQdgoQ3w9q6TkjHNX7MfEq_j6ojV0JQOCv1TflKNv0oJE0f5YqQYyC3WK5HuLdZNunrJcrpDgTZG4S0q3MkQX9s0nTxpofhfson0-kp6bo7ae3W1v7mNkm50Y1MihE5TeMF9wPamA_67Ul24WYFzkuFojK2LHLDdKqB38eL1E2a-7_hwjkA7FYbspRb0gC5QuoTFng4gW5BavKAna3I9ehqb3b_DOAbyVsihxJL0_0mUt--66flpEjMYz1dH_sVlC-nM0EZLgxqSMosYTpsvmTNFbJE0llrmu_hPaznlAvUku4q-EUmckhzynRSsWnblx48KQqT6zuizOWDvOzJcnZaokWtO_FrEG1ZsPCEHk_d9XnxVbtfLG6Dy_B-uucvsIFNzs9szRJ7eiXYJl2UiPE5GZcfeonqK_24ZLbaKuI3qV3A9zakoXecFrbpm1V4Fk6NPbVIK5y1Q8P2fiOycyEBOpKWeuViKRIsbr6XLOx5qGORZLP1_lK0e41vvPDXew_2ZnJg9lom7NPKOBgOFTrX5di4nd5GobHCK8zZo5pczv19iWVnNb2rZ4-oFaDp1QUeDwT04hWdkANFZPzp3KGPIzXAMoYrpKK8yOYEDxDLr9N-w6-i4F-v1ubaDJ7B-a0cvEP-JtvdxKSvZSwCwSETsj8XTmGHY9EmacKE3pUdtgYhCceLUFad2BW_ueZ8Bs_aYCG3QgqKkcLXYYWh4D3uFRVNrpyVlC6OQwndu5_UZcCLolVMJ1iiZe109CJipXTyDE_KJc0e6bkwgpNrmVXzfrPCYCYfulsnalWxGA-7SfHCNtGYclQflJwIrfb8K7SqUXhf49WQgxgIXGQO5TsXuo5S1i19BfVbfnpH5_HJtGxZgR1M3IXflyf7f_jl0BoJ80DelBM6JjDNePgFGteaalj2GAlSgvj50oPv8-FvuS_gIydkm4pX-A1KIpZ77ISoxymiO7xeZQaAfValnnnbFQL8lnbuKBE43jMit6mxQkRcUWlaYQU3_XEKFJ4bSMhPS8m5bKGO9Uq122m65T1Bpfj_HjgbMnkV4M5cO6ltCZ4gALm5_oAQf73gDTtg7iK2YhyOnySRoDSinHkmm0a95IwCxo8fg6UP6KG_KpBBN7Xs7FqiLEn7L4Nc0aasP0189ygyalrgZ69Q3kVeZ5_qd5OVPgB_syqaER9j49rXRrCnnQpcquTciJE3xO_mAdhERgwti4zHsScoLIbspHY_j6oTm7QUmUTyVQ_hrlE2nPVDywG1_tkxm_aNktjVNkR98m1OTxp-cE0vixSHwKle3MDEElo1IdAMOOdEgcv8WsjFd-JHtyvQFKCWEfxT4JMcvov_ahldKA1z933omeJ92c69V7rppdwAv9gYkg-n4WAMwP3GeL1rHP9PvVRAY85JaWlL3TfelfocKp7q_XJQRAEgdOp2Rd6-lIV3q8XOilZeRMegr0TW-cvCEBiy4FQZnroUJ9a-4ST3DLIqWJq4hQ6WDZOJrjBr2HdkRdYUxzPUHshq3lF8cTRrHeY9dEmcQY1zZ2TEb5uo9xj3VtzissJo0IFQ3x7kpIfI0O5UcgZdTWiSbcyyAOrzGje_50Iyp0LWEb3675flcrKO0W1rLIhDqx8r2-SGjPy9ByXSpywcaoV8WuBY6S0G3Nwd8vc-BPfYvXEuLUmikkhwh5BXwS8Vd-tOliNE-7kp3rVrBPn2S-c8gPDozMgLvy-wX94twOvKSZDAHB7cNYHISfv7iPnoHzmnvb7tw5nB4Ax3IyUgR3NnjVKQ-MyfSUqzgRP_mNCddVbRXDnCJzN6CehPM4NbFSj7zP3v7Y86Hcsnyb7ZcTLOnojQGd1cnXwy4u7oVLofrpd_END28PT8VrJ7XaGXem-MEsN3RryIeQ5HGtLm6N7qU3hbbiQ3LwZBDrNeBtQKLn0HlQPipnFtgFMVkkTOxr7HwZaJ4xc0t2DDIgVirmRt244GqfjFA6Jb5fW70GZnneWEmujILwjEbT8LZUornh4oIhaNAyqcoO2ACSCoBoYN2n67y8KVzsbEQq0viuJSqEha-U3UR_8cpKS7GgmLlN5e1R62cByBhHQbf7sg3lNE7KGvUYsnOm7vwylGOjpQ3UEhSAdveADxJIQ44G5zUHc5yUQxE9EW1694XyIIgPYlYr99Gpm1nJ9-QTtyTuU-rSdFxBDjEUgKNp3bMikpdGQzljxEc-wwRn3bvMFXFOZEWxPCaAoqwnvIMN_0xkmk_iVcDMsUVdBMhPyX3Uz0M2YZ-6WieN_Y22sjWTZ2R5h-CXk-A7aqr9bqELA8dbXwSa1lNLYCBF9WHwt974uVb7Yy0viF00977AFiMr_v5SOKMYAzntOV73uSVymUwl4mkrNq0k99lC-7p841zAVgfzn7p4lK9KuRqbW76nmqu1PfpZ6_ItA9Ol5uKsl8-jleVnAwAF67SbulOQ16LOEusijb2bLWZX971YCCiyFNohvoF35vTOR_nJ_F_ZIycNRSz2KSPT289ZSJ_l_zdfhGswZKqTJKtyOc8qmp2wQLL9sgshFIAXo5QTQgzSy_U7eS8zLkTJTsqy_YV9gBF0q8pxMpjJYmJSlBnMXcExi_lJ-S1Wx1eatWDyBT8e6ZO8USfCZsPq_bwWwHVpOO9u6qCko603P1bFqxAcqYsWsVm21OpaJgFgpSq1QtC0HHQP-KMATzKqTo6UZh21q43R7O9aPL0ZOtVC_N_gXxlcVxu7l3_sVbhVvS-GzjaPDdLVIC6KoHLFpJUwMDkX5aEKjXTY3p6IVYAQKZj-ab4Pz3VgMzHhvxm9gkjHJFX5tdzpC37wMml6YVD9yQ8oVBO8e06r9itnF-ZuWAeqhW8-Oop2J_Uhjrt-BIkvNoNYAoJwzazW81zDiGx2r6eT9Fz2My-eWOrzTPKhUo2dI_6M6qQTu37qJAaRmuiyMge_hyz8PGKg9ubH030_HNXR9VDsC8mClhIt2wXJF_JTR_o1ApIMZ4tGPXl5IeTpV4whCqbDHyGi6sb-C4e_NV5aBCviEw42gZAvUcsc76-TB6qg0aiCypHkwR01XO-csXPIfjsQWRQb_5uR23XCdOFEfb0Um3PyE424gzZEtB2TeB0fQlQjImZyA8Yk5hqj6ZL3GOKEv39tvO_A27EwCEvDKPBy4ykftQDaUOEj9YbriB5tjytN_aJ4mN-6V7ZO7IY8kwbFspqDE1yw7ozpi7D1nPd1IiGd2YNt6Tn6W4hU2VGESpKuh3X1FGBSnV41QyNtYxz8iKaEeoKnBGjQeNku5u5b0f5YAtcuKpyXA==
+        id: cmp_019c269a7248b303016af2c978994887d2a0cc89b579fe23ad
+        type: compaction
+      usage:
+        input_tokens: 122
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 206
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 328
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input:
+      - content: Remember the word APRICOT. Do not call any tools. Reply only READY.
+        role: user
+      - id: mcpl_019c269a7248b303006af2c975115887d28f147cf94100d596
+        server_label: microsoft_learn
+        tools:
+        - annotations:
+            read_only: true
+          description: 'Search official Microsoft/Azure documentation to find the
+            most relevant and trustworthy content for a user''s query. This tool returns
+            up to 10 high-quality content chunks (each max 500 tokens), extracted
+            from Microsoft Learn and other official sources. Each result includes
+            the article title, URL, and a self-contained content excerpt optimized
+            for fast retrieval and reasoning. Always use this tool to quickly ground
+            your answers in accurate, first-party Microsoft/Azure knowledge.
+
+
+            ## Follow-up Pattern
+
+            To ensure completeness, use microsoft_docs_fetch when high-value pages
+            are identified by search. The fetch tool complements search by providing
+            the full detail. This is a required step for comprehensive results.'
+          input_schema:
+            properties:
+              query:
+                default: null
+                description: a query or topic about Microsoft/Azure products, services,
+                  platforms, developer tools, frameworks, or APIs
+                type: string
+            type: object
+          name: microsoft_docs_search
+        type: mcp_list_tools
+      - content:
+        - annotations: []
+          logprobs: []
+          text: READY
+          type: output_text
+        id: msg_019c269a7248b303006af2c976d29087d29045f745621931b8
+        role: assistant
+        status: completed
+        type: message
+      - content: What word did I ask you to remember? Reply with only that word, or
+          NONE if you cannot see it. Do not call any tools.
+        role: user
+      max_output_tokens: 4096
+      model: gpt-4.1
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794296186
+      created_at: 1794296186
+      error: null
+      frequency_penalty: 0.0
+      id: resp_019c269a7248b303006af2c97a06d887d29ecbc7f581282201
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: APRICOT
+          type: output_text
+        id: msg_019c269a7248b303006af2c97ae33487d28e9d3ae41d10e52f
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        headers: null
+        require_approval: never
+        server_description: null
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 258
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 5
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 263
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body:
+      input:
+      - content:
+        - text: Remember the word APRICOT. Do not call any tools. Reply only READY.
+          type: input_text
+        id: msg_019c269a7248b303016af2c977c91c87d286a6589ef4062fd9
+        role: user
+        status: completed
+        type: message
+      - encrypted_content: gAAAAABq8sl5382MV3RXM4TNWZJNagVejLGiTealsaLcAfV2UX1v_R6YE3Kibp51qgvAOBd7xdbuC-dX-HR9j3Mr1QVE_RKTNKfdnfQRChnwBkkLte-wlmGK-EAS_203QBxDemswwsloxNqP8rqitV8XcAm8wqwDEBCKI72CVBWRGAVqVHMtsMBbyNjKpQdgoQ3w9q6TkjHNX7MfEq_j6ojV0JQOCv1TflKNv0oJE0f5YqQYyC3WK5HuLdZNunrJcrpDgTZG4S0q3MkQX9s0nTxpofhfson0-kp6bo7ae3W1v7mNkm50Y1MihE5TeMF9wPamA_67Ul24WYFzkuFojK2LHLDdKqB38eL1E2a-7_hwjkA7FYbspRb0gC5QuoTFng4gW5BavKAna3I9ehqb3b_DOAbyVsihxJL0_0mUt--66flpEjMYz1dH_sVlC-nM0EZLgxqSMosYTpsvmTNFbJE0llrmu_hPaznlAvUku4q-EUmckhzynRSsWnblx48KQqT6zuizOWDvOzJcnZaokWtO_FrEG1ZsPCEHk_d9XnxVbtfLG6Dy_B-uucvsIFNzs9szRJ7eiXYJl2UiPE5GZcfeonqK_24ZLbaKuI3qV3A9zakoXecFrbpm1V4Fk6NPbVIK5y1Q8P2fiOycyEBOpKWeuViKRIsbr6XLOx5qGORZLP1_lK0e41vvPDXew_2ZnJg9lom7NPKOBgOFTrX5di4nd5GobHCK8zZo5pczv19iWVnNb2rZ4-oFaDp1QUeDwT04hWdkANFZPzp3KGPIzXAMoYrpKK8yOYEDxDLr9N-w6-i4F-v1ubaDJ7B-a0cvEP-JtvdxKSvZSwCwSETsj8XTmGHY9EmacKE3pUdtgYhCceLUFad2BW_ueZ8Bs_aYCG3QgqKkcLXYYWh4D3uFRVNrpyVlC6OQwndu5_UZcCLolVMJ1iiZe109CJipXTyDE_KJc0e6bkwgpNrmVXzfrPCYCYfulsnalWxGA-7SfHCNtGYclQflJwIrfb8K7SqUXhf49WQgxgIXGQO5TsXuo5S1i19BfVbfnpH5_HJtGxZgR1M3IXflyf7f_jl0BoJ80DelBM6JjDNePgFGteaalj2GAlSgvj50oPv8-FvuS_gIydkm4pX-A1KIpZ77ISoxymiO7xeZQaAfValnnnbFQL8lnbuKBE43jMit6mxQkRcUWlaYQU3_XEKFJ4bSMhPS8m5bKGO9Uq122m65T1Bpfj_HjgbMnkV4M5cO6ltCZ4gALm5_oAQf73gDTtg7iK2YhyOnySRoDSinHkmm0a95IwCxo8fg6UP6KG_KpBBN7Xs7FqiLEn7L4Nc0aasP0189ygyalrgZ69Q3kVeZ5_qd5OVPgB_syqaER9j49rXRrCnnQpcquTciJE3xO_mAdhERgwti4zHsScoLIbspHY_j6oTm7QUmUTyVQ_hrlE2nPVDywG1_tkxm_aNktjVNkR98m1OTxp-cE0vixSHwKle3MDEElo1IdAMOOdEgcv8WsjFd-JHtyvQFKCWEfxT4JMcvov_ahldKA1z933omeJ92c69V7rppdwAv9gYkg-n4WAMwP3GeL1rHP9PvVRAY85JaWlL3TfelfocKp7q_XJQRAEgdOp2Rd6-lIV3q8XOilZeRMegr0TW-cvCEBiy4FQZnroUJ9a-4ST3DLIqWJq4hQ6WDZOJrjBr2HdkRdYUxzPUHshq3lF8cTRrHeY9dEmcQY1zZ2TEb5uo9xj3VtzissJo0IFQ3x7kpIfI0O5UcgZdTWiSbcyyAOrzGje_50Iyp0LWEb3675flcrKO0W1rLIhDqx8r2-SGjPy9ByXSpywcaoV8WuBY6S0G3Nwd8vc-BPfYvXEuLUmikkhwh5BXwS8Vd-tOliNE-7kp3rVrBPn2S-c8gPDozMgLvy-wX94twOvKSZDAHB7cNYHISfv7iPnoHzmnvb7tw5nB4Ax3IyUgR3NnjVKQ-MyfSUqzgRP_mNCddVbRXDnCJzN6CehPM4NbFSj7zP3v7Y86Hcsnyb7ZcTLOnojQGd1cnXwy4u7oVLofrpd_END28PT8VrJ7XaGXem-MEsN3RryIeQ5HGtLm6N7qU3hbbiQ3LwZBDrNeBtQKLn0HlQPipnFtgFMVkkTOxr7HwZaJ4xc0t2DDIgVirmRt244GqfjFA6Jb5fW70GZnneWEmujILwjEbT8LZUornh4oIhaNAyqcoO2ACSCoBoYN2n67y8KVzsbEQq0viuJSqEha-U3UR_8cpKS7GgmLlN5e1R62cByBhHQbf7sg3lNE7KGvUYsnOm7vwylGOjpQ3UEhSAdveADxJIQ44G5zUHc5yUQxE9EW1694XyIIgPYlYr99Gpm1nJ9-QTtyTuU-rSdFxBDjEUgKNp3bMikpdGQzljxEc-wwRn3bvMFXFOZEWxPCaAoqwnvIMN_0xkmk_iVcDMsUVdBMhPyX3Uz0M2YZ-6WieN_Y22sjWTZ2R5h-CXk-A7aqr9bqELA8dbXwSa1lNLYCBF9WHwt974uVb7Yy0viF00977AFiMr_v5SOKMYAzntOV73uSVymUwl4mkrNq0k99lC-7p841zAVgfzn7p4lK9KuRqbW76nmqu1PfpZ6_ItA9Ol5uKsl8-jleVnAwAF67SbulOQ16LOEusijb2bLWZX971YCCiyFNohvoF35vTOR_nJ_F_ZIycNRSz2KSPT289ZSJ_l_zdfhGswZKqTJKtyOc8qmp2wQLL9sgshFIAXo5QTQgzSy_U7eS8zLkTJTsqy_YV9gBF0q8pxMpjJYmJSlBnMXcExi_lJ-S1Wx1eatWDyBT8e6ZO8USfCZsPq_bwWwHVpOO9u6qCko603P1bFqxAcqYsWsVm21OpaJgFgpSq1QtC0HHQP-KMATzKqTo6UZh21q43R7O9aPL0ZOtVC_N_gXxlcVxu7l3_sVbhVvS-GzjaPDdLVIC6KoHLFpJUwMDkX5aEKjXTY3p6IVYAQKZj-ab4Pz3VgMzHhvxm9gkjHJFX5tdzpC37wMml6YVD9yQ8oVBO8e06r9itnF-ZuWAeqhW8-Oop2J_Uhjrt-BIkvNoNYAoJwzazW81zDiGx2r6eT9Fz2My-eWOrzTPKhUo2dI_6M6qQTu37qJAaRmuiyMge_hyz8PGKg9ubH030_HNXR9VDsC8mClhIt2wXJF_JTR_o1ApIMZ4tGPXl5IeTpV4whCqbDHyGi6sb-C4e_NV5aBCviEw42gZAvUcsc76-TB6qg0aiCypHkwR01XO-csXPIfjsQWRQb_5uR23XCdOFEfb0Um3PyE424gzZEtB2TeB0fQlQjImZyA8Yk5hqj6ZL3GOKEv39tvO_A27EwCEvDKPBy4ykftQDaUOEj9YbriB5tjytN_aJ4mN-6V7ZO7IY8kwbFspqDE1yw7ozpi7D1nPd1IiGd2YNt6Tn6W4hU2VGESpKuh3X1FGBSnV41QyNtYxz8iKaEeoKnBGjQeNku5u5b0f5YAtcuKpyXA==
+        id: cmp_019c269a7248b303016af2c978994887d2a0cc89b579fe23ad
+        type: compaction
+      - content: What word did I ask you to remember? Reply with only that word, or
+          NONE if you cannot see it. Do not call any tools.
+        role: user
+      max_output_tokens: 4096
+      model: gpt-4.1
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794296188
+      created_at: 1794296187
+      error: null
+      frequency_penalty: 0.0
+      id: resp_019c269a7248b303006af2c97bc47887d2b95e10ba65bc3cfd
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_019c269a7248b303006af2c97bd02c87d282ff213010003855
+        server_label: microsoft_learn
+        tools:
+        - annotations:
+            read_only: true
+          description: 'Search official Microsoft/Azure documentation to find the
+            most relevant and trustworthy content for a user''s query. This tool returns
+            up to 10 high-quality content chunks (each max 500 tokens), extracted
+            from Microsoft Learn and other official sources. Each result includes
+            the article title, URL, and a self-contained content excerpt optimized
+            for fast retrieval and reasoning. Always use this tool to quickly ground
+            your answers in accurate, first-party Microsoft/Azure knowledge.
+
+
+            ## Follow-up Pattern
+
+            To ensure completeness, use microsoft_docs_fetch when high-value pages
+            are identified by search. The fetch tool complements search by providing
+            the full detail. This is a required step for comprehensive results.'
+          input_schema:
+            properties:
+              query:
+                default: null
+                description: a query or topic about Microsoft/Azure products, services,
+                  platforms, developer tools, frameworks, or APIs
+                type: string
+            type: object
+          name: microsoft_docs_search
+        type: mcp_list_tools
+      - content:
+        - annotations: []
+          logprobs: []
+          text: APRICOT
+          type: output_text
+        id: msg_019c269a7248b303006af2c97ce41887d281698df8ca2ebeee
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        headers: null
+        require_approval: never
+        server_description: null
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 539
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 5
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 544
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      context_management:
+      - compact_threshold: 1000
+        type: compaction
+      input: Background notes for later. Background notes for later. Background notes
+        for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Remember the word APRICOT. Reply with only OK. Do not call
+        any tools.
+      max_output_tokens: 4096
+      model: gpt-4.1
+      previous_response_id: resp_019c269a7248b303006af2c974dfb087d2994fc09f501ef3e9
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794296195
+      created_at: 1794296189
+      error: null
+      frequency_penalty: 0.0
+      id: resp_019c269a7248b303006af2c97dd29887d288aae60231418b0c
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - encrypted_content: gAAAAABq8smAKu-TEEbjPSC9PmHakSbnYjk55C5b7LyavSEGkrsvq5dGe4DAsLap82xP4i3xyp8pnF9JbMQONuLCRi-TNMpVUe6R-1k-gZENm8jdJj95sx5xZue_4ap7wOdhrTVpVAnx9k_7wtbOLFxkBqPk2EDGgJkzwEiTrhqHTj2flDjPGvTCJ_ICKT4md_zQXnDl2hJX5MA9IxP6yZ3nhj4NTB21HymnI1Zu7l77JAoyUsL74TBB_wHt19EMCrQdXw2j4usf3sY5n1EXIffi4cidpprX-84gAVuJiZHrDikSyixodyaaBV6WL21xlo125ujByS2Eoji3wzHcDwPnuZqXrFQ7Xczi34R5ZN7jLw991SjZUW_2-Dn7drHDt51UDI4taiBKw_gLOyIU_ppHy5YgvR-IpuqkyTvVz74DkIyahZ4Wu3O-aifSmhz1M9a80qg_-Vb1dXowBbBCMd-BvTLXzOEmUaXwsu3hExpCmfD__qpG5LpVKAcoKVe-mf6b7uCmcjgACeoqRN0xpXZJU8jEdID1jQGkhAAqD4oVQLFAxQuWMiLVttyKZMrmjP2U8B2mKjrNRTOprrhIgqXm7OBP31f-Jj66cwhja3SRaH9v97ISTR9a1YIBvZgDnm-GpAxvAqG3Fw2A0VPuLq1fiHMT0cOUuquhhx8NoxT1fjcaagFU8pwb61E7fY28DrL8egKqGqgFDTUDjXmMa5xW-qh3g8ij0SKPrqF_340mkAaKGVeGQpf9Cya3XXuGe2-0FxDJchHrGOa7RLj0v4IlPA8xlHl0Oc3qCWqsruboOQuji2Ofb03N3A0RGSrIWuzM1wHgTs5Eog9VabiOPKw8xYiX8JiCXZneLvHDG2AggcBSNki9ZIZvKkvmRd9sO_embAkeou3mx8x6RjaT_5BhbkpDzwGXUJPoFAWclRujYufO_MF9OUCsKwvPtwl8skkg76P5fX1Tg98qY7c7NiO5t5Mo2aHKHSF1Dfu1QHcJjIR1PNqSDd_NsHIYxi3dtPvA9-mPeGHecOlALqHZejoEMxRiRT5kY_TVLIV682iap1t3Rk5_ggyjzJ4BjaQ3NSwXPvbkHd5NO0sbgBXDYUR8AI3MLZyV3wMAhvo8q_ugDLroWh7JjnNzu6mHTG3Lk4lazekBIz5l5MOgXxV8tAOhe6HwIPMAQDI-caovF7Vrmhs4BX988hrivBfeci7DrO6x3tDlkaMegCagdiJK-L_mbV2tGeu4OzhTdy_tohOhOJjBmKeahl1Rws1vzzzesOY7wV0Ysu4fGyf1_8ECfCzFUdriZrQ8m3Ko8W5tz80ydeXNt2cUNZMPQ1p_qk4q9bIMluuDCBtjaYuaenygxDT9dYlw20n_VKN_4n1sKlnECMYbgMJPls-6vvCGqtAE_Sz5Y6EOkF1ePLT1Bwl61QFNfd4tD3ypYNEMC8V9uSINUGymNrDf9gX74RWOBaBEIgFcBUWu3O4CIea4kgju4-5nUkCP6Jbhyh1XQzpvzebqOOQ7LM5HCsreBXXLH1VQk4xZp6_atDD0CrSA3IXedv6-bUmZh8rUvz-t-4ln_oxEyYn9nTCeCe6_2uXTQ-JzDhJIhSr0Q7a8hG8Q2cGZti0wj4EYtlxN3KMQGpFIKJUnt3o18a3FMjdgjpotkL9aQdqEuNIMJncCJyRwFlWwYUs0EPYjCR6OH3p9ZVkr-WMpomP8pc3m6cdUmu-nwf-VTDKlLi8FdPsdtSCx_oeiPzFeOPsNNDMtNBG4QIMjdIMS_m3yHl_7z2kSQjxP54aNVNVdHYz-Sxw3wakN5z7yChCL0Xuwn1veS5U_F0hIqMlYMaPnhs2bUw0UxN73xXgrG8jyuBB3jG_IMPpfLRZbBwvKam4y8WMEJNCvbJAYqNDIDXQySJ7iCzVPpcUSbs5ZrSO0ddAlVm-opGBME05I5bzOAvr07XpjcA0stcNplGd6pxDq47Qdzs5cW3GdSzlm6tmWFOU_xbf6wVYpWVZbfx4UjsH2-Q6tToFoTa_QtNJvqKXwjC6NVO-JndpBMkLYeM3Acdblxg9viIEx9g7MJyWiiLiK9UMPrFC_c7SHEcWIHcRYG3RCebrJDZSwefRtBkbD3XChWKpx7zSQcp5azHpcls04-CN1w7dr9qj8EvKtBr26kB-lztz_oMCg6F6NuCDpLFiAweRRm0_GuahlNyrsQaiy7aJf0CrVCgDZeWf_fnDafarz-SjeOqwLFaDgKkBvsfolwPltC0F-T6VDz5rdW9wLOa9FiH0DqkrLqngLUik2gcPD57s0TwUmz--D9VagU9eE7UpLthLF8Q8VbZxBqYtEX0psHka-vxlmPy_EseiO82MILcY9Ki9Ll_NphwZpbDuOZLgoqPz8evTdFMFBFQ7oL-6o9Ge8S_aUHMf_4NOxr8BRerhaktUH9N4OKqFlk2SGAeMqEoSKY1yATFxlKyk1kwZhH3aoHJ9pCZvjmQdg0Zf83oI_RsoqFRgQ-VxaaUnNW5OLXWg414lvWthEMffWb-DP_QRBZ65ozqiLX1qeP16bfj23k7qN3-R_OXFXQtspj6YrTq9DVVIObMIpbwAh7idbCbkHEcDBfJJS_DvN52WUOplSLYD0RdsA8hDuxy2l-iVAv2p9ImDy11UsAbqFdkU8GBPgNofFga1InwR1E5qypCcn_X7qaedG-0mQdRPcWqqSHKEXUTFYMythODAQQKXJXo7LDUs3IO7B3ZDWmc6G9bkoQXgvGYVF3F4ekB_kPHKz5og-AE_n-2hFXtn7CN29cxf0KNfExfcLlvXWLqo88TlP7MCR9ZnPSSkTBhZCsHKFMenTP-b5-nqEhJsyUbkWri68R-Er0vMvhz0SGQ3JH_YP0rwE6rqzWI1xPOjRTG5BnRTGNefWLdormAsuoSYoFk9P_Iokl3Uuc3_zEbuDZoUH0KdllYYb3-4QfzkYX1WbnMLrtZcTjFm9Y7PwMkfkTLU-H70qEYf6D8tnNV_7QLcY5mf2AzT44ZtVBMVLzB1UStoQUlIS7HdoL9jHYWyUSPmHRBhraHi1mHgkuHno0pNZqhr2PgTx4UQt0v3m4iaLkCgV_zIXK_DKT4Iu2-PCdPY3LlhwNJbiVGQ6Pvc30Jdh8LiOt12yy0NVfbbNmZ1NOG8iOhQbAxuLlfXa5OtecULTlRCqj1Iu6kFy6hLt27lcRWD4dogUQsJeqRp4k75WUDGpYHVI_iM8zs1muYVENip5bJCpA-lBXUlto2LZhnJKSUMTtOr1SEmdck-kix4c0HiC_NAWj1rogwfvG7pzDWuZL0-rZyL_umDwMlfdtqCPe5fSazSIEIJAL0iDzFdAj3X9f6gUCTOOJuyMZ0Wz7Qit4grRDiPzgfwDeLndXhyw6LC7jYMgy1qeFNNLtymbO9Iguz0DW18wmfrOqfzU33T8PiohdQ0BodCklkXC2cG0cj_XSQlnXkKTkT2URpKXrmOwrtycMS1ZnxksTdNHNfo5s63RT0TyAQK06usCAATdt5Ylucvz1W6eqINFCE8Asqhykep0L8VSLgYb1E0DkpOhPE86fswlvK__-2Xi_B1nGnTDcYtVBVuj4GDsvdjkOCaoqa4S9bGTnBU3TfWLrFAvFVxvpztVwV0Fjbz2YvymHfbzkt3B-K2JncZLYFpI2-3npKqBzHKIGzZuPXp2b9wUdq1cOEnmcSAUR31dA31qA1zRN4Bwg3rSitDctzl1Sxoaii-f3gZZSeJ9i3j6qoW6mfHZgCOzbRIaByaHFPGhXHe91mGye_qDTzkPkZ0UW3MY3_QIDIIfMFuNR4J90HjGPrnq6TKbkj9JZpOf-ci2ShjJMvGcZEysIOwMotMy8JDfw0q4kHCNocq8GU9zcXcvrX-cQNMdQO2x1lR26ei1-Yz8eHkMAWTrqjbsUl5DudvjUpk6H4oamUgsgB_rhg9zpw8TFLXoxcQEUTT3e6aDulCQHq9rzMO5vI-BPl3PsmvMBJvpcDcuTauEYbYKlOKhL9jW37sifd5ed6pEOS6rcqy9a8q0dfNojvZ1RRy-QVHwdqAvdIyOhJq6kz3y4_h53CpCNvMEq8gNHN_VfHnG5PKlhxlOXNnlNPR5fY5CcPkswpvVgfhP7Szar2hh74R6arVYHPoqgra7-kEJtCg0YRFj1vpdaV_su-VL67BirrdBrBz8TX1b2Jo_xpZonc0PNWb0y-lNivPsSZNgp2onnI9M2wAr3v8X1UtOga5EVtSF9jILKgQzSM6m2VqAE2d010vPKOM6UKHvOWNwt3q3QsQ22B-HLuJuiHwPtu4l_bSHcLhNA0gjEHKZnjSvuX2EWDzkiGySZphk5zK4hffO-aHkJuEYfBEQf7pSPAUgIPgbhLv1-JBPsFEQHWSU8El_Y39lGl3gKcS6bXs_QnoV0AMozD6dTGLjqTR5jCJatr_dVpZ0BvI5mAjTPbksuJIDLBE7ute1Nkh8sinOtacKSMy-NAffyg0qatcijrN-EfNllAgq01n9D7HfOSVMaxysbvN1ZL_96qv5pzbaY-Rik3arLxkyybiQJrTraPEPvPZYahFgGfonLAIg-90UWj9VMGqQxCBfXZfURdMtCCm2MUPzoWneKBhpZOvaPsLoOXp7WDt1IRAqb5sfM_q-Ashw6928yVMnClT2Bc5ZuF8VUuGTHhmRiMESlU9VZPy9HrjpT7YOXQ-uSRL58n2_bKIyKA03QnjIB007_BP4WCQT6khCdOM7uAv35j_5JdyHBBYvy57cXXcxyABeS0c6GtG9p6ccSl1PeqcjnOxaj822rNMTRIxjeCIDxLqID_KZX9bx3YNsOq7dQ_5gtLVrn2_im5bbRNwodOU2MCAlVDuJUKURVy5cNh1YoH02xYe-hqv4Y284AgdfAGHttam9W2q0s0ahpnOXenb2Y_-Jjtwovr83wvLRw2On5kjr1W2e9-oA3eprXD4L9Ri8_2YDOvSmFHIrvIm_Dhji9WUT2Riv-EmlFM0ekiP0OgUQ86OPLbKPSekoZzqdLfq9oL1PlqAdPWZ3goZvCkuC2ucpvc2xkf29Ijeoj-BnqBMYZ10H_1kn49hRpyscuT0z7nPgsLrbzY4N2lUoqdoNNS_rKm4LBVogqiwiFUNHL9ruZVdjzG4V_cwQ86hY_ojSaooBjA==
+        id: cmp_019c269a7248b303006af2c980a57487d29d9b609036a635fb
+        type: compaction
+      - content:
+        - annotations: []
+          logprobs: []
+          text: OK
+          type: output_text
+        id: msg_019c269a7248b303006af2c980e00487d28537dd2876aa1009
+        role: assistant
+        status: completed
+        type: message
+      - encrypted_content: gAAAAABq8smDp1n2M-4agMcD22df0Zt1xk_XELLk5Rj8kavhzYjJyDgeAGzptyiHImGmvGHDf4_9D1ba1mwIWp0m-tccLTb97own_Kr2tsfZm2piua5HlYYSpTSlIvMciHrKEXGZCmMqJNgImUyh4t7XVQH43hlZX6RFEQxgsmwhv8cybBpGQgz5k0KnZXGOZxc39c_FWSH_pKvns4h1CrJFaXavlkYDBFjy4x9DzmNeo2_mRgrjUK5hCeS8Gku3ci5jHK87FxK6BIsf542SkkucOpw95bO2r1epI91yCCR3vfhKoejMfG8DNmQJekLM8fvKFKBqtTyaLcHbntbQ7VWt-vj1ygX49Q36rAmYcWzLKzs2U7L5aDLmVDtlnQerwYfIl4Wa8wFIizCgGfO1_Rbs9Eoi-91ENYPMep9P-ofAFT9Rms5m_3yvTN909Yx8ttEwkt0RQ30EwQup2ZCkb5e05ZKICXh7zx9mf2WEyDMl9LRtFizMDlA-UAiasSkakRj6fRo5l4FCV5B92C5kIxc-avYOi9Pl8YzhrjmtDx2Qu18UtZADGh5uyvBSHPX3sBxo55AMFTLfSsA8uwn9ZKlw4fVIElRle34TbblfKqSBKhzqgAmOZ1fywMIGyDZaY_3JzIyfGUmdG79Rlf66pQByDvlQgtfJs67-U07KA00E6IFa1HK6nM2CUIdEasmYa-GefvstNtSrBTXFBvJmOE8d5aN2YUh28ksOPTQ2DkQ9izMTU6Z1rQhenLWp5BNQ-h3Nuwm-MjZAQ2sqRmAF787Qx2HosJbmCU_TiKiFDVeGcAIidD_GJ0QRa-H4Xq-YXhyWW6xvv8ffyDL7NpT2X3L6BSQhUMKLS_bCVLObGOVIQjsqsrEzVYXX4WtjrqFHhsXeAtyFvZCC6F_lUrj1ddQuD60A_ZzlM5cdZgxvpk16S7SsuqZiL5aeSIQBwqBaKYddUKcjCrx0MYn9jhzerKYdG5IAnmOno0xu_7U9pfw_ZpoiRvwZ_kZ2j9nVQ0sazlSmEvWe6AVU6eUSinEc92lQVFXfaZXYOfs9U_eoZMOy4-HdsG0y0ZTnihmvnsCLlzEl_j52SLRRmdO3C6pHod8PAMXe3GF2WJjsGqtzHfIGXRSpT6iYPzZzOvTqAdf089nep25SwnhJ4i9C_7vSC0Rc1ZL1gmQgV2oU2K7zdMBIBzzCkGRiDwTFUwzvP8_M3iLlUF1sK7iQZJFNw_om4vaMEVLIniQpxde8daSRz4tjMHZffZjkGw_0VCvJ8tYa5NgIKVvR1DBXHmCut8-gVzaMvlswFaROmZ9PP2drTpSycg2txHpW-OYLtVmsHg2c75yJdPEbaNzL7Wh8QCMwAp_Fp7scUXtd-d58qoFHXs_k65RKmOYVP5Y-IDA3r2W0loqSQmXg9lS8qYp_FZWtBLcN8Rp1jxHQwb4DwCrcUcOwnfP8P8OR9w6wlLfpWlaAuPk5ZdSxxolKqUxqYbgepVfyonwcAhoZdzRVqbCA4ijWPl_bFdMHz2EbMKz8y7XYriNVqDB9X4v--b_YKQcKts03C55FuA_9-9OGb6o_6Imfy0FoqnvlhHNX5rCdI61Umsv5VH3aXajzmGFSNT10PRQ84drJUMUdvlKNK49xbIHiUwJqpcEM3iMWYEaRdpDisUdjQ7D4PG20htR0zlvTYNP4s_edo5H9oPKRVxyLksl-2A2ugk3albco69EJ3k9nMOj9sp9VNvsWKY_gFmsWtRJ956jVXR310vR-t7zC7YI0ZvBDerBpxkm_38Hmmdjb_D30Fnf4i4fXFqfMxl9-6gw3Spo39cqTKScJLcEnJshGnfcn6Dh_obWBoZp0t7reI93lmzyXwW_22khJm6-7zF4BnHzMHtHEK5RIHgV0tf3jSFb5SwyedPT2GVGtRdyy1r8edEHl2WUpnm08wrSJs4iDeaDm0UBggRgKe5721m-xFQHgfojyuKCLGQlMkS1zmrX21LCxHxT7w7Dawo8IK37heZK18Ucs6GEb-RNNxLJ9g-GhdoOPpZEFrsQ3sHP2-X0CR5vwJ8nbl6aElS6avIX2V__i7qliwkW5C_8kPvQ_NysdMaHiFulm90cnJ51X9hkNB_pb7eKxpTERuk6GhWlDRAXeK3K0ymjj6fGnrGXgAA3dOvO4VnTF17fAqNY7714lNtEdEMJxMwj6q5MikDZ98PvcbzphTpBNYpI0LbtennO5Z71U3Zz61RjI9nfD3Ekcn6LNcWWmDEIDkpxSHM_AZGKMcmRkF2Rz7VmNEFLdOOzw1-I6qfkGFLMhn4uPuBguabneaQvHZhbC4AJ_I3mG58pQSByZ4g2gDHIGYK_04TQBp3YBOWEEG2EjEnYKu_y5zEH7lXbN3Y0OVLKaqFKcFTdFJbSHDX4KfTYv75384_c70lfB5OeXgqTWmgMlxoN7Re11GzPBIXEif7qt4zBIexSgKGg_FJQ20kXuQ-IXqgd1vrA0Dji8I3z0a65jsvjFzLW5e1E7iiq9w3NHx9XjDaU9u4FPIP-yqCKRKCnEkW0K5w1fIOpnKIHx_-X70-cCEEHWU38D50Hq2P7qYEDXIZS_Lu1j6gaDqFEFuF3rUqAu4PP8lHX48X09lGHRghQl3to9_lRW7zbphk4bviZOxJMktVXqskDz36e6OgDgb1SXg0KMMxu_nmnz6zwhstxKg1R64yVuOex-Kuc_04yn5DT2ub7ikftbzskNPtkqyxAQSCtjGE9OuTmUsTLaQV-0tqUX1G6vuXm6mC98TvfL5tPCAPrzIGph2D3mlDXpDw61HcMf1r4y8LDmSzMhV8-PPzleleY3xTeeDzgvdZb7-HDOkeNBq-rtFcVorVZlHPceoLN7t2A6f1YE85aRr3iYCsnp1EQB7-ZXXSQT8zzrixDH1nCSr5f8OBvDUDTKdX6aEOUpStc4opzmrHdBbivYbCJdkomcvzjYwMsmP5mW9_CeItJSj2MMdayrvWrrggUwuDaFtKoWA9MHaqOERsqHMLG3xSywf1_et-gbc-v6JVOG1kDzt0KeR-6CRcpoKd7ush7kERKLbi-ZlAWxXq8FTXCstno6JgcAfL-nevbJV7o3ct8BlnR6QlHk4MkIR6MwW3cbPmxtZYXBitcG0zvPdIyqpnL3ezYZWyVCMeodF8rIDe-iPAQ_gPuNdejzJPS3tmSUT3qV8F3tLCaVmn1XMLqOr99kDAzQXZ6JX9Cbl5z-JDMjguhA8c5tQexTql8m2FG6vDptRvIKriLaI2DL-Mj6bBdX5G_Ija2zqS0jPe2fQG_g7aW3riy2WxD6VX7Y8ZiYs6Gn9S07-XNJ5MlBB9Jq6fEClUudXYOD5fp49d-AT59hGpy8QCQW4VFkFgxNEA7nMjVFAVivLXFP_chywSjymwtBrjvjLbkJm8eEABZa9NrK9iFMO_uj8Hy1nbIW8gjjzTZwaM1If2yrw6rjOwJcnluU8xGywlb8dhDi8PhU2tqi7WipC8tpAb5rUmacf7G_kFuXabY2dxlZJFmVdHZKJeiBykDWfFgATVbDcjvWVd_IcpYRiOjjFPi6QNGHyfY1oeWdE9yQAAkOqqckAz5XtKF-eTRZ6ClO5E11-sWbkhV_e-YN24CpVzmCjOfbYCZ49tj7hIkhxHyT3wehGwQcDKBe9z7WlDihPyQQgHDzv28EAqbg-JqQadSSrDK1Ck7-s7pvzzpUmGz0K1qauzOw33RVmQdaqYHsOmb-Na9Xu-ryTKG5hZ44fGs51H5nROJfz-ofVN0-5pGh_P2hpcFrsC8NJIdDntSAeB5KxBMyN9eCwa5m-ldIU5tq7uG7ZdWUY6ZYeW2p-kQdFoUc1cvFbzdMAYHnjDLJWMpsIsIblQXn8edH4wHkktZ7brTuDEHvevOoYXutJjyfEGHrsYf2snLOn3v91paiU5DtPAPvGQztkiqiWhuYCz7AlFuxZ8z8_6RyVxL45WG8Oq7FL0hWhe_p_a5ObAntTGS43eSOrGedEz1NpW8C2Kul2FIsc46RVB_v9XHP_n-kfwmACDEKHWMyvGJj6TF3Gb8W23ewEvCFXLn-zuoMiMhLT9G8EcGiZNrzMuweQb61R1KCPKrKhezmpflwDPT7CInei2B6lSyq-V50XvAYxwvloyzfdg3m8dF0klqCByyIM-0Cz1mJ6LnGoGsXQVjrEsneir0Zi1jpzhcMZekvoqYH76vmrtn-p5EnZoVTfZNW_oQkqW92pUxcXaMe7DGtNOet3PL1cYsjXeEluRjKj75_eMXwQJcPmG8x_HSZpbVYB5SAsddUo4JmJAb4eZoyDEpJDiBVKLDjAC1xbuin-W0AuYvfWs9IKYN5PNi4pQl_lEA8rSYsasPumtr33b3gzY_zed0Aka_BuRaOuL8vHLFilhgCMUESTohieTMvoYKgYCxQoC_IR0-SxoxyUwTYFB-QWK_yAR1ek_QLqdym7a0fpAAMv-HLUpjuRWiChZFrrr8eLurKmVaPwBo-lvqdw_KnXJzphOCje5-uggiap-rPSwT5Jcw2ghrqp5IlsXXKz05ZVrSCUv8j_GwJElFSm0gpjTyP0BUiupI6JymWK8WjLo1vEW6NP3D7hWSZHqiFE-vMPGzbbfebJhV451SptTQPbT8KxKKw55afVnhLwu6_BdCKc4DAQayDCDUfs_gm2NgM-HAnbB8E3vg4BGi60vVy7uh2KoZQyeTQf09JE7EpXWpI47FmGd0w_CBaoHfPfS_UDlnNYWl2z55SngnUsVg7xeQWiAmhSoN2DrKQAp6xIqWqsBZPOeLtlk9MotCpmDK4gZS9JH68VoBSpMnDzOSRZw738QnqxDpF-l0dmLV7UqAKHZDwtFPaNgUupW02pfZmYUxIGRNX7eikE5LkaMRe-xotJOVpNeje020wgtBodvFA6NJ2bBj1h4ot6bUs-lYcMHmd3BKQkGflPS1OSw-KqUR_2fh8GBhPYoFd2O8KYYm4IMGrfN2n3kStH-W0hMhEgymDsBf2UEjEKr0ujCajJQal78Idedcu8U4KyMVZJwQ9F8LvJ2hvh_HxDSowVbk9iDqaTv5WKd2xFl42Kl59SpfmpPqCcFbHdlJoaHleJaFSAr2Gx4i7FmHklx-6jfqeFF7oLGmNjkj35gKhaSBOvY1BQrbWXINP_OP_U9mkeb1O-cqpmTzwIHr20p0eDm5k8jKIwnz-g7xgCAfOiu7KKlehTGVa3JRv0j6Mccz5xWWbk5qlViWJy_j8HF7Ov9-vTxHvm9ZBxk3GSiT5-jtbfNAjUh8QuilYbDZYSK-gNfxeOiZusryiza1w9ds8kJuM2-WoS1fpTqpXfBm2TiABREuRl38beR581gzhQMw1gopT2d91B4d76srN1eBQFDDTn3qARfoe0ZWsPeLZqREgIHuQbYwC8iHJ1A2rDs88Xz5g9VpnKDacnAomt_ylU94EtYTEPs_6HWMcc6YkImj36uGrufQkv4MD44yYtnNmPVg9k20zcWaHTB3mI-495t6erVPM3DmDw2uG0DgR1P0dbo41wwH4YjScTbtUOiEt99mQ1doDJ3H86s7cC_Aub95D1cJowBOZSCtJy1wi7l_jLBQWabuufAUjIYjBHBMRVx6YVDZX55puRmlzKlKz6wPB5rew1Nfjf1FGZ7IafwAuH_WYqlh8nERDjDcjfO3gs5MX_OKFFFtfRJfEa7RbyfnlZnskhKTGhQSdQsIUUe2Vm_9q8vIE6zg59WDJpOEDlVCzynrMNGnld9m-aYAXfV6x-heNUeg3qxzcK7i3qeYHzaoCFEA1wdPzxG47KcrmvQRV1zrPQ3lOb93ZDh40wnbnChknMK5rnzP6PxoAAwUUATj-MXzeP4Asl-KEBfXPOzmKvXolMsQ5wSMPmwRoWpO3w0s5kqnzIusORaKalIoagEjmW9n0QUxBeBR2G-p9zVDydFN2TiBo5mhLwu8Tcu2uZFcI_7cHVRonWvTavFlmYqDEMKs4vm-MjVECIXWC9mSq1XPHeMVvMbJbM-Huww07l8BXF4t30LkOLMAqwHi3P7e_X1Ck_DwayzpO2uPH6Wur2CpR4U2LkNqkbdM7Fk3G6AwyLfIkiFqKsc9y7sIVtL0EjHUGzkhxB4aNUVd5E5dgSzGtLIvP527jrye_MzExfMRIkUUBRnFWgv0M2e4eH6685AyRRWdAPSjd8TdpuVQMrtII6Xo2d_2BmGgdmzZiLqlJqONVLzsO-q7dWJlSSv2-SJTdFgKbAf287lC4Q4jvdtHpANnekMzwaFr5h5yYTPdiVkHLa4FlEgXaLcPJrzyLAlNFNpPKm2LZkODG_-Jj5o4ABrnViU3_8qdQEopTivmprpwlOPoSV0u7g1Ki51OTINsPsQDsLlLp1x03U0ojSaeCLluqxo4jt2TVEN70IkzaOhW8YG3zZtF37j86hoZ_BECi_TXqxqV2Catwn030Hl7M9Heip6D9-FvJJcdwu395Y3qYDqnYK9_8VIcxV8qusrbATIuO1YggFjQocdqGeePTh6p2wlp3UTVMr15ML9-7bYhX71ZHcO5vgaOoSfVtHO_ZkcHzKRifBYmULeKJWvrcNTvoh8FmJz0WNIjmWrJQ6wLVY4U23AbVBISb-uXCndumEKRNSv_doZ5cxCy7ThOi3tE9zz5JTkfkpx6ZOYQGcndb8apNefnkMyyl-AA7J58ahlXATVjfyF050RIGfWi_Ma83wZiW08elFi7TbdvotmrDBFnewWHCryoBnlj0DPXPsantNbYllSvcQOvpO13pfq4TSzDatKbS8kb1BtEbo2r_J7_YfIMYGI58zqdLz34Sn9SI0qc8g3HSReWF1x8kyjDSxV56_DSGkgby7zMVzv-eHPGGB7PkasmKYAGd23TEHN-2aeW0O4LfUr25cLQcE8F5k56cKBm_9y3p2LznrZwi4RLqzPUXzl7t3KytdCZuSY9yx2KOXRkmtFlqU6X3gxWEOWnAR5IE4xs0u8UWWB8O
+        id: cmp_019c269a7248b303006af2c980e5c887d2b1fcc28b6868e771
+        type: compaction
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_019c269a7248b303006af2c974dfb087d2994fc09f501ef3e9
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        headers: null
+        require_approval: never
+        server_description: null
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 2844
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 685
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 3529
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body:
+      input:
+      - content: What word did I ask you to remember? Reply with only that word, or
+          NONE if you cannot see it. Do not call any tools.
+        role: user
+      max_output_tokens: 4096
+      model: gpt-4.1
+      previous_response_id: resp_019c269a7248b303006af2c97dd29887d288aae60231418b0c
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794296197
+      created_at: 1794296196
+      error: null
+      frequency_penalty: 0.0
+      id: resp_019c269a7248b303006af2c9844ff087d2ad45d18126f28d08
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_019c269a7248b303006af2c984824887d2aedd2e6c655e2d2b
+        server_label: microsoft_learn
+        tools:
+        - annotations:
+            read_only: true
+          description: 'Search official Microsoft/Azure documentation to find the
+            most relevant and trustworthy content for a user''s query. This tool returns
+            up to 10 high-quality content chunks (each max 500 tokens), extracted
+            from Microsoft Learn and other official sources. Each result includes
+            the article title, URL, and a self-contained content excerpt optimized
+            for fast retrieval and reasoning. Always use this tool to quickly ground
+            your answers in accurate, first-party Microsoft/Azure knowledge.
+
+
+            ## Follow-up Pattern
+
+            To ensure completeness, use microsoft_docs_fetch when high-value pages
+            are identified by search. The fetch tool complements search by providing
+            the full detail. This is a required step for comprehensive results.'
+          input_schema:
+            properties:
+              query:
+                default: null
+                description: a query or topic about Microsoft/Azure products, services,
+                  platforms, developer tools, frameworks, or APIs
+                type: string
+            type: object
+          name: microsoft_docs_search
+        type: mcp_list_tools
+      - content:
+        - annotations: []
+          logprobs: []
+          text: APRICOT
+          type: output_text
+        id: msg_019c269a7248b303006af2c98573f087d285441ec5aa065220
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_019c269a7248b303006af2c97dd29887d288aae60231418b0c
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        headers: null
+        require_approval: never
+        server_description: null
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 3367
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 2688
+        output_tokens: 5
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 3372
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_019c269a7248b303006af2c9844ff087d2ad45d18126f28d08/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - encrypted_content: gAAAAABq8smDp1n2M-4agMcD22df0Zt1xk_XELLk5Rj8kavhzYjJyDgeAGzptyiHImGmvGHDf4_9D1ba1mwIWp0m-tccLTb97own_Kr2tsfZm2piua5HlYYSpTSlIvMciHrKEXGZCmMqJNgImUyh4t7XVQH43hlZX6RFEQxgsmwhv8cybBpGQgz5k0KnZXGOZxc39c_FWSH_pKvns4h1CrJFaXavlkYDBFjy4x9DzmNeo2_mRgrjUK5hCeS8Gku3ci5jHK87FxK6BIsf542SkkucOpw95bO2r1epI91yCCR3vfhKoejMfG8DNmQJekLM8fvKFKBqtTyaLcHbntbQ7VWt-vj1ygX49Q36rAmYcWzLKzs2U7L5aDLmVDtlnQerwYfIl4Wa8wFIizCgGfO1_Rbs9Eoi-91ENYPMep9P-ofAFT9Rms5m_3yvTN909Yx8ttEwkt0RQ30EwQup2ZCkb5e05ZKICXh7zx9mf2WEyDMl9LRtFizMDlA-UAiasSkakRj6fRo5l4FCV5B92C5kIxc-avYOi9Pl8YzhrjmtDx2Qu18UtZADGh5uyvBSHPX3sBxo55AMFTLfSsA8uwn9ZKlw4fVIElRle34TbblfKqSBKhzqgAmOZ1fywMIGyDZaY_3JzIyfGUmdG79Rlf66pQByDvlQgtfJs67-U07KA00E6IFa1HK6nM2CUIdEasmYa-GefvstNtSrBTXFBvJmOE8d5aN2YUh28ksOPTQ2DkQ9izMTU6Z1rQhenLWp5BNQ-h3Nuwm-MjZAQ2sqRmAF787Qx2HosJbmCU_TiKiFDVeGcAIidD_GJ0QRa-H4Xq-YXhyWW6xvv8ffyDL7NpT2X3L6BSQhUMKLS_bCVLObGOVIQjsqsrEzVYXX4WtjrqFHhsXeAtyFvZCC6F_lUrj1ddQuD60A_ZzlM5cdZgxvpk16S7SsuqZiL5aeSIQBwqBaKYddUKcjCrx0MYn9jhzerKYdG5IAnmOno0xu_7U9pfw_ZpoiRvwZ_kZ2j9nVQ0sazlSmEvWe6AVU6eUSinEc92lQVFXfaZXYOfs9U_eoZMOy4-HdsG0y0ZTnihmvnsCLlzEl_j52SLRRmdO3C6pHod8PAMXe3GF2WJjsGqtzHfIGXRSpT6iYPzZzOvTqAdf089nep25SwnhJ4i9C_7vSC0Rc1ZL1gmQgV2oU2K7zdMBIBzzCkGRiDwTFUwzvP8_M3iLlUF1sK7iQZJFNw_om4vaMEVLIniQpxde8daSRz4tjMHZffZjkGw_0VCvJ8tYa5NgIKVvR1DBXHmCut8-gVzaMvlswFaROmZ9PP2drTpSycg2txHpW-OYLtVmsHg2c75yJdPEbaNzL7Wh8QCMwAp_Fp7scUXtd-d58qoFHXs_k65RKmOYVP5Y-IDA3r2W0loqSQmXg9lS8qYp_FZWtBLcN8Rp1jxHQwb4DwCrcUcOwnfP8P8OR9w6wlLfpWlaAuPk5ZdSxxolKqUxqYbgepVfyonwcAhoZdzRVqbCA4ijWPl_bFdMHz2EbMKz8y7XYriNVqDB9X4v--b_YKQcKts03C55FuA_9-9OGb6o_6Imfy0FoqnvlhHNX5rCdI61Umsv5VH3aXajzmGFSNT10PRQ84drJUMUdvlKNK49xbIHiUwJqpcEM3iMWYEaRdpDisUdjQ7D4PG20htR0zlvTYNP4s_edo5H9oPKRVxyLksl-2A2ugk3albco69EJ3k9nMOj9sp9VNvsWKY_gFmsWtRJ956jVXR310vR-t7zC7YI0ZvBDerBpxkm_38Hmmdjb_D30Fnf4i4fXFqfMxl9-6gw3Spo39cqTKScJLcEnJshGnfcn6Dh_obWBoZp0t7reI93lmzyXwW_22khJm6-7zF4BnHzMHtHEK5RIHgV0tf3jSFb5SwyedPT2GVGtRdyy1r8edEHl2WUpnm08wrSJs4iDeaDm0UBggRgKe5721m-xFQHgfojyuKCLGQlMkS1zmrX21LCxHxT7w7Dawo8IK37heZK18Ucs6GEb-RNNxLJ9g-GhdoOPpZEFrsQ3sHP2-X0CR5vwJ8nbl6aElS6avIX2V__i7qliwkW5C_8kPvQ_NysdMaHiFulm90cnJ51X9hkNB_pb7eKxpTERuk6GhWlDRAXeK3K0ymjj6fGnrGXgAA3dOvO4VnTF17fAqNY7714lNtEdEMJxMwj6q5MikDZ98PvcbzphTpBNYpI0LbtennO5Z71U3Zz61RjI9nfD3Ekcn6LNcWWmDEIDkpxSHM_AZGKMcmRkF2Rz7VmNEFLdOOzw1-I6qfkGFLMhn4uPuBguabneaQvHZhbC4AJ_I3mG58pQSByZ4g2gDHIGYK_04TQBp3YBOWEEG2EjEnYKu_y5zEH7lXbN3Y0OVLKaqFKcFTdFJbSHDX4KfTYv75384_c70lfB5OeXgqTWmgMlxoN7Re11GzPBIXEif7qt4zBIexSgKGg_FJQ20kXuQ-IXqgd1vrA0Dji8I3z0a65jsvjFzLW5e1E7iiq9w3NHx9XjDaU9u4FPIP-yqCKRKCnEkW0K5w1fIOpnKIHx_-X70-cCEEHWU38D50Hq2P7qYEDXIZS_Lu1j6gaDqFEFuF3rUqAu4PP8lHX48X09lGHRghQl3to9_lRW7zbphk4bviZOxJMktVXqskDz36e6OgDgb1SXg0KMMxu_nmnz6zwhstxKg1R64yVuOex-Kuc_04yn5DT2ub7ikftbzskNPtkqyxAQSCtjGE9OuTmUsTLaQV-0tqUX1G6vuXm6mC98TvfL5tPCAPrzIGph2D3mlDXpDw61HcMf1r4y8LDmSzMhV8-PPzleleY3xTeeDzgvdZb7-HDOkeNBq-rtFcVorVZlHPceoLN7t2A6f1YE85aRr3iYCsnp1EQB7-ZXXSQT8zzrixDH1nCSr5f8OBvDUDTKdX6aEOUpStc4opzmrHdBbivYbCJdkomcvzjYwMsmP5mW9_CeItJSj2MMdayrvWrrggUwuDaFtKoWA9MHaqOERsqHMLG3xSywf1_et-gbc-v6JVOG1kDzt0KeR-6CRcpoKd7ush7kERKLbi-ZlAWxXq8FTXCstno6JgcAfL-nevbJV7o3ct8BlnR6QlHk4MkIR6MwW3cbPmxtZYXBitcG0zvPdIyqpnL3ezYZWyVCMeodF8rIDe-iPAQ_gPuNdejzJPS3tmSUT3qV8F3tLCaVmn1XMLqOr99kDAzQXZ6JX9Cbl5z-JDMjguhA8c5tQexTql8m2FG6vDptRvIKriLaI2DL-Mj6bBdX5G_Ija2zqS0jPe2fQG_g7aW3riy2WxD6VX7Y8ZiYs6Gn9S07-XNJ5MlBB9Jq6fEClUudXYOD5fp49d-AT59hGpy8QCQW4VFkFgxNEA7nMjVFAVivLXFP_chywSjymwtBrjvjLbkJm8eEABZa9NrK9iFMO_uj8Hy1nbIW8gjjzTZwaM1If2yrw6rjOwJcnluU8xGywlb8dhDi8PhU2tqi7WipC8tpAb5rUmacf7G_kFuXabY2dxlZJFmVdHZKJeiBykDWfFgATVbDcjvWVd_IcpYRiOjjFPi6QNGHyfY1oeWdE9yQAAkOqqckAz5XtKF-eTRZ6ClO5E11-sWbkhV_e-YN24CpVzmCjOfbYCZ49tj7hIkhxHyT3wehGwQcDKBe9z7WlDihPyQQgHDzv28EAqbg-JqQadSSrDK1Ck7-s7pvzzpUmGz0K1qauzOw33RVmQdaqYHsOmb-Na9Xu-ryTKG5hZ44fGs51H5nROJfz-ofVN0-5pGh_P2hpcFrsC8NJIdDntSAeB5KxBMyN9eCwa5m-ldIU5tq7uG7ZdWUY6ZYeW2p-kQdFoUc1cvFbzdMAYHnjDLJWMpsIsIblQXn8edH4wHkktZ7brTuDEHvevOoYXutJjyfEGHrsYf2snLOn3v91paiU5DtPAPvGQztkiqiWhuYCz7AlFuxZ8z8_6RyVxL45WG8Oq7FL0hWhe_p_a5ObAntTGS43eSOrGedEz1NpW8C2Kul2FIsc46RVB_v9XHP_n-kfwmACDEKHWMyvGJj6TF3Gb8W23ewEvCFXLn-zuoMiMhLT9G8EcGiZNrzMuweQb61R1KCPKrKhezmpflwDPT7CInei2B6lSyq-V50XvAYxwvloyzfdg3m8dF0klqCByyIM-0Cz1mJ6LnGoGsXQVjrEsneir0Zi1jpzhcMZekvoqYH76vmrtn-p5EnZoVTfZNW_oQkqW92pUxcXaMe7DGtNOet3PL1cYsjXeEluRjKj75_eMXwQJcPmG8x_HSZpbVYB5SAsddUo4JmJAb4eZoyDEpJDiBVKLDjAC1xbuin-W0AuYvfWs9IKYN5PNi4pQl_lEA8rSYsasPumtr33b3gzY_zed0Aka_BuRaOuL8vHLFilhgCMUESTohieTMvoYKgYCxQoC_IR0-SxoxyUwTYFB-QWK_yAR1ek_QLqdym7a0fpAAMv-HLUpjuRWiChZFrrr8eLurKmVaPwBo-lvqdw_KnXJzphOCje5-uggiap-rPSwT5Jcw2ghrqp5IlsXXKz05ZVrSCUv8j_GwJElFSm0gpjTyP0BUiupI6JymWK8WjLo1vEW6NP3D7hWSZHqiFE-vMPGzbbfebJhV451SptTQPbT8KxKKw55afVnhLwu6_BdCKc4DAQayDCDUfs_gm2NgM-HAnbB8E3vg4BGi60vVy7uh2KoZQyeTQf09JE7EpXWpI47FmGd0w_CBaoHfPfS_UDlnNYWl2z55SngnUsVg7xeQWiAmhSoN2DrKQAp6xIqWqsBZPOeLtlk9MotCpmDK4gZS9JH68VoBSpMnDzOSRZw738QnqxDpF-l0dmLV7UqAKHZDwtFPaNgUupW02pfZmYUxIGRNX7eikE5LkaMRe-xotJOVpNeje020wgtBodvFA6NJ2bBj1h4ot6bUs-lYcMHmd3BKQkGflPS1OSw-KqUR_2fh8GBhPYoFd2O8KYYm4IMGrfN2n3kStH-W0hMhEgymDsBf2UEjEKr0ujCajJQal78Idedcu8U4KyMVZJwQ9F8LvJ2hvh_HxDSowVbk9iDqaTv5WKd2xFl42Kl59SpfmpPqCcFbHdlJoaHleJaFSAr2Gx4i7FmHklx-6jfqeFF7oLGmNjkj35gKhaSBOvY1BQrbWXINP_OP_U9mkeb1O-cqpmTzwIHr20p0eDm5k8jKIwnz-g7xgCAfOiu7KKlehTGVa3JRv0j6Mccz5xWWbk5qlViWJy_j8HF7Ov9-vTxHvm9ZBxk3GSiT5-jtbfNAjUh8QuilYbDZYSK-gNfxeOiZusryiza1w9ds8kJuM2-WoS1fpTqpXfBm2TiABREuRl38beR581gzhQMw1gopT2d91B4d76srN1eBQFDDTn3qARfoe0ZWsPeLZqREgIHuQbYwC8iHJ1A2rDs88Xz5g9VpnKDacnAomt_ylU94EtYTEPs_6HWMcc6YkImj36uGrufQkv4MD44yYtnNmPVg9k20zcWaHTB3mI-495t6erVPM3DmDw2uG0DgR1P0dbo41wwH4YjScTbtUOiEt99mQ1doDJ3H86s7cC_Aub95D1cJowBOZSCtJy1wi7l_jLBQWabuufAUjIYjBHBMRVx6YVDZX55puRmlzKlKz6wPB5rew1Nfjf1FGZ7IafwAuH_WYqlh8nERDjDcjfO3gs5MX_OKFFFtfRJfEa7RbyfnlZnskhKTGhQSdQsIUUe2Vm_9q8vIE6zg59WDJpOEDlVCzynrMNGnld9m-aYAXfV6x-heNUeg3qxzcK7i3qeYHzaoCFEA1wdPzxG47KcrmvQRV1zrPQ3lOb93ZDh40wnbnChknMK5rnzP6PxoAAwUUATj-MXzeP4Asl-KEBfXPOzmKvXolMsQ5wSMPmwRoWpO3w0s5kqnzIusORaKalIoagEjmW9n0QUxBeBR2G-p9zVDydFN2TiBo5mhLwu8Tcu2uZFcI_7cHVRonWvTavFlmYqDEMKs4vm-MjVECIXWC9mSq1XPHeMVvMbJbM-Huww07l8BXF4t30LkOLMAqwHi3P7e_X1Ck_DwayzpO2uPH6Wur2CpR4U2LkNqkbdM7Fk3G6AwyLfIkiFqKsc9y7sIVtL0EjHUGzkhxB4aNUVd5E5dgSzGtLIvP527jrye_MzExfMRIkUUBRnFWgv0M2e4eH6685AyRRWdAPSjd8TdpuVQMrtII6Xo2d_2BmGgdmzZiLqlJqONVLzsO-q7dWJlSSv2-SJTdFgKbAf287lC4Q4jvdtHpANnekMzwaFr5h5yYTPdiVkHLa4FlEgXaLcPJrzyLAlNFNpPKm2LZkODG_-Jj5o4ABrnViU3_8qdQEopTivmprpwlOPoSV0u7g1Ki51OTINsPsQDsLlLp1x03U0ojSaeCLluqxo4jt2TVEN70IkzaOhW8YG3zZtF37j86hoZ_BECi_TXqxqV2Catwn030Hl7M9Heip6D9-FvJJcdwu395Y3qYDqnYK9_8VIcxV8qusrbATIuO1YggFjQocdqGeePTh6p2wlp3UTVMr15ML9-7bYhX71ZHcO5vgaOoSfVtHO_ZkcHzKRifBYmULeKJWvrcNTvoh8FmJz0WNIjmWrJQ6wLVY4U23AbVBISb-uXCndumEKRNSv_doZ5cxCy7ThOi3tE9zz5JTkfkpx6ZOYQGcndb8apNefnkMyyl-AA7J58ahlXATVjfyF050RIGfWi_Ma83wZiW08elFi7TbdvotmrDBFnewWHCryoBnlj0DPXPsantNbYllSvcQOvpO13pfq4TSzDatKbS8kb1BtEbo2r_J7_YfIMYGI58zqdLz34Sn9SI0qc8g3HSReWF1x8kyjDSxV56_DSGkgby7zMVzv-eHPGGB7PkasmKYAGd23TEHN-2aeW0O4LfUr25cLQcE8F5k56cKBm_9y3p2LznrZwi4RLqzPUXzl7t3KytdCZuSY9yx2KOXRkmtFlqU6X3gxWEOWnAR5IE4xs0u8UWWB8O
+        id: cmp_019c269a7248b303006af2c980e5c887d2b1fcc28b6868e771
+        type: compaction
+      - content:
+        - text: What word did I ask you to remember? Reply with only that word, or
+            NONE if you cannot see it. Do not call any tools.
+          type: input_text
+        id: msg_019c269a7248b303006af2c984585087d2ad006db6c7345878
+        role: user
+        status: completed
+        type: message
+      first_id: cmp_019c269a7248b303006af2c980e5c887d2b1fcc28b6868e771
+      has_more: false
+      last_id: msg_019c269a7248b303006af2c984585087d2ad006db6c7345878
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body:
+      input: Use microsoft_docs_fetch to read https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/responses
+        then say DONE. If that tool is unavailable, say UNAVAILABLE. Do not use microsoft_docs_search.
+      max_output_tokens: 4096
+      model: gpt-4.1
+      previous_response_id: resp_019c269a7248b303006af2c974dfb087d2994fc09f501ef3e9
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        - microsoft_docs_fetch
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794296200
+      created_at: 1794296199
+      error: null
+      frequency_penalty: 0.0
+      id: resp_019c269a7248b303006af2c987361487d2a32772851b60a4bf
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: UNAVAILABLE
+          type: output_text
+        id: msg_019c269a7248b303006af2c987ee3487d2b6a54b7202e70cc3
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_019c269a7248b303006af2c974dfb087d2994fc09f501ef3e9
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        - microsoft_docs_fetch
+        headers: null
+        require_approval: never
+        server_description: null
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 275
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 4
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 279
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body:
+      input: Use microsoft_docs_fetch to read https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/responses
+        then say DONE. If that tool is unavailable, say UNAVAILABLE. Do not use microsoft_docs_search.
+      max_output_tokens: 4096
+      model: gpt-4.1
+      previous_response_id: resp_019c269a7248b303006af2c974dfb087d2994fc09f501ef3e9
+      store: true
+      stream: false
+      tools:
+      - require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794296201
+      created_at: 1794296201
+      error: null
+      frequency_penalty: 0.0
+      id: resp_019c269a7248b303006af2c9890fb887d294e9868ea78c900a
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: UNAVAILABLE
+          type: output_text
+        id: msg_019c269a7248b303006af2c989978887d2a144947ecf4cf483
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_019c269a7248b303006af2c974dfb087d2994fc09f501ef3e9
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools: null
+        headers: null
+        require_approval: never
+        server_description: null
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 275
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 4
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 279
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t10
+  request:
+    body:
+      input: Remember the word APRICOT. Do not call any tools. Reply only READY.
+      max_output_tokens: 4096
+      model: gpt-4.1
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - no_such_tool
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794296205
+      created_at: 1794296204
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0ed7e4624680bbb7006af2c98c21c887d2b04485f1d033d84c
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_0ed7e4624680bbb7006af2c98c4c5c87d2bc8d32e7ec6a10e0
+        server_label: microsoft_learn
+        tools: []
+        type: mcp_list_tools
+      - content:
+        - annotations: []
+          logprobs: []
+          text: READY
+          type: output_text
+        id: msg_0ed7e4624680bbb7006af2c98d8d1887d2a28298a791e97c3f
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - no_such_tool
+        headers: null
+        require_approval: never
+        server_description: null
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 53
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 2
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 55
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t11
+  request:
+    body:
+      input: Remember the word APRICOT. Do not call any tools. Reply only READY.
+      max_output_tokens: 4096
+      model: gpt-4.1
+      previous_response_id: resp_0ed7e4624680bbb7006af2c98c21c887d2b04485f1d033d84c
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - no_such_tool
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794296207
+      created_at: 1794296206
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0ed7e4624680bbb7006af2c98ea4bc87d282c0542cb76976da
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: READY
+          type: output_text
+        id: msg_0ed7e4624680bbb7006af2c98f22b487d280250d5ac8577e6c
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_0ed7e4624680bbb7006af2c98c21c887d2b04485f1d033d84c
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - no_such_tool
+        headers: null
+        require_approval: never
+        server_description: null
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 79
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 2
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 81
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200

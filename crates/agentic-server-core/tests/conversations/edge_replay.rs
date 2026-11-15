@@ -6,19 +6,7 @@ use agentic_core::storage::{ConversationData, ConversationStore, create_pool_wit
 use agentic_core::types::conversations::{ConversationResponse, CreateConversationRequest, CreateItemRequest};
 use agentic_core::types::io::{ItemLimit, ItemOrder, ItemPage, ListItemsResponse};
 
-pub(super) fn remap_ids(value: &Value, ids: &IdPairs) -> Value {
-    match value {
-        Value::String(value) => Value::String(ids.forward.get(value).unwrap_or(value).clone()),
-        Value::Array(values) => Value::Array(values.iter().map(|value| remap_ids(value, ids)).collect()),
-        Value::Object(values) => Value::Object(
-            values
-                .iter()
-                .map(|(key, value)| (key.clone(), remap_ids(value, ids)))
-                .collect(),
-        ),
-        value => value.clone(),
-    }
-}
+pub(super) use crate::support::replay::remap_ids;
 
 fn conversation_body(data: ConversationData) -> Value {
     serde_json::to_value(ConversationResponse::new(

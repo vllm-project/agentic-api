@@ -17,6 +17,14 @@
       "group": "API"
     },
     {
+      "id": "file-search",
+      "slug": "api/file-search",
+      "sourcePath": "api/file-search.md",
+      "title": "Files, vector stores, and file search",
+      "description": "Upload and ingest documents, configure sqlite-vec or pluggable storage, and return file citations.",
+      "group": "API"
+    },
+    {
       "id": "python-installation",
       "slug": "guides/python-installation",
       "sourcePath": "guides/python-installation.md",

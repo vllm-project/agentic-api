@@ -458,6 +458,10 @@ kubectl create secret generic agentic-api-secrets \
 Serply works the same way with `value: serply`, a `SERPLY_API_KEY` variable read from a `serply-api-key` secret key,
 and the default endpoint `https://api.serply.io`.
 
+Keenable works with `value: keenable` and needs no Secret: without `KEENABLE_API_KEY` it uses Keenable's key-free
+public endpoint (default host `https://api.keenable.ai`). Add a `KEENABLE_API_KEY` variable from a secret to use the
+keyed endpoint.
+
 To avoid a search vendor account altogether, point the gateway at a self-hosted
 [SearXNG](https://docs.searxng.org/) Service instead. The gateway only talks to that
 instance; SearXNG forwards queries to the engines enabled in its `settings.yml`, so an

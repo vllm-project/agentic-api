@@ -32,6 +32,13 @@ const legacySections: DocsSection[] = [
     path: 'api/index.md',
   },
   {
+    id: 'file-search',
+    title: 'Files, vector stores, and file search',
+    description:
+      'Ingest documents, configure retrieval, and return file citations.',
+    path: 'api/file-search.md',
+  },
+  {
     id: 'codex-desktop',
     title: 'Codex Desktop',
     description:

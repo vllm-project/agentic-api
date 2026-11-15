@@ -1,7 +1,7 @@
 # Quickstart
 
 Install vLLM Agentic API, connect it to a running vLLM server, and send your first Responses API request.
-These commands use the [0.9.0 release on PyPI](https://pypi.org/project/agentic-api/0.9.0/).
+These commands use the [0.10.0 release on PyPI](https://pypi.org/project/agentic-api/0.10.0/).
 
 ## Before you start
 
@@ -22,7 +22,7 @@ Use the exact `id` returned for your model in the request below.
 ## Install the gateway
 
 ```bash
-python -m pip install agentic-api==0.9.0
+python -m pip install agentic-api==0.10.0
 python -m agentic_api --version
 python -m agentic_api doctor --mode remote
 ```
@@ -59,7 +59,7 @@ The JSON response contains an `output` array. To continue a stored response, see
   `run claude` command. These commands launch a gateway for the client; see the
   [Rust CLI reference](../reference/rust-cli.md) and [Claude Code guide](harness-cli-testing.md).
 - To let the Python launcher manage vLLM on a supported Linux GPU host, install
-  `agentic-api[local]==0.9.0` and use `python -m agentic_api serve --model MODEL_ID`. See
+  `agentic-api[local]==0.10.0` and use `python -m agentic_api serve --model MODEL_ID`. See
   [Python installation and workflows](python-installation.md) for the local mode and diagnostics.
 - If you prefer Cargo, [agentic-server on crates.io](https://crates.io/crates/agentic-server)
   installs the Rust-native `agentic` CLI and gateway.

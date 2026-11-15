@@ -87,9 +87,36 @@ fn append_str(block: &mut Value, field: &str, fragment: Option<&Value>) {
     let Some(fragment) = fragment.and_then(Value::as_str) else {
         return;
     };
-    let combined = match block.get(field).and_then(Value::as_str) {
-        Some(existing) => format!("{existing}{fragment}"),
-        None => fragment.to_owned(),
-    };
-    block[field] = Value::from(combined);
+    if let Some(Value::String(existing)) = block.get_mut(field) {
+        existing.push_str(fragment);
+    } else {
+        block[field] = Value::from(fragment);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn string_deltas_reuse_existing_allocation() {
+        let mut text = String::with_capacity(64);
+        text.push_str("first");
+        let allocation = text.as_ptr();
+        let mut object = Map::new();
+        object.insert("text".to_owned(), Value::String(text));
+        let mut block = Value::Object(object);
+        let second = Value::from(" second");
+        let third = Value::from(" third");
+
+        append_str(&mut block, "text", Some(&second));
+        append_str(&mut block, "text", Some(&third));
+
+        let accumulated = block["text"].as_str().expect("text remains a string");
+        assert_eq!(accumulated, "first second third");
+        assert!(
+            std::ptr::eq(accumulated.as_ptr(), allocation),
+            "appending within spare capacity must retain the existing allocation"
+        );
+    }
 }

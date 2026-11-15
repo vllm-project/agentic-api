@@ -5,15 +5,21 @@ use std::num::NonZeroU64;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use super::conversations::ConversationMetadata;
 use super::io::input::{HistoryNaming, InputValidationError};
-use super::io::{FunctionTool, InputItem, MultiAgentConfig, OutputItem, ResponseUsage, ResponsesInput, ToolChoice};
+use super::io::{FunctionTool, MultiAgentConfig, OutputItem, ResponseUsage, ResponsesInput, ToolChoice};
 use super::tools::ResponsesTool;
+use super::{ReasoningEffortLevel, RequestField, ServiceTier};
 use crate::tool::{
     CodexNamespaceHandler, CustomHandler, ToolDeclaration, ToolError, declares_async, responses_declarations,
 };
 
+mod compaction;
+pub use compaction::{CompactRequest, CompactedResponse, ContextManagement};
+#[cfg(test)]
+mod capability_tests;
 mod prompt_cache;
-pub use prompt_cache::{PromptCacheMode, PromptCacheOptions, PromptCacheOptionsError, PromptCacheTtl};
+pub use prompt_cache::{PromptCacheMode, PromptCacheOptions, PromptCacheTtl};
 mod max_tool_calls;
 mod response_stream;
 mod serde_helpers;
@@ -41,7 +47,7 @@ pub struct ReasoningConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub effort: Option<String>,
+    pub effort: Option<ReasoningEffortLevel>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generate_summary: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -89,6 +95,8 @@ pub struct RequestPayload<T: ?Sized = ResponseTextConfig, C = PromptCacheOptions
     pub text: Option<Box<T>>,
     pub temperature: Option<f64>,
     pub top_p: Option<f64>,
+    #[serde(default, skip_serializing_if = "RequestField::is_missing")]
+    pub top_logprobs: RequestField<i64>,
     pub max_output_tokens: Option<u32>,
     /// Maximum built-in tool calls one response may process, as sent by the client.
     /// Read it through [`RequestPayload::max_tool_calls_limit`]; unsupported with multi-agent execution.
@@ -98,7 +106,7 @@ pub struct RequestPayload<T: ?Sized = ResponseTextConfig, C = PromptCacheOptions
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ignore_eos: Option<bool>,
     pub truncation: Option<String>,
-    pub metadata: Option<Value>,
+    pub metadata: Option<ConversationMetadata>,
     pub parallel_tool_calls: Option<bool>,
     /// Hosted collaboration configuration, interpreted by the gateway coordinator.
     /// Independent of the model's `parallel_tool_calls` generation preference.
@@ -111,7 +119,7 @@ pub struct RequestPayload<T: ?Sized = ResponseTextConfig, C = PromptCacheOptions
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt_cache_options: Option<C>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub service_tier: Option<String>,
+    pub service_tier: Option<ServiceTier>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_salt: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -132,6 +140,8 @@ pub struct RequestPayload<T: ?Sized = ResponseTextConfig, C = PromptCacheOptions
 /// Validation failures while constructing a typed upstream request.
 #[derive(Debug, thiserror::Error)]
 pub enum UpstreamRequestError {
+    #[error(transparent)]
+    Parameter(#[from] UnsupportedParameterError),
     #[error(transparent)]
     Input(#[from] InputValidationError),
     #[error(transparent)]
@@ -168,6 +178,8 @@ pub struct UpstreamRequest<'a> {
     pub temperature: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub top_p: Option<f64>,
+    #[serde(skip_serializing_if = "RequestField::is_missing")]
+    pub top_logprobs: &'a RequestField<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_output_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -175,7 +187,7 @@ pub struct UpstreamRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub truncation: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<&'a Value>,
+    pub metadata: Option<&'a ConversationMetadata>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -185,7 +197,7 @@ pub struct UpstreamRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_cache_options: Option<&'a PromptCacheOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub service_tier: Option<&'a str>,
+    pub service_tier: Option<ServiceTier>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_salt: Option<&'a str>,
     #[serde(flatten)]
@@ -294,6 +306,7 @@ impl<T: ?Sized, C> RequestPayload<T, C> {
             text: self.text.map(map_text).transpose()?,
             temperature: self.temperature,
             top_p: self.top_p,
+            top_logprobs: self.top_logprobs,
             max_output_tokens: self.max_output_tokens,
             max_tool_calls: self.max_tool_calls,
             ignore_eos: self.ignore_eos,
@@ -350,6 +363,7 @@ impl RequestPayload {
     /// member, or when a custom tool declares a format whose constrained
     /// decoding cannot be preserved upstream.
     pub fn to_upstream_request(&self, stream: bool) -> Result<UpstreamRequest<'_>, UpstreamRequestError> {
+        self.validate_modeled_extensions()?;
         self.input.validate()?;
         // This is only the upstream model-generation preference: it controls
         // whether the model may emit parallel calls, not how the gateway
@@ -382,6 +396,7 @@ impl RequestPayload {
             text: self.text.as_deref(),
             temperature: self.temperature,
             top_p: self.top_p,
+            top_logprobs: &self.top_logprobs,
             max_output_tokens: self.max_output_tokens,
             ignore_eos: self.ignore_eos,
             truncation: self.truncation.as_deref(),
@@ -390,58 +405,11 @@ impl RequestPayload {
             prompt_cache_key: self.prompt_cache_key.as_deref(),
             prompt_cache_retention: self.prompt_cache_retention,
             prompt_cache_options: self.prompt_cache_options.as_ref(),
-            service_tier: self.service_tier.as_deref(),
+            service_tier: self.service_tier,
             cache_salt: self.cache_salt.as_deref(),
             extra: &self.extra,
         })
     }
-}
-
-/// Server-side context management configuration for a Responses request.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct ContextManagement {
-    #[serde(rename = "type")]
-    pub type_: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub compact_threshold: Option<u64>,
-}
-
-/// Request body accepted by `POST /v1/responses/compact`.
-#[derive(Debug, Clone, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct CompactRequest {
-    pub model: String,
-    #[serde(default)]
-    pub input: Option<ResponsesInput>,
-    #[serde(default)]
-    pub instructions: Option<String>,
-    #[serde(default)]
-    pub previous_response_id: Option<String>,
-    #[serde(default)]
-    pub service_tier: Option<String>,
-    #[serde(default)]
-    pub prompt_cache_retention: Option<PromptCacheRetention>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub prompt_cache_options: Option<PromptCacheOptions>,
-    #[serde(default)]
-    pub prompt_cache_key: Option<String>,
-    /// Compatibility fields sent by current SDK and Codex clients.
-    #[serde(flatten)]
-    pub compatibility: HashMap<String, Value>,
-}
-
-/// Result returned by `POST /v1/responses/compact`.
-#[derive(Debug, Clone, Serialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct CompactedResponse {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub service_tier: Option<String>,
-    pub id: String,
-    pub object: String,
-    pub created_at: i64,
-    pub output: Vec<InputItem>,
-    pub usage: ResponseUsage,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -487,6 +455,8 @@ pub struct ResponsePayload {
 
 #[cfg(test)]
 mod tests {
+    use crate::types::io::InputItem;
+
     use super::*;
     use crate::types::io::InOutItem;
 

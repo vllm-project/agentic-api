@@ -76,26 +76,13 @@ impl ConversationStore {
         conversation::get_or_create(pool, conversation_id).await?.try_into()
     }
 
-    /// Gets a conversation by ID.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if conversation not found or database query fails.
-    pub async fn get(&self, conversation_id: &str) -> StoreResult<ConversationData> {
-        let pool = self.pool()?;
-        conversation::get(pool, conversation_id)
-            .await?
-            .ok_or_else(|| StorageError::not_found("Conversation", conversation_id))?
-            .try_into()
-    }
-
     /// Rehydrates a conversation: its items and the checkpoint a turn continues (the latest turn's metadata and the
     /// history rows).
     ///
     /// # Errors
     ///
-    /// Returns an error if a stored item is invalid or missing its sequence number, the turn's metadata
-    /// is missing or invalid, or the database query fails.
+    /// Returns an error if the conversation does not exist, a stored item is invalid or missing its sequence number,
+    /// the turn's metadata is missing or invalid, or the database query fails.
     pub async fn rehydrate(&self, conversation_id: &str) -> StoreResult<ConversationSnapshot> {
         let pool = self.pool()?;
         let Some(ConversationHistory {
@@ -104,7 +91,7 @@ impl ConversationStore {
             items: rows,
         }) = conversation::get_with_items(pool, conversation_id).await?
         else {
-            return Ok(ConversationSnapshot::default());
+            return Err(StorageError::not_found("Conversation", conversation_id));
         };
 
         if let Some(row) = rows.iter().find(|row| row.seq.is_none()) {
@@ -115,6 +102,7 @@ impl ConversationStore {
         }
         let items = rows.iter().map(InOutItem::try_from).collect::<StoreResult<_>>()?;
         let history_item_ids = rows.into_iter().map(|row| row.id).collect();
+        // A latest turn that is missing or belongs to another conversation is not continued.
         let metadata = match &latest_response_id {
             None => None,
             Some(response_id) => decode_turn_metadata(response_id, latest_turn.as_ref())?,
@@ -125,11 +113,11 @@ impl ConversationStore {
             items,
             checkpoint: ResponseCheckpoint {
                 response_id,
-                history: Vec::new(),
                 metadata: metadata.unwrap_or_default(),
                 durable: true,
                 history_item_ids,
                 requires_latest: false,
+                history: Vec::new(),
             },
         })
     }
