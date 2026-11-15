@@ -16,6 +16,7 @@ import warnings
 
 from openai import OpenAI
 from file_search_citation_fixtures import citation_upstream, exercise_citations
+from file_search_embedding_fixture import embedding_upstream
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -46,11 +47,21 @@ def run() -> None:
     if not SERVER.is_file():
         raise AssertionError(f"build the gateway first: cargo build -p agentic-server --bin agentic-server ({SERVER})")
 
+    postgres_url = os.environ.get("TEST_POSTGRES_URL")
     with tempfile.TemporaryDirectory(prefix="agentic-openai-file-search-") as directory, \
-            citation_upstream(Path(directory)) as (upstream_url, upstream_state):
+            citation_upstream(Path(directory)) as (upstream_url, upstream_state), \
+            embedding_upstream(bool(postgres_url)) as embedding_url:
         root = Path(directory)
         database = root / "gateway.db"
         database.touch()
+        if postgres_url:
+            home = root / "home"
+            home.mkdir()
+            (home / "config.toml").write_text(
+                f'[file_search]\nembedding_base_url = "{embedding_url}"\nembedding_model = "fixture"\n'
+                '[file_search.pgvector]\ndimensions = 2\ncandidate_limit = 100\n'
+                '[file_search.pgvector.index]\ntype = "hnsw"\nm = 16\nef_construction = 64\nef_search = 100\n'
+            )
         port = unused_port()
         url = f"http://127.0.0.1:{port}"
         log = root / "gateway.log"
@@ -66,7 +77,7 @@ def run() -> None:
             "--llm-api-base", upstream_url,
             "--gateway-host", "127.0.0.1",
             "--gateway-port", str(port),
-            "--db-url", f"sqlite://{database}",
+            "--db-url", postgres_url or f"sqlite://{database}",
             "--skip-llm-ready-check",
         ]
         with log.open("wb") as output:
@@ -103,6 +114,14 @@ def run() -> None:
                         for match in matches.data
                     ), matches
 
+                    if postgres_url:
+                        semantic = client.vector_stores.search(
+                            store.id, query="opening schedule", max_num_results=1,
+                            extra_body={"search_mode": "semantic"},
+                        )
+                        assert semantic.data[0].file_id == file.id, semantic
+                        assert semantic.data[0].score > 0.99, semantic
+
                     assert client.vector_stores.files.delete(file.id, vector_store_id=store.id).deleted
                     assert client.files.retrieve(file.id).id == file.id
                     assert client.vector_stores.delete(store.id).deleted
@@ -114,6 +133,7 @@ def run() -> None:
                         warnings.simplefilter("always")
                         exercise_citations(client, upstream_state)
                     assert all("future_citation" in str(warning.message) for warning in sdk_warnings), sdk_warnings
+                    print(f"OpenAI client Files/vector stores/search: {'pgvector semantic/hybrid' if postgres_url else 'SQLite keyword'} passed")
             except Exception as error:
                 raise AssertionError(f"OpenAI client integration failed: {error}\ngateway log:\n{log.read_text()}") from error
             finally:

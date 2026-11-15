@@ -9,7 +9,7 @@ use crate::{
     config::agentic_api_home,
     storage::{DbPool, file_search::FileSearchStorage, local_files::LocalFiles},
     tool::file_search::{
-        SqliteVecRepository,
+        PgvectorRepository, SqliteVecRepository,
         embeddings::Embeddings,
         provider::{FileBlobStore, FileSearchRepository},
     },
@@ -17,7 +17,7 @@ use crate::{
 };
 
 impl FileSearchService {
-    /// Builds the configured SQL or sqlite-vec provider and local blob store.
+    /// Builds the configured SQL, sqlite-vec, or pgvector provider and local blob store.
     ///
     /// # Errors
     /// Returns an error if the trusted extension cannot be loaded or providers cannot initialize.
@@ -26,9 +26,15 @@ impl FileSearchService {
         client: Arc<reqwest::Client>,
         config: FileSearchConfig,
     ) -> Result<Self, FileSearchError> {
-        let storage: Arc<dyn FileSearchRepository> = match &config.sqlite_vec_extension_path {
-            Some(extension_path) => Arc::new(SqliteVecRepository::open(pool, extension_path).await?),
-            None => Arc::new(FileSearchStorage::new(pool)),
+        let storage: Arc<dyn FileSearchRepository> = match (&config.sqlite_vec_extension_path, &config.pgvector) {
+            (Some(_), Some(_)) => {
+                return Err(FileSearchError::InvalidRequest(
+                    "configure only one of sqlite_vec_extension_path and pgvector".into(),
+                ));
+            }
+            (Some(extension_path), None) => Arc::new(SqliteVecRepository::open(pool, extension_path).await?),
+            (None, Some(options)) => Arc::new(PgvectorRepository::open(pool, options).await?),
+            (None, None) => Arc::new(FileSearchStorage::new(pool)),
         };
         Self::with_local_files(storage, client, &config)
     }

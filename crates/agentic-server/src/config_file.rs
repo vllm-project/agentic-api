@@ -390,17 +390,7 @@ impl FileConfig {
     }
 
     fn validate(&self, path: &Path) -> Result<(), Error> {
-        if self
-            .file_search
-            .sqlite_vec_extension_path
-            .as_ref()
-            .is_some_and(|extension| extension.as_os_str().is_empty())
-        {
-            return Err(Error::Config(format!(
-                "configuration file {} contains an empty file_search.sqlite_vec_extension_path",
-                path.display()
-            )));
-        }
+        self.file_search.validate(path)?;
         if self
             .files
             .storage_dir
@@ -409,17 +399,6 @@ impl FileConfig {
         {
             return Err(Error::Config(format!(
                 "configuration file {} contains an empty files.storage_dir",
-                path.display()
-            )));
-        }
-        if self
-            .file_search
-            .api_key_env
-            .as_deref()
-            .is_some_and(|name| name.trim().is_empty())
-        {
-            return Err(Error::Config(format!(
-                "configuration file {} contains an empty file_search.api_key_env",
                 path.display()
             )));
         }

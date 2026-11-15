@@ -1897,6 +1897,13 @@ for the five-minute lifetime, serialized-size budget, and crash recovery rules.
   exact-search provider retains a 64 MiB serialized-corpus limit; sqlite-vec
   admits 256 MiB. Its keyword, hybrid, and filtered semantic paths use that
   same provider limit when they read chunks for exact ranking.
+  The optional pgvector adapter uses `storage/file_search/pgvector.rs` for
+  PostgreSQL projection and index setup, bounded native candidate selection,
+  and typed SQL filters. Generated vector columns share metadata transactions;
+  no extension is required by portable migrations. Its repository in
+  `tool/file_search/pgvector.rs` implements the same injectable provider contract
+  and uses the shared final ranker. See the file-search guide for startup DDL
+  privileges, index rebuilds, recall settings, and provider identity changes.
 - **`conversation.rs` (tenant-scoped API)** — conversation and item CRUD. Item ownership is checked through
   the conversation so Responses-persisted items are visible too. Item writes share `lock_in_tx` with
   turn persistence, so concurrent writers get distinct sequence numbers.
