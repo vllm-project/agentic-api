@@ -1970,18 +1970,10 @@ async fn continuation_keeps_reasoning_before_the_web_search_it_led_to() {
     // output differ from the live round's; the order must not.
     let requests = llm.request_bodies().await;
     assert_eq!(requests.len(), 3);
-    let kinds = |request: &serde_json::Value| -> Vec<serde_json::Value> {
-        request["input"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|item| item["type"].clone())
-            .collect()
-    };
-    let live = kinds(&requests[1]);
+    let live = support::input_item_types(&requests[1]);
     assert_eq!(live, ["message", "reasoning", "function_call", "function_call_output"]);
     assert_eq!(
-        kinds(&requests[2])[..live.len()],
+        support::input_item_types(&requests[2])[..live.len()],
         live[..],
         "{:#?}",
         requests[2]["input"]

@@ -674,6 +674,16 @@ pub fn request_input_texts(body: &Value) -> Vec<String> {
     }
 }
 
+/// The `type` of each input item in a request body the gateway sent upstream.
+pub fn input_item_types(body: &Value) -> Vec<Value> {
+    body["input"]
+        .as_array()
+        .expect("item input")
+        .iter()
+        .map(|item| item["type"].clone())
+        .collect()
+}
+
 pub fn make_request(
     input: impl Serialize,
     store: bool,

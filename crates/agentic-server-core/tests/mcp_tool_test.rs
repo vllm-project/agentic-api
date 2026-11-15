@@ -1398,16 +1398,13 @@ async fn continuation_keeps_reasoning_before_the_mcp_call_it_led_to() {
     // live round's; the order must not.
     let bodies = fixture.request_bodies().await;
     assert_eq!(bodies.len(), 3);
-    let kinds = |body: &Value| -> Vec<Value> {
-        body["input"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|item| item["type"].clone())
-            .collect()
-    };
-    let live = kinds(&bodies[1]);
+    let live = support::input_item_types(&bodies[1]);
     assert_eq!(live, ["message", "reasoning", "function_call", "function_call_output"]);
-    assert_eq!(kinds(&bodies[2])[..live.len()], live[..], "{:#?}", bodies[2]["input"]);
+    assert_eq!(
+        support::input_item_types(&bodies[2])[..live.len()],
+        live[..],
+        "{:#?}",
+        bodies[2]["input"]
+    );
     assert_eq!(bodies[2]["input"][1], bodies[1]["input"][1], "the same reasoning");
 }
