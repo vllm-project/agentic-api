@@ -983,6 +983,7 @@ async fn tool_search_store_false_manual_replay_completes_without_reusable_respon
         original_request: make_request("lookup", true, false, Some(final_response.id.clone()), None),
         enriched_request: make_request("lookup", true, false, Some(final_response.id), None),
         new_input_items: Vec::new(),
+        file_search_history: Vec::new(),
         response_id: "resp_lookup".to_owned(),
         conversation_id: None,
         checkpoint: None,
@@ -1053,6 +1054,7 @@ async fn test_previous_response_id_persists_inherited_tools_and_choice() {
             ..make_request("lookup", true, false, None, None)
         },
         new_input_items: vec![],
+        file_search_history: Vec::new(),
         response_id: "resp_lookup".into(),
         conversation_id: None,
         checkpoint: None,
@@ -1483,6 +1485,7 @@ fn lookup_context(previous_response_id: Option<String>, conversation_id: Option<
         enriched_request: request.clone(),
         original_request: request,
         new_input_items: Vec::new(),
+        file_search_history: Vec::new(),
         response_id: "resp_lookup".to_owned(),
         conversation_id: None,
         checkpoint: None,

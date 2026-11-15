@@ -61,6 +61,7 @@ impl From<SplitContext> for RequestContext {
             original_request: wire.original_request,
             enriched_request,
             new_input_items,
+            file_search_history: Vec::new(),
             response_id: wire.response_id,
             conversation_id: wire.conversation_id,
             // Conversation mode is rejected, so there is no version to resume.

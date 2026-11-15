@@ -424,23 +424,21 @@ impl<'a> AgentTurn<'a> {
         }
     }
 
-    /// Give the model each built-in tool's output. File-search calls and their outputs also stay in item history so
-    /// a later turn can use the same retrieved context, even when the public item omits `results`.
+    /// Give the model each built-in tool's output. A file-search call keeps its model-facing pair (the function call
+    /// followed by its tool output) in public-output order. Persistence splices each pair where the public
+    /// `file_search_call` sits, so a later turn reuses the retrieved context even when that public item omits its
+    /// results, without moving reasoning that preceded the call.
     fn record_gateway_results(&mut self, output: &[OutputItem], results: Vec<GatewayCallResult>) {
         for result in results {
             if matches!(&result.public_output, Some(OutputItem::FileSearchCall(_)))
                 && let Some(OutputItem::FunctionCall(call)) = output.get(result.item_index)
             {
-                self.pipeline
-                    .request
-                    .new_input_items
-                    .push(InOutItem::Input(InputItem::FunctionCall(InputFunctionToolCall::from(
-                        call.clone(),
-                    ))));
-                self.pipeline
-                    .request
-                    .new_input_items
-                    .extend(result.input.iter().cloned().map(InOutItem::Input));
+                let mut pair = Vec::with_capacity(1 + result.input.len());
+                pair.push(InOutItem::Input(InputItem::FunctionCall(InputFunctionToolCall::from(
+                    call.clone(),
+                ))));
+                pair.extend(result.input.iter().cloned().map(InOutItem::Input));
+                self.pipeline.request.file_search_history.push(pair);
             }
             self.pipeline.request.enriched_request.input.extend(result.input);
         }

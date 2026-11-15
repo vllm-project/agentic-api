@@ -213,6 +213,7 @@ mod tests {
             enriched_request: req.clone(),
             original_request: req,
             new_input_items: vec![],
+            file_search_history: Vec::new(),
             response_id: "resp_test".into(),
             conversation_id: None,
             checkpoint: None,

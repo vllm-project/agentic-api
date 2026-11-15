@@ -102,6 +102,7 @@ fn upstream_request_value(payload: RequestPayload, stream: bool) -> Value {
         original_request: payload.clone(),
         enriched_request: payload,
         new_input_items: Vec::new(),
+        file_search_history: Vec::new(),
         response_id: "resp_test".to_string(),
         conversation_id: None,
         checkpoint: None,

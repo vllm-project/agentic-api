@@ -2260,6 +2260,7 @@ async fn test_websocket_generate_false_prewarm_redacts_mcp_runtime_credentials()
         original_request: request.clone(),
         enriched_request: request,
         new_input_items: vec![],
+        file_search_history: Vec::new(),
         response_id: "resp_lookup".to_owned(),
         conversation_id: None,
         checkpoint: None,

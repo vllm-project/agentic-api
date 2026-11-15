@@ -650,6 +650,7 @@ fn composed_upstream_request_cannot_bypass_file_validation() {
         original_request: request.clone(),
         enriched_request: request,
         new_input_items: Vec::new(),
+        file_search_history: Vec::new(),
         response_id: "resp_composed".to_owned(),
         conversation_id: None,
         checkpoint: None,

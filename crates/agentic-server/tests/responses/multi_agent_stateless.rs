@@ -199,6 +199,7 @@ async fn assert_reference_contract(mode: &str, actual_turns: &[Value]) {
                 original_request,
                 multi_agent_tree: None,
                 new_input_items: Vec::new(),
+                file_search_history: Vec::new(),
                 response_id: "resp_strict_replay".to_owned(),
                 conversation_id: None,
                 checkpoint: None,

@@ -41,6 +41,7 @@ fn context() -> RequestContext {
         original_request: request.clone(),
         enriched_request: request,
         new_input_items: Vec::new(),
+        file_search_history: Vec::new(),
         response_id: "resp_reserved".to_owned(),
         conversation_id: None,
         checkpoint: None,

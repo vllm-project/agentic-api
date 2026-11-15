@@ -38,9 +38,14 @@ pub struct RequestContext {
     /// Enriched request with rehydrated conversation history injected into `.input`.
     /// This is the request forwarded to the LLM.
     pub enriched_request: RequestPayload,
-    /// This turn's input items and model-facing file-search context for persistence. An in-turn compaction can replace
-    /// them with its window; persistence then appends the turn's public output.
+    /// This turn's input items for persistence. An in-turn compaction can replace them with its window; persistence
+    /// then appends the turn's public output.
     pub new_input_items: Vec<InOutItem>,
+    /// A file-search call's model-facing pair (its function call and tool output), one entry per gateway-run file
+    /// search in public-output order. Persistence splices each pair at the public `file_search_call` output's
+    /// position, so reasoning that preceded the call stays before it on a continuation even though the public item
+    /// omits the model output by default.
+    pub file_search_history: Vec<Vec<InOutItem>>,
     /// Our generated response ID (uuid7 with "resp_" prefix).
     pub response_id: String,
     /// Resolved conversation ID. `None` when `store=false` or non-conversational.

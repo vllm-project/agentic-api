@@ -151,19 +151,32 @@ async fn write_turn(
 
 /// The turn's own history: its input items, then its public output, less any output an in-turn session
 /// compaction already absorbed ([`ResponseContinuation::retains_output`]).
+///
+/// A public `file_search_call` omits the model output by default and maps to no continuation item, so persistence
+/// splices its model-facing call/output pair at that item's position. This keeps reasoning that preceded the call
+/// before it on a continuation instead of moving the pair ahead of the turn's output.
 fn turn_items(
     ctx: &mut RequestContext,
     output_items: &[OutputItem],
     continuation: Option<&ResponseContinuation>,
 ) -> Vec<InOutItem> {
     let mut items = std::mem::take(&mut ctx.new_input_items);
-    items.extend(
-        output_items
-            .iter()
-            .enumerate()
-            .filter(|(index, item)| continuation.is_none_or(|lease| lease.retains_output(*index, item)))
-            .map(|(_, item)| InOutItem::Output(item.clone())),
-    );
+    let mut file_search_pairs = std::mem::take(&mut ctx.file_search_history).into_iter();
+    for (index, item) in output_items.iter().enumerate() {
+        let retained = continuation.is_none_or(|lease| lease.retains_output(index, item));
+        if let OutputItem::FileSearchCall(_) = item {
+            // Consume the pair regardless of retention so later file searches stay aligned; drop it when
+            // an in-turn compaction absorbed the public call.
+            let pair = file_search_pairs.next();
+            if retained && let Some(pair) = pair {
+                items.extend(pair);
+            }
+            continue;
+        }
+        if retained {
+            items.push(InOutItem::Output(item.clone()));
+        }
+    }
     items
 }
 

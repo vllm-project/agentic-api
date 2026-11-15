@@ -88,6 +88,7 @@ pub(crate) async fn rehydrate_with_continuation(
             enriched_request: request,
             original_request,
             new_input_items,
+            file_search_history: Vec::new(),
             response_id,
             conversation_id: None,
             checkpoint: None,

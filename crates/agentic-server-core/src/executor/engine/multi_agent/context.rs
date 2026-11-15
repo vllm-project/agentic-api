@@ -285,6 +285,7 @@ pub(super) async fn prepare_agent(
         original_request: request.clone(),
         enriched_request: request,
         new_input_items: Vec::new(),
+        file_search_history: Vec::new(),
         response_id: parent.response_id.clone(),
         conversation_id: None,
         checkpoint: None,
