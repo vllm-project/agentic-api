@@ -7,9 +7,9 @@
 //! it is not KV-cache block identity and does not prove residency. It is
 //! unrelated to a response session (`executor::session`).
 
-use std::fmt::Write as _;
-
 use ring::digest;
+
+use crate::utils::common::lowercase_hex;
 
 /// Mixed into every derivation so a later format change yields new ids.
 const DERIVATION_TAG: &str = "agentic-api/session-id/v1";
@@ -48,12 +48,7 @@ impl ScopedSessionId {
             }
         }
         field(client_session_id);
-        let digest = context.finish();
-        let mut hex = String::with_capacity(digest.as_ref().len() * 2);
-        for byte in digest.as_ref() {
-            let _ = write!(hex, "{byte:02x}");
-        }
-        Self(hex)
+        Self(lowercase_hex(context.finish().as_ref()))
     }
 
     #[must_use]

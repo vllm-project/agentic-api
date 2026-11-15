@@ -274,10 +274,7 @@ mod tests {
                 .iter()
                 .find(|migration| migration.version == version)
                 .unwrap_or_else(|| panic!("merged migration {version} is missing"));
-            let checksum = migration.checksum.iter().fold(String::new(), |mut hex, byte| {
-                let _ = write!(hex, "{byte:02x}");
-                hex
-            });
+            let checksum = crate::utils::common::lowercase_hex(&migration.checksum);
             assert_eq!(checksum, expected, "merged migration {version} was edited");
         }
     }
