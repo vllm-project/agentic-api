@@ -464,3 +464,38 @@ async fn files_api_preserves_binary_uploads_without_requiring_searchable_content
         .error_for_status()
         .unwrap();
 }
+
+#[tokio::test]
+async fn vector_store_create_rejects_metadata_over_the_limits() {
+    let server = gateway().await;
+    let client = reqwest::Client::new();
+    let url = format!("{}/v1/vector_stores", server.url);
+
+    let mut metadata = serde_json::Map::new();
+    for index in 0..17 {
+        metadata.insert(format!("key{index:02}"), json!("value"));
+    }
+    let response = client
+        .post(&url)
+        .json(&json!({ "metadata": metadata }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(body["error"]["type"], "invalid_request_error", "{body}");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("metadata")),
+        "{body}"
+    );
+
+    let response = client
+        .post(&url)
+        .json(&json!({ "name": "within limits", "metadata": { "topic": "billing" } }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK, "{}", response.text().await.unwrap());
+}

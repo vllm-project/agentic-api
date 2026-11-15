@@ -11,6 +11,8 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::types::ConversationMetadata;
+
 /// Failures retain diagnostic sources without returning provider or database details to callers.
 #[derive(Debug, thiserror::Error)]
 pub enum FileSearchError {
@@ -294,7 +296,7 @@ pub struct CreateVectorStoreRequest {
     #[serde(default)]
     pub file_ids: Vec<String>,
     #[serde(default)]
-    pub metadata: BTreeMap<String, String>,
+    pub metadata: ConversationMetadata,
     pub chunking_strategy: Option<ChunkingStrategy>,
 }
 

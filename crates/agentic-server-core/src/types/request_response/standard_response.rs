@@ -1,4 +1,6 @@
-use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Map;
 
 use super::{PromptCacheOptions, RequestPayload, ResponseTextConfig, ResponseTextFormat};
@@ -30,6 +32,16 @@ where
     serializer.serialize_str(tier.as_deref().unwrap_or("default"))
 }
 
+/// Decode persisted standard-field metadata without re-applying the inbound
+/// request limits, so responses stored before validation still rehydrate.
+pub(super) fn deserialize_stored_metadata<'de, D>(deserializer: D) -> Result<ConversationMetadata, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let map = Option::<BTreeMap<String, String>>::deserialize(deserializer)?;
+    Ok(map.map_or_else(ConversationMetadata::new, ConversationMetadata::from_stored))
+}
+
 /// Standard response fields required by the Open Responses resource schema.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -49,6 +61,7 @@ pub struct StandardResponseFields {
     #[serde(default = "default_stored_response")]
     pub store: bool,
     pub background: bool,
+    #[serde(default, deserialize_with = "deserialize_stored_metadata")]
     pub metadata: ConversationMetadata,
     pub safety_identifier: Option<String>,
     pub prompt_cache_key: Option<String>,

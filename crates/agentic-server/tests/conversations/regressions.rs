@@ -164,3 +164,88 @@ async fn rejects_oversized_batches_and_invalid_limits() {
     }
     handle.abort();
 }
+
+async fn post_metadata(url: &str, path: &str, metadata: serde_json::Map<String, Value>) -> (StatusCode, Value) {
+    let response = reqwest::Client::new()
+        .post(format!("{url}{path}"))
+        .json(&json!({ "metadata": metadata }))
+        .send()
+        .await
+        .unwrap();
+    let status = response.status();
+    let body = response.json().await.unwrap_or(Value::Null);
+    (status, body)
+}
+
+fn assert_metadata_error(body: &Value) {
+    assert_eq!(body["error"]["type"], "invalid_request_error", "{body}");
+    assert_eq!(body["error"]["code"], "invalid_value", "{body}");
+    assert_eq!(body["error"]["param"], "metadata", "{body}");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("metadata")),
+        "{body}"
+    );
+}
+
+#[tokio::test]
+async fn regression_create_rejects_metadata_over_the_limits() {
+    let state = test_state_with_storage("http://127.0.0.1:1").await;
+    let (url, handle) = spawn_gateway(state).await;
+
+    for bad_metadata in [
+        // More than 16 key-value pairs.
+        (0..17)
+            .map(|index| (format!("key{index:02}"), json!("value")))
+            .collect(),
+        // An empty key.
+        serde_json::Map::from_iter([(String::new(), json!("value"))]),
+        // A 65-character key.
+        serde_json::Map::from_iter([("k".repeat(65), json!("value"))]),
+        // A 513-character value.
+        serde_json::Map::from_iter([("key".to_owned(), json!("v".repeat(513)))]),
+    ] {
+        let (status, body) = post_metadata(&url, "/v1/conversations", bad_metadata).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+        assert_metadata_error(&body);
+    }
+
+    // Valid metadata at the limits is accepted and echoed back.
+    let mut valid = serde_json::Map::new();
+    for index in 0..15 {
+        valid.insert(format!("key{index:02}"), json!("value"));
+    }
+    valid.insert("k".repeat(64), json!("v".repeat(512)));
+    let response = reqwest::Client::new()
+        .post(format!("{url}/v1/conversations"))
+        .json(&json!({ "metadata": valid }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK, "{}", response.text().await.unwrap());
+
+    handle.abort();
+}
+
+#[tokio::test]
+async fn regression_update_rejects_metadata_over_the_limits() {
+    let state = test_state_with_storage("http://127.0.0.1:1").await;
+    let (url, handle) = spawn_gateway(state).await;
+    let conversation_id = create_conversation_with_items(&url, vec![]).await;
+
+    let too_many: serde_json::Map<String, Value> = (0..17)
+        .map(|index| (format!("key{index:02}"), json!("value")))
+        .collect();
+    let (status, body) = post_metadata(&url, &format!("/v1/conversations/{conversation_id}"), too_many).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_metadata_error(&body);
+
+    // A conforming update still succeeds.
+    let valid = serde_json::Map::from_iter([("topic".to_owned(), json!("billing"))]);
+    let (status, body) = post_metadata(&url, &format!("/v1/conversations/{conversation_id}"), valid).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["metadata"]["topic"], "billing", "{body}");
+
+    handle.abort();
+}

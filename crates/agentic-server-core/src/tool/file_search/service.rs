@@ -103,14 +103,6 @@ impl FileSearchService {
         if request.name.as_ref().is_some_and(|name| name.len() > 256) {
             return invalid("vector store name must not exceed 256 bytes");
         }
-        if request.metadata.len() > 16
-            || request
-                .metadata
-                .iter()
-                .any(|(key, value)| key.is_empty() || key.len() > 64 || value.len() > 512)
-        {
-            return invalid("metadata accepts at most 16 entries, with 1 to 64 byte keys and values up to 512 bytes");
-        }
         if request.file_ids.len() > 16
             || request.file_ids.iter().collect::<HashSet<_>>().len() != request.file_ids.len()
         {
@@ -126,7 +118,7 @@ impl FileSearchService {
             usage_bytes: 0,
             file_counts: FileCounts::default(),
             status: "completed".into(),
-            metadata: request.metadata,
+            metadata: request.metadata.into_inner(),
         };
         let mut attachments = Vec::new();
         let mut dimensions = None;

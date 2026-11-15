@@ -9,7 +9,8 @@ pub mod request_response;
 pub mod tools;
 
 pub use conversations::{
-    ConversationResponse, CreateConversationRequest, CreateItemRequest, UpdateConversationRequest,
+    ConversationMetadata, ConversationResponse, CreateConversationRequest, CreateItemRequest, InvalidMetadata,
+    UpdateConversationRequest,
 };
 
 pub use io::{

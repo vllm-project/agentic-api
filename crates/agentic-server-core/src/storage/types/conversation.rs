@@ -1,5 +1,7 @@
 //! Domain type for conversation storage.
 
+use std::collections::BTreeMap;
+
 use super::super::models::Conversation as StorageDbConversation;
 use super::errors::{StorageError, StoreResult};
 use super::response::ResponseCheckpoint;
@@ -37,8 +39,9 @@ impl TryFrom<StorageDbConversation> for ConversationData {
         let metadata = row
             .metadata
             .as_deref()
-            .map(serde_json::from_str)
+            .map(serde_json::from_str::<BTreeMap<String, String>>)
             .transpose()?
+            .map(ConversationMetadata::from_stored)
             .unwrap_or_default();
         Ok(Self {
             conversation_id: row.id,
@@ -96,9 +99,22 @@ mod tests {
 
     #[test]
     fn metadata_round_trips_through_its_column() {
-        let metadata = ConversationMetadata::from([("topic".to_owned(), "billing".to_owned())]);
+        let metadata: ConversationMetadata = BTreeMap::from([("topic".to_owned(), "billing".to_owned())])
+            .try_into()
+            .unwrap();
         let encoded = encode_metadata(&metadata).unwrap();
         let decoded = ConversationData::try_from(row(Some(&encoded))).unwrap();
         assert_eq!(decoded.metadata, metadata);
+    }
+
+    #[test]
+    fn over_limit_stored_metadata_still_loads() {
+        // Rows persisted before request validation must remain readable.
+        let values = (0..17)
+            .map(|index| (format!("key{index}"), "value".to_owned()))
+            .collect::<BTreeMap<_, _>>();
+        let encoded = serde_json::to_string(&values).unwrap();
+        let conversation = ConversationData::try_from(row(Some(&encoded))).unwrap();
+        assert_eq!(conversation.metadata.len(), 17);
     }
 }
