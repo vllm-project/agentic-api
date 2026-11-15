@@ -4,6 +4,13 @@ All notable changes to Agentic API are documented here.
 
 ## [Unreleased]
 
+### Testing
+
+- Added OpenAI reference recordings of `mcp_call`, `web_search_call`, and `code_interpreter_call` items replayed with
+  `store: false`, inline and by `id`, with the scenario script that records them and a characterization test. Tests
+  now check the exact model input for each type on every replay path, and the MCP function name in a compaction
+  summary (part of #492).
+
 ## [0.10.0] - 2026-11-09
 
 ### Upgrade notes

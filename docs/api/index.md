@@ -187,9 +187,10 @@ rounds and gateway tool output.
 A client that replays a response's items (`store: false`) may send back its `tool_search_call` and
 `tool_search_output` items. They are checked as a continuation's history is, so a malformed client search history gets
 the same error with `store: false` as after a `previous_response_id`, and the model sees each pair as the function call
-and output it saw live. Replayed `mcp_call`, `web_search_call`, and `code_interpreter_call` items, sent inline or by `id`, are lowered from
-the public item into the function call and output the model sees on a `previous_response_id` continuation; OpenAI
-parity recordings per item type are tracked in
+and output it saw live. Replayed `mcp_call`, `web_search_call`, and `code_interpreter_call` items, sent inline or by
+`id`, are lowered from the public item into the function call and output the model sees on a `previous_response_id`
+continuation. OpenAI accepts all three replayed this way, including an `mcp_call` sent without its `mcp_list_tools`
+item and a replay that declares no tools; the gateway recordings for the same requests are tracked in
 [#492](https://github.com/vllm-project/agentic-api/issues/492).
 
 #### Hosted tool search

@@ -625,6 +625,7 @@ These files use `sessions`, not the HTTP `turns` schema or synthesized SSE.
 | `record_sglang_cassettes.sh` | Same shared executor scenarios as Dynamo, staged validation and sanitized provenance | SGLang |
 | `record_tool_search_cassettes.sh` | Four-turn mixed function/namespace client tool-search characterization; gateway blocking, HTTP/SSE, and WebSocket acceptance | gateway and OpenAI reference |
 | `record_hosted_tool_search_cassettes.sh` | Hosted (`execution: "server"`) tool search over deferred functions, namespaces, and MCP servers: validation, output items and streaming events, `query` filtering, `max_tool_calls`, continuation, `store: false` replay (OpenAI reference only), and WebSocket | gateway and OpenAI reference |
+| `record_replayed_gateway_calls_cassettes.sh` | `mcp_call`, `web_search_call`, and `code_interpreter_call` items sent back with `store: false`, inline and by `id`; an MCP call without its listing; replays that declare no tools | OpenAI reference (gateway set not committed yet) |
 
 ### Messages forced tool choice (vLLM)
 
@@ -1043,6 +1044,38 @@ pairs. A spawned-child case suspends on a client function and restores the child
 that history, while checking that the root does not inherit the child's loads. Both cases require one MCP listing
 across the session and use disabled storage. These are deterministic integration regressions against the existing
 recorded contract, not additional live provider recordings.
+
+### Replayed gateway calls (OpenAI reference)
+
+`record_replayed_gateway_calls_cassettes.sh` records what a provider does when a client sends back the gateway call
+items a response returned, with `store: false`, for [#492](https://github.com/vllm-project/agentic-api/issues/492).
+`replayed_calls/` holds one cassette per item type and leg, named
+`replayed-calls-<type>-<leg>-<provider>-<model>-nonstreaming.yaml`. The fixtures are the existing ones: the gitmcp
+tiktoken server from `hosted_tool_search/inputs/` (declared directly, not deferred), `web_search/tools.json`, and
+`code_interpreter/`. Each follow-up input is built from the captured output, as in `record_store_false_cassettes.sh`.
+
+| Leg | Types | Requests | What it records |
+|---|---|---|---|
+| `inline` | all | 2 | t1 makes the call with `store: false`; t2 sends back t1's input and output items with a follow-up question and `tool_choice: "none"` |
+| `by-id` | all | 3 | t1 is stored; t2 sends its output items as returned, with their ids, and t3 as `item_reference` items, both with `store: false` |
+| `no-listing` | `mcp` | 1 | The inline replay without its `mcp_list_tools` item |
+| `no-tools` | `mcp`, `code-interpreter` | 1 | The inline replay in a request that declares no tools, as a compaction summary does |
+
+`replayed_calls_characterization_test.rs` checks each request's status, `store`, declared tools, and the item types
+sent and returned, and that the by-`id` replays name the stored items. OpenAI accepts every leg (HTTP 200); without
+the listing it lists the server's tools again. The gateway's model input for these items is covered by unit tests
+(`replayed_gateway_calls_reach_the_model_as_their_function_calls` and the `a_replayed_mcp_call_*` tests).
+
+```bash
+OPENAI_API_KEY=sk-... \
+bash crates/agentic-server-core/tests/cassettes/record_replayed_gateway_calls_cassettes.sh
+```
+
+`REPLAYED_CALLS_RECORD_SET=gateway` with `GATEWAY_URL` and `GATEWAY_MODEL` records the same legs against a running
+gateway, which needs MCP access to `gitmcp.io`, a web-search provider, and for `code-interpreter` the embedded runtime
+described above. The gateway has no `item_reference` input type, so it refuses the `by-id` t3 request.
+`REPLAYED_CALLS_TYPES` selects types (`mcp web-search code-interpreter`), `REPLAYED_CALLS_SKIP_LEGS` omits legs
+(`<type>:<leg>` or `<leg>`), and `REPLAYED_CALLS_CASSETTES_DIR` writes the cassettes elsewhere.
 
 ### Image input (gateway → vLLM vision model, and OpenAI)
 

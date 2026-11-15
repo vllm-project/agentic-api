@@ -1,0 +1,394 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Use the python tool to calculate the sum of the squares of the integers
+        from 1 through 10. The code must print exactly CODE_INTERPRETER_OK=385. After
+        it runs, answer exactly CODE_INTERPRETER_OK=385.
+      max_output_tokens: 2048
+      model: gpt-5.6-sol
+      parallel_tool_calls: false
+      store: true
+      stream: false
+      tool_choice: required
+      tools:
+      - container:
+          type: auto
+        type: code_interpreter
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794747976
+      created_at: 1794747972
+      error: null
+      frequency_penalty: 0.0
+      id: resp_06691d6465e5a124006af9ae44c81487d2ab098f8f75cb57b2
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 2048
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - code: 'print(f"CODE_INTERPRETER_OK={sum(i*i for i in range(1, 11))}")
+
+          '
+        container_id: cntr_6af9ae44ed908191b0f14d30be49c597011977bc26be6d10
+        id: ci_06691d6465e5a124006af9ae4660b887d2b20710f4bba9fe85
+        outputs: null
+        status: completed
+        type: code_interpreter_call
+      - content:
+        - annotations: []
+          logprobs: []
+          text: CODE_INTERPRETER_OK=385
+          type: output_text
+        id: msg_06691d6465e5a124006af9ae47f7f087d29ad84cb4a35e5221
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: required
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - container:
+          type: auto
+        type: code_interpreter
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 1315
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 1143
+        output_tokens: 43
+        output_tokens_details:
+          reasoning_tokens: 32
+        total_tokens: 1358
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - content: Use the python tool to calculate the sum of the squares of the integers
+          from 1 through 10. The code must print exactly CODE_INTERPRETER_OK=385.
+          After it runs, answer exactly CODE_INTERPRETER_OK=385.
+        role: user
+        type: message
+      - code: 'print(f"CODE_INTERPRETER_OK={sum(i*i for i in range(1, 11))}")
+
+          '
+        container_id: cntr_6af9ae44ed908191b0f14d30be49c597011977bc26be6d10
+        id: ci_06691d6465e5a124006af9ae4660b887d2b20710f4bba9fe85
+        outputs: null
+        status: completed
+        type: code_interpreter_call
+      - content:
+        - annotations: []
+          logprobs: []
+          text: CODE_INTERPRETER_OK=385
+          type: output_text
+        id: msg_06691d6465e5a124006af9ae47f7f087d29ad84cb4a35e5221
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      - content: 'Without calling a tool, answer from the code output above only:
+          what exactly did the code print?'
+        role: user
+        type: message
+      max_output_tokens: 2048
+      model: gpt-5.6-sol
+      parallel_tool_calls: false
+      store: false
+      stream: false
+      tool_choice: none
+      tools:
+      - container:
+          type: auto
+        type: code_interpreter
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794747982
+      created_at: 1794747979
+      error: null
+      frequency_penalty: 0.0
+      id: resp_06691d6465e5a124016af9ae4b160087d2a55849f4b5d32057
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 2048
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - content: []
+        encrypted_content: gAAAAABq-a5OINBnT4P-WG4BbV0rXJZ1V4Du9vOGaed3IoFP-dLmlybdlVEmQy4bwPLbjIH2Lb4yVuRLS4KwlM1Ord9qB8NlO3XJWRHGdTeNmq31_Cm9xVuhA5I5PrleZ-X0SiiamZ_f97hoIApevDbbP2Pr0tsKYL84Gjbfor8_zW3y05wCIJ5m9lhTyyP4R7vWjpRTeLoKgWQo35fPr03XGY3CUTJCm9HSY4hPxmBm_HR0fphQLmrLGZBL6ah34Xqk-gtiMosoSxB0LlkNBwnJOVMmy5mwPqFYReyca4IuvTN5ji6XJWt0FOIX5ELAnWz7IotUKKAeBMlO-vEAPxZ3NW6kOCtu7ZoydopgRJVNN9KQ1qhXgvYZbFoFUUnDY8gTybRWx24CFJwkI0xD3sYL9kkjMFhQxl9s6rE4ANA71eMZmcTO8g1jPtY7ydIsYKH-T7cODQxIG9CptxLeO_nHN_fwb6Pwt7za7y940GcKYSJf8FG2WD-S6k62-uX7sY9STcqvax7-GVCYEnkT7dv8RldhSsPH9Rf_4uP6BiS1av7oYUceptASQtKc_s_VTsMkci7PdKONtYwE8FdrJPL-GM8naCVDd5uS6Rc2u7Ifwbif-OYUlOn1oI-D8TNROnrZtLzA43iACywQc1We7eW1XVFZ5Q_qmaxDdjGSqvlbf3dtZE6Jkr_PkNr8KfheoC2kP-EZ_64NGIDEsGirWrfULIK9kch--756nj2AgYTjsnLkiemac7pxw_Cgm2JNSefVAGHYOajqhCDfzx7HQtuJDdi2yH_3a3BdXiL3PQhPBqxDDbr6HtJWi8PY0K6Yw6yrgYLOodh6O_YhlxHOBg3SbLsXQfA7RshV2y-sMFUF5jlawO0IT17hXu8HB97GioGo1-1SSdzusPM2t4rAuXn0be71rmP9w57lZT-pvZOQ9l2ZqAdmxOt1a5xH8OZgHLFTJ3N2Ewqw5bxZUOnI00gqR6fb1dWy8U2eXSmLfXyZZebx-7w4mPmssb_DCfYaaAWEFalVjzuKdP5YpACyriMgYiZDrpwnmqA1Y-yfFVLNhPdmHhF_Q79BRexVc-D50kws_l6GhKJUDE2ch430_KcTOdApskw3Warv6B7QZGTYCfcqP5KMQrKkBabSLycJzQ_4CSYp-FsQUYZVulOhlqPO8cdcIGq-6PnHF-33R4zXV7SFx0xxoRGtl_-21EMcQY3UnZXPRksXkxghp5rruj8HU2FRPvp9lxLuFZsgpV49TptdIRP6QK9kS3KTdGnPMVgaUvoC9gkKH1znU7nBOyBCOfkRw4LPMQpuDT6LxkkoRunvbmXzhiIVxk9J64bTCABmrWkJfZkq8O3m41BcrSTDXYeysUG3dFFYtZJZvFNo12DIkUg6ghE1pZjzy5TBC8D2p6NuXNYfcES5D0RHIBCw7QMbswyNWKKFZCAabDRUXaUg9JbSHqV9kmR5nX_-TvUJlcB3ycCD9wbAW96XuRW4T35cfyuuOMepfKw2ajPSv1uBHPqsCdc9Od2GSWe0hLzr5GJmHsWz0mpAfIxPLvNyiIr_QdSgSr_8MBTbEWtaFydTm9wkl0S4CNrL5lNi6gk_kReiQksYI08utOYPJssdNl-pKkcjV0qz_xLlE6SCKjPEmRK2gssC_kEZjKY5GCTajhX1JYwuksxZPUDQjUrjvg6X3iNyIOy01RDakktGwSAZX0NXlRu_0uwVFainbKBZcl2yz65sgl29UUTK7nNlnbgBL1-YjOmVBOhdmcYSy2_9lKcOSEn61ihn3jfCf_j72JL1gjpt6lPfakVc-9T0KkeOryoO5e6kum1cVsZYcFxH2-gEt82abdjQ3p3yHqvk5t8E-_qaeZz5QdOVLovJLBuc-eimMDg3YWYc5aTEIlcUxEKH6-g0gJv6FOA34HfXoDElnJcoEBOVYcYzbOyvizoX1tYhk8bIpMM5M10y2ZL7os_gPsxV6rTmonXhGGaEnnjA6gBuz4P1SunoVrxSjkhdt3-Vu-jldjWw0B_Ipjk8LEjm9Nu2efiSKXbi3_0fyUcueMvq-gdaFjKo5x71wl2-lpDtedblI9BYksJrVxP2WAvjvyTOtIrCw3qLiUyAi6xNidx7EA2H3ouO8q9CTwixnGD4_fXBE1dZj19m7_l440rMDjdWaqZlq35HVGmYDwO-rwe7qzHsSndS_nA0WWtzfOJBUomOLi006tp-wTdyFi9DXMsECAses_G6pL28NXjOTCvQq9A1iyT7FaS2gCJUSEyHyUtnaPw28SOBOV4DIUMoLkJsPLYcluuM8QARQkJTSQRgiEfqwIqsmU0VfkbMwgnx20AEKQ4SpguqdW2VG3eLFRkCtt0H85ecmY3CNuAnHgprJ2lJIdn-JCm5FLggrCH-QzFAX-pQT5P1HZCqkKh6hUL8Po2rQvMELcykNYpIJrhUzOFGk-UHUgxT2cc15AUS2b9bJ3CtTktcHmZ2h9k2dZJ3Bd1y-kUFLcNP6vD1u62fS3LcW95YdxTNXlkqOpA-YUTFAhlUBdwEyO4HDuyc2DNQd1KnZXoqJKuGk4pmnBvrEWiFBrMxhfIWHp33qHWr4o3tdroVZCGGw7fqvwPe5WpHCcfiAAMaEfgi2V5dgwC7eK9o0dqpaUk4Q3cJR09pJITPc9aJ4jh24NAD0r04e1ZHEDLgoClKTrMNysAfoTGvPkK8Jz_tX3m6L400RooDcNclHLp0SxEH5-6d1SKIwN3h6PmZpBf-SgEXXwIyGJQlud92Ob64koh4DE_z2Hln5P-hd4hMBSNgqUwkqrTiP15YwVX8teK1Kwkegg7xAa3___9BDZCe2RfY16elBa_TBPN1qkuZCyaSE5dWGSprYjGvmiOX1m3zi9wGuHuwGkFfxM9ZsDELTGzPuHQ2_i6dYvKA04BVlkoWXiRw2jl1IUblt9tSAAyPkrJ7yEfLwtZJOEOYbjzsbnvimcu0E_fbG2uXz7UQvlyeDvTKAEapf90nvUt33BpI7lJ2Q176m1myAuRufCja3vUw3LD9vNyeL8SxZYtC-GYV_7b_CvSn4FJIcTOiFyS-Gp_2OyYaHVwbJHoQzAxDpkd0DxzXVGyeLy381qdUcAeX9R14RAR8DSkHZtA_rjITmRY-01jtVHFnqcdCiVRq2pEfJRp_TQFNvlV00iIqpJI_xtvuGMQko3DMntDqOmdW186F2xGXHnHa1DxX7WaHo4kdbAAv1LVwpYCumNaIExw4flUtzr-6ST4mkvefHyTE2-3GtVfr1Ecatrg3qdKQ84EVR0Hx8JbBO9QE27NqNU1Mu7H1MblILlVxrqVdy4OwS6xC-nVkbcUgCvYVjUdOY_GugoLXwQPEaI8qIxu5Ujv6OWOZNCwlmqbFU2x1wCAP5JTbN6IauYMLYhuFOiR4GClzzK4sC68d5iSO3i5jFmsVYG-dlMNuQkloedjojSJN88_vBVms8d08Pnf1nd0HvaK4v5sendYpzACKhHxARG7-7pm9FskTxhb58F-u0TdsICvnhGfIi9Zu_tDTnB3IXXBSRqw7TX-LAY394qB_s-wBOt2mx8PG6eLwJ83IOSkK09bCSVUmcY4kMtUvCOo02TtLTSuBa4l_3dKFZM5mROfbFR97-sE_EAcJsdpmjQAq7q83o-cem7OwNslvSG2QY7hlODKIjIYIT1CF7pg9AIMMWuLESFgb30h_yCAmV4ZOO0LsMYXVoDQYaLTET_XAaBrC6y6oHGvJLKYsYNRyeDv7LkdmSIwnWiLYSTyaVXg-bnZyGPpsLgsd7yIrNucaxggMTsyOlPDQPSL9LajV6bjMjp1IZSniB6VYN0QuloRbLPEcXqW74cro9mMMyhZC0fKGS1kaI8Ezkc1KXHXWfmfC25kYQMoMP16Aj5X1l7TClYwfIFg7Ghl-QeLBBtqIrm-vUI-VRrHBwUOnPjGoncTrjNP5qa44YjoaBmYvERYZ4auXLpBTsH8OGA_JrOYaCfAhjg4IDd0rTjPYp0Njlf98CTmCH-WyPsBSVleDlqs0Mpkbm8zyleOQw3PsD0n_TmnnGBXvcorZfgZIAp6ccgenYn3O6XJVqIlv67YzCQb8knmThQ2LrnkG_bhXrMptdZC7Y4veQ-_GV6bRSV_Zc7sbY1mCylmkMsnuyhjjc2A1MpIkNAdRz7-iW0YiPgfOwWa8pLA-AAiakzSl6_usC3_usdSusQtm2kGvIg6FD68fBk_A_iV2LMOv
+        id: rs_06691d6465e5a124016af9ae4ca81c87d290f9907dfb48d6a3
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: No code output was displayed.
+          type: output_text
+        id: msg_06691d6465e5a124016af9ae4e83c887d28d66b3cc0246dfe2
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: none
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - container:
+          type: auto
+        type: code_interpreter
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 1341
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 1266
+        output_tokens: 208
+        output_tokens_details:
+          reasoning_tokens: 196
+        total_tokens: 1549
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input:
+      - content: Use the python tool to calculate the sum of the squares of the integers
+          from 1 through 10. The code must print exactly CODE_INTERPRETER_OK=385.
+          After it runs, answer exactly CODE_INTERPRETER_OK=385.
+        role: user
+        type: message
+      - id: ci_06691d6465e5a124006af9ae4660b887d2b20710f4bba9fe85
+        type: item_reference
+      - id: msg_06691d6465e5a124006af9ae47f7f087d29ad84cb4a35e5221
+        type: item_reference
+      - content: 'Without calling a tool, answer from the code output above only:
+          what exactly did the code print?'
+        role: user
+        type: message
+      max_output_tokens: 2048
+      model: gpt-5.6-sol
+      parallel_tool_calls: false
+      store: false
+      stream: false
+      tool_choice: none
+      tools:
+      - container:
+          type: auto
+        type: code_interpreter
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794747986
+      created_at: 1794747984
+      error: null
+      frequency_penalty: 0.0
+      id: resp_06691d6465e5a124016af9ae50888087d2abcd93fe60af73c0
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 2048
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - content: []
+        encrypted_content: gAAAAABq-a5SYVRASAadX7EHJLV4YMj-pdHR7CL8nc5tzEAXzn84SwUjmAmq2dcBg0qGpaMGrgkPa6sOUabdBlJoR8zeH-tHAoInoPkZH2q0yqJvAgQaMcfH4mLsYZ08EC1DnFC6iC6MBtTK-32U8D9lDJjJVIl3XkoEk7WM728to0ImjULTNJoOuD7UkJoxE9DBMIYJw0Z6aOldocmV9fVCFUyJmJEMNNZsBRkAiYQGSE9JV482FOiY3wh2pMmLjjvEVohE-DDKptk-1vS8DRMOHjmSXk0dFA2a3xyAyGO85hsb_vbR9H3pOzz_QpacQdcYzIpGiAp_sYGdPFecf2G36rasOjzZeL-qO3o74WJ7RKXCRv_LCk4gL9Z3Mieb3fLamBm1WjAOCiiXSHo4j0Fg0sjamCH-YXPNkNV60a6MUzKy7EFnn-UAs3bC_4kmuZUz8vBqC0CGG3I8ABdz_pONN2RD6I94GTh_2M2fddes5U2rqD6LVsVS-AB7p4Tfbm5fF8eh3QHc5-8dAOyXS1lrez8j3S8fnsPjiMqw6DimMetZa8_G9YFyP0unL6cpic7n14SwfWDFGpeQL5yczoqbFnX9IFB_9OcIWAiM2xt81Wh4JIvwvCjA-qWHMdOKXlBb7Mz3feeB5et_KMXPDueOyhkUeGKd0-DEzM0RP1iZf-XjhRDaxlca5MMySKJ3uRNyztdHzcn2VBuX7LeERiD6y4XbixqRGdeQD5ben0K_FkEGMzXUlkmk1HV-Z03yzdOuxfvEDObgB3JdhJqWlQmonJn_Cs0xVbZ8wQSUtzKom-lgtGHNRj28mxh8892fbCU3Qv35nKr0rWxHeseGdbnviWXkOoPqUewzD2zUTP-gmtljVFjlDQcK28gDEEo89YybwCHFa2oC-VCFwGx3DdAHgDCmdKuzRH-pS9ThNpeeDwNglexyTiy_E08dkGnLepPiiGzWL0fCWkILVFBwxBvvlVQim7L9NntIqjHpXWS1BF9vsUYJRKS0QoWihyXaHtixwGEeby8rorLapoGzkznSWSfbL6HOXXR_NWlqxK4YBkl-x13SH1e50AAyJBZlErgqPH9-MDTagtNHjpwLmtNtnqelbtcaqs9RhVqZgRr5xS7dVfkoslW_02eL0Gy8-Xlu2rHL4eZSYkV5TT-gEmt40IMa1bxofxGyDZ6g5vQ3VIHkybTTXCLp6YdT1ku2WrF9ZZvbPHHVMSWHq0OTh1iOVakp_aNn2E209NzevPtdOH8dTklPoAfNOK523cvfoH_6EcyePYYI6dEpy52l2QS57iXGmvAGgcr7X2EqJWOSh5qNcyYyR1c-GPZ_nWz3DiP7vsw61E7q_oYwzs-qBYLk1OESVJCkHLu5FQS1A5CZkf4hbqQg3Eo8_I2EUV8BwRs_BaQJclQG4o3vcut4fLiMdbdzCg7f-YQG209DV4ofVUh9nzsysx45EZlOBcjSYl_GA1sjd75ez5_KcsE9qblmJ61t9Cn8mk8txT4AEg3AJA1jKz6RtFsqRsW7QgkIfzQjgMpG1nYf5szbUQCMc8zCLZPcK11aLWTM0TzcDnNlOGQM0NJWApgFNw_yjRI2qbX3fOCqdx8e3yz0O_u8cw_2wrabVGG7z1yfn3z2TpA9lCjUPEq_jreGHG3pgMN4u7Cyo0lo84j61Xt6muVeDoKcTI3F50pmmRLhgAApdrChZtqSuIPVZIqZ5mVfXXGmVr5L3ndIe5E8hE2UOFbWAmo9ZoD4pj5Alw0UZVlckgA3sE06Cfto2NTD9V-2Ct_DRvYROIFnKbyEkn4-1A_IuiU7EV6sCoBZE0KDssDvEtp_PkAShKF_iUUaOL-Guyx1rWfDRANFMsoGC6iZEvqmfm-8bLa8dsVCoIGwmvyjc5h_7j244LLiDTUOeGJdJtAY7poekweCsxMOQirW1wgeQKRhZy_8TpyCSj1FUo0k1R_KI3rLpbwXCBr9KBO1vAeV83BByl4dZcrO7Vo2iX7_NsHsD0b1T6EBD7mzO5LX_9rGmMB4XeYlXoOzIb0XqYWtjsRAXpg2rXLSRLD66jIsH7t0xYCCVf-DdKvajh3noW2V4OBhETNaK-fgoN8Ji8b0Zp5l4d_-qW1dTFe-_HwWICYPa9tDTBYMC7ZTHSyj4lLjohNHSRHRazB8nBQU-YkmIDokrljWQgIpzVF28gS3BMWeyP4JS1kVBy1LJ9CGojREpSqAgh5O2HO9RG0g6UNDC7VueCrl5WdJ9P03qpNbZKRzlUpby24AB6o_GrGiqS4coFGGqWslPUHPfZOq_cFSgMxCJEHNQ_N2K7lRnZ29UTZP_yl6JQ_v1KtMVmNKdjGldXwwjUugNx6JjEhrS_7JDTY5RCzkeqi_QP2PVdjXA0ypz5G3N9htEGruw3wL6jPX7WvwyuqG75I_KzTkZJFSfSWoMnOTHpYvDlLK_DdOsiUUv99R8JQperDZfbufs2f5QRcBCmasHcERQ1CWtDtYZ2EJET-PX8YGj1Q01v1-fmyydiZWWga3fk4glN95wDf_pPMRpZwqRVF9PjFFO6XN1kiUBARV5cVZtK91Ak09SaJU4eeQKKSbpB9AKfRb0lvpxP2wmnCkPn3dp7_8wQUWwtfhFS6DmasSOAgfrgkSLEIS5cYGBQZK0IREh7lSsypQpbDRr15ui5pZ5EowcUd3IWhYQ8h4b3PHtmjb01iSlTdLNN7qtYmrGQ==
+        id: rs_06691d6465e5a124016af9ae51f5ec87d2b0334fbc73b55e26
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: CODE_INTERPRETER_OK=385
+          type: output_text
+        id: msg_06691d6465e5a124016af9ae52c66c87d2aa24c9e7dd1a420e
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: none
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - container:
+          type: auto
+        type: code_interpreter
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 1341
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 1266
+        output_tokens: 96
+        output_tokens_details:
+          reasoning_tokens: 83
+        total_tokens: 1437
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200

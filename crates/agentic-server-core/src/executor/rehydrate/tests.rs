@@ -616,17 +616,32 @@ async fn stored_public_search_call_pairs_with_new_output_after_rehydration() {
     assert_eq!(private_input[1]["call_id"], "call_search_stored");
 }
 
+/// Gateway call items as a response returns them. Discovery names `read_file` with a suffix: `read.file`, listed first,
+/// takes the sanitized name they share.
+fn returned_gateway_calls() -> serde_json::Value {
+    serde_json::json!([
+        {"type": "mcp_list_tools", "id": "mcpl_files", "server_label": "files", "tools": [
+            {"name": "read.file", "input_schema": {"type": "object"}},
+            {"name": "read_file", "input_schema": {"type": "object"}}
+        ]},
+        {"type": "mcp_call", "id": "mcp_read", "server_label": "files", "name": "read_file",
+            "arguments": r#"{"path":"notes.txt"}"#, "status": "completed", "output": "alpha"},
+        {"type": "web_search_call", "id": "ws_potato", "status": "completed", "action": {"type": "search",
+            "query": "potato", "queries": ["potato"], "sources": [{"url": "https://kew.org", "title": "Potato"}]}},
+        {"type": "code_interpreter_call", "id": "ci_sum", "container_id": "cntr_sum", "code": "print(385)",
+            "status": "completed", "outputs": [{"type": "logs", "logs": "385\n"}]}
+    ])
+}
+
+/// Each replayed gateway call reaches the model as the function call and output it saw live, the same way from stored
+/// history (`previous_response_id`, a conversation) and from a `store: false` request that sends the returned items
+/// back by `id` or inline (#492).
 #[tokio::test]
-async fn stored_code_interpreter_call_reaches_the_model_as_its_function_call() -> Result<(), Box<dyn std::error::Error>>
-{
-    let projection: OutputItem = serde_json::from_value(serde_json::json!({
-        "type": "code_interpreter_call",
-        "id": "ci_projection",
-        "container_id": "cntr_projection",
-        "code": "print(7)",
-        "status": "completed",
-        "outputs": [{"type": "logs", "logs": "7\n"}]
-    }))?;
+async fn replayed_gateway_calls_reach_the_model_as_their_function_calls() -> Result<(), Box<dyn std::error::Error>> {
+    let returned: Vec<InOutItem> = serde_json::from_value::<Vec<OutputItem>>(returned_gateway_calls())?
+        .into_iter()
+        .map(InOutItem::Output)
+        .collect();
     let response_pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
     let conversation_pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
     let response_store = ResponseStore::new(response_pool);
@@ -635,7 +650,7 @@ async fn stored_code_interpreter_call_reaches_the_model_as_its_function_call() -
         .persist(
             "resp_projection",
             None,
-            vec![InOutItem::Output(projection.clone())],
+            returned.clone(),
             None,
             &ResponseMetadata::default(),
         )
@@ -648,26 +663,54 @@ async fn stored_code_interpreter_call_reaches_the_model_as_its_function_call() -
             &conversation.conversation_id,
             &ResponseCheckpoint::default(),
             "resp_conversation_projection",
-            vec![InOutItem::Output(projection)],
+            returned,
             None,
             &ResponseMetadata::default(),
         )
         .await?;
-    let exec_ctx = execution_context(conversation_store, response_store);
+    let stored = execution_context(conversation_store, response_store);
+    let unstored = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
+    let mut replay = request(None, None);
+    replay.store = false;
+    let mut sent = returned_gateway_calls();
+    sent.as_array_mut()
+        .ok_or("item array")?
+        .push(serde_json::json!({"role": "user", "content": "new input"}));
+    replay.input = serde_json::from_value(sent)?;
+    let expected = serde_json::json!([
+        {"type": "function_call", "call_id": "mcp_read", "name": "mcp__files__read_file__33ad240685",
+            "arguments": r#"{"path":"notes.txt"}"#, "status": "completed"},
+        {"type": "function_call_output", "call_id": "mcp_read", "output": "alpha", "status": "completed"},
+        {"type": "function_call", "call_id": "ws_potato", "name": "web_search",
+            "arguments": r#"{"queries":["potato"]}"#, "status": "completed"},
+        {"type": "function_call_output", "call_id": "ws_potato", "status": "completed", "output": concat!(
+            r#"{"query":"potato","queries":["potato"],"#,
+            r#""results":{"web":[{"url":"https://kew.org","title":"Potato"}],"news":[]}}"#
+        )},
+        {"type": "function_call", "call_id": "ci_sum", "name": "code_interpreter",
+            "arguments": r#"{"code":"print(385)"}"#, "status": "completed"},
+        {"type": "function_call_output", "call_id": "ci_sum", "status": "completed",
+            "output": r#"{"status":"completed","stdout":"385\n","stderr":""}"#},
+        {"type": "message", "role": "user", "content": "new input"}
+    ]);
 
-    for request in [
-        request(None, Some("resp_projection")),
-        request(Some(&conversation.conversation_id), None),
+    // `Some(by_id)` for the `store: false` replays: whether the returned items were resolved to the stored records.
+    for (request, exec_ctx, by_id) in [
+        (request(None, Some("resp_projection")), &stored, None),
+        (request(Some(&conversation.conversation_id), None), &stored, None),
+        (replay.clone(), &stored, Some(true)),
+        (replay, &unstored, Some(false)),
     ] {
-        let ctx = rehydrate_conversation(request, &exec_ctx).await?;
-        // History keeps the public item; the upstream projection lowers it to the call the model made.
-        let model_input = serde_json::to_value(ctx.enriched_request.input.normalized_model_input(&[])?)?;
-        assert_eq!(model_input.as_array().map(Vec::len), Some(3));
-        assert_eq!(model_input[0]["type"], "function_call");
-        assert_eq!(model_input[0]["name"], "code_interpreter");
-        assert_eq!(model_input[0]["call_id"], "ci_projection");
-        assert_eq!(model_input[1]["type"], "function_call_output");
-        assert_eq!(model_input[2]["role"], "user");
+        let ctx = rehydrate_conversation(request, exec_ctx).await?;
+        if let Some(by_id) = by_id {
+            let resolved = ctx.new_input_items[..4]
+                .iter()
+                .all(|item| matches!(item, InOutItem::Output(_)));
+            assert_eq!(resolved, by_id);
+        }
+        // History keeps the public items; the upstream projection lowers them to the calls the model made.
+        let upstream = ctx.enriched_request.to_upstream_request(false)?;
+        assert_eq!(serde_json::to_value(&upstream.input)?, expected);
     }
     Ok(())
 }

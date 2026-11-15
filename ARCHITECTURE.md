@@ -671,9 +671,9 @@ goes through it, so it lowers the public records the model never read (search it
   state), and `usage.rs` (token accounting structs). `ResponsesInput::model_input()` (through
   `normalized_model_input`) is the final model-visibility boundary used by `RequestPayload::to_upstream_request`.
   `input/search_history.rs` pairs search items (a client item by its `call_id`, a hosted output with the oldest open
-  hosted call, whose item id is the model's call id) and lowers them. A replayed `mcp_call` or `web_search_call` is
-  not lowered yet and reaches the model as the public record. It removes orchestration-only `McpListTools`,
-  `CompactionTrigger`, and public collaboration input items. A persisted
+  hosted call, whose item id is the model's call id) and lowers them. Replayed `mcp_call`, `web_search_call` and
+  `code_interpreter_call` records are lowered by `normalized_model_input`, as stored ones are. It removes
+  orchestration-only `McpListTools`, `CompactionTrigger`, and public collaboration input items. A persisted
   `Compaction` item is different: the latest checkpoint supersedes earlier model
   context and is converted into an assistant `output_text` summary, while canonical
   retained user messages and items after the checkpoint remain. This keeps rich
