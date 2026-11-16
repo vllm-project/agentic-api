@@ -1,0 +1,147 @@
+turns:
+- filename: t1
+  request:
+    body_base64: LS1hNWI1ZTllNTBhNTk3MmY1NTBhZTFlYTFiMzhlN2ZiNA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQpib2d1cw0KLS1hNWI1ZTllNTBhNTk3MmY1NTBhZTFlYTFiMzhlN2ZiNA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJmaWxlIjsgZmlsZW5hbWU9Im5vdGVzLnR4dCINCkNvbnRlbnQtVHlwZTogdGV4dC9wbGFpbg0KDQpEZXBsb3ltZW50IGNoZWNrbGlzdAotIFJlZ2lvbjogZXUtd2VzdAotIFJlbGVhc2UgY29kZXdvcmQ6IFBBUEFZQS03Ci0gT3duZXI6IHBsYXRmb3JtIHRlYW0KDQotLWE1YjVlOWU1MGE1OTcyZjU1MGFlMWVhMWIzOGU3ZmI0LS0NCg==
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: multipart/form-data; boundary=a5b5e9e50a5972f550ae1ea1b38e7fb4
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      detail:
+        code: null
+        message: '''bogus'' is not one of [''fine-tune'', ''assistants'', ''batch'',
+          ''user_data'', ''vision'', ''evals''] - ''purpose'''
+      error:
+        code: null
+        message: '''bogus'' is not one of [''fine-tune'', ''assistants'', ''batch'',
+          ''user_data'', ''vision'', ''evals''] - ''purpose'''
+        param: purpose
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t2
+  request:
+    body_base64: LS02NWMzNGVmNzg4ZGY4MjRlM2UyNzM1MGMwOWNkNzMyMw0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJmaWxlIjsgZmlsZW5hbWU9Im5vdGVzLnR4dCINCkNvbnRlbnQtVHlwZTogdGV4dC9wbGFpbg0KDQpEZXBsb3ltZW50IGNoZWNrbGlzdAotIFJlZ2lvbjogZXUtd2VzdAotIFJlbGVhc2UgY29kZXdvcmQ6IFBBUEFZQS03Ci0gT3duZXI6IHBsYXRmb3JtIHRlYW0KDQotLTY1YzM0ZWY3ODhkZjgyNGUzZTI3MzUwYzA5Y2Q3MzIzLS0NCg==
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: multipart/form-data; boundary=65c34ef788df824e3e27350c09cd7323
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      detail:
+        code: null
+        message: '''purpose'' is a required property'
+      error:
+        code: null
+        message: '''purpose'' is a required property'
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t3
+  request:
+    body_base64: cHVycG9zZT11c2VyX2RhdGE=
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/x-www-form-urlencoded
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      detail:
+        code: null
+        message: '''file'' is a required property'
+      error:
+        code: null
+        message: '''file'' is a required property'
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t4
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/files/file-00000000-0000-7000-8000-000000000000
+    query_params: {}
+  response:
+    body:
+      detail:
+        code: null
+        message: 'No such File object: file-00000000-0000-7000-8000-000000000000'
+      error:
+        code: null
+        message: 'No such File object: file-00000000-0000-7000-8000-000000000000'
+        param: id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t5
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/files/file-00000000-0000-7000-8000-000000000000/content
+    query_params: {}
+  response:
+    body:
+      detail:
+        code: null
+        message: 'No such File object: file-00000000-0000-7000-8000-000000000000'
+      error:
+        code: null
+        message: 'No such File object: file-00000000-0000-7000-8000-000000000000'
+        param: id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t6
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/files/file-00000000-0000-7000-8000-000000000000
+    query_params: {}
+  response:
+    body:
+      detail:
+        code: null
+        message: 'No such File object: file-00000000-0000-7000-8000-000000000000'
+      error:
+        code: null
+        message: 'No such File object: file-00000000-0000-7000-8000-000000000000'
+        param: id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404

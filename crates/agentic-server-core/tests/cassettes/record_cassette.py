@@ -1769,6 +1769,14 @@ FILES_IMAGE_PROMPT = "Which two colors are in the image? Reply with only the two
 FILES_TEXT_FOLLOW_UP = "What was the release codeword in the file I attached earlier? Reply with only the codeword."
 FILES_IMAGE_FOLLOW_UP = "Which two colors were in the image? Reply with only the two color names."
 FILES_MISSING_ID = "file-00000000-0000-7000-8000-000000000000"
+FILES_MISSING_STORE_ID = "vs_00000000000000000000000000"
+FILES_PDF_FIXTURE = Path(__file__).resolve().parent / "text_files" / "inputs" / "notes.pdf"
+FILES_TEXT_URL = (
+    "https://raw.githubusercontent.com/vllm-project/agentic-api/main/"
+    "crates/agentic-server-core/tests/cassettes/text_files/inputs/notes.txt"
+)
+FILES_SEARCH_PROMPT = "What is the release codeword in the deployment notes? Reply with only the codeword."
+FILES_SEARCH_FOLLOW_UP = "Which codeword did you find in the notes? Reply with only the codeword."
 
 
 def _files_upload(
@@ -1851,7 +1859,9 @@ def _files_response_body(
     input_value: Any,
     max_output_tokens: int | None,
     previous_response_id: str | None = None,
+    **fields: Any,
 ) -> dict[str, Any]:
+    """A stored, non-streaming Responses body; `fields` adds or overrides request fields."""
     body: dict[str, Any] = {
         "model": model,
         "store": True,
@@ -1862,6 +1872,7 @@ def _files_response_body(
         body["previous_response_id"] = previous_response_id
     if max_output_tokens:
         body["max_output_tokens"] = max_output_tokens
+    body.update(fields)
     return body
 
 
@@ -2028,9 +2039,302 @@ def _record_files_errors(client: httpx.Client, proxy_url: str) -> None:
     _files_request(client, proxy_url, "DELETE", f"/v1/files/{FILES_MISSING_ID}")
 
 
+def _payload_id(payload: Any) -> str | None:
+    value = payload.get("id") if isinstance(payload, dict) else None
+    return value if isinstance(value, str) else None
+
+
+def _files_json(client: httpx.Client, proxy_url: str, method: str, path: str, **kwargs: Any) -> Any:
+    response = _files_request(client, proxy_url, method, path, **kwargs)
+    try:
+        return response.json()
+    except ValueError:
+        return None
+
+
+def _data_url(content: bytes, media_type: str) -> str:
+    return f"data:{media_type};base64,{base64.b64encode(content).decode('ascii')}"
+
+
+def _record_files_api(client: httpx.Client, proxy_url: str) -> None:
+    """Every upload purpose and content kind, listing, retrieval, and deletion."""
+    notes = FILES_TEXT_FIXTURE.read_bytes()
+    image = FILES_IMAGE_FIXTURE.read_bytes()
+    ids: list[str | None] = []
+    for filename, content, content_type, purpose in (
+        ("notes.txt", notes, "text/plain", "assistants"),
+        ("notes.txt", notes, "text/plain", "user_data"),
+        ("colors.png", image, "image/png", "vision"),
+        ("colors.png", image, "image/png", "user_data"),
+        ("notes.txt", notes, "text/plain", "vision"),
+        ("notes.pdf", FILES_PDF_FIXTURE.read_bytes(), "application/pdf", "user_data"),
+        ("empty.txt", b"", "text/plain", "user_data"),
+        ("data.bin", bytes(range(256)), "application/octet-stream", "user_data"),
+    ):
+        ids.append(_payload_id(_files_upload(client, proxy_url, filename, content, content_type, purpose)))
+    uploaded = [file_id for file_id in ids if file_id]
+    # Listing is account-wide and newest first, so only the newest entries (this run's uploads) are listed.
+    _files_request(client, proxy_url, "GET", "/v1/files", params={"limit": 2})
+    if len(uploaded) >= 2:
+        _files_request(client, proxy_url, "GET", "/v1/files", params={"limit": 1, "after": uploaded[-2]})
+    _files_request(client, proxy_url, "GET", "/v1/files", params={"purpose": "vision", "limit": 1})
+    _files_request(client, proxy_url, "GET", "/v1/files", params={"limit": 0})
+    _files_request(client, proxy_url, "GET", "/v1/files", params={"order": "sideways"})
+    _files_request(client, proxy_url, "GET", "/v1/files", params={"limit": 1, "after": FILES_MISSING_ID})
+    if not uploaded:
+        return
+    first = uploaded[0]
+    _files_request(client, proxy_url, "GET", f"/v1/files/{first}")
+    _files_request(client, proxy_url, "GET", f"/v1/files/{first}/content")
+    _files_request(client, proxy_url, "DELETE", f"/v1/files/{first}")
+    _files_request(client, proxy_url, "DELETE", f"/v1/files/{first}")
+    _files_request(client, proxy_url, "GET", f"/v1/files/{first}")
+    _files_request(client, proxy_url, "GET", f"/v1/files/{first}/content")
+    for file_id in uploaded[1:]:
+        _files_request(client, proxy_url, "DELETE", f"/v1/files/{file_id}")
+
+
+def _record_files_input(
+    client: httpx.Client,
+    proxy_url: str,
+    model: str,
+    max_output_tokens: int | None,
+) -> None:
+    """Every way a file reaches Responses input, and what deleting the response, the file, or the conversation does."""
+    notes = FILES_TEXT_FIXTURE.read_bytes()
+    pdf = FILES_PDF_FIXTURE.read_bytes()
+    image = FILES_IMAGE_FIXTURE.read_bytes()
+    text_id = _payload_id(_files_upload(client, proxy_url, "notes.txt", notes, "text/plain", "user_data"))
+    pdf_id = _payload_id(_files_upload(client, proxy_url, "notes.pdf", pdf, "application/pdf", "user_data"))
+    image_id = _payload_id(_files_upload(client, proxy_url, "colors.png", image, "image/png", "vision"))
+    if not (text_id and pdf_id and image_id):
+        click.echo("  [an upload did not return a file id; skipping file references]", err=True)
+        return
+
+    def ask(parts: list[dict[str, Any]], prompt: str = FILES_TEXT_PROMPT, **fields: Any) -> Any:
+        message = _files_message([{"type": "input_text", "text": prompt}, *parts])
+        return _files_response(client, proxy_url, _files_response_body(model, message, max_output_tokens, **fields))[1]
+
+    def follow_up(response_id: str, **fields: Any) -> None:
+        _files_response(client, proxy_url,
+                        _files_response_body(model, FILES_TEXT_FOLLOW_UP, max_output_tokens, response_id, **fields))
+
+    ask([{"type": "input_file", "file_id": pdf_id}])
+    ask([{"type": "input_file", "filename": "notes.pdf", "file_data": _data_url(pdf, "application/pdf")}])
+    ask([{"type": "input_file", "file_url": FILES_TEXT_URL}])
+    ask([{"type": "input_file", "file_id": text_id, "filename": "renamed.txt"}])
+    ask([{"type": "input_file", "file_id": text_id, "filename": "notes.txt",
+          "file_data": _data_url(notes, "text/plain")}])
+    ask([{"type": "input_file", "file_id": image_id}], FILES_IMAGE_PROMPT)
+    ask([{"type": "input_image", "file_id": pdf_id}], FILES_IMAGE_PROMPT)
+    ask([{"type": "input_image", "file_id": image_id, "image_url": _data_url(image, "image/png")}],
+        FILES_IMAGE_PROMPT)
+    ask([{"type": "input_image", "file_id": image_id, "detail": "low"}], FILES_IMAGE_PROMPT)
+    ask([{"type": "input_file", "file_id": FILES_MISSING_ID}])
+    ask([{"type": "input_file", "file_id": text_id}], store=False)
+    ask([{"type": "input_file", "file_id": text_id}], stream=True)
+    ask([{"type": "input_file", "file_id": FILES_MISSING_ID}], stream=True)
+
+    # A file as the whole input: a file-only message, an easy message, and a bare input item.
+    def send(input_value: Any, **fields: Any) -> None:
+        _files_response(client, proxy_url, _files_response_body(model, input_value, max_output_tokens, **fields))
+
+    send(_files_message([{"type": "input_file", "file_id": text_id}]))
+    send([{"role": "user", "content": [{"type": "input_file", "file_id": pdf_id}]}])
+    send([{"type": "input_file", "file_id": text_id}])
+    send([{"type": "input_image", "file_id": image_id}])
+    # A file returned as a function call's output content.
+    read_notes = {"type": "function", "name": "read_notes", "description": "Return the deployment notes.",
+                  "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}
+    for output in ([{"type": "input_file", "file_id": text_id}],
+                   [{"type": "input_file", "file_id": pdf_id}],
+                   [{"type": "input_image", "file_id": image_id}],
+                   [{"type": "input_file", "file_id": FILES_MISSING_ID}]):
+        send([*_files_message([{"type": "input_text", "text": FILES_TEXT_PROMPT}]),
+              {"type": "function_call", "call_id": "call_read_notes", "name": "read_notes", "arguments": "{}"},
+              {"type": "function_call_output", "call_id": "call_read_notes", "output": output}],
+             tools=[read_notes])
+
+    # Deleting the response that holds the reference.
+    response_id = _payload_id(ask([{"type": "input_file", "file_id": text_id}]))
+    if response_id:
+        _files_request(client, proxy_url, "GET", f"/v1/responses/{response_id}/input_items")
+        _files_request(client, proxy_url, "DELETE", f"/v1/responses/{response_id}")
+        follow_up(response_id)
+        _files_request(client, proxy_url, "GET", f"/v1/responses/{response_id}/input_items")
+
+    # Deleting the referenced file while stored history still names it.
+    response_id = _payload_id(ask([{"type": "input_file", "file_id": pdf_id}]))
+    _files_request(client, proxy_url, "DELETE", f"/v1/files/{pdf_id}")
+    if response_id:
+        _files_request(client, proxy_url, "GET", f"/v1/responses/{response_id}/input_items")
+        _files_request(client, proxy_url, "GET", f"/v1/responses/{response_id}")
+        follow_up(response_id)
+        follow_up(response_id, stream=True)
+
+    # A conversation item that references a file, before and after the file is deleted.
+    conversation = _payload_id(_files_json(client, proxy_url, "POST", "/v1/conversations", json={"items": _files_message([
+        {"type": "input_text", "text": "Here are the deployment notes."},
+        {"type": "input_file", "file_id": text_id},
+    ])}))
+    if conversation:
+        turn = _files_response_body(model, FILES_TEXT_FOLLOW_UP, max_output_tokens, conversation=conversation)
+        _files_response(client, proxy_url, turn)
+        _files_request(client, proxy_url, "DELETE", f"/v1/files/{text_id}")
+        _files_request(client, proxy_url, "GET", f"/v1/conversations/{conversation}/items")
+        _files_response(client, proxy_url, turn)
+        _files_request(client, proxy_url, "DELETE", f"/v1/conversations/{conversation}")
+    else:
+        _files_request(client, proxy_url, "DELETE", f"/v1/files/{text_id}")
+    _files_request(client, proxy_url, "DELETE", f"/v1/files/{image_id}")
+
+
+def _record_files_compact(
+    client: httpx.Client,
+    proxy_url: str,
+    model: str,
+    max_output_tokens: int | None,
+) -> None:
+    """Client-facing `/v1/responses/compact` over file inputs, continuing from each window, before and after deletion."""
+    notes = FILES_TEXT_FIXTURE.read_bytes()
+    text_id = _payload_id(_files_upload(client, proxy_url, "notes.txt", notes, "text/plain", "user_data"))
+    pdf_id = _payload_id(_files_upload(client, proxy_url, "notes.pdf", FILES_PDF_FIXTURE.read_bytes(),
+                                       "application/pdf", "user_data"))
+    if not (text_id and pdf_id):
+        click.echo("  [an upload did not return a file id; skipping compaction]", err=True)
+        return
+    remember = {"type": "input_text", "text": "Remember these deployment notes for later."}
+
+    def compact(**body: Any) -> list[Any]:
+        window = _files_json(client, proxy_url, "POST", "/v1/responses/compact", json={"model": model, **body})
+        return window.get("output", []) if isinstance(window, dict) else []
+
+    def recall(window: list[Any]) -> None:
+        if not window:
+            return
+        _files_response(client, proxy_url, _files_response_body(
+            model, [*window, {"role": "user", "content": FILES_TEXT_FOLLOW_UP}], max_output_tokens, store=False))
+
+    by_id = compact(input=_files_message([remember, {"type": "input_file", "file_id": text_id}]))
+    recall(by_id)
+    recall(compact(input=_files_message([remember, {"type": "input_file", "filename": "notes.txt",
+                                                    "file_data": _data_url(notes, "text/plain")}])))
+    stored = _payload_id(_files_response(client, proxy_url, _files_response_body(
+        model, _files_message([remember, {"type": "input_file", "file_id": text_id}]), max_output_tokens))[1])
+    if stored:
+        recall(compact(previous_response_id=stored))
+    conversation = _payload_id(_files_json(client, proxy_url, "POST", "/v1/conversations", json={
+        "items": _files_message([remember, {"type": "input_file", "file_id": pdf_id}])}))
+    if conversation:
+        recall(compact(conversation=conversation))
+
+    # The windows compacted above, and compacting again, once the files are gone.
+    _files_request(client, proxy_url, "DELETE", f"/v1/files/{text_id}")
+    _files_request(client, proxy_url, "DELETE", f"/v1/files/{pdf_id}")
+    recall(by_id)
+    if stored:
+        compact(previous_response_id=stored)
+    if conversation:
+        compact(conversation=conversation)
+        _files_request(client, proxy_url, "DELETE", f"/v1/conversations/{conversation}")
+
+
+def _wait_for_store_file(client: httpx.Client, target: str, store_id: str, file_id: str) -> None:
+    """Poll ingestion directly against the provider so polls stay out of the cassette."""
+    deadline = time.monotonic() + 180
+    while time.monotonic() < deadline:
+        response = client.get(f"{target}/v1/vector_stores/{store_id}/files/{file_id}", timeout=_http_timeout())
+        status = response.json().get("status") if response.status_code == 200 else None
+        # A file attached at store creation can briefly be unlisted (404) before ingestion starts.
+        if status in {"completed", "failed", "cancelled"} or response.status_code not in {200, 404}:
+            click.echo(f"  [ingestion of {file_id}: HTTP {response.status_code}, status {status}]")
+            return
+        time.sleep(2)
+    raise click.ClickException(f"vector store file {file_id} was not ingested within 180 seconds")
+
+
+def _record_files_search(
+    client: httpx.Client,
+    proxy_url: str,
+    target: str,
+    model: str,
+    max_output_tokens: int | None,
+) -> None:
+    """Vector stores, their files and search, and the Responses `file_search` tool."""
+    notes = FILES_TEXT_FIXTURE.read_bytes()
+    file_id = _payload_id(_files_upload(client, proxy_url, "notes.txt", notes, "text/plain", "assistants"))
+    tagged_id = _payload_id(_files_upload(client, proxy_url, "team-notes.txt", notes, "text/plain", "assistants"))
+    if not (file_id and tagged_id):
+        click.echo("  [an upload did not return a file id; skipping vector stores]", err=True)
+        return
+    store_id = _payload_id(_files_json(client, proxy_url, "POST", "/v1/vector_stores",
+                                       json={"name": "agentic-api-recorder", "file_ids": [file_id]}))
+    if not store_id:
+        click.echo("  [vector store creation failed; skipping search]", err=True)
+        return
+    store = f"/v1/vector_stores/{store_id}"
+    _wait_for_store_file(client, target, store_id, file_id)
+    _files_request(client, proxy_url, "GET", store)
+    _files_request(client, proxy_url, "GET", "/v1/vector_stores", params={"limit": 1})
+    _files_request(client, proxy_url, "GET", f"{store}/files")
+    _files_request(client, proxy_url, "GET", f"{store}/files/{file_id}")
+    _files_request(client, proxy_url, "POST", f"{store}/files",
+                   json={"file_id": tagged_id, "attributes": {"department": "engineering"}})
+    _wait_for_store_file(client, target, store_id, tagged_id)
+    _files_request(client, proxy_url, "POST", f"{store}/files", json={"file_id": FILES_MISSING_ID})
+
+    engineering = {"type": "eq", "key": "department", "value": "engineering"}
+    for search in (
+        {"query": "release codeword"},
+        {"query": "release codeword", "max_num_results": 1, "filters": engineering,
+         "ranking_options": {"score_threshold": 0.0}},
+        {"query": ["release codeword", "deployment owner"]},
+        {"query": "release codeword", "filters": {"type": "between", "key": "department", "value": "x"}},
+        {"query": "release codeword", "max_num_results": 0},
+    ):
+        _files_request(client, proxy_url, "POST", f"{store}/search", json=search)
+    _files_request(client, proxy_url, "POST", f"/v1/vector_stores/{FILES_MISSING_STORE_ID}/search",
+                   json={"query": "release codeword"})
+
+    tool = {"type": "file_search", "vector_store_ids": [store_id]}
+
+    def ask(tools: list[dict[str, Any]], **fields: Any) -> Any:
+        body = _files_response_body(model, FILES_SEARCH_PROMPT, max_output_tokens, tools=tools, **fields)
+        return _files_response(client, proxy_url, body)[1]
+
+    first = _payload_id(ask([tool], include=["file_search_call.results"]))
+    ask([tool], stream=True, include=["file_search_call.results"])
+    ask([{**tool, "max_num_results": 1, "filters": engineering}], tool_choice={"type": "file_search"})
+    if first:
+        _files_response(client, proxy_url,
+                        _files_response_body(model, FILES_SEARCH_FOLLOW_UP, max_output_tokens, first))
+        _files_response(client, proxy_url,
+                        _files_response_body(model, FILES_SEARCH_FOLLOW_UP, max_output_tokens, first, tools=[tool]))
+    ask([{"type": "file_search", "vector_store_ids": [FILES_MISSING_STORE_ID]}])
+    ask([{"type": "file_search", "vector_store_ids": []}])
+    ask([{"type": "file_search"}])
+
+    # Detaching keeps the upload; deleting the upload removes it from the store.
+    _files_request(client, proxy_url, "DELETE", f"{store}/files/{tagged_id}")
+    _files_request(client, proxy_url, "GET", f"/v1/files/{tagged_id}")
+    _files_request(client, proxy_url, "GET", f"{store}/files")
+    _files_request(client, proxy_url, "DELETE", f"/v1/files/{file_id}")
+    _files_request(client, proxy_url, "GET", f"{store}/files/{file_id}")
+    _files_request(client, proxy_url, "POST", f"{store}/search", json={"query": "release codeword"})
+    if first:
+        _files_response(client, proxy_url,
+                        _files_response_body(model, FILES_SEARCH_FOLLOW_UP, max_output_tokens, first, tools=[tool]))
+    _files_request(client, proxy_url, "DELETE", store)
+    _files_request(client, proxy_url, "GET", store)
+    _files_request(client, proxy_url, "POST", f"{store}/search", json={"query": "release codeword"})
+    ask([tool])
+    _files_request(client, proxy_url, "DELETE", f"/v1/files/{tagged_id}")
+
+
 def run_files(
     client: httpx.Client,
     proxy_url: str,
+    target: str,
     model: str,
     scenario: str,
     max_output_tokens: int | None,
@@ -2041,6 +2345,14 @@ def run_files(
         _record_files_image(client, proxy_url, model, max_output_tokens)
     if scenario in {"errors", "all"}:
         _record_files_errors(client, proxy_url)
+    if scenario in {"api", "all"}:
+        _record_files_api(client, proxy_url)
+    if scenario in {"input", "all"}:
+        _record_files_input(client, proxy_url, model, max_output_tokens)
+    if scenario in {"search", "all"}:
+        _record_files_search(client, proxy_url, target, model, max_output_tokens)
+    if scenario in {"compact", "all"}:
+        _record_files_compact(client, proxy_url, model, max_output_tokens)
 
 
 def _prompt(label: str) -> str:
@@ -2845,7 +3157,7 @@ def run_responses(
 )
 @click.option(
     "--files-scenario",
-    type=click.Choice(["text", "image", "errors", "all"]),
+    type=click.Choice(["text", "image", "errors", "api", "input", "search", "compact", "all"]),
     default="all",
     show_default=True,
     help="Fixed Files API scenario (for --mode files).",
@@ -3421,6 +3733,7 @@ def main(
                     run_files(
                         client,
                         proxy_url,
+                        target,
                         model,
                         files_scenario,
                         response_max_output_tokens,

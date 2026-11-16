@@ -22,11 +22,27 @@
 #                  `input_image.file_id`, including the wrong-type rejection
 #   files-errors   invalid uploads (purpose, missing file, missing purpose) and
 #                  the missing-file errors for metadata, content, and delete
+#   files-api      every upload purpose and content kind (text, image, PDF,
+#                  empty, binary), listing with limit/after/purpose, retrieval,
+#                  content download, and repeated deletion
+#   files-input    every file form in Responses input: input_file by file_id
+#                  (text, PDF, image), inline file_data, file_url, file_id with
+#                  file_data, input_image by file_id (image, PDF), a missing
+#                  file, store:false, streaming, and continuing after the
+#                  response, the file, or the conversation item changes
+#   files-search   vector stores (create, list, attach with attributes, search
+#                  with filters and ranking) and the Responses file_search tool
+#                  (results include, streaming, tool_choice, continuation,
+#                  missing or empty stores, detached and deleted files)
+#   files-compact  client-facing /v1/responses/compact over a file referenced
+#                  by file_id, inline file_data, previous_response_id, and a
+#                  conversation item, continuing from each window, then again
+#                  after the files are deleted
 #
 # The files scenarios are recorded with `record_cassette.py --mode files`; the
 # gateway set needs the text model for files-text/files-errors and
 # FILES_IMAGE_MODEL for files-image. Select them explicitly:
-#   TEXT_FILE_SCENARIOS="files-text files-image files-errors"
+#   TEXT_FILE_SCENARIOS="files-text files-image files-errors files-api files-input files-search files-compact"
 #
 # The compaction summary and follow-up are recorded directly against the model
 # server (VLLM_URL, files named `vllm`) or OpenAI, because the gateway makes
@@ -326,10 +342,16 @@ turns = (yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}).get("turn
 if not turns:
     raise SystemExit(f"ERROR: {path} recorded no turns")
 
+# text/image: every successful answer reads the file. input/search: at least one answer
+# proves the file or the search reached the model; other turns are evidence as recorded.
 expected_words = {
     "text": [marker],
     "image": ["red", "blue"],
     "errors": [],
+    "api": [],
+    "input": [],
+    "search": [],
+    "compact": [],
 }[scenario]
 
 
@@ -373,6 +395,8 @@ for index, turn in enumerate(turns, start=1):
 
 if scenario != "errors" and uploads == 0:
     raise SystemExit(f"ERROR: {path} has no successful Files API upload")
+if scenario in {"input", "search", "compact"} and not any(marker in text for text in answers):
+    raise SystemExit(f"ERROR: no {scenario} answer contains {marker}; no file content reached the model")
 if scenario != "errors" and provider == "gateway" and len(answers) < 2:
     raise SystemExit(
         f"ERROR: the gateway recording must answer both the file reference and its continuation; "
@@ -456,6 +480,14 @@ record_provider_suite() {
         bold "$provider files API: invalid uploads and missing files (non-streaming)"
         record_files_scenario errors "$provider" "$conversation_flag" "$conversation_endpoint" "$model" \
           "$BASE_DIR/files-api-errors-${provider}-${model_slug}.yaml"
+        ;;
+      files-api|files-input|files-search|files-compact)
+        local kind="${scenario#files-}"
+        local name="$kind"
+        [[ "$kind" == "api" ]] && name=endpoints
+        bold "$provider ${scenario}"
+        record_files_scenario "$kind" "$provider" "$conversation_flag" "$conversation_endpoint" "$model" \
+          "$BASE_DIR/files-api-${name}-${provider}-${model_slug}.yaml"
         ;;
       *)
         echo "ERROR: unknown scenario $scenario" >&2

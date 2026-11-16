@@ -1154,6 +1154,10 @@ bytes and boundary.
 | `files-text` | `Qwen/Qwen2.5-3B-Instruct` | upload `notes.txt` (`user_data`), metadata and content retrieval, an `input_file.file_id` answer, a `previous_response_id` continuation, delete, the post-delete continuation and re-reference (`404 not_found`), `notes.txt` as `input_image` (`400`), delete |
 | `files-image` | `Qwen/Qwen2.5-VL-3B-Instruct` | upload the `red-blue-64.png` fixture as `colors.png` (`vision`), retrieval, an `input_image.file_id` answer (`Red, Blue`), a continuation, delete, the post-delete continuation (`404`), `notes.txt` as `input_image` (`400`), delete |
 | `files-errors` | `Qwen/Qwen2.5-3B-Instruct` | invalid purpose, missing `file`, missing multipart body, and missing-file metadata, content, and delete (`404`) |
+| `files-api` | text model | every upload purpose with text, image, PDF (`notes.pdf`), empty, and binary content; listing with `limit`, `after`, and `purpose` plus invalid list parameters; metadata and content retrieval; repeated deletion |
+| `files-input` | text model | `input_file` by `file_id` (text, PDF, image), inline PDF `file_data`, `file_url`, `file_id` with `filename` or `file_data`, `input_image` by `file_id` (image with `detail`, PDF, with `image_url`), a missing file, `store: false`, streaming, then continuing after deleting the response, the file, or a conversation item's file |
+| `files-search` | text model | vector store creation with `file_ids`, retrieval and listing, attaching a file with `attributes`, search with filters, ranking, list queries, and invalid parameters, then the Responses `file_search` tool with `include`, streaming, `tool_choice`, filters, continuation, missing or empty `vector_store_ids`, and after detaching, deleting a file, and deleting the store |
+| `files-compact` | text model | client-facing `/v1/responses/compact` over a file by `file_id`, inline `file_data`, `previous_response_id`, and a conversation, a turn continuing each window, then the window and compaction again after the files are deleted |
 
 **Recorded configuration.** vLLM 0.33.0 (`vllm/vllm-openai:latest`) serving `Qwen/Qwen2.5-3B-Instruct` for
 `files-text`/`files-errors` and `Qwen/Qwen2.5-VL-3B-Instruct` for `files-image`, with the gateway on port 9000. On a
@@ -1168,13 +1172,14 @@ GATEWAY_URL=http://localhost:9000 \
 bash crates/agentic-server-core/tests/cassettes/record_text_file_input_cassettes.sh
 
 # OpenAI reference set, when OPENAI_API_KEY is available.
-TEXT_FILE_RECORD_SET=openai TEXT_FILE_SCENARIOS="files-text files-image files-errors" \
+TEXT_FILE_RECORD_SET=openai \
+TEXT_FILE_SCENARIOS="files-text files-image files-errors files-api files-input files-search files-compact" \
 OPENAI_API_KEY=sk-... bash crates/agentic-server-core/tests/cassettes/record_text_file_input_cassettes.sh
 ```
 
 The script validates each recording before promoting it: every successful reference answer must contain `PAPAYA-7`
 (text) or `red` and `blue` (image), the gateway set must contain both the reference answer and its continuation, and
-every `files-errors` turn must be an error. Error status, code, and message are recorded verbatim as the evidence;
+every `files-errors` turn must be an error, and `files-input`, `files-search`, and `files-compact` must each contain at least one answer with `PAPAYA-7`. Vector store ingestion is polled directly against the provider, outside the cassette, so the recorded turns stay fixed. Error status, code, and message are recorded verbatim as the evidence;
 only successful answers are checked against the fixture content.
 
 ### Custom tool (gateway and OpenAI)
