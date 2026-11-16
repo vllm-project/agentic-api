@@ -12,8 +12,8 @@ turns:
     query_params: {}
   response:
     body:
-      created_at: 1792738289
-      id: conv_6adb03f135508196bb37728642fa17e60f78024076088eaa
+      created_at: 1794803026
+      id: conv_6afa8552bd2c81969f595936d1578d810c6cbf98717df77c
       metadata: {}
       object: conversation
     headers:
@@ -31,7 +31,7 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_6adb03f135508196bb37728642fa17e60f78024076088eaa/items
+    path: /v1/conversations/conv_6afa8552bd2c81969f595936d1578d810c6cbf98717df77c/items
     query_params: {}
   response:
     body:
@@ -39,13 +39,13 @@ turns:
       - content:
         - text: Remember SAPPHIRE.
           type: input_text
-        id: msg_6adb03f273008196a7793f98b07f32600f78024076088eaa
+        id: msg_6afa85531b588196a7d4f8088733ab160c6cbf98717df77c
         role: user
         status: completed
         type: message
-      first_id: msg_6adb03f273008196a7793f98b07f32600f78024076088eaa
+      first_id: msg_6afa85531b588196a7d4f8088733ab160c6cbf98717df77c
       has_more: false
-      last_id: msg_6adb03f273008196a7793f98b07f32600f78024076088eaa
+      last_id: msg_6afa85531b588196a7d4f8088733ab160c6cbf98717df77c
       object: list
     headers:
       content-type: application/json
@@ -53,7 +53,7 @@ turns:
 - filename: t3
   request:
     body:
-      conversation: conv_6adb03f135508196bb37728642fa17e60f78024076088eaa
+      conversation: conv_6afa8552bd2c81969f595936d1578d810c6cbf98717df77c
       input:
       - content: Reply with only SAPPHIRE.
         role: user
@@ -75,7 +75,7 @@ turns:
     - 'event: response.created
 
       '
-    - 'data: {"type":"response.created","response":{"id":"resp_0f78024076088eaa006adb03f3e7ac8196a6895584da7e1e39","object":"response","created_at":1792738293,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"conversation":{"id":"conv_6adb03f135508196bb37728642fa17e60f78024076088eaa"},"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+    - 'data: {"type":"response.created","response":{"id":"resp_0c6cbf98717df77c006afa8553a71481968dbe0014b8b862d0","object":"response","created_at":1794803028,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"conversation":{"id":"conv_6afa8552bd2c81969f595936d1578d810c6cbf98717df77c"},"error":null,"frequency_penalty":0.0,"image":{"context_compression":"disabled"},"incomplete_details":null,"input_transformations":[],"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
 
       '
     - '
@@ -84,7 +84,7 @@ turns:
     - 'event: response.in_progress
 
       '
-    - 'data: {"type":"response.in_progress","response":{"id":"resp_0f78024076088eaa006adb03f3e7ac8196a6895584da7e1e39","object":"response","created_at":1792738293,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"conversation":{"id":"conv_6adb03f135508196bb37728642fa17e60f78024076088eaa"},"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_0c6cbf98717df77c006afa8553a71481968dbe0014b8b862d0","object":"response","created_at":1794803028,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"conversation":{"id":"conv_6afa8552bd2c81969f595936d1578d810c6cbf98717df77c"},"error":null,"frequency_penalty":0.0,"image":{"context_compression":"disabled"},"incomplete_details":null,"input_transformations":[],"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
 
       '
     - '
@@ -93,7 +93,7 @@ turns:
     - 'event: response.output_item.added
 
       '
-    - 'data: {"type":"response.output_item.added","item":{"id":"msg_0f78024076088eaa006adb03f61cdc8196b66272355833fc56","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":2}
+    - 'data: {"type":"response.output_item.added","item":{"id":"msg_0c6cbf98717df77c006afa8554beb48196994bbeba8a5f173c","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":2}
 
       '
     - '
@@ -102,7 +102,7 @@ turns:
     - 'event: response.content_part.added
 
       '
-    - 'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_0f78024076088eaa006adb03f61cdc8196b66272355833fc56","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":3}
+    - 'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_0c6cbf98717df77c006afa8554beb48196994bbeba8a5f173c","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":3}
 
       '
     - '
@@ -111,7 +111,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"S","item_id":"msg_0f78024076088eaa006adb03f61cdc8196b66272355833fc56","logprobs":[],"obfuscation":"TsBVXJQWviGCDwx","output_index":0,"sequence_number":4}
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"S","item_id":"msg_0c6cbf98717df77c006afa8554beb48196994bbeba8a5f173c","logprobs":[],"obfuscation":"7jn1Z8Y2d6HFgIp","output_index":0,"sequence_number":4}
 
       '
     - '
@@ -120,7 +120,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"APP","item_id":"msg_0f78024076088eaa006adb03f61cdc8196b66272355833fc56","logprobs":[],"obfuscation":"2fwzBmRdvpTQv","output_index":0,"sequence_number":5}
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"APP","item_id":"msg_0c6cbf98717df77c006afa8554beb48196994bbeba8a5f173c","logprobs":[],"obfuscation":"g00sWWddYwsI6","output_index":0,"sequence_number":5}
 
       '
     - '
@@ -129,7 +129,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"H","item_id":"msg_0f78024076088eaa006adb03f61cdc8196b66272355833fc56","logprobs":[],"obfuscation":"Tr5pB4XqwqZmH5z","output_index":0,"sequence_number":6}
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"H","item_id":"msg_0c6cbf98717df77c006afa8554beb48196994bbeba8a5f173c","logprobs":[],"obfuscation":"yIv6eXYPHw2rzey","output_index":0,"sequence_number":6}
 
       '
     - '
@@ -138,7 +138,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"IRE","item_id":"msg_0f78024076088eaa006adb03f61cdc8196b66272355833fc56","logprobs":[],"obfuscation":"zV9kMk9ooz56Q","output_index":0,"sequence_number":7}
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"IRE","item_id":"msg_0c6cbf98717df77c006afa8554beb48196994bbeba8a5f173c","logprobs":[],"obfuscation":"OOHGzeRl1ZRB4","output_index":0,"sequence_number":7}
 
       '
     - '
@@ -147,7 +147,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":".","item_id":"msg_0f78024076088eaa006adb03f61cdc8196b66272355833fc56","logprobs":[],"obfuscation":"Syk58FLNMeZZDyQ","output_index":0,"sequence_number":8}
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":".","item_id":"msg_0c6cbf98717df77c006afa8554beb48196994bbeba8a5f173c","logprobs":[],"obfuscation":"GfTr1b02KuhaAZF","output_index":0,"sequence_number":8}
 
       '
     - '
@@ -156,7 +156,7 @@ turns:
     - 'event: response.output_text.done
 
       '
-    - 'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_0f78024076088eaa006adb03f61cdc8196b66272355833fc56","logprobs":[],"output_index":0,"sequence_number":9,"text":"SAPPHIRE."}
+    - 'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_0c6cbf98717df77c006afa8554beb48196994bbeba8a5f173c","logprobs":[],"output_index":0,"sequence_number":9,"text":"SAPPHIRE."}
 
       '
     - '
@@ -165,7 +165,7 @@ turns:
     - 'event: response.content_part.done
 
       '
-    - 'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_0f78024076088eaa006adb03f61cdc8196b66272355833fc56","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"SAPPHIRE."},"sequence_number":10}
+    - 'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_0c6cbf98717df77c006afa8554beb48196994bbeba8a5f173c","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"SAPPHIRE."},"sequence_number":10}
 
       '
     - '
@@ -174,7 +174,7 @@ turns:
     - 'event: response.output_item.done
 
       '
-    - 'data: {"type":"response.output_item.done","item":{"id":"msg_0f78024076088eaa006adb03f61cdc8196b66272355833fc56","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"SAPPHIRE."}],"role":"assistant"},"output_index":0,"sequence_number":11}
+    - 'data: {"type":"response.output_item.done","item":{"id":"msg_0c6cbf98717df77c006afa8554beb48196994bbeba8a5f173c","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"SAPPHIRE."}],"role":"assistant"},"output_index":0,"sequence_number":11}
 
       '
     - '
@@ -183,7 +183,7 @@ turns:
     - 'event: response.completed
 
       '
-    - 'data: {"type":"response.completed","response":{"id":"resp_0f78024076088eaa006adb03f3e7ac8196a6895584da7e1e39","object":"response","created_at":1792738293,"status":"completed","access_programs":null,"background":false,"completed_at":1792738294,"conversation":{"id":"conv_6adb03f135508196bb37728642fa17e60f78024076088eaa"},"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[{"id":"msg_0f78024076088eaa006adb03f61cdc8196b66272355833fc56","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"SAPPHIRE."}],"role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":25,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":0},"output_tokens":6,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":31},"user":null,"metadata":{}},"sequence_number":12}
+    - 'data: {"type":"response.completed","response":{"id":"resp_0c6cbf98717df77c006afa8553a71481968dbe0014b8b862d0","object":"response","created_at":1794803028,"status":"completed","access_programs":null,"background":false,"completed_at":1794803028,"conversation":{"id":"conv_6afa8552bd2c81969f595936d1578d810c6cbf98717df77c"},"error":null,"frequency_penalty":0.0,"image":{"context_compression":"disabled"},"incomplete_details":null,"input_transformations":[],"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[{"id":"msg_0c6cbf98717df77c006afa8554beb48196994bbeba8a5f173c","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"SAPPHIRE."}],"role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":25,"input_tokens_details":{"cache_write_tokens":0,"cache_write_tokens_details":{"ttl_12h_tokens":0,"ttl_30m_tokens":0},"cached_tokens":0},"output_tokens":6,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":31},"user":null,"metadata":{}},"sequence_number":12}
 
       '
     - '
@@ -198,7 +198,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0f78024076088eaa006adb03f3e7ac8196a6895584da7e1e39/input_items
+    path: /v1/responses/resp_0c6cbf98717df77c006afa8553a71481968dbe0014b8b862d0/input_items
     query_params:
       order: asc
   response:
@@ -207,20 +207,20 @@ turns:
       - content:
         - text: Remember SAPPHIRE.
           type: input_text
-        id: msg_6adb03f273008196a7793f98b07f32600f78024076088eaa
+        id: msg_6afa85531b588196a7d4f8088733ab160c6cbf98717df77c
         role: user
         status: completed
         type: message
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0f78024076088eaa006adb03f5d6108196907067f973abbba5
+        id: msg_0c6cbf98717df77c006afa8554182481968fd1d911cf8f2af9
         role: user
         status: completed
         type: message
-      first_id: msg_6adb03f273008196a7793f98b07f32600f78024076088eaa
+      first_id: msg_6afa85531b588196a7d4f8088733ab160c6cbf98717df77c
       has_more: false
-      last_id: msg_0f78024076088eaa006adb03f5d6108196907067f973abbba5
+      last_id: msg_0c6cbf98717df77c006afa8554182481968fd1d911cf8f2af9
       object: list
     headers:
       content-type: application/json
@@ -237,7 +237,7 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_6adb03f135508196bb37728642fa17e60f78024076088eaa/items
+    path: /v1/conversations/conv_6afa8552bd2c81969f595936d1578d810c6cbf98717df77c/items
     query_params: {}
   response:
     body:
@@ -245,13 +245,13 @@ turns:
       - content:
         - text: Now remember ORCHID.
           type: input_text
-        id: msg_6adb03f7285c8196998034551c5b636c0f78024076088eaa
+        id: msg_6afa855730f08196b62e5152b42212730c6cbf98717df77c
         role: user
         status: completed
         type: message
-      first_id: msg_6adb03f7285c8196998034551c5b636c0f78024076088eaa
+      first_id: msg_6afa855730f08196b62e5152b42212730c6cbf98717df77c
       has_more: false
-      last_id: msg_6adb03f7285c8196998034551c5b636c0f78024076088eaa
+      last_id: msg_6afa855730f08196b62e5152b42212730c6cbf98717df77c
       object: list
     headers:
       content-type: application/json
@@ -264,7 +264,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0f78024076088eaa006adb03f3e7ac8196a6895584da7e1e39/input_items
+    path: /v1/responses/resp_0c6cbf98717df77c006afa8553a71481968dbe0014b8b862d0/input_items
     query_params:
       order: asc
   response:
@@ -273,20 +273,20 @@ turns:
       - content:
         - text: Remember SAPPHIRE.
           type: input_text
-        id: msg_6adb03f273008196a7793f98b07f32600f78024076088eaa
+        id: msg_6afa85531b588196a7d4f8088733ab160c6cbf98717df77c
         role: user
         status: completed
         type: message
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0f78024076088eaa006adb03f5d6108196907067f973abbba5
+        id: msg_0c6cbf98717df77c006afa8554182481968fd1d911cf8f2af9
         role: user
         status: completed
         type: message
-      first_id: msg_6adb03f273008196a7793f98b07f32600f78024076088eaa
+      first_id: msg_6afa85531b588196a7d4f8088733ab160c6cbf98717df77c
       has_more: false
-      last_id: msg_0f78024076088eaa006adb03f5d6108196907067f973abbba5
+      last_id: msg_0c6cbf98717df77c006afa8554182481968fd1d911cf8f2af9
       object: list
     headers:
       content-type: application/json
@@ -294,7 +294,7 @@ turns:
 - filename: t7
   request:
     body:
-      conversation: conv_6adb03f135508196bb37728642fa17e60f78024076088eaa
+      conversation: conv_6afa8552bd2c81969f595936d1578d810c6cbf98717df77c
       input:
       - content: Reply with only ORCHID.
         role: user
@@ -316,7 +316,7 @@ turns:
     - 'event: response.created
 
       '
-    - 'data: {"type":"response.created","response":{"id":"resp_0f78024076088eaa006adb03f824048196a91ba8418fef53fc","object":"response","created_at":1792738296,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"conversation":{"id":"conv_6adb03f135508196bb37728642fa17e60f78024076088eaa"},"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+    - 'data: {"type":"response.created","response":{"id":"resp_0c6cbf98717df77c006afa85583e148196885f6909e72d89ca","object":"response","created_at":1794803032,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"conversation":{"id":"conv_6afa8552bd2c81969f595936d1578d810c6cbf98717df77c"},"error":null,"frequency_penalty":0.0,"image":{"context_compression":"disabled"},"incomplete_details":null,"input_transformations":[],"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
 
       '
     - '
@@ -325,7 +325,7 @@ turns:
     - 'event: response.in_progress
 
       '
-    - 'data: {"type":"response.in_progress","response":{"id":"resp_0f78024076088eaa006adb03f824048196a91ba8418fef53fc","object":"response","created_at":1792738296,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"conversation":{"id":"conv_6adb03f135508196bb37728642fa17e60f78024076088eaa"},"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_0c6cbf98717df77c006afa85583e148196885f6909e72d89ca","object":"response","created_at":1794803032,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"conversation":{"id":"conv_6afa8552bd2c81969f595936d1578d810c6cbf98717df77c"},"error":null,"frequency_penalty":0.0,"image":{"context_compression":"disabled"},"incomplete_details":null,"input_transformations":[],"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
 
       '
     - '
@@ -334,7 +334,7 @@ turns:
     - 'event: response.output_item.added
 
       '
-    - 'data: {"type":"response.output_item.added","item":{"id":"msg_0f78024076088eaa006adb03f887d08196873f5faaafb7a88b","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":2}
+    - 'data: {"type":"response.output_item.added","item":{"id":"msg_0c6cbf98717df77c006afa85599e248196840c478cc1b245fd","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":2}
 
       '
     - '
@@ -343,7 +343,7 @@ turns:
     - 'event: response.content_part.added
 
       '
-    - 'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_0f78024076088eaa006adb03f887d08196873f5faaafb7a88b","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":3}
+    - 'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_0c6cbf98717df77c006afa85599e248196840c478cc1b245fd","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":3}
 
       '
     - '
@@ -352,7 +352,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"OR","item_id":"msg_0f78024076088eaa006adb03f887d08196873f5faaafb7a88b","logprobs":[],"obfuscation":"25ftE9TeQslu4q","output_index":0,"sequence_number":4}
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"OR","item_id":"msg_0c6cbf98717df77c006afa85599e248196840c478cc1b245fd","logprobs":[],"obfuscation":"qi6U9yLTiB84gT","output_index":0,"sequence_number":4}
 
       '
     - '
@@ -361,7 +361,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"CH","item_id":"msg_0f78024076088eaa006adb03f887d08196873f5faaafb7a88b","logprobs":[],"obfuscation":"6jwmf7J5tUAsoA","output_index":0,"sequence_number":5}
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"CH","item_id":"msg_0c6cbf98717df77c006afa85599e248196840c478cc1b245fd","logprobs":[],"obfuscation":"gIBzjAqmcerOww","output_index":0,"sequence_number":5}
 
       '
     - '
@@ -370,7 +370,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"ID","item_id":"msg_0f78024076088eaa006adb03f887d08196873f5faaafb7a88b","logprobs":[],"obfuscation":"2jjjZUWynCM2Dr","output_index":0,"sequence_number":6}
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"ID","item_id":"msg_0c6cbf98717df77c006afa85599e248196840c478cc1b245fd","logprobs":[],"obfuscation":"ucp6AM8CTfh74n","output_index":0,"sequence_number":6}
 
       '
     - '
@@ -379,7 +379,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":".","item_id":"msg_0f78024076088eaa006adb03f887d08196873f5faaafb7a88b","logprobs":[],"obfuscation":"jlltGZ06BgFsw5j","output_index":0,"sequence_number":7}
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":".","item_id":"msg_0c6cbf98717df77c006afa85599e248196840c478cc1b245fd","logprobs":[],"obfuscation":"AsaFYI8CW8rggHl","output_index":0,"sequence_number":7}
 
       '
     - '
@@ -388,7 +388,7 @@ turns:
     - 'event: response.output_text.done
 
       '
-    - 'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_0f78024076088eaa006adb03f887d08196873f5faaafb7a88b","logprobs":[],"output_index":0,"sequence_number":8,"text":"ORCHID."}
+    - 'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_0c6cbf98717df77c006afa85599e248196840c478cc1b245fd","logprobs":[],"output_index":0,"sequence_number":8,"text":"ORCHID."}
 
       '
     - '
@@ -397,7 +397,7 @@ turns:
     - 'event: response.content_part.done
 
       '
-    - 'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_0f78024076088eaa006adb03f887d08196873f5faaafb7a88b","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"ORCHID."},"sequence_number":9}
+    - 'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_0c6cbf98717df77c006afa85599e248196840c478cc1b245fd","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"ORCHID."},"sequence_number":9}
 
       '
     - '
@@ -406,7 +406,7 @@ turns:
     - 'event: response.output_item.done
 
       '
-    - 'data: {"type":"response.output_item.done","item":{"id":"msg_0f78024076088eaa006adb03f887d08196873f5faaafb7a88b","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"ORCHID."}],"role":"assistant"},"output_index":0,"sequence_number":10}
+    - 'data: {"type":"response.output_item.done","item":{"id":"msg_0c6cbf98717df77c006afa85599e248196840c478cc1b245fd","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"ORCHID."}],"role":"assistant"},"output_index":0,"sequence_number":10}
 
       '
     - '
@@ -415,7 +415,7 @@ turns:
     - 'event: response.completed
 
       '
-    - 'data: {"type":"response.completed","response":{"id":"resp_0f78024076088eaa006adb03f824048196a91ba8418fef53fc","object":"response","created_at":1792738296,"status":"completed","access_programs":null,"background":false,"completed_at":1792738296,"conversation":{"id":"conv_6adb03f135508196bb37728642fa17e60f78024076088eaa"},"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[{"id":"msg_0f78024076088eaa006adb03f887d08196873f5faaafb7a88b","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"ORCHID."}],"role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":55,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":0},"output_tokens":5,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":60},"user":null,"metadata":{}},"sequence_number":11}
+    - 'data: {"type":"response.completed","response":{"id":"resp_0c6cbf98717df77c006afa85583e148196885f6909e72d89ca","object":"response","created_at":1794803032,"status":"completed","access_programs":null,"background":false,"completed_at":1794803033,"conversation":{"id":"conv_6afa8552bd2c81969f595936d1578d810c6cbf98717df77c"},"error":null,"frequency_penalty":0.0,"image":{"context_compression":"disabled"},"incomplete_details":null,"input_transformations":[],"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[{"id":"msg_0c6cbf98717df77c006afa85599e248196840c478cc1b245fd","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"ORCHID."}],"role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":55,"input_tokens_details":{"cache_write_tokens":0,"cache_write_tokens_details":{"ttl_12h_tokens":0,"ttl_30m_tokens":0},"cached_tokens":0},"output_tokens":5,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":60},"user":null,"metadata":{}},"sequence_number":11}
 
       '
     - '
@@ -430,7 +430,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0f78024076088eaa006adb03f824048196a91ba8418fef53fc/input_items
+    path: /v1/responses/resp_0c6cbf98717df77c006afa85583e148196885f6909e72d89ca/input_items
     query_params:
       order: asc
   response:
@@ -439,14 +439,14 @@ turns:
       - content:
         - text: Remember SAPPHIRE.
           type: input_text
-        id: msg_6adb03f273008196a7793f98b07f32600f78024076088eaa
+        id: msg_6afa85531b588196a7d4f8088733ab160c6cbf98717df77c
         role: user
         status: completed
         type: message
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0f78024076088eaa006adb03f5d6108196907067f973abbba5
+        id: msg_0c6cbf98717df77c006afa8554182481968fd1d911cf8f2af9
         role: user
         status: completed
         type: message
@@ -455,27 +455,27 @@ turns:
           logprobs: []
           text: SAPPHIRE.
           type: output_text
-        id: msg_0f78024076088eaa006adb03f61cdc8196b66272355833fc56
+        id: msg_0c6cbf98717df77c006afa8554beb48196994bbeba8a5f173c
         role: assistant
         status: completed
         type: message
       - content:
         - text: Now remember ORCHID.
           type: input_text
-        id: msg_6adb03f7285c8196998034551c5b636c0f78024076088eaa
+        id: msg_6afa855730f08196b62e5152b42212730c6cbf98717df77c
         role: user
         status: completed
         type: message
       - content:
         - text: Reply with only ORCHID.
           type: input_text
-        id: msg_0f78024076088eaa006adb03f84bb8819681b38ebce384f460
+        id: msg_0c6cbf98717df77c006afa8558ca3c8196bc592cbebad58ec1
         role: user
         status: completed
         type: message
-      first_id: msg_6adb03f273008196a7793f98b07f32600f78024076088eaa
+      first_id: msg_6afa85531b588196a7d4f8088733ab160c6cbf98717df77c
       has_more: false
-      last_id: msg_0f78024076088eaa006adb03f84bb8819681b38ebce384f460
+      last_id: msg_0c6cbf98717df77c006afa8558ca3c8196bc592cbebad58ec1
       object: list
     headers:
       content-type: application/json
@@ -488,7 +488,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/conversations/conv_6adb03f135508196bb37728642fa17e60f78024076088eaa/items
+    path: /v1/conversations/conv_6afa8552bd2c81969f595936d1578d810c6cbf98717df77c/items
     query_params:
       order: asc
   response:
@@ -497,14 +497,14 @@ turns:
       - content:
         - text: Remember SAPPHIRE.
           type: input_text
-        id: msg_6adb03f273008196a7793f98b07f32600f78024076088eaa
+        id: msg_6afa85531b588196a7d4f8088733ab160c6cbf98717df77c
         role: user
         status: completed
         type: message
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0f78024076088eaa006adb03f5d6108196907067f973abbba5
+        id: msg_0c6cbf98717df77c006afa8554182481968fd1d911cf8f2af9
         role: user
         status: completed
         type: message
@@ -513,21 +513,21 @@ turns:
           logprobs: []
           text: SAPPHIRE.
           type: output_text
-        id: msg_0f78024076088eaa006adb03f61cdc8196b66272355833fc56
+        id: msg_0c6cbf98717df77c006afa8554beb48196994bbeba8a5f173c
         role: assistant
         status: completed
         type: message
       - content:
         - text: Now remember ORCHID.
           type: input_text
-        id: msg_6adb03f7285c8196998034551c5b636c0f78024076088eaa
+        id: msg_6afa855730f08196b62e5152b42212730c6cbf98717df77c
         role: user
         status: completed
         type: message
       - content:
         - text: Reply with only ORCHID.
           type: input_text
-        id: msg_0f78024076088eaa006adb03f84bb8819681b38ebce384f460
+        id: msg_0c6cbf98717df77c006afa8558ca3c8196bc592cbebad58ec1
         role: user
         status: completed
         type: message
@@ -536,13 +536,13 @@ turns:
           logprobs: []
           text: ORCHID.
           type: output_text
-        id: msg_0f78024076088eaa006adb03f887d08196873f5faaafb7a88b
+        id: msg_0c6cbf98717df77c006afa85599e248196840c478cc1b245fd
         role: assistant
         status: completed
         type: message
-      first_id: msg_6adb03f273008196a7793f98b07f32600f78024076088eaa
+      first_id: msg_6afa85531b588196a7d4f8088733ab160c6cbf98717df77c
       has_more: false
-      last_id: msg_0f78024076088eaa006adb03f887d08196873f5faaafb7a88b
+      last_id: msg_0c6cbf98717df77c006afa85599e248196840c478cc1b245fd
       object: list
     headers:
       content-type: application/json
@@ -555,12 +555,12 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: DELETE
-    path: /v1/conversations/conv_6adb03f135508196bb37728642fa17e60f78024076088eaa/items/msg_6adb03f7285c8196998034551c5b636c0f78024076088eaa
+    path: /v1/conversations/conv_6afa8552bd2c81969f595936d1578d810c6cbf98717df77c/items/msg_6afa855730f08196b62e5152b42212730c6cbf98717df77c
     query_params: {}
   response:
     body:
-      created_at: 1792738289
-      id: conv_6adb03f135508196bb37728642fa17e60f78024076088eaa
+      created_at: 1794803026
+      id: conv_6afa8552bd2c81969f595936d1578d810c6cbf98717df77c
       metadata: {}
       object: conversation
     headers:
@@ -574,7 +574,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0f78024076088eaa006adb03f824048196a91ba8418fef53fc/input_items
+    path: /v1/responses/resp_0c6cbf98717df77c006afa85583e148196885f6909e72d89ca/input_items
     query_params:
       order: asc
   response:
@@ -583,14 +583,14 @@ turns:
       - content:
         - text: Remember SAPPHIRE.
           type: input_text
-        id: msg_6adb03f273008196a7793f98b07f32600f78024076088eaa
+        id: msg_6afa85531b588196a7d4f8088733ab160c6cbf98717df77c
         role: user
         status: completed
         type: message
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0f78024076088eaa006adb03f5d6108196907067f973abbba5
+        id: msg_0c6cbf98717df77c006afa8554182481968fd1d911cf8f2af9
         role: user
         status: completed
         type: message
@@ -599,27 +599,27 @@ turns:
           logprobs: []
           text: SAPPHIRE.
           type: output_text
-        id: msg_0f78024076088eaa006adb03f61cdc8196b66272355833fc56
+        id: msg_0c6cbf98717df77c006afa8554beb48196994bbeba8a5f173c
         role: assistant
         status: completed
         type: message
       - content:
         - text: Now remember ORCHID.
           type: input_text
-        id: msg_6adb03f7285c8196998034551c5b636c0f78024076088eaa
+        id: msg_6afa855730f08196b62e5152b42212730c6cbf98717df77c
         role: user
         status: completed
         type: message
       - content:
         - text: Reply with only ORCHID.
           type: input_text
-        id: msg_0f78024076088eaa006adb03f84bb8819681b38ebce384f460
+        id: msg_0c6cbf98717df77c006afa8558ca3c8196bc592cbebad58ec1
         role: user
         status: completed
         type: message
-      first_id: msg_6adb03f273008196a7793f98b07f32600f78024076088eaa
+      first_id: msg_6afa85531b588196a7d4f8088733ab160c6cbf98717df77c
       has_more: false
-      last_id: msg_0f78024076088eaa006adb03f84bb8819681b38ebce384f460
+      last_id: msg_0c6cbf98717df77c006afa8558ca3c8196bc592cbebad58ec1
       object: list
     headers:
       content-type: application/json
@@ -632,7 +632,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0f78024076088eaa006adb03f3e7ac8196a6895584da7e1e39/input_items
+    path: /v1/responses/resp_0c6cbf98717df77c006afa8553a71481968dbe0014b8b862d0/input_items
     query_params:
       order: asc
   response:
@@ -641,20 +641,20 @@ turns:
       - content:
         - text: Remember SAPPHIRE.
           type: input_text
-        id: msg_6adb03f273008196a7793f98b07f32600f78024076088eaa
+        id: msg_6afa85531b588196a7d4f8088733ab160c6cbf98717df77c
         role: user
         status: completed
         type: message
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0f78024076088eaa006adb03f5d6108196907067f973abbba5
+        id: msg_0c6cbf98717df77c006afa8554182481968fd1d911cf8f2af9
         role: user
         status: completed
         type: message
-      first_id: msg_6adb03f273008196a7793f98b07f32600f78024076088eaa
+      first_id: msg_6afa85531b588196a7d4f8088733ab160c6cbf98717df77c
       has_more: false
-      last_id: msg_0f78024076088eaa006adb03f5d6108196907067f973abbba5
+      last_id: msg_0c6cbf98717df77c006afa8554182481968fd1d911cf8f2af9
       object: list
     headers:
       content-type: application/json
@@ -667,12 +667,12 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: DELETE
-    path: /v1/responses/resp_0f78024076088eaa006adb03f3e7ac8196a6895584da7e1e39
+    path: /v1/responses/resp_0c6cbf98717df77c006afa8553a71481968dbe0014b8b862d0
     query_params: {}
   response:
     body:
       deleted: true
-      id: resp_0f78024076088eaa006adb03f3e7ac8196a6895584da7e1e39
+      id: resp_0c6cbf98717df77c006afa8553a71481968dbe0014b8b862d0
       object: response.deleted
     headers:
       content-type: application/json
@@ -685,7 +685,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0f78024076088eaa006adb03f824048196a91ba8418fef53fc/input_items
+    path: /v1/responses/resp_0c6cbf98717df77c006afa85583e148196885f6909e72d89ca/input_items
     query_params:
       order: asc
   response:
@@ -694,14 +694,14 @@ turns:
       - content:
         - text: Remember SAPPHIRE.
           type: input_text
-        id: msg_6adb03f273008196a7793f98b07f32600f78024076088eaa
+        id: msg_6afa85531b588196a7d4f8088733ab160c6cbf98717df77c
         role: user
         status: completed
         type: message
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0f78024076088eaa006adb03f5d6108196907067f973abbba5
+        id: msg_0c6cbf98717df77c006afa8554182481968fd1d911cf8f2af9
         role: user
         status: completed
         type: message
@@ -710,27 +710,27 @@ turns:
           logprobs: []
           text: SAPPHIRE.
           type: output_text
-        id: msg_0f78024076088eaa006adb03f61cdc8196b66272355833fc56
+        id: msg_0c6cbf98717df77c006afa8554beb48196994bbeba8a5f173c
         role: assistant
         status: completed
         type: message
       - content:
         - text: Now remember ORCHID.
           type: input_text
-        id: msg_6adb03f7285c8196998034551c5b636c0f78024076088eaa
+        id: msg_6afa855730f08196b62e5152b42212730c6cbf98717df77c
         role: user
         status: completed
         type: message
       - content:
         - text: Reply with only ORCHID.
           type: input_text
-        id: msg_0f78024076088eaa006adb03f84bb8819681b38ebce384f460
+        id: msg_0c6cbf98717df77c006afa8558ca3c8196bc592cbebad58ec1
         role: user
         status: completed
         type: message
-      first_id: msg_6adb03f273008196a7793f98b07f32600f78024076088eaa
+      first_id: msg_6afa85531b588196a7d4f8088733ab160c6cbf98717df77c
       has_more: false
-      last_id: msg_0f78024076088eaa006adb03f84bb8819681b38ebce384f460
+      last_id: msg_0c6cbf98717df77c006afa8558ca3c8196bc592cbebad58ec1
       object: list
     headers:
       content-type: application/json
@@ -743,7 +743,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/conversations/conv_6adb03f135508196bb37728642fa17e60f78024076088eaa/items
+    path: /v1/conversations/conv_6afa8552bd2c81969f595936d1578d810c6cbf98717df77c/items
     query_params:
       order: asc
   response:
@@ -752,14 +752,14 @@ turns:
       - content:
         - text: Remember SAPPHIRE.
           type: input_text
-        id: msg_6adb03f273008196a7793f98b07f32600f78024076088eaa
+        id: msg_6afa85531b588196a7d4f8088733ab160c6cbf98717df77c
         role: user
         status: completed
         type: message
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0f78024076088eaa006adb03f5d6108196907067f973abbba5
+        id: msg_0c6cbf98717df77c006afa8554182481968fd1d911cf8f2af9
         role: user
         status: completed
         type: message
@@ -768,14 +768,14 @@ turns:
           logprobs: []
           text: SAPPHIRE.
           type: output_text
-        id: msg_0f78024076088eaa006adb03f61cdc8196b66272355833fc56
+        id: msg_0c6cbf98717df77c006afa8554beb48196994bbeba8a5f173c
         role: assistant
         status: completed
         type: message
       - content:
         - text: Reply with only ORCHID.
           type: input_text
-        id: msg_0f78024076088eaa006adb03f84bb8819681b38ebce384f460
+        id: msg_0c6cbf98717df77c006afa8558ca3c8196bc592cbebad58ec1
         role: user
         status: completed
         type: message
@@ -784,13 +784,13 @@ turns:
           logprobs: []
           text: ORCHID.
           type: output_text
-        id: msg_0f78024076088eaa006adb03f887d08196873f5faaafb7a88b
+        id: msg_0c6cbf98717df77c006afa85599e248196840c478cc1b245fd
         role: assistant
         status: completed
         type: message
-      first_id: msg_6adb03f273008196a7793f98b07f32600f78024076088eaa
+      first_id: msg_6afa85531b588196a7d4f8088733ab160c6cbf98717df77c
       has_more: false
-      last_id: msg_0f78024076088eaa006adb03f887d08196873f5faaafb7a88b
+      last_id: msg_0c6cbf98717df77c006afa85599e248196840c478cc1b245fd
       object: list
     headers:
       content-type: application/json
@@ -803,7 +803,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0f78024076088eaa006adb03f824048196a91ba8418fef53fc
+    path: /v1/responses/resp_0c6cbf98717df77c006afa85583e148196885f6909e72d89ca
     query_params: {}
   response:
     body:
@@ -811,14 +811,17 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1792738296
+      completed_at: 1794803033
       conversation:
-        id: conv_6adb03f135508196bb37728642fa17e60f78024076088eaa
-      created_at: 1792738296
+        id: conv_6afa8552bd2c81969f595936d1578d810c6cbf98717df77c
+      created_at: 1794803032
       error: null
       frequency_penalty: 0.0
-      id: resp_0f78024076088eaa006adb03f824048196a91ba8418fef53fc
+      id: resp_0c6cbf98717df77c006afa85583e148196885f6909e72d89ca
+      image:
+        context_compression: disabled
       incomplete_details: null
+      input_transformations: []
       instructions: null
       max_output_tokens: null
       max_tool_calls: null
@@ -832,7 +835,7 @@ turns:
           logprobs: []
           text: ORCHID.
           type: output_text
-        id: msg_0f78024076088eaa006adb03f887d08196873f5faaafb7a88b
+        id: msg_0c6cbf98717df77c006afa85599e248196840c478cc1b245fd
         role: assistant
         status: completed
         type: message
@@ -876,6 +879,9 @@ turns:
         input_tokens: 55
         input_tokens_details:
           cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
           cached_tokens: 0
         output_tokens: 5
         output_tokens_details:
@@ -893,12 +899,12 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: DELETE
-    path: /v1/conversations/conv_6adb03f135508196bb37728642fa17e60f78024076088eaa
+    path: /v1/conversations/conv_6afa8552bd2c81969f595936d1578d810c6cbf98717df77c
     query_params: {}
   response:
     body:
       deleted: true
-      id: conv_6adb03f135508196bb37728642fa17e60f78024076088eaa
+      id: conv_6afa8552bd2c81969f595936d1578d810c6cbf98717df77c
       object: conversation.deleted
     headers:
       content-type: application/json
@@ -911,7 +917,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0f78024076088eaa006adb03f824048196a91ba8418fef53fc/input_items
+    path: /v1/responses/resp_0c6cbf98717df77c006afa85583e148196885f6909e72d89ca/input_items
     query_params: {}
   response:
     body:
@@ -919,14 +925,14 @@ turns:
       - content:
         - text: Reply with only ORCHID.
           type: input_text
-        id: msg_0f78024076088eaa006adb03f84bb8819681b38ebce384f460
+        id: msg_0c6cbf98717df77c006afa8558ca3c8196bc592cbebad58ec1
         role: user
         status: completed
         type: message
       - content:
         - text: Now remember ORCHID.
           type: input_text
-        id: msg_6adb03f7285c8196998034551c5b636c0f78024076088eaa
+        id: msg_6afa855730f08196b62e5152b42212730c6cbf98717df77c
         role: user
         status: completed
         type: message
@@ -935,27 +941,27 @@ turns:
           logprobs: []
           text: SAPPHIRE.
           type: output_text
-        id: msg_0f78024076088eaa006adb03f61cdc8196b66272355833fc56
+        id: msg_0c6cbf98717df77c006afa8554beb48196994bbeba8a5f173c
         role: assistant
         status: completed
         type: message
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0f78024076088eaa006adb03f5d6108196907067f973abbba5
+        id: msg_0c6cbf98717df77c006afa8554182481968fd1d911cf8f2af9
         role: user
         status: completed
         type: message
       - content:
         - text: Remember SAPPHIRE.
           type: input_text
-        id: msg_6adb03f273008196a7793f98b07f32600f78024076088eaa
+        id: msg_6afa85531b588196a7d4f8088733ab160c6cbf98717df77c
         role: user
         status: completed
         type: message
-      first_id: msg_0f78024076088eaa006adb03f84bb8819681b38ebce384f460
+      first_id: msg_0c6cbf98717df77c006afa8558ca3c8196bc592cbebad58ec1
       has_more: false
-      last_id: msg_6adb03f273008196a7793f98b07f32600f78024076088eaa
+      last_id: msg_6afa85531b588196a7d4f8088733ab160c6cbf98717df77c
       object: list
     headers:
       content-type: application/json
@@ -968,7 +974,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0f78024076088eaa006adb03f824048196a91ba8418fef53fc
+    path: /v1/responses/resp_0c6cbf98717df77c006afa85583e148196885f6909e72d89ca
     query_params: {}
   response:
     body:
@@ -976,14 +982,17 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1792738296
+      completed_at: 1794803033
       conversation:
-        id: conv_6adb03f135508196bb37728642fa17e60f78024076088eaa
-      created_at: 1792738296
+        id: conv_6afa8552bd2c81969f595936d1578d810c6cbf98717df77c
+      created_at: 1794803032
       error: null
       frequency_penalty: 0.0
-      id: resp_0f78024076088eaa006adb03f824048196a91ba8418fef53fc
+      id: resp_0c6cbf98717df77c006afa85583e148196885f6909e72d89ca
+      image:
+        context_compression: disabled
       incomplete_details: null
+      input_transformations: []
       instructions: null
       max_output_tokens: null
       max_tool_calls: null
@@ -997,7 +1006,7 @@ turns:
           logprobs: []
           text: ORCHID.
           type: output_text
-        id: msg_0f78024076088eaa006adb03f887d08196873f5faaafb7a88b
+        id: msg_0c6cbf98717df77c006afa85599e248196840c478cc1b245fd
         role: assistant
         status: completed
         type: message
@@ -1041,6 +1050,9 @@ turns:
         input_tokens: 55
         input_tokens_details:
           cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
           cached_tokens: 0
         output_tokens: 5
         output_tokens_details:
@@ -1050,3 +1062,112 @@ turns:
     headers:
       content-type: application/json
     status_code: 200
+- filename: t20
+  request:
+    body:
+      conversation: conv_6afa8552bd2c81969f595936d1578d810c6cbf98717df77c
+      input: Reply with only SAPPHIRE.
+      model: gpt-4.1
+      store: true
+      stream: true
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Conversation with id 'conv_6afa8552bd2c81969f595936d1578d810c6cbf98717df77c'
+          not found.
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t21
+  request:
+    body:
+      conversation: conv_11081a21602f363f704d087a4526d3aa21af506696a2d8b5
+      input: Reply with only SAPPHIRE.
+      model: gpt-4.1
+      store: true
+      stream: true
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Conversation with id 'conv_11081a21602f363f704d087a4526d3aa21af506696a2d8b5'
+          not found.
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t22
+  request:
+    body:
+      conversation: conv_11081a21602f363f704d087a4526d3aa21af506696a2d8b5
+      input: Reply with only SAPPHIRE.
+      model: gpt-4.1
+      store: false
+      stream: true
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Conversation with id 'conv_11081a21602f363f704d087a4526d3aa21af506696a2d8b5'
+          not found.
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t23
+  request:
+    body:
+      conversation:
+        id: conv_11081a21602f363f704d087a4526d3aa21af506696a2d8b5
+      input: Reply with only SAPPHIRE.
+      model: gpt-4.1
+      store: true
+      stream: true
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Conversation with id 'conv_11081a21602f363f704d087a4526d3aa21af506696a2d8b5'
+          not found.
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404

@@ -323,9 +323,7 @@ impl ExecutorError {
             Self::UnsupportedValue { param, .. } => param.as_deref(),
             Self::Storage(StorageError::ItemAlreadyInConversation) => Some("items"),
             Self::Storage(StorageError::ItemCursorNotFound { .. }) => Some("after"),
-            Self::ConversationLocked { .. } | Self::Storage(StorageError::ConversationNotFound { .. }) => {
-                Some("conversation")
-            }
+            Self::ConversationLocked { .. } => Some("conversation"),
             Self::Storage(StorageError::PreviousResponseNotFound { .. }) => Some("previous_response_id"),
             Self::Tool(ToolError::MissingOutput { .. } | ToolError::UnknownCallOutput { .. }) => Some("input"),
             Self::InvalidMaxToolCalls(_) => Some(MAX_TOOL_CALLS_PARAM),
@@ -362,7 +360,11 @@ impl ExecutorError {
         let code = if matches!(
             self.client_visible_error(),
             Self::Tool(ToolError::MissingOutput { .. } | ToolError::UnknownCallOutput { .. })
-                | Self::Storage(StorageError::ItemCursorNotFound { .. } | StorageError::ResponseNotFound { .. })
+                | Self::Storage(
+                    StorageError::ItemCursorNotFound { .. }
+                        | StorageError::ResponseNotFound { .. }
+                        | StorageError::ConversationNotFound { .. }
+                )
                 | Self::UnsupportedValue { code: None, .. }
         ) {
             serde_json::Value::Null
@@ -377,7 +379,8 @@ impl ExecutorError {
             error.insert("param".to_owned(), serde_json::json!(param));
         } else if matches!(
             self.client_visible_error(),
-            Self::Storage(StorageError::ResponseNotFound { .. }) | Self::UnsupportedValue { param: None, .. }
+            Self::Storage(StorageError::ResponseNotFound { .. } | StorageError::ConversationNotFound { .. })
+                | Self::UnsupportedValue { param: None, .. }
         ) {
             error.insert("param".to_owned(), serde_json::Value::Null);
         }
