@@ -1,0 +1,596 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input:
+      - arguments: '{}'
+        call_id: call_pair_0
+        id: fco_6b55a36fc4dfae4131b1c8c0
+        name: test_fn
+        type: function_call
+      - call_id: call_pair_0
+        id: fco_1d290ae7f23627326e04750a
+        output: done
+        type: function_call_output
+      - content: Reply with only OK.
+        role: user
+      model: gpt-4.1
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794831582
+      created_at: 1794831581
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0146179f8158592c016afaf4dd9fa887d2a5b1a9d3f71fd725
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: OK
+          type: output_text
+        id: msg_0146179f8158592c016afaf4de7ce887d29507058b2c06fd05
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 29
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 2
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 31
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - action:
+          commands:
+          - pwd
+        call_id: call_pair_1
+        id: sho_192dfcf5c5f4fdfe3547aad4
+        status: completed
+        type: shell_call
+      - call_id: call_pair_1
+        id: sho_e804cfd77b5c075e3c6bf1bd
+        output:
+        - outcome:
+            exit_code: 0
+            type: exit
+          stderr: ''
+          stdout: 'ok
+
+            '
+        type: shell_call_output
+      - content: Reply with only OK.
+        role: user
+      model: gpt-4.1
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794831585
+      created_at: 1794831584
+      error: null
+      frequency_penalty: 0.0
+      id: resp_08ee44b4eff16dc3016afaf4dffe7087d2abeab733548e6137
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: OK
+          type: output_text
+        id: msg_08ee44b4eff16dc3016afaf4e10dd487d2815fe10443aa13e0
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 50
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 2
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 52
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input:
+      - arguments: '{}'
+        call_id: call_pair_2
+        id: fco_6b55a36fc4dfae4131b1c8c0
+        name: test_fn
+        type: function_call
+      - call_id: call_pair_2
+        id: xyz_457ce76dfa1270a9b67f9cf1
+        output: done
+        type: function_call_output
+      - content: Reply with only OK.
+        role: user
+      model: gpt-4.1
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_value
+        message: 'Invalid ''input[1].id'': ''xyz_457ce76dfa1270a9b67f9cf1''. Expected
+          an ID that begins with ''fc''.'
+        param: input[1].id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t4
+  request:
+    body:
+      input:
+      - call_id: call_pair_3
+        id: ctco_9ce3cfdfd6b083b196fe9c29
+        input: x
+        name: test_tool
+        type: custom_tool_call
+      - call_id: call_pair_3
+        id: ctc_51ae314cb85d759ff5ede352
+        output: done
+        type: custom_tool_call_output
+      - content: Reply with only OK.
+        role: user
+      model: gpt-4.1
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_value
+        message: 'Invalid ''input[1].id'': ''ctc_51ae314cb85d759ff5ede352''. Expected
+          an ID that begins with ''ctco''.'
+        param: input[1].id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t5
+  request:
+    body:
+      input:
+      - action:
+          commands:
+          - pwd
+        call_id: call_pair_4
+        id: sho_192dfcf5c5f4fdfe3547aad4
+        status: completed
+        type: shell_call
+      - call_id: call_pair_4
+        id: sh_b49fdb6bc5042c10c4501baf
+        output:
+        - outcome:
+            exit_code: 0
+            type: exit
+          stderr: ''
+          stdout: 'ok
+
+            '
+        type: shell_call_output
+      - content: Reply with only OK.
+        role: user
+      model: gpt-4.1
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_value
+        message: 'Invalid ''input[1].id'': ''sh_b49fdb6bc5042c10c4501baf''. Expected
+          an ID that begins with ''sho''.'
+        param: input[1].id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t6
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1794831586
+      id: conv_6afaf4e2689c8190a8e4cb1c2af0b1050f165042e2767be8
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body:
+      items:
+      - arguments: '{}'
+        call_id: call_seed_function
+        name: test_fn
+        type: function_call
+      - call_id: call_seed_function
+        output: done
+        type: function_call_output
+      - call_id: call_seed_custom
+        input: x
+        name: test_tool
+        type: custom_tool_call
+      - call_id: call_seed_custom
+        output: done
+        type: custom_tool_call_output
+      - action:
+          commands:
+          - pwd
+        call_id: call_seed_shell
+        status: completed
+        type: shell_call
+      - call_id: call_seed_shell
+        output:
+        - outcome:
+            exit_code: 0
+            type: exit
+          stderr: ''
+          stdout: 'ok
+
+            '
+        type: shell_call_output
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_6afaf4e2689c8190a8e4cb1c2af0b1050f165042e2767be8/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - arguments: '{}'
+        call_id: call_seed_function
+        id: fc_6afaf4e2c5dc8190b2813dc4cae11d570f165042e2767be8
+        name: test_fn
+        status: in_progress
+        type: function_call
+      - call_id: call_seed_function
+        id: fc_6afaf4e2c6008190af46f698ba8a93630f165042e2767be8
+        output: done
+        status: completed
+        type: function_call_output
+      - call_id: call_seed_custom
+        id: ctc_6afaf4e2c6188190988aa5076b6ce6a60f165042e2767be8
+        input: x
+        name: test_tool
+        status: in_progress
+        type: custom_tool_call
+      - call_id: call_seed_custom
+        id: ctco_6afaf4e2c6308190ac105297b472f3700f165042e2767be8
+        output: done
+        status: completed
+        type: custom_tool_call_output
+      - action:
+          commands:
+          - pwd
+          max_output_length: null
+          timeout_ms: null
+        call_id: call_seed_shell
+        environment: null
+        id: sh_6afaf4e2c6648190bc821fe3e0a4d3b20f165042e2767be8
+        status: in_progress
+        type: shell_call
+      - call_id: call_seed_shell
+        id: sho_6afaf4e2c694819091a4791ea86ad8010f165042e2767be8
+        max_output_length: null
+        output:
+        - outcome:
+            exit_code: 0
+            type: exit
+          stderr: ''
+          stdout: 'ok
+
+            '
+        status: completed
+        type: shell_call_output
+      first_id: fc_6afaf4e2c5dc8190b2813dc4cae11d570f165042e2767be8
+      has_more: false
+      last_id: sho_6afaf4e2c694819091a4791ea86ad8010f165042e2767be8
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body:
+      input:
+      - arguments: '{}'
+        call_id: call_kind_0
+        id: fc_6afaf4e2c6008190af46f698ba8a93630f165042e2767be8
+        name: test_fn
+        type: function_call
+      - content: Reply with only OK.
+        role: user
+      model: gpt-4.1
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: No tool call found for function call output with call_id call_seed_function.
+        param: input
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t9
+  request:
+    body:
+      input:
+      - call_id: call_kind_1
+        id: fc_6afaf4e2c5dc8190b2813dc4cae11d570f165042e2767be8
+        output: done
+        type: function_call_output
+      - content: Reply with only OK.
+        role: user
+      model: gpt-4.1
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: No tool output found for function call call_seed_function.
+        param: input
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t10
+  request:
+    body:
+      input:
+      - call_id: call_kind_2
+        id: ctco_6afaf4e2c6308190ac105297b472f3700f165042e2767be8
+        input: x
+        name: test_tool
+        type: custom_tool_call
+      - content: Reply with only OK.
+        role: user
+      model: gpt-4.1
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: No tool call found for custom tool call output with call_id call_seed_custom.
+        param: input
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t11
+  request:
+    body:
+      input:
+      - action:
+          commands:
+          - pwd
+        call_id: call_kind_3
+        id: sho_6afaf4e2c694819091a4791ea86ad8010f165042e2767be8
+        status: completed
+        type: shell_call
+      - content: Reply with only OK.
+        role: user
+      model: gpt-4.1
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: No tool call found for shell call output with call_id call_seed_shell.
+        param: input
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400

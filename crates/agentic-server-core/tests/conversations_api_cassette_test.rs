@@ -913,6 +913,68 @@ fn edge_case_recordings_preserve_item_ids_and_deleted_cursor_behavior() {
     }
 }
 
+/// A call admits its output's ID prefix and a function output admits `fco_`, while an output refuses its call's prefix.
+/// Because a call and its output can then share a prefix, a reused stored ID resolves to the stored item's kind.
+#[test]
+fn item_id_prefix_recordings_admit_refuse_and_resolve_the_same_ids() {
+    let Some((openai, gateway)) = pair("item-id-prefixes") else {
+        return;
+    };
+    for recording in [&openai, &gateway] {
+        let turns = &recording.turns;
+        assert_eq!(turns.len(), 18);
+        let conversation_id = turns[0].response.body.as_ref().unwrap()["id"].as_str().unwrap();
+        let items_path = format!("/v1/conversations/{conversation_id}/items");
+        let refused = [
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("fc"),
+            Some("ctco"),
+            Some("sho"),
+        ];
+        for (turn, refused) in turns[1..11].iter().zip(refused) {
+            assert_eq!(turn.request.path, items_path);
+            let id = turn.request.body["items"][0]["id"].as_str().unwrap();
+            let Some(prefix) = refused else {
+                assert_eq!(turn.response.status_code, 200, "{id} admitted");
+                continue;
+            };
+            assert_eq!(turn.response.status_code, 400, "{id} refused");
+            assert_eq!(
+                turn.response.body.as_ref().unwrap(),
+                &json!({"error": {
+                    "code": "invalid_value", "param": "items[0].id", "type": "invalid_request_error",
+                    "message": format!("Invalid 'items[0].id': '{id}'. Expected an ID that begins with '{prefix}'.")
+                }})
+            );
+        }
+        assert_eq!(turns[11].request.path, items_path);
+        assert_eq!(all_listed_ids(&turns[11]).len(), 7, "admitted items are stored");
+
+        let stored = &turns[12].response.body.as_ref().unwrap()["data"];
+        for turn in &turns[14..18] {
+            let requested = &turn.request.body["items"][0];
+            let original = stored
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|item| item["id"] == requested["id"])
+                .unwrap();
+            assert_ne!(requested["type"], original["type"]);
+            let resolved = &turn.response.body.as_ref().unwrap()["data"][0];
+            assert_eq!(
+                (&resolved["id"], &resolved["type"], &resolved["call_id"]),
+                (&original["id"], &original["type"], &original["call_id"])
+            );
+        }
+    }
+}
+
 #[tokio::test]
 async fn supplied_id_validation_matches_recorded_openai_errors() {
     use agentic_core::executor::ConversationHandler;

@@ -319,6 +319,10 @@ mod tests {
             json!({"type":"mcp_call", "id":"mcp_1", "server_label":"s", "name":"f", "arguments":"{}"}),
             json!({"type":"web_search_call", "id":"ws_1", "status":"completed", "action":{"type":"search", "query":"test"}}),
             json!({"type":"compaction", "id":"cmp_1", "encrypted_content":"opaque"}),
+            json!({"type":"function_call", "id":"fco_1", "call_id":"call_1", "name":"f", "arguments":"{}"}),
+            json!({"type":"function_call_output", "id":"fco_1", "call_id":"call_1", "output":"done"}),
+            json!({"type":"custom_tool_call", "id":"ctco_1", "call_id":"call_1", "name":"f", "input":"x"}),
+            json!({"type":"shell_call", "id":"sho_1", "call_id":"call_1", "action":{"commands":["pwd"]}}),
         ];
         for mut value in cases {
             let item = stored(value.clone());
@@ -328,6 +332,29 @@ mod tests {
             let error = item.admit("items[0]").unwrap_err();
             assert_eq!(error.code(), "invalid_value");
             assert_eq!(error.param(), "items[0].id");
+        }
+    }
+
+    /// Recorded `OpenAI` behavior: an output refuses its call's prefix.
+    #[test]
+    fn outputs_refuse_their_call_prefix() {
+        for (value, prefix) in [
+            (
+                json!({"type":"custom_tool_call_output", "id":"ctc_1", "call_id":"call_1", "output":"done"}),
+                "ctco",
+            ),
+            (
+                json!({"type":"shell_call_output", "id":"sh_1", "call_id":"call_1", "output":[]}),
+                "sho",
+            ),
+        ] {
+            let error = stored(value).admit("items[0]").unwrap_err();
+            assert_eq!(error.code(), "invalid_value");
+            assert!(
+                error
+                    .to_string()
+                    .ends_with(&format!("Expected an ID that begins with '{prefix}'."))
+            );
         }
     }
 

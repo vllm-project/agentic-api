@@ -1,0 +1,600 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input:
+      - arguments: '{}'
+        call_id: call_pair_0
+        id: fco_58750540980b009a4ee9f008
+        name: test_fn
+        type: function_call
+      - call_id: call_pair_0
+        id: fco_b2c25504aac7389781d19877
+        output: done
+        type: function_call_output
+      - content: Reply with only OK.
+        role: user
+      model: openai/gpt-oss-20b
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794831609
+      created_at: 1794831609
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1e44c-ed1e-7d03-ac18-17b3a98c3cc9
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: openai/gpt-oss-20b
+      object: response
+      output:
+      - content:
+        - text: We are to reply with only "OK".
+          type: reasoning_text
+        id: rs_b1f6c313964c9d69
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: OK
+          type: output_text
+        id: msg_894396ba24d0165e
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 99
+        input_tokens_details:
+          cached_tokens: 64
+        output_tokens: 20
+        output_tokens_details:
+          reasoning_tokens: 10
+        total_tokens: 119
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - action:
+          commands:
+          - pwd
+        call_id: call_pair_1
+        id: sho_b9fa6f37c09a91f4f5e939a2
+        status: completed
+        type: shell_call
+      - call_id: call_pair_1
+        id: sho_de6a8172652aba8fe8be4846
+        output:
+        - outcome:
+            exit_code: 0
+            type: exit
+          stderr: ''
+          stdout: 'ok
+
+            '
+        type: shell_call_output
+      - content: Reply with only OK.
+        role: user
+      model: openai/gpt-oss-20b
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794831609
+      created_at: 1794831609
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1e44c-edb1-7f13-a66b-8914c9cf7227
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: openai/gpt-oss-20b
+      object: response
+      output:
+      - content:
+        - text: 'The user says: "Reply with only OK."
+
+
+            So we reply with "OK".'
+          type: reasoning_text
+        id: rs_a73667826592d94d
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: OK
+          type: output_text
+        id: msg_bb8bc8a2fccea9a4
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 123
+        input_tokens_details:
+          cached_tokens: 64
+        output_tokens: 28
+        output_tokens_details:
+          reasoning_tokens: 18
+        total_tokens: 151
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input:
+      - arguments: '{}'
+        call_id: call_pair_2
+        id: fco_58750540980b009a4ee9f008
+        name: test_fn
+        type: function_call
+      - call_id: call_pair_2
+        id: xyz_a249b5d42b7dc011e3e7f343
+        output: done
+        type: function_call_output
+      - content: Reply with only OK.
+        role: user
+      model: openai/gpt-oss-20b
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_value
+        message: 'Invalid ''input[1].id'': ''xyz_a249b5d42b7dc011e3e7f343''. Expected
+          an ID that begins with ''fc''.'
+        param: input[1].id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t4
+  request:
+    body:
+      input:
+      - call_id: call_pair_3
+        id: ctco_992626609cce2259de84b23d
+        input: x
+        name: test_tool
+        type: custom_tool_call
+      - call_id: call_pair_3
+        id: ctc_2554cff751aa639cc3b00d04
+        output: done
+        type: custom_tool_call_output
+      - content: Reply with only OK.
+        role: user
+      model: openai/gpt-oss-20b
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_value
+        message: 'Invalid ''input[1].id'': ''ctc_2554cff751aa639cc3b00d04''. Expected
+          an ID that begins with ''ctco''.'
+        param: input[1].id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t5
+  request:
+    body:
+      input:
+      - action:
+          commands:
+          - pwd
+        call_id: call_pair_4
+        id: sho_b9fa6f37c09a91f4f5e939a2
+        status: completed
+        type: shell_call
+      - call_id: call_pair_4
+        id: sh_dfd03f6fc99be83d7c2757ec
+        output:
+        - outcome:
+            exit_code: 0
+            type: exit
+          stderr: ''
+          stdout: 'ok
+
+            '
+        type: shell_call_output
+      - content: Reply with only OK.
+        role: user
+      model: openai/gpt-oss-20b
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_value
+        message: 'Invalid ''input[1].id'': ''sh_dfd03f6fc99be83d7c2757ec''. Expected
+          an ID that begins with ''sho''.'
+        param: input[1].id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t6
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1794831609
+      id: conv_01a1e44c-eee0-7f11-8f3e-c766f7089367
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body:
+      items:
+      - arguments: '{}'
+        call_id: call_seed_function
+        name: test_fn
+        type: function_call
+      - call_id: call_seed_function
+        output: done
+        type: function_call_output
+      - call_id: call_seed_custom
+        input: x
+        name: test_tool
+        type: custom_tool_call
+      - call_id: call_seed_custom
+        output: done
+        type: custom_tool_call_output
+      - action:
+          commands:
+          - pwd
+        call_id: call_seed_shell
+        status: completed
+        type: shell_call
+      - call_id: call_seed_shell
+        output:
+        - outcome:
+            exit_code: 0
+            type: exit
+          stderr: ''
+          stdout: 'ok
+
+            '
+        type: shell_call_output
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a1e44c-eee0-7f11-8f3e-c766f7089367/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - arguments: '{}'
+        call_id: call_seed_function
+        id: fc_01a1e44c-ef12-7032-a0f6-a4b7790b67e2
+        name: test_fn
+        status: in_progress
+        type: function_call
+      - call_id: call_seed_function
+        id: fc_01a1e44c-ef12-7032-a0f6-a4d0c7d852fc
+        output: done
+        status: completed
+        type: function_call_output
+      - call_id: call_seed_custom
+        id: ctc_01a1e44c-ef12-7032-a0f6-a4f75df83c45
+        input: x
+        name: test_tool
+        type: custom_tool_call
+      - call_id: call_seed_custom
+        id: ctco_01a1e44c-ef12-7032-a0f6-a51f7ec3cc3e
+        output: done
+        status: completed
+        type: custom_tool_call_output
+      - action:
+          commands:
+          - pwd
+        call_id: call_seed_shell
+        id: sh_01a1e44c-ef12-7032-a0f6-a5311dc5155b
+        status: completed
+        type: shell_call
+      - call_id: call_seed_shell
+        id: sho_01a1e44c-ef12-7032-a0f6-a554e3e2fbfc
+        output:
+        - outcome:
+            exit_code: 0
+            type: exit
+          stderr: ''
+          stdout: 'ok
+
+            '
+        status: completed
+        type: shell_call_output
+      first_id: fc_01a1e44c-ef12-7032-a0f6-a4b7790b67e2
+      has_more: false
+      last_id: sho_01a1e44c-ef12-7032-a0f6-a554e3e2fbfc
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body:
+      input:
+      - arguments: '{}'
+        call_id: call_kind_0
+        id: fc_01a1e44c-ef12-7032-a0f6-a4d0c7d852fc
+        name: test_fn
+        type: function_call
+      - content: Reply with only OK.
+        role: user
+      model: openai/gpt-oss-20b
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: 400
+        message: No call message found for call_seed_function
+        param: null
+        type: BadRequestError
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t9
+  request:
+    body:
+      input:
+      - call_id: call_kind_1
+        id: fc_01a1e44c-ef12-7032-a0f6-a4b7790b67e2
+        output: done
+        type: function_call_output
+      - content: Reply with only OK.
+        role: user
+      model: openai/gpt-oss-20b
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794831609
+      created_at: 1794831609
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1e44c-ef97-77c3-91ab-fc6cfd43fa60
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: openai/gpt-oss-20b
+      object: response
+      output:
+      - content:
+        - text: 'The user says: "Reply with only OK." So I should reply with only
+            "OK".'
+          type: reasoning_text
+        id: rs_93ee67aaebb8105c
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: OK
+          type: output_text
+        id: msg_a40796899ef084aa
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 86
+        input_tokens_details:
+          cached_tokens: 64
+        output_tokens: 30
+        output_tokens_details:
+          reasoning_tokens: 20
+        total_tokens: 116
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t10
+  request:
+    body:
+      input:
+      - call_id: call_kind_2
+        id: ctco_01a1e44c-ef12-7032-a0f6-a51f7ec3cc3e
+        input: x
+        name: test_tool
+        type: custom_tool_call
+      - content: Reply with only OK.
+        role: user
+      model: openai/gpt-oss-20b
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: 400
+        message: No call message found for call_seed_custom
+        param: null
+        type: BadRequestError
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t11
+  request:
+    body:
+      input:
+      - action:
+          commands:
+          - pwd
+        call_id: call_kind_3
+        id: sho_01a1e44c-ef12-7032-a0f6-a554e3e2fbfc
+        status: completed
+        type: shell_call
+      - content: Reply with only OK.
+        role: user
+      model: openai/gpt-oss-20b
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: 400
+        message: No call message found for call_seed_shell
+        param: null
+        type: BadRequestError
+    headers:
+      content-type: application/json
+    status_code: 400

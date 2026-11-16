@@ -1,0 +1,663 @@
+turns:
+- filename: t1
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1794831606
+      id: conv_01a1e44c-e337-7dd1-bc15-82e29319d20a
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      items:
+      - arguments: '{}'
+        call_id: call_prefix_0
+        id: fco_0c5888dd668abd074b39a555
+        name: test_fn
+        type: function_call
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a1e44c-e337-7dd1-bc15-82e29319d20a/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - arguments: '{}'
+        call_id: call_prefix_0
+        id: fco_0c5888dd668abd074b39a555
+        name: test_fn
+        status: in_progress
+        type: function_call
+      first_id: fco_0c5888dd668abd074b39a555
+      has_more: false
+      last_id: fco_0c5888dd668abd074b39a555
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      items:
+      - call_id: call_prefix_1
+        id: fco_ea5cd88dda28cbf5ac5032d0
+        output: done
+        type: function_call_output
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a1e44c-e337-7dd1-bc15-82e29319d20a/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - call_id: call_prefix_1
+        id: fco_ea5cd88dda28cbf5ac5032d0
+        output: done
+        status: completed
+        type: function_call_output
+      first_id: fco_ea5cd88dda28cbf5ac5032d0
+      has_more: false
+      last_id: fco_ea5cd88dda28cbf5ac5032d0
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body:
+      items:
+      - call_id: call_prefix_2
+        id: fc_e936dccca23ade21108a070d
+        output: done
+        type: function_call_output
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a1e44c-e337-7dd1-bc15-82e29319d20a/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - call_id: call_prefix_2
+        id: fc_e936dccca23ade21108a070d
+        output: done
+        status: completed
+        type: function_call_output
+      first_id: fc_e936dccca23ade21108a070d
+      has_more: false
+      last_id: fc_e936dccca23ade21108a070d
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      items:
+      - call_id: call_prefix_3
+        id: ctco_15632bf349053eeb68d030f5
+        input: x
+        name: test_tool
+        type: custom_tool_call
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a1e44c-e337-7dd1-bc15-82e29319d20a/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - call_id: call_prefix_3
+        id: ctco_15632bf349053eeb68d030f5
+        input: x
+        name: test_tool
+        type: custom_tool_call
+      first_id: ctco_15632bf349053eeb68d030f5
+      has_more: false
+      last_id: ctco_15632bf349053eeb68d030f5
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body:
+      items:
+      - call_id: call_prefix_4
+        id: ctco_1e1823111661b22f8f98593e
+        output: done
+        type: custom_tool_call_output
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a1e44c-e337-7dd1-bc15-82e29319d20a/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - call_id: call_prefix_4
+        id: ctco_1e1823111661b22f8f98593e
+        output: done
+        status: completed
+        type: custom_tool_call_output
+      first_id: ctco_1e1823111661b22f8f98593e
+      has_more: false
+      last_id: ctco_1e1823111661b22f8f98593e
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body:
+      items:
+      - action:
+          commands:
+          - pwd
+        call_id: call_prefix_5
+        id: sho_cdfcef15135b9d484ad978bc
+        status: completed
+        type: shell_call
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a1e44c-e337-7dd1-bc15-82e29319d20a/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - action:
+          commands:
+          - pwd
+        call_id: call_prefix_5
+        id: sho_cdfcef15135b9d484ad978bc
+        status: completed
+        type: shell_call
+      first_id: sho_cdfcef15135b9d484ad978bc
+      has_more: false
+      last_id: sho_cdfcef15135b9d484ad978bc
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body:
+      items:
+      - call_id: call_prefix_6
+        id: sho_52ca5373879903334d97d3ed
+        output:
+        - outcome:
+            exit_code: 0
+            type: exit
+          stderr: ''
+          stdout: 'ok
+
+            '
+        type: shell_call_output
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a1e44c-e337-7dd1-bc15-82e29319d20a/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - call_id: call_prefix_6
+        id: sho_52ca5373879903334d97d3ed
+        output:
+        - outcome:
+            exit_code: 0
+            type: exit
+          stderr: ''
+          stdout: 'ok
+
+            '
+        status: completed
+        type: shell_call_output
+      first_id: sho_52ca5373879903334d97d3ed
+      has_more: false
+      last_id: sho_52ca5373879903334d97d3ed
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body:
+      items:
+      - call_id: call_prefix_7
+        id: xyz_8e956eee99f05ed074e44de6
+        output: done
+        type: function_call_output
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a1e44c-e337-7dd1-bc15-82e29319d20a/items
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_value
+        message: 'Invalid ''items[0].id'': ''xyz_8e956eee99f05ed074e44de6''. Expected
+          an ID that begins with ''fc''.'
+        param: items[0].id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t10
+  request:
+    body:
+      items:
+      - call_id: call_prefix_8
+        id: ctc_2760eb98b63a962140fc8a63
+        output: done
+        type: custom_tool_call_output
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a1e44c-e337-7dd1-bc15-82e29319d20a/items
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_value
+        message: 'Invalid ''items[0].id'': ''ctc_2760eb98b63a962140fc8a63''. Expected
+          an ID that begins with ''ctco''.'
+        param: items[0].id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t11
+  request:
+    body:
+      items:
+      - call_id: call_prefix_9
+        id: sh_a4832e8b24e1fd8e9c42b892
+        output:
+        - outcome:
+            exit_code: 0
+            type: exit
+          stderr: ''
+          stdout: 'ok
+
+            '
+        type: shell_call_output
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a1e44c-e337-7dd1-bc15-82e29319d20a/items
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_value
+        message: 'Invalid ''items[0].id'': ''sh_a4832e8b24e1fd8e9c42b892''. Expected
+          an ID that begins with ''sho''.'
+        param: items[0].id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t12
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_01a1e44c-e337-7dd1-bc15-82e29319d20a/items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - arguments: '{}'
+        call_id: call_prefix_0
+        id: fco_0c5888dd668abd074b39a555
+        name: test_fn
+        status: in_progress
+        type: function_call
+      - call_id: call_prefix_1
+        id: fco_ea5cd88dda28cbf5ac5032d0
+        output: done
+        status: completed
+        type: function_call_output
+      - call_id: call_prefix_2
+        id: fc_e936dccca23ade21108a070d
+        output: done
+        status: completed
+        type: function_call_output
+      - call_id: call_prefix_3
+        id: ctco_15632bf349053eeb68d030f5
+        input: x
+        name: test_tool
+        type: custom_tool_call
+      - call_id: call_prefix_4
+        id: ctco_1e1823111661b22f8f98593e
+        output: done
+        status: completed
+        type: custom_tool_call_output
+      - action:
+          commands:
+          - pwd
+        call_id: call_prefix_5
+        id: sho_cdfcef15135b9d484ad978bc
+        status: completed
+        type: shell_call
+      - call_id: call_prefix_6
+        id: sho_52ca5373879903334d97d3ed
+        output:
+        - outcome:
+            exit_code: 0
+            type: exit
+          stderr: ''
+          stdout: 'ok
+
+            '
+        status: completed
+        type: shell_call_output
+      first_id: fco_0c5888dd668abd074b39a555
+      has_more: false
+      last_id: sho_52ca5373879903334d97d3ed
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t13
+  request:
+    body:
+      items:
+      - arguments: '{}'
+        call_id: call_seed_function
+        name: test_fn
+        type: function_call
+      - call_id: call_seed_function
+        output: done
+        type: function_call_output
+      - call_id: call_seed_custom
+        input: x
+        name: test_tool
+        type: custom_tool_call
+      - call_id: call_seed_custom
+        output: done
+        type: custom_tool_call_output
+      - action:
+          commands:
+          - pwd
+        call_id: call_seed_shell
+        status: completed
+        type: shell_call
+      - call_id: call_seed_shell
+        output:
+        - outcome:
+            exit_code: 0
+            type: exit
+          stderr: ''
+          stdout: 'ok
+
+            '
+        type: shell_call_output
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a1e44c-e337-7dd1-bc15-82e29319d20a/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - arguments: '{}'
+        call_id: call_seed_function
+        id: fc_01a1e44c-e4bb-7dd1-999b-0848a8df4060
+        name: test_fn
+        status: in_progress
+        type: function_call
+      - call_id: call_seed_function
+        id: fc_01a1e44c-e4bb-7dd1-999b-08634d8e5dc9
+        output: done
+        status: completed
+        type: function_call_output
+      - call_id: call_seed_custom
+        id: ctc_01a1e44c-e4bb-7dd1-999b-0886b830cdb8
+        input: x
+        name: test_tool
+        type: custom_tool_call
+      - call_id: call_seed_custom
+        id: ctco_01a1e44c-e4bb-7dd1-999b-08a8f4746af4
+        output: done
+        status: completed
+        type: custom_tool_call_output
+      - action:
+          commands:
+          - pwd
+        call_id: call_seed_shell
+        id: sh_01a1e44c-e4bb-7dd1-999b-08cdf0b5296a
+        status: completed
+        type: shell_call
+      - call_id: call_seed_shell
+        id: sho_01a1e44c-e4bb-7dd1-999b-08ee4ede0c94
+        output:
+        - outcome:
+            exit_code: 0
+            type: exit
+          stderr: ''
+          stdout: 'ok
+
+            '
+        status: completed
+        type: shell_call_output
+      first_id: fc_01a1e44c-e4bb-7dd1-999b-0848a8df4060
+      has_more: false
+      last_id: sho_01a1e44c-e4bb-7dd1-999b-08ee4ede0c94
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t14
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1794831607
+      id: conv_01a1e44c-e502-7353-8b6a-9178f69906ae
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t15
+  request:
+    body:
+      items:
+      - arguments: '{}'
+        call_id: call_kind_0
+        id: fc_01a1e44c-e4bb-7dd1-999b-08634d8e5dc9
+        name: test_fn
+        type: function_call
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a1e44c-e502-7353-8b6a-9178f69906ae/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - call_id: call_seed_function
+        id: fc_01a1e44c-e4bb-7dd1-999b-08634d8e5dc9
+        output: done
+        status: completed
+        type: function_call_output
+      first_id: fc_01a1e44c-e4bb-7dd1-999b-08634d8e5dc9
+      has_more: false
+      last_id: fc_01a1e44c-e4bb-7dd1-999b-08634d8e5dc9
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t16
+  request:
+    body:
+      items:
+      - call_id: call_kind_1
+        id: fc_01a1e44c-e4bb-7dd1-999b-0848a8df4060
+        output: done
+        type: function_call_output
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a1e44c-e502-7353-8b6a-9178f69906ae/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - arguments: '{}'
+        call_id: call_seed_function
+        id: fc_01a1e44c-e4bb-7dd1-999b-0848a8df4060
+        name: test_fn
+        status: in_progress
+        type: function_call
+      first_id: fc_01a1e44c-e4bb-7dd1-999b-0848a8df4060
+      has_more: false
+      last_id: fc_01a1e44c-e4bb-7dd1-999b-0848a8df4060
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t17
+  request:
+    body:
+      items:
+      - call_id: call_kind_2
+        id: ctco_01a1e44c-e4bb-7dd1-999b-08a8f4746af4
+        input: x
+        name: test_tool
+        type: custom_tool_call
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a1e44c-e502-7353-8b6a-9178f69906ae/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - call_id: call_seed_custom
+        id: ctco_01a1e44c-e4bb-7dd1-999b-08a8f4746af4
+        output: done
+        status: completed
+        type: custom_tool_call_output
+      first_id: ctco_01a1e44c-e4bb-7dd1-999b-08a8f4746af4
+      has_more: false
+      last_id: ctco_01a1e44c-e4bb-7dd1-999b-08a8f4746af4
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t18
+  request:
+    body:
+      items:
+      - action:
+          commands:
+          - pwd
+        call_id: call_kind_3
+        id: sho_01a1e44c-e4bb-7dd1-999b-08ee4ede0c94
+        status: completed
+        type: shell_call
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a1e44c-e502-7353-8b6a-9178f69906ae/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - call_id: call_seed_shell
+        id: sho_01a1e44c-e4bb-7dd1-999b-08ee4ede0c94
+        output:
+        - outcome:
+            exit_code: 0
+            type: exit
+          stderr: ''
+          stdout: 'ok
+
+            '
+        status: completed
+        type: shell_call_output
+      first_id: sho_01a1e44c-e4bb-7dd1-999b-08ee4ede0c94
+      has_more: false
+      last_id: sho_01a1e44c-e4bb-7dd1-999b-08ee4ede0c94
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
