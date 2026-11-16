@@ -112,6 +112,71 @@ fn mcp_execution_rejects_omitted_approval_policy() {
     assert!(error.to_string().contains("gateway configuration or the request"));
 }
 
+/// Discovery accepts a `require_approval` filter only when every tool the request can call runs without approval;
+/// the gateway has no approval step, so a gated tool rejects the declaration instead of running unapproved.
+#[tokio::test]
+async fn mcp_discovery_rejects_tools_the_approval_filter_gates() {
+    let config = ToolRuntimeConfig {
+        mcp_servers: HashMap::from([(
+            "counter".to_owned(),
+            McpServerEntry::Http {
+                url: "http://127.0.0.1:1/mcp".to_owned(),
+                headers: None,
+                allowed_tools: None,
+                require_approval: Some("never".to_owned()),
+                description: None,
+                defer_loading: None,
+            },
+        )]),
+        ..ToolRuntimeConfig::default()
+    };
+    let listing = || {
+        serde_json::from_value(serde_json::json!({
+            "id":"mcpl_history", "server_label":"counter", "tools":[
+                {"name":"read", "input_schema":{"type":"object"}},
+                {"name":"delete", "input_schema":{"type":"object"}}
+            ]
+        }))
+        .unwrap()
+    };
+    for (param, callable) in [
+        (serde_json::json!({"require_approval": "never"}), 2),
+        (
+            serde_json::json!({"require_approval": {"never": {"tool_names": ["read", "delete"]}}}),
+            2,
+        ),
+        (
+            serde_json::json!({"require_approval": {"never": {"tool_names": ["read"]}}, "allowed_tools": ["read"]}),
+            1,
+        ),
+    ] {
+        let mut param = param;
+        param["server_label"] = serde_json::json!("counter");
+        let mut executors = GatewayExecutors::from_config(Arc::new(reqwest::Client::new()), &config).unwrap();
+        let tools = executors
+            .mcp_server_tools(&mcp_param(param.clone()), Some(listing()))
+            .await
+            .unwrap_or_else(|error| panic!("{param}: {error}"));
+        assert_eq!(tools.discovered_handlers.len(), callable, "{param}");
+    }
+    for policy in [
+        serde_json::json!({"never": {"tool_names": ["read"]}}),
+        serde_json::json!({"always": {"tool_names": ["delete"]}, "never": {"tool_names": ["read"]}}),
+        serde_json::json!({}),
+    ] {
+        let mut executors = GatewayExecutors::from_config(Arc::new(reqwest::Client::new()), &config).unwrap();
+        let param = mcp_param(serde_json::json!({"server_label": "counter", "require_approval": policy}));
+        let Err(ToolError::Config(message)) = executors.mcp_server_tools(&param, Some(listing())).await else {
+            panic!("{policy} gates a callable tool");
+        };
+        assert!(
+            message.contains("requires approval for tool '")
+                && message.contains("approval gating is not yet supported"),
+            "{message}"
+        );
+    }
+}
+
 /// Discovery runs the declaration's own checks, as request validation does, before it connects.
 #[tokio::test]
 async fn mcp_discovery_rejects_what_the_declaration_check_rejects() {
