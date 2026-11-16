@@ -1,3 +1,4 @@
+use agentic_core::types::model_capabilities::ModelCapabilities;
 use std::convert::Infallible;
 use std::sync::Arc;
 
@@ -35,6 +36,7 @@ fn bench_config(llm_url: &str) -> Config {
         sqlite: agentic_core::config::SqliteConfig::default(),
         tools: agentic_core::config::ToolRuntimeConfig::default(),
         responses: agentic_core::config::ResponsesConfig::default(),
+        model_capabilities: ModelCapabilities::default(),
     }
 }
 
@@ -102,7 +104,6 @@ async fn spawn_gateway(config: Config) -> String {
         llm_api_base: config.llm_api_base,
         skip_llm_ready_check: config.skip_llm_ready_check,
         openai_api_key: config.openai_api_key,
-        model_capabilities: std::sync::Arc::default(),
         max_request_body_size: DEFAULT_MAX_REQUEST_BODY_SIZE,
     };
     let server_config = ServerConfig::from_env();

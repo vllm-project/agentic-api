@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{PromptCacheOptions, PromptCacheRetention, RequestPayload};
+use crate::types::ServiceTier;
 use crate::types::io::{InputItem, ResponseUsage, ResponsesInput};
 
 /// Server-side context management configuration for a Responses request.
@@ -30,7 +31,7 @@ pub struct CompactRequest {
     #[serde(default)]
     pub previous_response_id: Option<String>,
     #[serde(default)]
-    pub service_tier: Option<String>,
+    pub service_tier: Option<ServiceTier>,
     #[serde(default)]
     pub prompt_cache_retention: Option<PromptCacheRetention>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -97,7 +98,7 @@ impl RequestPayload {
             prompt_cache_key: self.prompt_cache_key.clone(),
             prompt_cache_retention: self.prompt_cache_retention,
             prompt_cache_options: self.prompt_cache_options,
-            service_tier: self.service_tier.clone(),
+            service_tier: self.service_tier,
             ..Self::default()
         }
     }

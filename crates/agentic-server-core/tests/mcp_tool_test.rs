@@ -1368,3 +1368,46 @@ async fn mcp_input_items_hold_only_the_public_request_input() {
         );
     }
 }
+
+/// Reasoning that leads to an MCP call keeps its place before the call when a stored response is continued (#482).
+#[tokio::test]
+async fn continuation_keeps_reasoning_before_the_mcp_call_it_led_to() {
+    let mcp_url = spawn_forecast_mcp().await;
+    let first_round = json!({"id": "resp_forecast", "object": "response", "created_at": 0, "model": "test-model",
+    "status": "completed", "output": [
+        {"type": "reasoning", "id": "rs_1", "summary": [],
+            "content": [{"type": "reasoning_text", "text": "check the forecast"}]},
+        {"type": "function_call", "id": "fc_forecast", "call_id": "call_forecast",
+            "name": "mcp__stub__forecast", "arguments": "{\"city\":\"Paris\"}", "status": "completed"}
+    ]});
+    let fixture = support::TestFixture::new_with_responses(vec![
+        support::MockResponse::Json(first_round.to_string()),
+        support::text_response("Forecast handled."),
+        support::text_response("Continued."),
+    ])
+    .await;
+    let response = complete_mcp_response(forecast_request(false, &mcp_url), &fixture).await;
+    let continuation: RequestPayload = serde_json::from_value(json!({
+        "model": "test-model", "input": "and tomorrow?", "store": true,
+        "previous_response_id": response["id"], "tools": forecast_declaration(&mcp_url)
+    }))
+    .unwrap();
+    complete_mcp_response(continuation, &fixture).await;
+
+    // The continuation lowers the stored mcp_call from its public form, so the call's fields may differ from the
+    // live round's; the order must not.
+    let bodies = fixture.request_bodies().await;
+    assert_eq!(bodies.len(), 3);
+    let kinds = |body: &Value| -> Vec<Value> {
+        body["input"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["type"].clone())
+            .collect()
+    };
+    let live = kinds(&bodies[1]);
+    assert_eq!(live, ["message", "reasoning", "function_call", "function_call_output"]);
+    assert_eq!(kinds(&bodies[2])[..live.len()], live[..], "{:#?}", bodies[2]["input"]);
+    assert_eq!(bodies[2]["input"][1], bodies[1]["input"][1], "the same reasoning");
+}
