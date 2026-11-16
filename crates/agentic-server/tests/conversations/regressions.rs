@@ -121,6 +121,82 @@ async fn regression_delete_item_returns_conversation() {
     assert_eq!(body["id"], conv_id);
 }
 
+/// Codex mints `fco_` IDs on the `function_call_output` items it builds for locally executed tools. Replaying that
+/// history through `POST /v1/conversations` must be admitted and persisted, while an ID that mislabels its type is
+/// still refused with both admitted spellings named.
+#[tokio::test]
+async fn codex_function_call_output_ids_are_admitted_over_http() {
+    let state = test_state_with_storage("http://127.0.0.1:1").await;
+    let (url, handle) = spawn_gateway(state).await;
+    let client = reqwest::Client::new();
+
+    let create = client
+        .post(format!("{url}/v1/conversations"))
+        .json(&json!({"items": [
+            {"type":"function_call", "id":"fc_1", "call_id":"call_1", "name":"f", "arguments":"{}"},
+            {"type":"function_call_output", "id":"fco_01a1e325-0f18-7553-9d45-7c133e40dcf4",
+             "call_id":"call_1", "output":"done"}
+        ]}))
+        .send()
+        .await
+        .unwrap();
+    let status = create.status();
+    let body: Value = create.json().await.unwrap();
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let conv_id = body["id"].as_str().unwrap();
+
+    let listed: Value = client
+        .get(format!("{url}/v1/conversations/{conv_id}/items"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let ids: Vec<&str> = listed["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids.len(), 2, "{listed}");
+    assert!(
+        ids.contains(&"fco_01a1e325-0f18-7553-9d45-7c133e40dcf4"),
+        "the fco_ output is persisted with its ID: {listed}"
+    );
+    assert!(ids.contains(&"fc_1"), "the fc_ call is persisted: {listed}");
+
+    for (item, expected_prefixes) in [
+        (
+            json!({"type":"function_call_output", "id":"wrong_1", "call_id":"call_2", "output":"done"}),
+            "'fc' or 'fco'",
+        ),
+        (
+            json!({"type":"function_call", "id":"fco_1", "call_id":"call_2", "name":"f", "arguments":"{}"}),
+            "'fc'",
+        ),
+    ] {
+        let response = client
+            .post(format!("{url}/v1/conversations/{conv_id}/items"))
+            .json(&json!({"items": [item]}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let error: Value = response.json().await.unwrap();
+        assert_eq!(error["error"]["code"], "invalid_value", "{error}");
+        assert_eq!(error["error"]["param"], "items[0].id", "{error}");
+        assert!(
+            error["error"]["message"]
+                .as_str()
+                .unwrap()
+                .ends_with(&format!("Expected an ID that begins with {expected_prefixes}.")),
+            "{error}"
+        );
+    }
+    handle.abort();
+}
+
 #[tokio::test]
 async fn rejects_oversized_batches_and_invalid_limits() {
     let state = test_state_with_storage("http://127.0.0.1:1").await;
