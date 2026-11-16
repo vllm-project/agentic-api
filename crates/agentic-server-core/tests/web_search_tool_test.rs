@@ -1931,6 +1931,64 @@ async fn execute_returns_mixed_client_tool_calls_without_followup_model_request(
     assert!(tool_output.contains("https://example.com/rust"));
 }
 
+/// Reasoning that leads to a search keeps its place before the search when a stored response is continued (#482).
+#[tokio::test]
+async fn continuation_keeps_reasoning_before_the_web_search_it_led_to() {
+    let (you_url, _captured_you, _you_handle) = spawn_mock_you().await;
+    let llm = support::MockServer::start_deque(vec![
+        support::MockResponse::Json(
+            serde_json::json!({"id": "resp_search", "object": "response", "created_at": 0, "model": "test-model",
+            "status": "completed", "output": [
+                {"type": "reasoning", "id": "rs_1", "summary": [],
+                    "content": [{"type": "reasoning_text", "text": "look it up"}]},
+                {"id": "fc_search", "type": "function_call", "call_id": "call_search", "name": "web_search",
+                    "arguments": "{\"query\":\"rust async\"}", "status": "completed"}
+            ]})
+            .to_string(),
+        ),
+        support::text_response("searched"),
+        support::text_response("continued"),
+    ])
+    .await;
+    let exec_ctx = build_exec_ctx(llm.url(), you_url).await;
+    let web_search: ResponsesTool = serde_json::from_value(serde_json::json!({"type": "web_search_preview"})).unwrap();
+    let payload = RequestPayload {
+        tools: Some(vec![web_search.clone()]),
+        ..base_payload(ResponsesInput::Text("look up rust async".to_owned()))
+    };
+    let Either::Left(response) = ExecuteRequest::new(payload, Arc::clone(&exec_ctx)).run().await.unwrap() else {
+        panic!("expected non-streaming response");
+    };
+    let continuation = RequestPayload {
+        tools: Some(vec![web_search]),
+        previous_response_id: Some(response.id),
+        ..base_payload(ResponsesInput::Text("and more".to_owned()))
+    };
+    ExecuteRequest::new(continuation, exec_ctx).run().await.unwrap();
+
+    // The continuation lowers the stored web_search_call from its public form, so the call's id, arguments and
+    // output differ from the live round's; the order must not.
+    let requests = llm.request_bodies().await;
+    assert_eq!(requests.len(), 3);
+    let kinds = |request: &serde_json::Value| -> Vec<serde_json::Value> {
+        request["input"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["type"].clone())
+            .collect()
+    };
+    let live = kinds(&requests[1]);
+    assert_eq!(live, ["message", "reasoning", "function_call", "function_call_output"]);
+    assert_eq!(
+        kinds(&requests[2])[..live.len()],
+        live[..],
+        "{:#?}",
+        requests[2]["input"]
+    );
+    assert_eq!(requests[2]["input"][1], requests[1]["input"][1], "the same reasoning");
+}
+
 #[tokio::test]
 async fn web_search_rejects_incompatible_domain_filters_before_calling_you() {
     let (base_url, mut captured, _handle) = spawn_mock_you().await;

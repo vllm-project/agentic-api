@@ -117,8 +117,11 @@ fn model_input(request: &Value) -> Vec<Value> {
 
 #[tokio::test]
 async fn live_continuation_and_replay_show_the_model_the_same_search() {
+    // Reasoning before the search must stay before it on every path (#482).
+    let reasoning = json!({"type": "reasoning", "id": "rs_1", "summary": [],
+        "content": [{"type": "reasoning_text", "text": "load get_weather first"}]});
     let (llm_url, requests) = spawn_llm(vec![
-        upstream("up_1", json!([search_call("s1")])),
+        upstream("up_1", json!([reasoning, search_call("s1")])),
         upstream("up_2", json!([message("done")])),
         upstream("up_3", json!([message("continued")])),
         upstream("up_4", json!([message("replayed")])),
@@ -152,10 +155,15 @@ async fn live_continuation_and_replay_show_the_model_the_same_search() {
 
     let requests = requests.lock().await;
     let live = model_input(&requests[1]);
-    assert_eq!(live.len(), 3, "the question, the search call and its output: {live:?}");
-    assert_eq!(live[1]["name"], "tool_search");
-    assert_eq!(live[2]["type"], "function_call_output");
-    assert_eq!(live[1]["call_id"], live[2]["call_id"]);
+    assert_eq!(
+        live.len(),
+        4,
+        "the question, the reasoning, the search call and its output: {live:?}"
+    );
+    assert_eq!(live[1]["type"], "reasoning");
+    assert_eq!(live[2]["name"], "tool_search");
+    assert_eq!(live[3]["type"], "function_call_output");
+    assert_eq!(live[2]["call_id"], live[3]["call_id"]);
     for (path, request) in [("continuation", &requests[2]), ("store: false replay", &requests[3])] {
         let input = model_input(request);
         assert_eq!(input[..live.len()], live[..], "{path} shares the live round's prefix");

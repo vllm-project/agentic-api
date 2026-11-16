@@ -23,9 +23,11 @@ orchestration needed by stateful agentic applications.
 The first project goal is reliable state hydration for the Responses API.
 
 This means supporting `previous_response_id` so clients can continue from a
-stored response without replaying the full conversation history. The server must
-persist the model-visible items needed for continuation, rehydrate them in the
-right order, append new input, and send the resulting request to vLLM core.
+stored response without replaying the full conversation history. The server
+persists the client-facing items needed for continuation (what the client sent
+and the public output it received), rehydrates them in order, appends new input,
+and lowers the result for vLLM core at one point before each request.
+Model-facing shapes are built per request and never stored.
 
 Core work:
 
@@ -34,6 +36,19 @@ Core work:
 - Preserve OpenAI-compatible request and response shapes.
 - Support streaming and non-streaming Responses API flows.
 - Keep storage semantics explicit and testable.
+
+Status: one typed path now carries history from rehydration to persistence
+([#500](https://github.com/vllm-project/agentic-api/issues/500): [#501](https://github.com/vllm-project/agentic-api/pull/501), [#502](https://github.com/vllm-project/agentic-api/pull/502), [#503](https://github.com/vllm-project/agentic-api/pull/503), [#505](https://github.com/vllm-project/agentic-api/pull/505), [#506](https://github.com/vllm-project/agentic-api/pull/506)). Stored history
+holds client-facing items only, ordinary conversation turns append like OpenAI
+instead of failing on concurrent writes (a turn that answers a pending call, or
+runs with multi-agent enabled, still requires the latest turn), and compaction
+output, continuation, and MCP
+discovery follow the recorded OpenAI behavior.
+`DELETE /v1/responses/{id}` and `GET /v1/responses/{id}/input_items` are
+available ([#466](https://github.com/vllm-project/agentic-api/pull/466)), and HTTP `store: false` requests run through
+the gateway ([#475](https://github.com/vllm-project/agentic-api/pull/475)). See
+[What a turn persists](https://github.com/vllm-project/agentic-api/blob/main/ARCHITECTURE.md#what-a-turn-persists) for the contract a
+change to persisted data must follow.
 
 ### 2. Codex Support Through Responses
 
@@ -91,13 +106,22 @@ Initial and expected tool areas include:
 - MCP-backed tools and resources.
 - Function tools owned by the gateway.
 
+Status: web search runs on selectable providers, including Serply
+([#420](https://github.com/vllm-project/agentic-api/pull/420)) and Keenable ([#507](https://github.com/vllm-project/agentic-api/pull/507)); hosted tool search
+executes over deferred functions, namespaces, and MCP servers
+([#472](https://github.com/vllm-project/agentic-api/pull/472)); and file search ships with the Files and vector-store
+APIs (see below).
+
 ### 4. Messages API
 
 The third major API goal is Messages.
 
 Status: `/v1/messages` forwards Anthropic Messages traffic to the upstream and
 runs a server-side loop for gateway-owned tools, which is enough for Claude
-Code. Stateful continuation and persistence for Messages remain the work below.
+Code. It returns gateway-run native server tool calls
+([#494](https://github.com/vllm-project/agentic-api/pull/494)) and persists Anthropic Messages threads
+([#508](https://github.com/vllm-project/agentic-api/pull/508)). The rest of the stateful work for Messages remains
+below.
 
 Messages should build on the same persistence, rehydration, and execution
 foundations as Responses, while exposing the API surface expected by agentic
@@ -146,10 +170,6 @@ The gateway passes the 17 published Open Responses acceptance cases when run
 sequentially against a vLLM-backed deployment. The following work remains before
 claiming broader compatibility:
 
-- Normalize `store=false` HTTP responses and model input through the same typed
-  compatibility path as stored responses. The current proxy path forwards the
-  request and response without applying gateway response normalization
-  ([#433](https://github.com/vllm-project/agentic-api/issues/433)).
 - Report effective response parameters from the actual upstream execution. A
   schema-complete response must not silently substitute gateway defaults for
   model or backend defaults
@@ -176,7 +196,8 @@ reject it across HTTP, WebSocket, storage, and continuation paths.
   keys, supported breakpoints, and processing-tier metadata; validate unsupported
   model/backend combinations without imposing one provider's restrictions on
   every vLLM model
-  ([#330](https://github.com/vllm-project/agentic-api/issues/330)).
+  ([#330](https://github.com/vllm-project/agentic-api/issues/330)). `prompt_cache_options` is already preserved across
+  Responses execution ([#436](https://github.com/vllm-project/agentic-api/pull/436)).
 - **Cache-preserving reasoning updates:** support `configuration_update` items,
   their ordered history and effective effort, and explicit compatibility rules
   for compaction, truncation, and multi-agent mode
@@ -191,20 +212,21 @@ These issues extend the capability contract in
 per execution path and prioritize preventing silent loss of request semantics.
 Provider-specific replay is conditional on a supported deployment need.
 
-### Next: Interactive Execution
+### Interactive Execution
 
-- **Async function and custom tools:** preserve async declarations and calls,
-  retain pending call identity across responses, and allow independent model
-  work before the application returns a tool call output. Define bounded
-  lifecycle rules for any gateway-managed pending work
-  ([#332](https://github.com/vllm-project/agentic-api/issues/332)).
-- **Mid-turn steering:** accept WebSocket `response.steer`, queue user updates,
-  emit steering lifecycle events, and continue from completed work with correct
-  handling of pending tool outputs, approvals, and disconnects
-  ([#333](https://github.com/vllm-project/agentic-api/issues/333)).
+- **Async function and custom tools:** shipped
+  ([#428](https://github.com/vllm-project/agentic-api/pull/428), closing [#332](https://github.com/vllm-project/agentic-api/issues/332)). Async declarations
+  and calls are preserved, pending call identity survives across responses, and
+  the model can continue before the application returns a tool call output.
+- **Mid-turn steering:** shipped for single-agent WebSocket responses
+  ([#445](https://github.com/vllm-project/agentic-api/pull/445), for [#333](https://github.com/vllm-project/agentic-api/issues/333)). Accepted
+  `response.steer` input is applied in order to a successor response that keeps
+  pending client tool outputs, and a disconnect discards it. Multi-agent steering
+  is unsupported; approval-aware steering depends on MCP approvals
+  ([#145](https://github.com/vllm-project/agentic-api/issues/145)).
 
-Reuse the shared typed ingestion, orchestration, and ordered delivery boundaries
-tracked in [#241](https://github.com/vllm-project/agentic-api/issues/241) and
+Reuse the shared typed ingestion and orchestration boundaries tracked in
+[#241](https://github.com/vllm-project/agentic-api/issues/241) and the bounded ordered delivery from
 [#244](https://github.com/vllm-project/agentic-api/issues/244). Parallel tool calls,
 independent WebSocket lanes, async calls, and steering have distinct semantics.
 
@@ -215,20 +237,24 @@ independent WebSocket lanes, async calls, and steering have distinct semantics.
   continuation for supported profiles. Gateway execution requires an isolated,
   resource-bounded runtime
   ([#334](https://github.com/vllm-project/agentic-api/issues/334)).
-- **Multi-agent orchestration:** implement isolated agent contexts and shared
-  scheduling through the existing tracker
+- **Multi-agent orchestration:** shipped
   ([#298](https://github.com/vllm-project/agentic-api/issues/298)). HTTP execution
-  for stored requests has shipped
-  ([#299](https://github.com/vllm-project/agentic-api/issues/299)); WebSocket
-  injection ([#300](https://github.com/vllm-project/agentic-api/issues/300)) and
-  stateless requests ([#393](https://github.com/vllm-project/agentic-api/issues/393))
-  remain.
-- **File search:** add the Files and Vector Stores APIs, indexed retrieval, and a
-  gateway-executed `file_search` tool with OpenAI-compatible streaming events
-  ([#34](https://github.com/vllm-project/agentic-api/pull/34)). Resolve `file_id`
-  references in Responses input against the same file store
-  ([#356](https://github.com/vllm-project/agentic-api/issues/356)). Until then,
-  `file_search` declarations are accepted but not offered to the model.
+  ([#299](https://github.com/vllm-project/agentic-api/issues/299)), WebSocket injection
+  ([#300](https://github.com/vllm-project/agentic-api/issues/300)), and HTTP `store: false` requests that replay the
+  complete history ([#476](https://github.com/vllm-project/agentic-api/pull/476)) run each agent in an isolated
+  context. Remaining: reject plaintext client-managed `agent_message` input
+  instead of dropping it ([#405](https://github.com/vllm-project/agentic-api/issues/405)). Returning
+  `last_task_message` from `list_agents` waits on observed OpenAI behavior
+  ([#395](https://github.com/vllm-project/agentic-api/issues/395)).
+- **File search:** shipped: the Files and vector-store APIs
+  ([#485](https://github.com/vllm-project/agentic-api/pull/485)), pluggable indexed retrieval with a
+  sqlite-vec provider ([#483](https://github.com/vllm-project/agentic-api/pull/483),
+  [#484](https://github.com/vllm-project/agentic-api/pull/484)), and the gateway-executed `file_search` tool with
+  citations ([#486](https://github.com/vllm-project/agentic-api/pull/486), [#513](https://github.com/vllm-project/agentic-api/pull/513)).
+  Remaining: resolve `file_id` references in Responses input against the same
+  file store ([#356](https://github.com/vllm-project/agentic-api/issues/356)), and keep reasoning before a file search
+  on `previous_response_id` continuations
+  ([#482](https://github.com/vllm-project/agentic-api/issues/482)).
 - **Computer use:** add typed computer calls, ordered actions, screenshots, and
   explicit execution-location handling through the existing feature issue
   ([#171](https://github.com/vllm-project/agentic-api/issues/171)).
@@ -247,6 +273,8 @@ predictable service with explicit capabilities and repeatable release checks.
 - **Authenticated state ownership:** scope persisted responses, conversations,
   items, and continuation to the authenticated user and tenant
   ([#107](https://github.com/vllm-project/agentic-api/issues/107)).
+- **Request admission:** opt-in per-caller rate limiting shipped
+  ([#458](https://github.com/vllm-project/agentic-api/pull/458)).
 - **Predictable Messages execution:** validate streaming lifecycles and bound
   retained content, pending tool calls, and delivery resources
   ([#313](https://github.com/vllm-project/agentic-api/issues/313)).
@@ -280,7 +308,10 @@ Longer-term work should improve production readiness and performance without
 moving inference responsibilities out of vLLM core.
 
 - Production storage backends, retention policy, and compaction.
-- Observability for request lifecycle, tool execution, and continuation.
+- Observability for request lifecycle, tool execution, and continuation,
+  building on the request, stage, and delivery metrics
+  ([#375](https://github.com/vllm-project/agentic-api/pull/375)) and gateway tool tracing
+  ([#453](https://github.com/vllm-project/agentic-api/pull/453), [#473](https://github.com/vllm-project/agentic-api/pull/473)).
 - Integration with reverse proxies, ingress, and other deployment surfaces.
 - Cached prefix continuation and other latency optimizations where vLLM core
   owns rendering, tokenization, and KV-cache execution.

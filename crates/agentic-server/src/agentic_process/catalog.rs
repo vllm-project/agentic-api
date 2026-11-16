@@ -11,7 +11,7 @@ use crate::agentic_cli::{Harness, SourceOptions};
 use crate::agentic_output::redact_url;
 use crate::model_capabilities::{CodexCatalogCapabilities, CodexModelCapabilities};
 
-use super::{PLACEHOLDER_MODEL, harness_binary};
+use super::{PLACEHOLDER_MODEL, harness::harness_binary};
 
 /// Operator-provided Codex version, used instead of probing the Codex binary.
 const CODEX_CLIENT_VERSION_ENV: &str = "AGENTIC_CODEX_CLIENT_VERSION";
