@@ -8,7 +8,7 @@ use crate::types::io::ClientItemError;
 use crate::types::io::input::InputValidationError;
 use crate::types::io::output::McpListTools;
 use crate::types::request_response::{
-    MAX_TOOL_CALLS_PARAM, MaxToolCallsError, PromptCacheOptionsError, UnsupportedParameterError, UpstreamRequestError,
+    MAX_TOOL_CALLS_PARAM, MaxToolCallsError, UnsupportedParameterError, UpstreamRequestError,
 };
 use crate::utils::common::serialize_to_vec_or_default;
 
@@ -143,9 +143,6 @@ pub enum ExecutorError {
     #[error("Files [{}] were not found", .ids.join(", "))]
     FileReferencesNotFound { ids: Vec<String> },
 
-    #[error(transparent)]
-    InvalidPromptCacheOptions(#[from] PromptCacheOptionsError),
-
     /// The request exceeds a documented transport or component size budget.
     #[error("{0}")]
     PayloadTooLarge(String),
@@ -178,6 +175,7 @@ impl From<UpstreamRequestError> for ExecutorError {
     fn from(error: UpstreamRequestError) -> Self {
         match error {
             UpstreamRequestError::Input(error) => error.into(),
+            UpstreamRequestError::Parameter(error) => error.into(),
             UpstreamRequestError::Tool(error) => error.into(),
         }
     }
@@ -225,7 +223,6 @@ impl ExecutorError {
             | Self::InvalidRequest(_)
             | Self::InvalidInput(_)
             | Self::ClientItem(_)
-            | Self::InvalidPromptCacheOptions(_)
             | Self::InvalidMaxToolCalls(_)
             | Self::UnsupportedValue { .. }
             | Self::UnsupportedParameter(_)
@@ -274,7 +271,6 @@ impl ExecutorError {
             | Self::InvalidRequest(_)
             | Self::InvalidInput(_)
             | Self::ClientItem(_)
-            | Self::InvalidPromptCacheOptions(_)
             | Self::InvalidMaxToolCalls(_)
             | Self::UnsupportedValue { .. }
             | Self::UnsupportedParameter(_)
@@ -285,7 +281,8 @@ impl ExecutorError {
             | Self::Storage(
                 StorageError::ItemCursorNotFound { .. }
                 | StorageError::ResponseNotFound { .. }
-                | StorageError::PreviousResponseNotFound { .. },
+                | StorageError::PreviousResponseNotFound { .. }
+                | StorageError::ConversationNotFound { .. },
             ) => "invalid_request_error",
             Self::Storage(e) if e.is_not_found() => "not_found",
             Self::Storage(e) if e.is_validation() => "invalid_request_error",
@@ -316,7 +313,6 @@ impl ExecutorError {
             Self::Storage(StorageError::ItemAlreadyInConversation) => "item_already_in_conversation",
             Self::PayloadTooLarge(_) => "body_too_large",
             Self::ResourceLimitExceeded { .. } => "response_resource_limit_exceeded",
-            Self::InvalidPromptCacheOptions(PromptCacheOptionsError::Unsupported) => "unsupported_parameter",
             Self::InvalidMaxToolCalls(error) => error.code(),
             Self::InvalidInput(error) if error.is_internal() => "server_error",
             Self::InvalidInput(error) => error.error_code().unwrap_or("invalid_request_error"),
@@ -340,7 +336,6 @@ impl ExecutorError {
             Self::ConversationLocked { .. } => Some("conversation"),
             Self::Storage(StorageError::PreviousResponseNotFound { .. }) => Some("previous_response_id"),
             Self::Tool(ToolError::MissingOutput { .. } | ToolError::UnknownCallOutput { .. }) => Some("input"),
-            Self::InvalidPromptCacheOptions(_) => Some("prompt_cache_options"),
             Self::InvalidMaxToolCalls(_) => Some(MAX_TOOL_CALLS_PARAM),
             Self::InvalidInput(error) => error.error_param(),
             Self::UnsupportedParameter(error) => Some(error.param()),
@@ -358,7 +353,8 @@ impl ExecutorError {
                 error @ (StorageError::ItemAlreadyInConversation
                 | StorageError::ItemCursorNotFound { .. }
                 | StorageError::ResponseNotFound { .. }
-                | StorageError::PreviousResponseNotFound { .. }),
+                | StorageError::PreviousResponseNotFound { .. }
+                | StorageError::ConversationNotFound { .. }),
             ) => error.to_string(),
             Self::Storage(StorageError::Database(_)) => "Internal server error".to_owned(),
             // An unresolved reference means a required stage was skipped, not that the input was invalid.
@@ -379,7 +375,11 @@ impl ExecutorError {
         let code = if matches!(
             self.client_visible_error(),
             Self::Tool(ToolError::MissingOutput { .. } | ToolError::UnknownCallOutput { .. })
-                | Self::Storage(StorageError::ItemCursorNotFound { .. } | StorageError::ResponseNotFound { .. })
+                | Self::Storage(
+                    StorageError::ItemCursorNotFound { .. }
+                        | StorageError::ResponseNotFound { .. }
+                        | StorageError::ConversationNotFound { .. }
+                )
                 | Self::UnsupportedValue { code: None, .. }
                 | Self::FileReferencesNotFound { .. }
         ) {
@@ -395,7 +395,7 @@ impl ExecutorError {
             error.insert("param".to_owned(), serde_json::json!(param));
         } else if matches!(
             self.client_visible_error(),
-            Self::Storage(StorageError::ResponseNotFound { .. })
+            Self::Storage(StorageError::ResponseNotFound { .. } | StorageError::ConversationNotFound { .. })
                 | Self::UnsupportedValue { param: None, .. }
                 | Self::FileReferencesNotFound { .. }
         ) {

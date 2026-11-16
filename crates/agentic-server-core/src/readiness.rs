@@ -141,6 +141,7 @@ pub async fn wait_llm_ready(config: &Config) -> Result<(), Error> {
 
 #[cfg(test)]
 mod tests {
+    use crate::types::model_capabilities::ModelCapabilities;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Duration;
@@ -166,6 +167,7 @@ mod tests {
             sqlite: crate::config::SqliteConfig::default(),
             tools: crate::config::ToolRuntimeConfig::default(),
             responses: crate::config::ResponsesConfig::default(),
+            model_capabilities: ModelCapabilities::default(),
         }
     }
 

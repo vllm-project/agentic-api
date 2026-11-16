@@ -59,6 +59,43 @@ pub(crate) fn generated_responses_file_config() -> ResponsesFileConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config_file::FileConfig;
+    use agentic_core::types::ServiceTier;
+
+    #[test]
+    fn model_capabilities_share_one_configuration_with_the_catalog() {
+        let input = r#"
+            [responses]
+            prompt_cache_options_supported = true
+
+            [models."gpt-6-astra"]
+            sampling_supported = false
+            logprobs_supported = false
+            supported_reasoning_levels = ["none", "minimal", "low", "high"]
+            service_tiers = ["default"]
+            prompt_cache_options_supported = false
+            prompt_cache_retention_supported = false
+        "#;
+        let file: FileConfig = toml::from_str(input).unwrap();
+        let config = resolve_responses_config(&file.responses).unwrap();
+        assert!(config.prompt_cache_options_supported);
+        let capabilities = file.model_capabilities();
+        let policy = capabilities.for_model("gpt-6-astra").unwrap();
+        assert_eq!(policy.sampling_supported, Some(false));
+        assert_eq!(policy.logprobs_supported, Some(false));
+        assert_eq!(policy.supported_reasoning_levels.as_ref().unwrap().as_slice().len(), 4);
+        assert_eq!(
+            capabilities.resolve_reasoning_levels("gpt-6-astra"),
+            policy.supported_reasoning_levels.as_ref().unwrap().as_slice(),
+        );
+        assert_eq!(policy.service_tiers.as_deref(), Some(&[ServiceTier::Default][..]));
+        assert_eq!(policy.prompt_cache_options_supported, Some(false));
+        assert_eq!(policy.prompt_cache_retention_supported, Some(false));
+        let restored: FileConfig = toml::from_str(&toml::to_string(&file).unwrap()).unwrap();
+        assert_eq!(restored.model_capabilities().for_model("gpt-6-astra"), Some(policy));
+        assert!(toml::from_str::<FileConfig>("[responses.models.astra]\nlogprobs_supported = false").is_err());
+        assert!(toml::from_str::<FileConfig>("[models.astra]\nlogprob_supported = false").is_err());
+    }
 
     #[test]
     fn prompt_cache_support_is_explicit_and_preserved_in_file_config() {

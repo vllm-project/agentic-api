@@ -21,6 +21,7 @@ use crate::tool::{GatewayExecutorRegistration, GatewayExecutors, file_search::Fi
 use crate::types::io::input::ResolvedFiles;
 use crate::types::io::{InOutItem, ToolChoice};
 use crate::types::messages::GatewayToolMap;
+use crate::types::model_capabilities::ModelCapabilities;
 use crate::types::request_response::{RequestPayload, ResponsePayload};
 
 /// Env var configuring client-tool → gateway-executor aliases for `/v1/messages`
@@ -132,6 +133,7 @@ pub struct ExecutionContext {
     /// Bounded-concurrency policy applied to gateway-owned calls in each round.
     pub(crate) gateway_scheduler_policy: GatewaySchedulerPolicy,
     pub responses_config: ResponsesConfig,
+    pub model_capabilities: ModelCapabilities,
     /// Execution, stage, token, and timing instruments. Defaults to the
     /// globally registered meter provider at construction time.
     pub metrics: ExecutorMetrics,
@@ -168,6 +170,7 @@ impl ExecutionContext {
             streaming_timeout: streaming_timeout_from_env(),
             gateway_scheduler_policy: GatewaySchedulerPolicy::default(),
             responses_config: ResponsesConfig::default(),
+            model_capabilities: ModelCapabilities::default(),
             metrics: ExecutorMetrics::from_global(),
             storage_pool: None,
         }
@@ -191,6 +194,13 @@ impl ExecutionContext {
     #[must_use]
     pub fn with_max_request_body_size(mut self, max_request_body_size: NonZeroUsize) -> Self {
         self.max_request_body_size = max_request_body_size.get();
+        self
+    }
+
+    /// Use the same configured capabilities for request admission and catalog projection.
+    #[must_use]
+    pub fn with_model_capabilities(mut self, model_capabilities: ModelCapabilities) -> Self {
+        self.model_capabilities = model_capabilities;
         self
     }
 
@@ -333,6 +343,7 @@ impl ExecutionContext {
             streaming_timeout: streaming_timeout_from_env(),
             gateway_scheduler_policy: GatewaySchedulerPolicy::new(cfg.tools.max_concurrent_gateway_calls),
             responses_config: cfg.responses,
+            model_capabilities: cfg.model_capabilities.clone(),
             metrics: ExecutorMetrics::from_global(),
             storage_pool: Some(pool),
         }

@@ -1352,7 +1352,6 @@ fn persistence_disabled_state(llm_url: &str) -> AppState {
         llm_api_base: config.llm_api_base,
         skip_llm_ready_check: config.skip_llm_ready_check,
         openai_api_key: config.openai_api_key,
-        model_capabilities: std::sync::Arc::default(),
         max_request_body_size: DEFAULT_MAX_REQUEST_BODY_SIZE,
     }
 }
@@ -1400,7 +1399,6 @@ async fn storage_backed_state_with(
         llm_api_base: config.llm_api_base,
         skip_llm_ready_check: config.skip_llm_ready_check,
         openai_api_key: config.openai_api_key,
-        model_capabilities: std::sync::Arc::default(),
         max_request_body_size: DEFAULT_MAX_REQUEST_BODY_SIZE,
     };
     StorageBackedState { state, pool, _db: db }
@@ -4621,33 +4619,41 @@ async fn prewarm_private(
 
 #[tokio::test]
 async fn websocket_validation_failure_evicts_only_its_valid_lane_parent() {
-    for (routing, should_evict) in [(json!("source"), true), (json!("fork"), false), (Value::Null, false)] {
-        let mock = MockResponsesServer::start(vec![]).await;
-        let (gateway_url, _gateway) = spawn_gateway(persistence_disabled_state(&mock.url)).await;
-        let mut ws = connect_responses_ws(&gateway_url).await;
-        // Null routing must never be interpreted as the default lane for eviction.
-        let lane = if routing.is_null() { None } else { Some("source") };
-        let parent = prewarm_private(&mut ws, lane, "private").await;
-        send_json(
-            &mut ws,
-            json!({"type":"response.create", "stream_id":routing,
-            "previous_response_id":parent, "model":7, "store":false, "input":[]}),
-        )
-        .await;
-        assert_eq!(recv_json(&mut ws).await["type"], "error");
-        let mut request = json!({"type":"response.create", "model":"test-model",
+    for fields in [
+        json!({"model":7}),
+        json!({"reasoning":{"effort":"hgih"}}),
+        json!({"service_tier":"custom"}),
+        json!({"top_logprobs":"3"}),
+    ] {
+        for (routing, should_evict) in [(json!("source"), true), (json!("fork"), false), (Value::Null, false)] {
+            let mock = MockResponsesServer::start(vec![]).await;
+            let (gateway_url, _gateway) = spawn_gateway(persistence_disabled_state(&mock.url)).await;
+            let mut ws = connect_responses_ws(&gateway_url).await;
+            // Null routing must never be interpreted as the default lane for eviction.
+            let lane = if routing.is_null() { None } else { Some("source") };
+            let parent = prewarm_private(&mut ws, lane, "private").await;
+            let mut invalid = json!({"type":"response.create", "stream_id":routing,
+            "previous_response_id":parent, "model":"test-model", "store":false, "input":[]});
+            invalid
+                .as_object_mut()
+                .unwrap()
+                .extend(fields.as_object().unwrap().clone());
+            send_json(&mut ws, invalid).await;
+            assert_eq!(recv_json(&mut ws).await["type"], "error");
+            let mut request = json!({"type":"response.create", "model":"test-model",
             "previous_response_id":parent, "input":[], "store":false, "generate":false});
-        if let Some(lane) = lane {
-            request["stream_id"] = json!(lane);
+            if let Some(lane) = lane {
+                request["stream_id"] = json!(lane);
+            }
+            send_json(&mut ws, request).await;
+            let events = recv_until_completed(&mut ws).await;
+            if should_evict {
+                assert_eq!(events.last().unwrap()["error"]["code"], "previous_response_not_found");
+            } else {
+                assert_eq!(events.last().unwrap()["type"], "response.completed");
+            }
+            assert!(mock.request_bodies().await.is_empty());
         }
-        send_json(&mut ws, request).await;
-        let events = recv_until_completed(&mut ws).await;
-        if should_evict {
-            assert_eq!(events.last().unwrap()["error"]["code"], "previous_response_not_found");
-        } else {
-            assert_eq!(events.last().unwrap()["type"], "response.completed");
-        }
-        assert!(mock.request_bodies().await.is_empty());
     }
 }
 

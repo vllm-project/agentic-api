@@ -1,4 +1,4 @@
-//! Responses resource limits and operator-asserted upstream cache support.
+//! Responses resource limits and operator-configured upstream capabilities.
 
 use crate::error::Error;
 
@@ -16,8 +16,7 @@ pub const MAX_STREAM_EVENT_BYTES_ENV: &str = "AGENTIC_MAX_STREAM_EVENT_BYTES";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ResponsesConfig {
-    /// Operator assertion that typed execution supports the mode/TTL contract for every served model.
-    /// Direct HTTP pass-through does not consult this switch.
+    /// Fallback assertion for models without a specific cache mode/TTL override.
     pub prompt_cache_options_supported: bool,
     pub max_retained_bytes: usize,
     pub max_upstream_json_bytes: usize,

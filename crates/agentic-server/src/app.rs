@@ -26,7 +26,6 @@ use crate::handler::{
     models, ready, responses, responses_ws_with_auth, retrieve_conversation, retrieve_item, retrieve_model,
     retrieve_response, transcriptions, translations, update_conversation,
 };
-use crate::model_capabilities::ModelCapabilities;
 use crate::rate_limit::{RateLimitConfig, RateLimiter, enforce_rate_limit};
 use crate::telemetry::http::{HttpMetrics, track_request};
 use crate::telemetry::websocket::WebSocketMetrics;
@@ -298,8 +297,6 @@ pub struct AppState {
     /// `Authorization` header on the executor path. Also authenticates local response
     /// retrieval when OIDC is disabled.
     pub openai_api_key: Option<String>,
-    /// Configured per-model input-modality overrides applied to the Codex model catalog.
-    pub model_capabilities: Arc<ModelCapabilities>,
     /// Ceiling on serialized inbound request bytes, applied uniformly to every
     /// request-bearing endpoint and to WebSocket messages and frames.
     ///

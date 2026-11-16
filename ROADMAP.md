@@ -251,10 +251,11 @@ independent WebSocket lanes, async calls, and steering have distinct semantics.
   sqlite-vec provider ([#483](https://github.com/vllm-project/agentic-api/pull/483),
   [#484](https://github.com/vllm-project/agentic-api/pull/484)), and the gateway-executed `file_search` tool with
   citations ([#486](https://github.com/vllm-project/agentic-api/pull/486), [#513](https://github.com/vllm-project/agentic-api/pull/513)).
-  Remaining: keep reasoning before a file search on `previous_response_id` continuations
-  ([#482](https://github.com/vllm-project/agentic-api/issues/482)). Responses message
-  `input_image` and `input_file` `file_id` references resolve against the same file store
+  citations ([#486](https://github.com/vllm-project/agentic-api/pull/486), [#513](https://github.com/vllm-project/agentic-api/pull/513)),
+  and Responses `input_image`/`input_file` `file_id` reference resolution against the same file store
   ([#356](https://github.com/vllm-project/agentic-api/issues/356)).
+  Remaining: keep reasoning before a file search on `previous_response_id` continuations
+  ([#482](https://github.com/vllm-project/agentic-api/issues/482)).
 - **Computer use:** add typed computer calls, ordered actions, screenshots, and
   explicit execution-location handling through the existing feature issue
   ([#171](https://github.com/vllm-project/agentic-api/issues/171)).

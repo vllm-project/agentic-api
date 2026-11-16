@@ -66,16 +66,6 @@ impl ConversationStore {
         row.try_into()
     }
 
-    /// Gets a conversation or creates it if it doesn't exist.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if database query fails.
-    pub async fn get_or_create(&self, conversation_id: &str) -> StoreResult<ConversationData> {
-        let pool = self.pool()?;
-        conversation::get_or_create(pool, conversation_id).await?.try_into()
-    }
-
     /// Rehydrates a conversation: its items and the checkpoint a turn continues (the latest turn's metadata and the
     /// history rows).
     ///
@@ -91,7 +81,9 @@ impl ConversationStore {
             items: rows,
         }) = conversation::get_with_items(pool, conversation_id).await?
         else {
-            return Err(StorageError::not_found("Conversation", conversation_id));
+            return Err(StorageError::ConversationNotFound {
+                id: conversation_id.to_owned(),
+            });
         };
 
         if let Some(row) = rows.iter().find(|row| row.seq.is_none()) {

@@ -2,8 +2,6 @@
 
 use serde::{Deserialize, Deserializer, Serialize};
 
-use super::RequestPayload;
-
 /// Where the upstream selects prompt-cache breakpoints.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -70,37 +68,12 @@ fn present_value<'de, D: Deserializer<'de>, T: Deserialize<'de>>(deserializer: D
     T::deserialize(deserializer).map(Some)
 }
 
-/// A syntactically valid cache policy cannot be served by this deployment.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-pub enum PromptCacheOptionsError {
-    #[error(
-        "prompt_cache_options is not enabled for this upstream; configure responses.prompt_cache_options_supported only after verifying the mode/TTL contract for every served model"
-    )]
-    Unsupported,
-}
-
-impl<T: ?Sized> RequestPayload<T> {
-    /// Validate deployment support for typed execution.
-    ///
-    /// # Errors
-    /// Rejects typed execution against unqualified upstreams. Legacy retention remains independent.
-    pub fn validate_prompt_cache_options(&self, supported: bool) -> Result<(), PromptCacheOptionsError> {
-        if self.prompt_cache_options.is_none() {
-            return Ok(());
-        }
-        if !supported {
-            return Err(PromptCacheOptionsError::Unsupported);
-        }
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
 
     use super::*;
-    use crate::types::request_response::{RequestPayload, ResponseTextConfig};
+    use crate::types::request_response::{RequestPayload, ResponseTextConfig, UnsupportedParameterError};
     use serde_json::json;
 
     #[test]
@@ -136,13 +109,13 @@ mod tests {
                 prompt_cache_options: Some(options),
                 ..Default::default()
             };
-            assert!(request.validate_prompt_cache_options(true).is_ok());
+            assert!(request.ensure_supported_parameters(None, true).is_ok());
             assert_eq!(
-                request.validate_prompt_cache_options(false),
-                Err(PromptCacheOptionsError::Unsupported)
+                request.ensure_supported_parameters(None, false),
+                Err(UnsupportedParameterError::PromptCacheOptions)
             );
             request.prompt_cache_retention = Some(super::super::PromptCacheRetention::TwentyFourHours);
-            assert_eq!(request.validate_prompt_cache_options(true), Ok(()));
+            assert_eq!(request.ensure_supported_parameters(None, true), Ok(()));
         }
     }
 

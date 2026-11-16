@@ -1208,6 +1208,13 @@ def run_items(
         _item_request(client, proxy_url, "DELETE", f"/v1/conversations/{conversation}")
         _item_request(client, proxy_url, "GET", f"{child_path}/input_items", expected_status=None)
         _item_request(client, proxy_url, "GET", child_path, expected_status=None)
+        # A turn naming a deleted or never-created conversation, stored or not, and in the object form.
+        unknown = f"conv_{secrets.token_hex(24)}"
+        for reference, store in ((conversation, True), (unknown, True), (unknown, False), ({"id": unknown}, True)):
+            _item_request(client, proxy_url, "POST", "/v1/responses",
+                          body={"model": model, "input": "Reply with only SAPPHIRE.", "conversation": reference,
+                                "store": store, "stream": stream},
+                          expected_status=None)
         return
     if scenario == "response-replayed-items":
         seed = _item_response(client, proxy_url, model, "Reply with only SAPPHIRE.", stream=stream)
@@ -3432,7 +3439,7 @@ def main(
                           19 if items_scenario == "response-lifecycle" else
                           16 if items_scenario == "response-pagination" else
                           23 if items_scenario == "response-edge-cases" else
-                          19 if items_scenario == "response-conversation" else
+                          23 if items_scenario == "response-conversation" else
                           14 if items_scenario == "response-replayed-items" else
                           48 if items_scenario == "response-tool-items" else
                           17 if items_scenario == "response-call-ids" else

@@ -121,7 +121,10 @@ pub(crate) async fn summarize_items(
 ) -> ExecutorResult<CompactedWindow> {
     let timer = exec_ctx.metrics.stage(Stage::Compaction);
     let summarized = async {
-        request.validate_prompt_cache_options(exec_ctx.responses_config.prompt_cache_options_supported)?;
+        request.ensure_supported_parameters(
+            exec_ctx.model_capabilities.for_model(&request.model),
+            exec_ctx.responses_config.prompt_cache_options_supported,
+        )?;
         // A compaction this turn made carries its window; summarize what the model saw.
         let original_items: Vec<InputItem> = expand_carried_windows(input.input_items())
             .into_iter()
@@ -337,6 +340,7 @@ mod tests {
     use crate::executor::modes::{ConversationHandler, ResponseHandler};
     use crate::executor::request::{ExecutionContext, RequestContext};
     use crate::storage::{ConversationStore, ResponseMetadata, ResponseStore, create_pool_with_schema};
+    use crate::types::ServiceTier;
     use crate::types::event::MessageStatus;
     use crate::types::io::InOutItem;
     use crate::types::io::{
@@ -963,7 +967,7 @@ mod tests {
         assert!(estimate_input_tokens(&text_input) > threshold);
         let mut text_context = context_with_threshold(text_input, threshold);
         text_context.enriched_request.prompt_cache_key = Some("workspace-a".to_owned());
-        text_context.enriched_request.service_tier = Some("priority".to_owned());
+        text_context.enriched_request.service_tier = Some(ServiceTier::Priority);
         text_context.enriched_request.prompt_cache_retention =
             Some(crate::types::request_response::PromptCacheRetention::TwentyFourHours);
 
