@@ -273,7 +273,8 @@ impl ExecutorError {
             | Self::Storage(
                 StorageError::ItemCursorNotFound { .. }
                 | StorageError::ResponseNotFound { .. }
-                | StorageError::PreviousResponseNotFound { .. },
+                | StorageError::PreviousResponseNotFound { .. }
+                | StorageError::ConversationNotFound { .. },
             ) => "invalid_request_error",
             Self::Storage(e) if e.is_not_found() => "not_found",
             Self::Storage(e) if e.is_validation() => "invalid_request_error",
@@ -341,7 +342,8 @@ impl ExecutorError {
                 error @ (StorageError::ItemAlreadyInConversation
                 | StorageError::ItemCursorNotFound { .. }
                 | StorageError::ResponseNotFound { .. }
-                | StorageError::PreviousResponseNotFound { .. }),
+                | StorageError::PreviousResponseNotFound { .. }
+                | StorageError::ConversationNotFound { .. }),
             ) => error.to_string(),
             Self::Storage(StorageError::Database(_)) => "Internal server error".to_owned(),
             Self::Tool(
@@ -358,7 +360,11 @@ impl ExecutorError {
         let code = if matches!(
             self.client_visible_error(),
             Self::Tool(ToolError::MissingOutput { .. } | ToolError::UnknownCallOutput { .. })
-                | Self::Storage(StorageError::ItemCursorNotFound { .. } | StorageError::ResponseNotFound { .. })
+                | Self::Storage(
+                    StorageError::ItemCursorNotFound { .. }
+                        | StorageError::ResponseNotFound { .. }
+                        | StorageError::ConversationNotFound { .. }
+                )
                 | Self::UnsupportedValue { code: None, .. }
         ) {
             serde_json::Value::Null
@@ -373,7 +379,8 @@ impl ExecutorError {
             error.insert("param".to_owned(), serde_json::json!(param));
         } else if matches!(
             self.client_visible_error(),
-            Self::Storage(StorageError::ResponseNotFound { .. }) | Self::UnsupportedValue { param: None, .. }
+            Self::Storage(StorageError::ResponseNotFound { .. } | StorageError::ConversationNotFound { .. })
+                | Self::UnsupportedValue { param: None, .. }
         ) {
             error.insert("param".to_owned(), serde_json::Value::Null);
         }
