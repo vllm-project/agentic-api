@@ -102,32 +102,6 @@ impl InputItem {
             Self::CompactionTrigger => None,
         }
     }
-
-    /// Returns the known public ID prefix, including its underscore separator.
-    /// A missing rule does not impose a prefix on unverified or ID-less variants.
-    #[must_use]
-    pub(crate) fn id_prefix(&self) -> Option<&'static str> {
-        match self {
-            Self::MultiAgentCall(_) => Some("mac_"),
-            Self::MultiAgentCallOutput(_) => Some("maco_"),
-            Self::AgentMessage(_) => Some("amsg_"),
-            Self::Message(_) => Some("msg_"),
-            Self::FunctionCall(_) | Self::FunctionCallOutput(_) => Some("fc_"),
-            Self::CodeInterpreterCall(_) => Some("ci_"),
-            Self::ToolSearchCall(_) => Some("tsc_"),
-            Self::ToolSearchOutput(_) => Some("tso_"),
-            Self::CustomToolCall(_) => Some("ctc_"),
-            Self::ShellCall(_) => Some("sh_"),
-            Self::Reasoning(_) => Some("rs_"),
-            Self::McpListTools(_) => Some("mcpl_"),
-            Self::Compaction(_) => Some("cmp_"),
-            Self::WebSearchCall(_) => Some("ws_"),
-            Self::McpCall(_) => Some("mcp_"),
-            Self::ShellCallOutput(_) => Some("sho_"),
-            Self::CustomToolCallOutput(_) => Some("ctco_"),
-            Self::CompactionTrigger => None,
-        }
-    }
 }
 
 impl OutputItem {
@@ -155,34 +129,56 @@ impl OutputItem {
             Self::Unknown => None,
         }
     }
-
-    /// Returns the known public ID prefix, including its underscore separator.
-    /// A missing rule does not impose a prefix on unverified or ID-less variants.
-    #[must_use]
-    pub(crate) fn id_prefix(&self) -> Option<&'static str> {
-        match self {
-            Self::MultiAgentCall(_) => Some("mac_"),
-            Self::MultiAgentCallOutput(_) => Some("maco_"),
-            Self::AgentMessage(_) => Some("amsg_"),
-            Self::Message(_) => Some("msg_"),
-            Self::FunctionCall(_) => Some("fc_"),
-            Self::CodeInterpreterCall(_) => Some("ci_"),
-            Self::ToolSearchCall(_) => Some("tsc_"),
-            Self::ToolSearchOutput(_) => Some("tso_"),
-            Self::CustomToolCall(_) => Some("ctc_"),
-            Self::ShellCall(_) => Some("sh_"),
-            Self::FileSearchCall(_) => Some("fs_"),
-            Self::WebSearchCall(_) => Some("ws_"),
-            Self::McpCall(_) => Some("mcp_"),
-            Self::McpListTools(_) => Some("mcpl_"),
-            Self::Reasoning(_) => Some("rs_"),
-            Self::Compaction(_) => Some("cmp_"),
-            Self::Unknown => None,
-        }
-    }
 }
 
 impl InOutItem {
+    /// Returns the public ID prefixes `OpenAI` admits for the type, including their underscore separator; new IDs are
+    /// minted with the first. A missing rule does not impose a prefix on unverified or ID-less variants.
+    #[must_use]
+    pub(crate) fn id_prefixes(&self) -> Option<&'static [&'static str]> {
+        match self {
+            Self::Input(input) => match input {
+                InputItem::MultiAgentCall(_) => Some(&["mac_"]),
+                InputItem::MultiAgentCallOutput(_) => Some(&["maco_"]),
+                InputItem::AgentMessage(_) => Some(&["amsg_"]),
+                InputItem::Message(_) => Some(&["msg_"]),
+                InputItem::FunctionCall(_) | InputItem::FunctionCallOutput(_) => Some(&["fc_", "fco_"]),
+                InputItem::CodeInterpreterCall(_) => Some(&["ci_"]),
+                InputItem::ToolSearchCall(_) => Some(&["tsc_"]),
+                InputItem::ToolSearchOutput(_) => Some(&["tso_"]),
+                InputItem::CustomToolCall(_) => Some(&["ctc_", "ctco_"]),
+                InputItem::ShellCall(_) => Some(&["sh_", "sho_"]),
+                InputItem::Reasoning(_) => Some(&["rs_"]),
+                InputItem::McpListTools(_) => Some(&["mcpl_"]),
+                InputItem::Compaction(_) => Some(&["cmp_"]),
+                InputItem::WebSearchCall(_) => Some(&["ws_"]),
+                InputItem::McpCall(_) => Some(&["mcp_"]),
+                InputItem::ShellCallOutput(_) => Some(&["sho_"]),
+                InputItem::CustomToolCallOutput(_) => Some(&["ctco_"]),
+                InputItem::CompactionTrigger => None,
+            },
+            Self::Output(output) => match output {
+                OutputItem::MultiAgentCall(_) => Some(&["mac_"]),
+                OutputItem::MultiAgentCallOutput(_) => Some(&["maco_"]),
+                OutputItem::AgentMessage(_) => Some(&["amsg_"]),
+                OutputItem::Message(_) => Some(&["msg_"]),
+                OutputItem::FunctionCall(_) => Some(&["fc_", "fco_"]),
+                OutputItem::CodeInterpreterCall(_) => Some(&["ci_"]),
+                OutputItem::ToolSearchCall(_) => Some(&["tsc_"]),
+                OutputItem::ToolSearchOutput(_) => Some(&["tso_"]),
+                OutputItem::CustomToolCall(_) => Some(&["ctc_", "ctco_"]),
+                OutputItem::ShellCall(_) => Some(&["sh_", "sho_"]),
+                OutputItem::FileSearchCall(_) => Some(&["fs_"]),
+                OutputItem::WebSearchCall(_) => Some(&["ws_"]),
+                OutputItem::McpCall(_) => Some(&["mcp_"]),
+                OutputItem::McpListTools(_) => Some(&["mcpl_"]),
+                OutputItem::Reasoning(_) => Some(&["rs_"]),
+                OutputItem::Compaction(_) => Some(&["cmp_"]),
+                OutputItem::Unknown => None,
+            },
+        }
+    }
+
     /// Admits an item a client sent, as Responses input or as Conversations items: the one check every such item
     /// passes. As on `OpenAI`, its ID must begin with its type's prefix and a call or an output needs a non-empty
     /// `call_id` (repeated ones are accepted). `item` is its parameter path, such as `input[1]`.
@@ -190,12 +186,8 @@ impl InOutItem {
     /// # Errors
     /// [`ClientItemError`] for a wrong ID prefix or an empty `call_id`.
     fn admit(&self, item: &str) -> Result<(), ClientItemError> {
-        let (id, prefix) = match self {
-            Self::Input(input) => (input.id(), input.id_prefix()),
-            Self::Output(output) => (output.id(), output.id_prefix()),
-        };
-        if let (Some(id), Some(prefix)) = (id, prefix)
-            && !id.starts_with(prefix)
+        if let (Some(id), Some(prefixes @ [prefix, ..])) = (self.id(), self.id_prefixes())
+            && !prefixes.iter().any(|prefix| id.starts_with(prefix))
         {
             return Err(ClientItemError::InvalidId {
                 param: format!("{item}.id"),
