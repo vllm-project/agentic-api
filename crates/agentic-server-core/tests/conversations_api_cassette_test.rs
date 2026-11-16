@@ -793,7 +793,7 @@ fn overlapping_multi_agent_turns_keep_the_first_turns_pending_call() {
 
 fn check_edge_case_recording(cassette: &Cassette) {
     let turns = &cassette.turns;
-    assert_eq!(turns.len(), 19);
+    assert_eq!(turns.len(), 22);
     for (index, turn) in turns.iter().enumerate() {
         assert_eq!(turn.filename, format!("t{}", index + 1));
     }
@@ -883,8 +883,9 @@ fn edge_case_recordings_preserve_item_ids_and_deleted_cursor_behavior() {
     check_edge_case_recording(&openai);
     check_edge_case_recording(&gateway);
 
+    // `OpenAI` mints one ID per copy of a repeated new ID (t21, t22), so `check_reused_item_occurrences` covers those.
     let mut ids = IdPairs::default();
-    for (index, (left, right)) in openai.turns.iter().zip(&gateway.turns).enumerate() {
+    for (index, (left, right)) in openai.turns.iter().zip(&gateway.turns).take(20).enumerate() {
         let location = format!("edge-cases t{}", index + 1);
         assert_eq!(left.request.method, right.request.method, "{location}: method");
         compare_path(&left.request.path, &right.request.path, &mut ids);
@@ -1015,29 +1016,39 @@ fn both_providers_reuse_item_identity_and_preserve_duplicate_occurrences() {
 
 fn check_reused_item_occurrences(recording: &Cassette) {
     let turns = &recording.turns;
-    assert_eq!(turns.len(), 19);
+    assert_eq!(turns.len(), 22);
     let original = &turns[7].response.body.as_ref().unwrap()["data"][2];
     let public_id = original["id"].as_str().unwrap();
+    let path = |turn: &Turn| {
+        let conversation_id = turn.response.body.as_ref().unwrap()["id"].as_str().unwrap();
+        format!("/v1/conversations/{conversation_id}/items")
+    };
     for (start, count) in [(11, 1), (14, 2)] {
-        let conversation_id = turns[start].response.body.as_ref().unwrap()["id"].as_str().unwrap();
-        let path = format!("/v1/conversations/{conversation_id}/items");
-        let creation = &turns[start + 1];
-        assert_eq!(creation.request.path, path);
-        assert_eq!(creation.response.status_code, 200);
+        let (creation, listing) = (&turns[start + 1], &turns[start + 2]);
+        assert_eq!(creation.request.path, path(&turns[start]));
+        assert_eq!(listing.request.path, path(&turns[start]));
         let requested = creation.request.body["items"].as_array().unwrap();
         assert_eq!(requested.len(), count);
         for item in requested {
             assert_eq!(item["id"], public_id);
             assert_ne!(item["content"], original["content"]);
         }
-        let expected = vec![original.clone(); count];
-        assert_eq!(creation.response.body.as_ref().unwrap()["data"], json!(expected));
-        let listing = &turns[start + 2];
-        assert_eq!(listing.request.path, path);
         assert_eq!(listing.request.query_params, json!({"order": "asc"}));
         assert_eq!(listing.response.status_code, 200);
-        assert_eq!(listing.response.body.as_ref().unwrap()["data"], json!(expected));
     }
+    // One reused stored item is stored as the original; two copies of it in one request are refused.
+    assert_eq!(turns[12].response.status_code, 200);
+    assert_eq!(turns[12].response.body.as_ref().unwrap()["data"], json!([original]));
+    assert_eq!(turns[13].response.body.as_ref().unwrap()["data"], json!([original]));
+    assert_eq!(turns[15].response.status_code, 409);
+    assert_eq!(
+        turns[15].response.body.as_ref().unwrap(),
+        &json!({"error": {
+            "type": "invalid_request_error", "code": "item_conflict", "param": "item",
+            "message": "The item was modified or deleted while it was being added. Please retry your request."
+        }})
+    );
+    assert_eq!(turns[16].response.body.as_ref().unwrap()["data"], json!([]));
     assert_eq!(turns[17].response.status_code, 400);
     assert_eq!(
         turns[17].response.body.as_ref().unwrap(),
@@ -1051,6 +1062,19 @@ fn check_reused_item_occurrences(recording: &Cassette) {
         turns[18].response.body.as_ref().unwrap()["data"],
         json!([original_items[0], original_items[2]])
     );
+    // A new ID repeated in one request reuses nothing, so both copies are stored in order.
+    let (creation, listing) = (&turns[20], &turns[21]);
+    assert_eq!(creation.request.path, path(&turns[19]));
+    assert_eq!(creation.response.status_code, 200);
+    let requested = creation.request.body["items"].as_array().unwrap();
+    assert_eq!(requested[0]["id"], requested[1]["id"]);
+    let contents = |turn: &Turn| -> Vec<Value> {
+        let items = turn.response.body.as_ref().unwrap()["data"].as_array().unwrap();
+        items.iter().map(|item| item["content"][0]["text"].clone()).collect()
+    };
+    let sent: Vec<_> = requested.iter().map(|item| item["content"].clone()).collect();
+    assert_eq!(contents(creation), sent);
+    assert_eq!(contents(listing), sent);
 }
 
 #[tokio::test]

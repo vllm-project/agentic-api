@@ -33,7 +33,7 @@ record() {
     local turns=5
     if [[ "$mode" == branch ]]; then turns=6; fi
     if [[ "$mode" == pagination ]]; then turns=10; fi
-    if [[ "$mode" == edge-cases ]]; then turns=19; fi
+    if [[ "$mode" == edge-cases ]]; then turns=22; fi
     if [[ "$mode" == item-id-prefixes ]]; then turns=18; fi
     if [[ "$mode" == concurrent-writes ]]; then turns=22; fi
     if [[ "$mode" == competing-tool-outputs ]]; then turns=9; fi
@@ -58,7 +58,7 @@ from yaml import safe_load
 cassette = safe_load(Path(sys.argv[1]).read_text())
 mode, scenario = sys.argv[2:]
 turns = cassette["turns"]
-expected = {"pagination": 10, "branch": 6, "edge-cases": 19, "item-id-prefixes": 18, "concurrent-writes": 22,
+expected = {"pagination": 10, "branch": 6, "edge-cases": 22, "item-id-prefixes": 18, "concurrent-writes": 22,
             "competing-tool-outputs": 9, "overlapping-multi-agent": 7}.get(mode, 5)
 assert list(cassette) == ["turns"], "cassette must be one flat turns list"
 assert len(turns) == expected
@@ -180,6 +180,12 @@ if mode == "edge-cases":
     assert requests[17]["body"] == requests[12]["body"]
     assert (requests[18]["method"], requests[18]["path"]) == ("GET", items_path)
     assert requests[18]["query_params"] == {"order": "asc"}
+    assert (requests[19]["method"], requests[19]["path"]) == ("POST", "/v1/conversations")
+    unseen_path = f"/v1/conversations/{turns[19]['response']['body']['id']}/items"
+    assert (requests[20]["method"], requests[20]["path"]) == ("POST", unseen_path)
+    unseen = [item["id"] for item in requests[20]["body"]["items"]]
+    assert len(unseen) == 2 and unseen[0] == unseen[1] and unseen[0] != reused_id
+    assert (requests[21]["method"], requests[21]["path"]) == ("GET", unseen_path)
     sys.exit(0)
 assert (requests[1]["method"], requests[1]["path"]) == ("POST", "/v1/responses")
 assert "conversation" in requests[1]["body"] and "previous_response_id" not in requests[1]["body"]

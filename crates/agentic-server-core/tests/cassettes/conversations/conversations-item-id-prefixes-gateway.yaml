@@ -12,8 +12,8 @@ turns:
     query_params: {}
   response:
     body:
-      created_at: 1794831606
-      id: conv_01a1e44c-e337-7dd1-bc15-82e29319d20a
+      created_at: 1794834947
+      id: conv_01a1e47f-de5b-7a21-8436-24d92c645e33
       metadata: {}
       object: conversation
     headers:
@@ -25,7 +25,7 @@ turns:
       items:
       - arguments: '{}'
         call_id: call_prefix_0
-        id: fco_0c5888dd668abd074b39a555
+        id: fco_6d0d860ae0f5cd57f72eae66
         name: test_fn
         type: function_call
     headers:
@@ -34,20 +34,20 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_01a1e44c-e337-7dd1-bc15-82e29319d20a/items
+    path: /v1/conversations/conv_01a1e47f-de5b-7a21-8436-24d92c645e33/items
     query_params: {}
   response:
     body:
       data:
       - arguments: '{}'
         call_id: call_prefix_0
-        id: fco_0c5888dd668abd074b39a555
+        id: fco_6d0d860ae0f5cd57f72eae66
         name: test_fn
         status: in_progress
         type: function_call
-      first_id: fco_0c5888dd668abd074b39a555
+      first_id: fco_6d0d860ae0f5cd57f72eae66
       has_more: false
-      last_id: fco_0c5888dd668abd074b39a555
+      last_id: fco_6d0d860ae0f5cd57f72eae66
       object: list
     headers:
       content-type: application/json
@@ -57,7 +57,7 @@ turns:
     body:
       items:
       - call_id: call_prefix_1
-        id: fco_ea5cd88dda28cbf5ac5032d0
+        id: fco_343bdae8ac874bf43973f09e
         output: done
         type: function_call_output
     headers:
@@ -66,19 +66,19 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_01a1e44c-e337-7dd1-bc15-82e29319d20a/items
+    path: /v1/conversations/conv_01a1e47f-de5b-7a21-8436-24d92c645e33/items
     query_params: {}
   response:
     body:
       data:
       - call_id: call_prefix_1
-        id: fco_ea5cd88dda28cbf5ac5032d0
+        id: fco_343bdae8ac874bf43973f09e
         output: done
         status: completed
         type: function_call_output
-      first_id: fco_ea5cd88dda28cbf5ac5032d0
+      first_id: fco_343bdae8ac874bf43973f09e
       has_more: false
-      last_id: fco_ea5cd88dda28cbf5ac5032d0
+      last_id: fco_343bdae8ac874bf43973f09e
       object: list
     headers:
       content-type: application/json
@@ -88,7 +88,7 @@ turns:
     body:
       items:
       - call_id: call_prefix_2
-        id: fc_e936dccca23ade21108a070d
+        id: fc_90b1cddc4b1b91ac1f0361ea
         output: done
         type: function_call_output
     headers:
@@ -97,19 +97,19 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_01a1e44c-e337-7dd1-bc15-82e29319d20a/items
+    path: /v1/conversations/conv_01a1e47f-de5b-7a21-8436-24d92c645e33/items
     query_params: {}
   response:
     body:
       data:
       - call_id: call_prefix_2
-        id: fc_e936dccca23ade21108a070d
+        id: fc_90b1cddc4b1b91ac1f0361ea
         output: done
         status: completed
         type: function_call_output
-      first_id: fc_e936dccca23ade21108a070d
+      first_id: fc_90b1cddc4b1b91ac1f0361ea
       has_more: false
-      last_id: fc_e936dccca23ade21108a070d
+      last_id: fc_90b1cddc4b1b91ac1f0361ea
       object: list
     headers:
       content-type: application/json
@@ -119,7 +119,7 @@ turns:
     body:
       items:
       - call_id: call_prefix_3
-        id: ctco_15632bf349053eeb68d030f5
+        id: ctco_06d00b80b823966dc75a58a5
         input: x
         name: test_tool
         type: custom_tool_call
@@ -129,19 +129,19 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_01a1e44c-e337-7dd1-bc15-82e29319d20a/items
+    path: /v1/conversations/conv_01a1e47f-de5b-7a21-8436-24d92c645e33/items
     query_params: {}
   response:
     body:
       data:
       - call_id: call_prefix_3
-        id: ctco_15632bf349053eeb68d030f5
+        id: ctco_06d00b80b823966dc75a58a5
         input: x
         name: test_tool
         type: custom_tool_call
-      first_id: ctco_15632bf349053eeb68d030f5
+      first_id: ctco_06d00b80b823966dc75a58a5
       has_more: false
-      last_id: ctco_15632bf349053eeb68d030f5
+      last_id: ctco_06d00b80b823966dc75a58a5
       object: list
     headers:
       content-type: application/json
@@ -151,7 +151,7 @@ turns:
     body:
       items:
       - call_id: call_prefix_4
-        id: ctco_1e1823111661b22f8f98593e
+        id: ctco_b15fd1cfa574cee91d7b6b46
         output: done
         type: custom_tool_call_output
     headers:
@@ -160,19 +160,19 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_01a1e44c-e337-7dd1-bc15-82e29319d20a/items
+    path: /v1/conversations/conv_01a1e47f-de5b-7a21-8436-24d92c645e33/items
     query_params: {}
   response:
     body:
       data:
       - call_id: call_prefix_4
-        id: ctco_1e1823111661b22f8f98593e
+        id: ctco_b15fd1cfa574cee91d7b6b46
         output: done
         status: completed
         type: custom_tool_call_output
-      first_id: ctco_1e1823111661b22f8f98593e
+      first_id: ctco_b15fd1cfa574cee91d7b6b46
       has_more: false
-      last_id: ctco_1e1823111661b22f8f98593e
+      last_id: ctco_b15fd1cfa574cee91d7b6b46
       object: list
     headers:
       content-type: application/json
@@ -185,7 +185,7 @@ turns:
           commands:
           - pwd
         call_id: call_prefix_5
-        id: sho_cdfcef15135b9d484ad978bc
+        id: sho_b5174a5b276bec534b6176fa
         status: completed
         type: shell_call
     headers:
@@ -194,7 +194,7 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_01a1e44c-e337-7dd1-bc15-82e29319d20a/items
+    path: /v1/conversations/conv_01a1e47f-de5b-7a21-8436-24d92c645e33/items
     query_params: {}
   response:
     body:
@@ -203,12 +203,12 @@ turns:
           commands:
           - pwd
         call_id: call_prefix_5
-        id: sho_cdfcef15135b9d484ad978bc
+        id: sho_b5174a5b276bec534b6176fa
         status: completed
         type: shell_call
-      first_id: sho_cdfcef15135b9d484ad978bc
+      first_id: sho_b5174a5b276bec534b6176fa
       has_more: false
-      last_id: sho_cdfcef15135b9d484ad978bc
+      last_id: sho_b5174a5b276bec534b6176fa
       object: list
     headers:
       content-type: application/json
@@ -218,7 +218,7 @@ turns:
     body:
       items:
       - call_id: call_prefix_6
-        id: sho_52ca5373879903334d97d3ed
+        id: sho_3a67ab431e19a4668abc624f
         output:
         - outcome:
             exit_code: 0
@@ -234,13 +234,13 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_01a1e44c-e337-7dd1-bc15-82e29319d20a/items
+    path: /v1/conversations/conv_01a1e47f-de5b-7a21-8436-24d92c645e33/items
     query_params: {}
   response:
     body:
       data:
       - call_id: call_prefix_6
-        id: sho_52ca5373879903334d97d3ed
+        id: sho_3a67ab431e19a4668abc624f
         output:
         - outcome:
             exit_code: 0
@@ -251,9 +251,9 @@ turns:
             '
         status: completed
         type: shell_call_output
-      first_id: sho_52ca5373879903334d97d3ed
+      first_id: sho_3a67ab431e19a4668abc624f
       has_more: false
-      last_id: sho_52ca5373879903334d97d3ed
+      last_id: sho_3a67ab431e19a4668abc624f
       object: list
     headers:
       content-type: application/json
@@ -263,7 +263,7 @@ turns:
     body:
       items:
       - call_id: call_prefix_7
-        id: xyz_8e956eee99f05ed074e44de6
+        id: xyz_f01f0de4a912cbbc63886578
         output: done
         type: function_call_output
     headers:
@@ -272,13 +272,13 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_01a1e44c-e337-7dd1-bc15-82e29319d20a/items
+    path: /v1/conversations/conv_01a1e47f-de5b-7a21-8436-24d92c645e33/items
     query_params: {}
   response:
     body:
       error:
         code: invalid_value
-        message: 'Invalid ''items[0].id'': ''xyz_8e956eee99f05ed074e44de6''. Expected
+        message: 'Invalid ''items[0].id'': ''xyz_f01f0de4a912cbbc63886578''. Expected
           an ID that begins with ''fc''.'
         param: items[0].id
         type: invalid_request_error
@@ -290,7 +290,7 @@ turns:
     body:
       items:
       - call_id: call_prefix_8
-        id: ctc_2760eb98b63a962140fc8a63
+        id: ctc_4a36562a742b5114ec2fddf5
         output: done
         type: custom_tool_call_output
     headers:
@@ -299,13 +299,13 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_01a1e44c-e337-7dd1-bc15-82e29319d20a/items
+    path: /v1/conversations/conv_01a1e47f-de5b-7a21-8436-24d92c645e33/items
     query_params: {}
   response:
     body:
       error:
         code: invalid_value
-        message: 'Invalid ''items[0].id'': ''ctc_2760eb98b63a962140fc8a63''. Expected
+        message: 'Invalid ''items[0].id'': ''ctc_4a36562a742b5114ec2fddf5''. Expected
           an ID that begins with ''ctco''.'
         param: items[0].id
         type: invalid_request_error
@@ -317,7 +317,7 @@ turns:
     body:
       items:
       - call_id: call_prefix_9
-        id: sh_a4832e8b24e1fd8e9c42b892
+        id: sh_66ad1287de7867168d5a39ef
         output:
         - outcome:
             exit_code: 0
@@ -333,13 +333,13 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_01a1e44c-e337-7dd1-bc15-82e29319d20a/items
+    path: /v1/conversations/conv_01a1e47f-de5b-7a21-8436-24d92c645e33/items
     query_params: {}
   response:
     body:
       error:
         code: invalid_value
-        message: 'Invalid ''items[0].id'': ''sh_a4832e8b24e1fd8e9c42b892''. Expected
+        message: 'Invalid ''items[0].id'': ''sh_66ad1287de7867168d5a39ef''. Expected
           an ID that begins with ''sho''.'
         param: items[0].id
         type: invalid_request_error
@@ -354,7 +354,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/conversations/conv_01a1e44c-e337-7dd1-bc15-82e29319d20a/items
+    path: /v1/conversations/conv_01a1e47f-de5b-7a21-8436-24d92c645e33/items
     query_params:
       order: asc
   response:
@@ -362,27 +362,27 @@ turns:
       data:
       - arguments: '{}'
         call_id: call_prefix_0
-        id: fco_0c5888dd668abd074b39a555
+        id: fco_6d0d860ae0f5cd57f72eae66
         name: test_fn
         status: in_progress
         type: function_call
       - call_id: call_prefix_1
-        id: fco_ea5cd88dda28cbf5ac5032d0
+        id: fco_343bdae8ac874bf43973f09e
         output: done
         status: completed
         type: function_call_output
       - call_id: call_prefix_2
-        id: fc_e936dccca23ade21108a070d
+        id: fc_90b1cddc4b1b91ac1f0361ea
         output: done
         status: completed
         type: function_call_output
       - call_id: call_prefix_3
-        id: ctco_15632bf349053eeb68d030f5
+        id: ctco_06d00b80b823966dc75a58a5
         input: x
         name: test_tool
         type: custom_tool_call
       - call_id: call_prefix_4
-        id: ctco_1e1823111661b22f8f98593e
+        id: ctco_b15fd1cfa574cee91d7b6b46
         output: done
         status: completed
         type: custom_tool_call_output
@@ -390,11 +390,11 @@ turns:
           commands:
           - pwd
         call_id: call_prefix_5
-        id: sho_cdfcef15135b9d484ad978bc
+        id: sho_b5174a5b276bec534b6176fa
         status: completed
         type: shell_call
       - call_id: call_prefix_6
-        id: sho_52ca5373879903334d97d3ed
+        id: sho_3a67ab431e19a4668abc624f
         output:
         - outcome:
             exit_code: 0
@@ -405,9 +405,9 @@ turns:
             '
         status: completed
         type: shell_call_output
-      first_id: fco_0c5888dd668abd074b39a555
+      first_id: fco_6d0d860ae0f5cd57f72eae66
       has_more: false
-      last_id: sho_52ca5373879903334d97d3ed
+      last_id: sho_3a67ab431e19a4668abc624f
       object: list
     headers:
       content-type: application/json
@@ -452,29 +452,29 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_01a1e44c-e337-7dd1-bc15-82e29319d20a/items
+    path: /v1/conversations/conv_01a1e47f-de5b-7a21-8436-24d92c645e33/items
     query_params: {}
   response:
     body:
       data:
       - arguments: '{}'
         call_id: call_seed_function
-        id: fc_01a1e44c-e4bb-7dd1-999b-0848a8df4060
+        id: fc_01a1e47f-dfd0-7333-a2ab-e75f365afbe0
         name: test_fn
         status: in_progress
         type: function_call
       - call_id: call_seed_function
-        id: fc_01a1e44c-e4bb-7dd1-999b-08634d8e5dc9
+        id: fc_01a1e47f-dfd0-7333-a2ab-e77e121da36f
         output: done
         status: completed
         type: function_call_output
       - call_id: call_seed_custom
-        id: ctc_01a1e44c-e4bb-7dd1-999b-0886b830cdb8
+        id: ctc_01a1e47f-dfd0-7333-a2ab-e791780daf11
         input: x
         name: test_tool
         type: custom_tool_call
       - call_id: call_seed_custom
-        id: ctco_01a1e44c-e4bb-7dd1-999b-08a8f4746af4
+        id: ctco_01a1e47f-dfd0-7333-a2ab-e7b1f5f8866d
         output: done
         status: completed
         type: custom_tool_call_output
@@ -482,11 +482,11 @@ turns:
           commands:
           - pwd
         call_id: call_seed_shell
-        id: sh_01a1e44c-e4bb-7dd1-999b-08cdf0b5296a
+        id: sh_01a1e47f-dfd1-73b2-8644-dc20794c4cd8
         status: completed
         type: shell_call
       - call_id: call_seed_shell
-        id: sho_01a1e44c-e4bb-7dd1-999b-08ee4ede0c94
+        id: sho_01a1e47f-dfd1-73b2-8644-dc499ffb27c5
         output:
         - outcome:
             exit_code: 0
@@ -497,9 +497,9 @@ turns:
             '
         status: completed
         type: shell_call_output
-      first_id: fc_01a1e44c-e4bb-7dd1-999b-0848a8df4060
+      first_id: fc_01a1e47f-dfd0-7333-a2ab-e75f365afbe0
       has_more: false
-      last_id: sho_01a1e44c-e4bb-7dd1-999b-08ee4ede0c94
+      last_id: sho_01a1e47f-dfd1-73b2-8644-dc499ffb27c5
       object: list
     headers:
       content-type: application/json
@@ -517,8 +517,8 @@ turns:
     query_params: {}
   response:
     body:
-      created_at: 1794831607
-      id: conv_01a1e44c-e502-7353-8b6a-9178f69906ae
+      created_at: 1794834948
+      id: conv_01a1e47f-e017-7392-be36-691c65545d85
       metadata: {}
       object: conversation
     headers:
@@ -530,7 +530,7 @@ turns:
       items:
       - arguments: '{}'
         call_id: call_kind_0
-        id: fc_01a1e44c-e4bb-7dd1-999b-08634d8e5dc9
+        id: fc_01a1e47f-dfd0-7333-a2ab-e77e121da36f
         name: test_fn
         type: function_call
     headers:
@@ -539,19 +539,19 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_01a1e44c-e502-7353-8b6a-9178f69906ae/items
+    path: /v1/conversations/conv_01a1e47f-e017-7392-be36-691c65545d85/items
     query_params: {}
   response:
     body:
       data:
       - call_id: call_seed_function
-        id: fc_01a1e44c-e4bb-7dd1-999b-08634d8e5dc9
+        id: fc_01a1e47f-dfd0-7333-a2ab-e77e121da36f
         output: done
         status: completed
         type: function_call_output
-      first_id: fc_01a1e44c-e4bb-7dd1-999b-08634d8e5dc9
+      first_id: fc_01a1e47f-dfd0-7333-a2ab-e77e121da36f
       has_more: false
-      last_id: fc_01a1e44c-e4bb-7dd1-999b-08634d8e5dc9
+      last_id: fc_01a1e47f-dfd0-7333-a2ab-e77e121da36f
       object: list
     headers:
       content-type: application/json
@@ -561,7 +561,7 @@ turns:
     body:
       items:
       - call_id: call_kind_1
-        id: fc_01a1e44c-e4bb-7dd1-999b-0848a8df4060
+        id: fc_01a1e47f-dfd0-7333-a2ab-e75f365afbe0
         output: done
         type: function_call_output
     headers:
@@ -570,20 +570,20 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_01a1e44c-e502-7353-8b6a-9178f69906ae/items
+    path: /v1/conversations/conv_01a1e47f-e017-7392-be36-691c65545d85/items
     query_params: {}
   response:
     body:
       data:
       - arguments: '{}'
         call_id: call_seed_function
-        id: fc_01a1e44c-e4bb-7dd1-999b-0848a8df4060
+        id: fc_01a1e47f-dfd0-7333-a2ab-e75f365afbe0
         name: test_fn
         status: in_progress
         type: function_call
-      first_id: fc_01a1e44c-e4bb-7dd1-999b-0848a8df4060
+      first_id: fc_01a1e47f-dfd0-7333-a2ab-e75f365afbe0
       has_more: false
-      last_id: fc_01a1e44c-e4bb-7dd1-999b-0848a8df4060
+      last_id: fc_01a1e47f-dfd0-7333-a2ab-e75f365afbe0
       object: list
     headers:
       content-type: application/json
@@ -593,7 +593,7 @@ turns:
     body:
       items:
       - call_id: call_kind_2
-        id: ctco_01a1e44c-e4bb-7dd1-999b-08a8f4746af4
+        id: ctco_01a1e47f-dfd0-7333-a2ab-e7b1f5f8866d
         input: x
         name: test_tool
         type: custom_tool_call
@@ -603,19 +603,19 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_01a1e44c-e502-7353-8b6a-9178f69906ae/items
+    path: /v1/conversations/conv_01a1e47f-e017-7392-be36-691c65545d85/items
     query_params: {}
   response:
     body:
       data:
       - call_id: call_seed_custom
-        id: ctco_01a1e44c-e4bb-7dd1-999b-08a8f4746af4
+        id: ctco_01a1e47f-dfd0-7333-a2ab-e7b1f5f8866d
         output: done
         status: completed
         type: custom_tool_call_output
-      first_id: ctco_01a1e44c-e4bb-7dd1-999b-08a8f4746af4
+      first_id: ctco_01a1e47f-dfd0-7333-a2ab-e7b1f5f8866d
       has_more: false
-      last_id: ctco_01a1e44c-e4bb-7dd1-999b-08a8f4746af4
+      last_id: ctco_01a1e47f-dfd0-7333-a2ab-e7b1f5f8866d
       object: list
     headers:
       content-type: application/json
@@ -628,7 +628,7 @@ turns:
           commands:
           - pwd
         call_id: call_kind_3
-        id: sho_01a1e44c-e4bb-7dd1-999b-08ee4ede0c94
+        id: sho_01a1e47f-dfd1-73b2-8644-dc499ffb27c5
         status: completed
         type: shell_call
     headers:
@@ -637,13 +637,13 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_01a1e44c-e502-7353-8b6a-9178f69906ae/items
+    path: /v1/conversations/conv_01a1e47f-e017-7392-be36-691c65545d85/items
     query_params: {}
   response:
     body:
       data:
       - call_id: call_seed_shell
-        id: sho_01a1e44c-e4bb-7dd1-999b-08ee4ede0c94
+        id: sho_01a1e47f-dfd1-73b2-8644-dc499ffb27c5
         output:
         - outcome:
             exit_code: 0
@@ -654,9 +654,9 @@ turns:
             '
         status: completed
         type: shell_call_output
-      first_id: sho_01a1e44c-e4bb-7dd1-999b-08ee4ede0c94
+      first_id: sho_01a1e47f-dfd1-73b2-8644-dc499ffb27c5
       has_more: false
-      last_id: sho_01a1e44c-e4bb-7dd1-999b-08ee4ede0c94
+      last_id: sho_01a1e47f-dfd1-73b2-8644-dc499ffb27c5
       object: list
     headers:
       content-type: application/json

@@ -1,5 +1,6 @@
 //! Conversation history item stored in the database.
 
+use std::collections::HashSet;
 use std::fmt::Write;
 
 use super::super::pool::{DbPool, DbResult, DbTransaction};
@@ -77,7 +78,8 @@ fn item_values_clause(row_count: usize, first_bind_index: usize, sequence_from_c
 /// row ID, so a repeated public ID can be stored once per occurrence. Rows are returned in input order.
 ///
 /// # Errors
-/// Returns an error if insertion fails or an item already belongs to the conversation.
+/// Returns an error if insertion fails, an item already belongs to the conversation, or two items reuse one stored
+/// item.
 pub async fn create_in_tx(
     tx: &mut DbTransaction<'_>,
     items: Vec<Item>,
@@ -173,7 +175,9 @@ async fn create_in_tx_with_next_conversation_seq(
              GROUP BY incoming.seq \
          ) \
          INSERT INTO items (id, metadata, data, created_at, conversation_id, seq, public_id, tenant_id) \
-         SELECT CASE WHEN source.id IS NULL THEN incoming.id ELSE incoming.entry_id END, \
+         SELECT CASE WHEN source.id IS NULL AND incoming.seq = \
+                    (SELECT MIN(first.seq) FROM incoming first WHERE first.id = incoming.id) \
+                THEN incoming.id ELSE incoming.entry_id END, \
                 COALESCE(source.metadata, incoming.metadata), COALESCE(source.data, incoming.data), \
                 COALESCE(source.created_at, incoming.created_at), \
                 incoming.conversation_id, incoming.seq, COALESCE(source.public_id, incoming.id), owner.tenant_id \
@@ -186,6 +190,7 @@ async fn create_in_tx_with_next_conversation_seq(
              WHERE existing.conversation_id = $1 \
                AND (CAST($2 AS BIGINT) IS NULL OR existing.seq < $2) \
          ) \
+         AND NOT EXISTS (SELECT 1 FROM source_rows GROUP BY source_id HAVING COUNT(*) > 1) \
          ORDER BY incoming.seq \
          RETURNING *"
     );
@@ -207,7 +212,13 @@ async fn create_in_tx_with_next_conversation_seq(
 
     let rows = query.fetch_all(&mut **tx).await?;
     if rows.is_empty() {
-        return Err(StorageError::ItemAlreadyInConversation);
+        // Each guard refuses the whole batch; only a repeated public ID can reuse one stored item twice.
+        let mut seen = HashSet::new();
+        return Err(if items.iter().all(|item| seen.insert(&item.public_id)) {
+            StorageError::ItemAlreadyInConversation
+        } else {
+            StorageError::ItemConflict
+        });
     }
     Ok(rows)
 }
@@ -474,6 +485,34 @@ mod tests {
         assert_eq!(original.data, r#"{"original":"a"}"#);
         assert!(get_items_by_public_id(&pool, &[]).await.unwrap().is_empty());
         pool.close().await;
+    }
+
+    /// A repeated new public ID is stored once per copy; a repeated stored one is refused and nothing is written.
+    #[tokio::test]
+    async fn repeated_public_ids_in_one_conversation_batch() {
+        let pool = crate::storage::create_pool_with_schema(Some("sqlite://?mode=memory"))
+            .await
+            .unwrap();
+        let mut transaction = pool.begin().await.unwrap();
+        for conversation_id in ["conv_new", "conv_stored"] {
+            conversation::create_in_tx(&mut transaction, conversation_id, None, None)
+                .await
+                .unwrap();
+        }
+        let repeated = || vec![row("msg_repeated".to_owned()), row("msg_repeated".to_owned())];
+        let created = create_in_tx(&mut transaction, repeated(), Some("conv_new"))
+            .await
+            .unwrap();
+        assert_eq!(created.len(), 2);
+        let refused = create_in_tx(&mut transaction, repeated(), Some("conv_stored")).await;
+        assert!(matches!(refused, Err(StorageError::ItemConflict)));
+        transaction.commit().await.unwrap();
+        let stored = conversation::get_with_items(&pool, "conv_stored")
+            .await
+            .unwrap()
+            .unwrap()
+            .items;
+        assert!(stored.is_empty());
     }
 
     #[tokio::test]
