@@ -3,6 +3,8 @@
 //! Validates that real cassette request bodies — the exact JSON the gateway receives —
 //! parse correctly into `Vec<ResponsesTool>` and normalize through the full pipeline.
 
+use std::collections::HashMap;
+
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -106,10 +108,11 @@ fn upstream_request_value(payload: RequestPayload, stream: bool) -> Value {
         conversation_id: None,
         checkpoint: None,
         continuation: None,
+        files: HashMap::default(),
     };
     let upstream_request = ctx
         .enriched_request
-        .to_upstream_request(stream)
+        .to_upstream_request(stream, &HashMap::default())
         .expect("valid upstream request");
     let body = serialize_to_string(&upstream_request).expect("serialize upstream request");
     serde_json::from_str(&body).expect("upstream request should be JSON")
@@ -347,7 +350,7 @@ fn codex_custom_grammar_cassettes_fail_closed_before_upstream_normalization() {
             // output did not prove equivalent enforcement. Reject the format
             // rather than silently normalizing it to an unconstrained function.
             let error = payload
-                .to_upstream_request(false)
+                .to_upstream_request(false, &HashMap::default())
                 .expect_err("custom grammar must be rejected before normalization");
             assert!(
                 error.to_string().contains("cannot preserve constrained decoding"),

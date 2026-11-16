@@ -210,7 +210,7 @@ fn is_binary_media_type(media_type: &str, filename: &str) -> bool {
 ///
 /// A text media type is enough on its own. Otherwise a text filename decides,
 /// unless the media type is PDF, image, audio, or video.
-pub(super) fn is_text_file(media_type: &str, filename: Option<&str>) -> bool {
+pub(crate) fn is_text_file(media_type: &str, filename: Option<&str>) -> bool {
     is_text_media_type(media_type)
         || filename.is_some_and(|filename| is_text_filename(filename) && !is_binary_media_type(media_type, filename))
 }

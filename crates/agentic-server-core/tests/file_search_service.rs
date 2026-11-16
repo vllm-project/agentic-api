@@ -221,20 +221,18 @@ impl FileBlobStore for PausedBlobs {
 }
 
 #[tokio::test]
-async fn read_file_returns_bytes_and_metadata_for_a_vision_upload() {
+async fn vision_upload_is_readable_through_the_files_api() {
     let service = service().await;
     let file = service
         .upload_file("plot.png", "image/png; charset=binary", "vision", b"png".to_vec())
         .await
         .unwrap();
-    let content = service.read_file(&file.id).await.unwrap();
-    assert_eq!(content.filename, "plot.png");
-    assert_eq!(content.content_type, "image/png; charset=binary");
-    assert_eq!(content.bytes, b"png");
+    assert_eq!(file.filename, "plot.png");
+    assert_eq!(file.purpose, "vision");
     assert_eq!(service.file_content(&file.id).await.unwrap(), b"png");
     assert_eq!(
         service
-            .read_file("file-01a15d85-a1db-76f3-918e-b31d6819a316")
+            .file_content("file-01a15d85-a1db-76f3-918e-b31d6819a316")
             .await
             .unwrap_err()
             .status_code(),

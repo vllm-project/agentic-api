@@ -221,6 +221,8 @@ impl ConversationHandler {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
     use crate::storage::{ResponseCheckpoint, ResponseMetadata, create_pool_with_schema};
     use crate::types::io::ResponsesInput;
@@ -248,6 +250,7 @@ mod tests {
             conversation_id: conversation_id.map(str::to_string),
             checkpoint: None,
             continuation: None,
+            files: HashMap::default(),
         }
     }
 

@@ -5,6 +5,7 @@
 mod common;
 
 use agentic_core::types::conversations::ConversationMetadata;
+use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::sync::Arc;
 use std::time::Duration;
@@ -640,7 +641,7 @@ fn composed_upstream_request_cannot_bypass_file_validation() {
         serde_json::from_value(json!({"model":"test-model", "input":user_input(&file_part())})).unwrap();
     for stream in [false, true] {
         let error = request
-            .to_upstream_request(stream)
+            .to_upstream_request(stream, &HashMap::default())
             .expect_err("typed construction validates input");
         assert!(error.to_string().contains("input[0].content[1]"));
         assert!(error.to_string().contains("input_file"));
@@ -654,6 +655,7 @@ fn composed_upstream_request_cannot_bypass_file_validation() {
         conversation_id: None,
         checkpoint: None,
         continuation: None,
+        files: HashMap::default(),
     };
     for stream in [false, true] {
         let error = upstream_request(&ctx, stream, None, None)

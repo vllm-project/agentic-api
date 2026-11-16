@@ -10,7 +10,7 @@ use super::{RequestPayload, UpstreamRequestError, UpstreamTool};
 use crate::tool::async_execution::lower_async_calls;
 use crate::tool::{CodexNamespaceHandler, NamespaceMap, ToolDeclaration};
 use crate::types::io::ResponsesInput;
-use crate::types::io::input::{HistoryNaming, InputValidationError};
+use crate::types::io::input::{HistoryNaming, InputValidationError, ResolvedFiles};
 
 impl RequestPayload {
     /// The function tools offered upstream for `declarations`, with namespace members under their flat names.
@@ -70,11 +70,12 @@ impl RequestPayload {
     ///
     /// # Errors
     ///
-    /// Returns a file that cannot be converted to text.
+    /// Returns a file that cannot be converted to text or an unresolved `file_id`.
     pub(super) fn upstream_input(
         &self,
         map: Option<&NamespaceMap>,
         history: &HistoryNaming,
+        files: &ResolvedFiles,
     ) -> Result<Cow<'_, ResponsesInput>, InputValidationError> {
         let functions = history.functions.iter().map(String::as_str).collect();
         Ok(lower_async_calls(
@@ -83,7 +84,7 @@ impl RequestPayload {
                 &functions,
                 Cow::Owned(
                     self.input
-                        .normalized_model_input(self.tools.as_deref().unwrap_or_default())?,
+                        .normalized_model_input(self.tools.as_deref().unwrap_or_default(), files)?,
                 ),
             ),
         ))

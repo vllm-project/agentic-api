@@ -5,7 +5,7 @@ use std::fmt;
 use thiserror::Error;
 
 use super::file_text::InputFileError;
-use super::{InputContent, InputItem, InputMessageContent, ResponsesInput};
+use super::{InputContent, InputItem, InputMessageContent, ResponsesInput, ToolCallOutput, ToolOutputContent};
 use crate::types::io::{InOutItem, OutputItem};
 
 /// Invalid message content, with its position in the request history.
@@ -18,14 +18,20 @@ pub struct InputValidationError {
 
 impl fmt::Display for InputValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "input[{}].content", self.item_index)?;
-        if let MessageContentError::UnsupportedPart { part_index, .. }
-        | MessageContentError::UnsupportedFile { part_index, .. }
-        | MessageContentError::UnsupportedImageReference { part_index } = &self.source
-        {
-            write!(f, "[{part_index}]")?;
+        match &self.source {
+            MessageContentError::MutuallyExclusive { location, field } => write!(
+                f,
+                "Mutually exclusive parameters: '{location}'. Ensure you are only providing one of: \
+                 'file_id' or '{field}'."
+            ),
+            MessageContentError::UnsupportedPart { location, .. }
+            | MessageContentError::UnsupportedFile { location, .. } => {
+                write!(f, "{location}: {}", self.source)
+            }
+            MessageContentError::Empty | MessageContentError::EncryptedReasoning => {
+                write!(f, "input[{}].content: {}", self.item_index, self.source)
+            }
         }
-        write!(f, ": {}", self.source)
     }
 }
 
@@ -42,8 +48,78 @@ impl InputValidationError {
     pub(super) fn unsupported_file(item_index: usize, part_index: usize, reason: InputFileError) -> Self {
         Self {
             item_index,
-            source: MessageContentError::UnsupportedFile { part_index, reason },
+            source: file_error(content_location(item_index, part_index), reason),
         }
+    }
+
+    /// A tool-output file at `input[item_index].output[part_index]` that cannot be converted.
+    pub(super) fn unsupported_output_file(item_index: usize, part_index: usize, reason: InputFileError) -> Self {
+        Self {
+            item_index,
+            source: file_error(output_location(item_index, part_index), reason),
+        }
+    }
+
+    /// A `file_id` reference the file handler did not resolve, at a message content part.
+    pub(crate) fn unresolved_file_reference(item_index: usize, part_index: usize) -> Self {
+        Self::unsupported_file(item_index, part_index, InputFileError::UnresolvedFileId)
+    }
+
+    /// A `file_id` reference the file handler did not resolve, at a tool-output part.
+    pub(crate) fn unresolved_output_reference(item_index: usize, part_index: usize) -> Self {
+        Self::unsupported_output_file(item_index, part_index, InputFileError::UnresolvedFileId)
+    }
+
+    /// Whether this rejection is an internal invariant violation rather than bad input.
+    ///
+    /// Rehydration resolves every `file_id` reference before the model-facing
+    /// request is built, so an unresolved reference here means the gateway
+    /// skipped a required stage; the client cannot fix it.
+    pub(crate) fn is_internal(&self) -> bool {
+        matches!(
+            &self.source,
+            MessageContentError::UnsupportedFile {
+                reason: InputFileError::UnresolvedFileId,
+                ..
+            }
+        )
+    }
+
+    /// The `OpenAI` error code for this rejection, when it has a specific one.
+    pub(crate) fn error_code(&self) -> Option<&'static str> {
+        match &self.source {
+            MessageContentError::MutuallyExclusive { .. } => Some("mutually_exclusive_parameters"),
+            MessageContentError::Empty
+            | MessageContentError::UnsupportedPart { .. }
+            | MessageContentError::UnsupportedFile { .. }
+            | MessageContentError::EncryptedReasoning => None,
+        }
+    }
+
+    /// The request parameter this rejection points at, when it has one.
+    pub(crate) fn error_param(&self) -> Option<&str> {
+        match &self.source {
+            MessageContentError::MutuallyExclusive { location, .. } => Some(location),
+            MessageContentError::Empty
+            | MessageContentError::UnsupportedPart { .. }
+            | MessageContentError::UnsupportedFile { .. }
+            | MessageContentError::EncryptedReasoning => None,
+        }
+    }
+}
+
+fn content_location(item_index: usize, part_index: usize) -> String {
+    format!("input[{item_index}].content[{part_index}]")
+}
+
+fn output_location(item_index: usize, part_index: usize) -> String {
+    format!("input[{item_index}].output[{part_index}]")
+}
+
+fn file_error(location: String, reason: InputFileError) -> MessageContentError {
+    match reason {
+        InputFileError::MutuallyExclusive { field } => MessageContentError::MutuallyExclusive { location, field },
+        reason => MessageContentError::UnsupportedFile { location, reason },
     }
 }
 
@@ -55,14 +131,11 @@ enum MessageContentError {
         "message content part type `{kind}` is not supported by the typed Responses executor; \
          provide input_text, input_image, or inline text input_file content instead"
     )]
-    UnsupportedPart { part_index: usize, kind: String },
+    UnsupportedPart { location: String, kind: String },
     #[error("{reason}")]
-    UnsupportedFile { part_index: usize, reason: InputFileError },
-    #[error(
-        "input_image with file_id is not supported on this path; the gateway resolves file references only \
-         during request rehydration, so send image_url instead"
-    )]
-    UnsupportedImageReference { part_index: usize },
+    UnsupportedFile { location: String, reason: InputFileError },
+    #[error("input content fields must not be combined")]
+    MutuallyExclusive { location: String, field: &'static str },
     #[error(
         "reasoning item contains encrypted state without plaintext reasoning content and cannot be replayed to vLLM"
     )]
@@ -70,25 +143,18 @@ enum MessageContentError {
 }
 
 impl InputMessageContent {
-    fn validate(&self, allow_file_id: bool) -> Result<(), MessageContentError> {
+    fn validate(&self, item_index: usize) -> Result<(), MessageContentError> {
         match self {
             Self::Text(_) => Ok(()),
             Self::Parts(parts) if parts.is_empty() => Err(MessageContentError::Empty),
             Self::Parts(parts) => parts.iter().enumerate().try_for_each(|(part_index, part)| {
+                let location = content_location(item_index, part_index);
                 let kind = match part {
                     InputContent::InputFile(file) => {
-                        let result = if allow_file_id {
-                            file.validate_allow_file_id()
-                        } else {
-                            file.validate()
-                        };
-                        return result.map_err(|reason| MessageContentError::UnsupportedFile { part_index, reason });
+                        return file.validate().map_err(|reason| file_error(location, reason));
                     }
                     InputContent::InputImage(image) => {
-                        if !allow_file_id && image.file_id.is_some() {
-                            return Err(MessageContentError::UnsupportedImageReference { part_index });
-                        }
-                        return Ok(());
+                        return validate_image(image, location);
                     }
                     InputContent::Unknown(kind) => kind,
                     InputContent::InputText(_)
@@ -97,7 +163,7 @@ impl InputMessageContent {
                     | InputContent::ReasoningText(_) => return Ok(()),
                 };
                 Err(MessageContentError::UnsupportedPart {
-                    part_index,
+                    location,
                     kind: kind.to_owned(),
                 })
             }),
@@ -105,19 +171,51 @@ impl InputMessageContent {
     }
 }
 
+fn validate_image(image: &super::InputImageContent, location: String) -> Result<(), MessageContentError> {
+    if image.file_id.is_some() && image.image_url.is_some() {
+        return Err(MessageContentError::MutuallyExclusive {
+            location,
+            field: "image_url",
+        });
+    }
+    Ok(())
+}
+
+fn validate_tool_output(output: &ToolCallOutput, item_index: usize) -> Result<(), MessageContentError> {
+    let ToolCallOutput::Content(parts) = output else {
+        return Ok(());
+    };
+    parts.iter().enumerate().try_for_each(|(part_index, part)| {
+        let location = output_location(item_index, part_index);
+        match part {
+            // A structured tool output keeps its own content contract; only a `file_id`
+            // reference has the message rules, because it must resolve before inference.
+            ToolOutputContent::InputFile(file) if file.file_id.is_some() => {
+                file.validate().map_err(|reason| file_error(location, reason))
+            }
+            ToolOutputContent::InputImage(image) if image.file_id.is_some() => validate_image(image, location),
+            ToolOutputContent::InputFile(_) | ToolOutputContent::InputImage(_) | ToolOutputContent::InputText(_) => {
+                Ok(())
+            }
+        }
+    })
+}
+
 impl InputItem {
-    fn validate(&self, allow_file_id: bool) -> Result<(), MessageContentError> {
+    fn validate(&self, item_index: usize) -> Result<(), MessageContentError> {
         match self {
-            Self::Message(message) => message.content.validate(allow_file_id),
+            Self::Message(message) => message.content.validate(item_index),
+            Self::FunctionCallOutput(output) => validate_tool_output(&output.output, item_index),
+            Self::CustomToolCallOutput(output) => validate_tool_output(&output.output, item_index),
             _ => Ok(()),
         }
     }
 }
 
 impl InOutItem {
-    fn validate(&self, allow_file_id: bool) -> Result<(), MessageContentError> {
+    fn validate(&self, item_index: usize) -> Result<(), MessageContentError> {
         match self {
-            Self::Input(item) => item.validate(allow_file_id),
+            Self::Input(item) => item.validate(item_index),
             Self::Output(OutputItem::Message(message)) if message.content.is_empty() => Err(MessageContentError::Empty),
             Self::Output(_) => Ok(()),
         }
@@ -132,32 +230,22 @@ impl ResponsesInput {
     /// pass the same validation. Structured tool outputs have their own content
     /// contract and can contain files.
     ///
+    /// A `file_id` is valid input: it is resolved from the gateway file store for
+    /// the model-facing request, while history keeps the reference. A part that
+    /// combines `file_id` with another content field is rejected with `OpenAI`'s
+    /// mutually exclusive parameters error. A structured tool-output part without a
+    /// `file_id` keeps its own content contract and is not inspected here.
+    ///
     /// # Errors
     /// Returns the item and content-part location of an empty message array, a
-    /// message content type the typed executor cannot convey, or a message
-    /// file that is not an inline base64 UTF-8 text file.
+    /// message content type the typed executor cannot convey, a message file that is
+    /// not an inline base64 UTF-8 text file, or a part that combines `file_id` with
+    /// another content field.
     pub fn validate(&self) -> Result<(), InputValidationError> {
-        self.validate_impl(false)
-    }
-
-    /// Validate message content before file references are resolved.
-    ///
-    /// Like [`Self::validate`], except that a message `input_file` may carry `file_id` for
-    /// rehydration to resolve. Every other unsupported message-file form is still rejected here.
-    ///
-    /// # Errors
-    /// Returns the item and content-part location of an empty message array, a
-    /// message content type the typed executor cannot convey, or an inline message
-    /// file that is not a base64 UTF-8 text file.
-    pub(crate) fn validate_before_hydration(&self) -> Result<(), InputValidationError> {
-        self.validate_impl(true)
-    }
-
-    fn validate_impl(&self, allow_file_id: bool) -> Result<(), InputValidationError> {
         match self {
             Self::Text(_) => Ok(()),
             Self::Items(items) => items.iter().enumerate().try_for_each(|(item_index, item)| {
-                item.validate(allow_file_id)
+                item.validate(item_index)
                     .map_err(|source| InputValidationError { item_index, source })
             }),
         }
@@ -180,9 +268,11 @@ mod tests {
         .unwrap();
         let error = input.validate().unwrap_err();
         assert_eq!(error.item_index, 1);
-        assert!(
-            matches!(&error.source, MessageContentError::UnsupportedPart { part_index: 1, kind } if kind == "future_content")
-        );
+        assert!(matches!(
+            &error.source,
+            MessageContentError::UnsupportedPart { location, kind }
+                if location == "input[1].content[1]" && kind == "future_content"
+        ));
         assert!(error.to_string().starts_with("input[1].content[1]:"));
     }
 
@@ -199,9 +289,9 @@ mod tests {
         assert!(matches!(
             error.source,
             MessageContentError::UnsupportedFile {
-                part_index: 1,
+                ref location,
                 reason: InputFileError::FileUrl
-            }
+            } if location == "input[1].content[1]"
         ));
         let message = error.to_string();
         assert!(message.starts_with("input[1].content[1]: input_file with file_url is not supported"));
@@ -209,58 +299,71 @@ mod tests {
     }
 
     #[test]
-    fn file_references_pass_before_hydration_but_not_strict_validation() {
+    fn file_references_are_valid_input() {
         let input: ResponsesInput = serde_json::from_value(json!([
             {"role":"user", "content":[{"type":"input_file", "file_id":"file-1"}]}
         ]))
         .unwrap();
-        assert!(matches!(
-            input.validate().unwrap_err().source,
-            MessageContentError::UnsupportedFile {
-                reason: InputFileError::FileId,
-                ..
-            }
-        ));
-        input.validate_before_hydration().unwrap();
+        input.validate().unwrap();
     }
 
     #[test]
-    fn image_references_pass_before_hydration_but_not_strict_validation() {
+    fn image_references_are_valid_input() {
         let input: ResponsesInput = serde_json::from_value(json!([
-            {"role":"user", "content":[{"type":"input_image", "file_id":"file-1"}]}
+            {"role":"user", "content":[{"type":"input_image", "file_id":"file-1", "detail":"high"}]}
         ]))
         .unwrap();
-        let error = input.validate().unwrap_err();
-        assert!(matches!(
-            error.source,
-            MessageContentError::UnsupportedImageReference { part_index: 0 }
-        ));
-        assert!(error.to_string().contains("input[0].content[0]: "), "{error}");
-        input.validate_before_hydration().unwrap();
+        input.validate().unwrap();
     }
 
     #[test]
-    fn hydration_phase_still_rejects_other_unsupported_files() {
-        for (part, expected) in [
+    fn references_combined_with_inline_fields_use_openai_mutually_exclusive_errors() {
+        for (part, field) in [
             (
-                json!({"type":"input_file", "file_url":"https://example.invalid/a.txt"}),
-                InputFileError::FileUrl,
+                json!({"type":"input_file", "file_id":"file-1", "filename":"a.txt"}),
+                "filename",
             ),
             (
-                json!({"type":"input_file", "filename":"a.txt"}),
-                InputFileError::MissingData,
+                json!({"type":"input_file", "file_id":"file-1", "file_data":"aGk="}),
+                "file_data",
             ),
             (
-                json!({"type":"input_file", "file_data":"data:application/pdf;base64,AA=="}),
-                InputFileError::NotText,
+                json!({"type":"input_file", "file_id":"file-1", "file_url":"https://example.invalid/a.txt"}),
+                "file_url",
+            ),
+            (
+                json!({"type":"input_image", "file_id":"file-1", "image_url":"data:image/png;base64,AA=="}),
+                "image_url",
             ),
         ] {
             let input: ResponsesInput = serde_json::from_value(json!([{"role":"user", "content":[part]}])).unwrap();
-            assert!(matches!(
-                input.validate_before_hydration().unwrap_err().source,
-                MessageContentError::UnsupportedFile { reason, .. } if reason == expected
-            ));
+            let error = input.validate().unwrap_err();
+            assert_eq!(error.error_code(), Some("mutually_exclusive_parameters"));
+            assert_eq!(error.error_param(), Some("input[0].content[0]"));
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "Mutually exclusive parameters: 'input[0].content[0]'. Ensure you are only providing one of: \
+                     'file_id' or '{field}'."
+                )
+            );
         }
+    }
+
+    #[test]
+    fn tool_output_files_use_their_output_position() {
+        let input: ResponsesInput = serde_json::from_value(json!([
+            {"type":"function_call_output", "call_id":"call_1", "output":[
+                {"type":"input_text", "text":"done"},
+                {"type":"input_file", "file_id":"file-1", "filename":"a.txt"}
+            ]}
+        ]))
+        .unwrap();
+        let error = input.validate().unwrap_err();
+        assert_eq!(error.error_param(), Some("input[0].output[1]"));
+        assert!(error.to_string().starts_with(
+            "Mutually exclusive parameters: 'input[0].output[1]'. Ensure you are only providing one of: 'file_id' or 'filename'."
+        ));
     }
 
     #[test]

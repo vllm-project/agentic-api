@@ -74,7 +74,7 @@ pub fn upstream_request(
     guidance: Option<&InputMessage>,
     withheld: Option<&ToolRegistry>,
 ) -> ExecutorResult<String> {
-    let mut request = ctx.enriched_request.to_upstream_request(stream)?;
+    let mut request = ctx.enriched_request.to_upstream_request(stream, &ctx.files)?;
     if let Some(registry) = withheld {
         if let Some(tools) = request.tools.as_mut() {
             // Hosted search does not count toward `max_tool_calls`, so it stays available.
@@ -206,6 +206,8 @@ pub(super) async fn fetch_stream_payload(
 
 #[cfg(test)]
 pub(super) mod tests {
+    use std::collections::HashMap;
+
     use super::*;
     use crate::events::SseLine;
     use crate::executor::error::ResourceLimit;
@@ -565,6 +567,7 @@ pub(super) mod tests {
             conversation_id: None,
             checkpoint: None,
             continuation: None,
+            files: HashMap::default(),
         }
     }
 

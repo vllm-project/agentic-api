@@ -2,6 +2,7 @@
 //! this crate speaks it; core keeps the operations it composes.
 #![allow(clippy::result_large_err)] // `ExecutorError` is core's; boxing it is not ours to decide
 
+use std::collections::HashMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
@@ -67,6 +68,7 @@ impl From<SplitContext> for RequestContext {
             checkpoint: None,
             continuation: None,
             multi_agent_tree: None,
+            files: HashMap::default(),
         }
     }
 }

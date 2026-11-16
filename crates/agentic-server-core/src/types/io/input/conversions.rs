@@ -9,7 +9,8 @@ use serde_json::Value;
 
 use super::{
     CustomToolCallOutputMessage, FunctionToolResultMessage, InputContent, InputFunctionToolCall, InputItem,
-    InputMessage, InputMessageContent, InputMessageType, InputTextContent, InputValidationError, ResponsesInput,
+    InputMessage, InputMessageContent, InputMessageType, InputTextContent, InputValidationError, ResolvedFiles,
+    ResponsesInput, ToolCallOutput, ToolOutputContent,
 };
 use std::collections::HashMap;
 
@@ -219,11 +220,19 @@ impl ResponsesInput {
     /// conversion joins them all, and neither can use a summary or provider-encrypted state, so a summary-only item
     /// is dropped.
     ///
+    /// A `file_id` reference is resolved from `files` only here, for this model-facing copy; the client's history and
+    /// every stored shape keep the reference. A reference that `files` does not hold is an internal error: the file
+    /// handler resolves the final input before inference.
+    ///
     /// # Errors
-    /// Returns a file that cannot be converted to text, or a reasoning item with only encrypted state. Positions refer
-    /// to the model-facing copy; [`Self::validate`] reports a file failure with the request's positions and runs
-    /// first on typed paths.
-    pub(crate) fn normalized_model_input(&self, tools: &[ResponsesTool]) -> Result<Self, InputValidationError> {
+    /// Returns a file that cannot be converted to text, an unresolved `file_id`, or a reasoning item with only
+    /// encrypted state. Positions refer to the model-facing copy; [`Self::validate`] reports a file failure with the
+    /// request's positions and runs first on typed paths.
+    pub(crate) fn normalized_model_input(
+        &self,
+        tools: &[ResponsesTool],
+        files: &ResolvedFiles,
+    ) -> Result<Self, InputValidationError> {
         let input = self.model_input().into_owned();
         let Self::Items(_) = input else {
             return Ok(input);
@@ -241,7 +250,14 @@ impl ResponsesInput {
                     InputItem::FunctionCallOutput((&call).into()),
                 ]),
                 InputItem::CustomToolCall(call) => model.push(InputItem::FunctionCall(call.into())),
-                InputItem::CustomToolCallOutput(output) => model.push(InputItem::FunctionCallOutput(output.into())),
+                InputItem::FunctionCallOutput(mut output) => {
+                    output.output = lower_tool_output(output.output, files, model.len())?;
+                    model.push(InputItem::FunctionCallOutput(output));
+                }
+                InputItem::CustomToolCallOutput(mut output) => {
+                    output.output = lower_tool_output(output.output, files, model.len())?;
+                    model.push(InputItem::FunctionCallOutput(output.into()));
+                }
                 InputItem::ShellCall(call) => model.push(InputItem::FunctionCall(call.into())),
                 InputItem::ShellCallOutput(output) => model.push(InputItem::FunctionCallOutput(output.into())),
                 InputItem::Reasoning(mut reasoning) => {
@@ -263,9 +279,26 @@ impl ResponsesInput {
                             match part {
                                 InputContent::InputImage(image) => {
                                     image.detail.get_or_insert_with(|| "auto".to_owned());
+                                    if let Some(file_id) = image.file_id.as_deref() {
+                                        let resolved = files.get(file_id).ok_or_else(|| {
+                                            InputValidationError::unresolved_file_reference(model.len(), part_index)
+                                        })?;
+                                        resolved.to_input_image(image).map_err(|reason| {
+                                            InputValidationError::unsupported_file(model.len(), part_index, reason)
+                                        })?;
+                                    }
                                 }
                                 InputContent::InputFile(file) => {
-                                    let text = InputTextContent::try_from(&*file).map_err(|reason| {
+                                    let text = match file.file_id.as_deref() {
+                                        Some(file_id) => {
+                                            let resolved = files.get(file_id).ok_or_else(|| {
+                                                InputValidationError::unresolved_file_reference(model.len(), part_index)
+                                            })?;
+                                            resolved.to_input_text(file)
+                                        }
+                                        None => InputTextContent::try_from(&*file),
+                                    }
+                                    .map_err(|reason| {
                                         InputValidationError::unsupported_file(model.len(), part_index, reason)
                                     })?;
                                     *part = InputContent::InputText(text);
@@ -285,6 +318,53 @@ impl ResponsesInput {
         }
         Ok(Self::from(model))
     }
+}
+
+/// Resolve the `file_id` references in a structured tool output.
+///
+/// Tool outputs keep their own content contract: a part without a reference passes through
+/// unchanged, including inline files and images. A `file_id` is replaced by the resolved text
+/// or image data URL, as a message file is handled.
+fn lower_tool_output(
+    output: ToolCallOutput,
+    files: &ResolvedFiles,
+    item_index: usize,
+) -> Result<ToolCallOutput, InputValidationError> {
+    let ToolCallOutput::Content(parts) = output else {
+        return Ok(output);
+    };
+    let mut lowered = Vec::with_capacity(parts.len());
+    for (part_index, part) in parts.into_iter().enumerate() {
+        let part = match part {
+            ToolOutputContent::InputText(text) => ToolOutputContent::InputText(text),
+            ToolOutputContent::InputFile(file) => {
+                let Some(file_id) = file.file_id.as_deref() else {
+                    lowered.push(ToolOutputContent::InputFile(file));
+                    continue;
+                };
+                let text = files
+                    .get(file_id)
+                    .ok_or_else(|| InputValidationError::unresolved_output_reference(item_index, part_index))?
+                    .to_input_text(&file)
+                    .map_err(|reason| InputValidationError::unsupported_output_file(item_index, part_index, reason))?;
+                ToolOutputContent::InputText(text)
+            }
+            ToolOutputContent::InputImage(mut image) => {
+                let Some(file_id) = image.file_id.as_deref() else {
+                    lowered.push(ToolOutputContent::InputImage(image));
+                    continue;
+                };
+                files
+                    .get(file_id)
+                    .ok_or_else(|| InputValidationError::unresolved_output_reference(item_index, part_index))?
+                    .to_input_image(&mut image)
+                    .map_err(|reason| InputValidationError::unsupported_output_file(item_index, part_index, reason))?;
+                ToolOutputContent::InputImage(image)
+            }
+        };
+        lowered.push(part);
+    }
+    Ok(ToolCallOutput::Content(lowered))
 }
 
 /// Appends history items, as [`ResponsesInput::push`] does.
@@ -410,7 +490,7 @@ mod tests {
         };
         assert!(matches!(&parts[0], InputContent::InputImage(image) if image.detail.is_none()));
 
-        let model = input.normalized_model_input(&[]).unwrap();
+        let model = input.normalized_model_input(&[], &HashMap::default()).unwrap();
         let ResponsesInput::Items(model_items) = &model else {
             panic!("model items")
         };
@@ -439,7 +519,7 @@ mod tests {
                 {"type":"input_text", "text":"after"}]}
         ]))
         .unwrap();
-        let model = input.normalized_model_input(&[]).unwrap();
+        let model = input.normalized_model_input(&[], &HashMap::default()).unwrap();
         assert_eq!(
             serialize_to_value(&model).unwrap()[0]["content"],
             json!([{"type":"input_text", "text":"before"}, {"type":"input_text", "text":"File: notes.txt\nhi"},
@@ -456,7 +536,7 @@ mod tests {
                 {"type":"input_file", "file_data":"data:application/pdf;base64,JVBERi0=", "filename":"a.pdf"}]}
         ]))
         .unwrap();
-        let error = input.normalized_model_input(&[]).unwrap_err();
+        let error = input.normalized_model_input(&[], &HashMap::default()).unwrap_err();
         assert!(
             error
                 .to_string()
@@ -485,7 +565,7 @@ mod tests {
         )]);
 
         let model = input
-            .normalized_model_input(&[])
+            .normalized_model_input(&[], &HashMap::default())
             .expect("plaintext reasoning is replayable");
 
         assert!(
@@ -515,7 +595,7 @@ mod tests {
             let input = ResponsesInput::from(vec![reasoning_item(&content, Some("opaque-provider-state"))]);
 
             let error = input
-                .normalized_model_input(&[])
+                .normalized_model_input(&[], &HashMap::default())
                 .expect_err("encrypted-only reasoning must not reach vLLM");
 
             assert!(
@@ -532,7 +612,7 @@ mod tests {
         let input = ResponsesInput::from(vec![reasoning_item(&["plaintext continuation"], None)]);
 
         let model = input
-            .normalized_model_input(&[])
+            .normalized_model_input(&[], &HashMap::default())
             .expect("null encrypted state is valid");
 
         let ResponsesInput::Items(items) = model else {
@@ -559,7 +639,7 @@ mod tests {
             let input: ResponsesInput = serde_json::from_str(input).unwrap();
 
             let model = input
-                .normalized_model_input(&[])
+                .normalized_model_input(&[], &HashMap::default())
                 .expect("summary-only reasoning has no usable vLLM state");
 
             let ResponsesInput::Items(items) = model else {

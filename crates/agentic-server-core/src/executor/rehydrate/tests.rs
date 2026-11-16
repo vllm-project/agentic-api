@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 
@@ -494,7 +495,7 @@ async fn rehydration_remains_public_until_explicit_tool_search_preparation() {
     );
     let upstream = ctx
         .enriched_request
-        .to_upstream_request(false)
+        .to_upstream_request(false, &HashMap::default())
         .expect("prepared tool-search request lowers at the upstream boundary");
     assert!(matches!(
         upstream.tools.as_deref(),
@@ -663,7 +664,11 @@ async fn stored_code_interpreter_call_reaches_the_model_as_its_function_call() -
     ] {
         let ctx = rehydrate_conversation(request, &exec_ctx).await?;
         // History keeps the public item; the upstream projection lowers it to the call the model made.
-        let model_input = serde_json::to_value(ctx.enriched_request.input.normalized_model_input(&[])?)?;
+        let model_input = serde_json::to_value(
+            ctx.enriched_request
+                .input
+                .normalized_model_input(&[], &HashMap::default())?,
+        )?;
         assert_eq!(model_input.as_array().map(Vec::len), Some(3));
         assert_eq!(model_input[0]["type"], "function_call");
         assert_eq!(model_input[0]["name"], "code_interpreter");
@@ -966,7 +971,7 @@ async fn rehydration_hydrates_file_references_without_changing_canonical_input()
         "input": [{"role": "user", "content": [
             {"type": "input_text", "text": "read these"},
             {"type": "input_file", "file_id": text_id},
-            {"type": "input_image", "file_id": image_id}
+            {"type": "input_image", "file_id": image_id.clone()}
         ]}]
     }))
     .unwrap();
@@ -982,22 +987,13 @@ async fn rehydration_hydrates_file_references_without_changing_canonical_input()
     assert!(original[0]["content"][1].get("file_data").is_none());
 
     let model = serde_json::to_value(&ctx.enriched_request.input).unwrap();
-    assert!(
-        model[0]["content"][1]["file_data"]
-            .as_str()
-            .unwrap()
-            .starts_with("data:text/plain;base64,")
-    );
-    assert!(model[0]["content"][1].get("file_id").is_none());
-    assert!(
-        model[0]["content"][2]["image_url"]
-            .as_str()
-            .unwrap()
-            .starts_with("data:image/png;base64,")
-    );
-    assert!(model[0]["content"][2].get("file_id").is_none());
+    assert_eq!(model[0]["content"][1]["file_id"], text.id);
+    assert!(model[0]["content"][1].get("file_data").is_none());
+    assert_eq!(model[0]["content"][2]["file_id"], image.id);
+    assert!(model[0]["content"][2].get("image_url").is_none());
+    assert_eq!(ctx.files.len(), 2, "the lookup holds both resolved files");
 
-    let upstream = serde_json::to_value(ctx.enriched_request.to_upstream_request(false).unwrap()).unwrap();
+    let upstream = serde_json::to_value(ctx.enriched_request.to_upstream_request(false, &ctx.files).unwrap()).unwrap();
     assert_eq!(
         upstream["input"][0]["content"][1],
         serde_json::json!({"type": "input_text", "text": "File: notes.txt\nhello"})
@@ -1054,13 +1050,13 @@ async fn continuation_hydrates_file_references_from_stored_history() -> Result<(
     let ctx = rehydrate_conversation(request(None, Some("resp_prior")), &exec_ctx).await?;
 
     let model = serde_json::to_value(&ctx.enriched_request.input)?;
-    assert!(
-        model[0]["content"][0]["file_data"]
-            .as_str()
-            .unwrap()
-            .starts_with("data:text/plain;base64,")
+    assert_eq!(model[0]["content"][0]["file_id"], text.id);
+    assert!(model[0]["content"][0].get("file_data").is_none());
+    let upstream = serde_json::to_value(ctx.enriched_request.to_upstream_request(false, &ctx.files)?)?;
+    assert_eq!(
+        upstream["input"][0]["content"][0],
+        serde_json::json!({"type": "input_text", "text": "File: notes.txt\nstored text"})
     );
-    assert!(model[0]["content"][0].get("file_id").is_none());
     Ok(())
 }
 
@@ -1081,23 +1077,103 @@ async fn continuation_reports_a_deleted_file_reference() -> Result<(), Box<dyn s
             {"type": "input_file", "file_id": text.id}
         ]
     }))?;
+    let text_id = text.id;
     let response_store = ResponseStore::new(pool);
     response_store
         .persist("resp_prior", None, vec![stored], None, &ResponseMetadata::default())
         .await?;
-    service.delete_file(&text.id).await?;
+    service.delete_file(&text_id).await?;
     let exec_ctx = execution_context(ConversationStore::disabled(), response_store).with_file_search_service(service);
 
     let error = rehydrate_conversation(request(None, Some("resp_prior")), &exec_ctx)
         .await
         .unwrap_err();
     assert!(
-        matches!(
-            error,
-            ExecutorError::FileSearch(crate::types::file_search::FileSearchError::NotFound(ref message))
-                if message.contains("input[0].content[0]: ")
-        ),
+        matches!(&error, ExecutorError::FileReferencesNotFound { ids } if ids.as_slice() == std::slice::from_ref(&text_id)),
         "{error}"
+    );
+    assert_eq!(error.http_status(), http::StatusCode::NOT_FOUND);
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&error.into_response_body()).unwrap(),
+        serde_json::json!({"error": {
+            "message": format!("Files [{text_id}] were not found"),
+            "type": "invalid_request_error", "code": null, "param": null
+        }})
+    );
+    Ok(())
+}
+
+/// A restored agent tree keeps its histories outside the root's public input, and this turn's
+/// items stay outside the snapshot until the engine appends them, so both must be scanned.
+#[tokio::test]
+async fn restored_agent_histories_and_new_input_resolve_file_references() -> Result<(), Box<dyn std::error::Error>> {
+    let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
+    let files = tempfile::tempdir()?;
+    let config = FileSearchConfig {
+        files_storage_dir: Some(files.path().to_owned()),
+        ..FileSearchConfig::default()
+    };
+    let service = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), config)?;
+    let stored_text = service
+        .upload_file("notes.txt", "text/plain", "assistants", b"stored text".to_vec())
+        .await?;
+    let new_image = service
+        .upload_file("plot.png", "image/png", "vision", b"png".to_vec())
+        .await?;
+    let (stored_id, image_id) = (stored_text.id, new_image.id);
+    let history: Vec<InputItem> = serde_json::from_value(serde_json::json!([
+        {"role": "user", "content": [
+            {"type": "input_text", "text": "read this"},
+            {"type": "input_file", "file_id": stored_id.clone()}
+        ]}
+    ]))?;
+    let metadata = ResponseMetadata {
+        multi_agent_tree: Some(StoredTreeSnapshot {
+            version: 1,
+            config: MultiAgentConfig {
+                enabled: true,
+                max_concurrent_subagents: Some(2),
+            },
+            agents: vec![StoredAgent {
+                identity: AgentIdentity::root(),
+                parent: None,
+                turn: AgentTurnId::new(),
+                state: AgentState::Idle,
+                mailbox: Vec::new(),
+                history,
+                loaded_tools: Vec::new(),
+                last_task: String::new(),
+                final_answer: None,
+                rounds: 0,
+                wait: None,
+            }],
+            client_calls: Vec::new(),
+        }),
+        ..Default::default()
+    };
+    let response_store = ResponseStore::new(pool);
+    response_store
+        .persist("resp_tree", None, Vec::new(), None, &metadata)
+        .await?;
+    let exec_ctx = execution_context(ConversationStore::disabled(), response_store).with_file_search_service(service);
+
+    let payload: RequestPayload = serde_json::from_value(serde_json::json!({
+        "model": "test",
+        "previous_response_id": "resp_tree",
+        "input": [{"role": "user", "content": [
+            {"type": "input_text", "text": "and this"},
+            {"type": "input_image", "file_id": image_id.clone()}
+        ]}]
+    }))?;
+    let ctx = rehydrate_conversation(payload, &exec_ctx).await?;
+
+    assert_eq!(ctx.files.len(), 2, "the lookup covers agent history and new input");
+    assert!(ctx.files.contains_key(&stored_id));
+    assert!(ctx.files.contains_key(&image_id));
+    let upstream = serde_json::to_value(ctx.enriched_request.to_upstream_request(false, &ctx.files)?)?;
+    assert_eq!(
+        upstream["input"][0]["content"][1],
+        serde_json::json!({"type": "input_text", "text": "File: notes.txt\nstored text"})
     );
     Ok(())
 }

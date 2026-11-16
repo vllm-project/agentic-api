@@ -6,12 +6,20 @@ All notable changes to Agentic API are documented here.
 
 ### Added
 
-- Resolve Responses message `input_image` and `input_file` `file_id` references from the Files API before
-  inference, so stateless backends receive the referenced media inline. Stored history keeps the client's
-  reference, a reference part must not also carry its inline field (`image_url`, `file_data`, or `file_url`),
-  an `input_image` must reference an `image/*` upload, and resolved content is limited to 64 MiB per request.
-  Upload purpose `vision` is now accepted (#356). Compaction summarizes the resolved input, so a compacted
-  window can contain the resolved data URL for a retained message that references a file.
+- Resolve Responses message `input_image` and `input_file` `file_id` references from the Files API when the
+  gateway builds the model-facing request, so stateless backends receive the referenced media inline. Stored
+  history, compaction windows, and multi-agent tree snapshots keep the client's reference and resolve it again
+  on each request; a reference part must not also carry its inline field (`image_url`, `file_data`, or
+  `file_url`), an `input_image` must reference a stored file with an accepted image filename, a missing file
+  returns `OpenAI`'s `Files [<id>] were not found` 404, and resolved content counts toward the request body
+  limit. A `file_id` in a structured function/custom tool call output is resolved the same way, while other
+  tool-output parts pass through unchanged. Upload purpose `vision` is now accepted (#356).
+
+### Changed
+
+- `RequestPayload::to_upstream_request` now takes the per-request resolved-file lookup
+  (`&ResolvedFiles`) that rehydration builds with `FileHandler::resolve`. Embedders calling it directly must
+  resolve the payload's `file_id` references first, or pass an empty map when the payload has none.
 
 ## [0.10.0] - 2026-11-09
 

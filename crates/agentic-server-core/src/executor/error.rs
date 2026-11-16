@@ -139,6 +139,10 @@ pub enum ExecutorError {
     #[error(transparent)]
     UnsupportedParameter(#[from] UnsupportedParameterError),
 
+    /// A `file_id` reference does not resolve to a file the gateway stores.
+    #[error("Files [{}] were not found", .ids.join(", "))]
+    FileReferencesNotFound { ids: Vec<String> },
+
     #[error(transparent)]
     InvalidPromptCacheOptions(#[from] PromptCacheOptionsError),
 
@@ -206,6 +210,7 @@ impl ExecutorError {
     #[must_use]
     pub fn http_status(&self) -> StatusCode {
         match self.client_visible_error() {
+            Self::InvalidInput(error) if error.is_internal() => StatusCode::INTERNAL_SERVER_ERROR,
             Self::FileSearch(error) | Self::Tool(ToolError::FileSearch(error)) => {
                 StatusCode::from_u16(error.status_code()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
             }
@@ -226,6 +231,7 @@ impl ExecutorError {
             | Self::UnsupportedParameter(_)
             | Self::JsonError(_) => StatusCode::BAD_REQUEST,
             Self::Storage(e) if e.is_not_found() => StatusCode::NOT_FOUND,
+            Self::FileReferencesNotFound { .. } => StatusCode::NOT_FOUND,
             Self::Storage(e) if e.is_validation() => StatusCode::BAD_REQUEST,
             Self::LLMRequest { status, .. } | Self::LLMTransport { status, .. } => *status,
             Self::Tool(
@@ -250,6 +256,7 @@ impl ExecutorError {
     #[must_use]
     pub fn error_type(&self) -> &'static str {
         match self.client_visible_error() {
+            Self::InvalidInput(error) if error.is_internal() => "server_error",
             Self::FileSearch(error) | Self::Tool(ToolError::FileSearch(error)) => match error.status_code() {
                 400 => "invalid_request_error",
                 404 => "not_found",
@@ -271,6 +278,7 @@ impl ExecutorError {
             | Self::InvalidMaxToolCalls(_)
             | Self::UnsupportedValue { .. }
             | Self::UnsupportedParameter(_)
+            | Self::FileReferencesNotFound { .. }
             | Self::ParseError(_)
             | Self::JsonError(_)
             | Self::PayloadTooLarge(_)
@@ -310,6 +318,8 @@ impl ExecutorError {
             Self::ResourceLimitExceeded { .. } => "response_resource_limit_exceeded",
             Self::InvalidPromptCacheOptions(PromptCacheOptionsError::Unsupported) => "unsupported_parameter",
             Self::InvalidMaxToolCalls(error) => error.code(),
+            Self::InvalidInput(error) if error.is_internal() => "server_error",
+            Self::InvalidInput(error) => error.error_code().unwrap_or("invalid_request_error"),
             Self::UnsupportedValue { code, .. } => code.unwrap_or("unsupported_value"),
             Self::UnsupportedParameter(error) => error.code(),
             Self::Tool(ToolError::UnknownParameter { .. }) => "unknown_parameter",
@@ -332,6 +342,7 @@ impl ExecutorError {
             Self::Tool(ToolError::MissingOutput { .. } | ToolError::UnknownCallOutput { .. }) => Some("input"),
             Self::InvalidPromptCacheOptions(_) => Some("prompt_cache_options"),
             Self::InvalidMaxToolCalls(_) => Some(MAX_TOOL_CALLS_PARAM),
+            Self::InvalidInput(error) => error.error_param(),
             Self::UnsupportedParameter(error) => Some(error.param()),
             Self::McpListToolsFailed(_) => Some("tools"),
             _ => None,
@@ -350,6 +361,10 @@ impl ExecutorError {
                 | StorageError::PreviousResponseNotFound { .. }),
             ) => error.to_string(),
             Self::Storage(StorageError::Database(_)) => "Internal server error".to_owned(),
+            // An unresolved reference means a required stage was skipped, not that the input was invalid.
+            Self::InvalidInput(error) if error.is_internal() => "Internal server error".to_owned(),
+            // `OpenAI`'s content rejections carry the position inside the message itself.
+            Self::InvalidInput(error) => error.to_string(),
             Self::Tool(
                 error @ (ToolError::MissingOutput { .. }
                 | ToolError::UnknownCallOutput { .. }
@@ -366,6 +381,7 @@ impl ExecutorError {
             Self::Tool(ToolError::MissingOutput { .. } | ToolError::UnknownCallOutput { .. })
                 | Self::Storage(StorageError::ItemCursorNotFound { .. } | StorageError::ResponseNotFound { .. })
                 | Self::UnsupportedValue { code: None, .. }
+                | Self::FileReferencesNotFound { .. }
         ) {
             serde_json::Value::Null
         } else {
@@ -379,7 +395,9 @@ impl ExecutorError {
             error.insert("param".to_owned(), serde_json::json!(param));
         } else if matches!(
             self.client_visible_error(),
-            Self::Storage(StorageError::ResponseNotFound { .. }) | Self::UnsupportedValue { param: None, .. }
+            Self::Storage(StorageError::ResponseNotFound { .. })
+                | Self::UnsupportedValue { param: None, .. }
+                | Self::FileReferencesNotFound { .. }
         ) {
             error.insert("param".to_owned(), serde_json::Value::Null);
         }
@@ -429,6 +447,18 @@ mod tests {
             assert_eq!(error.response_error()["type"], category);
             assert!(std::error::Error::source(&error).is_some());
         }
+    }
+
+    #[test]
+    fn unresolved_file_reference_is_an_internal_error() {
+        let error = ExecutorError::InvalidInput(InputValidationError::unresolved_file_reference(0, 1));
+        assert_eq!(error.http_status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(error.error_type(), "server_error");
+        assert_eq!(error.error_code(), "server_error");
+        assert_eq!(error.error_message(), "Internal server error");
+        let envelope = error.response_error();
+        assert_eq!(envelope["code"], "server_error");
+        assert!(envelope.get("param").is_none());
     }
 
     #[test]

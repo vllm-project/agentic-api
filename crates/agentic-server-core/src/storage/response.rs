@@ -379,7 +379,7 @@ mod tests {
         let (_, history) = store.rehydrate("resp_items").await.unwrap();
         assert_eq!(history, vec![InOutItem::Output(projection)]);
         let inputs = ResponsesInput::from(InOutItem::into_input_items(history));
-        let model = Vec::<InputItem>::from(inputs.normalized_model_input(&[]).unwrap());
+        let model = Vec::<InputItem>::from(inputs.normalized_model_input(&[], &HashMap::default()).unwrap());
         assert!(
             matches!(&model[..], [InputItem::FunctionCall(call), InputItem::FunctionCallOutput(output)]
             if call.name == "code_interpreter" && call.call_id == "ci_gateway" && output.call_id == "ci_gateway")

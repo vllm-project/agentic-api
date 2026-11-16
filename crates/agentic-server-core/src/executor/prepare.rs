@@ -56,6 +56,8 @@ fn restored_loaded_tools(ctx: &mut RequestContext) -> Vec<ResponsesTool> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
     use crate::storage::{ResponseCheckpoint, ResponseMetadata};
     use crate::types::request_response::RequestPayload;
@@ -89,6 +91,7 @@ mod tests {
             conversation_id: None,
             checkpoint: Some(checkpoint),
             continuation: None,
+            files: HashMap::default(),
         };
         let restored = restored_loaded_tools(&mut ctx);
         assert_eq!(serde_json::to_value(restored).unwrap(), serde_json::json!([loaded]));

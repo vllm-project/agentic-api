@@ -5,7 +5,7 @@ mod prompt_cache_breakpoints;
 #[path = "responses_websocket/prompt_cache_options.rs"]
 mod prompt_cache_options;
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::convert::Infallible;
 use std::fmt::Write as _;
 use std::path::PathBuf;
@@ -761,7 +761,8 @@ mod steering {
                 "model":"test-model", "input":steering_input}))
             .unwrap();
             steering.input = ResponsesInput::from(steering.input.into_canonical_items());
-            let expected = serialize_to_value(&steering.to_upstream_request(true).unwrap().input).unwrap();
+            let expected =
+                serialize_to_value(&steering.to_upstream_request(true, &HashMap::default()).unwrap().input).unwrap();
             let expected = expected.as_array().unwrap();
             assert!(
                 requests[1]["input"].as_array().unwrap().ends_with(expected),
@@ -2264,6 +2265,7 @@ async fn test_websocket_generate_false_prewarm_redacts_mcp_runtime_credentials()
         conversation_id: None,
         checkpoint: None,
         continuation: None,
+        files: HashMap::default(),
     };
     let stored = fixture
         .state
@@ -7439,7 +7441,7 @@ mod duplex_replay {
         request.input = ResponsesInput::from(input.into_canonical_items());
         // to_upstream_request invokes the existing crate-private
         // ResponsesInput::normalized_model_input, including image defaults.
-        let upstream = request.to_upstream_request(true).unwrap();
+        let upstream = request.to_upstream_request(true, &HashMap::default()).unwrap();
         user_messages(&serialize_to_value(&upstream.input).unwrap())
     }
 
@@ -7651,8 +7653,12 @@ mod duplex_replay {
                             if search.is_active() {
                                 search.prepare_inference_request(&mut inference_settings).unwrap();
                             }
-                            let normalized =
-                                serialize_to_value(&inference_settings.to_upstream_request(true).unwrap()).unwrap();
+                            let normalized = serialize_to_value(
+                                &inference_settings
+                                    .to_upstream_request(true, &HashMap::default())
+                                    .unwrap(),
+                            )
+                            .unwrap();
                             loaded_tool_profiles.insert(source.to_owned(), loaded_tools);
                             settings_spies.push((next_model, normalized));
                             profiles.insert(source.to_owned(), profile);

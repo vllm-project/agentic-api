@@ -444,7 +444,7 @@ async fn prepare(
         ));
     }
     // Fail before any tool preparation or response event if the model can't be given this input.
-    ctx.enriched_request.input.normalized_model_input(&[])?;
+    ctx.enriched_request.input.normalized_model_input(&[], &ctx.files)?;
     prepare_request_tools(ctx)
 }
 

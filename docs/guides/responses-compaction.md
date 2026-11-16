@@ -124,10 +124,11 @@ text file, sent as either:
   some clients send for TypeScript, is accepted with a `.ts`, `.mts`, or `.cts` filename.
 
 Content that passes these checks must still decode as UTF-8, so binary data is rejected even with a text filename.
-A `file_id` instead references an uploaded file from the Files API. Rehydration reads it from the gateway file
-store and substitutes its base64 data URL, using the media type and filename stored with the upload. The stored
-file must satisfy the same text media-type and filename rules. An `input_image` `file_id` is resolved the same way
-and must reference an `image/*` upload. A `file_url` is never fetched.
+A `file_id` instead references an uploaded file from the Files API. The model-facing lowering reads it from the
+gateway file store. A stored file carries no client-visible media type, so a text file is identified by its
+uploaded filename using the text filename rules, and its decoded text becomes an `input_text` part. An
+`input_image` `file_id` must reference an upload whose filename has an accepted image extension; its bytes
+become an inline base64 `image_url` data URL. A `file_url` is never fetched.
 
 The file is decoded only in the request sent to the model, where it becomes an `input_text` part in the same
 position. When `filename` is set, the text starts with a `File: <filename>` line, so this part:
@@ -143,27 +144,26 @@ reaches the model as:
 ```
 
 Stored response and conversation history keep the client's original `input_file`; inline text is decoded again
-and a `file_id` is resolved again on each continuation. Compaction summarizes the resolved model-facing input,
-so a compacted window can contain the resolved base64 data URL for any retained message that references a
-file; multi-agent tree snapshots can likewise retain the resolved form and count it toward their retained-byte
-budget. Inline `file_data` counts toward the request body limit (`max_request_body_size_bytes`) in its base64
-form; a `file_id` reference does not, because the client body carries only the reference. The decoded text
-counts toward the model's context length. Resolved file references are limited to 64 MiB of base64 data URLs
-per request.
+and a `file_id` is resolved again for each model-facing request. Compaction windows and multi-agent tree
+snapshots keep the same client-facing item, including the `file_id` reference. Inline `file_data` and resolved
+content count toward the request body limit (`max_request_body_size_bytes`); the decoded text counts toward the
+model's context length.
 
-Every other message file is rejected with HTTP 400 `invalid_request_error` (or the equivalent WebSocket error)
-before inference and before anything is stored. The message gives the reason without echoing the file: a
-`file_id` that cannot be resolved (the file was deleted, or this gateway has no file store), `file_url` (the
-gateway does not fetch files), a missing `file_data`, a non-text file such as a PDF, a data URL that is not
-base64-encoded, invalid base64, or content that is not valid UTF-8.
+Every other message file is rejected before inference and before anything is stored. A `file_id` that does not
+resolve to a stored file returns 404 `invalid_request_error` with the message `Files [<id>] were not found`;
+without a configured file store it returns 400 `invalid_request_error`. Other invalid files return HTTP 400
+`invalid_request_error` (or the equivalent
+WebSocket error): `file_url` (the gateway does not fetch files), a missing `file_data`, a non-text file such as
+a PDF, a data URL that is not base64-encoded, invalid base64, or content that is not valid UTF-8. The message
+gives the reason without echoing the file.
 Extract text from PDFs and other documents client-side and send it as `input_text`, or send pages as
 `input_image`. The same validation applies to files restored from response/conversation history, explicit and
 automatic compaction, `compaction_trigger`, and WebSocket `generate: false` requests.
 
 HTTP `store: false` requests use the same typed executor, inline text-file normalization, and file-input validation.
 Without `previous_response_id` or `conversation`, clients supply the complete item history in `input`; the gateway
-does not load or persist state.
-Structured function/custom tool call outputs containing files retain their existing pass-through behavior.
+does not load or persist state. A `file_id` in a structured function/custom tool call output is resolved the same
+way; other tool-output parts pass through unchanged and are kept as the client sent them.
 
 API `input_file` content is distinct from mentioning a local filename in Codex or asking a client-executed read tool
 to read a file. A local file mention is not a file upload, and this gateway does not resolve local paths, fetch

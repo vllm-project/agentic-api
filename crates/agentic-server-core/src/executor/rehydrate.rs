@@ -3,9 +3,9 @@
 //! Builds a [`RequestContext`] by loading prior turns from storage and
 //! injecting them into the enriched request before it is forwarded to the LLM.
 
+use std::borrow::Cow;
+use std::collections::HashMap;
 use std::convert::identity;
-
-mod files;
 
 use super::session::{ResponseContinuation, ResponseSession};
 use crate::executor::error::{ExecutorError, ExecutorResult};
@@ -77,7 +77,7 @@ pub(crate) async fn rehydrate_with_continuation(
         exec_ctx
             .gateway_executors
             .validate_declarations(request.tool_declarations().as_deref())?;
-        request.input.validate_before_hydration()?;
+        request.input.validate()?;
         let response_id = uuid7_str("resp_");
         // Persistence keeps the public items. Tool lowering belongs to the enriched
         // inference copy, including when a later turn loads these items from storage.
@@ -95,6 +95,7 @@ pub(crate) async fn rehydrate_with_continuation(
             conversation_id: None,
             checkpoint: None,
             continuation,
+            files: HashMap::default(),
         };
 
         match (
@@ -132,9 +133,14 @@ pub(crate) async fn rehydrate_with_continuation(
         exec_ctx
             .gateway_executors
             .validate_declarations(ctx.enriched_request.tool_declarations().as_deref())?;
-        files::hydrate_file_references(&mut ctx.enriched_request.input, exec_ctx.file_search.as_ref()).await?;
         ctx.enriched_request.input.validate()?;
         validate_multi_agent_request(&ctx.enriched_request)?;
+        // Resolve once, after the branches assembled the turn's final input. The lookup serves only
+        // model-facing lowering; the stored history keeps the client's reference.
+        ctx.files = exec_ctx
+            .file_handler
+            .resolve(referenced_items(&ctx), exec_ctx.max_request_body_size)
+            .await?;
         Ok(ctx)
     })
     .await;
@@ -150,6 +156,27 @@ fn from_responses(ctx: &mut RequestContext) -> ExecutorResult<()> {
     }
     ctx.enriched_request.input = ResponsesInput::from(items);
     Ok(())
+}
+
+/// Every item a model-facing projection can lower.
+///
+/// Without a restored tree, the enriched input is the whole turn (continued history plus this
+/// turn's items), so scanning it covers every reference once. A restored tree keeps each
+/// agent's history in the snapshot, and this turn's items stay outside that snapshot until the
+/// engine appends them, so both are scanned there. Carried compaction windows stay in place;
+/// the file handler expands them.
+fn referenced_items(ctx: &RequestContext) -> Vec<Cow<'_, InputItem>> {
+    if let Some(tree) = &ctx.multi_agent_tree {
+        let mut items: Vec<Cow<'_, InputItem>> = tree
+            .snapshot()
+            .agents
+            .iter()
+            .flat_map(|agent| agent.history.iter().map(Cow::Borrowed))
+            .collect();
+        items.extend(ctx.new_input_items.iter().filter_map(InOutItem::as_input));
+        return items;
+    }
+    ctx.enriched_request.input.input_items().collect()
 }
 
 fn validate_multi_agent_request(request: &RequestPayload) -> ExecutorResult<()> {

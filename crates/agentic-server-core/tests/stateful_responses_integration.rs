@@ -5,6 +5,8 @@
 
 mod support;
 
+use std::collections::HashMap;
+
 use agentic_core::executor::request::RequestContext;
 use agentic_core::executor::{ExecutionContext, ExecutorError, commit, execute, persist_turn, rehydrate_conversation};
 use agentic_core::storage::StorageError;
@@ -987,6 +989,7 @@ async fn tool_search_store_false_manual_replay_completes_without_reusable_respon
         conversation_id: None,
         checkpoint: None,
         continuation: None,
+        files: HashMap::default(),
     };
     let error = fixture
         .exec_ctx
@@ -1057,6 +1060,7 @@ async fn test_previous_response_id_persists_inherited_tools_and_choice() {
         conversation_id: None,
         checkpoint: None,
         continuation: None,
+        files: HashMap::default(),
     };
 
     let stored = fixture
@@ -1487,6 +1491,7 @@ fn lookup_context(previous_response_id: Option<String>, conversation_id: Option<
         conversation_id: None,
         checkpoint: None,
         continuation: None,
+        files: HashMap::default(),
     }
 }
 

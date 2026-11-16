@@ -159,21 +159,24 @@ an actionable error when a PDF is attached for ingestion.
 
 A message `input_image` can reference an uploaded image with `file_id` instead of an
 inline `image_url`, and a message `input_file` can reference an uploaded text file with
-`file_id` instead of inline `file_data`. Before inference, the gateway reads the file from
-the same store and substitutes a base64 data URL in the model-facing request. The
-client's reference remains in stored response and conversation history, so a continuation
-resolves it again; deleting the file makes a later continuation fail with 404. Compaction
-summarizes the resolved model-facing input, so a compacted window can contain the resolved
-data URL rather than the reference, and a multi-agent tree snapshot can retain the resolved
-form as well.
+`file_id` instead of inline `file_data`. When the gateway builds the model-facing request,
+it reads the file from the same store and substitutes the model-facing content: the text
+for an `input_file`, a base64 data URL for an `input_image`. Stored response
+and conversation history keep the client's reference, so each continuation resolves it
+again; deleting the file makes a later continuation fail with 404. Compaction windows and
+multi-agent tree snapshots keep the same client-facing item, including the reference.
 
-An `input_image` reference must resolve to a file with an `image/*` media type; upload
-those files with purpose `vision`. An `input_file` reference is subject to the same UTF-8
-text media-type and filename rules as inline `file_data`, and the uploaded filename
-supplies the `File: <name>` prefix when the part omits one. A part must use `file_id` or
-its inline field, not both. `file_url` is never fetched.
+An `input_image` reference must resolve to a stored file whose filename has an accepted
+image extension: `.jpeg`, `.jpg`, `.png`, `.gif`, or `.webp`; upload those files with
+purpose `vision`. An `input_file` reference must resolve to a stored file whose filename
+passes the text filename rules (a stored file carries no client-visible media type), and
+its content must decode as UTF-8; the stored filename supplies the `File: <name>` prefix.
+A part must use `file_id` or its inline field, not both. A missing file returns 404
+`invalid_request_error` with `Files [<id>] were not found`; a wrong file type returns 400
+`invalid_request_error`. `file_url` is never fetched.
 
-Hydration adds at most 64 MiB of resolved data URLs to one request. Exceeding that limit
+Resolved content counts toward the same request body limit
+(`server.max_request_body_size_bytes`) as inline content. Exceeding the configured limit
 returns HTTP 413 with error code `body_too_large`.
 
 ## Search directly

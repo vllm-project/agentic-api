@@ -34,7 +34,7 @@ use crate::telemetry::websocket::WebSocketMetrics;
 /// Default ceiling on serialized inbound request bytes for HTTP bodies and
 /// WebSocket messages.
 pub const DEFAULT_MAX_REQUEST_BODY_SIZE: NonZeroUsize =
-    NonZeroUsize::new(10 * 1024 * 1024).expect("default is nonzero");
+    NonZeroUsize::new(agentic_core::executor::DEFAULT_MAX_REQUEST_BODY_SIZE_BYTES).expect("default is nonzero");
 
 #[derive(Clone, Default)]
 pub struct WebSocketTracker {

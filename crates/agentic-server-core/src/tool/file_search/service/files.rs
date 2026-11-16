@@ -1,7 +1,7 @@
 //! File upload, retrieval, and deletion operations.
 
 use super::{
-    Arc, CancellationToken, Collection, DeleteObject, FileContent, FileObject, FilePublicationFailure, FileSearchError,
+    Arc, CancellationToken, Collection, DeleteObject, FileObject, FilePublicationFailure, FileSearchError,
     FileSearchService, ListParams, ListResponse, MAX_FILE_BYTES, OwnedSemaphorePermit, decode_content, deleted,
     invalid, page, size_i64, validate_file_id, validate_list,
 };
@@ -136,23 +136,10 @@ impl FileSearchService {
     /// # Errors
     /// Returns not-found, resource-limit, or storage errors.
     pub async fn file_content(&self, id: &str) -> Result<Vec<u8>, FileSearchError> {
-        Ok(self.read_file(id).await?.bytes)
-    }
-
-    /// Reads a stored file and the metadata needed to inline it in a request.
-    ///
-    /// # Errors
-    /// Returns not-found, resource-limit, or storage errors.
-    pub async fn read_file(&self, id: &str) -> Result<FileContent, FileSearchError> {
         let permit = self.permit()?;
         validate_file_id(id)?;
         let file = self.storage.file(id).await?;
-        let bytes = self.read_content(id, file.object.bytes, file.content, permit).await?;
-        Ok(FileContent {
-            filename: file.object.filename,
-            content_type: file.content_type,
-            bytes,
-        })
+        self.read_content(id, file.object.bytes, file.content, permit).await
     }
 
     /// Atomically deletes metadata, attachments, and chunks, then removes the local blob.

@@ -1,5 +1,6 @@
 //! Constructed regression fixtures, not live OpenAI/vLLM recordings.
 use agentic_core::types::conversations::ConversationMetadata;
+use std::collections::HashMap;
 use std::fmt::Write;
 use std::sync::Arc;
 
@@ -45,6 +46,7 @@ fn context() -> RequestContext {
         conversation_id: None,
         checkpoint: None,
         continuation: None,
+        files: HashMap::default(),
     }
 }
 
@@ -91,7 +93,7 @@ fn prepared_shell_history_and_choice_match_upstream_function_tools() {
     request.input = serde_json::from_value(json!([shell_item("completed"), shell_output()])).unwrap();
     let mut prepared = request.clone();
     prepared.input = ResponsesInput::from(Vec::from(&request.input));
-    let upstream = serde_json::to_value(prepared.to_upstream_request(false).unwrap()).unwrap();
+    let upstream = serde_json::to_value(prepared.to_upstream_request(false, &HashMap::default()).unwrap()).unwrap();
     assert_eq!(upstream["tool_choice"], json!({"type": "function", "name": "shell"}));
     assert_eq!(upstream["tools"][0]["name"], "shell");
     assert_eq!(upstream["input"][0]["type"], "function_call");

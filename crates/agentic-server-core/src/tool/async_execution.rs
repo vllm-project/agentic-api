@@ -129,6 +129,8 @@ pub fn lower_async_calls(input: Cow<'_, ResponsesInput>) -> Cow<'_, ResponsesInp
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
     use crate::types::io::InputFunctionToolCall;
     use crate::types::io::input::FunctionToolResultMessage;
@@ -311,7 +313,7 @@ mod tests {
         }))
         .unwrap();
 
-        let upstream = serde_json::to_value(request.to_upstream_request(false).unwrap()).unwrap();
+        let upstream = serde_json::to_value(request.to_upstream_request(false, &HashMap::default()).unwrap()).unwrap();
 
         let tool = &upstream["tools"][0];
         assert_eq!(tool["description"], async_description(Some("Read the weather.")));

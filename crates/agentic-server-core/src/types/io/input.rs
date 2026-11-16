@@ -1,8 +1,10 @@
 mod calls;
 mod content;
 mod conversions;
+mod file_references;
 mod file_text;
 mod history_naming;
+mod resolved_file;
 mod search_history;
 mod tool_search;
 mod validation;
@@ -11,6 +13,8 @@ mod window;
 pub(crate) use conversions::internal_mcp_tool_name;
 pub use file_text::InputFileError;
 pub(crate) use history_naming::HistoryNaming;
+pub use resolved_file::{ResolvedFile, ResolvedFiles};
+pub(crate) use resolved_file::{context_stuffing_extensions, extension_label, is_text_filename};
 pub(crate) use search_history::{
     SearchHistory, SearchHistoryDefect, TOOL_SEARCH_NAME, hosted_search_output_text, is_search_item,
 };
@@ -471,6 +475,8 @@ fn function_call_item_id(item_id: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use serde_json::Value;
 
     use super::*;
@@ -1117,7 +1123,12 @@ mod tests {
         let canonical_value = serde_json::to_value(Vec::<InputItem>::from(&input)).expect("canonical items");
         assert_eq!(canonical_value[0]["type"], "custom_tool_call");
         assert_eq!(canonical_value[1]["type"], "custom_tool_call_output");
-        let model_value = serde_json::to_value(input.normalized_model_input(&[]).expect("model input")).unwrap();
+        let model_value = serde_json::to_value(
+            input
+                .normalized_model_input(&[], &HashMap::default())
+                .expect("model input"),
+        )
+        .unwrap();
         assert_eq!(model_value[0]["type"], "function_call");
         assert_eq!(model_value[0]["id"], "fc_1");
         assert_eq!(model_value[0]["arguments"], r#"{"input":"hello"}"#);
@@ -1163,7 +1174,7 @@ mod tests {
         let owned = serde_json::to_value(Vec::<InputItem>::from(input.clone())).unwrap();
         assert_eq!(borrowed, owned);
         assert_eq!(borrowed[0]["type"], "shell_call");
-        let model = serde_json::to_value(input.normalized_model_input(&[]).unwrap()).unwrap();
+        let model = serde_json::to_value(input.normalized_model_input(&[], &HashMap::default()).unwrap()).unwrap();
         assert_eq!(model[0]["type"], "function_call");
         assert_eq!(model[0]["id"], "fc_1");
         assert_eq!(model[0]["name"], "shell");
@@ -1183,6 +1194,8 @@ mod tests {
 
 #[cfg(test)]
 mod borrowed_history_tests {
+    use std::collections::HashMap;
+
     use super::*;
     use crate::types::io::InOutItem;
     use crate::types::io::OutputItem;
@@ -1242,7 +1255,7 @@ mod borrowed_history_tests {
             Vec::<InputItem>::from(&input).as_slice(),
             [InputItem::CustomToolCall(_), InputItem::ShellCall(_)]
         ));
-        let model = Vec::<InputItem>::from(input.normalized_model_input(&[]).unwrap());
+        let model = Vec::<InputItem>::from(input.normalized_model_input(&[], &HashMap::default()).unwrap());
         assert!(matches!(
             model.as_slice(),
             [InputItem::FunctionCall(_), InputItem::FunctionCall(_)]

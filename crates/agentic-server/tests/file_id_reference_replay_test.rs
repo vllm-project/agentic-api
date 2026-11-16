@@ -107,6 +107,23 @@ fn remap_ids(value: &mut Value, ids: &HashMap<String, String>) {
     }
 }
 
+/// Replaces recorded file IDs anywhere an expected error message embeds them.
+///
+/// Uploads receive fresh IDs on replay, and the gateway echoes the client's ID in
+/// `Files [<id>] were not found`, so error bodies cannot be compared verbatim.
+fn remap_error_ids(value: &mut Value, ids: &HashMap<String, String>) {
+    match value {
+        Value::String(text) => {
+            for (recorded, actual) in ids {
+                *text = text.replace(recorded.as_str(), actual);
+            }
+        }
+        Value::Array(items) => items.iter_mut().for_each(|item| remap_error_ids(item, ids)),
+        Value::Object(fields) => fields.values_mut().for_each(|field| remap_error_ids(field, ids)),
+        Value::Null | Value::Bool(_) | Value::Number(_) => {}
+    }
+}
+
 fn remap_path(path: &str, ids: &HashMap<String, String>) -> String {
     path.split('/')
         .map(|segment| ids.get(segment).cloned().unwrap_or_else(|| segment.to_owned()))
@@ -142,6 +159,45 @@ async fn stored_parts(exec_ctx: &ExecutionContext) -> Vec<Value> {
             item["content"].as_array().cloned().unwrap_or_default()
         })
         .collect()
+}
+
+/// The client-facing input context a stored response was generated from.
+async fn client_input_items(gateway: &Gateway, response_id: &str) -> Vec<Value> {
+    let url = format!("{}/v1/responses/{response_id}/input_items?order=asc", gateway.url);
+    let response = reqwest::Client::new()
+        .get(url)
+        .send()
+        .await
+        .expect("input items request");
+    assert_eq!(response.status(), StatusCode::OK, "input items status");
+    let body: Value = response.json().await.expect("input items JSON");
+    assert_eq!(body["object"], "list");
+    body["data"].as_array().cloned().expect("input items data")
+}
+
+fn content_parts(items: &[Value]) -> Vec<&Value> {
+    items
+        .iter()
+        .flat_map(|item| item["content"].as_array().into_iter().flatten())
+        .collect()
+}
+
+async fn post_response(gateway: &Gateway, input: Value) -> (StatusCode, Value) {
+    let response = reqwest::Client::new()
+        .post(format!("{}/v1/responses", gateway.url))
+        .json(&json!({"model": "test-model", "input": input, "store": false, "stream": false}))
+        .send()
+        .await
+        .expect("response request");
+    let status = response.status();
+    let body = response.json().await.expect("response JSON");
+    (status, body)
+}
+
+fn error_message(body: &Value) -> &str {
+    body["error"]["message"]
+        .as_str()
+        .unwrap_or_else(|| panic!("error message: {body}"))
 }
 
 struct MockUpstream {
@@ -206,15 +262,23 @@ impl Drop for Gateway {
 }
 
 async fn start_gateway(upstream_url: &str) -> Gateway {
+    start_gateway_with_file_search(upstream_url, true).await
+}
+
+async fn start_gateway_with_file_search(upstream_url: &str, file_search: bool) -> Gateway {
     let db = tempfile::tempdir().expect("temp database directory");
     let files = tempfile::tempdir().expect("temp files directory");
     let mut config = common::test_config(upstream_url);
     config.openai_api_key = None;
     config.db_url = Some(format!("sqlite://{}", db.path().join("gateway.db").display()));
     config.tools.file_search.files_storage_dir = Some(files.path().to_owned());
+    let mut exec_ctx = ExecutionContext::from_config(&config).await.expect("execution context");
+    if !file_search {
+        exec_ctx = exec_ctx.without_file_search_service();
+    }
+    let exec_ctx = Arc::new(exec_ctx);
     let mut state = common::test_state(&config);
-    state.exec_ctx = Arc::new(ExecutionContext::from_config(&config).await.expect("execution context"));
-    let exec_ctx = Arc::clone(&state.exec_ctx);
+    state.exec_ctx = Arc::clone(&exec_ctx);
     let (url, task) = common::spawn_gateway(state).await;
     Gateway {
         url,
@@ -225,7 +289,14 @@ async fn start_gateway(upstream_url: &str) -> Gateway {
     }
 }
 
-async fn replay(cassette: &Value, expected_upstream_calls: usize) -> (Gateway, MockUpstream, HashMap<String, String>) {
+struct Replay {
+    gateway: Gateway,
+    upstream: MockUpstream,
+    file_ids: HashMap<String, String>,
+    response_ids: HashMap<String, String>,
+}
+
+async fn replay(cassette: &Value, expected_upstream_calls: usize) -> Replay {
     let responses = turns(cassette)
         .iter()
         .filter(|turn| path(turn) == "/v1/responses" && expected_status(turn) == StatusCode::OK)
@@ -245,7 +316,12 @@ async fn replay(cassette: &Value, expected_upstream_calls: usize) -> (Gateway, M
         expected_upstream_calls,
         "rejected files must not reach inference"
     );
-    (gateway, upstream, file_ids)
+    Replay {
+        gateway,
+        upstream,
+        file_ids,
+        response_ids,
+    }
 }
 
 async fn replay_turn(
@@ -288,7 +364,9 @@ async fn replay_turn(
     let expected = &turn["response"];
     if !status.is_success() {
         let actual: Value = response.json().await.expect("error JSON");
-        assert_eq!(actual, expected["body"], "{}", turn["filename"]);
+        let mut expected_body = expected["body"].clone();
+        remap_error_ids(&mut expected_body, file_ids);
+        assert_eq!(actual, expected_body, "{}", turn["filename"]);
         return;
     }
     if let Some(encoded) = expected["body_base64"].as_str() {
@@ -360,7 +438,12 @@ fn assert_response(actual: &Value, expected: &Value, response_ids: &mut HashMap<
 #[tokio::test]
 async fn files_api_text_reference_replays_through_the_gateway() {
     let cassette = load(TEXT);
-    let (gateway, upstream, file_ids) = replay(&cassette, 2).await;
+    let Replay {
+        gateway,
+        upstream,
+        file_ids,
+        response_ids,
+    } = replay(&cassette, 2).await;
     let notes = recorded_content(&cassette);
     let expected = format!(
         "File: notes.txt\n{}",
@@ -398,12 +481,31 @@ async fn files_api_text_reference_replays_through_the_gateway() {
             .is_some_and(|text| text.contains("Deployment checklist"))),
         "model-facing file text must not be persisted"
     );
+
+    let first_response = response_ids
+        .get(recorded_id(turn(&cassette, "t4")))
+        .expect("first response ID");
+    let listed_items = client_input_items(&gateway, first_response).await;
+    let listed = content_parts(&listed_items);
+    let listed_reference = listed
+        .iter()
+        .find(|part| part["type"] == "input_file" && part["file_id"].as_str() == Some(first_file.as_str()))
+        .expect("client-facing history keeps the file_id reference");
+    assert!(
+        listed_reference.get("file_data").is_none(),
+        "client-facing history must not inline the file: {listed_reference}"
+    );
 }
 
 #[tokio::test]
 async fn files_api_image_reference_replays_through_the_gateway() {
     let cassette = load(IMAGE);
-    let (gateway, upstream, file_ids) = replay(&cassette, 2).await;
+    let Replay {
+        gateway,
+        upstream,
+        file_ids,
+        response_ids,
+    } = replay(&cassette, 2).await;
     let image = recorded_content(&cassette);
     let expected_url = format!("data:image/png;base64,{}", STANDARD.encode(&image));
     let requests = upstream.requests.lock().await;
@@ -427,12 +529,32 @@ async fn files_api_image_reference_replays_through_the_gateway() {
         reference.get("image_url").is_none(),
         "stored history must not inline the image: {reference}"
     );
+
+    let first_response = response_ids
+        .get(recorded_id(turn(&cassette, "t4")))
+        .expect("first response ID");
+    let listed_items = client_input_items(&gateway, first_response).await;
+    let listed = content_parts(&listed_items);
+    let listed_reference = listed
+        .iter()
+        .find(|part| part["type"] == "input_image" && part["file_id"].as_str() == Some(first_file.as_str()))
+        .expect("client-facing history keeps the file_id reference");
+    assert!(
+        listed_reference.get("image_url").is_none(),
+        "client-facing history must not inline the image: {listed_reference}"
+    );
 }
 
 #[tokio::test]
 async fn files_api_upload_and_lookup_errors_replay_without_inference() {
     let cassette = load(ERRORS);
-    let (gateway, upstream, _file_ids) = replay(&cassette, 0).await;
+    let Replay {
+        gateway,
+        upstream,
+        response_ids,
+        ..
+    } = replay(&cassette, 0).await;
+    assert!(response_ids.is_empty(), "rejected turns must not create responses");
     assert!(upstream.requests.lock().await.is_empty());
     let pool = gateway.exec_ctx.storage_pool().expect("storage pool");
     let stored: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM items")
@@ -440,4 +562,81 @@ async fn files_api_upload_and_lookup_errors_replay_without_inference() {
         .await
         .expect("stored item count");
     assert_eq!(stored, 0, "rejected files must not create stored history");
+}
+
+#[tokio::test]
+async fn file_reference_errors_keep_their_http_status_and_part_position() {
+    let upstream = mock_upstream(Vec::new()).await;
+    let gateway = start_gateway(&upstream.url).await;
+    let cases = vec![
+        (
+            json!([{"role": "user", "content": [
+                {"type": "input_image", "file_id": "file-1", "image_url": "data:image/png;base64,AA=="}
+            ]}]),
+            "Mutually exclusive parameters: 'input[0].content[0]'. Ensure you are only providing one of: \
+             'file_id' or 'image_url'."
+                .to_owned(),
+        ),
+        (
+            json!([{"role": "user", "content": [
+                {"type": "input_file", "file_id": "file-1", "file_data": "aGk=", "filename": "notes.txt"}
+            ]}]),
+            "Mutually exclusive parameters: 'input[0].content[0]'. Ensure you are only providing one of: \
+             'file_id' or 'file_data'."
+                .to_owned(),
+        ),
+        (
+            json!([{"role": "user", "content": [
+                {"type": "input_file", "file_id": "file-1", "file_url": "https://example.invalid/a.txt"}
+            ]}]),
+            "Mutually exclusive parameters: 'input[0].content[0]'. Ensure you are only providing one of: \
+             'file_id' or 'file_url'."
+                .to_owned(),
+        ),
+    ];
+    for (input, message) in cases {
+        let (actual_status, body) = post_response(&gateway, input.clone()).await;
+        assert_eq!(actual_status, StatusCode::BAD_REQUEST, "{input}");
+        assert_eq!(body["error"]["type"], "invalid_request_error", "{body}");
+        assert_eq!(body["error"]["code"], "mutually_exclusive_parameters", "{body}");
+        assert_eq!(body["error"]["param"], "input[0].content[0]", "{body}");
+        assert_eq!(error_message(&body), message, "{input}");
+    }
+
+    let missing = format!("file-{}", uuid::Uuid::now_v7());
+    let nested = json!([
+        {"role": "user", "content": [{"type": "input_text", "text": "first"}]},
+        {"role": "user", "content": [
+            {"type": "input_text", "text": "a"},
+            {"type": "input_text", "text": "b"},
+            {"type": "input_file", "file_id": missing}
+        ]}
+    ]);
+    let (status, body) = post_response(&gateway, nested).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    assert_eq!(body["error"]["type"], "invalid_request_error", "{body}");
+    assert_eq!(body["error"]["code"], Value::Null, "{body}");
+    assert_eq!(body["error"]["param"], Value::Null, "{body}");
+    assert_eq!(error_message(&body), format!("Files [{missing}] were not found"));
+
+    let no_store = start_gateway_with_file_search(&upstream.url, false).await;
+    let nested = json!([
+        {"role": "user", "content": [{"type": "input_text", "text": "first"}]},
+        {"role": "user", "content": [
+            {"type": "input_text", "text": "a"},
+            {"type": "input_text", "text": "b"},
+            {"type": "input_file", "file_id": "file-1"}
+        ]}
+    ]);
+    let (status, body) = post_response(&no_store, nested).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(
+        error_message(&body),
+        "invalid request: input[1].content[2]: input_file with file_id requires the gateway file store; configure \
+         file storage or send the content inline"
+    );
+    assert!(
+        upstream.requests.lock().await.is_empty(),
+        "rejected references must not reach inference"
+    );
 }

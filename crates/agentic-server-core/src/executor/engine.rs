@@ -222,6 +222,7 @@ async fn run_compaction_trigger(
         let window = summarize_items(
             &ctx.enriched_request,
             input,
+            &ctx.files,
             exec_ctx,
             auth,
             CompactionTrigger::InputItem,
@@ -295,6 +296,8 @@ async fn run_blocking(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
     use crate::executor::modes::{ConversationHandler, ResponseHandler};
     use crate::storage::{ConversationStore, ResponseStore, create_pool_with_schema};
@@ -454,6 +457,7 @@ mod tests {
             conversation_id: None,
             checkpoint: None,
             continuation: None,
+            files: HashMap::default(),
         };
         let mut exec_ctx = ExecutionContext::new(
             ConversationHandler::new(ConversationStore::disabled()),
@@ -518,6 +522,7 @@ mod tests {
             conversation_id: None,
             checkpoint: None,
             continuation: None,
+            files: HashMap::default(),
         };
         let plain_payload: RequestPayload = serde_json::from_value(serde_json::json!({
             "model": "test-model",
@@ -534,6 +539,7 @@ mod tests {
             conversation_id: None,
             checkpoint: None,
             continuation: None,
+            files: HashMap::default(),
         };
         let mut exec_ctx = ExecutionContext::new(
             ConversationHandler::new(ConversationStore::disabled()),
@@ -622,6 +628,7 @@ mod tests {
             conversation_id: None,
             checkpoint: None,
             continuation: None,
+            files: HashMap::default(),
         };
         let mut exec_ctx = ExecutionContext::new(
             ConversationHandler::new(ConversationStore::disabled()),

@@ -1,5 +1,7 @@
 //! Request input is checked at the typed boundary, before execution or routing.
 
+use std::collections::HashMap;
+
 use agentic_core::executor::ExecutorError;
 use agentic_core::types::io::{InOutItem, InputItem, ResponsesInput};
 use agentic_core::types::request_response::{CompactRequest, RequestPayload};
@@ -105,7 +107,7 @@ fn gateway_call_input_preserves_typed_payloads_in_canonical_history() {
         {"type":"function_call_output","call_id":"mcp_1","output":"sunny","status":"completed"}
     ]);
     for stream in [false, true] {
-        let upstream = payload.to_upstream_request(stream).unwrap();
+        let upstream = payload.to_upstream_request(stream, &HashMap::default()).unwrap();
         assert_eq!(serde_json::to_value(&upstream.input).unwrap(), model_input);
     }
     let items = payload.input.into_canonical_items();

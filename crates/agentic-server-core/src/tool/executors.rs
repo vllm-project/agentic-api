@@ -156,6 +156,11 @@ impl GatewayExecutors {
         Ok(executors)
     }
 
+    /// Removes the gateway-owned file-search handler.
+    pub(crate) fn remove_file_search(&mut self) {
+        self.file_search = None;
+    }
+
     pub fn insert(&mut self, registration: impl Into<GatewayExecutorRegistration>) {
         match registration.into() {
             GatewayExecutorRegistration::WebSearch(executor) => self.web_search = Some(executor),

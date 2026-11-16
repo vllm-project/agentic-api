@@ -192,6 +192,8 @@ impl ResponseHandler {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
     use crate::types::io::ResponsesInput;
     use crate::types::request_response::RequestPayload;
@@ -217,6 +219,7 @@ mod tests {
             conversation_id: None,
             checkpoint: None,
             continuation: None,
+            files: HashMap::default(),
         }
     }
 

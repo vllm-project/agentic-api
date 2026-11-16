@@ -1,11 +1,11 @@
 turns:
 - filename: t1
   request:
-    body_base64: LS0yZTYxZjFkMDE3NWY3MWY2MjVkMWEzNWIxNTRjZTIyZA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp2aXNpb24NCi0tMmU2MWYxZDAxNzVmNzFmNjI1ZDFhMzViMTU0Y2UyMmQNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJjb2xvcnMucG5nIg0KQ29udGVudC1UeXBlOiBpbWFnZS9wbmcNCg0KiVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PsQkAAAzDsPz/dHpCp2wCzwalybTxvgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+Dq47PDiz8p6GQAAAABJRU5ErkJggg0KLS0yZTYxZjFkMDE3NWY3MWY2MjVkMWEzNWIxNTRjZTIyZC0tDQo=
+    body_base64: LS05ZWVmNmNiZTg1MmIwYTg4ZGE1ZjNkOTFmZTRlOGU3OA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp2aXNpb24NCi0tOWVlZjZjYmU4NTJiMGE4OGRhNWYzZDkxZmU0ZThlNzgNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJjb2xvcnMucG5nIg0KQ29udGVudC1UeXBlOiBpbWFnZS9wbmcNCg0KiVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PsQkAAAzDsPz/dHpCp2wCzwalybTxvgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+Dq47PDiz8p6GQAAAABJRU5ErkJggg0KLS05ZWVmNmNiZTg1MmIwYTg4ZGE1ZjNkOTFmZTRlOGU3OC0tDQo=
     body_encoding: base64
     headers:
       accept: '*/*'
-      content-type: multipart/form-data; boundary=2e61f1d0175f71f625d1a35b154ce22d
+      content-type: multipart/form-data; boundary=9eef6cbe852b0a88da5f3d91fe4e8e78
       user-agent: python-httpx/0.28.1
     method: POST
     path: /v1/files
@@ -13,9 +13,9 @@ turns:
   response:
     body:
       bytes: 136
-      created_at: 1794621071
+      created_at: 1794819893
       filename: colors.png
-      id: file-01a1d7c0-60ad-7dd3-99dc-a2f7bd5cf35f
+      id: file-01a1e39a-2815-7b71-b133-f003cd6e862e
       object: file
       purpose: vision
       status: processed
@@ -29,14 +29,14 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/files/file-01a1d7c0-60ad-7dd3-99dc-a2f7bd5cf35f
+    path: /v1/files/file-01a1e39a-2815-7b71-b133-f003cd6e862e
     query_params: {}
   response:
     body:
       bytes: 136
-      created_at: 1794621071
+      created_at: 1794819893
       filename: colors.png
-      id: file-01a1d7c0-60ad-7dd3-99dc-a2f7bd5cf35f
+      id: file-01a1e39a-2815-7b71-b133-f003cd6e862e
       object: file
       purpose: vision
       status: processed
@@ -50,7 +50,7 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/files/file-01a1d7c0-60ad-7dd3-99dc-a2f7bd5cf35f/content
+    path: /v1/files/file-01a1e39a-2815-7b71-b133-f003cd6e862e/content
     query_params: {}
   response:
     body_base64: iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PsQkAAAzDsPz/dHpCp2wCzwalybTxvgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+Dq47PDiz8p6GQAAAABJRU5ErkJggg==
@@ -65,7 +65,7 @@ turns:
       - content:
         - text: Which two colors are in the image? Reply with only the two color names.
           type: input_text
-        - file_id: file-01a1d7c0-60ad-7dd3-99dc-a2f7bd5cf35f
+        - file_id: file-01a1e39a-2815-7b71-b133-f003cd6e862e
           type: input_image
         role: user
         type: message
@@ -83,11 +83,11 @@ turns:
   response:
     body:
       background: false
-      completed_at: 1794621072
-      created_at: 1794621072
+      completed_at: 1794819893
+      created_at: 1794819893
       error: null
       frequency_penalty: 0.0
-      id: resp_01a1d7c0-60e4-7b92-972f-ebfaf6285952
+      id: resp_01a1e39a-2838-7871-8f7e-5e59134efea8
       incomplete_details: null
       instructions: null
       max_output_tokens: 64
@@ -101,7 +101,7 @@ turns:
           logprobs: []
           text: Red, Blue
           type: output_text
-        id: msg_83b452a6e72d0f73
+        id: msg_a6b3e97e4197aa09
         role: assistant
         status: completed
         type: message
@@ -142,7 +142,7 @@ turns:
       input: Which two colors were in the image? Reply with only the two color names.
       max_output_tokens: 64
       model: Qwen/Qwen2.5-VL-3B-Instruct
-      previous_response_id: resp_01a1d7c0-60e4-7b92-972f-ebfaf6285952
+      previous_response_id: resp_01a1e39a-2838-7871-8f7e-5e59134efea8
       store: true
       stream: false
     headers:
@@ -155,11 +155,11 @@ turns:
   response:
     body:
       background: false
-      completed_at: 1794621073
-      created_at: 1794621073
+      completed_at: 1794819894
+      created_at: 1794819894
       error: null
       frequency_penalty: 0.0
-      id: resp_01a1d7c0-65e9-7ce1-b79b-a1a4310d7362
+      id: resp_01a1e39a-2ad8-7ec3-bb06-5f580668955d
       incomplete_details: null
       instructions: null
       max_output_tokens: 64
@@ -173,13 +173,13 @@ turns:
           logprobs: []
           text: Red, Blue
           type: output_text
-        id: msg_81b5cc9d046a20e5
+        id: msg_827a13044554254c
         role: assistant
         status: completed
         type: message
       parallel_tool_calls: false
       presence_penalty: 0.0
-      previous_response_id: resp_01a1d7c0-60e4-7b92-972f-ebfaf6285952
+      previous_response_id: resp_01a1e39a-2838-7871-8f7e-5e59134efea8
       prompt_cache_key: null
       prompt_cache_options: null
       reasoning: null
@@ -215,12 +215,12 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: DELETE
-    path: /v1/files/file-01a1d7c0-60ad-7dd3-99dc-a2f7bd5cf35f
+    path: /v1/files/file-01a1e39a-2815-7b71-b133-f003cd6e862e
     query_params: {}
   response:
     body:
       deleted: true
-      id: file-01a1d7c0-60ad-7dd3-99dc-a2f7bd5cf35f
+      id: file-01a1e39a-2815-7b71-b133-f003cd6e862e
       object: file.deleted
     headers:
       content-type: application/json
@@ -231,7 +231,7 @@ turns:
       input: Which two colors were in the image? Reply with only the two color names.
       max_output_tokens: 64
       model: Qwen/Qwen2.5-VL-3B-Instruct
-      previous_response_id: resp_01a1d7c0-60e4-7b92-972f-ebfaf6285952
+      previous_response_id: resp_01a1e39a-2838-7871-8f7e-5e59134efea8
       store: true
       stream: false
     headers:
@@ -244,19 +244,20 @@ turns:
   response:
     body:
       error:
-        code: not_found
-        message: 'input[0].content[1]: File not found'
-        type: not_found
+        code: null
+        message: Files [file-01a1e39a-2815-7b71-b133-f003cd6e862e] were not found
+        param: null
+        type: invalid_request_error
     headers:
       content-type: application/json
     status_code: 404
 - filename: t8
   request:
-    body_base64: LS1jNWRiY2VhMGZlOTJmZWM5ODg3ZTAyYzEzZGY3YTM1Mg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tYzVkYmNlYTBmZTkyZmVjOTg4N2UwMmMxM2RmN2EzNTINCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJub3Rlcy50eHQiDQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW4NCg0KRGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg0KLS1jNWRiY2VhMGZlOTJmZWM5ODg3ZTAyYzEzZGY3YTM1Mi0tDQo=
+    body_base64: LS0wMTZlMGJkMDYyMjdkYjFjYjllZDE0YWFiNzgyZjE2ZA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tMDE2ZTBiZDA2MjI3ZGIxY2I5ZWQxNGFhYjc4MmYxNmQNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJub3Rlcy50eHQiDQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW4NCg0KRGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg0KLS0wMTZlMGJkMDYyMjdkYjFjYjllZDE0YWFiNzgyZjE2ZC0tDQo=
     body_encoding: base64
     headers:
       accept: '*/*'
-      content-type: multipart/form-data; boundary=c5dbcea0fe92fec9887e02c13df7a352
+      content-type: multipart/form-data; boundary=016e0bd06227db1cb9ed14aab782f16d
       user-agent: python-httpx/0.28.1
     method: POST
     path: /v1/files
@@ -264,9 +265,9 @@ turns:
   response:
     body:
       bytes: 91
-      created_at: 1794621073
+      created_at: 1794819894
       filename: notes.txt
-      id: file-01a1d7c0-679f-7b33-b141-cbb18ba9a5b7
+      id: file-01a1e39a-2bd9-7682-9558-0368fc48490a
       object: file
       purpose: user_data
       status: processed
@@ -280,7 +281,7 @@ turns:
       - content:
         - text: Which two colors are in the image? Reply with only the two color names.
           type: input_text
-        - file_id: file-01a1d7c0-679f-7b33-b141-cbb18ba9a5b7
+        - file_id: file-01a1e39a-2bd9-7682-9558-0368fc48490a
           type: input_image
         role: user
         type: message
@@ -298,9 +299,10 @@ turns:
   response:
     body:
       error:
-        code: invalid_request_error
-        message: 'invalid request: input[0].content[1]: input_image.file_id must reference
-          a file with an image media type'
+        code: null
+        message: 'Invalid input: Expected image type to be a supported format: .jpeg,
+          .jpg, .png, .gif, .webp but got .txt.'
+        param: input
         type: invalid_request_error
     headers:
       content-type: application/json
@@ -312,12 +314,12 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: DELETE
-    path: /v1/files/file-01a1d7c0-679f-7b33-b141-cbb18ba9a5b7
+    path: /v1/files/file-01a1e39a-2bd9-7682-9558-0368fc48490a
     query_params: {}
   response:
     body:
       deleted: true
-      id: file-01a1d7c0-679f-7b33-b141-cbb18ba9a5b7
+      id: file-01a1e39a-2bd9-7682-9558-0368fc48490a
       object: file.deleted
     headers:
       content-type: application/json

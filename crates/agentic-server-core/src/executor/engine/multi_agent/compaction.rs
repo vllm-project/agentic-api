@@ -33,8 +33,9 @@ impl MultiAgentRun {
             .find(|agent| agent.identity.is_root())
             .expect("validated tree has a root");
         root.history.retain(|item| !item.is_compaction_trigger());
-        let plan = CompactionPlan::prepare_explicit(&root.identity, 0, &root.history, &ctx.enriched_request)?
-            .ok_or_else(|| invalid("no resolved root context available for compaction"))?;
+        let plan =
+            CompactionPlan::prepare_explicit(&root.identity, 0, &root.history, &ctx.enriched_request, &ctx.files)?
+                .ok_or_else(|| invalid("no resolved root context available for compaction"))?;
         let mut result = plan.execute(exec, auth).await?;
         let usage = result.usage();
         let service_tier = result.window.service_tier.take();

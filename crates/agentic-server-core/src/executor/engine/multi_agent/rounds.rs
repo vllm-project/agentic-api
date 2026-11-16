@@ -82,6 +82,7 @@ impl MultiAgentRun {
                     context.generation,
                     &context.stored.history,
                     &context.request,
+                    &context.files,
                 )?
             {
                 context.compacting = true;
@@ -136,6 +137,7 @@ impl MultiAgentRun {
             conversation_id: None,
             checkpoint: None,
             continuation: None,
+            files: context.files.clone(),
         };
         // Round tasks present through the response owner's relay, never the client queue.
         let streaming = pipeline.is_streaming();

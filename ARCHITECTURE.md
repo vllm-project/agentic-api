@@ -682,8 +682,11 @@ goes through it, so it lowers the public records the model never read (search it
   Message-file conversion belongs to `input/file_text.rs`: supported inline UTF-8
   text files become model-facing text with their `prompt_cache_breakpoint` retained.
   Canonical history keeps the original file; unrelated file extensions are not copied
-  onto the text part. A `file_id` reference is resolved during rehydration, so on that
-  path this conversion sees the stored file's base64 data URL.
+  onto the text part. `input/resolved_file.rs` holds the per-request lookup behind a
+  `file_id` reference: this lowering alone replaces an `input_file` with text or an
+  `input_image` with a data URL, choosing the type from the stored filename's extension,
+  while the client-facing part keeps its reference. The lookup starts from
+  `executor/modes/files.rs` and is never stored.
 
 - **`types/io/item.rs`** — `InOutItem` is the shared input/output union used by
   `ResponsesInput::Items`, conversation requests/resources, and retained history.
@@ -831,13 +834,8 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   for the two request copies' responsibilities.
 - **`rehydrate.rs`** — `rehydrate_conversation()` loads prior history from either the
   conversation store or the response store depending on which ID the request carries,
-  and builds the enriched `RequestContext`. Message `input_image` and `input_file`
-  `file_id` references in the enriched input are resolved against the file store into
-  base64 data URLs before final validation; the client's reference stays in
-  `original_request` and canonical history. Compaction windows and multi-agent tree
-  snapshots derive from the resolved copy, so they can retain the data URL. Every source
-  (a stored response, a session parent, or a conversation turn) leaves its
-  `ResponseCheckpoint` on the context (`checkpoint`): the continued turn's
+  and builds the enriched `RequestContext`. Every source (a stored response, a session parent, or a
+  conversation turn) leaves its `ResponseCheckpoint` on the context (`checkpoint`): the continued turn's
   metadata and its stored history rows. `prepare.rs` restores tool-search
   state after compaction from it without another storage read, and persistence extends it: a response's history
   is its parent's rows plus the new ones, so neither store reads the parent again. A conversation turn's response
@@ -989,6 +987,11 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   Lookups and retrieval are separate methods (`get`, `get_or_create`, `create`, `retrieve`, `validate_exists`);
   **any new CRUD operation
   beyond persist/rehydrate belongs here**, added as a new method that delegates to the corresponding store.
+- **`modes/files.rs`** — `FileHandler`, the read-only access seam to the gateway file store. Rehydration
+  calls its one `resolve` after the branches assemble the turn's final input; the returned per-turn lookup
+  (`RequestContext::files`) is used only by `normalized_model_input`, and is never stored, checkpointed, or
+  snapshotted. It reports a missing reference with `OpenAI`'s `Files [<id>...] were not found` envelope and
+  checks the resolved content against the request body limit.
 - **`error.rs`** — `ExecutorError`, with the mapping methods (`http_status()`,
   `error_type()`, `into_response_body()`, ...) handlers use to render errors.
 
@@ -1934,12 +1937,10 @@ for the five-minute lifetime, serialized-size budget, and crash recovery rules.
   `InOutItem::into_input_items` turns a full
   history into the `Vec<InputItem>` used for continuation processing: stored
   `InputItem`s pass through, while stored `OutputItem`s go through
-  `OutputItem::to_input_item()`. Messages, reasoning, function/custom calls,
-  compaction checkpoints, and MCP list-tools records are retained. Public
-  `web_search_call`, `mcp_call`, and `code_interpreter_call` outputs are deliberately omitted because their
-  model-facing function calls and results are already persisted as input items;
-  reconstructing them here would duplicate and lose information from that canonical
-  pair.
+  `OutputItem::to_input_item()`. Every public item is retained in its public type, including `web_search_call`,
+  `mcp_call`, and `code_interpreter_call`; `ResponsesInput::normalized_model_input` lowers them for the model
+  ([What a turn persists](#what-a-turn-persists)). `file_search_call` is the one exception still recorded
+  through its model-facing call and output ([#482](https://github.com/vllm-project/agentic-api/issues/482)).
 
   This conversion is **not** the model visibility boundary. The resulting enriched
   history still contains `InputItem::Compaction`, `InputItem::CompactionTrigger`, and
@@ -1972,6 +1973,52 @@ lists the history without the snapshot's output. Only the retrieval reads decode
 `get_input_items`, which counts its outputs), so a continuation, and a session checkpoint built from it, never
 carries the parent's full response. A response stored without a snapshot, such as a `store: false` session checkpoint, remains
 usable for continuation, but GET retrieval reports a conflict rather than fabricating status, usage, or output.
+
+#### What a turn persists
+
+Stored history is the client-facing record of a turn: the items the client sent and the public output it received,
+in that order. Model-facing shapes (the gateway's lowered `function_call` / `function_call_output` pairs, the assistant summary a
+compaction item becomes, upstream-specific item forms) are never stored. They are built for each upstream request at the one
+lowering point, `ResponsesInput::normalized_model_input`. `input_items`, conversation items, and continuation all read
+the same rows, so they share one client-facing representation (`input_items` lists a turn's history without its own
+output). A change that stores a model-facing item, or a second
+copy of history in another shape, breaks that contract; the `file_search` path is the one leftover
+([#482](https://github.com/vllm-project/agentic-api/issues/482)).
+
+One typed flow carries history through a turn:
+
+- **Rehydrate.** Rehydration produces a `ResponseCheckpoint`: the parent's metadata and its ordered
+  `history_item_ids`. The turn runs on it, and nothing reads the parent again to rebuild history.
+- **Persist.** `write_turn` stores the request's own items, then the public output, and `ResponseStore::persist`
+  extends the checkpoint's `history_item_ids` with the new rows. It re-reads only the parent row, to drop rows a
+  deletion removed while the turn ran.
+- **Sessions.** A WebSocket session publishes the same checkpoint in memory for the next turn on the connection. It
+  is durable only when the request is stored; a stored child of an unstored parent stores the parent's history
+  itself.
+
+What a continuation sees, and therefore what each turn's list holds, follows OpenAI's recorded behavior:
+
+- **Compaction.** A single-agent continuation starts at the latest compaction a turn produced
+  (`ResponseCheckpoint::continue_from_compaction` trims `history_item_ids`), so the list restarts at every
+  compaction. Automatic compaction and `compaction_trigger` carry their retained user messages, including media,
+  inside the compaction item; standalone `/v1/responses/compact` stores the window it built. Open async calls are not
+  part of the item: automatic compaction keeps them as separate items next to it, and the standalone window returns
+  them in their public form, so replaying the compaction item alone does not restore pending call IDs. A compacting turn keeps its own original input. Multi-agent continuations keep their full public history,
+  with the agent tree in `responses.metadata`.
+- **Compaction sent back as input.** `InOutItem::filter_for_compaction` decides what a turn stores of a request that
+  carries a compaction. One from an unstored turn is used for that turn only: it and the items before it are not
+  stored, except the user messages its window keeps. A stored compaction sent back stays history, and the stored
+  window starts at it.
+- **Items sent back by ID.** A client item that names a stored item takes the stored item's content, not what the
+  client sent, and each occurrence gets its own history row, so a repeated public ID keeps every position.
+- **Deletion.** Deleting a response removes its rows from every descendant's `history_item_ids`, and a turn that
+  was running at the time does not restore them.
+- **Conversations.** A conversation turn stores the history it started from plus its own items, appended at commit
+  after whatever the conversation holds then. A turn that answers a pending call, or runs with multi-agent enabled,
+  must still continue the latest turn, and is refused with `conversation_locked` otherwise.
+
+Evidence for each rule lives in the OpenAI and gateway cassettes (`compaction/`, `responses/`, `conversations/`). A
+change to what is persisted needs the same: record OpenAI with the recorder, then the gateway, and assert both.
 
 #### Schema, migrations, and where data goes
 

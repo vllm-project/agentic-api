@@ -289,6 +289,7 @@ pub(super) async fn prepare_agent(
         conversation_id: None,
         checkpoint: None,
         continuation: None,
+        files: parent.files.clone(),
     };
     let mut pipeline = AgentPipeline::new(ctx, tool_search, StreamRelay::detached());
     let turn = AgentTurn::new(
@@ -320,6 +321,7 @@ pub(super) async fn prepare_agent(
         inputs_during_round: Vec::new(),
         stored,
         execution,
+        files: parent.files.clone(),
         request: ctx.enriched_request,
         tool_search,
     })

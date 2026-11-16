@@ -65,7 +65,11 @@ async fn build_state(
     model_capabilities: ModelCapabilities,
 ) -> Result<AppState, ServerError> {
     let proxy_state = ProxyState::new(config.clone())?;
-    let exec_ctx = Arc::new(ExecutionContext::from_config(config).await?);
+    let exec_ctx = Arc::new(
+        ExecutionContext::from_config(config)
+            .await?
+            .with_max_request_body_size(max_request_body_size),
+    );
 
     Ok(AppState {
         proxy_state,

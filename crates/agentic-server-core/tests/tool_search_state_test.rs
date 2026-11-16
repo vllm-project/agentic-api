@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use agentic_core::tool::{ToolSearchHandler, ToolSearchState, model_visible_namespace_member_name};
 use agentic_core::types::io::InOutItem;
 use agentic_core::{InputItem, RequestPayload, ResponsesInput};
@@ -814,8 +816,12 @@ fn namespace_tool_choice_rejects_withheld_member_and_accepts_loaded_member() {
     loaded.tool_choice.clone_from(&withheld.tool_choice);
     let mut state = ToolSearchState::build(&loaded).expect("exact namespace member loads");
     let private = private_request(&mut state, &loaded);
-    let upstream = serde_json::to_value(private.to_upstream_request(false).expect("private request lowers"))
-        .expect("upstream request serializes");
+    let upstream = serde_json::to_value(
+        private
+            .to_upstream_request(false, &HashMap::default())
+            .expect("private request lowers"),
+    )
+    .expect("upstream request serializes");
     assert_eq!(
         upstream["tool_choice"]["name"],
         model_visible_namespace_member_name("weather", "forecast")
@@ -870,8 +876,12 @@ fn namespace_history_rejects_exact_withheld_calls_and_lowers_loaded_calls() {
     );
     let mut state = ToolSearchState::build(&loaded_request).expect("loaded known history call remains valid");
     let private = private_request(&mut state, &loaded_request);
-    let upstream = serde_json::to_value(private.to_upstream_request(false).expect("loaded history lowers"))
-        .expect("upstream request serializes");
+    let upstream = serde_json::to_value(
+        private
+            .to_upstream_request(false, &HashMap::default())
+            .expect("loaded history lowers"),
+    )
+    .expect("upstream request serializes");
     assert_eq!(upstream["input"][2]["name"], flat_name);
     assert!(upstream["input"][2].get("namespace").is_none());
 
@@ -1055,8 +1065,12 @@ fn dynamic_namespace_history_rejects_forward_references_but_accepts_valid_order_
         );
         let mut state = ToolSearchState::build(&valid).expect("output-before-call order is valid");
         let private = private_request(&mut state, &valid);
-        let upstream = serde_json::to_value(private.to_upstream_request(false).expect("valid history lowers"))
-            .expect("upstream request serializes");
+        let upstream = serde_json::to_value(
+            private
+                .to_upstream_request(false, &HashMap::default())
+                .expect("valid history lowers"),
+        )
+        .expect("upstream request serializes");
         assert_eq!(upstream["input"][2]["name"], flat_name);
         assert!(upstream["input"][2].get("namespace").is_none());
     }
@@ -1147,8 +1161,12 @@ fn prepare_inference_request_consumes_prepared_views_without_mutating_public_sou
     assert_eq!(private_value["tools"][1]["name"], "get_weather");
     assert!(private_value["tools"][1].get("defer_loading").is_none());
 
-    let upstream = serde_json::to_value(private.to_upstream_request(false).expect("prepared request lowers"))
-        .expect("upstream request serializes");
+    let upstream = serde_json::to_value(
+        private
+            .to_upstream_request(false, &HashMap::default())
+            .expect("prepared request lowers"),
+    )
+    .expect("upstream request serializes");
     assert_eq!(upstream["tools"][0]["type"], "function");
     assert_eq!(upstream["tools"][0]["name"], "tool_search");
 }

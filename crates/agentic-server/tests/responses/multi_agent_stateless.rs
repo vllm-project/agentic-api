@@ -203,6 +203,7 @@ async fn assert_reference_contract(mode: &str, actual_turns: &[Value]) {
                 conversation_id: None,
                 checkpoint: None,
                 continuation: None,
+                files: HashMap::default(),
             };
             decode_upstream(context, UpstreamBody::Sse(&stream))
                 .await
