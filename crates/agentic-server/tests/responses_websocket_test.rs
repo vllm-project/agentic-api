@@ -5044,6 +5044,54 @@ async fn test_websocket_multiple_images_across_messages_keep_order() {
 }
 
 #[tokio::test]
+async fn websocket_codex_function_output_id_continues_stored_and_unstored_turns() {
+    for store in [false, true] {
+        let mock = MockResponsesServer::start(vec![
+            sse_weather_function_call_response(),
+            sse_response("resp_after_tool", "msg_after_tool", "sunny"),
+        ])
+        .await;
+        let fixture = storage_backed_state(&mock.url).await;
+        let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+        let mut ws = connect_responses_ws(&gateway_url).await;
+        let tools = json!([{"type":"function", "name":"get_weather", "parameters":{"type":"object"}}]);
+        send_json(
+            &mut ws,
+            json!({"type":"response.create", "model":"test-model", "input":"weather",
+                "store":store, "tools":tools}),
+        )
+        .await;
+        let first = recv_until_completed(&mut ws).await;
+        let response = &first.last().unwrap()["response"];
+        assert_eq!(response["output"][0]["call_id"], "call_weather");
+        send_json(
+            &mut ws,
+            json!({"type":"response.create", "model":"test-model", "store":store,
+                "previous_response_id":response["id"], "tools":tools,
+                "input":[{"type":"function_call_output", "id":"fco_codex_weather",
+                    "call_id":"call_weather", "output":"sunny"}]}),
+        )
+        .await;
+        let second = recv_until_completed(&mut ws).await;
+        assert_eq!(
+            second.last().unwrap()["response"]["output"][0]["content"][0]["text"],
+            "sunny"
+        );
+        let requests = mock.request_bodies().await;
+        assert_eq!(requests.len(), 2);
+        let result = requests[1]["input"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["type"] == "function_call_output")
+            .expect("Codex's tool result reaches inference");
+        assert_eq!(result["id"], "fco_codex_weather");
+        assert_eq!(result["call_id"], "call_weather");
+        assert_eq!(result["output"], "sunny");
+    }
+}
+
+#[tokio::test]
 async fn test_websocket_view_image_tool_output_reaches_next_round() {
     let mock = MockResponsesServer::start(vec![
         sse_function_call_response("resp_upstream_1", "view_image"),

@@ -4,6 +4,11 @@ All notable changes to Agentic API are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Accept Codex's `fco_` IDs on function call outputs, preserving existing `fc_` IDs. Codex tool continuations
+  previously failed with a 400 before reaching inference when a tool result included an `fco_` ID.
+
 ### Changed
 
 - An MCP declaration's `require_approval` is now typed (`McpApprovalPolicy`) and parses the Responses API filter

@@ -184,7 +184,8 @@ impl OutputItem {
 
 impl InOutItem {
     /// Admits an item a client sent, as Responses input or as Conversations items: the one check every such item
-    /// passes. As on `OpenAI`, its ID must begin with its type's prefix and a call or an output needs a non-empty
+    /// passes. Its ID must begin with its type's prefix (also accepting Codex's `fco_` function output IDs),
+    /// and a call or an output needs a non-empty
     /// `call_id` (repeated ones are accepted). `item` is its parameter path, such as `input[1]`.
     ///
     /// # Errors
@@ -196,6 +197,7 @@ impl InOutItem {
         };
         if let (Some(id), Some(prefix)) = (id, prefix)
             && !id.starts_with(prefix)
+            && !(matches!(self, Self::Input(InputItem::FunctionCallOutput(_))) && id.starts_with("fco_"))
         {
             return Err(ClientItemError::InvalidId {
                 param: format!("{item}.id"),
@@ -337,6 +339,43 @@ mod tests {
             assert_eq!(error.code(), "invalid_value");
             assert_eq!(error.param(), "items[0].id");
         }
+    }
+
+    #[test]
+    fn codex_function_output_ids_preserve_item_and_call_identity() {
+        let value = json!({
+            "type":"function_call_output",
+            "id":"fco_01a1e559-c4e5-7661-8ba8-7e5e11d753a2",
+            "call_id":"call_1",
+            "output":"done"
+        });
+        let item = stored(value.clone());
+        for field in ["input", "items"] {
+            InOutItem::admit_all(std::slice::from_ref(&item), field).unwrap();
+        }
+        let serialized = serde_json::to_value(item).unwrap();
+        assert_eq!(serialized["id"], value["id"]);
+        assert_eq!(serialized["call_id"], value["call_id"]);
+        assert_eq!(serialized["output"], value["output"]);
+    }
+
+    #[test]
+    fn codex_output_prefix_does_not_relax_other_item_or_call_id_checks() {
+        for value in [
+            json!({"type":"function_call", "id":"fco_1", "call_id":"call_1", "name":"f", "arguments":"{}"}),
+            json!({"type":"message", "id":"fco_1", "role":"user", "content":"hello"}),
+            json!({"type":"function_call_output", "id":"wrong_1", "call_id":"call_1", "output":"done"}),
+            json!({"type":"function_call_output", "id":"", "call_id":"call_1", "output":"done"}),
+        ] {
+            let error = stored(value).admit("input[0]").unwrap_err();
+            assert_eq!(error.param(), "input[0].id");
+            assert_eq!(error.code(), "invalid_value");
+        }
+        let error = stored(json!({"type":"function_call_output", "id":"fco_1", "call_id":"", "output":"done"}))
+            .admit("input[0]")
+            .unwrap_err();
+        assert_eq!(error.param(), "input[0].call_id");
+        assert_eq!(error.code(), "empty_string");
     }
 
     #[test]

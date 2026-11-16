@@ -718,7 +718,8 @@ goes through it, so it lowers the public records the model never read (search it
   `InOutItem::admit_all` (`item/item_id.rs`) is the one check every item a client sends passes, whatever its kind,
   called once per endpoint that accepts items: Responses `input` in `ResponseHandler::resolve_input_items`, and
   Conversations `items` in `ConversationHandler::create` and `create_items`. As on `OpenAI`, an item's ID must
-  begin with its kind's prefix, and a call or an output needs a non-empty `call_id` (`ClientCallId::validate`,
+  begin with its kind's prefix. Function call outputs also accept Codex's `fco_` prefix alongside `fc_`,
+  preserving the supplied item ID and `call_id`. A call or an output needs a non-empty `call_id` (`ClientCallId::validate`,
   the same rule the pending-call ledger applies) while repeated ones are accepted. A refusal is a `ClientItemError` with `OpenAI`'s code (`invalid_value`, `empty_string`), parameter
   (`input[N].id`, `items[N].call_id`) and message. Storage does not validate items, and upstream output is
   not admitted: an empty `call_id` in stored history is refused by the ledger when a turn continues it.
