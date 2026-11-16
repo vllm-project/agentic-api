@@ -8,7 +8,7 @@ use crate::types::io::ClientItemError;
 use crate::types::io::input::InputValidationError;
 use crate::types::io::output::McpListTools;
 use crate::types::request_response::{
-    MAX_TOOL_CALLS_PARAM, MaxToolCallsError, PromptCacheOptionsError, UnsupportedParameterError, UpstreamRequestError,
+    MAX_TOOL_CALLS_PARAM, MaxToolCallsError, UnsupportedParameterError, UpstreamRequestError,
 };
 use crate::utils::common::serialize_to_vec_or_default;
 
@@ -139,9 +139,6 @@ pub enum ExecutorError {
     #[error(transparent)]
     UnsupportedParameter(#[from] UnsupportedParameterError),
 
-    #[error(transparent)]
-    InvalidPromptCacheOptions(#[from] PromptCacheOptionsError),
-
     /// The request exceeds a documented transport or component size budget.
     #[error("{0}")]
     PayloadTooLarge(String),
@@ -174,6 +171,7 @@ impl From<UpstreamRequestError> for ExecutorError {
     fn from(error: UpstreamRequestError) -> Self {
         match error {
             UpstreamRequestError::Input(error) => error.into(),
+            UpstreamRequestError::Parameter(error) => error.into(),
             UpstreamRequestError::Tool(error) => error.into(),
         }
     }
@@ -220,7 +218,6 @@ impl ExecutorError {
             | Self::InvalidRequest(_)
             | Self::InvalidInput(_)
             | Self::ClientItem(_)
-            | Self::InvalidPromptCacheOptions(_)
             | Self::InvalidMaxToolCalls(_)
             | Self::UnsupportedValue { .. }
             | Self::UnsupportedParameter(_)
@@ -267,7 +264,6 @@ impl ExecutorError {
             | Self::InvalidRequest(_)
             | Self::InvalidInput(_)
             | Self::ClientItem(_)
-            | Self::InvalidPromptCacheOptions(_)
             | Self::InvalidMaxToolCalls(_)
             | Self::UnsupportedValue { .. }
             | Self::UnsupportedParameter(_)
@@ -308,7 +304,6 @@ impl ExecutorError {
             Self::Storage(StorageError::ItemAlreadyInConversation) => "item_already_in_conversation",
             Self::PayloadTooLarge(_) => "body_too_large",
             Self::ResourceLimitExceeded { .. } => "response_resource_limit_exceeded",
-            Self::InvalidPromptCacheOptions(PromptCacheOptionsError::Unsupported) => "unsupported_parameter",
             Self::InvalidMaxToolCalls(error) => error.code(),
             Self::UnsupportedValue { code, .. } => code.unwrap_or("unsupported_value"),
             Self::UnsupportedParameter(error) => error.code(),
@@ -330,7 +325,6 @@ impl ExecutorError {
             Self::ConversationLocked { .. } => Some("conversation"),
             Self::Storage(StorageError::PreviousResponseNotFound { .. }) => Some("previous_response_id"),
             Self::Tool(ToolError::MissingOutput { .. } | ToolError::UnknownCallOutput { .. }) => Some("input"),
-            Self::InvalidPromptCacheOptions(_) => Some("prompt_cache_options"),
             Self::InvalidMaxToolCalls(_) => Some(MAX_TOOL_CALLS_PARAM),
             Self::UnsupportedParameter(error) => Some(error.param()),
             Self::McpListToolsFailed(_) => Some("tools"),

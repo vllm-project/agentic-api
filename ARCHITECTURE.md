@@ -131,11 +131,13 @@ handling, ignore `agentic_cli*`/`agentic_harness.rs`/`agentic_output.rs`/
 a coding harness (Codex or Claude Code) as subprocesses for local, single-command use
 (`agentic serve <model>`), and never touch the request path.
 
-`model_capabilities.rs` is the one deliberate exception: it is the shared contract both
-sides speak. The gateway resolves each model's `InputModalities` and reasoning effort levels
-there and serves them in the Codex catalog; the launcher parses that same catalog back through
-`CodexCatalogCapabilities` before writing an isolated Codex home. Keeping one definition is
-what stops the HTTP catalog and a launcher catalog from disagreeing about image support.
+`model_capabilities.rs` is the one deliberate exception: it owns the Codex catalog
+representation shared by the gateway and launcher. Core's `types/model_capabilities.rs`
+owns `ModelOverride`, `ModelCapabilities`, and their validated settings. Its immutable override table is
+shared through `Arc`, so cloning transport configuration does not copy every model entry. The gateway
+uses the same configured values for the catalog and Responses admission; the launcher
+parses the catalog through `CodexCatalogCapabilities` before writing an isolated Codex home.
+Catalog display defaults do not become admission limits.
 
 ### `app.rs`, `server.rs`, `main.rs`
 
@@ -190,6 +192,23 @@ Unmodeled top-level provider parameters, such as `chat_template_kwargs` and `top
 are retained in `RequestPayload::extra` and borrowed by `UpstreamRequest` for forwarding
 on each inference round. Known fields keep their typed validation and conversion;
 gateway state controls and WebSocket event metadata are not provider extensions.
+`RequestPayload::ensure_supported_parameters()` checks explicit `[models]`
+capabilities for the current request's exact model ID before history lookup or
+inference, returning typed `UnsupportedParameterError` variants. The same check
+runs at core admission, WebSocket preflight, and summary inference. Embedded and
+split execution receive capabilities through core `Config` and `ExecutionContext`.
+The deployment cache-options default applies when the selected model has no override.
+WebSocket policy rejection precedes checkpoint acquisition, preserving the parent
+for retry. Unknown effort/tier values and malformed `top_logprobs` fail decoding
+instead and follow the existing parse-error checkpoint cleanup.
+
+`reasoning.effort`, `service_tier`, and `top_logprobs` are modeled request fields.
+`top_logprobs` preserves omission, explicit null, and signed integers through the
+upstream conversion; its numerical limits remain upstream-owned. Direct Rust
+construction must not place it in `extra`, which would bypass typed validation or
+serialize duplicate keys. Actual response tiers and stored response snapshots retain
+their existing string representation.
+
 With `store: false` and no state IDs, execution does not rehydrate stored history or
 persist the turn. Clients supply the complete item history in `input`, including
 prior output items and tool call outputs. `previous_response_id` still loads an
@@ -663,6 +682,9 @@ goes through it, so it lowers the public records the model never read (search it
   Input validation also runs before and after rehydration. It is separate from
   deserialization because raw proxy routing preserves unsupported content for the
   upstream to interpret; typed construction reports input and tool errors separately.
+- **`types/model_capabilities.rs`** — shared model settings and resolution for catalog
+  presentation and Responses admission. Only explicit overrides restrict requests;
+  the catalog's default reasoning levels are presentation defaults.
 - **`types/io/`** — `input.rs` (inbound message/tool-call/tool-result shapes,
   `ResponsesInput`), `output.rs` (outbound output items: messages, function calls, web
   search/MCP calls, reasoning — plus the `ApplyDone` trait described below), `tools.rs`

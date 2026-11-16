@@ -487,6 +487,7 @@ fn build_config(llm_api_base: String, common: &CommonArgs, file: &FileConfig) ->
             max_concurrent_gateway_calls,
         },
         responses: responses_config,
+        model_capabilities: file.model_capabilities(),
     })
 }
 
@@ -496,7 +497,6 @@ fn gateway_options<'a>(
     oidc: Option<OidcConfig>,
 ) -> Result<GatewayOptions<'a>, Error> {
     Ok(GatewayOptions {
-        model_capabilities: file.model_capabilities(),
         host: &common.gateway_host,
         port: common.gateway_port,
         max_request_body_size: resolve_max_request_body_size(

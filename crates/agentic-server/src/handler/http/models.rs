@@ -388,7 +388,7 @@ pub async fn models(State(state): State<AppState>, headers: HeaderMap, Query(par
         Err(response) => return response,
     };
 
-    match build_codex_models_response(&upstream_bytes, &state.model_capabilities) {
+    match build_codex_models_response(&upstream_bytes, &state.exec_ctx.model_capabilities) {
         Ok(response) => axum::Json(response).into_response(),
         Err(error) => invalid_model_list(&error),
     }
@@ -479,7 +479,7 @@ mod tests {
 
     use serde_json::{Value, json};
 
-    use agentic_core::types::messages::ReasoningEffortLevel;
+    use agentic_core::types::{ReasoningEffortLevel, ServiceTier};
 
     use super::{build_codex_models_response, dependencies_are_ready, find_upstream_model};
     use crate::app::ReadinessTracker;
@@ -515,7 +515,24 @@ mod tests {
 
     fn configured_capabilities() -> ModelCapabilities {
         ModelCapabilities::new(BTreeMap::from([
-            ("vision-model".to_owned(), modalities(InputModalities::TextAndImage)),
+            (
+                "vision-model".to_owned(),
+                ModelOverride {
+                    sampling_supported: Some(false),
+                    logprobs_supported: Some(false),
+                    service_tiers: Some(vec![ServiceTier::Default]),
+                    prompt_cache_options_supported: Some(true),
+                    prompt_cache_retention_supported: Some(false),
+                    ..modalities(InputModalities::TextAndImage)
+                },
+            ),
+            (
+                "unlisted-model".to_owned(),
+                ModelOverride {
+                    sampling_supported: Some(false),
+                    ..ModelOverride::default()
+                },
+            ),
             ("pinned-text-model".to_owned(), modalities(InputModalities::Text)),
         ]))
     }
@@ -649,6 +666,11 @@ mod tests {
     #[test]
     fn catalog_entries_keep_the_codex_key_set() {
         let models = catalog(UPSTREAM_MODELS, &configured_capabilities());
+        assert_eq!(
+            models.len(),
+            4,
+            "configured capabilities do not advertise unlisted upstream models"
+        );
         let model = entry(&models, "vision-model");
         let mut keys: Vec<&str> = model
             .as_object()

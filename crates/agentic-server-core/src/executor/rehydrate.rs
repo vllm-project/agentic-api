@@ -63,9 +63,11 @@ pub(crate) async fn rehydrate_with_continuation(
     let timer = exec_ctx.metrics.stage(Stage::Rehydrate);
     // Keep the large request future off the caller's stack.
     let rehydrated = Box::pin(async move {
-        request.validate_prompt_cache_options(exec_ctx.responses_config.prompt_cache_options_supported)?;
         // Every typed entry point reaches this check: executor-routed HTTP, WebSocket, split execution, embedders.
-        request.ensure_supported_parameters()?;
+        request.ensure_supported_parameters(
+            exec_ctx.model_capabilities.for_model(&request.model),
+            exec_ctx.responses_config.prompt_cache_options_supported,
+        )?;
         validate_multi_agent_request(&request)?;
         // Stored turns never supply `max_tool_calls`, so the request value is final here.
         request.max_tool_calls_limit()?;

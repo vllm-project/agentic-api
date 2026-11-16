@@ -10,7 +10,9 @@ use agentic_core::executor::{
     decode_upstream, rehydrate_conversation, upstream_request,
 };
 use agentic_core::storage::{ConversationStore, ResponseStore, create_pool_with_schema};
+use agentic_core::types::model_capabilities::{ModelCapabilities, ModelOverride, SupportedReasoningLevels};
 use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
+use agentic_core::types::{ReasoningEffortLevel, ServiceTier};
 use agentic_llm_d::SigningKey;
 use agentic_llm_d::context::{Hydration, SplitContext, ensure_splittable, seal, unseal};
 use serde_json::value::RawValue;
@@ -663,6 +665,115 @@ async fn the_wire_context_round_trips_into_an_equal_context() {
         back.enriched_request.previous_response_id.is_none(),
         "upstream stays stateless"
     );
+}
+
+#[tokio::test]
+async fn capability_parameters_survive_hydrate_seal_rebuild_and_persist() {
+    let mut ctx = exec_ctx().await;
+    ctx.model_capabilities = ModelCapabilities::new(
+        [(
+            "test-model".to_owned(),
+            ModelOverride {
+                supported_reasoning_levels: Some(
+                    SupportedReasoningLevels::try_new(&[ReasoningEffortLevel::Minimal]).unwrap(),
+                ),
+                service_tiers: Some(vec![ServiceTier::Flex]),
+                prompt_cache_options_supported: Some(true),
+                ..ModelOverride::default()
+            },
+        )]
+        .into(),
+    );
+    for stream in [false, true] {
+        for value in [None, Some(Value::Null), Some(json!(-1)), Some(json!(21))] {
+            let mut wire = json!({"model":"test-model","input":"remember this","store":true,"stream":stream,
+                "reasoning":{"effort":"minimal"},"service_tier":"flex",
+                "prompt_cache_options":{"mode":"explicit","ttl":"30m"}});
+            if let Some(value) = &value {
+                wire["top_logprobs"] = value.clone();
+            }
+            let hydrated = hydrate(serde_json::from_value(wire.clone()).unwrap(), &ctx)
+                .await
+                .unwrap();
+            let sent: Value = serde_json::from_str(hydrated.request.get()).unwrap();
+            let split = unseal(&hydrated.context, &signing_key()).unwrap();
+            let original = serde_json::to_value(&split.original_request).unwrap();
+            let rebuilt = RequestContext::from(split);
+            let rebuilt_body = upstream_request(&rebuilt, stream, None, None).unwrap();
+            let rebuilt_request: Value = serde_json::from_str(&rebuilt_body).unwrap();
+            for request in [&sent, &original, &rebuilt_request] {
+                for field in ["top_logprobs", "reasoning", "service_tier", "prompt_cache_options"] {
+                    assert_eq!(request.get(field), wire.get(field), "{field}: {request}");
+                }
+            }
+            assert_eq!(
+                hydrated.request.get().matches("\"top_logprobs\":").count(),
+                usize::from(value.is_some()),
+            );
+            let body = if stream {
+                upstream_sse("remembered")
+            } else {
+                upstream_json("remembered")
+            };
+            let upstream = if stream {
+                UpstreamBody::Sse(&body)
+            } else {
+                UpstreamBody::Json(&body)
+            };
+            let persisted = persist(hydrated.context, upstream, &ctx).await.unwrap();
+            let snapshot = ctx.resp_handler.get_snapshot(&persisted.id).await.unwrap();
+            assert_eq!(
+                snapshot.standard_fields.reasoning.as_ref().unwrap().effort.as_deref(),
+                Some("minimal"),
+            );
+            assert_eq!(
+                serde_json::to_value(snapshot.standard_fields.prompt_cache_options).unwrap(),
+                wire["prompt_cache_options"],
+            );
+            let next = turn("follow-up", Some(&persisted.id), &ctx).await;
+            assert_eq!(replayed(&next).0, 3, "the split turn remains continuable");
+            let next_request: Value = serde_json::from_str(next.request.get()).unwrap();
+            for field in ["top_logprobs", "reasoning", "service_tier", "prompt_cache_options"] {
+                assert!(
+                    next_request.get(field).is_none(),
+                    "{field} was inherited: {next_request}"
+                );
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn split_hydration_applies_explicit_model_capabilities_before_history_lookup() {
+    let mut ctx = exec_ctx().await;
+    ctx.model_capabilities = ModelCapabilities::new(
+        [(
+            "test-model".to_owned(),
+            ModelOverride {
+                supported_reasoning_levels: Some(
+                    SupportedReasoningLevels::try_new(&[ReasoningEffortLevel::Low]).unwrap(),
+                ),
+                service_tiers: Some(vec![ServiceTier::Default]),
+                logprobs_supported: Some(false),
+                ..ModelOverride::default()
+            },
+        )]
+        .into(),
+    );
+    for (param, fields) in [
+        ("reasoning.effort", json!({"reasoning":{"effort":"high"}})),
+        ("service_tier", json!({"service_tier":"priority"})),
+        ("top_logprobs", json!({"top_logprobs":3})),
+    ] {
+        let mut wire = json!({"model":"test-model","input":"hi","previous_response_id":"resp_missing"});
+        wire.as_object_mut()
+            .unwrap()
+            .extend(fields.as_object().unwrap().clone());
+        let error = hydrate(serde_json::from_value(wire).unwrap(), &ctx).await.unwrap_err();
+        assert_eq!(error.error_param(), Some(param), "{error}");
+        assert_eq!(error.error_code(), "unsupported_value", "{error}");
+        assert_eq!(status_of(&error), 400);
+    }
 }
 
 /// A context `hydrate` did not issue must not be usable.
