@@ -94,6 +94,7 @@ impl utoipa::PartialSchema for RequestPayload {
             .property("tools", nullable_array(Ref::from_schema_name("ResponsesTool").into()))
             .property("tool_choice", nullable_ref("ToolChoice"))
             .property("stream", bool_type())
+            .property("stream_options", nullable_ref("StreamOptions"))
             .property("store", bool_type())
             .property("include", nullable_array(str_type().into()))
             .property("reasoning", nullable_ref("ReasoningConfig"))

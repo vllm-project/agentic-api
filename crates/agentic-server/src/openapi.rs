@@ -69,6 +69,7 @@ use utoipa::OpenApi;
         agentic_core::types::request_response::IncompleteDetails,
         agentic_core::types::request_response::ResponseTextConfig,
         agentic_core::types::request_response::ResponseTextFormat,
+        agentic_core::types::request_response::StreamOptions,
         agentic_core::types::request_response::ReasoningConfig,
         agentic_core::types::io::ResponsesInput,
         agentic_core::types::io::InputItem,

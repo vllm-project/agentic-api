@@ -24,6 +24,7 @@ mod max_tool_calls;
 mod response_stream;
 mod serde_helpers;
 mod standard_response;
+mod stream_options;
 mod text_config;
 mod unsupported;
 mod upstream_input;
@@ -33,6 +34,7 @@ use serde_helpers::{
     serialize_upstream_tool_choice,
 };
 pub use standard_response::{ResponseReasoning, StandardResponseFields};
+pub use stream_options::StreamOptions;
 pub use text_config::{ResponseTextConfig, ResponseTextFormat};
 pub use unsupported::{
     BACKGROUND_PARAM, Background, PROMPT_PARAM, RejectedValue, TOOL_CHOICE_PARAM, UnsupportedParameterError,
@@ -86,6 +88,8 @@ pub struct RequestPayload<T: ?Sized = ResponseTextConfig, C = PromptCacheOptions
     pub tool_choice: Option<ToolChoice>,
     #[serde(default)]
     pub stream: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stream_options: Option<Box<StreamOptions>>,
     #[serde(default = "default_true")]
     pub store: bool,
     pub include: Option<Vec<String>>,
@@ -156,6 +160,8 @@ pub struct UpstreamRequest<'a> {
     pub model: &'a str,
     pub input: Cow<'a, ResponsesInput>,
     pub stream: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream_options: Option<&'a StreamOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub instructions: Option<&'a str>,
     /// Tools forwarded to vLLM. Function-like declarations are normalized to ordinary function
@@ -300,6 +306,7 @@ impl<T: ?Sized, C> RequestPayload<T, C> {
             tools: self.tools,
             tool_choice: self.tool_choice,
             stream: self.stream,
+            stream_options: self.stream_options,
             store: self.store,
             include: self.include,
             reasoning: self.reasoning,
@@ -388,6 +395,7 @@ impl RequestPayload {
             model: &self.model,
             input,
             stream,
+            stream_options: self.stream_options.as_deref(),
             instructions: self.instructions.as_deref(),
             tools,
             tool_choice: Some(tool_choice),
@@ -784,6 +792,24 @@ mod tests {
                     "model": "test-model", "input": "hello", "ignore_eos": value
                 }))
                 .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn request_payload_rejects_non_object_stream_options() {
+        for value in [
+            serde_json::json!("usage"),
+            serde_json::json!(1),
+            serde_json::json!(true),
+            serde_json::json!(["usage"]),
+        ] {
+            assert!(
+                serde_json::from_value::<RequestPayload>(serde_json::json!({
+                    "model": "test-model", "input": "hello", "stream_options": value
+                }))
+                .is_err(),
+                "stream_options must be an object: {value}"
             );
         }
     }

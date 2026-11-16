@@ -3219,3 +3219,40 @@ async fn recorded_mixed_tool_capture_stays_public_over_http_sse() {
     assert_eq!(requests.len(), 1, "the replayed turn runs one inference round");
     common::assert_lowered_mixed_upstream(&requests[0]);
 }
+
+#[tokio::test]
+async fn stream_options_is_forwarded_upstream_without_changing_terminal_usage() {
+    let stream_options = serde_json::json!({"include_obfuscation": true, "include": ["usage"]});
+
+    let (llm_url, requests, _llm) = spawn_tool_search_sse_sequence(vec![final_message_sse()]).await;
+    let fixture = storage_backed_state(&llm_url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let client = reqwest::Client::new();
+    let response = client
+        .post(format!("{gateway_url}/v1/responses"))
+        .json(&serde_json::json!({
+            "model":"test","input":"hi","store":false,"stream":true,"stream_options":stream_options
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let terminal = response
+        .text()
+        .await
+        .unwrap()
+        .lines()
+        .filter_map(|line| line.strip_prefix("data:"))
+        .filter_map(|data| serde_json::from_str::<serde_json::Value>(data.trim()).ok())
+        .find(|event| event["type"] == "response.completed")
+        .expect("a completed terminal event");
+    assert!(
+        terminal["response"].get("usage").is_some(),
+        "terminal usage stays unconditional regardless of stream_options"
+    );
+    assert_eq!(
+        requests.lock().await[0].get("stream_options"),
+        Some(&stream_options),
+        "the whole stream_options object is forwarded upstream"
+    );
+}

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde_json::{Value, json, value::RawValue};
 
-use super::{RequestPayload, ResponseTextConfig, UnsupportedParameterError, UpstreamRequestError};
+use super::{RequestPayload, ResponseTextConfig, StreamOptions, UnsupportedParameterError, UpstreamRequestError};
 use crate::types::model_capabilities::{ModelCapabilities, ModelOverride, SupportedReasoningLevels};
 use crate::types::{ReasoningEffortLevel, RequestField};
 
@@ -52,6 +52,58 @@ fn programmatic_extension_cannot_bypass_admission_or_duplicate_a_typed_upstream_
                 request.to_upstream_request(false),
                 Err(UpstreamRequestError::Parameter(
                     UnsupportedParameterError::TopLogprobsExtension
+                ))
+            ));
+        }
+    }
+}
+
+#[test]
+fn typed_stream_options_survives_mapping_and_upstream_serialization() {
+    for value in [
+        None,
+        Some(Value::Null),
+        Some(json!({})),
+        Some(json!({"include_obfuscation": true})),
+        Some(json!({"include": ["usage"], "include_obfuscation": false})),
+    ] {
+        let mut wire = json!({"model": "test", "input": "hello"});
+        if let Some(value) = &value {
+            wire["stream_options"] = value.clone();
+        }
+        let raw: RequestPayload<RawValue> = serde_json::from_value(wire).unwrap();
+        let request = raw
+            .try_map_text(|text| serde_json::from_str::<ResponseTextConfig>(text.get()).map(Box::new))
+            .unwrap();
+        assert!(!request.extra.contains_key("stream_options"));
+        let restored: RequestPayload = serde_json::from_str(&serde_json::to_string(&request).unwrap()).unwrap();
+        assert_eq!(request.stream_options, restored.stream_options);
+        for stream in [false, true] {
+            let body = serde_json::to_string(&restored.to_upstream_request(stream).unwrap()).unwrap();
+            let upstream: Value = serde_json::from_str(&body).unwrap();
+            assert_eq!(upstream.get("stream_options"), value.as_ref().filter(|v| !v.is_null()));
+            assert_eq!(upstream["stream"], stream);
+        }
+    }
+}
+
+#[test]
+fn programmatic_stream_options_cannot_duplicate_a_typed_upstream_key() {
+    for typed in [None, Some(Box::new(StreamOptions::default()))] {
+        for extension in [Value::Null, json!(true), json!("invalid")] {
+            let request = RequestPayload {
+                stream_options: typed.clone(),
+                extra: [("stream_options".to_owned(), extension)].into(),
+                ..Default::default()
+            };
+            assert_eq!(
+                request.ensure_supported_parameters(None, true),
+                Err(UnsupportedParameterError::StreamOptionsExtension)
+            );
+            assert!(matches!(
+                request.to_upstream_request(false),
+                Err(UpstreamRequestError::Parameter(
+                    UnsupportedParameterError::StreamOptionsExtension
                 ))
             ));
         }

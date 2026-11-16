@@ -478,6 +478,7 @@ and [#330](https://github.com/vllm-project/agentic-api/issues/330).
 | `service_tier` | Allowed current request tier forwarded; actual final answer/root tier retained in response and storage. | Unknown values or configured exclusion; upstream account/region errors preserved; [#389](https://github.com/vllm-project/agentic-api/pull/389) and capability tests. |
 | Sampling, logprobs, reasoning effort | Known typed values forwarded subject to explicit model limits; top-logprobs omission/null preserved. | Type/enum errors and configured limits; capability and WebSocket retry tests. |
 | Cache-read/write usage | Upstream-reported reads and writes accumulate across inference rounds; missing writes remain omitted, explicit zero retained. | No inferred writes or billing; [#421](https://github.com/vllm-project/agentic-api/pull/421). |
+| `stream_options` | Typed object forwarded unchanged, including unmodeled members such as `include`; absent/null omitted. Terminal `response.completed` frames emit usage unconditionally. | Non-object values, non-boolean `include_obfuscation`, and a duplicate key in unmodeled members are rejected; gating SSE usage on this field is out of scope. |
 
 Deterministic tests verify gateway admission, forwarding, and error propagation;
 they do not measure cache hits or qualify a live model's capabilities. `cache_salt`
@@ -523,11 +524,13 @@ Background mode is tracked in
 [#357](https://github.com/vllm-project/agentic-api/issues/357). This matrix
 contributes to [#314](https://github.com/vllm-project/agentic-api/issues/314).
 
-Members the gateway does not model, including `top_logprobs`, `user`,
-`safety_identifier`, `stream_options`, and vLLM sampling extensions such as
-`top_k`, `min_p`, `seed`, and `stop`, are forwarded upstream unchanged. The
-upstream decides whether it honors them; reporting the effective parameters is
-tracked in [#434](https://github.com/vllm-project/agentic-api/issues/434).
+Members the gateway does not model, including `user`, `safety_identifier`, and
+vLLM sampling extensions such as `top_k`, `min_p`, `seed`, and `stop`, are
+forwarded upstream unchanged. `top_logprobs` and `stream_options` are modeled
+typed fields; unknown members *inside* a modeled object are still forwarded
+unchanged. The upstream decides whether it honors them; reporting the effective
+parameters is tracked in
+[#434](https://github.com/vllm-project/agentic-api/issues/434).
 
 #### Prompt-cache usage compatibility
 

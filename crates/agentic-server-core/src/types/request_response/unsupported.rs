@@ -119,6 +119,8 @@ pub enum UnsupportedParameterError {
     PromptCacheOptions,
     #[error("top_logprobs must use its typed request field, not extra")]
     TopLogprobsExtension,
+    #[error("stream_options must use its typed request field, not extra")]
+    StreamOptionsExtension,
 }
 
 impl UnsupportedParameterError {
@@ -137,6 +139,7 @@ impl UnsupportedParameterError {
             Self::ServiceTier => "service_tier",
             Self::PromptCacheRetention => "prompt_cache_retention",
             Self::PromptCacheOptions => "prompt_cache_options",
+            Self::StreamOptionsExtension => "stream_options",
         }
     }
 
@@ -153,7 +156,8 @@ impl UnsupportedParameterError {
             | Self::ReasoningEffort
             | Self::ServiceTier
             | Self::PromptCacheRetention
-            | Self::TopLogprobsExtension => "unsupported_value",
+            | Self::TopLogprobsExtension
+            | Self::StreamOptionsExtension => "unsupported_value",
             Self::BackgroundType(_) => "invalid_type",
             Self::PromptTemplate | Self::PromptCacheOptions => "unsupported_parameter",
         }
@@ -164,6 +168,9 @@ impl RequestPayload {
     pub(super) fn validate_modeled_extensions(&self) -> Result<(), UnsupportedParameterError> {
         if self.extra.contains_key("top_logprobs") {
             return Err(UnsupportedParameterError::TopLogprobsExtension);
+        }
+        if self.extra.contains_key("stream_options") {
+            return Err(UnsupportedParameterError::StreamOptionsExtension);
         }
         Ok(())
     }
@@ -303,6 +310,17 @@ mod tests {
             UnsupportedParameterError::BackgroundType(JsonKind::String).to_string(),
             "Invalid type for 'background': expected a boolean, but got a string instead."
         );
+    }
+
+    #[test]
+    fn stream_options_in_extra_is_an_unsupported_value() {
+        let request = RequestPayload {
+            extra: [("stream_options".to_owned(), json!({"include": ["usage"]}))].into(),
+            ..Default::default()
+        };
+        let error = request.ensure_supported_parameters(None, false).unwrap_err();
+        assert_eq!(error, UnsupportedParameterError::StreamOptionsExtension);
+        assert_eq!((error.param(), error.code()), ("stream_options", "unsupported_value"));
     }
 
     #[test]
