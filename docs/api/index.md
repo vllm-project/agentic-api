@@ -478,6 +478,7 @@ and [#330](https://github.com/vllm-project/agentic-api/issues/330).
 | `service_tier` | Allowed current request tier forwarded; actual final answer/root tier retained in response and storage. | Unknown values or configured exclusion; upstream account/region errors preserved; [#389](https://github.com/vllm-project/agentic-api/pull/389) and capability tests. |
 | Sampling, logprobs, reasoning effort | Known typed values forwarded subject to explicit model limits; top-logprobs omission/null preserved. | Type/enum errors and configured limits; capability and WebSocket retry tests. |
 | Cache-read/write usage | Upstream-reported reads and writes accumulate across inference rounds; missing writes remain omitted, explicit zero retained. | No inferred writes or billing; [#421](https://github.com/vllm-project/agentic-api/pull/421). |
+| `truncation` | Typed string field forwarded unchanged; known values are `auto` and `disabled`, and unknown strings are preserved for the upstream to decide. An absent value is omitted rather than serialized as `null`; every response echoes the requested value or defaults to `disabled`. | Non-string values; parity of effective truncation is tracked in [#434](https://github.com/vllm-project/agentic-api/issues/434). |
 
 Deterministic tests verify gateway admission, forwarding, and error propagation;
 they do not measure cache hits or qualify a live model's capabilities. `cache_salt`

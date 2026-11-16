@@ -105,6 +105,7 @@ pub struct RequestPayload<T: ?Sized = ResponseTextConfig, C = PromptCacheOptions
     /// vLLM extension: continue generation past the end-of-sequence token.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ignore_eos: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub truncation: Option<String>,
     pub metadata: Option<ConversationMetadata>,
     pub parallel_tool_calls: Option<bool>,
@@ -774,6 +775,48 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn truncation_survives_wire_round_trip_and_upstream_forwarding() {
+        for value in [
+            None,
+            Some(serde_json::Value::Null),
+            Some(serde_json::json!("auto")),
+            Some(serde_json::json!("disabled")),
+            Some(serde_json::json!("future-mode")),
+        ] {
+            let mut wire = serde_json::json!({"model": "test-model", "input": "hello"});
+            if let Some(value) = &value {
+                wire["truncation"] = value.clone();
+            }
+            let request: RequestPayload = serde_json::from_value(wire).expect("request should deserialize");
+            let expected = value.as_ref().filter(|value| !value.is_null());
+            assert_eq!(request.truncation.as_deref(), expected.and_then(Value::as_str));
+            assert_eq!(
+                serde_json::to_value(&request).unwrap().get("truncation"),
+                expected,
+                "unknown truncation values must round-trip unchanged"
+            );
+            for stream in [false, true] {
+                let upstream = serde_json::to_value(request.to_upstream_request(stream).unwrap()).unwrap();
+                assert_eq!(upstream.get("truncation"), expected, "stream={stream}");
+                assert_eq!(upstream["stream"], stream);
+            }
+        }
+    }
+
+    #[test]
+    fn absent_truncation_is_omitted_not_null() {
+        let payload: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test-model", "input": "hello"
+        }))
+        .expect("request should deserialize");
+        assert!(payload.truncation.is_none());
+        assert!(
+            serde_json::to_value(&payload).unwrap().get("truncation").is_none(),
+            "an absent truncation stays absent instead of serializing as null"
+        );
     }
 
     #[test]

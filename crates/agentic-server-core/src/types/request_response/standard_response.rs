@@ -139,4 +139,25 @@ mod tests {
         fields.apply_request(&RequestPayload::default());
         assert!(fields.prompt_cache_options.is_none());
     }
+
+    #[test]
+    fn truncation_is_echoed_with_unknown_values_preserved_and_default_disabled() {
+        let mut fields = StandardResponseFields::default();
+        for (request_value, expected) in [
+            (None, "disabled"),
+            (Some("auto"), "auto"),
+            (Some("disabled"), "disabled"),
+            (Some("future-mode"), "future-mode"),
+        ] {
+            let request = RequestPayload {
+                truncation: request_value.map(str::to_owned),
+                ..Default::default()
+            };
+            fields.apply_request(&request);
+            let serialized = serde_json::to_value(&fields).unwrap();
+            assert_eq!(serialized["truncation"], expected);
+            let restored: StandardResponseFields = serde_json::from_value(serialized).unwrap();
+            assert_eq!(restored.truncation, expected);
+        }
+    }
 }
