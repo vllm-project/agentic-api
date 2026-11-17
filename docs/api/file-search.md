@@ -123,8 +123,11 @@ The Files API accepts binary uploads independently of search ingestion. Files
 are limited to 20 MiB, and the configured gateway request-body limit also applies
 to multipart uploads and vector-store JSON requests. The default request-body
 limit is 10 MiB; raise `server.max_request_body_size_bytes` for larger uploads.
-Uploads must use purpose `assistants`, `user_data`, or `vision`. Use `vision` for images
-referenced from Responses input. Attaching a
+Uploads accept the OpenAI purposes `fine-tune`, `assistants`, `batch`, `user_data`, `vision`, and
+`evals`. Use `vision` for images referenced from Responses input; a `vision` upload must use an
+image media type (`image/gif`, `image/jpeg`, `image/jpg`, `image/png`, or `image/webp`). The
+`GET /v1/files/{file_id}/content` route serves `vision` uploads only; another purpose returns 400
+`Not allowed to download files of purpose: <purpose>`, matching the recorded OpenAI rows. Attaching a
 file to a vector store validates its format: UTF-8 text, Markdown, CSV, JSON, source
 files, and other supported text formats work in the default build. The default
 chunk size is 800 tokens with a 400-token overlap. Override it with:

@@ -6,7 +6,7 @@ use crate::executor::pending_calls::CallLedger;
 use crate::executor::request::ExecutionContext;
 use crate::executor::telemetry::stages::CompactionTrigger;
 use crate::types::agent::AgentIdentity;
-use crate::types::io::input::{ResolvedFiles, async_records};
+use crate::types::io::input::async_records;
 use crate::types::io::{CompactionItem, InputItem, ResponseUsage, ResponsesInput};
 use crate::types::request_response::RequestPayload;
 
@@ -15,7 +15,6 @@ pub struct CompactionPlan {
     generation: u64,
     prefix: Vec<InputItem>,
     request: RequestPayload,
-    files: ResolvedFiles,
 }
 
 pub struct CompactionResult {
@@ -38,7 +37,6 @@ impl CompactionPlan {
         generation: u64,
         history: &[InputItem],
         request: &RequestPayload,
-        files: &ResolvedFiles,
     ) -> ExecutorResult<Option<Self>> {
         let Some(threshold) = request.compact_threshold() else {
             return Ok(None);
@@ -46,7 +44,7 @@ impl CompactionPlan {
         if estimate_history_tokens(history) <= threshold {
             return Ok(None);
         }
-        Self::prepare_explicit(agent, generation, history, request, files)
+        Self::prepare_explicit(agent, generation, history, request)
     }
 
     /// Capture only the resolved prefix; pending calls remain outside the snapshot.
@@ -55,7 +53,6 @@ impl CompactionPlan {
         generation: u64,
         history: &[InputItem],
         request: &RequestPayload,
-        files: &ResolvedFiles,
     ) -> ExecutorResult<Option<Self>> {
         let prefix = &history[..CallLedger::scan(history)?.resolved_prefix_len()];
         Ok((!prefix.is_empty()).then(|| Self {
@@ -66,7 +63,6 @@ impl CompactionPlan {
                 tools: request.tools.clone(),
                 ..request.summary_settings()
             },
-            files: files.clone(),
         }))
     }
 
@@ -86,7 +82,6 @@ impl CompactionPlan {
         let window = summarize_items(
             &self.request,
             ResponsesInput::from(self.prefix),
-            &self.files,
             exec,
             auth,
             CompactionTrigger::InputItem,

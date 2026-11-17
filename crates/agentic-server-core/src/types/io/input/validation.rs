@@ -5,13 +5,16 @@ use std::fmt;
 use thiserror::Error;
 
 use super::file_text::InputFileError;
-use super::{InputContent, InputItem, InputMessageContent, ResponsesInput, ToolCallOutput, ToolOutputContent};
+use super::window::expand_carried_windows;
+use super::{
+    InputContent, InputItem, InputMessage, InputMessageContent, ResponsesInput, ToolCallOutput, ToolOutputContent,
+};
 use crate::types::io::{InOutItem, OutputItem};
 
-/// Invalid message content, with its position in the request history.
+/// Invalid message content, with its position in the request history when it has one.
 #[derive(Debug, Error)]
 pub struct InputValidationError {
-    item_index: usize,
+    item_index: Option<usize>,
     #[source]
     source: MessageContentError,
 }
@@ -29,8 +32,89 @@ impl fmt::Display for InputValidationError {
                 write!(f, "{location}: {}", self.source)
             }
             MessageContentError::Empty | MessageContentError::EncryptedReasoning => {
-                write!(f, "input[{}].content: {}", self.item_index, self.source)
+                write!(
+                    f,
+                    "input[{}].content: {}",
+                    self.item_index
+                        .expect("a content rejection is reported with its item position"),
+                    self.source
+                )
             }
+            // The recorded envelope for a resolved file carries no request position.
+            MessageContentError::ResolvedFile { message } => f.write_str(message),
+        }
+    }
+}
+
+/// One `file_id` reference in the request input and where it appears.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct FileReference {
+    /// The client's `file_id`.
+    pub(crate) file_id: String,
+    /// The wire part type that carries the reference: `input_file` or `input_image`.
+    pub(crate) part: &'static str,
+    /// The request position: `input[i].content[p]` or `input[i].output[p]`.
+    pub(crate) location: String,
+}
+
+/// Every `file_id` reference in `input`, in request order, with its position.
+///
+/// Carried compaction windows are expanded so a restored window's retained messages are
+/// included. The executor resolves each reference before building the model-facing request;
+/// split execution rejects input that has any.
+pub(crate) fn file_references(input: &ResponsesInput) -> Vec<FileReference> {
+    let mut references = Vec::new();
+    for (item_index, item) in expand_carried_windows(input.input_items()).iter().enumerate() {
+        match item.as_ref() {
+            InputItem::Message(message) => collect_message_references(message, item_index, &mut references),
+            InputItem::FunctionCallOutput(output) => {
+                collect_tool_output_references(&output.output, item_index, &mut references);
+            }
+            InputItem::CustomToolCallOutput(output) => {
+                collect_tool_output_references(&output.output, item_index, &mut references);
+            }
+            _ => {}
+        }
+    }
+    references
+}
+
+fn collect_message_references(message: &InputMessage, item_index: usize, references: &mut Vec<FileReference>) {
+    let InputMessageContent::Parts(parts) = &message.content else {
+        return;
+    };
+    for (part_index, part) in parts.iter().enumerate() {
+        let reference = match part {
+            InputContent::InputFile(file) => file.file_id.as_deref().map(|file_id| (file_id, "input_file")),
+            InputContent::InputImage(image) => image.file_id.as_deref().map(|file_id| (file_id, "input_image")),
+            _ => None,
+        };
+        if let Some((file_id, part)) = reference {
+            references.push(FileReference {
+                file_id: file_id.to_owned(),
+                part,
+                location: content_location(item_index, part_index),
+            });
+        }
+    }
+}
+
+fn collect_tool_output_references(output: &ToolCallOutput, item_index: usize, references: &mut Vec<FileReference>) {
+    let ToolCallOutput::Content(parts) = output else {
+        return;
+    };
+    for (part_index, part) in parts.iter().enumerate() {
+        let reference = match part {
+            ToolOutputContent::InputFile(file) => file.file_id.as_deref().map(|file_id| (file_id, "input_file")),
+            ToolOutputContent::InputImage(image) => image.file_id.as_deref().map(|file_id| (file_id, "input_image")),
+            ToolOutputContent::InputText(_) => None,
+        };
+        if let Some((file_id, part)) = reference {
+            references.push(FileReference {
+                file_id: file_id.to_owned(),
+                part,
+                location: output_location(item_index, part_index),
+            });
         }
     }
 }
@@ -39,7 +123,7 @@ impl InputValidationError {
     /// A reasoning item at `input[item_index]` that carries only provider-encrypted state, which vLLM cannot replay.
     pub(super) fn encrypted_reasoning(item_index: usize) -> Self {
         Self {
-            item_index,
+            item_index: Some(item_index),
             source: MessageContentError::EncryptedReasoning,
         }
     }
@@ -47,7 +131,7 @@ impl InputValidationError {
     /// A message file at `input[item_index].content[part_index]` that cannot be converted to text.
     pub(super) fn unsupported_file(item_index: usize, part_index: usize, reason: InputFileError) -> Self {
         Self {
-            item_index,
+            item_index: Some(item_index),
             source: file_error(content_location(item_index, part_index), reason),
         }
     }
@@ -55,34 +139,32 @@ impl InputValidationError {
     /// A tool-output file at `input[item_index].output[part_index]` that cannot be converted.
     pub(super) fn unsupported_output_file(item_index: usize, part_index: usize, reason: InputFileError) -> Self {
         Self {
-            item_index,
+            item_index: Some(item_index),
             source: file_error(output_location(item_index, part_index), reason),
         }
     }
 
-    /// A `file_id` reference the file handler did not resolve, at a message content part.
-    pub(crate) fn unresolved_file_reference(item_index: usize, part_index: usize) -> Self {
-        Self::unsupported_file(item_index, part_index, InputFileError::UnresolvedFileId)
-    }
-
-    /// A `file_id` reference the file handler did not resolve, at a tool-output part.
-    pub(crate) fn unresolved_output_reference(item_index: usize, part_index: usize) -> Self {
-        Self::unsupported_output_file(item_index, part_index, InputFileError::UnresolvedFileId)
-    }
-
-    /// Whether this rejection is an internal invariant violation rather than bad input.
+    /// A resolved file the model cannot receive as the part that referenced it.
     ///
-    /// Rehydration resolves every `file_id` reference before the model-facing
-    /// request is built, so an unresolved reference here means the gateway
-    /// skipped a required stage; the client cannot fix it.
-    pub(crate) fn is_internal(&self) -> bool {
-        matches!(
-            &self.source,
-            MessageContentError::UnsupportedFile {
-                reason: InputFileError::UnresolvedFileId,
-                ..
-            }
-        )
+    /// The message is the recorded gateway envelope, which names `input` and no position.
+    pub(crate) fn resolved_file(message: String) -> Self {
+        Self {
+            item_index: None,
+            source: MessageContentError::ResolvedFile { message },
+        }
+    }
+
+    /// The recorded envelope's message for a resolved file that does not match its part.
+    pub(crate) fn resolved_file_message(&self) -> Option<&str> {
+        match &self.source {
+            MessageContentError::ResolvedFile { message } => Some(message),
+            _ => None,
+        }
+    }
+
+    /// Whether this is the recorded mutually exclusive parameters rejection.
+    pub(crate) fn is_mutually_exclusive(&self) -> bool {
+        matches!(&self.source, MessageContentError::MutuallyExclusive { .. })
     }
 
     /// The `OpenAI` error code for this rejection, when it has a specific one.
@@ -92,7 +174,8 @@ impl InputValidationError {
             MessageContentError::Empty
             | MessageContentError::UnsupportedPart { .. }
             | MessageContentError::UnsupportedFile { .. }
-            | MessageContentError::EncryptedReasoning => None,
+            | MessageContentError::EncryptedReasoning
+            | MessageContentError::ResolvedFile { .. } => None,
         }
     }
 
@@ -103,7 +186,8 @@ impl InputValidationError {
             MessageContentError::Empty
             | MessageContentError::UnsupportedPart { .. }
             | MessageContentError::UnsupportedFile { .. }
-            | MessageContentError::EncryptedReasoning => None,
+            | MessageContentError::EncryptedReasoning
+            | MessageContentError::ResolvedFile { .. } => None,
         }
     }
 }
@@ -140,6 +224,10 @@ enum MessageContentError {
         "reasoning item contains encrypted state without plaintext reasoning content and cannot be replayed to vLLM"
     )]
     EncryptedReasoning,
+    /// A resolved file whose kind does not match the part that referenced it; the message is
+    /// the recorded gateway envelope.
+    #[error("{message}")]
+    ResolvedFile { message: String },
 }
 
 impl InputMessageContent {
@@ -245,8 +333,10 @@ impl ResponsesInput {
         match self {
             Self::Text(_) => Ok(()),
             Self::Items(items) => items.iter().enumerate().try_for_each(|(item_index, item)| {
-                item.validate(item_index)
-                    .map_err(|source| InputValidationError { item_index, source })
+                item.validate(item_index).map_err(|source| InputValidationError {
+                    item_index: Some(item_index),
+                    source,
+                })
             }),
         }
     }
@@ -267,7 +357,7 @@ mod tests {
         ]))
         .unwrap();
         let error = input.validate().unwrap_err();
-        assert_eq!(error.item_index, 1);
+        assert_eq!(error.item_index, Some(1));
         assert!(matches!(
             &error.source,
             MessageContentError::UnsupportedPart { location, kind }
@@ -285,7 +375,7 @@ mod tests {
         ]))
         .unwrap();
         let error = input.validate().unwrap_err();
-        assert_eq!(error.item_index, 1);
+        assert_eq!(error.item_index, Some(1));
         assert!(matches!(
             error.source,
             MessageContentError::UnsupportedFile {

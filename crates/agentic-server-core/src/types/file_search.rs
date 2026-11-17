@@ -11,6 +11,12 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+/// Upload purposes the Files API accepts, in the order `OpenAI` reports them.
+pub const FILE_PURPOSES: [&str; 6] = ["fine-tune", "assistants", "batch", "user_data", "vision", "evals"];
+
+/// Image media types a `vision` upload accepts.
+pub(crate) const VISION_CONTENT_TYPES: [&str; 5] = ["image/gif", "image/jpeg", "image/jpg", "image/png", "image/webp"];
+
 /// Failures retain diagnostic sources without returning provider or database details to callers.
 #[derive(Debug, thiserror::Error)]
 pub enum FileSearchError {

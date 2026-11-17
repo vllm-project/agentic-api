@@ -1,11 +1,11 @@
 turns:
 - filename: t1
   request:
-    body_base64: LS1jNzRhNTQ4MGM4MDg3MWU2ZmYyN2JjNzgyNjcyZmE2Yg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQpib2d1cw0KLS1jNzRhNTQ4MGM4MDg3MWU2ZmYyN2JjNzgyNjcyZmE2Yg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJmaWxlIjsgZmlsZW5hbWU9Im5vdGVzLnR4dCINCkNvbnRlbnQtVHlwZTogdGV4dC9wbGFpbg0KDQpEZXBsb3ltZW50IGNoZWNrbGlzdAotIFJlZ2lvbjogZXUtd2VzdAotIFJlbGVhc2UgY29kZXdvcmQ6IFBBUEFZQS03Ci0gT3duZXI6IHBsYXRmb3JtIHRlYW0KDQotLWM3NGE1NDgwYzgwODcxZTZmZjI3YmM3ODI2NzJmYTZiLS0NCg==
+    body_base64: LS0wM2RiNDY2YzZhZTM2MTI3Y2E3MjY0ZGU5ZTRiNGU3OQ0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQpib2d1cw0KLS0wM2RiNDY2YzZhZTM2MTI3Y2E3MjY0ZGU5ZTRiNGU3OQ0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJmaWxlIjsgZmlsZW5hbWU9Im5vdGVzLnR4dCINCkNvbnRlbnQtVHlwZTogdGV4dC9wbGFpbg0KDQpEZXBsb3ltZW50IGNoZWNrbGlzdAotIFJlZ2lvbjogZXUtd2VzdAotIFJlbGVhc2UgY29kZXdvcmQ6IFBBUEFZQS03Ci0gT3duZXI6IHBsYXRmb3JtIHRlYW0KDQotLTAzZGI0NjZjNmFlMzYxMjdjYTcyNjRkZTllNGI0ZTc5LS0NCg==
     body_encoding: base64
     headers:
       accept: '*/*'
-      content-type: multipart/form-data; boundary=c74a5480c80871e6ff27bc782672fa6b
+      content-type: multipart/form-data; boundary=03db466c6ae36127ca7264de9e4b4e79
       user-agent: python-httpx/0.28.1
     method: POST
     path: /v1/files
@@ -13,19 +13,21 @@ turns:
   response:
     body:
       error:
-        code: invalid_request_error
-        message: file purpose must be assistants, user_data, or vision
+        code: null
+        message: '''bogus'' is not one of [''fine-tune'', ''assistants'', ''batch'',
+          ''user_data'', ''vision'', ''evals''] - ''purpose'''
+        param: purpose
         type: invalid_request_error
     headers:
       content-type: application/json
     status_code: 400
 - filename: t2
   request:
-    body_base64: LS1kZjhhNmNmNTI4NmFiMzg3ZDAxMTQ1OTljMjgzZDFiZA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJmaWxlIjsgZmlsZW5hbWU9Im5vdGVzLnR4dCINCkNvbnRlbnQtVHlwZTogdGV4dC9wbGFpbg0KDQpEZXBsb3ltZW50IGNoZWNrbGlzdAotIFJlZ2lvbjogZXUtd2VzdAotIFJlbGVhc2UgY29kZXdvcmQ6IFBBUEFZQS03Ci0gT3duZXI6IHBsYXRmb3JtIHRlYW0KDQotLWRmOGE2Y2Y1Mjg2YWIzODdkMDExNDU5OWMyODNkMWJkLS0NCg==
+    body_base64: LS03ODU2MjJlZGUyMmMzMjNhZTE3YzlhOWJhMzIyYjU4MQ0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJmaWxlIjsgZmlsZW5hbWU9Im5vdGVzLnR4dCINCkNvbnRlbnQtVHlwZTogdGV4dC9wbGFpbg0KDQpEZXBsb3ltZW50IGNoZWNrbGlzdAotIFJlZ2lvbjogZXUtd2VzdAotIFJlbGVhc2UgY29kZXdvcmQ6IFBBUEFZQS03Ci0gT3duZXI6IHBsYXRmb3JtIHRlYW0KDQotLTc4NTYyMmVkZTIyYzMyM2FlMTdjOWE5YmEzMjJiNTgxLS0NCg==
     body_encoding: base64
     headers:
       accept: '*/*'
-      content-type: multipart/form-data; boundary=df8a6cf5286ab387d0114599c283d1bd
+      content-type: multipart/form-data; boundary=785622ede22c323ae17c9a9ba322b581
       user-agent: python-httpx/0.28.1
     method: POST
     path: /v1/files
@@ -33,8 +35,9 @@ turns:
   response:
     body:
       error:
-        code: invalid_request_error
-        message: Both file and purpose are required
+        code: null
+        message: '''purpose'' is a required property'
+        param: null
         type: invalid_request_error
     headers:
       content-type: application/json
@@ -53,8 +56,9 @@ turns:
   response:
     body:
       error:
-        code: invalid_request_error
-        message: Expected multipart/form-data with file and purpose fields
+        code: null
+        message: '''file'' is a required property'
+        param: null
         type: invalid_request_error
     headers:
       content-type: application/json
@@ -71,9 +75,10 @@ turns:
   response:
     body:
       error:
-        code: not_found
-        message: File not found
-        type: not_found
+        code: null
+        message: 'No such File object: file-00000000-0000-7000-8000-000000000000'
+        param: id
+        type: invalid_request_error
     headers:
       content-type: application/json
     status_code: 404
@@ -89,9 +94,10 @@ turns:
   response:
     body:
       error:
-        code: not_found
-        message: File not found
-        type: not_found
+        code: null
+        message: 'No such File object: file-00000000-0000-7000-8000-000000000000'
+        param: id
+        type: invalid_request_error
     headers:
       content-type: application/json
     status_code: 404
@@ -107,9 +113,10 @@ turns:
   response:
     body:
       error:
-        code: not_found
-        message: File not found
-        type: not_found
+        code: null
+        message: 'No such File object: file-00000000-0000-7000-8000-000000000000'
+        param: id
+        type: invalid_request_error
     headers:
       content-type: application/json
     status_code: 404

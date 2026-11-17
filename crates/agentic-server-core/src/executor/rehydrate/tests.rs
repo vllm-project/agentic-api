@@ -5,6 +5,7 @@ use std::sync::Arc;
 use super::*;
 use crate::executor::modes::{ConversationHandler, ResponseHandler};
 use crate::executor::pending_calls::{CallLedger, PendingCall};
+use crate::executor::upstream::upstream_request;
 use crate::storage::{ConversationStore, ResponseCheckpoint, ResponseMetadata, ResponseStore, create_pool_with_schema};
 use crate::tool::ToolError;
 use crate::tool::file_search::FileSearchService;
@@ -949,13 +950,13 @@ async fn file_execution_context() -> (ExecutionContext, FileSearchService, tempf
         ..FileSearchConfig::default()
     };
     let service = FileSearchService::new(pool, Arc::new(reqwest::Client::new()), config).unwrap();
-    let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled())
-        .with_file_search_service(service.clone());
+    let mut exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
+    exec_ctx.file_search = Some(service.clone());
     (exec_ctx, service, files)
 }
 
 #[tokio::test]
-async fn rehydration_hydrates_file_references_without_changing_canonical_input() {
+async fn rehydration_keeps_file_references_until_the_upstream_body_is_built() {
     let (exec_ctx, service, _files) = file_execution_context().await;
     let text = service
         .upload_file("notes.txt", "text/plain", "assistants", b"hello".to_vec())
@@ -991,9 +992,9 @@ async fn rehydration_hydrates_file_references_without_changing_canonical_input()
     assert!(model[0]["content"][1].get("file_data").is_none());
     assert_eq!(model[0]["content"][2]["file_id"], image.id);
     assert!(model[0]["content"][2].get("image_url").is_none());
-    assert_eq!(ctx.files.len(), 2, "the lookup holds both resolved files");
 
-    let upstream = serde_json::to_value(ctx.enriched_request.to_upstream_request(false, &ctx.files).unwrap()).unwrap();
+    let upstream: serde_json::Value =
+        serde_json::from_str(&upstream_request(&exec_ctx, &ctx, false, None, None).await.unwrap()).unwrap();
     assert_eq!(
         upstream["input"][0]["content"][1],
         serde_json::json!({"type": "input_text", "text": "File: notes.txt\nhello"})
@@ -1008,7 +1009,7 @@ async fn rehydration_hydrates_file_references_without_changing_canonical_input()
 }
 
 #[tokio::test]
-async fn rehydration_rejects_file_references_without_a_file_store() {
+async fn upstream_request_rejects_file_references_without_a_file_store() {
     let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
     let request: RequestPayload = serde_json::from_value(serde_json::json!({
         "model": "test",
@@ -1017,7 +1018,8 @@ async fn rehydration_rejects_file_references_without_a_file_store() {
         ]}]
     }))
     .unwrap();
-    let error = rehydrate_conversation(request, &exec_ctx).await.unwrap_err();
+    let ctx = rehydrate_conversation(request, &exec_ctx).await.unwrap();
+    let error = upstream_request(&exec_ctx, &ctx, false, None, None).await.unwrap_err();
     assert!(
         matches!(error, ExecutorError::InvalidRequest(ref message) if message.contains("gateway file store")),
         "{error}"
@@ -1045,14 +1047,16 @@ async fn continuation_hydrates_file_references_from_stored_history() -> Result<(
     response_store
         .persist("resp_prior", None, vec![stored], None, &ResponseMetadata::default())
         .await?;
-    let exec_ctx = execution_context(ConversationStore::disabled(), response_store).with_file_search_service(service);
+    let mut exec_ctx = execution_context(ConversationStore::disabled(), response_store);
+    exec_ctx.file_search = Some(service);
 
     let ctx = rehydrate_conversation(request(None, Some("resp_prior")), &exec_ctx).await?;
 
     let model = serde_json::to_value(&ctx.enriched_request.input)?;
     assert_eq!(model[0]["content"][0]["file_id"], text.id);
     assert!(model[0]["content"][0].get("file_data").is_none());
-    let upstream = serde_json::to_value(ctx.enriched_request.to_upstream_request(false, &ctx.files)?)?;
+    let upstream: serde_json::Value =
+        serde_json::from_str(&upstream_request(&exec_ctx, &ctx, false, None, None).await?)?;
     assert_eq!(
         upstream["input"][0]["content"][0],
         serde_json::json!({"type": "input_text", "text": "File: notes.txt\nstored text"})
@@ -1083,11 +1087,11 @@ async fn continuation_reports_a_deleted_file_reference() -> Result<(), Box<dyn s
         .persist("resp_prior", None, vec![stored], None, &ResponseMetadata::default())
         .await?;
     service.delete_file(&text_id).await?;
-    let exec_ctx = execution_context(ConversationStore::disabled(), response_store).with_file_search_service(service);
+    let mut exec_ctx = execution_context(ConversationStore::disabled(), response_store);
+    exec_ctx.file_search = Some(service);
 
-    let error = rehydrate_conversation(request(None, Some("resp_prior")), &exec_ctx)
-        .await
-        .unwrap_err();
+    let ctx = rehydrate_conversation(request(None, Some("resp_prior")), &exec_ctx).await?;
+    let error = upstream_request(&exec_ctx, &ctx, false, None, None).await.unwrap_err();
     assert!(
         matches!(&error, ExecutorError::FileReferencesNotFound { ids } if ids.as_slice() == std::slice::from_ref(&text_id)),
         "{error}"
@@ -1103,10 +1107,10 @@ async fn continuation_reports_a_deleted_file_reference() -> Result<(), Box<dyn s
     Ok(())
 }
 
-/// A restored agent tree keeps its histories outside the root's public input, and this turn's
-/// items stay outside the snapshot until the engine appends them, so both must be scanned.
+/// A restored agent tree keeps each agent's history in the snapshot, and this turn's items stay
+/// outside it until the engine appends them. Each round resolves the input it lowers.
 #[tokio::test]
-async fn restored_agent_histories_and_new_input_resolve_file_references() -> Result<(), Box<dyn std::error::Error>> {
+async fn restored_agent_history_resolves_its_file_references_per_round() -> Result<(), Box<dyn std::error::Error>> {
     let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
     let files = tempfile::tempdir()?;
     let config = FileSearchConfig {
@@ -1155,7 +1159,8 @@ async fn restored_agent_histories_and_new_input_resolve_file_references() -> Res
     response_store
         .persist("resp_tree", None, Vec::new(), None, &metadata)
         .await?;
-    let exec_ctx = execution_context(ConversationStore::disabled(), response_store).with_file_search_service(service);
+    let mut exec_ctx = execution_context(ConversationStore::disabled(), response_store);
+    exec_ctx.file_search = Some(service);
 
     let payload: RequestPayload = serde_json::from_value(serde_json::json!({
         "model": "test",
@@ -1167,13 +1172,14 @@ async fn restored_agent_histories_and_new_input_resolve_file_references() -> Res
     }))?;
     let ctx = rehydrate_conversation(payload, &exec_ctx).await?;
 
-    assert_eq!(ctx.files.len(), 2, "the lookup covers agent history and new input");
-    assert!(ctx.files.contains_key(&stored_id));
-    assert!(ctx.files.contains_key(&image_id));
-    let upstream = serde_json::to_value(ctx.enriched_request.to_upstream_request(false, &ctx.files)?)?;
+    // The restored root's round resolves its own history; this turn's items join later.
+    let upstream: serde_json::Value =
+        serde_json::from_str(&upstream_request(&exec_ctx, &ctx, false, None, None).await?)?;
     assert_eq!(
         upstream["input"][0]["content"][1],
         serde_json::json!({"type": "input_text", "text": "File: notes.txt\nstored text"})
     );
+    let new_input = serde_json::to_value(&ctx.new_input_items)?;
+    assert_eq!(new_input[0]["content"][1]["file_id"], image_id);
     Ok(())
 }

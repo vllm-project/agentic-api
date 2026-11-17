@@ -34,6 +34,7 @@ pub fn test_config(llm_url: &str) -> Config {
         db_url: None,
         postgres: agentic_core::config::PostgresConfig::default(),
         sqlite: agentic_core::config::SqliteConfig::default(),
+        max_request_body_size: agentic_core::executor::DEFAULT_MAX_REQUEST_BODY_SIZE_BYTES,
         tools: agentic_core::config::ToolRuntimeConfig::default(),
         responses: agentic_core::config::ResponsesConfig::default(),
         model_capabilities: ModelCapabilities::default(),

@@ -2,7 +2,6 @@
 pub mod multi_agent_contract;
 mod support;
 
-use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -32,7 +31,6 @@ fn request_context() -> RequestContext {
         conversation_id: None,
         checkpoint: None,
         continuation: None,
-        files: HashMap::default(),
     }
 }
 

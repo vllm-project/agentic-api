@@ -188,10 +188,35 @@ fn split_filename(filename: &str) -> (&str, Option<&str>) {
     (basename, extension)
 }
 
-fn is_text_filename(filename: &str) -> bool {
+/// Whether a filename names a text file by its extension or a known text basename.
+pub(crate) fn is_text_filename(filename: &str) -> bool {
     let (basename, extension) = split_filename(filename);
     contains(TEXT_FILENAMES, basename) || extension.is_some_and(|extension| contains(TEXT_EXTENSIONS, extension))
 }
+
+/// The media type for an accepted image filename.
+pub(crate) fn image_media_type(filename: &str) -> Option<&'static str> {
+    match split_filename(filename).1?.to_ascii_lowercase().as_str() {
+        "jpeg" | "jpg" => Some("image/jpeg"),
+        "png" => Some("image/png"),
+        "gif" => Some("image/gif"),
+        "webp" => Some("image/webp"),
+        _ => None,
+    }
+}
+
+/// The filename extension shown in a wrong-file-type error, including a leading dot.
+pub(crate) fn extension_label(filename: &str) -> String {
+    format!(".{}", split_filename(filename).1.unwrap_or_default())
+}
+
+/// The formats `OpenAI` lists for context stuffing, used verbatim in a wrong-file-type error.
+pub(crate) const CONTEXT_STUFFING_EXTENSIONS: &str = ".art, .bat, .brf, .c, .cls, .css, .csv, .diff, .doc, .docx, .dot, \
+     .eml, .epub, .es, .h, .hs, .htm, .html, .hwp, .hwpx, .ics, .ifb, .java, .js, .json, .keynote, .ksh, .ltx, .mail, \
+     .markdown, .md, .mht, .mhtml, .mjs, .msg, .nws, .odp, .ods, .odt, .otp, .ots, .pages, .patch, .pdf, .pl, .pm, \
+     .pot, .potm, .potx, .ppa, .pps, .ppsm, .ppsx, .ppt, .pptm, .pptx, .pwz, .py, .rst, .rtf, .scala, .sh, .shtml, \
+     .srt, .sty, .svg, .svgz, .tex, .text, .txt, .tsv, .vcf, .vtt, .wiz, .xla, .xlb, .xlc, .xlm, .xls, .xlsx, .xlt, \
+     .xlw, .xml, .yaml, .yml";
 
 /// Media types a text filename cannot override.
 fn is_binary_media_type(media_type: &str, filename: &str) -> bool {

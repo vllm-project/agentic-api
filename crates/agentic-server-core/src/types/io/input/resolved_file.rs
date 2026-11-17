@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
+use thiserror::Error;
 
 use super::content::{InputFileContent, InputImageContent, InputTextContent};
 use super::file_text::{InputFileError, kinds, text_content_from_bytes};
@@ -31,24 +32,9 @@ impl ResolvedFile {
         Self { filename, bytes }
     }
 
-    /// The filename extension without its dot, preserving its case.
-    fn extension(&self) -> Option<&str> {
-        file_extension(&self.filename)
-    }
-
-    pub(crate) fn is_image(&self) -> bool {
-        self.image_media_type().is_some()
-    }
-
     /// The media type for an accepted image filename.
     pub(crate) fn image_media_type(&self) -> Option<&'static str> {
-        match self.extension()?.to_ascii_lowercase().as_str() {
-            "jpeg" | "jpg" => Some("image/jpeg"),
-            "png" => Some("image/png"),
-            "gif" => Some("image/gif"),
-            "webp" => Some("image/webp"),
-            _ => None,
-        }
+        kinds::image_media_type(&self.filename)
     }
 
     /// The base64 data URL used for an `input_image` reference.
@@ -86,57 +72,50 @@ impl ResolvedFile {
     ///
     /// The client's filename wins over the stored name; a reference cannot carry one, but
     /// conversion stays the same code that inline `file_data` uses. The caller keeps the
-    /// client-facing part unchanged.
-    pub(crate) fn to_input_text(&self, file: &InputFileContent) -> Result<InputTextContent, InputFileError> {
+    /// client-facing part unchanged. This is the one place a resolved file's kind is checked.
+    pub(crate) fn to_input_text(&self, file: &InputFileContent) -> Result<InputTextContent, ResolvedFileError> {
         let filename = file.filename.as_deref().unwrap_or(&self.filename);
-        if !is_text_filename(filename) {
-            return Err(InputFileError::NotText);
+        if !kinds::is_text_filename(filename) {
+            return Err(ResolvedFileError::NotText {
+                extension: kinds::extension_label(filename),
+            });
         }
-        text_content_from_bytes(Some(filename), &self.bytes, &file.extra)
+        text_content_from_bytes(Some(filename), &self.bytes, &file.extra).map_err(Into::into)
     }
 
     /// Builds the model-facing image part for an `input_image` reference.
-    pub(crate) fn to_input_image(&self, image: &mut InputImageContent) -> Result<(), InputFileError> {
-        image.image_url = Some(self.data_url().ok_or(InputFileError::NotImage)?);
+    ///
+    /// This is the one place a resolved file's image kind is checked.
+    pub(crate) fn to_input_image(&self, image: &mut InputImageContent) -> Result<(), ResolvedFileError> {
+        let data_url = self
+            .data_url()
+            .ok_or_else(|| ResolvedFileError::NotImage(kinds::extension_label(&self.filename)))?;
+        image.image_url = Some(data_url);
         image.file_id = None;
         Ok(())
     }
 }
 
+/// A resolved file the model cannot receive as the part that referenced it.
+///
+/// `NotImage` and `NotText` carry the recorded gateway envelope's message; the request
+/// reports them with `param: input` before inference. `Content` is a file whose kind was
+/// accepted but whose bytes cannot be lowered to text, reported at the request position.
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
+pub(crate) enum ResolvedFileError {
+    #[error("Invalid input: Expected image type to be a supported format: .jpeg, .jpg, .png, .gif, .webp but got {0}.")]
+    NotImage(String),
+    #[error(
+        "Invalid input: Expected context stuffing file type to be a supported format: {formats} but got {extension}.",
+        formats = kinds::CONTEXT_STUFFING_EXTENSIONS
+    )]
+    NotText { extension: String },
+    #[error(transparent)]
+    Content(#[from] InputFileError),
+}
+
 /// Files resolved for one request, keyed by the client's `file_id`.
 pub type ResolvedFiles = HashMap<String, Arc<ResolvedFile>>;
-
-/// The filename extension without its dot, unless the basename is a dotfile or has none.
-pub(crate) fn file_extension(filename: &str) -> Option<&str> {
-    let basename = filename.rsplit(['/', '\\']).next().unwrap_or(filename);
-    basename
-        .rsplit_once('.')
-        .filter(|(stem, extension)| !stem.is_empty() && !extension.is_empty())
-        .map(|(_, extension)| extension)
-}
-
-/// Whether a filename names a text file by its extension or a known text basename.
-pub(crate) fn is_text_filename(filename: &str) -> bool {
-    kinds::is_text_file("", Some(filename))
-}
-
-/// The extension shown in a wrong-file-type error, including a leading dot.
-pub(crate) fn extension_label(filename: &str) -> String {
-    format!(".{}", file_extension(filename).unwrap_or_default())
-}
-
-/// The formats `OpenAI` lists for context stuffing, used verbatim in a wrong-file-type error.
-const CONTEXT_STUFFING_EXTENSIONS: &str = ".art, .bat, .brf, .c, .cls, .css, .csv, .diff, .doc, .docx, .dot, .eml, \
-     .epub, .es, .h, .hs, .htm, .html, .hwp, .hwpx, .ics, .ifb, .java, .js, .json, .keynote, .ksh, .ltx, .mail, \
-     .markdown, .md, .mht, .mhtml, .mjs, .msg, .nws, .odp, .ods, .odt, .otp, .ots, .pages, .patch, .pdf, .pl, .pm, \
-     .pot, .potm, .potx, .ppa, .pps, .ppsm, .ppsx, .ppt, .pptm, .pptx, .pwz, .py, .rst, .rtf, .scala, .sh, .shtml, \
-     .srt, .sty, .svg, .svgz, .tex, .text, .txt, .tsv, .vcf, .vtt, .wiz, .xla, .xlb, .xlc, .xlm, .xls, .xlsx, .xlt, \
-     .xlw, .xml, .yaml, .yml";
-
-/// The supported text formats, as `OpenAI` lists its context stuffing formats.
-pub(crate) fn context_stuffing_extensions() -> &'static str {
-    CONTEXT_STUFFING_EXTENSIONS
-}
 
 #[cfg(test)]
 mod tests {
@@ -155,7 +134,7 @@ mod tests {
         ] {
             let file = ResolvedFile::new(filename.to_owned(), b"image".to_vec());
             assert_eq!(file.image_media_type(), Some(media_type), "{filename}");
-            assert!(file.is_image());
+            assert!(file.image_media_type().is_some());
             assert_eq!(
                 file.data_url().unwrap(),
                 format!("data:{media_type};base64,{}", STANDARD.encode(b"image"))
@@ -165,7 +144,7 @@ mod tests {
         for filename in ["plot.svg", "plot.bin", "plot", ".png"] {
             let file = ResolvedFile::new(filename.to_owned(), b"image".to_vec());
             assert_eq!(file.image_media_type(), None, "{filename}");
-            assert!(!file.is_image());
+            assert!(file.image_media_type().is_none());
         }
     }
 
@@ -207,9 +186,41 @@ mod tests {
             ..InputFileContent::default()
         };
         let pdf = ResolvedFile::new("report.pdf".into(), b"%PDF".to_vec());
-        assert_eq!(pdf.to_input_text(&file), Err(InputFileError::NotText));
+        assert_eq!(
+            pdf.to_input_text(&file),
+            Err(ResolvedFileError::NotText {
+                extension: ".pdf".into(),
+            })
+        );
         let binary = ResolvedFile::new("notes.txt".into(), vec![0xff]);
-        assert_eq!(binary.to_input_text(&file), Err(InputFileError::NotUtf8));
+        assert_eq!(
+            binary.to_input_text(&file),
+            Err(ResolvedFileError::Content(InputFileError::NotUtf8))
+        );
+    }
+
+    #[test]
+    fn resolved_image_rejects_a_non_image_name_with_the_recorded_message() {
+        let mut image = InputImageContent::default();
+        let file = ResolvedFile::new("notes.txt".into(), b"hello".to_vec());
+        assert_eq!(
+            file.to_input_image(&mut image),
+            Err(ResolvedFileError::NotImage(".txt".into()))
+        );
+        assert_eq!(
+            ResolvedFileError::NotImage(".txt".into()).to_string(),
+            "Invalid input: Expected image type to be a supported format: .jpeg, .jpg, .png, .gif, .webp but got .txt."
+        );
+        assert_eq!(
+            ResolvedFileError::NotText {
+                extension: ".png".into()
+            }
+            .to_string(),
+            format!(
+                "Invalid input: Expected context stuffing file type to be a supported format: {} but got .png.",
+                kinds::CONTEXT_STUFFING_EXTENSIONS
+            )
+        );
     }
 
     #[test]

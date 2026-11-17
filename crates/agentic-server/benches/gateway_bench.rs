@@ -163,6 +163,7 @@ async fn spawn_gateway(llm_url: &str) -> (Arc<reqwest::Client>, String) {
         tools: agentic_core::config::ToolRuntimeConfig::default(),
         responses: agentic_core::config::ResponsesConfig::default(),
         model_capabilities: ModelCapabilities::default(),
+        max_request_body_size: agentic_core::executor::DEFAULT_MAX_REQUEST_BODY_SIZE_BYTES,
     };
 
     let proxy_state = ProxyState::new(config.clone()).unwrap();

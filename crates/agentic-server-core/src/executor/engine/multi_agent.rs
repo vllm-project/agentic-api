@@ -44,7 +44,6 @@ use crate::types::{
     agent::{AgentIdentity, AgentTurnKey},
     agent_commands::{AgentListingStatus, CollaborationResult},
     agent_tree::{StoredAgent, StoredTreeSnapshot},
-    io::input::ResolvedFiles,
     io::{InputItem, MultiAgentAction, MultiAgentConfig, OutputItem},
     request_response::{RequestPayload, ResponsePayload},
 };
@@ -71,8 +70,6 @@ struct AgentContext {
     execution: AgentExecutionState,
     request: RequestPayload,
     tool_search: Option<ToolSearchState>,
-    /// The turn's resolved `file_id` content, shared by every agent's model-facing lowering.
-    files: ResolvedFiles,
 }
 
 struct CompletedRound {

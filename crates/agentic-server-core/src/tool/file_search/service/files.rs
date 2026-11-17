@@ -6,6 +6,7 @@ use super::{
     invalid, page, size_i64, validate_file_id, validate_list,
 };
 use crate::storage::file_search::StoredFileContent;
+use crate::types::file_search::{FILE_PURPOSES, VISION_CONTENT_TYPES};
 use std::time::Duration;
 use tokio::time::Instant;
 
@@ -32,10 +33,27 @@ impl FileSearchService {
         if filename.is_empty() || filename.len() > 255 || filename.chars().any(char::is_control) {
             return invalid("filename must contain 1 to 255 bytes without control characters");
         }
-        if !matches!(purpose, "assistants" | "user_data" | "vision") {
-            return invalid("file purpose must be assistants, user_data, or vision");
+        if !FILE_PURPOSES.contains(&purpose) {
+            let accepted = FILE_PURPOSES.map(|purpose| format!("'{purpose}'")).join(", ");
+            return invalid(&format!("'{purpose}' is not one of [{accepted}] - 'purpose'"));
         }
-        if bytes.is_empty() || bytes.len() > MAX_FILE_BYTES {
+        let media_type = content_type
+            .split_once(';')
+            .map_or(content_type, |(media_type, _)| media_type)
+            .trim();
+        if purpose == "vision"
+            && !VISION_CONTENT_TYPES
+                .iter()
+                .any(|accepted| media_type.eq_ignore_ascii_case(accepted))
+        {
+            return invalid(&format!(
+                "Invalid file format {media_type}. Supported formats: \"gif\", \"jpeg\", \"jpg\", \"png\", \"webp\""
+            ));
+        }
+        if bytes.is_empty() {
+            return invalid("File is empty.");
+        }
+        if bytes.len() > MAX_FILE_BYTES {
             return invalid("file must contain 1 byte to 20 MiB");
         }
         if content_type.is_empty() || content_type.len() > 256 || content_type.chars().any(char::is_control) {
@@ -185,7 +203,7 @@ impl FileSearchService {
                     storage.complete_blob_cleanup(&id, &cleanup_token).await?;
                 }
             }
-            Ok(deleted(&id, "file.deleted"))
+            Ok(deleted(&id, "file"))
         })
         .await?
     }

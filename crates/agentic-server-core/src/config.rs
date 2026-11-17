@@ -557,6 +557,9 @@ pub struct Config {
     pub db_url: Option<String>,
     pub postgres: PostgresConfig,
     pub sqlite: SqliteConfig,
+    /// Ceiling on serialized inbound request bytes. Resolved `file_id` content counts
+    /// against it, so the executor and the transport use the same limit.
+    pub max_request_body_size: usize,
     pub tools: ToolRuntimeConfig,
     pub responses: ResponsesConfig,
     /// Explicit model capabilities shared by request admission and model catalogs.

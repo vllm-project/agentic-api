@@ -1,7 +1,6 @@
 mod calls;
 mod content;
 mod conversions;
-mod file_references;
 mod file_text;
 mod history_naming;
 mod resolved_file;
@@ -13,14 +12,15 @@ mod window;
 pub(crate) use conversions::internal_mcp_tool_name;
 pub use file_text::InputFileError;
 pub(crate) use history_naming::HistoryNaming;
+pub(crate) use resolved_file::ResolvedFileError;
 pub use resolved_file::{ResolvedFile, ResolvedFiles};
-pub(crate) use resolved_file::{context_stuffing_extensions, extension_label, is_text_filename};
 pub(crate) use search_history::{
     SearchHistory, SearchHistoryDefect, TOOL_SEARCH_NAME, hosted_search_output_text, is_search_item,
 };
 pub(super) use tool_search::check_tool_search_call_id;
 pub use tool_search::{InputToolSearchCall, ToolSearchOutputMessage};
 pub use validation::InputValidationError;
+pub(crate) use validation::{FileReference, file_references};
 
 pub(crate) use window::{
     async_records, expand_carried_windows, latest_compaction_window, model_items, open_async_call_ids, retain_window,

@@ -165,6 +165,7 @@ mod tests {
             db_url: None,
             postgres: crate::config::PostgresConfig::default(),
             sqlite: crate::config::SqliteConfig::default(),
+            max_request_body_size: crate::executor::DEFAULT_MAX_REQUEST_BODY_SIZE_BYTES,
             tools: crate::config::ToolRuntimeConfig::default(),
             responses: crate::config::ResponsesConfig::default(),
             model_capabilities: ModelCapabilities::default(),

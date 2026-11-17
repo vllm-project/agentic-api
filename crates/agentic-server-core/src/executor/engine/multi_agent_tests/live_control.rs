@@ -718,15 +718,9 @@ async fn accepted_output_invalidates_inflight_compaction_without_losing_history(
         )
         .unwrap();
     let context = &run.contexts[&root];
-    let plan = CompactionPlan::prepare_explicit(
-        &root,
-        context.generation,
-        &context.stored.history,
-        &context.request,
-        &context.files,
-    )
-    .unwrap()
-    .unwrap();
+    let plan = CompactionPlan::prepare_explicit(&root, context.generation, &context.stored.history, &context.request)
+        .unwrap()
+        .unwrap();
     assert!(matches!(
         run.accept_live_outputs(batch(&run.payload.id, &["proposal"])),
         OutputDecision::Accepted
@@ -874,15 +868,10 @@ async fn control_injection_before_during_and_after_compaction_keeps_call_linkage
                 ));
             }
             let context = &run.contexts[&root];
-            let plan = CompactionPlan::prepare_explicit(
-                &root,
-                context.generation,
-                &context.stored.history,
-                &context.request,
-                &context.files,
-            )
-            .unwrap()
-            .unwrap();
+            let plan =
+                CompactionPlan::prepare_explicit(&root, context.generation, &context.stored.history, &context.request)
+                    .unwrap()
+                    .unwrap();
             let summary = plan.execute(&exec, None);
             tokio::pin!(summary);
             tokio::select! {
@@ -977,7 +966,6 @@ async fn sibling_output_and_mail_are_preserved_during_root_compaction() {
                     context.generation,
                     &context.stored.history,
                     &context.request,
-                    &context.files,
                 )
                 .unwrap()
                 .unwrap();

@@ -167,7 +167,6 @@ impl MultiAgentRun {
         execution.restart();
         let request = source.request.clone();
         let tool_search = source.tool_search.clone();
-        let files = source.files.clone();
         let child = self
             .registry
             .register_child(turn, &task.task_name, &task.message)
@@ -197,7 +196,6 @@ impl MultiAgentRun {
                 execution,
                 request,
                 tool_search,
-                files,
             },
         );
         self.publish_mail(&turn.agent, &child.agent, &task.message, pipeline)

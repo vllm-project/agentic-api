@@ -2,70 +2,52 @@
 //!
 //! This is the access seam between request execution and the gateway file store, next to
 //! [`ConversationHandler`](super::ConversationHandler) and [`ResponseHandler`](super::ResponseHandler).
-//! It owns the service and only reads: one [`FileHandler::resolve`] returns the per-turn lookup
-//! used by the model-facing lowering. Stored history, checkpoints, session parents and agent tree
-//! snapshots keep the client's reference.
+//! It owns no state: it reads the executor's one file service. One [`FileHandler::resolve`]
+//! returns the lookup used by the model-facing lowering of the input it was given. Stored
+//! history, checkpoints, session parents and agent tree snapshots keep the client's reference.
 
-use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::tool::file_search::FileSearchService;
 use crate::types::file_search::FileSearchError;
-use crate::types::io::input::{
-    ResolvedFile, ResolvedFiles, context_stuffing_extensions, expand_carried_windows, extension_label, is_text_filename,
-};
-use crate::types::io::{InputContent, InputItem, InputMessageContent, ToolCallOutput, ToolOutputContent};
-
-/// Which content kind carried a `file_id`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ReferenceKind {
-    File,
-    Image,
-}
-
-/// One `file_id` occurrence.
-#[derive(Debug, Clone)]
-struct Reference {
-    file_id: String,
-    kind: ReferenceKind,
-    /// The request position, when the item came from the request's input rather than an agent history.
-    location: Option<String>,
-}
+use crate::types::io::ResponsesInput;
+use crate::types::io::input::{FileReference, ResolvedFile, ResolvedFiles, file_references};
 
 /// Resolves the Files API content behind `file_id` references.
-#[derive(Debug, Clone, Default)]
-pub(crate) struct FileHandler {
-    service: Option<FileSearchService>,
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct FileHandler<'a> {
+    service: Option<&'a FileSearchService>,
 }
 
-impl FileHandler {
-    pub(crate) const fn new(service: Option<FileSearchService>) -> Self {
+impl<'a> FileHandler<'a> {
+    pub(crate) const fn new(service: Option<&'a FileSearchService>) -> Self {
         Self { service }
     }
 
     /// Read every referenced file once and return the content keyed by `file_id`.
     ///
-    /// `items` is the final input plus every restored agent history, so a multi-agent run
-    /// resolves each reference before any agent's round lowers it. A missing file is reported
-    /// with `OpenAI`'s `Files [<id>...] were not found` envelope; wrong file types and the
-    /// resolved encoded size are checked here, before inference.
+    /// `input` is the input this request lowers, so the lookup holds exactly the references
+    /// the model-facing request will read. A missing file is reported with `OpenAI`'s
+    /// `Files [<id>...] were not found` envelope; the resolved encoded size is checked
+    /// here, before inference. Each file kind is checked once, where its reference is
+    /// lowered.
     ///
     /// # Errors
-    /// Returns one not-found error listing every missing id, a wrong-file-type error, a
-    /// request-too-large error, or a file store error. The lookup is never stored.
-    pub(crate) async fn resolve<'a>(
+    /// Returns one not-found error listing every missing id, a request-too-large error, or a
+    /// file store error. The lookup is never stored.
+    pub(crate) async fn resolve(
         &self,
-        items: impl IntoIterator<Item = Cow<'a, InputItem>>,
+        input: &ResponsesInput,
         max_encoded_bytes: usize,
     ) -> ExecutorResult<ResolvedFiles> {
-        let references = references(items);
+        let references = file_references(input);
         if references.is_empty() {
             return Ok(HashMap::new());
         }
-        let Some(service) = &self.service else {
-            return Err(no_store_error(&references));
+        let Some(service) = self.service else {
+            return Err(no_store_error(&references[0]));
         };
 
         let mut files: ResolvedFiles = HashMap::new();
@@ -92,22 +74,13 @@ impl FileHandler {
             let file = files
                 .get(&reference.file_id)
                 .expect("every distinct referenced file was read or reported missing");
-            let reference_bytes = match reference.kind {
-                ReferenceKind::Image => {
-                    if !file.is_image() {
-                        return Err(image_type_error(&file.filename));
-                    }
-                    file.data_url_len().ok_or_else(|| image_type_error(&file.filename))?
-                }
-                ReferenceKind::File => {
-                    if !is_text_filename(&file.filename) {
-                        return Err(file_type_error(&file.filename));
-                    }
-                    // Exact serialized JSON-escaped size; a non-UTF-8 file is rejected when
-                    // its model-facing text part is built, so the raw count is only a fallback.
-                    file.text_json_len().unwrap_or(file.bytes.len())
-                }
-            };
+            // The size of the part this reference lowers to: an image data URL or the
+            // JSON-escaped text value. A file the part will reject counts at its raw size;
+            // lowering rejects it before inference.
+            let reference_bytes = file
+                .data_url_len()
+                .or_else(|| file.text_json_len())
+                .unwrap_or(file.bytes.len());
             encoded_bytes = encoded_bytes.saturating_add(reference_bytes);
         }
         if encoded_bytes > max_encoded_bytes {
@@ -117,90 +90,6 @@ impl FileHandler {
         }
         Ok(files)
     }
-}
-
-/// Collect every message and structured-tool-output `file_id`, expanding carried compaction
-/// windows so a restored window's retained messages are resolved too.
-fn references<'a>(items: impl IntoIterator<Item = Cow<'a, InputItem>>) -> Vec<Reference> {
-    let items = expand_carried_windows(items);
-    let mut references = Vec::new();
-    for (item_index, item) in items.iter().enumerate() {
-        match item.as_ref() {
-            InputItem::Message(message) => {
-                let InputMessageContent::Parts(parts) = &message.content else {
-                    continue;
-                };
-                for (part_index, part) in parts.iter().enumerate() {
-                    let location = Some(content_location(item_index, part_index));
-                    match part {
-                        InputContent::InputFile(file) => {
-                            if let Some(file_id) = file.file_id.as_deref() {
-                                references.push(Reference {
-                                    file_id: file_id.to_owned(),
-                                    kind: ReferenceKind::File,
-                                    location,
-                                });
-                            }
-                        }
-                        InputContent::InputImage(image) => {
-                            if let Some(file_id) = image.file_id.as_deref() {
-                                references.push(Reference {
-                                    file_id: file_id.to_owned(),
-                                    kind: ReferenceKind::Image,
-                                    location,
-                                });
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            InputItem::FunctionCallOutput(output) => collect_tool_output(&output.output, item_index, &mut references),
-            InputItem::CustomToolCallOutput(output) => {
-                collect_tool_output(&output.output, item_index, &mut references);
-            }
-            _ => {}
-        }
-    }
-    references
-}
-
-fn collect_tool_output(output: &ToolCallOutput, item_index: usize, references: &mut Vec<Reference>) {
-    let ToolCallOutput::Content(parts) = output else {
-        return;
-    };
-    for (part_index, part) in parts.iter().enumerate() {
-        let location = Some(output_location(item_index, part_index));
-        match part {
-            ToolOutputContent::InputFile(file) => {
-                if let Some(file_id) = file.file_id.as_deref() {
-                    references.push(Reference {
-                        file_id: file_id.to_owned(),
-                        kind: ReferenceKind::File,
-                        location,
-                    });
-                }
-            }
-            ToolOutputContent::InputImage(image) => {
-                if let Some(file_id) = image.file_id.as_deref() {
-                    references.push(Reference {
-                        file_id: file_id.to_owned(),
-                        kind: ReferenceKind::Image,
-                        location,
-                    });
-                }
-            }
-            ToolOutputContent::InputText(_) => {}
-        }
-    }
-}
-
-fn content_location(item_index: usize, part_index: usize) -> String {
-    format!("input[{item_index}].content[{part_index}]")
-}
-
-fn output_location(item_index: usize, part_index: usize) -> String {
-    format!("input[{item_index}].output[{part_index}]")
 }
 
 enum ReferenceRead {
@@ -221,44 +110,11 @@ fn read_error(error: FileSearchError) -> ReferenceRead {
     }
 }
 
-fn no_store_error(references: &[Reference]) -> ExecutorError {
-    let reference = &references[0];
-    let part = match reference.kind {
-        ReferenceKind::File => "input_file",
-        ReferenceKind::Image => "input_image",
-    };
-    let location = reference
-        .location
-        .as_deref()
-        .map(|location| format!("{location}: "))
-        .unwrap_or_default();
+fn no_store_error(reference: &FileReference) -> ExecutorError {
     ExecutorError::InvalidRequest(format!(
-        "{location}{part} with file_id requires the gateway file store; configure file storage or send the content \
-         inline"
+        "{}: {} with file_id requires the gateway file store; configure file storage or send the content inline",
+        reference.location, reference.part
     ))
-}
-
-fn image_type_error(filename: &str) -> ExecutorError {
-    ExecutorError::UnsupportedValue {
-        param: Some("input".into()),
-        code: None,
-        message: format!(
-            "Invalid input: Expected image type to be a supported format: .jpeg, .jpg, .png, .gif, .webp but got {}.",
-            extension_label(filename)
-        ),
-    }
-}
-
-fn file_type_error(filename: &str) -> ExecutorError {
-    ExecutorError::UnsupportedValue {
-        param: Some("input".into()),
-        code: None,
-        message: format!(
-            "Invalid input: Expected context stuffing file type to be a supported format: {} but got {}.",
-            context_stuffing_extensions(),
-            extension_label(filename)
-        ),
-    }
 }
 
 #[cfg(test)]
@@ -280,12 +136,8 @@ mod tests {
         (service, files)
     }
 
-    fn input(value: serde_json::Value) -> Vec<InputItem> {
+    fn input(value: serde_json::Value) -> ResponsesInput {
         serde_json::from_value(value).expect("input items")
-    }
-
-    fn owned(items: &[InputItem]) -> Vec<Cow<'_, InputItem>> {
-        items.iter().map(Cow::Borrowed).collect()
     }
 
     fn message(error: ExecutorError) -> String {
@@ -306,7 +158,7 @@ mod tests {
             .upload_file("plot.png", "image/png", "vision", b"png bytes".to_vec())
             .await
             .unwrap();
-        let items = input(json!([
+        let input = input(json!([
             {"role": "user", "content": [
                 {"type": "input_image", "file_id": &image.id, "detail": "high"},
                 {"type": "input_file", "file_id": &text.id}
@@ -317,15 +169,21 @@ mod tests {
             ]}
         ]));
 
-        let files = FileHandler::new(Some(service))
-            .resolve(owned(&items), usize::MAX)
+        let files = FileHandler::new(Some(&service))
+            .resolve(&input, usize::MAX)
             .await
             .unwrap();
         assert_eq!(files.len(), 2, "a repeated reference is read once");
         let resolved_text = files.get(&text.id).expect("text content");
         assert_eq!(resolved_text.filename, "notes.txt");
         assert_eq!(resolved_text.bytes, b"hello");
-        assert!(files.get(&image.id).expect("image content").is_image());
+        assert!(
+            files
+                .get(&image.id)
+                .expect("image content")
+                .image_media_type()
+                .is_some()
+        );
     }
 
     #[tokio::test]
@@ -333,15 +191,15 @@ mod tests {
         let (service, _files) = file_search().await;
         let first = format!("file-{}", uuid::Uuid::now_v7());
         let second = format!("file-{}", uuid::Uuid::now_v7());
-        let items = input(json!([
+        let input = input(json!([
             {"role": "user", "content": [
                 {"type": "input_text", "text": "a"},
                 {"type": "input_file", "file_id": first},
                 {"type": "input_file", "file_id": second}
             ]}
         ]));
-        let error = FileHandler::new(Some(service))
-            .resolve(owned(&items), usize::MAX)
+        let error = FileHandler::new(Some(&service))
+            .resolve(&input, usize::MAX)
             .await
             .unwrap_err();
         assert_eq!(error.http_status(), http::StatusCode::NOT_FOUND);
@@ -352,7 +210,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn wrong_file_types_use_openai_envelope() {
+    async fn references_resolve_without_checking_their_kind() {
         let (service, _files) = file_search().await;
         let text = service
             .upload_file("notes.txt", "text/plain", "assistants", b"hello".to_vec())
@@ -363,46 +221,22 @@ mod tests {
             .await
             .unwrap();
 
-        let as_image = input(json!([
-            {"role": "user", "content": [{"type": "input_image", "file_id": &text.id}]}
-        ]));
-        let error = FileHandler::new(Some(service.clone()))
-            .resolve(owned(&as_image), usize::MAX)
-            .await
-            .unwrap_err();
-        assert_eq!(error.http_status(), http::StatusCode::BAD_REQUEST);
-        assert_eq!(error.error_type(), "invalid_request_error");
-        assert_eq!(error.error_param(), Some("input"));
-        assert_eq!(
-            error.to_string(),
-            "Invalid input: Expected image type to be a supported format: .jpeg, .jpg, .png, .gif, .webp but got \
-             .txt."
-        );
-
-        let as_file = input(json!([
-            {"role": "user", "content": [{"type": "input_file", "file_id": &image.id}]}
-        ]));
-        let error = FileHandler::new(Some(service))
-            .resolve(owned(&as_file), usize::MAX)
-            .await
-            .unwrap_err();
-        assert_eq!(error.http_status(), http::StatusCode::BAD_REQUEST);
-        assert!(
-            error
-                .to_string()
-                .starts_with("Invalid input: Expected context stuffing file type to be a supported format: .")
-        );
-        assert!(error.to_string().ends_with("but got .png."), "{error}");
+        // The part kind is checked once, where each reference is lowered, not here.
+        for (part, file_id) in [("input_image", &text.id), ("input_file", &image.id)] {
+            let input = input(json!([{"role": "user", "content": [{"type": part, "file_id": file_id}]}]));
+            let files = FileHandler::new(Some(&service))
+                .resolve(&input, usize::MAX)
+                .await
+                .unwrap();
+            assert_eq!(files.len(), 1);
+        }
     }
 
     #[tokio::test]
     async fn references_require_a_configured_file_store() {
         for (kind, part) in [("input_image", "input_image"), ("input_file", "input_file")] {
-            let items = input(json!([{"role": "user", "content": [{"type": kind, "file_id": "file-1"}]}]));
-            let error = FileHandler::new(None)
-                .resolve(owned(&items), usize::MAX)
-                .await
-                .unwrap_err();
+            let input = input(json!([{"role": "user", "content": [{"type": kind, "file_id": "file-1"}]}]));
+            let error = FileHandler::new(None).resolve(&input, usize::MAX).await.unwrap_err();
             assert_eq!(error.http_status(), http::StatusCode::BAD_REQUEST);
             assert_eq!(
                 message(error),
@@ -414,7 +248,7 @@ mod tests {
         }
         assert!(
             FileHandler::new(None)
-                .resolve(Vec::new(), usize::MAX)
+                .resolve(&ResponsesInput::default(), usize::MAX)
                 .await
                 .unwrap()
                 .is_empty()
@@ -428,16 +262,13 @@ mod tests {
             .upload_file("notes.txt", "text/plain", "assistants", b"hello".to_vec())
             .await
             .unwrap();
-        let items = input(json!([
+        let input = input(json!([
             {"role": "user", "content": [
                 {"type": "input_file", "file_id": &text.id},
                 {"type": "input_file", "file_id": &text.id}
             ]}
         ]));
-        let error = FileHandler::new(Some(service))
-            .resolve(owned(&items), 9)
-            .await
-            .unwrap_err();
+        let error = FileHandler::new(Some(&service)).resolve(&input, 9).await.unwrap_err();
         assert!(matches!(error, ExecutorError::PayloadTooLarge(_)), "{error}");
     }
 
@@ -453,17 +284,15 @@ mod tests {
         let raw_bytes = model_text.len();
         let escaped_bytes = serde_json::to_string(&model_text).unwrap().len() - 2;
         assert!(escaped_bytes > raw_bytes);
-        let items = input(json!([
+        let input = input(json!([
             {"role": "user", "content": [{"type": "input_file", "file_id": &text.id}]}
         ]));
 
-        let resolved = FileHandler::new(Some(service.clone()))
-            .resolve(owned(&items), escaped_bytes)
-            .await;
+        let resolved = FileHandler::new(Some(&service)).resolve(&input, escaped_bytes).await;
         assert!(resolved.is_ok(), "the exact escaped size fits the limit");
 
-        let error = FileHandler::new(Some(service))
-            .resolve(owned(&items), raw_bytes)
+        let error = FileHandler::new(Some(&service))
+            .resolve(&input, raw_bytes)
             .await
             .unwrap_err();
         assert!(
@@ -480,14 +309,15 @@ mod tests {
             .upload_file("notes.txt", "text/plain", "assistants", b"hello".to_vec())
             .await
             .unwrap();
-        let retained = input(json!([
+        let retained: Vec<crate::types::io::InputItem> = serde_json::from_value(json!([
             {"role": "user", "content": [{"type": "input_file", "file_id": &text.id}]}
-        ]));
+        ]))
+        .unwrap();
         let compaction = CompactionItem::carrying(None, "summary".into(), retained).unwrap();
-        let items = vec![InputItem::Compaction(compaction)];
+        let input = ResponsesInput::from(vec![crate::types::io::InputItem::Compaction(compaction)]);
 
-        let files = FileHandler::new(Some(service))
-            .resolve(owned(&items), usize::MAX)
+        let files = FileHandler::new(Some(&service))
+            .resolve(&input, usize::MAX)
             .await
             .unwrap();
         assert!(files.contains_key(&text.id));

@@ -24,11 +24,6 @@ use super::{InputFileContent, InputTextContent};
 /// Messages never echo the file data, URL, name, or media type.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum InputFileError {
-    #[error(
-        "a file_id reference was not resolved for this model-facing request; the gateway resolves references \
-         from its file store before inference"
-    )]
-    UnresolvedFileId,
     /// `file_id` must be the only content field on the part.
     #[error("input content must not combine file_id with {field}")]
     MutuallyExclusive { field: &'static str },
@@ -73,9 +68,10 @@ fn parse_data_url(url: &str) -> Result<(&str, &str), InputFileError> {
 impl InputFileContent {
     /// Check the reference fields and media type without decoding, returning the base64 payload.
     fn text_payload(&self) -> Result<&str, InputFileError> {
-        if self.file_id.is_some() {
-            return Err(InputFileError::UnresolvedFileId);
-        }
+        debug_assert!(
+            self.file_id.is_none(),
+            "a file_id reference is lowered from its resolved content, not inline"
+        );
         if self.file_url.is_some() {
             return Err(InputFileError::FileUrl);
         }
@@ -307,13 +303,9 @@ mod tests {
     }
 
     #[test]
-    fn references_are_valid_input_but_undeclared_conversion_fails() {
+    fn references_are_valid_input_lowered_only_from_resolved_content() {
         let reference = file(json!({"file_id":"file_1"}));
         assert_eq!(reference.validate(), Ok(()));
-        assert_eq!(
-            InputTextContent::try_from(&reference).map(|_| ()),
-            Err(InputFileError::UnresolvedFileId)
-        );
         for (fields, field) in [
             (json!({"file_id":"file_1", "filename":"a.txt"}), "filename"),
             (json!({"file_id":"file_1", "file_data":"aGk="}), "file_data"),

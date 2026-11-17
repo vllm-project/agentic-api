@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::conversations::ConversationMetadata;
-use super::io::input::{HistoryNaming, InputValidationError, ResolvedFiles};
+use super::io::input::{HistoryNaming, InputValidationError, ResolvedFiles, file_references};
 use super::io::{FunctionTool, MultiAgentConfig, OutputItem, ResponseUsage, ResponsesInput, ToolChoice};
 use super::tools::ResponsesTool;
 use super::{ReasoningEffortLevel, RequestField, ServiceTier};
@@ -255,7 +255,7 @@ impl<T: ?Sized, C> RequestPayload<T, C> {
             return Some("async tools");
         }
         // Resolved file content comes from the gateway's file store before inference.
-        if self.input.has_file_references() {
+        if !file_references(&self.input).is_empty() {
             return Some("file_id references");
         }
         if self.input.contains_compaction() || self.input.has_compaction_trigger() {

@@ -244,11 +244,34 @@ async fn vision_upload_is_readable_through_the_files_api() {
 async fn unknown_upload_purpose_is_rejected() {
     let service = service().await;
     let error = service
-        .upload_file("notes.txt", "text/plain", "batch", b"text".to_vec())
+        .upload_file("notes.txt", "text/plain", "bogus", b"text".to_vec())
         .await
         .unwrap_err();
     assert_eq!(error.status_code(), 400);
-    assert!(error.public_message().contains("vision"));
+    assert_eq!(
+        error.public_message(),
+        "'bogus' is not one of ['fine-tune', 'assistants', 'batch', 'user_data', 'vision', 'evals'] - 'purpose'"
+    );
+}
+
+#[tokio::test]
+async fn vision_upload_rejects_non_image_content_and_empty_files() {
+    let service = service().await;
+    let error = service
+        .upload_file("notes.txt", "text/plain", "vision", b"text".to_vec())
+        .await
+        .unwrap_err();
+    assert_eq!(error.status_code(), 400);
+    assert_eq!(
+        error.public_message(),
+        "Invalid file format text/plain. Supported formats: \"gif\", \"jpeg\", \"jpg\", \"png\", \"webp\""
+    );
+    let error = service
+        .upload_file("empty.txt", "text/plain", "user_data", Vec::new())
+        .await
+        .unwrap_err();
+    assert_eq!(error.status_code(), 400);
+    assert_eq!(error.public_message(), "File is empty.");
 }
 
 #[tokio::test]

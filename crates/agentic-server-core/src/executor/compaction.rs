@@ -26,7 +26,7 @@ use crate::executor::upstream::fetch_blocking_payload;
 use crate::storage::ResponseCheckpoint;
 use crate::tool::{CodexNamespaceHandler, ToolRegistry, ToolSearchState};
 use crate::types::event::MessageStatus;
-use crate::types::io::input::{InputTextContent, ResolvedFiles, expand_carried_windows, latest_compaction_window};
+use crate::types::io::input::{InputTextContent, expand_carried_windows, latest_compaction_window};
 use crate::types::io::{
     CompactionItem, InOutItem, InputContent, InputItem, InputMessage, InputMessageContent, OutputItem, ResponseUsage,
     ResponsesInput,
@@ -114,7 +114,6 @@ fn build_compacted_window(items: &[InputItem], summary: String) -> Vec<InputItem
 pub(crate) async fn summarize_items(
     request: &RequestPayload,
     input: ResponsesInput,
-    files: &ResolvedFiles,
     exec_ctx: &ExecutionContext,
     auth: Option<&UpstreamHeaders>,
     trigger: CompactionTrigger,
@@ -167,7 +166,6 @@ pub(crate) async fn summarize_items(
             conversation_id: None,
             checkpoint: None,
             continuation: None,
-            files: files.clone(),
         };
         let mut agent = AgentPipeline::new(ctx, None, StreamRelay::detached());
         let response = fetch_blocking_payload(&mut agent, exec_ctx, auth, &ToolRegistry::default(), None).await?;
@@ -226,7 +224,6 @@ pub(crate) async fn maybe_compact_context(
     let window = summarize_items(
         &ctx.enriched_request,
         ResponsesInput::from(items),
-        &ctx.files,
         exec_ctx,
         auth,
         CompactionTrigger::ContextManagement,
@@ -296,7 +293,6 @@ pub async fn compact_response(
     let window = summarize_items(
         &ctx.enriched_request,
         input,
-        &ctx.files,
         exec_ctx,
         auth.as_ref(),
         CompactionTrigger::Explicit,
@@ -331,7 +327,6 @@ pub async fn compact_response(
 #[cfg(test)]
 mod tests {
     use super::estimate::ESTIMATED_IMAGE_TOKENS;
-    use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
 
     use axum::Router;
@@ -420,7 +415,6 @@ mod tests {
             conversation_id: None,
             checkpoint: None,
             continuation: None,
-            files: HashMap::default(),
         }
     }
 
@@ -1014,15 +1008,10 @@ mod tests {
             ..RequestPayload::default()
         };
         request.prompt_cache_retention = Some(PromptCacheRetention::TwentyFourHours);
-        let plan = CompactionPlan::prepare_explicit(
-            &AgentIdentity::root(),
-            0,
-            &[user_message("remember context")],
-            &request,
-            &HashMap::default(),
-        )
-        .unwrap()
-        .unwrap();
+        let plan =
+            CompactionPlan::prepare_explicit(&AgentIdentity::root(), 0, &[user_message("remember context")], &request)
+                .unwrap()
+                .unwrap();
         request.prompt_cache_retention = Some(PromptCacheRetention::InMemory);
         plan.execute(&exec, None).await.unwrap();
         let requests = requests.lock().unwrap();
@@ -1047,7 +1036,6 @@ mod tests {
             0,
             &[user_message("remember context")],
             &ctx.enriched_request,
-            &HashMap::default(),
         )
         .unwrap()
         .unwrap();

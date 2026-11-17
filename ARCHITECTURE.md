@@ -1009,9 +1009,10 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   Lookups and retrieval are separate methods (`get`, `create`, `retrieve`, `validate_exists`);
   **any new CRUD operation
   beyond persist/rehydrate belongs here**, added as a new method that delegates to the corresponding store.
-- **`modes/files.rs`** — `FileHandler`, the read-only access seam to the gateway file store. Rehydration
-  calls its one `resolve` after the branches assemble the turn's final input; the returned per-turn lookup
-  (`RequestContext::files`) is used only by `normalized_model_input`, and is never stored, checkpointed, or
+- **`modes/files.rs`** — `FileHandler`, the read-only access seam to the gateway file store. One `resolve`
+  returns the lookup for the input the model-facing request will lower; `upstream_request` calls it while
+  building that body, and `execute.rs::prepare` repeats it before tool preparation so a bad reference fails
+  early. The lookup is used only by `normalized_model_input` and is never stored, checkpointed, or
   snapshotted. It reports a missing reference with `OpenAI`'s `Files [<id>...] were not found` envelope and
   checks the resolved content against the request body limit.
 - **`error.rs`** — `ExecutorError`, with the mapping methods (`http_status()`,

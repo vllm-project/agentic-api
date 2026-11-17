@@ -2263,7 +2263,6 @@ async fn test_websocket_generate_false_prewarm_redacts_mcp_runtime_credentials()
         conversation_id: None,
         checkpoint: None,
         continuation: None,
-        files: HashMap::default(),
     };
     let stored = fixture
         .state

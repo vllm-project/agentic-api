@@ -3,7 +3,7 @@
 use agentic_core::executor::ExecutorError;
 use agentic_core::tool::file_search::{FileSearchService, MAX_FILE_BYTES};
 use agentic_core::types::file_search::{
-    AttachFileRequest, CreateVectorStoreRequest, FileSearchError, ListParams, SearchRequest,
+    AttachFileRequest, CreateVectorStoreRequest, FILE_PURPOSES, FileSearchError, ListParams, SearchRequest,
 };
 use axum::extract::multipart::{MultipartError, MultipartRejection};
 use axum::extract::rejection::{JsonRejection, QueryRejection};
@@ -59,6 +59,51 @@ fn payload_too_large() -> Response {
     executor_error_response(ExecutorError::PayloadTooLarge("Request body exceeds the limit".into()))
 }
 
+/// The recorded `OpenAI` Files API error object: `type: invalid_request_error`, `code: null`, and an
+/// optional `param` naming the row's field.
+#[derive(Serialize)]
+struct FilesApiError<'a> {
+    message: &'a str,
+    #[serde(rename = "type")]
+    error_type: &'static str,
+    code: Option<&'static str>,
+    param: Option<&'static str>,
+}
+
+#[derive(Serialize)]
+struct FilesApiErrorEnvelope<'a> {
+    error: FilesApiError<'a>,
+}
+
+fn files_api_error(status: StatusCode, param: Option<&'static str>, message: impl Into<String>) -> Response {
+    let message = message.into();
+    (
+        status,
+        Json(FilesApiErrorEnvelope {
+            error: FilesApiError {
+                message: &message,
+                error_type: "invalid_request_error",
+                code: None,
+                param,
+            },
+        }),
+    )
+        .into_response()
+}
+
+fn file_not_found(id: &str) -> Response {
+    files_api_error(StatusCode::NOT_FOUND, Some("id"), format!("No such File object: {id}"))
+}
+
+/// A lookup by path ID: the recorded row reports any unusable ID as a missing file.
+fn file_row(result: Result<impl Serialize, FileSearchError>, id: &str) -> Response {
+    match result {
+        Ok(value) => Json(value).into_response(),
+        Err(FileSearchError::NotFound(_) | FileSearchError::InvalidRequest(_)) => file_not_found(id),
+        Err(failure) => error(failure),
+    }
+}
+
 fn result<T: Serialize>(value: Result<T, FileSearchError>) -> Response {
     match value {
         Ok(value) => Json(value).into_response(),
@@ -101,7 +146,9 @@ pub(crate) async fn upload_file(
     let mut multipart = match multipart {
         Ok(multipart) => multipart,
         Err(rejection) if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE => return payload_too_large(),
-        Err(_) => return invalid("Expected multipart/form-data with file and purpose fields"),
+        // The recorded missing-file row posts a form without a file part at all; report the
+        // required upload field instead of the transport-level rejection.
+        Err(_) => return files_api_error(StatusCode::BAD_REQUEST, None, "'file' is a required property"),
     };
     let mut purpose = None;
     let mut uploaded = None;
@@ -148,10 +195,25 @@ pub(crate) async fn upload_file(
             _ => return invalid("Expected exactly one file and one purpose field"),
         }
     }
-    let (Some(purpose), Some((filename, content_type, bytes))) = (purpose, uploaded) else {
-        return invalid("Both file and purpose are required");
+    let Some(purpose) = purpose else {
+        return files_api_error(StatusCode::BAD_REQUEST, None, "'purpose' is a required property");
     };
-    result(search.upload_file(&filename, &content_type, &purpose, bytes).await)
+    let Some((filename, content_type, bytes)) = uploaded else {
+        return files_api_error(StatusCode::BAD_REQUEST, None, "'file' is a required property");
+    };
+    if !FILE_PURPOSES.contains(&purpose.as_str()) {
+        let accepted = FILE_PURPOSES.map(|purpose| format!("'{purpose}'")).join(", ");
+        return files_api_error(
+            StatusCode::BAD_REQUEST,
+            Some("purpose"),
+            format!("'{purpose}' is not one of [{accepted}] - 'purpose'"),
+        );
+    }
+    match search.upload_file(&filename, &content_type, &purpose, bytes).await {
+        Ok(file) => Json(file).into_response(),
+        Err(FileSearchError::InvalidRequest(message)) => files_api_error(StatusCode::BAD_REQUEST, None, message),
+        Err(failure) => error(failure),
+    }
 }
 
 fn multipart_error(failure: &MultipartError) -> Response {
@@ -180,6 +242,22 @@ pub(crate) async fn list_files(
         Ok(params) => params,
         Err(error) => return *error,
     };
+    if let Some((cursor, param)) = params
+        .after
+        .as_deref()
+        .map(|cursor| (cursor, "after"))
+        .or(params.before.as_deref().map(|cursor| (cursor, "before")))
+        && let Err(failure) = search.get_file(cursor).await
+    {
+        return match failure {
+            FileSearchError::NotFound(_) | FileSearchError::InvalidRequest(_) => files_api_error(
+                StatusCode::NOT_FOUND,
+                Some(param),
+                format!("No such File object: {cursor}"),
+            ),
+            failure => error(failure),
+        };
+    }
     result(search.list_files(&params).await)
 }
 
@@ -194,7 +272,7 @@ pub(crate) async fn get_file(State(state): State<AppState>, Path(id): Path<Strin
         Ok(service) => service,
         Err(error) => return *error,
     };
-    result(search.get_file(&id).await)
+    file_row(search.get_file(&id).await, &id)
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(
@@ -208,6 +286,18 @@ pub(crate) async fn file_content(State(state): State<AppState>, Path(id): Path<S
         Ok(service) => service,
         Err(error) => return *error,
     };
+    let file = match search.get_file(&id).await {
+        Ok(file) => file,
+        Err(FileSearchError::NotFound(_) | FileSearchError::InvalidRequest(_)) => return file_not_found(&id),
+        Err(failure) => return error(failure),
+    };
+    if file.purpose != "vision" {
+        return files_api_error(
+            StatusCode::BAD_REQUEST,
+            None,
+            format!("Not allowed to download files of purpose: {}", file.purpose),
+        );
+    }
     match search.file_content(&id).await {
         Ok(bytes) => (
             [
@@ -217,6 +307,7 @@ pub(crate) async fn file_content(State(state): State<AppState>, Path(id): Path<S
             bytes,
         )
             .into_response(),
+        Err(FileSearchError::NotFound(_) | FileSearchError::InvalidRequest(_)) => file_not_found(&id),
         Err(failure) => error(failure),
     }
 }
@@ -232,7 +323,7 @@ pub(crate) async fn delete_file(State(state): State<AppState>, Path(id): Path<St
         Ok(service) => service,
         Err(error) => return *error,
     };
-    result(search.delete_file(&id).await)
+    file_row(search.delete_file(&id).await, &id)
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(

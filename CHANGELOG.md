@@ -18,8 +18,10 @@ All notable changes to Agentic API are documented here.
 ### Changed
 
 - `RequestPayload::to_upstream_request` now takes the per-request resolved-file lookup
-  (`&ResolvedFiles`) that rehydration builds with `FileHandler::resolve`. Embedders calling it directly must
-  resolve the payload's `file_id` references first, or pass an empty map when the payload has none.
+  (`&ResolvedFiles`) built with `FileHandler::resolve`. Embedders calling it directly must resolve the
+  payload's `file_id` references first, or pass an empty map when the payload has none.
+- `executor::upstream_request` is now async: it resolves the `file_id` references in the input it lowers
+  from its `ExecutionContext`. Callers await it, and the lookup no longer lives on `RequestContext`.
 
 ## [0.10.0] - 2026-11-09
 

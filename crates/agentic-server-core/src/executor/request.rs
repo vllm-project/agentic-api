@@ -1,4 +1,4 @@
-use std::num::{NonZeroU64, NonZeroUsize};
+use std::num::NonZeroU64;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -18,7 +18,6 @@ use crate::storage::{
     ConversationStore, DatabaseBackend, ResponseCheckpoint, ResponseStore, create_pool_with_schema_and_configs,
 };
 use crate::tool::{GatewayExecutorRegistration, GatewayExecutors, file_search::FileSearchService};
-use crate::types::io::input::ResolvedFiles;
 use crate::types::io::{InOutItem, ToolChoice};
 use crate::types::messages::GatewayToolMap;
 use crate::types::model_capabilities::ModelCapabilities;
@@ -52,10 +51,6 @@ pub struct RequestContext {
     pub checkpoint: Option<ResponseCheckpoint>,
     /// Optional transient-session lease and canonical parent snapshot. Never serialized.
     pub continuation: Option<ResponseContinuation>,
-    /// The Files API content behind this turn's `file_id` references, resolved once by rehydration.
-    ///
-    /// Model-facing lowering reads it; it is never stored, checkpointed, or snapshotted.
-    pub files: ResolvedFiles,
 }
 
 impl RequestContext {
@@ -106,11 +101,10 @@ impl RequestContext {
 #[derive(Clone, Debug)]
 pub struct ExecutionContext {
     /// Shared in-tree file ingestion and retrieval, available when persistence is configured.
+    /// This is the one file service handle; `FileHandler` reads it.
     pub file_search: Option<FileSearchService>,
-    /// Reads the Files API content behind request `file_id` references.
-    pub(crate) file_handler: FileHandler,
     /// Ceiling on serialized inbound request bytes; resolved file content counts against it.
-    pub max_request_body_size: usize,
+    pub(crate) max_request_body_size: usize,
     pub conv_handler: ConversationHandler,
     pub resp_handler: ResponseHandler,
     pub client: Arc<reqwest::Client>,
@@ -157,7 +151,6 @@ impl ExecutionContext {
         let gateway_executors = GatewayExecutors::from_env(Arc::clone(&client));
         Self {
             file_search: None,
-            file_handler: FileHandler::default(),
             max_request_body_size: DEFAULT_MAX_REQUEST_BODY_SIZE_BYTES,
             conv_handler,
             resp_handler,
@@ -190,11 +183,9 @@ impl ExecutionContext {
         self
     }
 
-    /// Use the gateway's inbound request-body ceiling for resolved file content too.
-    #[must_use]
-    pub fn with_max_request_body_size(mut self, max_request_body_size: NonZeroUsize) -> Self {
-        self.max_request_body_size = max_request_body_size.get();
-        self
+    /// Reads the Files API content behind request `file_id` references from the one file service.
+    pub(crate) fn file_handler(&self) -> FileHandler<'_> {
+        FileHandler::new(self.file_search.as_ref())
     }
 
     /// Use the same configured capabilities for request admission and catalog projection.
@@ -207,29 +198,6 @@ impl ExecutionContext {
     #[must_use]
     pub fn with_gateway_executor(mut self, executor: impl Into<GatewayExecutorRegistration>) -> Self {
         self.gateway_executors.insert(executor);
-        self
-    }
-
-    /// Installs one file search service for both the Files API and the
-    /// gateway-executed built-in tool.
-    #[must_use]
-    pub fn with_file_search_service(mut self, service: FileSearchService) -> Self {
-        self.gateway_executors
-            .insert(GatewayExecutorRegistration::FileSearch(Arc::new(
-                crate::tool::file_search::FileSearchHandler::new(service.clone()),
-            )));
-        self.file_handler = FileHandler::new(Some(service.clone()));
-        self.file_search = Some(service);
-        self
-    }
-
-    /// Runs without the in-tree file store: the Files API tool and `file_id` resolution
-    /// both report that no store is configured.
-    #[must_use]
-    pub fn without_file_search_service(mut self) -> Self {
-        self.gateway_executors.remove_file_search();
-        self.file_handler = FileHandler::default();
-        self.file_search = None;
         self
     }
 
@@ -305,7 +273,7 @@ impl ExecutionContext {
         let conv_handler = ConversationHandler::new(ConversationStore::new(pool.clone()));
         let resp_handler = ResponseHandler::new(ResponseStore::new(pool.clone()));
         let client = Arc::new(reqwest::Client::new());
-        let gateway_executors = GatewayExecutors::from_config(Arc::clone(&client), &cfg.tools)
+        let mut gateway_executors = GatewayExecutors::from_config(Arc::clone(&client), &cfg.tools)
             .map_err(|error| Error::Config(format!("failed to validate configured gateway tool policies: {error}")))?;
         let file_search =
             FileSearchService::configured(Arc::clone(&pool), Arc::clone(&client), cfg.tools.file_search.clone())
@@ -321,10 +289,12 @@ impl ExecutionContext {
         if let Err(error) = file_search.reconcile_blob_cleanup().await {
             tracing::warn!(%error, "file blob reconciliation will retry while the gateway runs");
         }
+        gateway_executors.insert(GatewayExecutorRegistration::FileSearch(Arc::new(
+            crate::tool::file_search::FileSearchHandler::new(file_search.clone()),
+        )));
         Ok(Self {
-            file_search: None,
-            file_handler: FileHandler::default(),
-            max_request_body_size: DEFAULT_MAX_REQUEST_BODY_SIZE_BYTES,
+            file_search: Some(file_search),
+            max_request_body_size: cfg.max_request_body_size,
             conv_handler,
             resp_handler,
             client,
@@ -346,8 +316,7 @@ impl ExecutionContext {
             model_capabilities: cfg.model_capabilities.clone(),
             metrics: ExecutorMetrics::from_global(),
             storage_pool: Some(pool),
-        }
-        .with_file_search_service(file_search))
+        })
     }
 }
 

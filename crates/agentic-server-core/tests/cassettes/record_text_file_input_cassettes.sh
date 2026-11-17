@@ -397,7 +397,7 @@ if scenario != "errors" and uploads == 0:
     raise SystemExit(f"ERROR: {path} has no successful Files API upload")
 if scenario in {"input", "search", "compact"} and not any(marker in text for text in answers):
     raise SystemExit(f"ERROR: no {scenario} answer contains {marker}; no file content reached the model")
-if scenario != "errors" and provider == "gateway" and len(answers) < 2:
+if expected_words and provider == "gateway" and len(answers) < 2:
     raise SystemExit(
         f"ERROR: the gateway recording must answer both the file reference and its continuation; "
         f"got {len(answers)} successful response(s)"

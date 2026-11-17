@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use agentic_core::events::{EventPayload, SSEEventType, normalize_sse_line};
 use agentic_core::executor::{RequestContext, UpstreamBody, decode_upstream};
 use agentic_core::types::request_response::RequestPayload;
@@ -16,7 +14,6 @@ fn context() -> RequestContext {
         conversation_id: None,
         checkpoint: None,
         continuation: None,
-        files: HashMap::default(),
     }
 }
 

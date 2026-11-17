@@ -1166,7 +1166,8 @@ bytes and boundary.
 limit its multimodal profiling reserves the KV budget during startup.
 
 ```bash
-TEXT_FILE_RECORD_SET=gateway TEXT_FILE_SCENARIOS="files-text files-image files-errors" \
+TEXT_FILE_RECORD_SET=gateway \
+TEXT_FILE_SCENARIOS="files-text files-image files-errors files-api files-input files-search files-compact" \
 MODEL=Qwen/Qwen2.5-3B-Instruct FILES_IMAGE_MODEL=Qwen/Qwen2.5-VL-3B-Instruct \
 GATEWAY_URL=http://localhost:9000 \
 bash crates/agentic-server-core/tests/cassettes/record_text_file_input_cassettes.sh
@@ -1178,8 +1179,12 @@ OPENAI_API_KEY=sk-... bash crates/agentic-server-core/tests/cassettes/record_tex
 ```
 
 The script validates each recording before promoting it: every successful reference answer must contain `PAPAYA-7`
-(text) or `red` and `blue` (image), the gateway set must contain both the reference answer and its continuation, and
-every `files-errors` turn must be an error, and `files-input`, `files-search`, and `files-compact` must each contain at least one answer with `PAPAYA-7`. Vector store ingestion is polled directly against the provider, outside the cassette, so the recorded turns stay fixed. Error status, code, and message are recorded verbatim as the evidence;
+(text) or `red` and `blue` (image), the text and image gateway recordings must contain both the reference answer and
+its continuation, every `files-errors` turn must be an error, and `files-input`, `files-search`, and `files-compact`
+must each contain at least one answer with `PAPAYA-7`. `file_id_reference_replay_test.rs` replays the gateway Files
+rows and compares them with the `OpenAI` reference rows: upload rules, download-by-purpose, unknown IDs, and the
+deleted object must match; list-parameter validation messages stay gateway-specific because the gateway does not
+implement the `purpose` list filter. Vector store ingestion is polled directly against the provider, outside the cassette, so the recorded turns stay fixed. Error status, code, and message are recorded verbatim as the evidence;
 only successful answers are checked against the fixture content.
 
 ### Custom tool (gateway and OpenAI)

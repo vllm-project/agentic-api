@@ -118,7 +118,7 @@ pub enum ExecutorError {
     InvalidRequest(String),
 
     #[error("invalid request: {0}")]
-    InvalidInput(#[from] InputValidationError),
+    InvalidInput(InputValidationError),
 
     /// A client-supplied item `OpenAI` refuses.
     #[error(transparent)]
@@ -181,6 +181,21 @@ impl From<UpstreamRequestError> for ExecutorError {
     }
 }
 
+impl From<InputValidationError> for ExecutorError {
+    fn from(error: InputValidationError) -> Self {
+        // A resolved file whose kind does not match its part uses the recorded gateway envelope:
+        // `param: input`, `code: null`, and no message position or gateway prefix.
+        match error.resolved_file_message() {
+            Some(message) => Self::UnsupportedValue {
+                param: Some("input".to_owned()),
+                code: None,
+                message: message.to_owned(),
+            },
+            None => Self::InvalidInput(error),
+        }
+    }
+}
+
 impl ExecutorError {
     pub(crate) fn is_invalid_upstream_tool_search(&self) -> bool {
         matches!(
@@ -208,7 +223,6 @@ impl ExecutorError {
     #[must_use]
     pub fn http_status(&self) -> StatusCode {
         match self.client_visible_error() {
-            Self::InvalidInput(error) if error.is_internal() => StatusCode::INTERNAL_SERVER_ERROR,
             Self::FileSearch(error) | Self::Tool(ToolError::FileSearch(error)) => {
                 StatusCode::from_u16(error.status_code()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
             }
@@ -253,7 +267,6 @@ impl ExecutorError {
     #[must_use]
     pub fn error_type(&self) -> &'static str {
         match self.client_visible_error() {
-            Self::InvalidInput(error) if error.is_internal() => "server_error",
             Self::FileSearch(error) | Self::Tool(ToolError::FileSearch(error)) => match error.status_code() {
                 400 => "invalid_request_error",
                 404 => "not_found",
@@ -314,7 +327,6 @@ impl ExecutorError {
             Self::PayloadTooLarge(_) => "body_too_large",
             Self::ResourceLimitExceeded { .. } => "response_resource_limit_exceeded",
             Self::InvalidMaxToolCalls(error) => error.code(),
-            Self::InvalidInput(error) if error.is_internal() => "server_error",
             Self::InvalidInput(error) => error.error_code().unwrap_or("invalid_request_error"),
             Self::UnsupportedValue { code, .. } => code.unwrap_or("unsupported_value"),
             Self::UnsupportedParameter(error) => error.code(),
@@ -357,10 +369,8 @@ impl ExecutorError {
                 | StorageError::ConversationNotFound { .. }),
             ) => error.to_string(),
             Self::Storage(StorageError::Database(_)) => "Internal server error".to_owned(),
-            // An unresolved reference means a required stage was skipped, not that the input was invalid.
-            Self::InvalidInput(error) if error.is_internal() => "Internal server error".to_owned(),
-            // `OpenAI`'s content rejections carry the position inside the message itself.
-            Self::InvalidInput(error) => error.to_string(),
+            // The recorded mutually exclusive envelope carries no gateway prefix.
+            Self::InvalidInput(error) if error.is_mutually_exclusive() => error.to_string(),
             Self::Tool(
                 error @ (ToolError::MissingOutput { .. }
                 | ToolError::UnknownCallOutput { .. }
@@ -450,15 +460,20 @@ mod tests {
     }
 
     #[test]
-    fn unresolved_file_reference_is_an_internal_error() {
-        let error = ExecutorError::InvalidInput(InputValidationError::unresolved_file_reference(0, 1));
-        assert_eq!(error.http_status(), StatusCode::INTERNAL_SERVER_ERROR);
-        assert_eq!(error.error_type(), "server_error");
-        assert_eq!(error.error_code(), "server_error");
-        assert_eq!(error.error_message(), "Internal server error");
+    fn resolved_file_kind_errors_use_the_recorded_input_envelope() {
+        let error = ExecutorError::from(InputValidationError::resolved_file(
+            "Invalid input: Expected image type to be a supported format: .jpeg, .jpg, .png, .gif, .webp but got .txt."
+                .to_owned(),
+        ));
+        assert_eq!(error.http_status(), StatusCode::BAD_REQUEST);
         let envelope = error.response_error();
-        assert_eq!(envelope["code"], "server_error");
-        assert!(envelope.get("param").is_none());
+        assert_eq!(envelope["type"], "invalid_request_error");
+        assert_eq!(envelope["code"], serde_json::Value::Null);
+        assert_eq!(envelope["param"], "input");
+        assert_eq!(
+            envelope["message"],
+            "Invalid input: Expected image type to be a supported format: .jpeg, .jpg, .png, .gif, .webp but got .txt."
+        );
     }
 
     #[test]

@@ -105,8 +105,8 @@ async fn build_hydration(
     // check what will actually run.
     ensure_splittable(&ctx.enriched_request)?;
     let stream = ctx.original_request.stream;
-    let request =
-        RawValue::from_string(upstream_request(&ctx, stream, None, None)?).map_err(ExecutorError::JsonError)?;
+    let request = RawValue::from_string(upstream_request(state.exec_ctx.as_ref(), &ctx, stream, None, None).await?)
+        .map_err(ExecutorError::JsonError)?;
     let context = seal(ctx.into(), state.secrets.signing_key())?;
     if context.len() > MAX_CONTEXT_SIZE {
         return Err(ExecutorError::PayloadTooLarge(

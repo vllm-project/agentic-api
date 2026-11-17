@@ -634,8 +634,8 @@ async fn conversation_file_is_rejected_by_websocket_prewarm() {
     assert_history_ws_rejected(true, false).await;
 }
 
-#[test]
-fn composed_upstream_request_cannot_bypass_file_validation() {
+#[tokio::test]
+async fn composed_upstream_request_cannot_bypass_file_validation() {
     use agentic_core::executor::{RequestContext, upstream_request};
     let request: RequestPayload =
         serde_json::from_value(json!({"model":"test-model", "input":user_input(&file_part())})).unwrap();
@@ -655,10 +655,16 @@ fn composed_upstream_request_cannot_bypass_file_validation() {
         conversation_id: None,
         checkpoint: None,
         continuation: None,
-        files: HashMap::default(),
     };
+    let exec_ctx = ExecutionContext::new(
+        ConversationHandler::new(ConversationStore::disabled()),
+        ResponseHandler::new(ResponseStore::disabled()),
+        Arc::new(reqwest::Client::new()),
+        "http://localhost:8000".to_owned(),
+    );
     for stream in [false, true] {
-        let error = upstream_request(&ctx, stream, None, None)
+        let error = upstream_request(&exec_ctx, &ctx, stream, None, None)
+            .await
             .expect_err("direct typed upstream preparation must reject files");
         assert_eq!(error.http_status().as_u16(), 400);
         assert!(error.error_message().contains("input_file"));

@@ -9,8 +9,8 @@ use serde_json::Value;
 
 use super::{
     CustomToolCallOutputMessage, FunctionToolResultMessage, InputContent, InputFunctionToolCall, InputItem,
-    InputMessage, InputMessageContent, InputMessageType, InputTextContent, InputValidationError, ResolvedFiles,
-    ResponsesInput, ToolCallOutput, ToolOutputContent,
+    InputMessage, InputMessageContent, InputMessageType, InputTextContent, InputValidationError, ResolvedFileError,
+    ResolvedFiles, ResponsesInput, ToolCallOutput, ToolOutputContent, file_text::InputFileError,
 };
 use std::collections::HashMap;
 
@@ -221,13 +221,12 @@ impl ResponsesInput {
     /// is dropped.
     ///
     /// A `file_id` reference is resolved from `files` only here, for this model-facing copy; the client's history and
-    /// every stored shape keep the reference. A reference that `files` does not hold is an internal error: the file
-    /// handler resolves the final input before inference.
+    /// every stored shape keep the reference. `files` is built from this same input, so every reference has an entry.
     ///
     /// # Errors
-    /// Returns a file that cannot be converted to text, an unresolved `file_id`, or a reasoning item with only
-    /// encrypted state. Positions refer to the model-facing copy; [`Self::validate`] reports a file failure with the
-    /// request's positions and runs first on typed paths.
+    /// Returns a file that cannot be converted to text, a resolved file whose kind does not match its part, or a
+    /// reasoning item with only encrypted state. Positions refer to the model-facing copy; [`Self::validate`] reports
+    /// an inline file failure with the request's positions and runs first on typed paths.
     pub(crate) fn normalized_model_input(
         &self,
         tools: &[ResponsesTool],
@@ -280,27 +279,31 @@ impl ResponsesInput {
                                 InputContent::InputImage(image) => {
                                     image.detail.get_or_insert_with(|| "auto".to_owned());
                                     if let Some(file_id) = image.file_id.as_deref() {
-                                        let resolved = files.get(file_id).ok_or_else(|| {
-                                            InputValidationError::unresolved_file_reference(model.len(), part_index)
-                                        })?;
-                                        resolved.to_input_image(image).map_err(|reason| {
-                                            InputValidationError::unsupported_file(model.len(), part_index, reason)
+                                        let resolved = resolved_file(files, file_id);
+                                        resolved.to_input_image(image).map_err(|error| {
+                                            file_error(error, |reason| {
+                                                InputValidationError::unsupported_file(model.len(), part_index, reason)
+                                            })
                                         })?;
                                     }
                                 }
                                 InputContent::InputFile(file) => {
                                     let text = match file.file_id.as_deref() {
                                         Some(file_id) => {
-                                            let resolved = files.get(file_id).ok_or_else(|| {
-                                                InputValidationError::unresolved_file_reference(model.len(), part_index)
-                                            })?;
-                                            resolved.to_input_text(file)
+                                            resolved_file(files, file_id).to_input_text(file).map_err(|error| {
+                                                file_error(error, |reason| {
+                                                    InputValidationError::unsupported_file(
+                                                        model.len(),
+                                                        part_index,
+                                                        reason,
+                                                    )
+                                                })
+                                            })?
                                         }
-                                        None => InputTextContent::try_from(&*file),
-                                    }
-                                    .map_err(|reason| {
-                                        InputValidationError::unsupported_file(model.len(), part_index, reason)
-                                    })?;
+                                        None => InputTextContent::try_from(&*file).map_err(|reason| {
+                                            InputValidationError::unsupported_file(model.len(), part_index, reason)
+                                        })?,
+                                    };
                                     *part = InputContent::InputText(text);
                                 }
                                 InputContent::InputText(_)
@@ -317,6 +320,31 @@ impl ResponsesInput {
             }
         }
         Ok(Self::from(model))
+    }
+}
+
+/// The resolved content behind a `file_id`.
+///
+/// The caller built `files` from this same input, so every reference has an entry.
+fn resolved_file<'a>(files: &'a ResolvedFiles, file_id: &str) -> &'a super::ResolvedFile {
+    files
+        .get(file_id)
+        .expect("the file handler resolves every reference in the input it lowers")
+}
+
+/// A resolved file the model cannot receive as its part.
+///
+/// The wrong-kind message is the recorded envelope; a content failure stays at the part's position,
+/// which the caller supplies because messages and tool outputs report positions differently.
+fn file_error(
+    error: ResolvedFileError,
+    content: impl FnOnce(InputFileError) -> InputValidationError,
+) -> InputValidationError {
+    match error {
+        error @ (ResolvedFileError::NotImage(_) | ResolvedFileError::NotText { .. }) => {
+            InputValidationError::resolved_file(error.to_string())
+        }
+        ResolvedFileError::Content(reason) => content(reason),
     }
 }
 
@@ -342,11 +370,11 @@ fn lower_tool_output(
                     lowered.push(ToolOutputContent::InputFile(file));
                     continue;
                 };
-                let text = files
-                    .get(file_id)
-                    .ok_or_else(|| InputValidationError::unresolved_output_reference(item_index, part_index))?
-                    .to_input_text(&file)
-                    .map_err(|reason| InputValidationError::unsupported_output_file(item_index, part_index, reason))?;
+                let text = resolved_file(files, file_id).to_input_text(&file).map_err(|error| {
+                    file_error(error, |reason| {
+                        InputValidationError::unsupported_output_file(item_index, part_index, reason)
+                    })
+                })?;
                 ToolOutputContent::InputText(text)
             }
             ToolOutputContent::InputImage(mut image) => {
@@ -354,11 +382,13 @@ fn lower_tool_output(
                     lowered.push(ToolOutputContent::InputImage(image));
                     continue;
                 };
-                files
-                    .get(file_id)
-                    .ok_or_else(|| InputValidationError::unresolved_output_reference(item_index, part_index))?
+                resolved_file(files, file_id)
                     .to_input_image(&mut image)
-                    .map_err(|reason| InputValidationError::unsupported_output_file(item_index, part_index, reason))?;
+                    .map_err(|error| {
+                        file_error(error, |reason| {
+                            InputValidationError::unsupported_output_file(item_index, part_index, reason)
+                        })
+                    })?;
                 ToolOutputContent::InputImage(image)
             }
         };

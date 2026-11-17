@@ -32,6 +32,21 @@ const DIR: &str = concat!(
 const TEXT: &str = "files-api-text-gateway-Qwen-Qwen2.5-3B-Instruct.yaml";
 const IMAGE: &str = "files-api-image-gateway-Qwen-Qwen2.5-VL-3B-Instruct.yaml";
 const ERRORS: &str = "files-api-errors-gateway-Qwen-Qwen2.5-3B-Instruct.yaml";
+const API: &str = "files-api-endpoints-gateway-Qwen-Qwen2.5-3B-Instruct.yaml";
+const INPUT: &str = "files-api-input-gateway-Qwen-Qwen2.5-3B-Instruct.yaml";
+const SEARCH: &str = "files-api-search-gateway-Qwen-Qwen2.5-3B-Instruct.yaml";
+const COMPACT: &str = "files-api-compact-gateway-Qwen-Qwen2.5-3B-Instruct.yaml";
+const OPENAI: [&str; 7] = [
+    "files-api-text-openai-gpt-4o.yaml",
+    "files-api-errors-openai-gpt-4o.yaml",
+    "files-api-endpoints-openai-gpt-4o.yaml",
+    "files-api-input-openai-gpt-4o.yaml",
+    "files-api-search-openai-gpt-4o.yaml",
+    "files-api-compact-openai-gpt-4o.yaml",
+    "files-api-image-openai-gpt-4o.yaml",
+];
+const GATEWAY: [&str; 7] = [TEXT, ERRORS, API, INPUT, SEARCH, COMPACT, IMAGE];
+const NOTES: &[u8] = include_bytes!("../../agentic-server-core/tests/cassettes/text_files/inputs/notes.txt");
 
 fn load(name: &str) -> Value {
     let path = format!("{DIR}/{name}");
@@ -274,7 +289,7 @@ async fn start_gateway_with_file_search(upstream_url: &str, file_search: bool) -
     config.tools.file_search.files_storage_dir = Some(files.path().to_owned());
     let mut exec_ctx = ExecutionContext::from_config(&config).await.expect("execution context");
     if !file_search {
-        exec_ctx = exec_ctx.without_file_search_service();
+        exec_ctx.file_search = None;
     }
     let exec_ctx = Arc::new(exec_ctx);
     let mut state = common::test_state(&config);
@@ -341,6 +356,17 @@ async fn replay_turn(
         "DELETE" => client.delete(url),
         other => panic!("unsupported method {other}"),
     };
+    if let Some(params) = turn["request"]["query_params"].as_object() {
+        let params = params
+            .iter()
+            .map(|(key, value)| {
+                let value = value.as_str().unwrap_or_default();
+                let value = file_ids.get(value).cloned().unwrap_or_else(|| value.to_owned());
+                (key.clone(), value)
+            })
+            .collect::<Vec<_>>();
+        request = request.query(&params);
+    }
     if let Some(body) = request_bytes(turn) {
         let content_type = turn["request"]["headers"]["content-type"]
             .as_str()
@@ -382,6 +408,7 @@ async fn replay_turn(
     let actual: Value = response.json().await.expect("JSON response");
     match (method, raw_path) {
         ("POST", "/v1/files") => assert_upload(&actual, expected, file_ids),
+        ("GET", "/v1/files") => assert_file_list(&actual, expected, file_ids),
         ("GET", path) if path.starts_with("/v1/files/") => assert_file_metadata(&actual, expected, file_ids),
         ("DELETE", path) if path.starts_with("/v1/files/") => assert_delete(&actual, expected, file_ids),
         ("POST", "/v1/responses") => assert_response(&actual, expected, response_ids),
@@ -413,8 +440,34 @@ fn assert_delete(actual: &Value, expected: &Value, file_ids: &HashMap<String, St
     let recorded_id = expected["body"]["id"].as_str().expect("recorded file ID");
     let actual_id = file_ids.get(recorded_id).expect("uploaded file ID");
     assert_eq!(actual["deleted"], true);
-    assert_eq!(actual["object"], "file.deleted");
+    assert_eq!(actual["object"], expected["body"]["object"]);
     assert_eq!(actual["id"].as_str(), Some(actual_id.as_str()));
+}
+
+fn assert_file_list(actual: &Value, expected: &Value, file_ids: &HashMap<String, String>) {
+    let expected = &expected["body"];
+    let actual_data = actual["data"].as_array().expect("listed files");
+    let expected_data = expected["data"].as_array().expect("recorded files");
+    assert_eq!(actual_data.len(), expected_data.len(), "{actual}");
+    for (actual, expected) in actual_data.iter().zip(expected_data) {
+        let recorded_id = expected["id"].as_str().expect("recorded file ID");
+        let actual_id = file_ids.get(recorded_id).expect("uploaded file ID");
+        assert_eq!(actual["id"].as_str(), Some(actual_id.as_str()));
+        for field in ["bytes", "filename", "object", "purpose", "status"] {
+            assert_eq!(actual[field], expected[field], "listed {field}");
+        }
+    }
+    let remap = |id: &Value| id.as_str().and_then(|id| file_ids.get(id)).cloned();
+    assert_eq!(
+        actual["first_id"].as_str().map(str::to_owned),
+        remap(&expected["first_id"])
+    );
+    assert_eq!(
+        actual["last_id"].as_str().map(str::to_owned),
+        remap(&expected["last_id"])
+    );
+    assert_eq!(actual["has_more"], expected["has_more"]);
+    assert_eq!(actual["object"], expected["object"]);
 }
 
 fn assert_response(actual: &Value, expected: &Value, response_ids: &mut HashMap<String, String>) {
@@ -444,10 +497,9 @@ async fn files_api_text_reference_replays_through_the_gateway() {
         file_ids,
         response_ids,
     } = replay(&cassette, 2).await;
-    let notes = recorded_content(&cassette);
     let expected = format!(
         "File: notes.txt\n{}",
-        std::str::from_utf8(&notes).expect("notes are UTF-8")
+        std::str::from_utf8(NOTES).expect("notes are UTF-8")
     );
     let requests = upstream.requests.lock().await;
     assert_eq!(requests.len(), 2);
@@ -543,6 +595,124 @@ async fn files_api_image_reference_replays_through_the_gateway() {
         listed_reference.get("image_url").is_none(),
         "client-facing history must not inline the image: {listed_reference}"
     );
+}
+
+#[tokio::test]
+async fn files_api_endpoint_rows_replay_through_the_gateway() {
+    let cassette = load(API);
+    let Replay { upstream, file_ids, .. } = replay(&cassette, 0).await;
+    assert_eq!(file_ids.len(), 6, "every successful upload is remapped");
+    assert!(
+        upstream.requests.lock().await.is_empty(),
+        "the Files API rows never reach inference"
+    );
+}
+
+/// The recorded gateway rows must reproduce the `OpenAI` reference rows for the Files API:
+/// the same lifecycle rows, statuses, upload rules, download policy, unknown-id envelope, and
+/// delete object.
+#[test]
+fn recorded_gateway_files_rows_match_the_openai_reference() {
+    for (gateway_name, openai_name) in GATEWAY.iter().zip(OPENAI) {
+        let gateway = load(gateway_name);
+        let openai = load(openai_name);
+        let gateway_rows = file_rows(&gateway);
+        let openai_rows = file_rows(&openai);
+        assert_eq!(gateway_rows.len(), openai_rows.len(), "{gateway_name}");
+        for (gateway, openai) in gateway_rows.iter().zip(&openai_rows) {
+            let row = format!("{gateway_name} {} {}", method(gateway), path(gateway));
+            assert_eq!(method(gateway), method(openai), "{row}");
+            assert_eq!(normalized_path(gateway), normalized_path(openai), "{row}");
+            let list_excludes_purpose =
+                path(gateway) == "/v1/files" && gateway["request"]["query_params"].get("purpose").is_some();
+            if list_excludes_purpose {
+                // The gateway does not implement purpose-filtered listing.
+                continue;
+            }
+            assert_eq!(expected_status(gateway), expected_status(openai), "{row}");
+            if path(gateway) == "/v1/files" && expected_status(gateway) != StatusCode::OK {
+                // List-parameter validation messages are gateway-specific.
+                continue;
+            }
+            if expected_status(gateway) == StatusCode::OK {
+                match method(gateway) {
+                    "POST" => {
+                        for field in ["bytes", "filename", "object", "purpose", "status"] {
+                            assert_eq!(
+                                gateway["response"]["body"][field], openai["response"]["body"][field],
+                                "{row} {field}"
+                            );
+                        }
+                    }
+                    "GET" if path(gateway) == "/v1/files" => {
+                        for (gateway, openai) in gateway["response"]["body"]["data"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .zip(openai["response"]["body"]["data"].as_array().unwrap())
+                        {
+                            for field in ["bytes", "filename", "object", "purpose", "status"] {
+                                assert_eq!(gateway[field], openai[field], "{row} listed {field}");
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            } else {
+                assert_eq!(normalized_error(gateway), normalized_error(openai), "{row}");
+            }
+        }
+    }
+}
+
+fn file_rows(cassette: &Value) -> Vec<&Value> {
+    turns(cassette)
+        .iter()
+        .filter(|turn| path(turn).starts_with("/v1/files"))
+        .collect()
+}
+
+fn normalized_path(turn: &Value) -> String {
+    path(turn)
+        .split('/')
+        .map(|segment| {
+            if segment.starts_with("file-") {
+                "file-<id>"
+            } else {
+                segment
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+/// A file ID this row names in its path or query.
+fn row_file_ids(turn: &Value) -> Vec<String> {
+    let mut ids = path(turn)
+        .split('/')
+        .filter(|segment| segment.starts_with("file-"))
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    if let Some(params) = turn["request"]["query_params"].as_object() {
+        ids.extend(
+            params
+                .values()
+                .filter_map(Value::as_str)
+                .filter(|value| value.starts_with("file-"))
+                .map(str::to_owned),
+        );
+    }
+    ids
+}
+
+fn normalized_error(turn: &Value) -> Value {
+    let mut error = turn["response"]["body"]["error"].clone();
+    let mut message = error["message"].as_str().unwrap_or_default().to_owned();
+    for id in row_file_ids(turn) {
+        message = message.replace(&id, "file-<id>");
+    }
+    error["message"] = Value::String(message);
+    error
 }
 
 #[tokio::test]

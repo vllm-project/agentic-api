@@ -108,7 +108,6 @@ fn upstream_request_value(payload: RequestPayload, stream: bool) -> Value {
         conversation_id: None,
         checkpoint: None,
         continuation: None,
-        files: HashMap::default(),
     };
     let upstream_request = ctx
         .enriched_request

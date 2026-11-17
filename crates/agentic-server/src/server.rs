@@ -62,11 +62,8 @@ async fn build_state(
     max_request_body_size: NonZeroUsize,
 ) -> Result<AppState, ServerError> {
     let proxy_state = ProxyState::new(config.clone())?;
-    let exec_ctx = Arc::new(
-        ExecutionContext::from_config(config)
-            .await?
-            .with_max_request_body_size(max_request_body_size),
-    );
+    // The executor reads `config.max_request_body_size`; the transport keeps its own copy.
+    let exec_ctx = Arc::new(ExecutionContext::from_config(config).await?);
 
     Ok(AppState {
         proxy_state,

@@ -46,7 +46,6 @@ fn context() -> RequestContext {
         conversation_id: None,
         checkpoint: None,
         continuation: None,
-        files: HashMap::default(),
     }
 }
 

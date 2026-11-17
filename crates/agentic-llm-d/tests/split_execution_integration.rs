@@ -141,7 +141,8 @@ async fn hydrate(request: RequestPayload, ctx: &ExecutionContext) -> ExecutorRes
     let live = rehydrate_conversation(request, ctx).await?;
     ensure_splittable(&live.enriched_request)?;
     let stream = live.original_request.stream;
-    let body = RawValue::from_string(upstream_request(&live, stream, None, None)?).map_err(ExecutorError::JsonError)?;
+    let body = RawValue::from_string(upstream_request(ctx, &live, stream, None, None).await?)
+        .map_err(ExecutorError::JsonError)?;
     Ok(Hydration {
         request: body,
         context: seal(live.into(), &signing_key())?,
@@ -699,7 +700,7 @@ async fn capability_parameters_survive_hydrate_seal_rebuild_and_persist() {
             let split = unseal(&hydrated.context, &signing_key()).unwrap();
             let original = serde_json::to_value(&split.original_request).unwrap();
             let rebuilt = RequestContext::from(split);
-            let rebuilt_body = upstream_request(&rebuilt, stream, None, None).unwrap();
+            let rebuilt_body = upstream_request(&ctx, &rebuilt, stream, None, None).await.unwrap();
             let rebuilt_request: Value = serde_json::from_str(&rebuilt_body).unwrap();
             for request in [&sent, &original, &rebuilt_request] {
                 for field in ["top_logprobs", "reasoning", "service_tier", "prompt_cache_options"] {
