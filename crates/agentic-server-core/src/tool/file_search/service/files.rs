@@ -1,9 +1,9 @@
 //! File upload, retrieval, and deletion operations.
 
 use super::{
-    Arc, CancellationToken, Collection, DeleteObject, FileObject, FilePublicationFailure, FileRowParam,
-    FileSearchError, FileSearchService, ListParams, ListResponse, MAX_FILE_BYTES, OwnedSemaphorePermit, decode_content,
-    deleted, page, size_i64, validate_file_id, validate_list,
+    Arc, CancellationToken, Collection, DeleteObject, FileObject, FilePublicationFailure, FileSearchError,
+    FileSearchService, ListParams, ListResponse, MAX_FILE_BYTES, OwnedSemaphorePermit, decode_content, deleted, page,
+    size_i64, validate_file_id, validate_list,
 };
 use crate::storage::file_search::StoredFileContent;
 use crate::types::file_search::FILE_PURPOSES;
@@ -14,16 +14,16 @@ use tokio::time::Instant;
 const UPLOAD_LEASE_SECONDS: i64 = 60;
 const UPLOAD_RENEW_INTERVAL: Duration = Duration::from_secs(20);
 
-/// A Files API request the recorded rows reject: `invalid_request_error`, `code: null`.
-fn row_rejected(message: impl Into<String>, param: Option<FileRowParam>) -> FileSearchError {
-    FileSearchError::FileRowRejected {
+/// A Files API request the recorded responses reject: `invalid_request_error`, `code: null`.
+fn rejected(message: impl Into<String>, param: Option<&'static str>) -> FileSearchError {
+    FileSearchError::FileRejected {
         message: message.into(),
         param,
     }
 }
 
-/// The recorded row reports any unusable ID as a missing file, whatever the lookup failed with.
-fn file_lookup_error(error: FileSearchError, id: &str, param: FileRowParam) -> FileSearchError {
+/// The recorded response reports any unusable ID as a missing file, whatever the lookup failed with.
+fn file_lookup_error(error: FileSearchError, id: &str, param: &'static str) -> FileSearchError {
     match error {
         FileSearchError::NotFound(_) | FileSearchError::InvalidRequest(_) | FileSearchError::FileNotFound { .. } => {
             FileSearchError::FileNotFound {
@@ -35,19 +35,19 @@ fn file_lookup_error(error: FileSearchError, id: &str, param: FileRowParam) -> F
     }
 }
 
-/// Applies the Files API upload rules in the order the recorded rows check them.
+/// Applies the Files API upload rules in the order the recorded responses check them.
 fn validate_upload(filename: &str, content_type: &str, purpose: &str, bytes: &[u8]) -> Result<(), FileSearchError> {
     if filename.is_empty() || filename.len() > 255 || filename.chars().any(char::is_control) {
-        return Err(row_rejected(
+        return Err(rejected(
             "filename must contain 1 to 255 bytes without control characters",
             None,
         ));
     }
     if !FILE_PURPOSES.contains(&purpose) {
         let accepted = FILE_PURPOSES.map(|purpose| format!("'{purpose}'")).join(", ");
-        return Err(row_rejected(
+        return Err(rejected(
             format!("'{purpose}' is not one of [{accepted}] - 'purpose'"),
-            Some(FileRowParam::Purpose),
+            Some("purpose"),
         ));
     }
     let media_type = content_type
@@ -58,19 +58,19 @@ fn validate_upload(filename: &str, content_type: &str, purpose: &str, bytes: &[u
         let supported = IMAGE_MEDIA_TYPES
             .map(|accepted| format!("\"{}\"", accepted.strip_prefix("image/").unwrap_or(accepted)))
             .join(", ");
-        return Err(row_rejected(
+        return Err(rejected(
             format!("Invalid file format {media_type}. Supported formats: {supported}"),
             None,
         ));
     }
     if bytes.is_empty() {
-        return Err(row_rejected("File is empty.", None));
+        return Err(rejected("File is empty.", None));
     }
     if bytes.len() > MAX_FILE_BYTES {
-        return Err(row_rejected("file must contain 1 byte to 20 MiB", None));
+        return Err(rejected("file must contain 1 byte to 20 MiB", None));
     }
     if content_type.is_empty() || content_type.len() > 256 || content_type.chars().any(char::is_control) {
-        return Err(row_rejected(
+        return Err(rejected(
             "content_type must contain 1 to 256 bytes without control characters",
             None,
         ));
@@ -174,10 +174,7 @@ impl FileSearchService {
     /// Returns pagination validation, missing cursor, or storage errors.
     pub async fn list_files(&self, params: &ListParams) -> Result<ListResponse<FileObject>, FileSearchError> {
         validate_list(params)?;
-        for (cursor, param) in [
-            (params.after.as_deref(), FileRowParam::After),
-            (params.before.as_deref(), FileRowParam::Before),
-        ] {
+        for (cursor, param) in [(params.after.as_deref(), "after"), (params.before.as_deref(), "before")] {
             if let Some(cursor) = cursor {
                 self.get_file(cursor)
                     .await
@@ -194,23 +191,23 @@ impl FileSearchService {
     /// # Errors
     /// Returns not-found or storage errors.
     pub async fn get_file(&self, id: &str) -> Result<FileObject, FileSearchError> {
-        validate_file_id(id).map_err(|error| file_lookup_error(error, id, FileRowParam::Id))?;
+        validate_file_id(id).map_err(|error| file_lookup_error(error, id, "id"))?;
         self.storage
             .file_object(id)
             .await
-            .map_err(|error| file_lookup_error(error, id, FileRowParam::Id))
+            .map_err(|error| file_lookup_error(error, id, "id"))
     }
 
     /// # Errors
     /// Returns not-found, resource-limit, or storage errors.
     pub async fn file_content(&self, id: &str) -> Result<Vec<u8>, FileSearchError> {
         let permit = self.permit()?;
-        validate_file_id(id).map_err(|error| file_lookup_error(error, id, FileRowParam::Id))?;
+        validate_file_id(id).map_err(|error| file_lookup_error(error, id, "id"))?;
         let file = self
             .storage
             .file(id)
             .await
-            .map_err(|error| file_lookup_error(error, id, FileRowParam::Id))?;
+            .map_err(|error| file_lookup_error(error, id, "id"))?;
         self.read_content(id, file.object.bytes, file.content, permit).await
     }
 
@@ -219,7 +216,7 @@ impl FileSearchService {
     /// # Errors
     /// Returns not-found or storage errors.
     pub async fn delete_file(&self, id: &str) -> Result<DeleteObject, FileSearchError> {
-        validate_file_id(id).map_err(|error| file_lookup_error(error, id, FileRowParam::Id))?;
+        validate_file_id(id).map_err(|error| file_lookup_error(error, id, "id"))?;
         let permit = self.permit()?;
         let storage = self.storage.clone();
         let files = self.files.clone();
@@ -244,11 +241,11 @@ impl FileSearchService {
                         Some(storage.pending_blob_cleanup(&id).await?.ok_or_else(|| {
                             FileSearchError::FileNotFound {
                                 id: id.clone(),
-                                param: FileRowParam::Id,
+                                param: "id",
                             }
                         })?),
                     ),
-                    Err(error) => return Err(file_lookup_error(error, &id, FileRowParam::Id)),
+                    Err(error) => return Err(file_lookup_error(error, &id, "id")),
                 };
             if needs_blob_cleanup {
                 // Reconciliation may have removed the marker and bytes after metadata deletion.

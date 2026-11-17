@@ -704,11 +704,12 @@ goes through it, so it lowers the public records the model never read (search it
   Message-file conversion belongs to `input/file_text.rs`: supported inline UTF-8
   text files become model-facing text with their `prompt_cache_breakpoint` retained.
   Canonical history keeps the original file; unrelated file extensions are not copied
-  onto the text part. `input/resolved_file.rs` holds the per-request lookup behind a
-  `file_id` reference: this lowering alone replaces an `input_file` with text or an
-  `input_image` with a data URL, choosing the type from the stored filename's extension,
-  while the client-facing part keeps its reference. The lookup starts from
-  `executor/modes/files.rs` and is never stored.
+  onto the text part. `input/content.rs` holds the per-request lookup behind a
+  `file_id` reference: `InputFileContent::to_text`, `InputImageContent::inline_file`
+  and `ToolCallOutput::inline_files` replace an `input_file` with text or an
+  `input_image` with a data URL, choosing the type from the stored filename's
+  extension, while the client-facing part keeps its reference. The lookup starts
+  from `executor/modes/files.rs` and is never stored.
 
 - **`types/io/item.rs`** — `InOutItem` is the shared input/output union used by
   `ResponsesInput::Items`, conversation requests/resources, and retained history.

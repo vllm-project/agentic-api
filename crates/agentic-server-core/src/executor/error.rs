@@ -3,7 +3,7 @@ use thiserror::Error;
 
 use crate::StorageError;
 use crate::tool::ToolError;
-use crate::types::file_search::{FileRowParam, FileSearchError};
+use crate::types::file_search::FileSearchError;
 use crate::types::io::ClientItemError;
 use crate::types::io::input::InputValidationError;
 use crate::types::io::output::McpListTools;
@@ -268,9 +268,7 @@ impl ExecutorError {
     pub fn error_type(&self) -> &'static str {
         match self.client_visible_error() {
             Self::FileSearch(error) | Self::Tool(ToolError::FileSearch(error)) => match error {
-                FileSearchError::FileNotFound { .. } | FileSearchError::FileRowRejected { .. } => {
-                    "invalid_request_error"
-                }
+                FileSearchError::FileNotFound { .. } | FileSearchError::FileRejected { .. } => "invalid_request_error",
                 _ => match error.status_code() {
                     400 => "invalid_request_error",
                     404 => "not_found",
@@ -346,9 +344,11 @@ impl ExecutorError {
     pub fn error_param(&self) -> Option<&str> {
         match self.client_visible_error() {
             Self::ClientItem(error) => Some(error.param()),
-            Self::FileSearch(error) | Self::Tool(ToolError::FileSearch(error)) => {
-                error.row_param().map(FileRowParam::as_str)
-            }
+            Self::FileSearch(error) | Self::Tool(ToolError::FileSearch(error)) => match error {
+                FileSearchError::FileNotFound { param, .. } => Some(*param),
+                FileSearchError::FileRejected { param, .. } => *param,
+                _ => None,
+            },
             Self::Tool(ToolError::UnknownParameter { param }) => Some(param),
             Self::UnsupportedValue { param, .. } => param.as_deref(),
             Self::Storage(StorageError::ItemAlreadyInConversation) => Some("items"),
@@ -396,7 +396,7 @@ impl ExecutorError {
                 ToolError::MissingOutput { .. }
                     | ToolError::UnknownCallOutput { .. }
                     | ToolError::FileSearch(
-                        FileSearchError::FileNotFound { .. } | FileSearchError::FileRowRejected { .. }
+                        FileSearchError::FileNotFound { .. } | FileSearchError::FileRejected { .. }
                     )
             ) | Self::Storage(
                 StorageError::ItemCursorNotFound { .. }
@@ -404,7 +404,7 @@ impl ExecutorError {
                     | StorageError::ConversationNotFound { .. }
             ) | Self::UnsupportedValue { code: None, .. }
                 | Self::FileReferencesNotFound { .. }
-                | Self::FileSearch(FileSearchError::FileNotFound { .. } | FileSearchError::FileRowRejected { .. })
+                | Self::FileSearch(FileSearchError::FileNotFound { .. } | FileSearchError::FileRejected { .. })
         ) {
             serde_json::Value::Null
         } else {
@@ -421,11 +421,8 @@ impl ExecutorError {
             Self::Storage(StorageError::ResponseNotFound { .. } | StorageError::ConversationNotFound { .. })
                 | Self::UnsupportedValue { param: None, .. }
                 | Self::FileReferencesNotFound { .. }
-                | Self::FileSearch(FileSearchError::FileRowRejected { param: None, .. })
-                | Self::Tool(ToolError::FileSearch(FileSearchError::FileRowRejected {
-                    param: None,
-                    ..
-                }))
+                | Self::FileSearch(FileSearchError::FileRejected { param: None, .. })
+                | Self::Tool(ToolError::FileSearch(FileSearchError::FileRejected { param: None, .. }))
         ) {
             error.insert("param".to_owned(), serde_json::Value::Null);
         }
@@ -478,10 +475,10 @@ mod tests {
     }
 
     #[test]
-    fn files_row_errors_use_the_recorded_envelope() {
+    fn files_errors_use_the_recorded_envelope() {
         let missing = ExecutorError::from(FileSearchError::FileNotFound {
             id: "file-1".to_owned(),
-            param: FileRowParam::After,
+            param: "after",
         });
         assert_eq!(missing.http_status(), StatusCode::NOT_FOUND);
         assert_eq!(
@@ -494,7 +491,7 @@ mod tests {
             })
         );
 
-        let rejected = ExecutorError::from(FileSearchError::FileRowRejected {
+        let rejected = ExecutorError::from(FileSearchError::FileRejected {
             message: "File is empty.".to_owned(),
             param: None,
         });

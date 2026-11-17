@@ -59,9 +59,9 @@ fn payload_too_large() -> Response {
     executor_error_response(ExecutorError::PayloadTooLarge("Request body exceeds the limit".into()))
 }
 
-/// A Files API upload rejection, in the recorded row envelope: `invalid_request_error`, `code: null`.
+/// A Files API upload rejection, in the recorded envelope: `invalid_request_error`, `code: null`.
 fn rejected(message: impl Into<String>) -> Response {
-    error(FileSearchError::FileRowRejected {
+    error(FileSearchError::FileRejected {
         message: message.into(),
         param: None,
     })
@@ -113,7 +113,7 @@ pub(crate) async fn upload_file(
     let mut multipart = match multipart {
         Ok(multipart) => multipart,
         Err(rejection) if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE => return payload_too_large(),
-        // The recorded missing-file row posts a form without a file part at all; report the
+        // The recorded missing-file request posts a form without a file part at all; report the
         // required upload field instead of the transport-level rejection.
         Err(_) => return required("file"),
     };
