@@ -98,6 +98,7 @@ mod tests {
     use crate::config::{PostgresConfig, SqliteConfig};
     use crate::storage::pool::{DbPool, create_pool};
     use crate::storage::schema::PoolWithSchema;
+    use crate::utils::common::lowercase_hex;
 
     /// A database an earlier release created: migrated to just before the minimum, holding a conversation whose
     /// items reference each other and whose latest turn is a response with a child, so dropping it crosses every
@@ -274,7 +275,7 @@ mod tests {
                 .iter()
                 .find(|migration| migration.version == version)
                 .unwrap_or_else(|| panic!("merged migration {version} is missing"));
-            let checksum = crate::utils::common::lowercase_hex(&migration.checksum);
+            let checksum = lowercase_hex(&migration.checksum);
             assert_eq!(checksum, expected, "merged migration {version} was edited");
         }
     }

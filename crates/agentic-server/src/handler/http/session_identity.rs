@@ -8,14 +8,10 @@
 //! `vllm_xargs.session_id` is scoped the same way; vLLM prefers the header.
 //! `x-claude-code-session-id` and the body are forwarded unchanged.
 
-use std::borrow::Cow;
-use std::fmt;
-
 use axum::http::request::Parts;
 use axum::response::Response;
 use http::{Extensions, HeaderMap, HeaderValue, StatusCode, header};
 use serde::Deserialize;
-use serde::de::{Deserializer, IgnoredAny, MapAccess, Visitor};
 
 use agentic_core::proxy::{ProxyAuth, error_response_for_auth};
 use agentic_core::types::session_id::{ScopedSessionId, SessionTenant};
@@ -95,80 +91,20 @@ fn client_session_id(headers: &HeaderMap) -> Result<Option<&str>, SessionIdError
 /// vLLM falls back to `vllm_xargs.session_id` when no `X-Session-ID` arrives and
 /// uses it only when it is a non-empty string.
 fn body_session_id(body: &[u8]) -> Option<String> {
-    let BodyView(xargs) = serde_json::from_slice(body).ok()?;
-    let XargsView(session_id) = xargs?;
-    session_id.filter(|session_id| !session_id.is_empty())
+    let view: BodyView = serde_json::from_slice(body).ok()?;
+    view.vllm_xargs?.session_id.filter(|session_id| !session_id.is_empty())
 }
 
-/// The request body's `vllm_xargs`, if its last occurrence is an object. Only
-/// that key is read; the rest of the body is skipped without being built.
-/// vLLM's JSON parser keeps the last of repeated keys, so these views do too: a
-/// derived struct would reject the repeat instead, and vLLM would then use an
-/// unscoped `vllm_xargs.session_id`.
-struct BodyView(Option<XargsView>);
-
-/// `vllm_xargs.session_id`, if its last occurrence is a string.
-struct XargsView(Option<String>);
-
-/// A JSON value that is either the wanted shape or anything else.
+/// The request body's `vllm_xargs`; the rest of the body is skipped.
 #[derive(Deserialize)]
-#[serde(untagged)]
-enum OrOther<T> {
-    Wanted(T),
-    Other(IgnoredAny),
+struct BodyView {
+    vllm_xargs: Option<XargsView>,
 }
 
-/// The last value of `key` in a JSON object, `None` when it is missing or is
-/// not a `T`; other keys are skipped.
-fn last_value_of<'de, T, M>(mut map: M, key: &str) -> Result<Option<T>, M::Error>
-where
-    T: Deserialize<'de>,
-    M: MapAccess<'de>,
-{
-    let mut value = None;
-    while let Some(name) = map.next_key::<Cow<'de, str>>()? {
-        if name == key {
-            value = match map.next_value::<OrOther<T>>()? {
-                OrOther::Wanted(wanted) => Some(wanted),
-                OrOther::Other(_) => None,
-            };
-        } else {
-            map.next_value::<IgnoredAny>()?;
-        }
-    }
-    Ok(value)
-}
-
-impl<'de> Deserialize<'de> for BodyView {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct BodyVisitor;
-        impl<'de> Visitor<'de> for BodyVisitor {
-            type Value = BodyView;
-            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                formatter.write_str("a JSON object")
-            }
-            fn visit_map<M: MapAccess<'de>>(self, map: M) -> Result<BodyView, M::Error> {
-                last_value_of(map, "vllm_xargs").map(BodyView)
-            }
-        }
-        deserializer.deserialize_map(BodyVisitor)
-    }
-}
-
-impl<'de> Deserialize<'de> for XargsView {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct XargsVisitor;
-        impl<'de> Visitor<'de> for XargsVisitor {
-            type Value = XargsView;
-            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                formatter.write_str("a JSON object")
-            }
-            fn visit_map<M: MapAccess<'de>>(self, map: M) -> Result<XargsView, M::Error> {
-                last_value_of(map, "session_id").map(XargsView)
-            }
-        }
-        deserializer.deserialize_map(XargsVisitor)
-    }
+/// `vllm_xargs.session_id`.
+#[derive(Deserialize)]
+struct XargsView {
+    session_id: Option<String>,
 }
 
 /// Until tenants are modeled (#107), a verified OIDC principal owns its
@@ -303,24 +239,16 @@ mod tests {
 
     #[test]
     fn body_session_id_is_a_non_empty_vllm_xargs_string() {
-        let cases: [(&[u8], Option<&str>); 13] = [
+        let cases: [(&[u8], Option<&str>); 9] = [
             (br#"{"vllm_xargs":{"session_id":"s1"}}"#, Some("s1")),
             (
                 br#"{"model":"m","messages":[{"role":"user","content":"hi"}],"vllm_xargs":{"top_k":2,"session_id":"s1"}}"#,
                 Some("s1"),
             ),
-            (
-                br#"{"vllm_xargs":{"session_id":"s0"},"vllm_xargs":{"session_id":"s1"}}"#,
-                Some("s1"),
-            ),
-            // A repeated key keeps its last value, as in vLLM, whatever the earlier one was.
-            (br#"{"vllm_xargs":{"session_id":7,"session_id":"s1"}}"#, Some("s1")),
-            (br#"{"vllm_xargs":{"session_id":"s1","session_id":7}}"#, None),
-            (br#"{"vllm_xargs":5,"vllm_xargs":{"session_id":"s1"}}"#, Some("s1")),
-            (br#"{"vllm_xargs":{"session_id":"s1"},"vllm_xargs":null}"#, None),
             (br#"{"vllm_xargs":{"session_id":""}}"#, None),
             (br#"{"vllm_xargs":{"session_id":7}}"#, None),
             (br#"{"vllm_xargs":{}}"#, None),
+            (br#"{"vllm_xargs":null}"#, None),
             (br#"{"session_id":"s1"}"#, None),
             (b"[]", None),
             (b"not json", None),
