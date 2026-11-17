@@ -1,6 +1,6 @@
 //! Content resolved from the Files API for one model-facing request.
 //!
-//! Rehydration reads the referenced files and builds a [`ResolvedFiles`] map; only
+//! `FileHandler::resolve` reads the referenced files and builds a [`ResolvedFiles`] map; only
 //! [`super::ResponsesInput::normalized_model_input`] uses it, to replace a client's `file_id`
 //! with inline content in the model copy. Stored history and `enriched_request.input` keep the
 //! client's reference.
