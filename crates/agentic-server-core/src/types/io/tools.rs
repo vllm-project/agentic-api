@@ -278,10 +278,9 @@ impl<'de> Deserialize<'de> for ToolChoice {
                 "auto" => Ok(Self::Auto),
                 "none" => Ok(Self::None),
                 "required" => Ok(Self::Required),
-                other => Err(de::Error::unknown_variant(
-                    other,
-                    &["auto", "none", "required", "function", "custom"],
-                )),
+                // Only `auto`/`none`/`required` are valid string selectors; `function`
+                // and `custom` are object selectors and must not be advertised here.
+                other => Err(de::Error::unknown_variant(other, &["auto", "none", "required"])),
             },
             Value::Object(object) => {
                 if object.get("type").and_then(Value::as_str) == Some("shell") {
@@ -526,6 +525,27 @@ mod tests {
                 .is_err()
         );
         assert!(ToolChoice::Required.is_supported());
+    }
+
+    #[test]
+    fn unknown_string_tool_choice_lists_only_string_variants() {
+        for invalid in ["function", "custom", "nonsense"] {
+            let error = serde_json::from_value::<ToolChoice>(serde_json::json!(invalid))
+                .expect_err("string selector is not a valid tool_choice");
+            assert_eq!(
+                error.to_string(),
+                format!("unknown variant `{invalid}`, expected one of `auto`, `none`, `required`")
+            );
+        }
+
+        // The same names remain valid as object selectors; the corrected string-form
+        // error must not be read as rejecting them outright.
+        for object in [
+            serde_json::json!({"type": "function", "name": "get_weather"}),
+            serde_json::json!({"type": "custom", "name": "apply_patch"}),
+        ] {
+            serde_json::from_value::<ToolChoice>(object).expect("object selector is valid");
+        }
     }
 
     #[test]
