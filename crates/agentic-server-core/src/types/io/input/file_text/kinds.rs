@@ -194,15 +194,24 @@ pub(crate) fn is_text_filename(filename: &str) -> bool {
     contains(TEXT_FILENAMES, basename) || extension.is_some_and(|extension| contains(TEXT_EXTENSIONS, extension))
 }
 
+/// Image media types an upload accepts, as the recorded `OpenAI` row lists them.
+pub(crate) const IMAGE_MEDIA_TYPES: [&str; 5] = ["image/gif", "image/jpeg", "image/jpg", "image/png", "image/webp"];
+
+/// Whether an upload's media type is an accepted image format.
+pub(crate) fn is_image_media_type(media_type: &str) -> bool {
+    IMAGE_MEDIA_TYPES
+        .iter()
+        .any(|accepted| media_type.eq_ignore_ascii_case(accepted))
+}
+
 /// The media type for an accepted image filename.
 pub(crate) fn image_media_type(filename: &str) -> Option<&'static str> {
-    match split_filename(filename).1?.to_ascii_lowercase().as_str() {
-        "jpeg" | "jpg" => Some("image/jpeg"),
-        "png" => Some("image/png"),
-        "gif" => Some("image/gif"),
-        "webp" => Some("image/webp"),
-        _ => None,
-    }
+    let extension = split_filename(filename).1?.to_ascii_lowercase();
+    let subtype = if extension == "jpg" { "jpeg" } else { extension.as_str() };
+    IMAGE_MEDIA_TYPES
+        .iter()
+        .find(|media_type| media_type.strip_prefix("image/") == Some(subtype))
+        .copied()
 }
 
 /// The filename extension shown in a wrong-file-type error, including a leading dot.

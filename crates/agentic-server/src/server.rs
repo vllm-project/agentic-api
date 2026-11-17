@@ -95,7 +95,7 @@ async fn serve_gateway(
     let websocket_tracker = state.websocket_tracker.clone();
     let messages_threads = state.exec_ctx.messages_threads.clone();
     let shutdown_on_error = shutdown_token.clone();
-    let cleanup_service = state.exec_ctx.file_search.clone();
+    let cleanup_service = state.exec_ctx.file_handler.service().cloned();
     let router = build_router_with_auth(state, &server_config, authenticator);
     let listener = TcpListener::bind(&addr).await?;
     let addr = listener.local_addr()?;

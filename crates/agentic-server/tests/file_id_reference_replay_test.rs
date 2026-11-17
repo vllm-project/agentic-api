@@ -12,7 +12,7 @@ mod common;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
-use agentic_core::executor::ExecutionContext;
+use agentic_core::executor::{ExecutionContext, FileHandler};
 use axum::Router;
 use axum::body::Bytes;
 use axum::response::IntoResponse;
@@ -289,7 +289,7 @@ async fn start_gateway_with_file_search(upstream_url: &str, file_search: bool) -
     config.tools.file_search.files_storage_dir = Some(files.path().to_owned());
     let mut exec_ctx = ExecutionContext::from_config(&config).await.expect("execution context");
     if !file_search {
-        exec_ctx.file_search = None;
+        exec_ctx.file_handler = FileHandler::default();
     }
     let exec_ctx = Arc::new(exec_ctx);
     let mut state = common::test_state(&config);

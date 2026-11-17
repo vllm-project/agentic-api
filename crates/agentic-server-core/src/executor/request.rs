@@ -101,8 +101,8 @@ impl RequestContext {
 #[derive(Clone, Debug)]
 pub struct ExecutionContext {
     /// Shared in-tree file ingestion and retrieval, available when persistence is configured.
-    /// This is the one file service handle; `FileHandler` reads it.
-    pub file_search: Option<FileSearchService>,
+    /// This is the one file service handle.
+    pub file_handler: FileHandler,
     /// Ceiling on serialized inbound request bytes; resolved file content counts against it.
     pub(crate) max_request_body_size: usize,
     pub conv_handler: ConversationHandler,
@@ -150,7 +150,7 @@ impl ExecutionContext {
     ) -> Self {
         let gateway_executors = GatewayExecutors::from_env(Arc::clone(&client));
         Self {
-            file_search: None,
+            file_handler: FileHandler::default(),
             max_request_body_size: DEFAULT_MAX_REQUEST_BODY_SIZE_BYTES,
             conv_handler,
             resp_handler,
@@ -181,11 +181,6 @@ impl ExecutionContext {
     pub fn with_responses_config(mut self, responses_config: ResponsesConfig) -> Self {
         self.responses_config = responses_config;
         self
-    }
-
-    /// Reads the Files API content behind request `file_id` references from the one file service.
-    pub(crate) fn file_handler(&self) -> FileHandler<'_> {
-        FileHandler::new(self.file_search.as_ref())
     }
 
     /// Use the same configured capabilities for request admission and catalog projection.
@@ -293,7 +288,7 @@ impl ExecutionContext {
             crate::tool::file_search::FileSearchHandler::new(file_search.clone()),
         )));
         Ok(Self {
-            file_search: Some(file_search),
+            file_handler: FileHandler::new(file_search),
             max_request_body_size: cfg.max_request_body_size,
             conv_handler,
             resp_handler,

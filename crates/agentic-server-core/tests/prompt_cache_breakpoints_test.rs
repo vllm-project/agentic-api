@@ -1,10 +1,10 @@
 //! Pin content-boundary preservation across canonical and model-facing representations.
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use agentic_core::types::RequestPayload;
+use agentic_core::types::file_search::FileObject;
 use agentic_core::types::io::ResponsesInput;
-use agentic_core::types::io::input::{ResolvedFile, ResolvedFiles};
+use agentic_core::types::io::input::ResolvedFiles;
 use serde_json::{Value, json};
 
 #[test]
@@ -15,10 +15,16 @@ fn breakpoints_survive_image_defaults_and_custom_tool_normalization() {
             "prompt_cache_breakpoint":{"mode":"explicit"}},
         {"type":"input_text","text":"unmarked suffix"}
     ]);
-    let files = ResolvedFiles::from([(
-        "file_test".to_owned(),
-        Arc::new(ResolvedFile::new("notes.txt".into(), b"tool file".to_vec())),
-    )]);
+    let object = FileObject {
+        id: "file_test".to_owned(),
+        object: "file".to_owned(),
+        bytes: 9,
+        created_at: 0,
+        filename: "notes.txt".to_owned(),
+        purpose: "assistants".to_owned(),
+        status: "processed".to_owned(),
+    };
+    let files = ResolvedFiles::from([("file_test".to_owned(), (object, b"tool file".to_vec()))]);
     for output_kind in ["function_call_output", "custom_tool_call_output"] {
         let output = json!([
             {"type":"input_text","text":"tool prefix","prompt_cache_breakpoint":{"mode":"explicit"}},

@@ -704,7 +704,7 @@ async fn local_files_accept_binary_uploads_but_validate_ingestion() {
 }
 
 #[tokio::test]
-async fn local_files_reject_malformed_keys_and_missing_blobs_are_storage_failures() {
+async fn local_files_report_malformed_keys_as_missing_and_missing_blobs_as_storage_failures() {
     let files = tempfile::tempdir().unwrap();
     let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
     let service = FileSearchService::new(pool, Arc::new(reqwest::Client::new()), file_config(&files)).unwrap();
@@ -715,8 +715,8 @@ async fn local_files_reject_malformed_keys_and_missing_blobs_are_storage_failure
         "file-invalid",
         "file-00000000-0000-0000-0000-000000000000/child",
     ] {
-        assert_eq!(service.file_content(key).await.unwrap_err().status_code(), 400);
-        assert_eq!(service.delete_file(key).await.unwrap_err().status_code(), 400);
+        assert_eq!(service.file_content(key).await.unwrap_err().status_code(), 404);
+        assert_eq!(service.delete_file(key).await.unwrap_err().status_code(), 404);
     }
     let file = service
         .upload_file("lost.txt", "text/plain", "assistants", b"lost".to_vec())

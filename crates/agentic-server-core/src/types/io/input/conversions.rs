@@ -9,8 +9,8 @@ use serde_json::Value;
 
 use super::{
     CustomToolCallOutputMessage, FunctionToolResultMessage, InputContent, InputFunctionToolCall, InputItem,
-    InputMessage, InputMessageContent, InputMessageType, InputTextContent, InputValidationError, ResolvedFileError,
-    ResolvedFiles, ResponsesInput, ToolCallOutput, ToolOutputContent, file_text::InputFileError,
+    InputMessage, InputMessageContent, InputMessageType, InputTextContent, InputValidationError, ResolvedFiles,
+    ResponsesInput,
 };
 use std::collections::HashMap;
 
@@ -250,11 +250,11 @@ impl ResponsesInput {
                 ]),
                 InputItem::CustomToolCall(call) => model.push(InputItem::FunctionCall(call.into())),
                 InputItem::FunctionCallOutput(mut output) => {
-                    output.output = lower_tool_output(output.output, files, model.len())?;
+                    output.output.inline_files(files, model.len())?;
                     model.push(InputItem::FunctionCallOutput(output));
                 }
                 InputItem::CustomToolCallOutput(mut output) => {
-                    output.output = lower_tool_output(output.output, files, model.len())?;
+                    output.output.inline_files(files, model.len())?;
                     model.push(InputItem::FunctionCallOutput(output.into()));
                 }
                 InputItem::ShellCall(call) => model.push(InputItem::FunctionCall(call.into())),
@@ -278,32 +278,14 @@ impl ResponsesInput {
                             match part {
                                 InputContent::InputImage(image) => {
                                     image.detail.get_or_insert_with(|| "auto".to_owned());
-                                    if let Some(file_id) = image.file_id.as_deref() {
-                                        let resolved = resolved_file(files, file_id);
-                                        resolved.to_input_image(image).map_err(|error| {
-                                            file_error(error, |reason| {
-                                                InputValidationError::unsupported_file(model.len(), part_index, reason)
-                                            })
-                                        })?;
-                                    }
+                                    image.inline_file(files).map_err(|reason| {
+                                        InputValidationError::unsupported_file(model.len(), part_index, reason)
+                                    })?;
                                 }
                                 InputContent::InputFile(file) => {
-                                    let text = match file.file_id.as_deref() {
-                                        Some(file_id) => {
-                                            resolved_file(files, file_id).to_input_text(file).map_err(|error| {
-                                                file_error(error, |reason| {
-                                                    InputValidationError::unsupported_file(
-                                                        model.len(),
-                                                        part_index,
-                                                        reason,
-                                                    )
-                                                })
-                                            })?
-                                        }
-                                        None => InputTextContent::try_from(&*file).map_err(|reason| {
-                                            InputValidationError::unsupported_file(model.len(), part_index, reason)
-                                        })?,
-                                    };
+                                    let text = file.to_text(files).map_err(|reason| {
+                                        InputValidationError::unsupported_file(model.len(), part_index, reason)
+                                    })?;
                                     *part = InputContent::InputText(text);
                                 }
                                 InputContent::InputText(_)
@@ -321,80 +303,6 @@ impl ResponsesInput {
         }
         Ok(Self::from(model))
     }
-}
-
-/// The resolved content behind a `file_id`.
-///
-/// The caller built `files` from this same input, so every reference has an entry.
-fn resolved_file<'a>(files: &'a ResolvedFiles, file_id: &str) -> &'a super::ResolvedFile {
-    files
-        .get(file_id)
-        .expect("the file handler resolves every reference in the input it lowers")
-}
-
-/// A resolved file the model cannot receive as its part.
-///
-/// The wrong-kind message is the recorded envelope; a content failure stays at the part's position,
-/// which the caller supplies because messages and tool outputs report positions differently.
-fn file_error(
-    error: ResolvedFileError,
-    content: impl FnOnce(InputFileError) -> InputValidationError,
-) -> InputValidationError {
-    match error {
-        error @ (ResolvedFileError::NotImage(_) | ResolvedFileError::NotText { .. }) => {
-            InputValidationError::resolved_file(error.to_string())
-        }
-        ResolvedFileError::Content(reason) => content(reason),
-    }
-}
-
-/// Resolve the `file_id` references in a structured tool output.
-///
-/// Tool outputs keep their own content contract: a part without a reference passes through
-/// unchanged, including inline files and images. A `file_id` is replaced by the resolved text
-/// or image data URL, as a message file is handled.
-fn lower_tool_output(
-    output: ToolCallOutput,
-    files: &ResolvedFiles,
-    item_index: usize,
-) -> Result<ToolCallOutput, InputValidationError> {
-    let ToolCallOutput::Content(parts) = output else {
-        return Ok(output);
-    };
-    let mut lowered = Vec::with_capacity(parts.len());
-    for (part_index, part) in parts.into_iter().enumerate() {
-        let part = match part {
-            ToolOutputContent::InputText(text) => ToolOutputContent::InputText(text),
-            ToolOutputContent::InputFile(file) => {
-                let Some(file_id) = file.file_id.as_deref() else {
-                    lowered.push(ToolOutputContent::InputFile(file));
-                    continue;
-                };
-                let text = resolved_file(files, file_id).to_input_text(&file).map_err(|error| {
-                    file_error(error, |reason| {
-                        InputValidationError::unsupported_output_file(item_index, part_index, reason)
-                    })
-                })?;
-                ToolOutputContent::InputText(text)
-            }
-            ToolOutputContent::InputImage(mut image) => {
-                let Some(file_id) = image.file_id.as_deref() else {
-                    lowered.push(ToolOutputContent::InputImage(image));
-                    continue;
-                };
-                resolved_file(files, file_id)
-                    .to_input_image(&mut image)
-                    .map_err(|error| {
-                        file_error(error, |reason| {
-                            InputValidationError::unsupported_output_file(item_index, part_index, reason)
-                        })
-                    })?;
-                ToolOutputContent::InputImage(image)
-            }
-        };
-        lowered.push(part);
-    }
-    Ok(ToolCallOutput::Content(lowered))
 }
 
 /// Appends history items, as [`ResponsesInput::push`] does.

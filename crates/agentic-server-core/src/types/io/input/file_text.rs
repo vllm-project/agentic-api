@@ -41,14 +41,28 @@ pub enum InputFileError {
          a text extension; extract the text client-side and send it as input_text, or send pages as input_image"
     )]
     NotText,
-    #[error("the referenced file is not a supported image; upload a .jpeg, .jpg, .png, .gif, or .webp file")]
-    NotImage,
+    #[error("Invalid input: Expected image type to be a supported format: .jpeg, .jpg, .png, .gif, .webp but got {0}.")]
+    NotImage(String),
+    #[error(
+        "Invalid input: Expected context stuffing file type to be a supported format: {formats} but got {extension}.",
+        formats = kinds::CONTEXT_STUFFING_EXTENSIONS
+    )]
+    NotTextFile { extension: String },
+    #[error("file_id reference was not resolved for the model-facing request")]
+    Unresolved,
     #[error("input_file file_data is not supported: data URLs must be base64-encoded (data:<media type>;base64,...)")]
     NotBase64DataUrl,
     #[error("input_file file_data is not supported: it is not valid base64")]
     InvalidBase64,
     #[error("input_file file_data is not supported: the decoded file is not valid UTF-8 text")]
     NotUtf8,
+}
+
+impl InputFileError {
+    /// Whether this is the recorded wrong-kind failure for a resolved `file_id`.
+    pub(crate) fn is_resolved_kind(&self) -> bool {
+        matches!(self, Self::NotImage(_) | Self::NotTextFile { .. })
+    }
 }
 
 /// Split a base64 data URL into its media type and payload.

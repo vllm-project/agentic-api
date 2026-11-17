@@ -41,7 +41,7 @@ impl fmt::Display for InputValidationError {
                 )
             }
             // The recorded envelope for a resolved file carries no request position.
-            MessageContentError::ResolvedFile { message } => f.write_str(message),
+            MessageContentError::ResolvedFile { reason } => f.write_str(&reason.to_string()),
         }
     }
 }
@@ -129,10 +129,20 @@ impl InputValidationError {
     }
 
     /// A message file at `input[item_index].content[part_index]` that cannot be converted to text.
+    ///
+    /// A resolved file whose kind does not match its part uses the recorded envelope: the
+    /// message names `input` and no request position.
     pub(super) fn unsupported_file(item_index: usize, part_index: usize, reason: InputFileError) -> Self {
-        Self {
-            item_index: Some(item_index),
-            source: file_error(content_location(item_index, part_index), reason),
+        if reason.is_resolved_kind() {
+            Self {
+                item_index: None,
+                source: MessageContentError::ResolvedFile { reason },
+            }
+        } else {
+            Self {
+                item_index: Some(item_index),
+                source: file_error(content_location(item_index, part_index), reason),
+            }
         }
     }
 
@@ -144,20 +154,10 @@ impl InputValidationError {
         }
     }
 
-    /// A resolved file the model cannot receive as the part that referenced it.
-    ///
-    /// The message is the recorded gateway envelope, which names `input` and no position.
-    pub(crate) fn resolved_file(message: String) -> Self {
-        Self {
-            item_index: None,
-            source: MessageContentError::ResolvedFile { message },
-        }
-    }
-
-    /// The recorded envelope's message for a resolved file that does not match its part.
-    pub(crate) fn resolved_file_message(&self) -> Option<&str> {
+    /// The wrong-kind failure for a resolved file that does not match its part.
+    pub(crate) fn resolved_file_reason(&self) -> Option<&InputFileError> {
         match &self.source {
-            MessageContentError::ResolvedFile { message } => Some(message),
+            MessageContentError::ResolvedFile { reason } => Some(reason),
             _ => None,
         }
     }
@@ -224,10 +224,9 @@ enum MessageContentError {
         "reasoning item contains encrypted state without plaintext reasoning content and cannot be replayed to vLLM"
     )]
     EncryptedReasoning,
-    /// A resolved file whose kind does not match the part that referenced it; the message is
-    /// the recorded gateway envelope.
-    #[error("{message}")]
-    ResolvedFile { message: String },
+    /// A resolved file whose kind does not match the part that referenced it.
+    #[error("{reason}")]
+    ResolvedFile { reason: InputFileError },
 }
 
 impl InputMessageContent {
@@ -269,32 +268,10 @@ fn validate_image(image: &super::InputImageContent, location: String) -> Result<
     Ok(())
 }
 
-fn validate_tool_output(output: &ToolCallOutput, item_index: usize) -> Result<(), MessageContentError> {
-    let ToolCallOutput::Content(parts) = output else {
-        return Ok(());
-    };
-    parts.iter().enumerate().try_for_each(|(part_index, part)| {
-        let location = output_location(item_index, part_index);
-        match part {
-            // A structured tool output keeps its own content contract; only a `file_id`
-            // reference has the message rules, because it must resolve before inference.
-            ToolOutputContent::InputFile(file) if file.file_id.is_some() => {
-                file.validate().map_err(|reason| file_error(location, reason))
-            }
-            ToolOutputContent::InputImage(image) if image.file_id.is_some() => validate_image(image, location),
-            ToolOutputContent::InputFile(_) | ToolOutputContent::InputImage(_) | ToolOutputContent::InputText(_) => {
-                Ok(())
-            }
-        }
-    })
-}
-
 impl InputItem {
     fn validate(&self, item_index: usize) -> Result<(), MessageContentError> {
         match self {
             Self::Message(message) => message.content.validate(item_index),
-            Self::FunctionCallOutput(output) => validate_tool_output(&output.output, item_index),
-            Self::CustomToolCallOutput(output) => validate_tool_output(&output.output, item_index),
             _ => Ok(()),
         }
     }
@@ -315,20 +292,19 @@ impl ResponsesInput {
     ///
     /// Run after routing: raw-proxy requests preserve their original bytes and
     /// leave content support decisions to the upstream. Restored history must
-    /// pass the same validation. Structured tool outputs have their own content
-    /// contract and can contain files.
+    /// pass the same validation. Structured tool outputs keep their own content
+    /// contract and are not inspected here.
     ///
-    /// A `file_id` is valid input: it is resolved from the gateway file store for
-    /// the model-facing request, while history keeps the reference. A part that
-    /// combines `file_id` with another content field is rejected with `OpenAI`'s
-    /// mutually exclusive parameters error. A structured tool-output part without a
-    /// `file_id` keeps its own content contract and is not inspected here.
+    /// A message `file_id` is valid input: it is resolved from the gateway file
+    /// store for the model-facing request, while history keeps the reference. A
+    /// message part that combines `file_id` with another content field is rejected
+    /// with `OpenAI`'s mutually exclusive parameters error.
     ///
     /// # Errors
     /// Returns the item and content-part location of an empty message array, a
     /// message content type the typed executor cannot convey, a message file that is
-    /// not an inline base64 UTF-8 text file, or a part that combines `file_id` with
-    /// another content field.
+    /// not an inline base64 UTF-8 text file, or a message part that combines `file_id`
+    /// with another content field.
     pub fn validate(&self) -> Result<(), InputValidationError> {
         match self {
             Self::Text(_) => Ok(()),
@@ -438,22 +414,6 @@ mod tests {
                 )
             );
         }
-    }
-
-    #[test]
-    fn tool_output_files_use_their_output_position() {
-        let input: ResponsesInput = serde_json::from_value(json!([
-            {"type":"function_call_output", "call_id":"call_1", "output":[
-                {"type":"input_text", "text":"done"},
-                {"type":"input_file", "file_id":"file-1", "filename":"a.txt"}
-            ]}
-        ]))
-        .unwrap();
-        let error = input.validate().unwrap_err();
-        assert_eq!(error.error_param(), Some("input[0].output[1]"));
-        assert!(error.to_string().starts_with(
-            "Mutually exclusive parameters: 'input[0].output[1]'. Ensure you are only providing one of: 'file_id' or 'filename'."
-        ));
     }
 
     #[test]

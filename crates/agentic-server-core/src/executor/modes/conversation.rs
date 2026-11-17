@@ -205,7 +205,6 @@ impl ConversationHandler {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
     use crate::storage::{ResponseCheckpoint, ResponseMetadata, create_pool_with_schema};
     use crate::types::io::ResponsesInput;

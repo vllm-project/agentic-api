@@ -3,7 +3,7 @@ use thiserror::Error;
 
 use crate::StorageError;
 use crate::tool::ToolError;
-use crate::types::file_search::FileSearchError;
+use crate::types::file_search::{FileRowParam, FileSearchError};
 use crate::types::io::ClientItemError;
 use crate::types::io::input::InputValidationError;
 use crate::types::io::output::McpListTools;
@@ -185,11 +185,11 @@ impl From<InputValidationError> for ExecutorError {
     fn from(error: InputValidationError) -> Self {
         // A resolved file whose kind does not match its part uses the recorded gateway envelope:
         // `param: input`, `code: null`, and no message position or gateway prefix.
-        match error.resolved_file_message() {
-            Some(message) => Self::UnsupportedValue {
+        match error.resolved_file_reason() {
+            Some(reason) => Self::UnsupportedValue {
                 param: Some("input".to_owned()),
                 code: None,
-                message: message.to_owned(),
+                message: reason.to_string(),
             },
             None => Self::InvalidInput(error),
         }
@@ -267,12 +267,17 @@ impl ExecutorError {
     #[must_use]
     pub fn error_type(&self) -> &'static str {
         match self.client_visible_error() {
-            Self::FileSearch(error) | Self::Tool(ToolError::FileSearch(error)) => match error.status_code() {
-                400 => "invalid_request_error",
-                404 => "not_found",
-                409 => "conflict_error",
-                502 => "upstream_error",
-                _ => "server_error",
+            Self::FileSearch(error) | Self::Tool(ToolError::FileSearch(error)) => match error {
+                FileSearchError::FileNotFound { .. } | FileSearchError::FileRowRejected { .. } => {
+                    "invalid_request_error"
+                }
+                _ => match error.status_code() {
+                    400 => "invalid_request_error",
+                    404 => "not_found",
+                    409 => "conflict_error",
+                    502 => "upstream_error",
+                    _ => "server_error",
+                },
             },
             Self::ConversationLocked { .. }
             | Self::Tool(
@@ -341,6 +346,9 @@ impl ExecutorError {
     pub fn error_param(&self) -> Option<&str> {
         match self.client_visible_error() {
             Self::ClientItem(error) => Some(error.param()),
+            Self::FileSearch(error) | Self::Tool(ToolError::FileSearch(error)) => {
+                error.row_param().map(FileRowParam::as_str)
+            }
             Self::Tool(ToolError::UnknownParameter { param }) => Some(param),
             Self::UnsupportedValue { param, .. } => param.as_deref(),
             Self::Storage(StorageError::ItemAlreadyInConversation) => Some("items"),
@@ -384,14 +392,19 @@ impl ExecutorError {
     pub(crate) fn response_error(&self) -> serde_json::Value {
         let code = if matches!(
             self.client_visible_error(),
-            Self::Tool(ToolError::MissingOutput { .. } | ToolError::UnknownCallOutput { .. })
-                | Self::Storage(
-                    StorageError::ItemCursorNotFound { .. }
-                        | StorageError::ResponseNotFound { .. }
-                        | StorageError::ConversationNotFound { .. }
-                )
-                | Self::UnsupportedValue { code: None, .. }
+            Self::Tool(
+                ToolError::MissingOutput { .. }
+                    | ToolError::UnknownCallOutput { .. }
+                    | ToolError::FileSearch(
+                        FileSearchError::FileNotFound { .. } | FileSearchError::FileRowRejected { .. }
+                    )
+            ) | Self::Storage(
+                StorageError::ItemCursorNotFound { .. }
+                    | StorageError::ResponseNotFound { .. }
+                    | StorageError::ConversationNotFound { .. }
+            ) | Self::UnsupportedValue { code: None, .. }
                 | Self::FileReferencesNotFound { .. }
+                | Self::FileSearch(FileSearchError::FileNotFound { .. } | FileSearchError::FileRowRejected { .. })
         ) {
             serde_json::Value::Null
         } else {
@@ -408,6 +421,11 @@ impl ExecutorError {
             Self::Storage(StorageError::ResponseNotFound { .. } | StorageError::ConversationNotFound { .. })
                 | Self::UnsupportedValue { param: None, .. }
                 | Self::FileReferencesNotFound { .. }
+                | Self::FileSearch(FileSearchError::FileRowRejected { param: None, .. })
+                | Self::Tool(ToolError::FileSearch(FileSearchError::FileRowRejected {
+                    param: None,
+                    ..
+                }))
         ) {
             error.insert("param".to_owned(), serde_json::Value::Null);
         }
@@ -460,11 +478,61 @@ mod tests {
     }
 
     #[test]
+    fn files_row_errors_use_the_recorded_envelope() {
+        let missing = ExecutorError::from(FileSearchError::FileNotFound {
+            id: "file-1".to_owned(),
+            param: FileRowParam::After,
+        });
+        assert_eq!(missing.http_status(), StatusCode::NOT_FOUND);
+        assert_eq!(
+            missing.response_error(),
+            serde_json::json!({
+                "message": "No such File object: file-1",
+                "type": "invalid_request_error",
+                "code": null,
+                "param": "after"
+            })
+        );
+
+        let rejected = ExecutorError::from(FileSearchError::FileRowRejected {
+            message: "File is empty.".to_owned(),
+            param: None,
+        });
+        assert_eq!(rejected.http_status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            rejected.response_error(),
+            serde_json::json!({
+                "message": "File is empty.",
+                "type": "invalid_request_error",
+                "code": null,
+                "param": null
+            })
+        );
+    }
+
+    #[test]
     fn resolved_file_kind_errors_use_the_recorded_input_envelope() {
-        let error = ExecutorError::from(InputValidationError::resolved_file(
-            "Invalid input: Expected image type to be a supported format: .jpeg, .jpg, .png, .gif, .webp but got .txt."
-                .to_owned(),
-        ));
+        use crate::types::file_search::FileObject;
+        use crate::types::io::ResponsesInput;
+        use crate::types::io::input::ResolvedFiles;
+
+        let input: ResponsesInput = serde_json::from_value(serde_json::json!([
+            {"role":"user", "content":[{"type":"input_image", "file_id":"file-1"}]}
+        ]))
+        .unwrap();
+        let object = FileObject {
+            id: "file-1".to_owned(),
+            object: "file".to_owned(),
+            bytes: 2,
+            created_at: 0,
+            filename: "notes.txt".to_owned(),
+            purpose: "user_data".to_owned(),
+            status: "processed".to_owned(),
+        };
+        let mut files = ResolvedFiles::default();
+        files.insert("file-1".to_owned(), (object, b"hi".to_vec()));
+
+        let error = ExecutorError::from(input.normalized_model_input(&[], &files).unwrap_err());
         assert_eq!(error.http_status(), StatusCode::BAD_REQUEST);
         let envelope = error.response_error();
         assert_eq!(envelope["type"], "invalid_request_error");

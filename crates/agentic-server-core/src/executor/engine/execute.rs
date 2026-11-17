@@ -22,6 +22,7 @@ use crate::executor::rehydrate::rehydrate_with_continuation;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::session::{ResponseCheckpointPin, ResponseContinuation, ResponseSession, SteeringQueue};
 use crate::executor::telemetry::{Api, ExecutionSpan, Route};
+use crate::executor::upstream::upstream_request;
 use crate::tool::ToolSearchState;
 use crate::types::io::ResponsesInput;
 use crate::types::request_response::{RequestPayload, ResponsePayload};
@@ -444,12 +445,9 @@ async fn prepare(
         ));
     }
     // Fail before any tool preparation or response event if the model can't be given this input:
-    // a missing referenced file returns its JSON 404 and a mismatched file type its 400 first.
-    let files = exec
-        .file_handler()
-        .resolve(&ctx.enriched_request.input, exec.max_request_body_size)
-        .await?;
-    ctx.enriched_request.input.normalized_model_input(&[], &files)?;
+    // build the model-facing body, so a missing referenced file returns its JSON 404, a mismatched
+    // file type its 400, and resolved content over the body limit its 413 first.
+    upstream_request(exec, &ctx, false, None, None).await?;
     prepare_request_tools(ctx)
 }
 

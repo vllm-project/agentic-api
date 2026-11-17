@@ -5,15 +5,16 @@ mod file_text;
 mod history_naming;
 mod resolved_file;
 mod search_history;
+mod tool_output;
 mod tool_search;
 mod validation;
 mod window;
 
 pub(crate) use conversions::internal_mcp_tool_name;
 pub use file_text::InputFileError;
+pub(crate) use file_text::kinds::{IMAGE_MEDIA_TYPES, is_image_media_type};
 pub(crate) use history_naming::HistoryNaming;
-pub(crate) use resolved_file::ResolvedFileError;
-pub use resolved_file::{ResolvedFile, ResolvedFiles};
+pub use resolved_file::ResolvedFiles;
 pub(crate) use search_history::{
     SearchHistory, SearchHistoryDefect, TOOL_SEARCH_NAME, hosted_search_output_text, is_search_item,
 };

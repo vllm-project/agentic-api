@@ -3,7 +3,7 @@ use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 use super::*;
-use crate::executor::modes::{ConversationHandler, ResponseHandler};
+use crate::executor::modes::{ConversationHandler, FileHandler, ResponseHandler};
 use crate::executor::pending_calls::{CallLedger, PendingCall};
 use crate::executor::upstream::upstream_request;
 use crate::storage::{ConversationStore, ResponseCheckpoint, ResponseMetadata, ResponseStore, create_pool_with_schema};
@@ -951,7 +951,7 @@ async fn file_execution_context() -> (ExecutionContext, FileSearchService, tempf
     };
     let service = FileSearchService::new(pool, Arc::new(reqwest::Client::new()), config).unwrap();
     let mut exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
-    exec_ctx.file_search = Some(service.clone());
+    exec_ctx.file_handler = FileHandler::new(service.clone());
     (exec_ctx, service, files)
 }
 
@@ -1048,7 +1048,7 @@ async fn continuation_hydrates_file_references_from_stored_history() -> Result<(
         .persist("resp_prior", None, vec![stored], None, &ResponseMetadata::default())
         .await?;
     let mut exec_ctx = execution_context(ConversationStore::disabled(), response_store);
-    exec_ctx.file_search = Some(service);
+    exec_ctx.file_handler = FileHandler::new(service);
 
     let ctx = rehydrate_conversation(request(None, Some("resp_prior")), &exec_ctx).await?;
 
@@ -1088,7 +1088,7 @@ async fn continuation_reports_a_deleted_file_reference() -> Result<(), Box<dyn s
         .await?;
     service.delete_file(&text_id).await?;
     let mut exec_ctx = execution_context(ConversationStore::disabled(), response_store);
-    exec_ctx.file_search = Some(service);
+    exec_ctx.file_handler = FileHandler::new(service);
 
     let ctx = rehydrate_conversation(request(None, Some("resp_prior")), &exec_ctx).await?;
     let error = upstream_request(&exec_ctx, &ctx, false, None, None).await.unwrap_err();
@@ -1160,7 +1160,7 @@ async fn restored_agent_history_resolves_its_file_references_per_round() -> Resu
         .persist("resp_tree", None, Vec::new(), None, &metadata)
         .await?;
     let mut exec_ctx = execution_context(ConversationStore::disabled(), response_store);
-    exec_ctx.file_search = Some(service);
+    exec_ctx.file_handler = FileHandler::new(service);
 
     let payload: RequestPayload = serde_json::from_value(serde_json::json!({
         "model": "test",

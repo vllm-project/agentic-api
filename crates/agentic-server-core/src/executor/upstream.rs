@@ -68,9 +68,12 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
 /// whose gateway-executed tools are left out after a `max_tool_calls` refusal; neither
 /// changes the persisted request.
 ///
+/// The serialized body must fit the request body limit when it carries resolved file content;
+/// the inbound limit alone does not bound it.
+///
 /// # Errors
 /// A missing or unreadable referenced file, unsupported message content, a tool-configuration
-/// error, or a serialization failure.
+/// error, a resolved body over the size limit, or a serialization failure.
 pub async fn upstream_request(
     exec_ctx: &ExecutionContext,
     ctx: &RequestContext,
@@ -78,10 +81,7 @@ pub async fn upstream_request(
     guidance: Option<&InputMessage>,
     withheld: Option<&ToolRegistry>,
 ) -> ExecutorResult<String> {
-    let files = exec_ctx
-        .file_handler()
-        .resolve(&ctx.enriched_request.input, exec_ctx.max_request_body_size)
-        .await?;
+    let files = exec_ctx.file_handler.resolve(&ctx.enriched_request.input).await?;
     let mut request = ctx.enriched_request.to_upstream_request(stream, &files)?;
     if let Some(registry) = withheld {
         if let Some(tools) = request.tools.as_mut() {
@@ -113,7 +113,14 @@ pub async fn upstream_request(
     if let Some(guidance) = guidance {
         request.input.to_mut().push(InputItem::Message(guidance.clone()));
     }
-    serialize_to_string(&request).map_err(ExecutorError::JsonError)
+    let body = serialize_to_string(&request).map_err(ExecutorError::JsonError)?;
+    if !files.is_empty() && body.len() > exec_ctx.max_request_body_size {
+        return Err(ExecutorError::PayloadTooLarge(format!(
+            "resolved file_id references exceed the {}-byte request body limit",
+            exec_ctx.max_request_body_size
+        )));
+    }
+    Ok(body)
 }
 
 pub(super) async fn fetch_blocking_payload(

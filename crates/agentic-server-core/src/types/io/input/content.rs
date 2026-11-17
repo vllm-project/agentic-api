@@ -1,9 +1,14 @@
 //! Typed message content parts and their wire deserialization.
 
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::utils::common::deserialize_from_value;
+
+use super::file_text::{InputFileError, kinds, text_content_from_bytes};
+use super::resolved_file::ResolvedFiles;
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -42,6 +47,31 @@ pub struct InputImageContent {
     pub extra: Map<String, Value>,
 }
 
+impl InputImageContent {
+    /// Replace a `file_id` with the resolved image's inline data URL.
+    ///
+    /// The stored filename decides the media type, as `OpenAI` does; a part without a
+    /// reference is unchanged.
+    pub(crate) fn inline_file(&mut self, files: &ResolvedFiles) -> Result<(), InputFileError> {
+        let Some(file_id) = self.file_id.as_deref() else {
+            return Ok(());
+        };
+        let Some((object, bytes)) = files.get(file_id) else {
+            return Err(InputFileError::Unresolved);
+        };
+        let media_type = kinds::image_media_type(&object.filename)
+            .ok_or_else(|| InputFileError::NotImage(kinds::extension_label(&object.filename)))?;
+        let mut data_url = String::new();
+        data_url.push_str("data:");
+        data_url.push_str(media_type);
+        data_url.push_str(";base64,");
+        STANDARD.encode_string(bytes, &mut data_url);
+        self.image_url = Some(data_url);
+        self.file_id = None;
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct InputFileContent {
@@ -60,6 +90,27 @@ pub struct InputFileContent {
     /// upstream, like the raw proxy path does.
     #[serde(default, flatten, skip_serializing_if = "Map::is_empty")]
     pub extra: Map<String, Value>,
+}
+
+impl InputFileContent {
+    /// The model-facing `input_text` part for this file.
+    ///
+    /// Inline `file_data` and a resolved `file_id` share this conversion. A resolved
+    /// file's stored filename decides the text kind and supplies the `File: <name>` prefix.
+    pub(crate) fn to_text(&self, files: &ResolvedFiles) -> Result<InputTextContent, InputFileError> {
+        let Some(file_id) = self.file_id.as_deref() else {
+            return InputTextContent::try_from(self);
+        };
+        let Some((object, bytes)) = files.get(file_id) else {
+            return Err(InputFileError::Unresolved);
+        };
+        if !kinds::is_text_filename(&object.filename) {
+            return Err(InputFileError::NotTextFile {
+                extension: kinds::extension_label(&object.filename),
+            });
+        }
+        text_content_from_bytes(Some(&object.filename), bytes, &self.extra)
+    }
 }
 
 /// A refusal in rehydrated assistant history.
