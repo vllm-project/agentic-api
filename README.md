@@ -209,6 +209,7 @@ provider = "brave"
 ```
 
 - [Configuration](docs/guides/configuration.md): storage, request and rate limits, model capabilities, response limits, and MCP servers.
+- [Responses capability policies](docs/api/index.md#model-capability-policies): per-model parameter limits, prompt-cache controls, and service tiers.
 - [Web search providers](docs/guides/web-search.md): provider settings and how each one maps the shared tool contract.
 - [Embedded code interpreter](docs/design/embedded-code-interpreter.md): the opt-in `embedded-code-interpreter` build feature.
 - [Deploying](docs/deploying/README.md): containers, Kubernetes, and observability.

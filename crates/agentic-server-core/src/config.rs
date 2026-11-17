@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::Error;
 use crate::tool::McpServerEntry;
 use crate::types::file_search::FileSearchConfig;
+use crate::types::model_capabilities::ModelCapabilities;
 
 mod web_fetch;
 pub use web_fetch::{
@@ -558,6 +559,8 @@ pub struct Config {
     pub sqlite: SqliteConfig,
     pub tools: ToolRuntimeConfig,
     pub responses: ResponsesConfig,
+    /// Explicit model capabilities shared by request admission and model catalogs.
+    pub model_capabilities: ModelCapabilities,
 }
 
 /// Resolves the directory used for user configuration and local state.
@@ -871,11 +874,11 @@ mod tests {
     #[test]
     fn responses_config_validation() {
         let valid = ResponsesConfig {
-            prompt_cache_options_supported: false,
             max_retained_bytes: 1024 * 1024,
             max_upstream_json_bytes: 2 * 1024 * 1024,
             max_upstream_sse_line_bytes: 2 * 1024 * 1024,
             max_stream_event_bytes: 2 * 1024 * 1024,
+            ..ResponsesConfig::default()
         };
         assert!(valid.validate().is_ok());
 
@@ -893,11 +896,11 @@ mod tests {
 
         // For 4 MiB retained, 64 KiB is not enough headroom (requires 25% = 1 MiB)
         let borderline = ResponsesConfig {
-            prompt_cache_options_supported: false,
             max_retained_bytes: 4 * 1024 * 1024,
             max_upstream_json_bytes: 4 * 1024 * 1024 + 64 * 1024,
             max_upstream_sse_line_bytes: 5 * 1024 * 1024,
             max_stream_event_bytes: 5 * 1024 * 1024,
+            ..ResponsesConfig::default()
         };
         assert!(borderline.validate().is_err());
     }

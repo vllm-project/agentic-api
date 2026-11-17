@@ -63,9 +63,11 @@ pub(crate) async fn rehydrate_with_continuation(
     let timer = exec_ctx.metrics.stage(Stage::Rehydrate);
     // Keep the large request future off the caller's stack.
     let rehydrated = Box::pin(async move {
-        request.validate_prompt_cache_options(exec_ctx.responses_config.prompt_cache_options_supported)?;
         // Every typed entry point reaches this check: executor-routed HTTP, WebSocket, split execution, embedders.
-        request.ensure_supported_parameters()?;
+        request.ensure_supported_parameters(
+            exec_ctx.model_capabilities.for_model(&request.model),
+            exec_ctx.responses_config.prompt_cache_options_supported,
+        )?;
         validate_multi_agent_request(&request)?;
         // Stored turns never supply `max_tool_calls`, so the request value is final here.
         request.max_tool_calls_limit()?;
@@ -259,18 +261,12 @@ fn missing_previous_response_id() -> ExecutorError {
 
 /// Hydrates `ctx` from the conversation store.
 ///
-/// Rehydrates the conversation's history and continues it with this request's items. A missing conversation is
-/// created by a stored turn and required by an unstored one. A conversation turn does not inherit the stored settings.
+/// Rehydrates the conversation's history and continues it with this request's items. A turn references an existing
+/// conversation only: an unknown id is rejected as not-found rather than created implicitly, matching the
+/// `OpenAI` Conversations contract. A conversation turn does not inherit the stored settings.
 async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) -> ExecutorResult<()> {
-    let snapshot = match exec_ctx.conv_handler.rehydrate(ctx).await {
-        Err(ExecutorError::Storage(error)) if error.is_not_found() && ctx.original_request.store => {
-            exec_ctx.conv_handler.get_or_create(ctx).await?;
-            ConversationSnapshot::default()
-        }
-        result => result?,
-    };
+    let ConversationSnapshot { items, mut checkpoint } = exec_ctx.conv_handler.rehydrate(ctx).await?;
     ctx.conversation_id.clone_from(&ctx.original_request.conversation);
-    let ConversationSnapshot { items, mut checkpoint } = snapshot;
     checkpoint.continue_from_compaction(&items, &ctx.enriched_request);
     if !restore_agent_tree(ctx, &checkpoint.metadata, exec_ctx.responses_config.max_retained_bytes)? {
         let history = InOutItem::into_input_items(items);

@@ -47,7 +47,7 @@ than assuming that OpenAI and the gateway accept the same requests.
 | `lifecycle` | 19 | Stored parent/child responses, input pages, retrieval, parent deletion, child visibility, continued inference after deletion, repeated deletion. |
 | `pagination` | 16 | Ascending, descending and default order; one-item pages; limit 100; cursors at the end; a cursor from an unrelated response. |
 | `edge-cases` | 23 | Unstored/missing IDs; missing parent; invalid, repeated and out-of-range query parameters; unknown and repeated includes; repeated deletion. |
-| `conversation` | 19 | Responses attached to a conversation, manual item insertion/deletion, snapshots before and after mutations, response deletion, conversation deletion. |
+| `conversation` | 23 | Responses attached to a conversation, manual item insertion/deletion, snapshots before and after mutations, response deletion, conversation deletion, then turns naming the deleted conversation and a never-created one (`store: true`, `store: false`, and the `{"id": ...}` form). |
 | `replayed-items` | 14 | Generated-ID reuse, two copies of an ID with different content, wrong-prefix IDs, function call/output history without public item IDs, seed immutability after probes. |
 | `call-ids` | Up to 17 | Function call history whose `call_id` repeats in one input (two calls and outputs, two calls and one output, one call and two outputs, a call repeated after its output) or is empty; `previous_response_id` continuations that repeat a stored turn's forced call or send its output twice, plus a normal control; conversations created with a repeated or empty `call_id`, or appended to with a reused one, then a turn. Each request names its case in `x-run-id`; a conversation's follow-ups run only after it is created. JSON only. |
 | `tool-items` | 48 plus additional pages | Replay existing parallel builtin/client/mixed tools, shell, code interpreter, tool search, and the multi-agent review task; inspect complete input pages after each response and a final continuation. |
@@ -613,7 +613,7 @@ These files use `sessions`, not the HTTP `turns` schema or synthesized SSE.
 | `record_custom_tool_cassettes.sh` | Matching two-turn custom-tool flows (streaming + non-streaming) | gateway and OpenAI reference |
 | `record_async_tool_cassettes.py` | Async function/custom tool scenarios and probes; each scenario declares its modes | OpenAI reference and gateway (vLLM: unrecorded sampling) |
 | `record_shell_cassettes.sh` | Four two-turn local-shell scenarios (streaming + non-streaming) | gateway and OpenAI reference |
-| `record_mcp_cassettes.sh` | Native MCP counter tool discovery and calls (streaming + non-streaming) | gateway and OpenAI reference |
+| `record_mcp_cassettes.sh` | Native MCP counter tool discovery and calls (streaming + non-streaming); with `MCP_RECORD_CASE=approval`, one turn per `require_approval` form against Microsoft Learn MCP (`mcp-approval` items scenario) | gateway and OpenAI reference |
 | `record_web_search_cassettes.sh` | Matching web-search calls (streaming + non-streaming) | gateway and OpenAI reference |
 | `record_max_tool_calls_cassettes.sh` | `max_tool_calls` validation, per-tool exhaustion, call counting, and WebSocket scenarios | gateway and OpenAI reference |
 | `record_code_interpreter_cassettes.sh` | One code-interpreter calculation; OpenAI blocking/SSE and gateway blocking/SSE/WebSocket | gateway and OpenAI reference |

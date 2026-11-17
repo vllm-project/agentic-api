@@ -1,3 +1,4 @@
+use agentic_core::types::ServiceTier;
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -1299,7 +1300,7 @@ async fn execute_runs_web_search_and_sends_tool_output_back_to_model() {
         max_output_tokens: Some(1024),
         prompt_cache_key: Some("workspace-a".to_owned()),
         prompt_cache_retention: Some(agentic_core::types::request_response::PromptCacheRetention::TwentyFourHours),
-        service_tier: Some("priority".to_owned()),
+        service_tier: Some(ServiceTier::Priority),
         ..Default::default()
     };
 
@@ -1827,7 +1828,7 @@ async fn execute_relaxes_forced_tool_choice_after_web_search_result() {
         tools: Some(vec![web_search]),
         tool_choice: Some(ToolChoice::Required),
         max_output_tokens: Some(1024),
-        service_tier: Some("priority".to_owned()),
+        service_tier: Some(ServiceTier::Priority),
         ..Default::default()
     };
 
@@ -1847,7 +1848,7 @@ fn base_payload(input: ResponsesInput) -> RequestPayload {
         input,
         store: true,
         max_output_tokens: Some(1024),
-        service_tier: Some("priority".to_owned()),
+        service_tier: Some(ServiceTier::Priority),
         ..Default::default()
     }
 }
@@ -1970,18 +1971,10 @@ async fn continuation_keeps_reasoning_before_the_web_search_it_led_to() {
     // output differ from the live round's; the order must not.
     let requests = llm.request_bodies().await;
     assert_eq!(requests.len(), 3);
-    let kinds = |request: &serde_json::Value| -> Vec<serde_json::Value> {
-        request["input"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|item| item["type"].clone())
-            .collect()
-    };
-    let live = kinds(&requests[1]);
+    let live = support::input_item_types(&requests[1]);
     assert_eq!(live, ["message", "reasoning", "function_call", "function_call_output"]);
     assert_eq!(
-        kinds(&requests[2])[..live.len()],
+        support::input_item_types(&requests[2])[..live.len()],
         live[..],
         "{:#?}",
         requests[2]["input"]
@@ -2029,7 +2022,7 @@ async fn execute_accumulates_usage_across_web_search_model_rounds() {
         store: true,
         tools: Some(vec![web_search]),
         max_output_tokens: Some(1024),
-        service_tier: Some("priority".to_owned()),
+        service_tier: Some(ServiceTier::Priority),
         ..Default::default()
     };
 
@@ -2064,7 +2057,7 @@ async fn stream_emits_web_search_lifecycle_events_before_final_payload() {
         tools: Some(vec![web_search]),
         stream: true,
         max_output_tokens: Some(1024),
-        service_tier: Some("priority".to_owned()),
+        service_tier: Some(ServiceTier::Priority),
         ..Default::default()
     };
 
@@ -2176,7 +2169,7 @@ async fn multi_round_stream_has_single_lifecycle_and_monotonic_public_sequence()
         max_output_tokens: Some(1024),
         prompt_cache_key: Some("workspace-a".to_owned()),
         prompt_cache_retention: Some(agentic_core::types::request_response::PromptCacheRetention::TwentyFourHours),
-        service_tier: Some("priority".to_owned()),
+        service_tier: Some(ServiceTier::Priority),
         ..Default::default()
     };
 
@@ -2255,7 +2248,7 @@ async fn stream_hides_web_search_function_events_when_name_arrives_on_done() {
         tools: Some(vec![web_search]),
         stream: true,
         max_output_tokens: Some(1024),
-        service_tier: Some("priority".to_owned()),
+        service_tier: Some(ServiceTier::Priority),
         ..Default::default()
     };
 
@@ -2309,7 +2302,7 @@ async fn stream_orders_gateway_lifecycle_before_later_client_function_events() {
         tools: Some(vec![web_search, client_function]),
         stream: true,
         max_output_tokens: Some(1024),
-        service_tier: Some("priority".to_owned()),
+        service_tier: Some(ServiceTier::Priority),
         ..Default::default()
     };
 
@@ -2381,7 +2374,7 @@ async fn execute_runs_multiple_web_search_calls_concurrently() {
         store: true,
         tools: Some(vec![web_search]),
         max_output_tokens: Some(1024),
-        service_tier: Some("priority".to_owned()),
+        service_tier: Some(ServiceTier::Priority),
         ..Default::default()
     };
 
@@ -2420,7 +2413,7 @@ async fn execute_feeds_web_search_execution_errors_back_to_model() {
         store: true,
         tools: Some(vec![web_search]),
         max_output_tokens: Some(1024),
-        service_tier: Some("priority".to_owned()),
+        service_tier: Some(ServiceTier::Priority),
         ..Default::default()
     };
 
@@ -2461,7 +2454,7 @@ async fn execute_returns_incomplete_after_max_gateway_tool_rounds() {
         store: true,
         tools: Some(vec![web_search]),
         max_output_tokens: Some(1024),
-        service_tier: Some("priority".to_owned()),
+        service_tier: Some(ServiceTier::Priority),
         ..Default::default()
     };
 
@@ -2502,7 +2495,7 @@ async fn execute_feeds_invalid_web_search_arguments_back_to_model() {
         store: true,
         tools: Some(vec![web_search]),
         max_output_tokens: Some(1024),
-        service_tier: Some("priority".to_owned()),
+        service_tier: Some(ServiceTier::Priority),
         ..Default::default()
     };
 
@@ -2550,7 +2543,7 @@ async fn execute_runs_large_gateway_fanout_without_hard_cap() {
         store: true,
         tools: Some(vec![web_search]),
         max_output_tokens: Some(1024),
-        service_tier: Some("priority".to_owned()),
+        service_tier: Some(ServiceTier::Priority),
         ..Default::default()
     };
 
@@ -2688,7 +2681,7 @@ async fn stream_error_events_escape_error_messages() {
         store: true,
         stream: true,
         max_output_tokens: Some(1024),
-        service_tier: Some("priority".to_owned()),
+        service_tier: Some(ServiceTier::Priority),
         ..Default::default()
     };
 
@@ -2751,7 +2744,7 @@ async fn incomplete_turn_persists_a_consistent_conversation_for_continuation() {
         store: true,
         tools: Some(vec![web_search]),
         max_output_tokens: Some(1024),
-        service_tier: Some("priority".to_owned()),
+        service_tier: Some(ServiceTier::Priority),
         ..Default::default()
     };
 
@@ -2768,7 +2761,7 @@ async fn incomplete_turn_persists_a_consistent_conversation_for_continuation() {
         store: true,
         previous_response_id: Some(response.id),
         max_output_tokens: Some(1024),
-        service_tier: Some("priority".to_owned()),
+        service_tier: Some(ServiceTier::Priority),
         ..Default::default()
     };
     let _ = ExecuteRequest::new(continuation_payload, exec_ctx).run().await.unwrap();
@@ -2830,7 +2823,7 @@ async fn stream_returns_incomplete_after_max_gateway_tool_rounds() {
         tools: Some(vec![web_search]),
         stream: true,
         max_output_tokens: Some(1024),
-        service_tier: Some("priority".to_owned()),
+        service_tier: Some(ServiceTier::Priority),
         ..Default::default()
     };
 
