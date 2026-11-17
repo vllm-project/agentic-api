@@ -4,6 +4,11 @@ All notable changes to Agentic API are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Added Sofya as a selectable `web_search` provider with `AGENTIC_WEB_SEARCH_PROVIDER=sofya` and `SOFYA_API_KEY`.
+  Domain filters and `freshness` (including date ranges) are forwarded to Sofya's own parameters.
+
 ### Changed
 
 - An MCP declaration's `require_approval` is now typed (`McpApprovalPolicy`) and parses the Responses API filter

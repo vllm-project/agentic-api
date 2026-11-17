@@ -6,9 +6,9 @@ every provider.
 | Setting | Environment variable | `config.toml` key | Default |
 | :--- | :--- | :--- | :--- |
 | Provider | `AGENTIC_WEB_SEARCH_PROVIDER` | `[web_search] provider` | `you` |
-| API key | variable named by `api_key_env` | `[web_search] api_key_env` | `YOU_API_KEY` / `BRAVE_API_KEY` / `TAVILY_API_KEY` / `SERPLY_API_KEY` / `KEENABLE_API_KEY` (optional) / `SEARXNG_API_KEY` (optional) |
-| Endpoint | `AGENTIC_WEB_SEARCH_BASE_URL` (or `YOU_API_BASE_URL` for You.com) | `[web_search] base_url` | none for You.com; `https://api.search.brave.com` for Brave; `https://api.tavily.com` for Tavily; `https://api.serply.io` for Serply; `https://api.keenable.ai` for Keenable; **required** for SearXNG |
-| Concurrent queries | `AGENTIC_WEB_SEARCH_MAX_CONCURRENT_QUERIES` | `[web_search] max_concurrent_queries` | You.com, Tavily, Serply, Keenable and SearXNG inherit `max_concurrent_gateway_calls`; Brave `1` |
+| API key | variable named by `api_key_env` | `[web_search] api_key_env` | `YOU_API_KEY` / `BRAVE_API_KEY` / `TAVILY_API_KEY` / `SERPLY_API_KEY` / `KEENABLE_API_KEY` (optional) / `SOFYA_API_KEY` / `SEARXNG_API_KEY` (optional) |
+| Endpoint | `AGENTIC_WEB_SEARCH_BASE_URL` (or `YOU_API_BASE_URL` for You.com) | `[web_search] base_url` | none for You.com; `https://api.search.brave.com` for Brave; `https://api.tavily.com` for Tavily; `https://api.serply.io` for Serply; `https://api.keenable.ai` for Keenable; `https://sofya.co` for Sofya; **required** for SearXNG |
+| Concurrent queries | `AGENTIC_WEB_SEARCH_MAX_CONCURRENT_QUERIES` | `[web_search] max_concurrent_queries` | You.com, Tavily, Serply, Keenable, Sofya and SearXNG inherit `max_concurrent_gateway_calls`; Brave `1` |
 
 **You.com** (`provider = "you"`) is the default and behaves exactly as before: domain filters are applied by the
 provider, `count` accepts 1–100, and the You.com-specific `livecrawl`, `livecrawl_formats`, `crawl_timeout`, and
@@ -92,7 +92,29 @@ The gateway adapts the shared tool contract to Keenable:
 - Each per-query `metadata[]` entry carries `"provider": "keenable"`. A 401/403 names `KEENABLE_API_KEY` and a 429 is
   reported with its `Retry-After` value, without an automatic retry.
 
-If you switch an existing deployment to Brave, Tavily, or Serply, update `api_key_env` if an older `config.toml` pins
+**Sofya** (`provider = "sofya"`) needs only `SOFYA_API_KEY`; its [API](https://sofya.co/docs) is metered in credits
+per request. Requests are `POST` bodies against `https://sofya.co/v1/search` with the key sent as a bearer token. The
+gateway adapts the shared tool contract to Sofya:
+
+- Every query is one `search_depth: "snippets"`, `topic: "general"` search, the depth that returns result snippets
+  without reading the pages, so all hits land in `results.web` and `results.news` is always empty.
+- `allowed_domains` / `blocked_domains` (and the model's `include_domains` / `exclude_domains`) are forwarded to
+  Sofya's native `include_domains` / `exclude_domains` and re-checked by the gateway on the response as defense in
+  depth, so a filtered search can return fewer than `count` results. Sofya takes at most 10 bare host names per list
+  (`github.com`, no scheme or path): only such entries are forwarded, and the rest is applied by the gateway alone.
+  With more than 10 allowed domains the search itself covers only the first 10.
+- `count` is clamped to Sofya's maximum of 20 (`max_results`); `freshness` is forwarded as Sofya's `freshness`
+  (`day`, `week`, `month`, `year`), and a date range becomes `YYYY-MM-DD:YYYY-MM-DD`, inclusive on both sides.
+- `country`, `language`, `safesearch`, and the You.com-specific arguments are ignored (logged at debug level).
+- A result's description is Sofya's `description` (the snippet), falling back to `content`, and `page_age` carries
+  `published_date`.
+- Each per-query `metadata[]` entry carries `"provider": "sofya"` plus Sofya's `X-Request-Id` response header as
+  `search_uuid` and its `elapsed_ms` as `latency` (in seconds).
+- Batched queries inherit the gateway concurrency limit. A 401/403 names `SOFYA_API_KEY`; a 402 (the account is out
+  of credits, or the key reached its spending limit) and a rate-limited request (HTTP 429, reported with its
+  `Retry-After` value) fail that `web_search_call` without an automatic retry.
+
+If you switch an existing deployment to Brave, Tavily, Serply, or Sofya, update `api_key_env` if an older `config.toml` pins
 it (or remove it) and drop a You.com `base_url`; a mismatched key variable is reported in the failed `web_search_call`
 message. Example:
 

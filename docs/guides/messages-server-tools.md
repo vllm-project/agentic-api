@@ -7,7 +7,7 @@ server tools below run on the gateway instead.
 
 Current Claude Code versions declare Anthropic's native `web_search_20250305` server tool. Agentic API translates that
 declaration for the upstream model and executes the resulting search server-side against the configured search backend
-(You.com, Brave Search, Tavily, Serply, Keenable, or SearXNG, see [Web search providers](web-search.md)); no MCP server or tool
+(You.com, Brave Search, Tavily, Serply, Keenable, Sofya, or SearXNG, see [Web search providers](web-search.md)); no MCP server or tool
 alias is required:
 
 ```bash

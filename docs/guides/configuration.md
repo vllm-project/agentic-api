@@ -17,12 +17,12 @@ llm_api_base = "http://127.0.0.1:5050"
 # database_url = "postgresql://agentic-api@localhost/agentic_api"
 
 [web_search]
-# Search backend for the gateway-owned web_search tool: "you" (default), "brave", "tavily", "serply", "keenable", or "searxng".
+# Search backend for the gateway-owned web_search tool: "you" (default), "brave", "tavily", "serply", "keenable", "sofya", or "searxng".
 provider = "you"
 base_url = "https://ydc-index.io"
 api_key_env = "YOU_API_KEY"
 # Concurrent provider requests inside one batched web-search call; unset uses
-# the provider default (Brave: 1; You.com, Tavily, Serply, Keenable and SearXNG: max_concurrent_gateway_calls).
+# the provider default (Brave: 1; You.com, Tavily, Serply, Keenable, Sofya and SearXNG: max_concurrent_gateway_calls).
 # max_concurrent_queries = 1
 
 [web_fetch]
