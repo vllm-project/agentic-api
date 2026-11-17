@@ -1,20 +1,14 @@
-//! Resolve response resource limits and upstream deadlines from configuration and environment.
+//! Resolve independent response resource limits from configuration and environment.
 
 use crate::config_file::ResponsesFileConfig;
-use crate::{environment_value, parse_env_nonzero_u64_value, parse_env_nonzero_usize};
+use crate::{environment_value, parse_env_nonzero_usize};
 use agentic_core::config::{
     DEFAULT_MAX_RETAINED_RESPONSE_BYTES, DEFAULT_MAX_STREAM_EVENT_BYTES, DEFAULT_MAX_UPSTREAM_JSON_BYTES,
-    DEFAULT_MAX_UPSTREAM_SSE_LINE_BYTES, DEFAULT_UPSTREAM_CONNECT_TIMEOUT_S,
-    DEFAULT_UPSTREAM_RESPONSE_HEADER_TIMEOUT_S, DEFAULT_UPSTREAM_TOTAL_TIMEOUT_S, MAX_RETAINED_RESPONSE_BYTES_ENV,
-    MAX_STREAM_EVENT_BYTES_ENV, MAX_UPSTREAM_JSON_BYTES_ENV, MAX_UPSTREAM_SSE_LINE_BYTES_ENV, ResponsesConfig,
-    UPSTREAM_CONNECT_TIMEOUT_S_ENV, UPSTREAM_RESPONSE_HEADER_TIMEOUT_S_ENV, UPSTREAM_TOTAL_TIMEOUT_S_ENV,
+    DEFAULT_MAX_UPSTREAM_SSE_LINE_BYTES, MAX_RETAINED_RESPONSE_BYTES_ENV, MAX_STREAM_EVENT_BYTES_ENV,
+    MAX_UPSTREAM_JSON_BYTES_ENV, MAX_UPSTREAM_SSE_LINE_BYTES_ENV, ResponsesConfig,
 };
 use agentic_core::error::Error;
-use std::num::{NonZeroU64, NonZeroUsize};
-
-fn resolve_timeout(name: &str, file_value: Option<NonZeroU64>, default: NonZeroU64) -> Result<NonZeroU64, Error> {
-    parse_env_nonzero_u64_value(name, std::env::var(name), file_value.unwrap_or(default))
-}
+use std::num::NonZeroUsize;
 
 pub(crate) fn resolve_responses_config(file: &ResponsesFileConfig) -> Result<ResponsesConfig, Error> {
     let max_retained_bytes_default = file
@@ -37,30 +31,12 @@ pub(crate) fn resolve_responses_config(file: &ResponsesFileConfig) -> Result<Res
         .unwrap_or_else(|| NonZeroUsize::new(DEFAULT_MAX_STREAM_EVENT_BYTES).expect("nonzero default"));
     let max_stream_event_bytes =
         parse_env_nonzero_usize(MAX_STREAM_EVENT_BYTES_ENV, max_stream_event_bytes_default)?.get();
-    let upstream_connect_timeout_s = resolve_timeout(
-        UPSTREAM_CONNECT_TIMEOUT_S_ENV,
-        file.upstream_connect_timeout_s,
-        DEFAULT_UPSTREAM_CONNECT_TIMEOUT_S,
-    )?;
-    let upstream_response_header_timeout_s = resolve_timeout(
-        UPSTREAM_RESPONSE_HEADER_TIMEOUT_S_ENV,
-        file.upstream_response_header_timeout_s,
-        DEFAULT_UPSTREAM_RESPONSE_HEADER_TIMEOUT_S,
-    )?;
-    let upstream_total_timeout_s = resolve_timeout(
-        UPSTREAM_TOTAL_TIMEOUT_S_ENV,
-        file.upstream_total_timeout_s,
-        DEFAULT_UPSTREAM_TOTAL_TIMEOUT_S,
-    )?;
     let responses_config = ResponsesConfig {
         prompt_cache_options_supported: file.prompt_cache_options_supported.unwrap_or(false),
         max_retained_bytes,
         max_upstream_json_bytes,
         max_upstream_sse_line_bytes,
         max_stream_event_bytes,
-        upstream_connect_timeout_s,
-        upstream_response_header_timeout_s,
-        upstream_total_timeout_s,
     };
     responses_config.validate()?;
     Ok(responses_config)
@@ -77,18 +53,49 @@ pub(crate) fn generated_responses_file_config() -> ResponsesFileConfig {
             .and_then(|value| value.parse::<NonZeroUsize>().ok()),
         max_stream_event_bytes: environment_value(MAX_STREAM_EVENT_BYTES_ENV)
             .and_then(|value| value.parse::<NonZeroUsize>().ok()),
-        upstream_connect_timeout_s: environment_value(UPSTREAM_CONNECT_TIMEOUT_S_ENV)
-            .and_then(|value| value.parse::<NonZeroU64>().ok()),
-        upstream_response_header_timeout_s: environment_value(UPSTREAM_RESPONSE_HEADER_TIMEOUT_S_ENV)
-            .and_then(|value| value.parse::<NonZeroU64>().ok()),
-        upstream_total_timeout_s: environment_value(UPSTREAM_TOTAL_TIMEOUT_S_ENV)
-            .and_then(|value| value.parse::<NonZeroU64>().ok()),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config_file::FileConfig;
+    use agentic_core::types::ServiceTier;
+
+    #[test]
+    fn model_capabilities_share_one_configuration_with_the_catalog() {
+        let input = r#"
+            [responses]
+            prompt_cache_options_supported = true
+
+            [models."gpt-6-astra"]
+            sampling_supported = false
+            logprobs_supported = false
+            supported_reasoning_levels = ["none", "minimal", "low", "high"]
+            service_tiers = ["default"]
+            prompt_cache_options_supported = false
+            prompt_cache_retention_supported = false
+        "#;
+        let file: FileConfig = toml::from_str(input).unwrap();
+        let config = resolve_responses_config(&file.responses).unwrap();
+        assert!(config.prompt_cache_options_supported);
+        let capabilities = file.model_capabilities();
+        let policy = capabilities.for_model("gpt-6-astra").unwrap();
+        assert_eq!(policy.sampling_supported, Some(false));
+        assert_eq!(policy.logprobs_supported, Some(false));
+        assert_eq!(policy.supported_reasoning_levels.as_ref().unwrap().as_slice().len(), 4);
+        assert_eq!(
+            capabilities.resolve_reasoning_levels("gpt-6-astra"),
+            policy.supported_reasoning_levels.as_ref().unwrap().as_slice(),
+        );
+        assert_eq!(policy.service_tiers.as_deref(), Some(&[ServiceTier::Default][..]));
+        assert_eq!(policy.prompt_cache_options_supported, Some(false));
+        assert_eq!(policy.prompt_cache_retention_supported, Some(false));
+        let restored: FileConfig = toml::from_str(&toml::to_string(&file).unwrap()).unwrap();
+        assert_eq!(restored.model_capabilities().for_model("gpt-6-astra"), Some(policy));
+        assert!(toml::from_str::<FileConfig>("[responses.models.astra]\nlogprobs_supported = false").is_err());
+        assert!(toml::from_str::<FileConfig>("[models.astra]\nlogprob_supported = false").is_err());
+    }
 
     #[test]
     fn prompt_cache_support_is_explicit_and_preserved_in_file_config() {

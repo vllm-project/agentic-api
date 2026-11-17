@@ -131,11 +131,13 @@ handling, ignore `agentic_cli*`/`agentic_harness.rs`/`agentic_output.rs`/
 a coding harness (Codex or Claude Code) as subprocesses for local, single-command use
 (`agentic serve <model>`), and never touch the request path.
 
-`model_capabilities.rs` is the one deliberate exception: it is the shared contract both
-sides speak. The gateway resolves each model's `InputModalities` and reasoning effort levels
-there and serves them in the Codex catalog; the launcher parses that same catalog back through
-`CodexCatalogCapabilities` before writing an isolated Codex home. Keeping one definition is
-what stops the HTTP catalog and a launcher catalog from disagreeing about image support.
+`model_capabilities.rs` is the one deliberate exception: it owns the Codex catalog
+representation shared by the gateway and launcher. Core's `types/model_capabilities.rs`
+owns `ModelOverride`, `ModelCapabilities`, and their validated settings. Its immutable override table is
+shared through `Arc`, so cloning transport configuration does not copy every model entry. The gateway
+uses the same configured values for the catalog and Responses admission; the launcher
+parses the catalog through `CodexCatalogCapabilities` before writing an isolated Codex home.
+Catalog display defaults do not become admission limits.
 
 ### `app.rs`, `server.rs`, `main.rs`
 
@@ -190,6 +192,23 @@ Unmodeled top-level provider parameters, such as `chat_template_kwargs` and `top
 are retained in `RequestPayload::extra` and borrowed by `UpstreamRequest` for forwarding
 on each inference round. Known fields keep their typed validation and conversion;
 gateway state controls and WebSocket event metadata are not provider extensions.
+`RequestPayload::ensure_supported_parameters()` checks explicit `[models]`
+capabilities for the current request's exact model ID before history lookup or
+inference, returning typed `UnsupportedParameterError` variants. The same check
+runs at core admission, WebSocket preflight, and summary inference. Embedded and
+split execution receive capabilities through core `Config` and `ExecutionContext`.
+The deployment cache-options default applies when the selected model has no override.
+WebSocket policy rejection precedes checkpoint acquisition, preserving the parent
+for retry. Unknown effort/tier values and malformed `top_logprobs` fail decoding
+instead and follow the existing parse-error checkpoint cleanup.
+
+`reasoning.effort`, `service_tier`, and `top_logprobs` are modeled request fields.
+`top_logprobs` preserves omission, explicit null, and signed integers through the
+upstream conversion; its numerical limits remain upstream-owned. Direct Rust
+construction must not place it in `extra`, which would bypass typed validation or
+serialize duplicate keys. Actual response tiers and stored response snapshots retain
+their existing string representation.
+
 With `store: false` and no state IDs, execution does not rehydrate stored history or
 persist the turn. Clients supply the complete item history in `input`, including
 prior output items and tool call outputs. `previous_response_id` still loads an
@@ -663,6 +682,9 @@ goes through it, so it lowers the public records the model never read (search it
   Input validation also runs before and after rehydration. It is separate from
   deserialization because raw proxy routing preserves unsupported content for the
   upstream to interpret; typed construction reports input and tool errors separately.
+- **`types/model_capabilities.rs`** — shared model settings and resolution for catalog
+  presentation and Responses admission. Only explicit overrides restrict requests;
+  the catalog's default reasoning levels are presentation defaults.
 - **`types/io/`** — `input.rs` (inbound message/tool-call/tool-result shapes,
   `ResponsesInput`), `output.rs` (outbound output items: messages, function calls, web
   search/MCP calls, reasoning — plus the `ApplyDone` trait described below), `tools.rs`
@@ -838,7 +860,7 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   keeps the history the turn continued, as OpenAI does, while its items are appended after whatever the
   conversation holds when it is stored. A session keeps the same
   checkpoint type in memory, with the history items, as the next turn's parent. A conversation is read in one
-  statement; a missing one is created for a stored turn and rejected for an unstored one. Client-supplied item IDs are checked and resolved against storage
+  statement; a missing one is rejected with a 404 for both stored and unstored turns. Client-supplied item IDs are checked and resolved against storage
   in bounded query batches. Rehydration retains internal
   `InputItem::McpListTools` records so `ToolRegistry` can suppress repeated MCP
   discovery lifecycle output. After stored history and the new request input are
@@ -882,10 +904,13 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   It builds `UpstreamRequest`s, snapshots registry classification facts into an owned
   `TranslationContext`, passes the shared retained-data budget into ingestion, and
   passes each live JSON or SSE body to `AgentPipeline`. It does not charge SSE wire bytes.
-- **`inference.rs`** — `call_inference()`: the raw HTTP/SSE transport to vLLM. No
-  parsing beyond splitting `data: ...` lines and stopping at `[DONE]`. Typed inference
-  uses explicit connect and response-header deadlines plus a per-round total deadline;
-  body byte ceilings and streaming progress timeouts remain independent limits.
+- **`inference.rs`** — `send_request`, `fetch_response_json`, and `response_lines` own
+  raw HTTP/SSE transport. No parsing beyond splitting `data: ...` lines and stopping at
+  `[DONE]`. The shared client built by `ExecutionContext::from_config` has a 10-second
+  connect timeout. Streaming header waits and body reads use the existing progress window;
+  JSON uses zero (no timeout), and there is no total inference deadline. Progress means
+  wire bytes, not semantic tokens. Body byte ceilings remain enforced. See the
+  [configuration guide](docs/guides/configuration.md#typed-upstream-timeouts) for the security tradeoff.
 - **`pipeline.rs`, `pipeline/`** — `AgentPipeline`, the request-owned entry point for
   both response body formats. `RoundIngestion` owns the synchronous per-round semantic
   core; its `StreamRelay` (`relay.rs`, `relay/`) owns awaited, ordered client delivery
@@ -982,7 +1007,7 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   `storage::conversation`/`storage::response` directly. Today they only cover what the
   pipeline and retrieval need. Each handler has one `rehydrate` and one `persist`; `persist` takes the turn's
   output items, its snapshot, and the `ResponseMetadata` that `persist.rs` builds, including any multi-agent tree.
-  Lookups and retrieval are separate methods (`get`, `get_or_create`, `create`, `retrieve`, `validate_exists`);
+  Lookups and retrieval are separate methods (`get`, `create`, `retrieve`, `validate_exists`);
   **any new CRUD operation
   beyond persist/rehydrate belongs here**, added as a new method that delegates to the corresponding store.
 - **`error.rs`** — `ExecutorError`, with the mapping methods (`http_status()`,
@@ -1946,7 +1971,7 @@ for the five-minute lifetime, serialized-size budget, and crash recovery rules.
   but it is never serialized to vLLM.
 - **`conversation.rs`, `response.rs`** — `ConversationStore` and `ResponseStore`: one
   typed function per operation, taking and returning `InOutItem` and storage types rather
-  than rows (`create`, `get`, `get_or_create`, `rehydrate`, `persist`, and the item CRUD).
+  than rows (`create`, `get`, `rehydrate`, `persist`, and the item CRUD).
   `ResponseStore::get` decodes `ResponseData` at the store boundary; handlers and executor callers receive the
   typed value. Split commit reuses a checkpoint or loads only this parent row when its wire context omitted it.
   Conversation `rehydrate` is one query; response `rehydrate` reads the response row and then its

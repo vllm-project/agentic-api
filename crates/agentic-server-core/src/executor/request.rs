@@ -20,6 +20,7 @@ use crate::storage::{
 use crate::tool::{GatewayExecutorRegistration, GatewayExecutors, file_search::FileSearchService};
 use crate::types::io::{InOutItem, ToolChoice};
 use crate::types::messages::GatewayToolMap;
+use crate::types::model_capabilities::ModelCapabilities;
 use crate::types::request_response::{RequestPayload, ResponsePayload};
 
 /// Env var configuring client-tool → gateway-executor aliases for `/v1/messages`
@@ -116,13 +117,14 @@ pub struct ExecutionContext {
     /// Base URL for the LLM backend, e.g. `"http://localhost:8000"`.
     pub llm_base_url: String,
     /// Maximum wait for the next body chunk in a streaming request, including HTTP error bodies.
-    /// Applies after response headers arrive; `Duration::ZERO` disables the timeout.
+    /// Bounds sending/receiving response headers and each body chunk read; `Duration::ZERO` disables the timeout.
     /// Sourced from the `STREAMING_CHUNK_TIMEOUT_S` environment variable, defaulting to
     /// [`DEFAULT_STREAMING_TIMEOUT`] when unset or unparseable.
     pub streaming_timeout: Duration,
     /// Bounded-concurrency policy applied to gateway-owned calls in each round.
     pub(crate) gateway_scheduler_policy: GatewaySchedulerPolicy,
     pub responses_config: ResponsesConfig,
+    pub model_capabilities: ModelCapabilities,
     /// Execution, stage, token, and timing instruments. Defaults to the
     /// globally registered meter provider at construction time.
     pub metrics: ExecutorMetrics,
@@ -136,6 +138,7 @@ impl ExecutionContext {
         format!("{}/v1/responses", self.llm_base_url)
     }
 
+    /// Uses the supplied client unchanged; embedders must configure its connect timeout.
     #[must_use]
     pub fn new(
         conv_handler: ConversationHandler,
@@ -157,6 +160,7 @@ impl ExecutionContext {
             streaming_timeout: streaming_timeout_from_env(),
             gateway_scheduler_policy: GatewaySchedulerPolicy::default(),
             responses_config: ResponsesConfig::default(),
+            model_capabilities: ModelCapabilities::default(),
             metrics: ExecutorMetrics::from_global(),
             storage_pool: None,
         }
@@ -173,6 +177,13 @@ impl ExecutionContext {
     #[must_use]
     pub fn with_responses_config(mut self, responses_config: ResponsesConfig) -> Self {
         self.responses_config = responses_config;
+        self
+    }
+
+    /// Use the same configured capabilities for request admission and catalog projection.
+    #[must_use]
+    pub fn with_model_capabilities(mut self, model_capabilities: ModelCapabilities) -> Self {
+        self.model_capabilities = model_capabilities;
         self
     }
 
@@ -267,7 +278,7 @@ impl ExecutionContext {
         let resp_handler = ResponseHandler::new(ResponseStore::new(pool.clone()));
         let client = Arc::new(
             reqwest::Client::builder()
-                .connect_timeout(cfg.responses.upstream_connect_timeout())
+                .connect_timeout(Duration::from_secs(10))
                 .build()
                 .map_err(|error| Error::Config(format!("failed to build upstream HTTP client: {error}")))?,
         );
@@ -307,6 +318,7 @@ impl ExecutionContext {
             streaming_timeout: streaming_timeout_from_env(),
             gateway_scheduler_policy: GatewaySchedulerPolicy::new(cfg.tools.max_concurrent_gateway_calls),
             responses_config: cfg.responses,
+            model_capabilities: cfg.model_capabilities.clone(),
             metrics: ExecutorMetrics::from_global(),
             storage_pool: Some(pool),
         }

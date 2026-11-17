@@ -46,7 +46,6 @@ async fn test_state_with_storage(llm_url: &str) -> AppState {
         llm_api_base: config.llm_api_base.clone(),
         skip_llm_ready_check: config.skip_llm_ready_check,
         openai_api_key: config.openai_api_key.clone(),
-        model_capabilities: Arc::default(),
         max_request_body_size: DEFAULT_MAX_REQUEST_BODY_SIZE,
     }
 }

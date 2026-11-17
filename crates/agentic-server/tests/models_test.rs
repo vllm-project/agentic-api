@@ -75,10 +75,9 @@ fn state_with_overrides(llm_url: &str, overrides: &[(&str, ModelOverride)]) -> A
         .iter()
         .map(|(model_id, overrides)| ((*model_id).to_owned(), overrides.clone()))
         .collect::<BTreeMap<_, _>>();
-    AppState {
-        model_capabilities: Arc::new(ModelCapabilities::new(overrides)),
-        ..test_state(&config)
-    }
+    let mut state = test_state(&config);
+    Arc::get_mut(&mut state.exec_ctx).unwrap().model_capabilities = ModelCapabilities::new(overrides);
+    state
 }
 
 async fn spawn_configured_gateway(

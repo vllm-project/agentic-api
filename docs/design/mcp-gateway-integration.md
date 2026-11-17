@@ -110,9 +110,13 @@ impl McpClient {
 `~/.agentic-api/config.toml`; a request selects one by declaring the configured `server_label` without a `server_url`.
 Connection details from gateway configuration take precedence and cannot be overridden by a request. Configured
 `allowed_tools` form a policy ceiling that a request may narrow but cannot expand, and configured
-`require_approval = "never"` lets a request omit its approval setting. Configured `defer_loading` and `description`
-are defaults for a request that leaves `defer_loading` or `server_description` unset; a deferred server's tools stay
-behind hosted tool search until a search loads them, so such a request must declare hosted `tool_search`.
+`require_approval = "never"` lets a request omit its approval setting. A request's own `require_approval` is a typed
+`McpApprovalPolicy`: `"never"`, or a filter whose `never.tool_names` covers every tool discovery returns for the
+request. A tool the policy gates fails discovery with a configuration error, because the gateway cannot yet pause
+for MCP approval ([#145](https://github.com/vllm-project/agentic-api/issues/145)). Configured `defer_loading` and
+`description` are defaults for a request that leaves `defer_loading` or `server_description` unset; a deferred
+server's tools stay behind hosted tool search until a search loads them, so such a request must declare hosted
+`tool_search`.
 
 Request-provided URLs allow loopback hosts by default. Additional trusted hostnames may be configured through
 `AGENTIC_MCP_ALLOWED_HOSTS` from the process environment or the `config.toml` `[mcp].allowed_hosts` array. URL

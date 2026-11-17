@@ -14,7 +14,6 @@ use agentic_server::app::{
     AppState, ReadinessTracker, ServerConfig, WebSocketTracker, build_router_with_auth, gateway_listener,
 };
 use agentic_server::auth::{OidcAuthError, OidcAuthenticator, OidcConfig};
-use agentic_server::model_capabilities::ModelCapabilities;
 use agentic_server::rate_limit::RateLimitConfig;
 use agentic_server::telemetry::TelemetryError;
 use tokio::{net::TcpListener, task::JoinSet};
@@ -29,7 +28,6 @@ const FILE_BLOB_CLEANUP_INTERVAL: Duration = Duration::from_secs(30);
 /// These are deliberately separate from [`Config`], which carries inference,
 /// storage, and tool concerns that core owns.
 pub struct GatewayOptions<'a> {
-    pub model_capabilities: ModelCapabilities,
     pub host: &'a str,
     pub port: u16,
     /// Ceiling on serialized inbound request bytes for HTTP bodies and
@@ -62,7 +60,6 @@ async fn build_state(
     config: &Config,
     shutdown_token: CancellationToken,
     max_request_body_size: NonZeroUsize,
-    model_capabilities: ModelCapabilities,
 ) -> Result<AppState, ServerError> {
     let proxy_state = ProxyState::new(config.clone())?;
     let exec_ctx = Arc::new(ExecutionContext::from_config(config).await?);
@@ -78,7 +75,6 @@ async fn build_state(
         skip_llm_ready_check: config.skip_llm_ready_check,
         openai_api_key: config.openai_api_key.clone(),
         max_request_body_size,
-        model_capabilities: Arc::new(model_capabilities),
     })
 }
 
@@ -247,20 +243,13 @@ pub async fn run(config: Config, gateway: GatewayOptions<'_>) -> Result<(), Serv
         max_request_body_size,
         rate_limit,
         oidc,
-        model_capabilities,
     } = gateway;
     let authenticator = match oidc {
         Some(oidc) => Some(OidcAuthenticator::discover(oidc).await?),
         None => None,
     };
     wait_until_llm_ready(&config).await?;
-    let state = build_state(
-        &config,
-        CancellationToken::new(),
-        max_request_body_size,
-        model_capabilities,
-    )
-    .await?;
+    let state = build_state(&config, CancellationToken::new(), max_request_body_size).await?;
     serve_gateway_until_signal(state, host, port, authenticator, rate_limit).await
 }
 
@@ -281,7 +270,6 @@ pub async fn run_with_llm(
         max_request_body_size,
         rate_limit,
         oidc,
-        model_capabilities,
     } = gateway;
     let authenticator = match oidc {
         Some(oidc) => Some(OidcAuthenticator::discover(oidc).await?),
@@ -313,7 +301,7 @@ pub async fn run_with_llm(
             }
             state = async {
                 wait_until_llm_ready(&config).await?;
-                build_state(&config, shutdown_token.clone(), max_request_body_size, model_capabilities).await
+                build_state(&config, shutdown_token.clone(), max_request_body_size).await
             } => state?,
         };
 

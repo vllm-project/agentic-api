@@ -68,21 +68,21 @@ max_upstream_sse_line_bytes = 16777216
 # Defaults to 16 MiB (16777216).
 max_stream_event_bytes = 16777216
 
-# Finite deadlines for typed upstream inference connections, response headers,
-# and complete inference rounds. Values are positive seconds.
-upstream_connect_timeout_s = 10
-upstream_response_header_timeout_s = 600
-upstream_total_timeout_s = 3600
-
 [models."Qwen/Qwen3-VL-8B-Instruct"]
 # Input modalities to advertise for this served model ID.
 # Accepted values are "text" and "text" + "image"; text is always required.
 input_modalities = ["text", "image"]
 
 [models."zai-org/GLM-5.3-Flash"]
-# Reasoning effort levels to offer for this served model ID, in the order Codex lists them.
-# Accepted values are "low", "medium", "high", "xhigh", and "max".
+# Reasoning effort levels to advertise and accept for this exact served model ID.
+# Accepted names are "none", "minimal", "low", "medium", "high", "xhigh", and "max".
 supported_reasoning_levels = ["low", "high", "max"]
+
+# Optional Responses limits for another exact served model ID.
+[models."gpt-6-astra"]
+sampling_supported = false
+logprobs_supported = false
+supported_reasoning_levels = ["low", "medium", "high", "xhigh", "max"]
 
 [mcp_servers.counter]
 url = "https://mcp.example.com/mcp"
@@ -107,11 +107,32 @@ This matters because Codex reads its local model catalog and strips image conten
 when the catalog says the model is text-only, so a missing override blocks image input even against a vision-capable
 upstream.
 
-`supported_reasoning_levels` lists the reasoning effort levels Codex offers for that served model, in the order the
-catalog advertises them. A model without the setting keeps `["low", "medium", "high"]`, so existing catalogs are
-unchanged. Levels use the shared effort vocabulary (`low`, `medium`, `high`, `xhigh`, and `max`); unknown level names,
-empty lists, and repeated levels are rejected at startup with the offending file and line. Each level's Codex-facing
-description comes from a fixed per-level table rather than from the configuration file.
+`supported_reasoning_levels` lists the reasoning effort levels Codex offers and Responses requests may explicitly
+select for that served model, in catalog order. Levels use the shared vocabulary (`none`, `minimal`, `low`, `medium`,
+`high`, `xhigh`, and `max`); unknown names, empty lists, and repeated levels are rejected at startup. Each level's
+Codex-facing description comes from a fixed table. Without this setting, the catalog displays `["low", "medium",
+"high"]`, but that fallback does not restrict requests.
+
+Existing explicit `supported_reasoning_levels` lists now also govern request admission, rather than only catalog
+display. Check that deployed lists include every effort clients should be allowed to request.
+
+The same `[models."<served-model-id>"]` table accepts optional Responses capability settings:
+
+| Setting | Request admission |
+| --- | --- |
+| `sampling_supported = false` | Reject non-null `temperature` and `top_p`. |
+| `logprobs_supported = false` | Reject non-null `top_logprobs` (including zero) and `message.output_text.logprobs` in `include`. |
+| `supported_reasoning_levels` | Allow explicitly requested `reasoning.effort` values from this list. |
+| `service_tiers` | Allow explicitly requested tiers from this deployment's list: `auto`, `default`, `flex`, `scale`, `priority`, `fast`, or `ultrafast`. Empty lists, repeated tiers, and unknown tier names are rejected at startup. |
+| `prompt_cache_options_supported` | Override `[responses] prompt_cache_options_supported` for this model; the deployment default is `false`. |
+| `prompt_cache_retention_supported = false` | Reject non-null legacy `prompt_cache_retention`. |
+
+Only explicit settings restrict their corresponding request fields; model names do not enable built-in profiles.
+The typed request parser still applies to every model. Set service-tier limits only for known deployment restrictions;
+the upstream determines actual account and regional availability. Enable cache options only after qualifying mode/TTL
+support for that model, or for all models using the deployment fallback. Ordinary `/v1/models` responses remain
+upstream-owned; local settings feed the Codex catalog without adding admission fields to its output.
+See [Responses capability policies](../api/index.md#model-capability-policies) for errors and compatibility details.
 
 `max_request_body_size_bytes` bounds the serialized request the gateway accepts on `/v1/responses`,
 `/v1/responses/compact`, `/v1/conversations`, the Anthropic Messages endpoints, the Responses WebSocket, and the
@@ -144,7 +165,7 @@ credential variable. `AGENTIC_WEB_SEARCH_PROVIDER`, `AGENTIC_WEB_SEARCH_BASE_URL
 name. The MCP allowlist is used only for request-declared remote MCP URLs; configured `[mcp_servers]` entries are trusted
 operator configuration.
 
-`[responses]` configures response resource limits and upstream deadlines across inference, transport, and delivery:
+`[responses]` configures independent response resource limits across inference, transport, and client delivery:
 - `max_retained_bytes` (`AGENTIC_MAX_RETAINED_RESPONSE_BYTES`, default 8 MiB): bounds cumulative logical retained
   response data across all rounds of a turn and gateway tool outputs. Unlike raw wire bytes, it is invariant to
   upstream SSE chunking (1-byte deltas, coarse chunks, and non-streaming JSON consume identical logical budget).
@@ -155,12 +176,6 @@ operator configuration.
   event delivered to the client, including full `response.output_item.done` snapshots and terminal `response.completed`.
   The WebSocket transport applies the same limit to each routed event (its `stream_id` member counts toward it), and
   the executor validates the terminal event against that transport limit before persisting the response.
-- `upstream_connect_timeout_s` (`AGENTIC_UPSTREAM_CONNECT_TIMEOUT_S`, default 10 seconds): bounds connection setup for
-  the shared typed-executor HTTP client.
-- `upstream_response_header_timeout_s` (`AGENTIC_UPSTREAM_RESPONSE_HEADER_TIMEOUT_S`, default 600 seconds): bounds the
-  wait for response headers in each typed inference round, preserving the existing long-prefill allowance.
-- `upstream_total_timeout_s` (`AGENTIC_UPSTREAM_TOTAL_TIMEOUT_S`, default 3600 seconds): bounds each complete typed
-  inference round, including a streaming or JSON response body, even while the upstream continues sending data.
 
 Validation enforces that `max_stream_event_bytes`, `max_upstream_sse_line_bytes`, and `max_upstream_json_bytes` each
 exceed `max_retained_bytes` by proportional wire headroom (`max(64 KiB, max_retained_bytes / 4)`) to account for JSON
@@ -168,9 +183,6 @@ serialization overhead, escaping, and message envelopes. When sizing gateway mem
 in-flight buffers multiply per active streaming request: a stream in flight may hold an upstream line buffer (up to
 `max_upstream_sse_line_bytes`), its parsed AST, an outbound channel event (up to `max_stream_event_bytes`), and retained
 turn state (`max_retained_bytes`).
-The timeout values must satisfy `upstream_connect_timeout_s <= upstream_response_header_timeout_s <=
-upstream_total_timeout_s`; they cannot be disabled with zero. The existing streaming chunk timeout remains an
-independent progress bound within the total deadline.
 
 With that file in place, inject only the secret when starting the server:
 
@@ -197,5 +209,39 @@ Configured `allowed_tools` form the maximum tool set; request-provided `allowed_
 `require_approval = "never"` lets requests omit that field. If a label exists in `config.toml`, a request cannot
 override it with `server_url`; otherwise the existing request-declared HTTP MCP flow remains available.
 
+The gateway has no MCP approval step yet. A request's `require_approval` may be `"never"` or a filter object such as
+`{"never": {"tool_names": ["read"]}}`; a tool that the filter's `never.tool_names` does not list needs approval, as in
+the Responses API, so the request fails with a 400 if the server exposes such a tool. Narrow `allowed_tools` to the
+listed tools in that case. `"always"` and `read_only` filters are rejected. A filter is echoed in the shape the
+Responses API uses: both `always` and `never`, `null` when absent.
+
 Web search provider settings are described in [Web search providers](web-search.md), and the gateway-run web search
 and web fetch tools for Claude Code in [Gateway server tools on `/v1/messages`](messages-server-tools.md).
+
+### Typed upstream timeouts
+
+The shared HTTP client constructed by `ExecutionContext::from_config` has a fixed
+10-second connect timeout. `ExecutionContext::new` accepts an existing client unchanged;
+embedders must set its connection policy themselves. This shared client is also used by
+configured gateway tools. Transparent HTTP proxying has its own transport policy.
+
+`STREAMING_CHUNK_TIMEOUT_S` (default 600 seconds; zero disables it) bounds the complete
+request-send/response-header wait for typed streaming inference and each subsequent wait
+for a body chunk, including HTTP error bodies. It measures **wire progress**, not semantic
+token progress: partial lines, SSE comments, or other bytes reset the body wait. Waiting
+on downstream delivery is outside a pending upstream chunk read.
+
+Typed JSON inference passes `Duration::ZERO` for both headers and body reads because
+non-streaming upstreams may generate the whole response before sending headers. Connection
+setup is still bounded for the configured shared client, but JSON header and body waits
+can remain unbounded after connection. JSON and SSE line byte ceilings still apply, as does
+the 1 MiB error-body ceiling; unreadable error bodies retain the upstream status and headers.
+
+There is no total inference-round deadline. This avoids aborting legitimate long generations
+and agent sessions while upstream data continues arriving. It is deliberately narrower than
+the original finite connect/header/total deadline proposal in PR #540 and is **not security-equivalent**:
+a continuous byte trickle may keep a stream alive indefinitely without producing tokens
+(for example, bounded SSE comment lines evade a cumulative semantic-output budget). A single
+unterminated line still hits the line-size limit. Zero also disables streaming header/progress
+bounds. Operators requiring a hard lifetime bound must enforce a separate request policy;
+these progress and size limits do not provide one.

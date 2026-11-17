@@ -1,13 +1,8 @@
-//! Request members typed execution recognizes only to reject them.
+//! Typed gateway parameter checks and opt-in model capability restrictions.
 //!
-//! Silently dropping `background` or `prompt` would answer a different request
-//! than the client sent, so executor admission rejects them with a typed
-//! parameter error instead. Absent and `null` values (and `background: false`)
-//! are the defaults the executor already honours, so they stay accepted.
-//!
-//! The HTTP router parses every request before choosing a route, and direct
-//! pass-through forwards the original body for the upstream to judge. So both
-//! members accept any JSON value here, and only executor admission rejects one.
+//! Wire decoding validates field shapes. Admission rejects unsupported gateway features and
+//! explicitly configured model restrictions before history lookup or inference. Unconfigured
+//! model capabilities remain upstream-owned, independently of catalog display defaults.
 
 use std::fmt;
 
@@ -15,6 +10,8 @@ use serde::de::{self, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 
 use super::{JsonKind, RequestPayload};
+use crate::types::io::ItemInclude;
+use crate::types::model_capabilities::ModelOverride;
 
 /// Request parameter name for background execution.
 pub const BACKGROUND_PARAM: &str = "background";
@@ -102,6 +99,26 @@ pub enum UnsupportedParameterError {
     PromptTemplate,
     #[error("MCP tool_choice is not supported; use `auto`, `required`, or a function `tool_choice` instead")]
     McpToolChoice,
+    #[error("temperature is not supported by the configured model policy")]
+    Temperature,
+    #[error("top_p is not supported by the configured model policy")]
+    TopP,
+    #[error("top_logprobs is not supported by the configured model policy")]
+    TopLogprobs,
+    #[error("message.output_text.logprobs in include is not supported by the configured model policy")]
+    LogprobsInclude,
+    #[error("reasoning.effort is not supported by the configured model policy")]
+    ReasoningEffort,
+    #[error("service_tier is not supported by the configured model policy")]
+    ServiceTier,
+    #[error("prompt_cache_retention is not supported by the configured model policy")]
+    PromptCacheRetention,
+    #[error(
+        "prompt_cache_options is not enabled for this model; verify the upstream mode/TTL contract before enabling models.<id>.prompt_cache_options_supported or responses.prompt_cache_options_supported"
+    )]
+    PromptCacheOptions,
+    #[error("top_logprobs must use its typed request field, not extra")]
+    TopLogprobsExtension,
 }
 
 impl UnsupportedParameterError {
@@ -112,6 +129,14 @@ impl UnsupportedParameterError {
             Self::BackgroundMode | Self::BackgroundType(_) => BACKGROUND_PARAM,
             Self::PromptTemplate => PROMPT_PARAM,
             Self::McpToolChoice => TOOL_CHOICE_PARAM,
+            Self::Temperature => "temperature",
+            Self::TopP => "top_p",
+            Self::TopLogprobs | Self::TopLogprobsExtension => "top_logprobs",
+            Self::LogprobsInclude => "include",
+            Self::ReasoningEffort => "reasoning.effort",
+            Self::ServiceTier => "service_tier",
+            Self::PromptCacheRetention => "prompt_cache_retention",
+            Self::PromptCacheOptions => "prompt_cache_options",
         }
     }
 
@@ -119,21 +144,89 @@ impl UnsupportedParameterError {
     #[must_use]
     pub const fn code(self) -> &'static str {
         match self {
-            Self::BackgroundMode | Self::McpToolChoice => "unsupported_value",
+            Self::BackgroundMode
+            | Self::McpToolChoice
+            | Self::Temperature
+            | Self::TopP
+            | Self::TopLogprobs
+            | Self::LogprobsInclude
+            | Self::ReasoningEffort
+            | Self::ServiceTier
+            | Self::PromptCacheRetention
+            | Self::TopLogprobsExtension => "unsupported_value",
             Self::BackgroundType(_) => "invalid_type",
-            Self::PromptTemplate => "unsupported_parameter",
+            Self::PromptTemplate | Self::PromptCacheOptions => "unsupported_parameter",
         }
     }
 }
 
 impl RequestPayload {
+    pub(super) fn validate_modeled_extensions(&self) -> Result<(), UnsupportedParameterError> {
+        if self.extra.contains_key("top_logprobs") {
+            return Err(UnsupportedParameterError::TopLogprobsExtension);
+        }
+        Ok(())
+    }
+
     /// Rejects request members typed execution recognizes but cannot honour.
     ///
     /// # Errors
     ///
-    /// Returns [`UnsupportedParameterError`] for `background: true`, a
-    /// non-boolean `background`, a non-null `prompt`, or an MCP `tool_choice`.
-    pub fn ensure_supported_parameters(&self) -> Result<(), UnsupportedParameterError> {
+    /// Returns a typed error for unsupported gateway parameters or explicit model restrictions.
+    /// Only the configured override restricts model parameters; catalog display defaults do not.
+    /// The deployment cache-options setting is used when the model has no override for it.
+    pub fn ensure_supported_parameters(
+        &self,
+        model: Option<&ModelOverride>,
+        prompt_cache_options_supported: bool,
+    ) -> Result<(), UnsupportedParameterError> {
+        self.validate_modeled_extensions()?;
+        let cache_supported = model
+            .and_then(|model| model.prompt_cache_options_supported)
+            .unwrap_or(prompt_cache_options_supported);
+        if self.prompt_cache_options.is_some() && !cache_supported {
+            return Err(UnsupportedParameterError::PromptCacheOptions);
+        }
+        if let Some(model) = model {
+            if model.sampling_supported == Some(false) {
+                if self.temperature.is_some() {
+                    return Err(UnsupportedParameterError::Temperature);
+                }
+                if self.top_p.is_some() {
+                    return Err(UnsupportedParameterError::TopP);
+                }
+            }
+            if model.logprobs_supported == Some(false) {
+                if self.top_logprobs.as_ref().is_some() {
+                    return Err(UnsupportedParameterError::TopLogprobs);
+                }
+                if self
+                    .include
+                    .iter()
+                    .flatten()
+                    .any(|field| matches!(field.parse(), Ok(ItemInclude::MessageOutputTextLogprobs)))
+                {
+                    return Err(UnsupportedParameterError::LogprobsInclude);
+                }
+            }
+            if let Some((effort, allowed)) = self
+                .reasoning
+                .as_ref()
+                .and_then(|reasoning| reasoning.effort)
+                .zip(model.supported_reasoning_levels.as_ref())
+                && !allowed.as_slice().contains(&effort)
+            {
+                return Err(UnsupportedParameterError::ReasoningEffort);
+            }
+            if let Some((tier, allowed)) = self.service_tier.zip(model.service_tiers.as_ref())
+                && !allowed.contains(&tier)
+            {
+                return Err(UnsupportedParameterError::ServiceTier);
+            }
+            if model.prompt_cache_retention_supported == Some(false) && self.prompt_cache_retention.is_some() {
+                return Err(UnsupportedParameterError::PromptCacheRetention);
+            }
+        }
         match self.background {
             Some(Background(WireBackground::Boolean(true))) => {
                 return Err(UnsupportedParameterError::BackgroundMode);
@@ -174,14 +267,18 @@ mod tests {
             json!({"background": false}),
             json!({"prompt": null}),
         ] {
-            assert_eq!(parse(&extra).ensure_supported_parameters(), Ok(()), "{extra}");
+            assert_eq!(
+                parse(&extra).ensure_supported_parameters(None, false),
+                Ok(()),
+                "{extra}"
+            );
         }
     }
 
     #[test]
     fn background_true_is_an_unsupported_value() {
         let extra = json!({"background": true});
-        let error = parse(&extra).ensure_supported_parameters().unwrap_err();
+        let error = parse(&extra).ensure_supported_parameters(None, false).unwrap_err();
         assert_eq!(error, UnsupportedParameterError::BackgroundMode);
         assert_eq!((error.param(), error.code()), ("background", "unsupported_value"));
     }
@@ -197,7 +294,7 @@ mod tests {
             (json!([true]), JsonKind::Array),
         ] {
             let error = parse(&json!({"background": value}))
-                .ensure_supported_parameters()
+                .ensure_supported_parameters(None, false)
                 .unwrap_err();
             assert_eq!(error, UnsupportedParameterError::BackgroundType(kind), "{value}");
             assert_eq!((error.param(), error.code()), ("background", "invalid_type"));
@@ -212,7 +309,7 @@ mod tests {
     fn any_prompt_reference_is_an_unsupported_parameter() {
         for prompt in [json!({"id": "pmpt_1", "version": "2"}), json!("x"), json!([])] {
             let extra = json!({"prompt": prompt});
-            let error = parse(&extra).ensure_supported_parameters().unwrap_err();
+            let error = parse(&extra).ensure_supported_parameters(None, false).unwrap_err();
             assert_eq!(error, UnsupportedParameterError::PromptTemplate, "{prompt}");
             assert_eq!((error.param(), error.code()), ("prompt", "unsupported_parameter"));
         }
@@ -222,7 +319,7 @@ mod tests {
     fn background_is_checked_before_prompt() {
         let extra = json!({"background": true, "prompt": {"id": "pmpt_1"}});
         assert_eq!(
-            parse(&extra).ensure_supported_parameters(),
+            parse(&extra).ensure_supported_parameters(None, false),
             Err(UnsupportedParameterError::BackgroundMode)
         );
     }

@@ -1,7 +1,9 @@
+use futures::StreamExt;
+
 use crate::executor::accumulator::Validation;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::inference::UpstreamHeaders;
-use crate::executor::inference::{call_inference_with_headers_limited, fetch_response_json_limited};
+use crate::executor::inference::{fetch_response_json, response_lines, send_request};
 use crate::executor::multi_agent::collaboration;
 use crate::executor::pipeline::AgentPipeline;
 use crate::executor::relay::StreamRelay;
@@ -12,6 +14,7 @@ use crate::tool::{ToolRegistry, ToolSearchState};
 use crate::types::io::{InputItem, InputMessage, MultiAgentAction};
 use crate::types::request_response::{ResponsePayload, UpstreamTool};
 use crate::utils::common::serialize_to_string;
+#[cfg(test)]
 use std::sync::Arc;
 
 /// Snapshot tool facts at the orchestration boundary, excluding all execution bindings.
@@ -118,13 +121,12 @@ pub(super) async fn fetch_blocking_payload(
     agent.ensure_request_prepared()?;
     let withheld = agent.builtin_tools_withheld().then_some(registry);
     let upstream_json = upstream_request(&agent.request, false, agent.agent_guidance(), withheld)?;
-    let body = fetch_response_json_limited(
+    let (body, _) = fetch_response_json(
         upstream_json,
         &exec_ctx.responses_url(),
         &exec_ctx.client,
         auth,
         exec_ctx.responses_config.max_upstream_json_bytes,
-        exec_ctx.responses_config.upstream_timeouts(),
     )
     .await?;
     agent.run_with_json_body(
@@ -185,15 +187,21 @@ pub(super) async fn fetch_stream_payload(
     agent.ensure_request_prepared()?;
     let withheld = agent.builtin_tools_withheld().then_some(registry);
     let upstream_json = upstream_request(&agent.request, true, agent.agent_guidance(), withheld)?;
-    let lines = call_inference_with_headers_limited(
-        upstream_json,
-        exec_ctx.responses_url(),
-        Arc::clone(&exec_ctx.client),
-        auth.cloned(),
-        exec_ctx.streaming_timeout,
-        exec_ctx.responses_config.max_upstream_sse_line_bytes,
-        exec_ctx.responses_config.upstream_timeouts(),
-    );
+    // Keep sending lazy so the pipeline can cancel header waits at a steering boundary.
+    let lines = async_stream::try_stream! {
+        let resp = send_request(
+            &exec_ctx.client,
+            &exec_ctx.responses_url(),
+            upstream_json,
+            auth,
+            exec_ctx.streaming_timeout,
+        ).await?;
+        let lines = response_lines(resp, exec_ctx.streaming_timeout, exec_ctx.responses_config.max_upstream_sse_line_bytes);
+        futures::pin_mut!(lines);
+        while let Some(line) = lines.next().await {
+            yield line?;
+        }
+    };
     agent
         .run_with_stream_body(
             lines,

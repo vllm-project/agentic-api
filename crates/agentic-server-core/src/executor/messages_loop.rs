@@ -20,7 +20,7 @@ use serde_json::{Value, json};
 use tracing::Instrument as _;
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::inference::fetch_response_json_with_headers;
+use crate::executor::inference::{UpstreamHeaders, fetch_response_json};
 use crate::executor::messages_context::MessagesRequestContext;
 use crate::executor::messages_round::{MessagesRoundDecision, decide_round};
 use crate::executor::messages_server_tools::{NativeServerTools, ServerToolView};
@@ -140,13 +140,12 @@ async fn run_messages_loop_traced(
         let body = ctx.upstream_body()?;
         rounds.begin_round();
         let timer = exec_ctx.metrics.stage(Stage::Inference);
-        let fetched = fetch_response_json_with_headers(
+        let fetched = fetch_response_json(
             body,
             &upstream.url,
             &exec_ctx.client,
-            &upstream.headers,
+            Some(&UpstreamHeaders::Forwarded(upstream.headers.clone())),
             exec_ctx.responses_config.max_upstream_json_bytes,
-            exec_ctx.responses_config.upstream_timeouts(),
         )
         .instrument(super::telemetry::stages::inference_round(round))
         .await;

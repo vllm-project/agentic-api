@@ -388,9 +388,13 @@ A configured list is advertised in the order it is written, so a model whose cha
 supported_reasoning_levels = ["low", "high", "max"]
 ```
 
-Levels use the shared effort vocabulary (`low`, `medium`, `high`, `xhigh`, `max`). Each level's Codex-facing
+Levels use the shared effort vocabulary (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`). Each level's Codex-facing
 description comes from a fixed per-level table in `model_capabilities.rs`, not from configuration. An empty list, a
 repeated level, and an unknown level name are rejected at startup with the offending file and line.
+
+Explicit lists also constrain `reasoning.effort` on Responses requests for the same model. The fallback display list
+does not constrain requests. Core's `types/model_capabilities.rs` owns the shared settings and resolver; see
+[Responses capability policies](../api/index.md#model-capability-policies) for admission behavior.
 
 A launcher reads `input_modalities` and `supported_reasoning_levels` from the same gateway catalog response and writes
 them into the isolated catalog, so `agentic run codex` offers what the gateway advertises. A gateway that predates
