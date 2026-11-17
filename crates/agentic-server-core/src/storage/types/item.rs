@@ -61,11 +61,7 @@ pub(in crate::storage) fn encode(item: &InOutItem) -> StoreResult<StorageDbItem>
     let public_id = match item.id() {
         Some("") => return Err(StorageError::Validation("item id cannot be an empty string".to_owned())),
         Some(id) => id.to_owned(),
-        None => uuid7_str(
-            item.id_prefixes()
-                .and_then(|prefixes| prefixes.first().copied())
-                .unwrap_or("item_"),
-        ),
+        None => item.minted_id(),
     };
     let (data, kind) = match item {
         InOutItem::Input(input) => (serde_json::to_string(input)?, ItemKind::Input),

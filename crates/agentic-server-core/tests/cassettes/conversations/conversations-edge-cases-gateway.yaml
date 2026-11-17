@@ -12,8 +12,8 @@ turns:
     query_params: {}
   response:
     body:
-      created_at: 1794834945
-      id: conv_01a1e47f-d50e-7cc2-9786-9553bc64e615
+      created_at: 1794888550
+      id: conv_01a1e7b1-c9c2-7700-8844-22534d39425a
       metadata: {}
       object: conversation
     headers:
@@ -24,7 +24,7 @@ turns:
     body:
       items:
       - content: test
-        id: item_wrongprefix_01efb70ac4cb3c18
+        id: item_wrongprefix_6d169d64ac82797e
         role: user
         type: message
     headers:
@@ -33,13 +33,13 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_01a1e47f-d50e-7cc2-9786-9553bc64e615/items
+    path: /v1/conversations/conv_01a1e7b1-c9c2-7700-8844-22534d39425a/items
     query_params: {}
   response:
     body:
       error:
         code: invalid_value
-        message: 'Invalid ''items[0].id'': ''item_wrongprefix_01efb70ac4cb3c18''.
+        message: 'Invalid ''items[0].id'': ''item_wrongprefix_6d169d64ac82797e''.
           Expected an ID that begins with ''msg''.'
         param: items[0].id
         type: invalid_request_error
@@ -54,7 +54,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/conversations/conv_01a1e47f-d50e-7cc2-9786-9553bc64e615/items
+    path: /v1/conversations/conv_01a1e7b1-c9c2-7700-8844-22534d39425a/items
     query_params: {}
   response:
     body:
@@ -79,8 +79,8 @@ turns:
     query_params: {}
   response:
     body:
-      created_at: 1794834945
-      id: conv_01a1e47f-d535-7120-a915-02659578a60b
+      created_at: 1794888550
+      id: conv_01a1e7b1-c9eb-7342-bac8-c231bae6e248
       metadata: {}
       object: conversation
     headers:
@@ -92,7 +92,7 @@ turns:
       items:
       - arguments: '{}'
         call_id: call_prefix_probe
-        id: msg_wrongprefix_a71357200fc2a7b8
+        id: msg_wrongprefix_5ef367f25be61423
         name: test_fn
         type: function_call
     headers:
@@ -101,13 +101,13 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_01a1e47f-d535-7120-a915-02659578a60b/items
+    path: /v1/conversations/conv_01a1e7b1-c9eb-7342-bac8-c231bae6e248/items
     query_params: {}
   response:
     body:
       error:
         code: invalid_value
-        message: 'Invalid ''items[0].id'': ''msg_wrongprefix_a71357200fc2a7b8''. Expected
+        message: 'Invalid ''items[0].id'': ''msg_wrongprefix_5ef367f25be61423''. Expected
           an ID that begins with ''fc''.'
         param: items[0].id
         type: invalid_request_error
@@ -122,7 +122,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/conversations/conv_01a1e47f-d535-7120-a915-02659578a60b/items
+    path: /v1/conversations/conv_01a1e7b1-c9eb-7342-bac8-c231bae6e248/items
     query_params: {}
   response:
     body:
@@ -147,8 +147,8 @@ turns:
     query_params: {}
   response:
     body:
-      created_at: 1794834945
-      id: conv_01a1e47f-d577-7e33-a7db-7af09f831a5a
+      created_at: 1794888550
+      id: conv_01a1e7b1-ca29-7ec2-a407-b2e7abde1d5d
       metadata: {}
       object: conversation
     headers:
@@ -173,7 +173,7 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_01a1e47f-d577-7e33-a7db-7af09f831a5a/items
+    path: /v1/conversations/conv_01a1e7b1-ca29-7ec2-a407-b2e7abde1d5d/items
     query_params: {}
   response:
     body:
@@ -181,27 +181,27 @@ turns:
       - content:
         - text: msg1
           type: input_text
-        id: msg_01a1e47f-d593-7aa1-b837-3b57f29a510a
+        id: msg_01a1e7b1-ca44-72c1-8241-9c1940abe279
         role: user
         status: completed
         type: message
       - content:
         - text: msg2
           type: input_text
-        id: msg_01a1e47f-d593-7aa1-b837-3b715d35327c
+        id: msg_01a1e7b1-ca44-72c1-8241-9c32f9c1cf78
         role: user
         status: completed
         type: message
       - content:
         - text: msg3
           type: input_text
-        id: msg_01a1e47f-d593-7aa1-b837-3b99881d9362
+        id: msg_01a1e7b1-ca44-72c1-8241-9c5a3ac44fcc
         role: user
         status: completed
         type: message
-      first_id: msg_01a1e47f-d593-7aa1-b837-3b57f29a510a
+      first_id: msg_01a1e7b1-ca44-72c1-8241-9c1940abe279
       has_more: false
-      last_id: msg_01a1e47f-d593-7aa1-b837-3b99881d9362
+      last_id: msg_01a1e7b1-ca44-72c1-8241-9c5a3ac44fcc
       object: list
     headers:
       content-type: application/json
@@ -214,7 +214,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/conversations/conv_01a1e47f-d577-7e33-a7db-7af09f831a5a/items
+    path: /v1/conversations/conv_01a1e7b1-ca29-7ec2-a407-b2e7abde1d5d/items
     query_params:
       limit: '2'
   response:
@@ -223,20 +223,20 @@ turns:
       - content:
         - text: msg3
           type: input_text
-        id: msg_01a1e47f-d593-7aa1-b837-3b99881d9362
+        id: msg_01a1e7b1-ca44-72c1-8241-9c5a3ac44fcc
         role: user
         status: completed
         type: message
       - content:
         - text: msg2
           type: input_text
-        id: msg_01a1e47f-d593-7aa1-b837-3b715d35327c
+        id: msg_01a1e7b1-ca44-72c1-8241-9c32f9c1cf78
         role: user
         status: completed
         type: message
-      first_id: msg_01a1e47f-d593-7aa1-b837-3b99881d9362
+      first_id: msg_01a1e7b1-ca44-72c1-8241-9c5a3ac44fcc
       has_more: true
-      last_id: msg_01a1e47f-d593-7aa1-b837-3b715d35327c
+      last_id: msg_01a1e7b1-ca44-72c1-8241-9c32f9c1cf78
       object: list
     headers:
       content-type: application/json
@@ -249,12 +249,12 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: DELETE
-    path: /v1/conversations/conv_01a1e47f-d577-7e33-a7db-7af09f831a5a/items/msg_01a1e47f-d593-7aa1-b837-3b715d35327c
+    path: /v1/conversations/conv_01a1e7b1-ca29-7ec2-a407-b2e7abde1d5d/items/msg_01a1e7b1-ca44-72c1-8241-9c32f9c1cf78
     query_params: {}
   response:
     body:
-      created_at: 1794834945
-      id: conv_01a1e47f-d577-7e33-a7db-7af09f831a5a
+      created_at: 1794888550
+      id: conv_01a1e7b1-ca29-7ec2-a407-b2e7abde1d5d
       metadata: {}
       object: conversation
     headers:
@@ -268,15 +268,15 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/conversations/conv_01a1e47f-d577-7e33-a7db-7af09f831a5a/items
+    path: /v1/conversations/conv_01a1e7b1-ca29-7ec2-a407-b2e7abde1d5d/items
     query_params:
-      after: msg_01a1e47f-d593-7aa1-b837-3b715d35327c
+      after: msg_01a1e7b1-ca44-72c1-8241-9c32f9c1cf78
       limit: '2'
   response:
     body:
       error:
         code: null
-        message: No item found with id 'msg_01a1e47f-d593-7aa1-b837-3b715d35327c'
+        message: No item found with id 'msg_01a1e7b1-ca44-72c1-8241-9c32f9c1cf78'
         param: after
         type: invalid_request_error
     headers:
@@ -295,8 +295,8 @@ turns:
     query_params: {}
   response:
     body:
-      created_at: 1794834945
-      id: conv_01a1e47f-d632-7b93-ace4-6ac9d9e2694b
+      created_at: 1794888551
+      id: conv_01a1e7b1-cae0-7b22-b58c-49dc905e7b31
       metadata: {}
       object: conversation
     headers:
@@ -307,7 +307,7 @@ turns:
     body:
       items:
       - content: 'Duplicate ID probe: first copy.'
-        id: msg_01a1e47f-d593-7aa1-b837-3b99881d9362
+        id: msg_01a1e7b1-ca44-72c1-8241-9c5a3ac44fcc
         role: user
         type: message
     headers:
@@ -316,7 +316,7 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_01a1e47f-d632-7b93-ace4-6ac9d9e2694b/items
+    path: /v1/conversations/conv_01a1e7b1-cae0-7b22-b58c-49dc905e7b31/items
     query_params: {}
   response:
     body:
@@ -324,13 +324,13 @@ turns:
       - content:
         - text: msg3
           type: input_text
-        id: msg_01a1e47f-d593-7aa1-b837-3b99881d9362
+        id: msg_01a1e7b1-ca44-72c1-8241-9c5a3ac44fcc
         role: user
         status: completed
         type: message
-      first_id: msg_01a1e47f-d593-7aa1-b837-3b99881d9362
+      first_id: msg_01a1e7b1-ca44-72c1-8241-9c5a3ac44fcc
       has_more: false
-      last_id: msg_01a1e47f-d593-7aa1-b837-3b99881d9362
+      last_id: msg_01a1e7b1-ca44-72c1-8241-9c5a3ac44fcc
       object: list
     headers:
       content-type: application/json
@@ -343,7 +343,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/conversations/conv_01a1e47f-d632-7b93-ace4-6ac9d9e2694b/items
+    path: /v1/conversations/conv_01a1e7b1-cae0-7b22-b58c-49dc905e7b31/items
     query_params:
       order: asc
   response:
@@ -352,13 +352,13 @@ turns:
       - content:
         - text: msg3
           type: input_text
-        id: msg_01a1e47f-d593-7aa1-b837-3b99881d9362
+        id: msg_01a1e7b1-ca44-72c1-8241-9c5a3ac44fcc
         role: user
         status: completed
         type: message
-      first_id: msg_01a1e47f-d593-7aa1-b837-3b99881d9362
+      first_id: msg_01a1e7b1-ca44-72c1-8241-9c5a3ac44fcc
       has_more: false
-      last_id: msg_01a1e47f-d593-7aa1-b837-3b99881d9362
+      last_id: msg_01a1e7b1-ca44-72c1-8241-9c5a3ac44fcc
       object: list
     headers:
       content-type: application/json
@@ -376,8 +376,8 @@ turns:
     query_params: {}
   response:
     body:
-      created_at: 1794834945
-      id: conv_01a1e47f-d6cc-7c42-841a-97038fc814d6
+      created_at: 1794888551
+      id: conv_01a1e7b1-cb76-78c2-a702-eb89e7ae08fe
       metadata: {}
       object: conversation
     headers:
@@ -388,11 +388,11 @@ turns:
     body:
       items:
       - content: 'Duplicate ID probe: first copy.'
-        id: msg_01a1e47f-d593-7aa1-b837-3b99881d9362
+        id: msg_01a1e7b1-ca44-72c1-8241-9c5a3ac44fcc
         role: user
         type: message
       - content: 'Duplicate ID probe: second copy.'
-        id: msg_01a1e47f-d593-7aa1-b837-3b99881d9362
+        id: msg_01a1e7b1-ca44-72c1-8241-9c5a3ac44fcc
         role: user
         type: message
     headers:
@@ -401,7 +401,7 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_01a1e47f-d6cc-7c42-841a-97038fc814d6/items
+    path: /v1/conversations/conv_01a1e7b1-cb76-78c2-a702-eb89e7ae08fe/items
     query_params: {}
   response:
     body:
@@ -422,7 +422,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/conversations/conv_01a1e47f-d6cc-7c42-841a-97038fc814d6/items
+    path: /v1/conversations/conv_01a1e7b1-cb76-78c2-a702-eb89e7ae08fe/items
     query_params:
       order: asc
   response:
@@ -440,7 +440,7 @@ turns:
     body:
       items:
       - content: 'Duplicate ID probe: first copy.'
-        id: msg_01a1e47f-d593-7aa1-b837-3b99881d9362
+        id: msg_01a1e7b1-ca44-72c1-8241-9c5a3ac44fcc
         role: user
         type: message
     headers:
@@ -449,7 +449,7 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_01a1e47f-d577-7e33-a7db-7af09f831a5a/items
+    path: /v1/conversations/conv_01a1e7b1-ca29-7ec2-a407-b2e7abde1d5d/items
     query_params: {}
   response:
     body:
@@ -469,7 +469,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/conversations/conv_01a1e47f-d577-7e33-a7db-7af09f831a5a/items
+    path: /v1/conversations/conv_01a1e7b1-ca29-7ec2-a407-b2e7abde1d5d/items
     query_params:
       order: asc
   response:
@@ -478,20 +478,20 @@ turns:
       - content:
         - text: msg1
           type: input_text
-        id: msg_01a1e47f-d593-7aa1-b837-3b57f29a510a
+        id: msg_01a1e7b1-ca44-72c1-8241-9c1940abe279
         role: user
         status: completed
         type: message
       - content:
         - text: msg3
           type: input_text
-        id: msg_01a1e47f-d593-7aa1-b837-3b99881d9362
+        id: msg_01a1e7b1-ca44-72c1-8241-9c5a3ac44fcc
         role: user
         status: completed
         type: message
-      first_id: msg_01a1e47f-d593-7aa1-b837-3b57f29a510a
+      first_id: msg_01a1e7b1-ca44-72c1-8241-9c1940abe279
       has_more: false
-      last_id: msg_01a1e47f-d593-7aa1-b837-3b99881d9362
+      last_id: msg_01a1e7b1-ca44-72c1-8241-9c5a3ac44fcc
       object: list
     headers:
       content-type: application/json
@@ -509,8 +509,8 @@ turns:
     query_params: {}
   response:
     body:
-      created_at: 1794834946
-      id: conv_01a1e47f-d813-7182-a0fe-c19feee649cb
+      created_at: 1794888551
+      id: conv_01a1e7b1-ccb5-7b81-9e8a-273d1035f828
       metadata: {}
       object: conversation
     headers:
@@ -521,11 +521,11 @@ turns:
     body:
       items:
       - content: 'Duplicate ID probe: first copy.'
-        id: msg_61a212f105b1291158fad636524d89b3794b367fb7a51d59
+        id: msg_adf6d77e24f065f2ad7d4ca4b7922e979915d13a53c47a65
         role: user
         type: message
       - content: 'Duplicate ID probe: second copy.'
-        id: msg_61a212f105b1291158fad636524d89b3794b367fb7a51d59
+        id: msg_adf6d77e24f065f2ad7d4ca4b7922e979915d13a53c47a65
         role: user
         type: message
     headers:
@@ -534,7 +534,7 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_01a1e47f-d813-7182-a0fe-c19feee649cb/items
+    path: /v1/conversations/conv_01a1e7b1-ccb5-7b81-9e8a-273d1035f828/items
     query_params: {}
   response:
     body:
@@ -542,20 +542,20 @@ turns:
       - content:
         - text: 'Duplicate ID probe: first copy.'
           type: input_text
-        id: msg_61a212f105b1291158fad636524d89b3794b367fb7a51d59
+        id: msg_01a1e7b1-ccfe-76c1-9485-8c53ccaf5986
         role: user
         status: completed
         type: message
       - content:
         - text: 'Duplicate ID probe: second copy.'
           type: input_text
-        id: msg_61a212f105b1291158fad636524d89b3794b367fb7a51d59
+        id: msg_01a1e7b1-ccfe-76c1-9485-8c6b25d500ac
         role: user
         status: completed
         type: message
-      first_id: msg_61a212f105b1291158fad636524d89b3794b367fb7a51d59
+      first_id: msg_01a1e7b1-ccfe-76c1-9485-8c53ccaf5986
       has_more: false
-      last_id: msg_61a212f105b1291158fad636524d89b3794b367fb7a51d59
+      last_id: msg_01a1e7b1-ccfe-76c1-9485-8c6b25d500ac
       object: list
     headers:
       content-type: application/json
@@ -568,7 +568,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/conversations/conv_01a1e47f-d813-7182-a0fe-c19feee649cb/items
+    path: /v1/conversations/conv_01a1e7b1-ccb5-7b81-9e8a-273d1035f828/items
     query_params:
       order: asc
   response:
@@ -577,20 +577,67 @@ turns:
       - content:
         - text: 'Duplicate ID probe: first copy.'
           type: input_text
-        id: msg_61a212f105b1291158fad636524d89b3794b367fb7a51d59
+        id: msg_01a1e7b1-ccfe-76c1-9485-8c53ccaf5986
         role: user
         status: completed
         type: message
       - content:
         - text: 'Duplicate ID probe: second copy.'
           type: input_text
-        id: msg_61a212f105b1291158fad636524d89b3794b367fb7a51d59
+        id: msg_01a1e7b1-ccfe-76c1-9485-8c6b25d500ac
         role: user
         status: completed
         type: message
-      first_id: msg_61a212f105b1291158fad636524d89b3794b367fb7a51d59
+      first_id: msg_01a1e7b1-ccfe-76c1-9485-8c53ccaf5986
       has_more: false
-      last_id: msg_61a212f105b1291158fad636524d89b3794b367fb7a51d59
+      last_id: msg_01a1e7b1-ccfe-76c1-9485-8c6b25d500ac
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t23
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/conversations/conv_01a1e7b1-ccb5-7b81-9e8a-273d1035f828/items/msg_01a1e7b1-ccfe-76c1-9485-8c53ccaf5986
+    query_params: {}
+  response:
+    body:
+      created_at: 1794888551
+      id: conv_01a1e7b1-ccb5-7b81-9e8a-273d1035f828
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t24
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_01a1e7b1-ccb5-7b81-9e8a-273d1035f828/items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: 'Duplicate ID probe: second copy.'
+          type: input_text
+        id: msg_01a1e7b1-ccfe-76c1-9485-8c6b25d500ac
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a1e7b1-ccfe-76c1-9485-8c6b25d500ac
+      has_more: false
+      last_id: msg_01a1e7b1-ccfe-76c1-9485-8c6b25d500ac
       object: list
     headers:
       content-type: application/json

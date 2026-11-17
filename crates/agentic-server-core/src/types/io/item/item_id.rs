@@ -7,6 +7,7 @@ use crate::types::event::MessageStatus;
 use crate::types::io::{
     FunctionToolCall, InOutItem, InputItem, OutputItem, OutputMessage, ReasoningOutput, ShellCallStatus,
 };
+use crate::utils::common::uuid7_str;
 
 /// A client-supplied item `OpenAI` refuses, named by its parameter path and worded as `OpenAI` words it.
 #[derive(Debug, Error)]
@@ -132,6 +133,16 @@ impl OutputItem {
 }
 
 impl InOutItem {
+    /// A new public ID for the item, under the first prefix its type admits.
+    #[must_use]
+    pub(crate) fn minted_id(&self) -> String {
+        uuid7_str(
+            self.id_prefixes()
+                .and_then(|prefixes| prefixes.first().copied())
+                .unwrap_or("item_"),
+        )
+    }
+
     /// Returns the public ID prefixes `OpenAI` admits for the type, including their underscore separator; new IDs are
     /// minted with the first. A missing rule does not impose a prefix on unverified or ID-less variants.
     #[must_use]

@@ -175,9 +175,7 @@ async fn create_in_tx_with_next_conversation_seq(
              GROUP BY incoming.seq \
          ) \
          INSERT INTO items (id, metadata, data, created_at, conversation_id, seq, public_id, tenant_id) \
-         SELECT CASE WHEN source.id IS NULL AND incoming.seq = \
-                    (SELECT MIN(first.seq) FROM incoming first WHERE first.id = incoming.id) \
-                THEN incoming.id ELSE incoming.entry_id END, \
+         SELECT CASE WHEN source.id IS NULL THEN incoming.id ELSE incoming.entry_id END, \
                 COALESCE(source.metadata, incoming.metadata), COALESCE(source.data, incoming.data), \
                 COALESCE(source.created_at, incoming.created_at), \
                 incoming.conversation_id, incoming.seq, COALESCE(source.public_id, incoming.id), owner.tenant_id \
@@ -221,6 +219,23 @@ async fn create_in_tx_with_next_conversation_seq(
         });
     }
     Ok(rows)
+}
+
+/// The public IDs among `ids` that the tenant has stored.
+///
+/// # Errors
+/// Returns `DbResult::Err` if the database query fails.
+pub async fn stored_public_ids(pool: &DbPool, tenant_id: &str, ids: &[String]) -> DbResult<HashSet<String>> {
+    let placeholders = (2..ids.len() + 2)
+        .map(|index| format!("${index}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!("SELECT DISTINCT public_id FROM items WHERE tenant_id = $1 AND public_id IN ({placeholders})");
+    let mut query = sqlx::query_scalar::<_, String>(&sql).bind(tenant_id);
+    for id in ids {
+        query = query.bind(id);
+    }
+    Ok(query.fetch_all(pool).await?.into_iter().collect())
 }
 
 /// Get items by IDs.
@@ -487,27 +502,30 @@ mod tests {
         pool.close().await;
     }
 
-    /// A repeated new public ID is stored once per copy; a repeated stored one is refused and nothing is written.
+    /// A stored public ID repeated in one batch is refused and nothing is written.
     #[tokio::test]
-    async fn repeated_public_ids_in_one_conversation_batch() {
+    async fn repeated_stored_public_id_in_one_conversation_batch() {
         let pool = crate::storage::create_pool_with_schema(Some("sqlite://?mode=memory"))
             .await
             .unwrap();
         let mut transaction = pool.begin().await.unwrap();
-        for conversation_id in ["conv_new", "conv_stored"] {
+        for conversation_id in ["conv_source", "conv_target"] {
             conversation::create_in_tx(&mut transaction, conversation_id, None, None)
                 .await
                 .unwrap();
         }
-        let repeated = || vec![row("msg_repeated".to_owned()), row("msg_repeated".to_owned())];
-        let created = create_in_tx(&mut transaction, repeated(), Some("conv_new"))
-            .await
-            .unwrap();
-        assert_eq!(created.len(), 2);
-        let refused = create_in_tx(&mut transaction, repeated(), Some("conv_stored")).await;
+        create_in_tx(
+            &mut transaction,
+            vec![row("msg_stored".to_owned())],
+            Some("conv_source"),
+        )
+        .await
+        .unwrap();
+        let repeated = vec![row("msg_stored".to_owned()), row("msg_stored".to_owned())];
+        let refused = create_in_tx(&mut transaction, repeated, Some("conv_target")).await;
         assert!(matches!(refused, Err(StorageError::ItemConflict)));
         transaction.commit().await.unwrap();
-        let stored = conversation::get_with_items(&pool, "conv_stored")
+        let stored = conversation::get_with_items(&pool, "conv_target")
             .await
             .unwrap()
             .unwrap()

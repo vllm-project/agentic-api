@@ -473,12 +473,15 @@ def _record_duplicate_items(
     _item_request(client, proxy_url, "POST", source_items_path,
                   body={"items": [first]}, expected_status=None)
     _item_request(client, proxy_url, "GET", source_items_path, params={"order": "asc"})
-    # A new ID repeated in one request reuses nothing, so it is not refused like a repeated stored ID.
+    # A new ID repeated in one request reuses nothing, so each copy is stored as its own item: deleting the first
+    # leaves the second listed.
     unseen = f"msg_{secrets.token_hex(24)}"
     conversation = _create_conversation(client, proxy_url)
     items_path = f"/v1/conversations/{conversation}/items"
-    _item_request(client, proxy_url, "POST", items_path, expected_status=None,
-                  body={"items": [{**first, "id": unseen}, {**second, "id": unseen}]})
+    copies = _item_request(client, proxy_url, "POST", items_path, expected_status=None,
+                           body={"items": [{**first, "id": unseen}, {**second, "id": unseen}]})
+    _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
+    _item_request(client, proxy_url, "DELETE", f"{items_path}/{copies['data'][0]['id']}")
     _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
 
 
@@ -2922,7 +2925,7 @@ def main(
                           17 if items_scenario == "response-call-ids" else
                           10 if items_scenario == "pagination" else
                           6 if items_scenario == "branch" else
-                          22 if items_scenario == "edge-cases" else
+                          24 if items_scenario == "edge-cases" else
                           18 if items_scenario == "item-id-prefixes" else
                           11 if items_scenario == "response-item-id-prefixes" else
                           22 if items_scenario == "concurrent-writes" else

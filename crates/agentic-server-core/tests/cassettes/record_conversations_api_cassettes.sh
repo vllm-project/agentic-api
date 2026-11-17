@@ -33,7 +33,7 @@ record() {
     local turns=5
     if [[ "$mode" == branch ]]; then turns=6; fi
     if [[ "$mode" == pagination ]]; then turns=10; fi
-    if [[ "$mode" == edge-cases ]]; then turns=22; fi
+    if [[ "$mode" == edge-cases ]]; then turns=24; fi
     if [[ "$mode" == item-id-prefixes ]]; then turns=18; fi
     if [[ "$mode" == concurrent-writes ]]; then turns=22; fi
     if [[ "$mode" == competing-tool-outputs ]]; then turns=9; fi
@@ -58,7 +58,7 @@ from yaml import safe_load
 cassette = safe_load(Path(sys.argv[1]).read_text())
 mode, scenario = sys.argv[2:]
 turns = cassette["turns"]
-expected = {"pagination": 10, "branch": 6, "edge-cases": 22, "item-id-prefixes": 18, "concurrent-writes": 22,
+expected = {"pagination": 10, "branch": 6, "edge-cases": 24, "item-id-prefixes": 18, "concurrent-writes": 22,
             "competing-tool-outputs": 9, "overlapping-multi-agent": 7}.get(mode, 5)
 assert list(cassette) == ["turns"], "cassette must be one flat turns list"
 assert len(turns) == expected
@@ -186,6 +186,9 @@ if mode == "edge-cases":
     unseen = [item["id"] for item in requests[20]["body"]["items"]]
     assert len(unseen) == 2 and unseen[0] == unseen[1] and unseen[0] != reused_id
     assert (requests[21]["method"], requests[21]["path"]) == ("GET", unseen_path)
+    first_copy = turns[20]["response"]["body"]["data"][0]["id"]
+    assert (requests[22]["method"], requests[22]["path"]) == ("DELETE", f"{unseen_path}/{first_copy}")
+    assert (requests[23]["method"], requests[23]["path"]) == ("GET", unseen_path)
     sys.exit(0)
 assert (requests[1]["method"], requests[1]["path"]) == ("POST", "/v1/responses")
 assert "conversation" in requests[1]["body"] and "previous_response_id" not in requests[1]["body"]
