@@ -77,9 +77,9 @@ filesystem for uploaded bytes. A persistent volume claim (PVC) mounted at the
 configured files directory uses this same local-files implementation.
 
 Rust integrations can instead supply implementations of `FileSearchRepository`
-and `FileBlobStore` through `FileSearchService::with_providers`, then install the
-service with `ExecutionContext::with_file_search_service`. The HTTP routes and
-Responses built-in tool use that service. A repository adapter
+and `FileBlobStore` through `FileSearchService::with_providers`, then wrap the
+service with `FileHandler::new` and assign it to `ExecutionContext.file_handler`.
+The HTTP routes and Responses built-in tool use that handler. A repository adapter
 can compose SQL metadata with Milvus or another vector index; a blob-store
 adapter can use S3, GCS, or Azure Blob Storage. This layer provides SQL and
 sqlite-vec repositories and the local blob store. Other adapters and a

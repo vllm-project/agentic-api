@@ -100,8 +100,8 @@ impl RequestContext {
 /// rather than stored here, keeping this context purely shared and immutable.
 #[derive(Clone, Debug)]
 pub struct ExecutionContext {
-    /// Shared in-tree file ingestion and retrieval, available when persistence is configured.
-    /// This is the one file service handle.
+    /// The executor's file ingestion and retrieval handler, available when persistence is
+    /// configured. It owns the one file service, which the HTTP Files API routes share.
     pub file_handler: FileHandler,
     /// Ceiling on serialized inbound request bytes; resolved file content counts against it.
     pub(crate) max_request_body_size: usize,
