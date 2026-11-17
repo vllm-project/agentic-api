@@ -1009,12 +1009,13 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   Lookups and retrieval are separate methods (`get`, `create`, `retrieve`, `validate_exists`);
   **any new CRUD operation
   beyond persist/rehydrate belongs here**, added as a new method that delegates to the corresponding store.
-- **`modes/files.rs`** — `FileHandler`, the read-only access seam to the gateway file store. One `resolve`
-  returns the lookup for the input the model-facing request will lower; `upstream_request` calls it while
-  building that body, and `execute.rs::prepare` repeats it before tool preparation so a bad reference fails
-  early. The lookup is used only by `normalized_model_input` and is never stored, checkpointed, or
-  snapshotted. It reports a missing reference with `OpenAI`'s `Files [<id>...] were not found` envelope and
-  checks the resolved content against the request body limit.
+- **`modes/files.rs`** — `FileHandler`, the access seam to the gateway file store, next to the conversation and
+  response handlers. It owns the executor's one file service. One `resolve` returns the lookup for the input the
+  model-facing request will lower; `upstream_request` calls it while building that body, and `execute.rs::prepare`
+  builds the same body before tool preparation so a bad reference fails early. The lookup is used only by
+  `normalized_model_input` and is never stored, checkpointed, or snapshotted. It reports a missing reference with
+  `OpenAI`'s `Files [<id>...] were not found` envelope, and `upstream_request` checks the serialized body against
+  the request body limit when it carries resolved file content.
 - **`error.rs`** — `ExecutorError`, with the mapping methods (`http_status()`,
   `error_type()`, `into_response_body()`, ...) handlers use to render errors.
 

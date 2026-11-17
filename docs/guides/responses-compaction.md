@@ -163,7 +163,8 @@ automatic compaction, `compaction_trigger`, and WebSocket `generate: false` requ
 HTTP `store: false` requests use the same typed executor, inline text-file normalization, and file-input validation.
 Without `previous_response_id` or `conversation`, clients supply the complete item history in `input`; the gateway
 does not load or persist state. A `file_id` in a structured function/custom tool call output is resolved the same
-way; other tool-output parts pass through unchanged and are kept as the client sent them.
+way, while the tool-output part keeps its own content contract; other tool-output parts pass through unchanged and
+are kept as the client sent them.
 
 API `input_file` content is distinct from mentioning a local filename in Codex or asking a client-executed read tool
 to read a file. A local file mention is not a file upload, and this gateway does not resolve local paths, fetch

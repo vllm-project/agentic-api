@@ -22,6 +22,12 @@ All notable changes to Agentic API are documented here.
   payload's `file_id` references first, or pass an empty map when the payload has none.
 - `executor::upstream_request` is now async: it resolves the `file_id` references in the input it lowers
   from its `ExecutionContext`. Callers await it, and the lookup no longer lives on `RequestContext`.
+- Files API rows now follow the recorded `OpenAI` behavior: only `vision` uploads can be downloaded
+  (`400 Not allowed to download files of purpose: <purpose>` otherwise), any unusable file ID is reported as
+  `404` `No such File object: <id>` naming `id`, `after`, or `before`, and upload rule failures use
+  `invalid_request_error` with `code: null`. These failures are `FileSearchError` row variants rendered by
+  `ExecutorError`; `ExecutionContext.file_search` is replaced by the `FileHandler` that owns the one service
+  (`FileHandler::new`, `FileHandler::service`).
 - An MCP declaration's `require_approval` is now typed (`McpApprovalPolicy`) and parses the Responses API filter
   object as well as `"always"` and `"never"` (part of #145). There is still no approval step, so a request is
   accepted only when no tool it can call needs approval: `"never"`, or a filter whose `never.tool_names` lists every
