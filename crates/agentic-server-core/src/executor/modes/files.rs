@@ -62,7 +62,7 @@ impl FileHandler {
                 Ok(file) => {
                     files.insert(reference.file_id.clone(), file);
                 }
-                Err(FileSearchError::NotFound(_) | FileSearchError::FileNotFound { .. }) => {
+                Err(FileSearchError::FileNotFound { .. }) => {
                     missing.push(reference.file_id.clone());
                 }
                 Err(error) => return Err(error.into()),

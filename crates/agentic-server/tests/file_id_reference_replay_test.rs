@@ -810,3 +810,73 @@ async fn file_reference_errors_keep_their_http_status_and_part_position() {
         "rejected references must not reach inference"
     );
 }
+
+/// A `file_id` in a structured tool output follows the recorded wrong-kind envelope, as a
+/// message file does. This is the `files-api-input` t22 row, which the Files-row comparison
+/// does not replay.
+#[tokio::test]
+async fn tool_output_wrong_kind_matches_the_recorded_input_envelope() {
+    let cassette = load(INPUT);
+    let recorded = turn(&cassette, "t22")["response"]["body"]["error"].clone();
+    let upstream = mock_upstream(Vec::new()).await;
+    let gateway = start_gateway(&upstream.url).await;
+    let client = reqwest::Client::new();
+
+    let boundary = "agentic-test-boundary";
+    let mut form = Vec::new();
+    form.extend_from_slice(
+        format!("--{boundary}\r\nContent-Disposition: form-data; name=\"purpose\"\r\n\r\nuser_data\r\n").as_bytes(),
+    );
+    form.extend_from_slice(
+        format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"notes.pdf\"\r\n\
+             Content-Type: application/pdf\r\n\r\n"
+        )
+        .as_bytes(),
+    );
+    form.extend_from_slice(b"%PDF-1.4\n");
+    form.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+    let upload = client
+        .post(format!("{}/v1/files", gateway.url))
+        .header("content-type", format!("multipart/form-data; boundary={boundary}"))
+        .body(form)
+        .send()
+        .await
+        .expect("upload request");
+    assert_eq!(upload.status(), StatusCode::OK);
+    let file: Value = upload.json().await.expect("uploaded file JSON");
+    let file_id = file["id"].as_str().expect("uploaded file ID").to_owned();
+
+    let input = json!([
+        {"role": "user", "content": [{"type": "input_text", "text": "What is the release codeword?"}]},
+        {"type": "function_call", "call_id": "call_read_notes", "name": "read_notes", "arguments": "{}"},
+        {"type": "function_call_output", "call_id": "call_read_notes", "output": [
+            {"type": "input_file", "file_id": file_id}
+        ]}
+    ]);
+    let response = client
+        .post(format!("{}/v1/responses", gateway.url))
+        .json(&json!({
+            "model": "test-model",
+            "input": input,
+            "tools": [{
+                "type": "function",
+                "name": "read_notes",
+                "description": "Return the deployment notes.",
+                "parameters": {"type": "object", "properties": {}, "additionalProperties": false}
+            }],
+            "store": false,
+            "stream": false
+        }))
+        .send()
+        .await
+        .expect("response request");
+    let status = response.status();
+    let body: Value = response.json().await.expect("response JSON");
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["error"], recorded, "{body}");
+    assert!(
+        upstream.requests.lock().await.is_empty(),
+        "a rejected tool output must not reach inference"
+    );
+}

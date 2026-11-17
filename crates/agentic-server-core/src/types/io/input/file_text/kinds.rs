@@ -254,6 +254,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn image_media_types_follow_the_accepted_extensions() {
+        for (filename, media_type) in [
+            ("plot.jpeg", "image/jpeg"),
+            ("plot.JPG", "image/jpeg"),
+            ("plot.png", "image/png"),
+            ("plot.gif", "image/gif"),
+            ("plot.webp", "image/webp"),
+        ] {
+            assert_eq!(image_media_type(filename), Some(media_type), "{filename}");
+            assert!(is_image_media_type(media_type), "{media_type}");
+        }
+        for filename in ["plot.svg", "plot.bin", "plot", ".png"] {
+            assert_eq!(image_media_type(filename), None, "{filename}");
+        }
+    }
+
+    #[test]
     fn text_media_types_need_no_filename() {
         for media_type in [
             "text/plain",

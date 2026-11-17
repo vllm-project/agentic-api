@@ -183,3 +183,105 @@ impl<'de> Deserialize<'de> for InputContent {
         part.map_err(serde::de::Error::custom)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::file_search::FileObject;
+    use serde_json::json;
+
+    fn resolved(filename: &str, bytes: &[u8]) -> (FileObject, Vec<u8>) {
+        (
+            FileObject {
+                id: format!("file-{filename}"),
+                object: "file".to_owned(),
+                bytes: i64::try_from(bytes.len()).expect("test fixture fits i64"),
+                created_at: 0,
+                filename: filename.to_owned(),
+                purpose: "user_data".to_owned(),
+                status: "processed".to_owned(),
+            },
+            bytes.to_vec(),
+        )
+    }
+
+    fn files() -> ResolvedFiles {
+        ResolvedFiles::from([
+            ("file-notes".to_owned(), resolved("notes.txt", b"hello")),
+            ("file-report".to_owned(), resolved("report.pdf", b"%PDF")),
+            ("file-plot".to_owned(), resolved("plot.png", b"png")),
+        ])
+    }
+
+    #[test]
+    fn resolved_text_file_uses_the_stored_name_and_keeps_extensions() {
+        let file: InputFileContent = serde_json::from_value(json!({
+            "type": "input_file", "file_id": "file-notes",
+            "prompt_cache_breakpoint": {"mode": "explicit"}
+        }))
+        .unwrap();
+        let text = file.to_text(&files()).unwrap();
+        assert_eq!(text.text, "File: notes.txt\nhello");
+        assert_eq!(
+            text.extra.get("prompt_cache_breakpoint"),
+            Some(&json!({"mode": "explicit"}))
+        );
+    }
+
+    #[test]
+    fn inline_text_file_uses_the_same_conversion() {
+        let file: InputFileContent = serde_json::from_value(json!({
+            "type": "input_file", "filename": "notes.txt", "file_data": "data:text/plain;base64,aGVsbG8="
+        }))
+        .unwrap();
+        let text = file.to_text(&ResolvedFiles::new()).unwrap();
+        assert_eq!(text.text, "File: notes.txt\nhello");
+    }
+
+    #[test]
+    fn resolved_text_file_rejects_a_wrong_kind_or_an_unresolved_id() {
+        let pdf = InputFileContent {
+            file_id: Some("file-report".into()),
+            ..InputFileContent::default()
+        };
+        assert_eq!(
+            pdf.to_text(&files()),
+            Err(InputFileError::NotTextFile {
+                extension: ".pdf".into()
+            })
+        );
+        let missing = InputFileContent {
+            file_id: Some("file-missing".into()),
+            ..InputFileContent::default()
+        };
+        assert_eq!(missing.to_text(&files()), Err(InputFileError::Unresolved));
+    }
+
+    #[test]
+    fn inline_image_replaces_the_reference_and_keeps_other_fields() {
+        let mut image: InputImageContent = serde_json::from_value(json!({
+            "type": "input_image", "file_id": "file-plot", "detail": "high", "extra_field": "keep"
+        }))
+        .unwrap();
+        image.inline_file(&files()).unwrap();
+        let expected = format!("data:image/png;base64,{}", STANDARD.encode(b"png"));
+        assert_eq!(image.image_url.as_deref(), Some(expected.as_str()));
+        assert!(image.file_id.is_none());
+        assert_eq!(image.detail.as_deref(), Some("high"));
+        assert_eq!(image.extra.get("extra_field"), Some(&json!("keep")));
+    }
+
+    #[test]
+    fn inline_image_rejects_a_wrong_kind_or_an_unresolved_id() {
+        let mut text = InputImageContent {
+            file_id: Some("file-notes".into()),
+            ..InputImageContent::default()
+        };
+        assert_eq!(text.inline_file(&files()), Err(InputFileError::NotImage(".txt".into())));
+        let mut missing = InputImageContent {
+            file_id: Some("file-missing".into()),
+            ..InputImageContent::default()
+        };
+        assert_eq!(missing.inline_file(&files()), Err(InputFileError::Unresolved));
+    }
+}

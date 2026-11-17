@@ -225,10 +225,12 @@ pub(super) mod tests {
     use super::*;
     use crate::events::SseLine;
     use crate::executor::error::ResourceLimit;
-    use crate::executor::modes::{ConversationHandler, ResponseHandler};
+    use crate::executor::modes::{ConversationHandler, FileHandler, ResponseHandler};
     use crate::executor::pipeline::RoundIngestion;
     use crate::executor::relay::RelayLimits;
-    use crate::storage::{ConversationStore, ResponseStore};
+    use crate::storage::{ConversationStore, ResponseStore, create_pool_with_schema};
+    use crate::tool::file_search::FileSearchService;
+    use crate::types::file_search::FileSearchConfig;
     use crate::types::io::ResponsesInput;
     use crate::types::request_response::RequestPayload;
     use serde_json::Value;
@@ -1352,5 +1354,41 @@ pub(super) mod tests {
             }
         ));
         server.abort();
+    }
+
+    #[tokio::test]
+    async fn resolved_file_content_counts_against_the_serialized_body_limit() {
+        let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
+        let files = tempfile::tempdir().unwrap();
+        let config = FileSearchConfig {
+            files_storage_dir: Some(files.path().to_owned()),
+            ..FileSearchConfig::default()
+        };
+        let service =
+            FileSearchService::new(pool, Arc::new(reqwest::Client::new()), config).expect("file search service");
+        let uploaded = service
+            .upload_file("notes.txt", "text/plain", "assistants", b"hello".to_vec())
+            .await
+            .unwrap();
+
+        let mut exec_ctx = execution_context();
+        exec_ctx.file_handler = FileHandler::new(service);
+        let mut ctx = request_context();
+        ctx.enriched_request.input = serde_json::from_value(serde_json::json!([
+            {"role": "user", "content": [{"type": "input_file", "file_id": uploaded.id}]}
+        ]))
+        .unwrap();
+
+        exec_ctx.max_request_body_size = usize::MAX;
+        upstream_request(&exec_ctx, &ctx, false, None, None)
+            .await
+            .expect("a body within the limit builds despite resolved content");
+
+        exec_ctx.max_request_body_size = 64;
+        let error = upstream_request(&exec_ctx, &ctx, false, None, None)
+            .await
+            .expect_err("resolved content over the limit must fail");
+        assert!(matches!(error, ExecutorError::PayloadTooLarge(_)), "{error:?}");
+        assert!(error.to_string().contains("request body limit"), "{error}");
     }
 }

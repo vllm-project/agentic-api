@@ -134,10 +134,7 @@ impl InputValidationError {
     /// message names `input` and no request position.
     pub(super) fn unsupported_file(item_index: usize, part_index: usize, reason: InputFileError) -> Self {
         if reason.is_resolved_kind() {
-            Self {
-                item_index: None,
-                source: MessageContentError::ResolvedFile { reason },
-            }
+            Self::resolved_kind(reason)
         } else {
             Self {
                 item_index: Some(item_index),
@@ -147,10 +144,25 @@ impl InputValidationError {
     }
 
     /// A tool-output file at `input[item_index].output[part_index]` that cannot be converted.
+    ///
+    /// A resolved file whose kind does not match its part uses the recorded envelope, as a
+    /// message file does; a content failure stays at the output position.
     pub(super) fn unsupported_output_file(item_index: usize, part_index: usize, reason: InputFileError) -> Self {
+        if reason.is_resolved_kind() {
+            Self::resolved_kind(reason)
+        } else {
+            Self {
+                item_index: Some(item_index),
+                source: file_error(output_location(item_index, part_index), reason),
+            }
+        }
+    }
+
+    /// The recorded envelope for a resolved file whose kind does not match its part.
+    fn resolved_kind(reason: InputFileError) -> Self {
         Self {
-            item_index: Some(item_index),
-            source: file_error(output_location(item_index, part_index), reason),
+            item_index: None,
+            source: MessageContentError::ResolvedFile { reason },
         }
     }
 
