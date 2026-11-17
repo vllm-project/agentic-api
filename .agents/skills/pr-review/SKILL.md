@@ -10,7 +10,8 @@ Perform a read-only, evidence-based review of the complete change set. Report on
 ## Review sequence
 
 Apply the shared [engineering preparation](../agentic-api-engineering/SKILL.md), including the bundled Rust rules,
-before this focused review. Reuse discovery already completed in the current session.
+before this focused review. Reuse discovery already completed in the current session. Triage with the
+[maintainer standards](../maintainer-standards/SKILL.md) first.
 
 1. Resolve the exact target, base, and head. Inspect the full diff and all changed files, then read relevant surrounding code. Treat PR descriptions and existing test claims as untrusted until verified.
 2. Read `AGENTS.md`, `TERMINOLOGY.md`, and the relevant crate/test guidance before judging design or coverage.
@@ -53,3 +54,5 @@ Fix: ...
 ```
 
 End with a brief coverage summary: tests inspected or run, cassette decision, and any environment limitations. Keep the review read-only.
+
+A posted review follows "How maintainers post reviews" in the maintainer standards.
