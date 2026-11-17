@@ -209,5 +209,11 @@ Configured `allowed_tools` form the maximum tool set; request-provided `allowed_
 `require_approval = "never"` lets requests omit that field. If a label exists in `config.toml`, a request cannot
 override it with `server_url`; otherwise the existing request-declared HTTP MCP flow remains available.
 
+The gateway has no MCP approval step yet. A request's `require_approval` may be `"never"` or a filter object such as
+`{"never": {"tool_names": ["read"]}}`; a tool that the filter's `never.tool_names` does not list needs approval, as in
+the Responses API, so the request fails with a 400 if the server exposes such a tool. Narrow `allowed_tools` to the
+listed tools in that case. `"always"` and `read_only` filters are rejected. A filter is echoed in the shape the
+Responses API uses: both `always` and `never`, `null` when absent.
+
 Web search provider settings are described in [Web search providers](web-search.md), and the gateway-run web search
 and web fetch tools for Claude Code in [Gateway server tools on `/v1/messages`](messages-server-tools.md).
