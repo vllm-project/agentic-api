@@ -613,7 +613,7 @@ These files use `sessions`, not the HTTP `turns` schema or synthesized SSE.
 | `record_custom_tool_cassettes.sh` | Matching two-turn custom-tool flows (streaming + non-streaming) | gateway and OpenAI reference |
 | `record_async_tool_cassettes.py` | Async function/custom tool scenarios and probes; each scenario declares its modes | OpenAI reference and gateway (vLLM: unrecorded sampling) |
 | `record_shell_cassettes.sh` | Four two-turn local-shell scenarios (streaming + non-streaming) | gateway and OpenAI reference |
-| `record_mcp_cassettes.sh` | Native MCP counter tool discovery and calls (streaming + non-streaming) | gateway and OpenAI reference |
+| `record_mcp_cassettes.sh` | Native MCP counter tool discovery and calls (streaming + non-streaming); with `MCP_RECORD_CASE=approval`, one turn per `require_approval` form against Microsoft Learn MCP (`mcp-approval` items scenario) | gateway and OpenAI reference |
 | `record_web_search_cassettes.sh` | Matching web-search calls (streaming + non-streaming) | gateway and OpenAI reference |
 | `record_max_tool_calls_cassettes.sh` | `max_tool_calls` validation, per-tool exhaustion, call counting, and WebSocket scenarios | gateway and OpenAI reference |
 | `record_code_interpreter_cassettes.sh` | One code-interpreter calculation; OpenAI blocking/SSE and gateway blocking/SSE/WebSocket | gateway and OpenAI reference |

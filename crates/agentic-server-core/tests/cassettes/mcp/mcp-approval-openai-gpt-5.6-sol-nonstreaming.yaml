@@ -1,0 +1,2586 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Call microsoft_docs_search exactly once with the query 'Azure Functions
+        timer trigger'. Do not call any other tool. Then reply DONE.
+      max_output_tokens: 4096
+      model: gpt-5.6-sol
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794743279
+      created_at: 1794743274
+      error: null
+      frequency_penalty: 0.0
+      id: resp_050e9c9f161d35e3006af99bea904887d2ba45483763426837
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_050e9c9f161d35e3006af99beaf42487d2bc1d7745401c0460
+        server_label: microsoft_learn
+        tools:
+        - annotations:
+            read_only: true
+          description: 'Search official Microsoft/Azure documentation to find the
+            most relevant and trustworthy content for a user''s query. This tool returns
+            up to 10 high-quality content chunks (each max 500 tokens), extracted
+            from Microsoft Learn and other official sources. Each result includes
+            the article title, URL, and a self-contained content excerpt optimized
+            for fast retrieval and reasoning. Always use this tool to quickly ground
+            your answers in accurate, first-party Microsoft/Azure knowledge.
+
+
+            ## Follow-up Pattern
+
+            To ensure completeness, use microsoft_docs_fetch when high-value pages
+            are identified by search. The fetch tool complements search by providing
+            the full detail. This is a required step for comprehensive results.'
+          input_schema:
+            properties:
+              query:
+                default: null
+                description: a query or topic about Microsoft/Azure products, services,
+                  platforms, developer tools, frameworks, or APIs
+                type: string
+            type: object
+          name: microsoft_docs_search
+        type: mcp_list_tools
+      - approval_request_id: null
+        arguments: '{"query":"Azure Functions timer trigger"}'
+        error: null
+        id: mcp_050e9c9f161d35e3006af99bedc34c87d29784ec963d219ed4
+        name: microsoft_docs_search
+        output: '{"results": [{"title": "Timer trigger for Azure Functions (programming-language-csharp)",
+          "content": "# Timer trigger for Azure Functions (programming-language-csharp)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-powershell)",
+          "content": "# Timer trigger for Azure Functions (programming-language-powershell)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-javascript)",
+          "content": "# Timer trigger for Azure Functions (programming-language-javascript)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-typescript)",
+          "content": "# Timer trigger for Azure Functions (programming-language-typescript)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-python)",
+          "content": "# Timer trigger for Azure Functions (programming-language-python)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-java)",
+          "content": "# Timer trigger for Azure Functions (programming-language-java)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-powershell)",
+          "content": "# Timer trigger for Azure Functions (programming-language-powershell)\n##
+          Configuration\nThe following table explains the binding configuration properties
+          that you set in the *function.json* file.\n| function.json property | Description|
+          \n|  --- | ---  |\n| **type** | Must be set to \"timerTrigger\". This property
+          is set automatically when you create the trigger in the Azure portal. |\n|
+          **direction** | Must be set to \"in\". This property is set automatically
+          when you create the trigger in the Azure portal. |\n| **name** | The name
+          of the variable that represents the timer object in function code. |\n|
+          **schedule** | A NCRONTAB expression or a TimeSpan value. A `TimeSpan` can
+          be used only for a function app that runs on an App Service Plan. You can
+          put the schedule expression in an app setting and set this property to the
+          app setting name wrapped in **%** signs, as in this example: \"%ScheduleAppSetting%\".
+          For more information, see [Work with application settings](https://learn.microsoft.com/azure/azure-functions/functions-how-to-use-azure-function-app-settings#settings).
+          |\n| **runOnStartup** | If `true`, the function is invoked when the runtime
+          starts. For example, the runtime starts when the function app wakes up after
+          going idle due to inactivity, when the function app restarts due to function
+          changes, and when the function app scales out. *Use with caution.***runOnStartup**
+          should rarely if ever be set to `true`, especially in production. |\n| **useMonitor**
+          | Set to `true` or `false` to indicate whether the schedule should be monitored.
+          Schedule monitoring persists schedule occurrences to aid in ensuring the
+          schedule is maintained correctly even when function app instances restart.
+          If not set explicitly, the default is `true` for schedules that have a recurrence
+          interval greater than or equal to 1 minute. For schedules that trigger more
+          than once per minute, the default is `false`. |\n\nWhen you''re developing
+          locally, add your application settings in the [local.settings.json file](https://learn.microsoft.com/azure/azure-functions/functions-develop-local#local-settings-file)
+          in the `Values` collection.\nCaution", "contentUrl": "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#configuration"},
+          {"title": "Timer trigger for Azure Functions (programming-language-javascript)",
+          "content": "# Timer trigger for Azure Functions (programming-language-javascript)\n##
+          Configuration\n### **Model v3**\nThe following table explains the binding
+          configuration properties that you set in the *function.json* file.\n| Property
+          | Description| \n|  --- | ---  |\n| **type** | Must be set to \"timerTrigger\".
+          This property is set automatically when you create the trigger in the Azure
+          portal. |\n| **direction** | Must be set to \"in\". This property is set
+          automatically when you create the trigger in the Azure portal. |\n| **name**
+          | The name of the variable that represents the timer object in function
+          code. |\n| **schedule** | A NCRONTAB expression or a TimeSpan value. A `TimeSpan`
+          can be used only for a function app that runs on an App Service Plan. You
+          can put the schedule expression in an app setting and set this property
+          to the app setting name wrapped in **%** signs, as in this example: \"%ScheduleAppSetting%\".
+          For more information, see [Work with application settings](https://learn.microsoft.com/azure/azure-functions/functions-how-to-use-azure-function-app-settings#settings).
+          |\n| **runOnStartup** | If `true`, the function is invoked when the runtime
+          starts. For example, the runtime starts when the function app wakes up after
+          going idle due to inactivity, when the function app restarts due to function
+          changes, and when the function app scales out. *Use with caution.***runOnStartup**
+          should rarely if ever be set to `true`, especially in production. |\n| **useMonitor**
+          | Set to `true` or `false` to indicate whether the schedule should be monitored.
+          Schedule monitoring persists schedule occurrences to aid in ensuring the
+          schedule is maintained correctly even when function app instances restart.
+          If not set explicitly, the default is `true` for schedules that have a recurrence
+          interval greater than or equal to 1 minute. For schedules that trigger more
+          than once per minute, the default is `false`. |\n\nWhen you''re developing
+          locally, add your application settings in the [local.settings.json file](https://learn.microsoft.com/azure/azure-functions/functions-develop-local#local-settings-file)
+          in the `Values` collection.\nCaution", "contentUrl": "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#configuration"},
+          {"title": "Timer trigger for Azure Functions (programming-language-javascript)",
+          "content": "# Timer trigger for Azure Functions (programming-language-javascript)\n##
+          Configuration\n### **Model v4**\nThe following table explains the properties
+          that you can set on the `options` object passed to the `app.timer()` method.\n|
+          Property | Description| \n|  --- | ---  |\n| **schedule** | A NCRONTAB expression
+          or a TimeSpan value. A `TimeSpan` can be used only for a function app that
+          runs on an App Service Plan. You can put the schedule expression in an app
+          setting and set this property to the app setting name wrapped in **%** signs,
+          as in this example: \"%ScheduleAppSetting%\". For more information, see
+          [Work with application settings](https://learn.microsoft.com/azure/azure-functions/functions-how-to-use-azure-function-app-settings#settings).
+          |\n| **runOnStartup** | If `true`, the function is invoked when the runtime
+          starts. For example, the runtime starts when the function app wakes up after
+          going idle due to inactivity, when the function app restarts due to function
+          changes, and when the function app scales out. *Use with caution.***runOnStartup**
+          should rarely if ever be set to `true`, especially in production. |\n| **useMonitor**
+          | Set to `true` or `false` to indicate whether the schedule should be monitored.
+          Schedule monitoring persists schedule occurrences to aid in ensuring the
+          schedule is maintained correctly even when function app instances restart.
+          If not set explicitly, the default is `true` for schedules that have a recurrence
+          interval greater than or equal to 1 minute. For schedules that trigger more
+          than once per minute, the default is `false`. |\n", "contentUrl": "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#configuration"},
+          {"title": "Timer trigger for Azure Functions (programming-language-typescript)",
+          "content": "# Timer trigger for Azure Functions (programming-language-typescript)\n##
+          Configuration\n### **Model v3**\nThe following table explains the binding
+          configuration properties that you set in the *function.json* file.\n| Property
+          | Description| \n|  --- | ---  |\n| **type** | Must be set to \"timerTrigger\".
+          This property is set automatically when you create the trigger in the Azure
+          portal. |\n| **direction** | Must be set to \"in\". This property is set
+          automatically when you create the trigger in the Azure portal. |\n| **name**
+          | The name of the variable that represents the timer object in function
+          code. |\n| **schedule** | A NCRONTAB expression or a TimeSpan value. A `TimeSpan`
+          can be used only for a function app that runs on an App Service Plan. You
+          can put the schedule expression in an app setting and set this property
+          to the app setting name wrapped in **%** signs, as in this example: \"%ScheduleAppSetting%\".
+          For more information, see [Work with application settings](https://learn.microsoft.com/azure/azure-functions/functions-how-to-use-azure-function-app-settings#settings).
+          |\n| **runOnStartup** | If `true`, the function is invoked when the runtime
+          starts. For example, the runtime starts when the function app wakes up after
+          going idle due to inactivity, when the function app restarts due to function
+          changes, and when the function app scales out. *Use with caution.***runOnStartup**
+          should rarely if ever be set to `true`, especially in production. |\n| **useMonitor**
+          | Set to `true` or `false` to indicate whether the schedule should be monitored.
+          Schedule monitoring persists schedule occurrences to aid in ensuring the
+          schedule is maintained correctly even when function app instances restart.
+          If not set explicitly, the default is `true` for schedules that have a recurrence
+          interval greater than or equal to 1 minute. For schedules that trigger more
+          than once per minute, the default is `false`. |\n\nWhen you''re developing
+          locally, add your application settings in the [local.settings.json file](https://learn.microsoft.com/azure/azure-functions/functions-develop-local#local-settings-file)
+          in the `Values` collection.\nCaution", "contentUrl": "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#configuration"}]}'
+        server_label: microsoft_learn
+        status: completed
+        type: mcp_call
+      - content:
+        - annotations: []
+          logprobs: []
+          text: DONE
+          type: output_text
+        id: msg_050e9c9f161d35e3006af99bef1e1087d28f2a735bc8eae564
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        headers: null
+        require_approval: never
+        server_description: null
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 5547
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 31
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 5578
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input: Call microsoft_docs_search exactly once with the query 'Azure Functions
+        timer trigger'. Do not call any other tool. Then reply DONE.
+      max_output_tokens: 4096
+      model: gpt-5.6-sol
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        require_approval: always
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794743284
+      created_at: 1794743282
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0a6efc6ae8e17abf006af99bf2447087d29394ed19e5c693e7
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_0a6efc6ae8e17abf006af99bf2709c87d28944bd4d46bcfa83
+        server_label: microsoft_learn
+        tools:
+        - annotations:
+            read_only: true
+          description: 'Search official Microsoft/Azure documentation to find the
+            most relevant and trustworthy content for a user''s query. This tool returns
+            up to 10 high-quality content chunks (each max 500 tokens), extracted
+            from Microsoft Learn and other official sources. Each result includes
+            the article title, URL, and a self-contained content excerpt optimized
+            for fast retrieval and reasoning. Always use this tool to quickly ground
+            your answers in accurate, first-party Microsoft/Azure knowledge.
+
+
+            ## Follow-up Pattern
+
+            To ensure completeness, use microsoft_docs_fetch when high-value pages
+            are identified by search. The fetch tool complements search by providing
+            the full detail. This is a required step for comprehensive results.'
+          input_schema:
+            properties:
+              query:
+                default: null
+                description: a query or topic about Microsoft/Azure products, services,
+                  platforms, developer tools, frameworks, or APIs
+                type: string
+            type: object
+          name: microsoft_docs_search
+        type: mcp_list_tools
+      - arguments: '{"query":"Azure Functions timer trigger"}'
+        id: mcpr_0a6efc6ae8e17abf006af99bf4b20487d2bf138dd9579aa48c
+        name: microsoft_docs_search
+        server_label: microsoft_learn
+        type: mcp_approval_request
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        headers: null
+        require_approval: always
+        server_description: null
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 304
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 26
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 330
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input: Call microsoft_docs_search exactly once with the query 'Azure Functions
+        timer trigger'. Do not call any other tool. Then reply DONE.
+      max_output_tokens: 4096
+      model: gpt-5.6-sol
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        require_approval:
+          never:
+            tool_names:
+            - microsoft_docs_search
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794743288
+      created_at: 1794743286
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0cf864ff85d11f91006af99bf5e1bc87d2ace1aa0675dee3b2
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_0cf864ff85d11f91006af99bf604ec87d298b0f4901a74a33d
+        server_label: microsoft_learn
+        tools:
+        - annotations:
+            read_only: true
+          description: 'Search official Microsoft/Azure documentation to find the
+            most relevant and trustworthy content for a user''s query. This tool returns
+            up to 10 high-quality content chunks (each max 500 tokens), extracted
+            from Microsoft Learn and other official sources. Each result includes
+            the article title, URL, and a self-contained content excerpt optimized
+            for fast retrieval and reasoning. Always use this tool to quickly ground
+            your answers in accurate, first-party Microsoft/Azure knowledge.
+
+
+            ## Follow-up Pattern
+
+            To ensure completeness, use microsoft_docs_fetch when high-value pages
+            are identified by search. The fetch tool complements search by providing
+            the full detail. This is a required step for comprehensive results.'
+          input_schema:
+            properties:
+              query:
+                default: null
+                description: a query or topic about Microsoft/Azure products, services,
+                  platforms, developer tools, frameworks, or APIs
+                type: string
+            type: object
+          name: microsoft_docs_search
+        type: mcp_list_tools
+      - approval_request_id: null
+        arguments: '{"query":"Azure Functions timer trigger"}'
+        error: null
+        id: mcp_0cf864ff85d11f91006af99bf761e087d28ba2050d1a5a1306
+        name: microsoft_docs_search
+        output: '{"results": [{"title": "Timer trigger for Azure Functions (programming-language-csharp)",
+          "content": "# Timer trigger for Azure Functions (programming-language-csharp)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-powershell)",
+          "content": "# Timer trigger for Azure Functions (programming-language-powershell)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-javascript)",
+          "content": "# Timer trigger for Azure Functions (programming-language-javascript)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-typescript)",
+          "content": "# Timer trigger for Azure Functions (programming-language-typescript)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-python)",
+          "content": "# Timer trigger for Azure Functions (programming-language-python)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-java)",
+          "content": "# Timer trigger for Azure Functions (programming-language-java)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-powershell)",
+          "content": "# Timer trigger for Azure Functions (programming-language-powershell)\n##
+          Configuration\nThe following table explains the binding configuration properties
+          that you set in the *function.json* file.\n| function.json property | Description|
+          \n|  --- | ---  |\n| **type** | Must be set to \"timerTrigger\". This property
+          is set automatically when you create the trigger in the Azure portal. |\n|
+          **direction** | Must be set to \"in\". This property is set automatically
+          when you create the trigger in the Azure portal. |\n| **name** | The name
+          of the variable that represents the timer object in function code. |\n|
+          **schedule** | A NCRONTAB expression or a TimeSpan value. A `TimeSpan` can
+          be used only for a function app that runs on an App Service Plan. You can
+          put the schedule expression in an app setting and set this property to the
+          app setting name wrapped in **%** signs, as in this example: \"%ScheduleAppSetting%\".
+          For more information, see [Work with application settings](https://learn.microsoft.com/azure/azure-functions/functions-how-to-use-azure-function-app-settings#settings).
+          |\n| **runOnStartup** | If `true`, the function is invoked when the runtime
+          starts. For example, the runtime starts when the function app wakes up after
+          going idle due to inactivity, when the function app restarts due to function
+          changes, and when the function app scales out. *Use with caution.***runOnStartup**
+          should rarely if ever be set to `true`, especially in production. |\n| **useMonitor**
+          | Set to `true` or `false` to indicate whether the schedule should be monitored.
+          Schedule monitoring persists schedule occurrences to aid in ensuring the
+          schedule is maintained correctly even when function app instances restart.
+          If not set explicitly, the default is `true` for schedules that have a recurrence
+          interval greater than or equal to 1 minute. For schedules that trigger more
+          than once per minute, the default is `false`. |\n\nWhen you''re developing
+          locally, add your application settings in the [local.settings.json file](https://learn.microsoft.com/azure/azure-functions/functions-develop-local#local-settings-file)
+          in the `Values` collection.\nCaution", "contentUrl": "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#configuration"},
+          {"title": "Timer trigger for Azure Functions (programming-language-javascript)",
+          "content": "# Timer trigger for Azure Functions (programming-language-javascript)\n##
+          Configuration\n### **Model v3**\nThe following table explains the binding
+          configuration properties that you set in the *function.json* file.\n| Property
+          | Description| \n|  --- | ---  |\n| **type** | Must be set to \"timerTrigger\".
+          This property is set automatically when you create the trigger in the Azure
+          portal. |\n| **direction** | Must be set to \"in\". This property is set
+          automatically when you create the trigger in the Azure portal. |\n| **name**
+          | The name of the variable that represents the timer object in function
+          code. |\n| **schedule** | A NCRONTAB expression or a TimeSpan value. A `TimeSpan`
+          can be used only for a function app that runs on an App Service Plan. You
+          can put the schedule expression in an app setting and set this property
+          to the app setting name wrapped in **%** signs, as in this example: \"%ScheduleAppSetting%\".
+          For more information, see [Work with application settings](https://learn.microsoft.com/azure/azure-functions/functions-how-to-use-azure-function-app-settings#settings).
+          |\n| **runOnStartup** | If `true`, the function is invoked when the runtime
+          starts. For example, the runtime starts when the function app wakes up after
+          going idle due to inactivity, when the function app restarts due to function
+          changes, and when the function app scales out. *Use with caution.***runOnStartup**
+          should rarely if ever be set to `true`, especially in production. |\n| **useMonitor**
+          | Set to `true` or `false` to indicate whether the schedule should be monitored.
+          Schedule monitoring persists schedule occurrences to aid in ensuring the
+          schedule is maintained correctly even when function app instances restart.
+          If not set explicitly, the default is `true` for schedules that have a recurrence
+          interval greater than or equal to 1 minute. For schedules that trigger more
+          than once per minute, the default is `false`. |\n\nWhen you''re developing
+          locally, add your application settings in the [local.settings.json file](https://learn.microsoft.com/azure/azure-functions/functions-develop-local#local-settings-file)
+          in the `Values` collection.\nCaution", "contentUrl": "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#configuration"},
+          {"title": "Timer trigger for Azure Functions (programming-language-javascript)",
+          "content": "# Timer trigger for Azure Functions (programming-language-javascript)\n##
+          Configuration\n### **Model v4**\nThe following table explains the properties
+          that you can set on the `options` object passed to the `app.timer()` method.\n|
+          Property | Description| \n|  --- | ---  |\n| **schedule** | A NCRONTAB expression
+          or a TimeSpan value. A `TimeSpan` can be used only for a function app that
+          runs on an App Service Plan. You can put the schedule expression in an app
+          setting and set this property to the app setting name wrapped in **%** signs,
+          as in this example: \"%ScheduleAppSetting%\". For more information, see
+          [Work with application settings](https://learn.microsoft.com/azure/azure-functions/functions-how-to-use-azure-function-app-settings#settings).
+          |\n| **runOnStartup** | If `true`, the function is invoked when the runtime
+          starts. For example, the runtime starts when the function app wakes up after
+          going idle due to inactivity, when the function app restarts due to function
+          changes, and when the function app scales out. *Use with caution.***runOnStartup**
+          should rarely if ever be set to `true`, especially in production. |\n| **useMonitor**
+          | Set to `true` or `false` to indicate whether the schedule should be monitored.
+          Schedule monitoring persists schedule occurrences to aid in ensuring the
+          schedule is maintained correctly even when function app instances restart.
+          If not set explicitly, the default is `true` for schedules that have a recurrence
+          interval greater than or equal to 1 minute. For schedules that trigger more
+          than once per minute, the default is `false`. |\n", "contentUrl": "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#configuration"},
+          {"title": "Timer trigger for Azure Functions (programming-language-typescript)",
+          "content": "# Timer trigger for Azure Functions (programming-language-typescript)\n##
+          Configuration\n### **Model v3**\nThe following table explains the binding
+          configuration properties that you set in the *function.json* file.\n| Property
+          | Description| \n|  --- | ---  |\n| **type** | Must be set to \"timerTrigger\".
+          This property is set automatically when you create the trigger in the Azure
+          portal. |\n| **direction** | Must be set to \"in\". This property is set
+          automatically when you create the trigger in the Azure portal. |\n| **name**
+          | The name of the variable that represents the timer object in function
+          code. |\n| **schedule** | A NCRONTAB expression or a TimeSpan value. A `TimeSpan`
+          can be used only for a function app that runs on an App Service Plan. You
+          can put the schedule expression in an app setting and set this property
+          to the app setting name wrapped in **%** signs, as in this example: \"%ScheduleAppSetting%\".
+          For more information, see [Work with application settings](https://learn.microsoft.com/azure/azure-functions/functions-how-to-use-azure-function-app-settings#settings).
+          |\n| **runOnStartup** | If `true`, the function is invoked when the runtime
+          starts. For example, the runtime starts when the function app wakes up after
+          going idle due to inactivity, when the function app restarts due to function
+          changes, and when the function app scales out. *Use with caution.***runOnStartup**
+          should rarely if ever be set to `true`, especially in production. |\n| **useMonitor**
+          | Set to `true` or `false` to indicate whether the schedule should be monitored.
+          Schedule monitoring persists schedule occurrences to aid in ensuring the
+          schedule is maintained correctly even when function app instances restart.
+          If not set explicitly, the default is `true` for schedules that have a recurrence
+          interval greater than or equal to 1 minute. For schedules that trigger more
+          than once per minute, the default is `false`. |\n\nWhen you''re developing
+          locally, add your application settings in the [local.settings.json file](https://learn.microsoft.com/azure/azure-functions/functions-develop-local#local-settings-file)
+          in the `Values` collection.\nCaution", "contentUrl": "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#configuration"}]}'
+        server_label: microsoft_learn
+        status: completed
+        type: mcp_call
+      - content:
+        - annotations: []
+          logprobs: []
+          text: DONE
+          type: output_text
+        id: msg_0cf864ff85d11f91006af99bf86b9487d281b53366d9ea2455
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        headers: null
+        require_approval:
+          always: null
+          never:
+            read_only: null
+            tool_names:
+            - microsoft_docs_search
+        server_description: null
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 5547
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 31
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 5578
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body:
+      input: Call microsoft_docs_fetch exactly once with the URL https://learn.microsoft.com/en-us/azure/azure-functions/functions-bindings-timer.
+        Do not call any other tool. Then reply DONE.
+      max_output_tokens: 4096
+      model: gpt-5.6-sol
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        - microsoft_docs_fetch
+        require_approval:
+          never:
+            tool_names:
+            - microsoft_docs_search
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794743292
+      created_at: 1794743289
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0e52fad1fcf3ca04006af99bf9d90887d2a328e90dab032354
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_0e52fad1fcf3ca04006af99bf9ef2887d29bdca6280500bd75
+        server_label: microsoft_learn
+        tools:
+        - annotations:
+            read_only: true
+          description: 'Search official Microsoft/Azure documentation to find the
+            most relevant and trustworthy content for a user''s query. This tool returns
+            up to 10 high-quality content chunks (each max 500 tokens), extracted
+            from Microsoft Learn and other official sources. Each result includes
+            the article title, URL, and a self-contained content excerpt optimized
+            for fast retrieval and reasoning. Always use this tool to quickly ground
+            your answers in accurate, first-party Microsoft/Azure knowledge.
+
+
+            ## Follow-up Pattern
+
+            To ensure completeness, use microsoft_docs_fetch when high-value pages
+            are identified by search. The fetch tool complements search by providing
+            the full detail. This is a required step for comprehensive results.'
+          input_schema:
+            properties:
+              query:
+                default: null
+                description: a query or topic about Microsoft/Azure products, services,
+                  platforms, developer tools, frameworks, or APIs
+                type: string
+            type: object
+          name: microsoft_docs_search
+        - annotations:
+            read_only: true
+          description: 'Fetch and convert a Microsoft Learn documentation webpage
+            to markdown format. This tool retrieves the latest complete content of
+            Microsoft documentation webpages including Azure, .NET, Microsoft 365,
+            and other Microsoft technologies.
+
+
+            ## When to Use This Tool
+
+            - When search results provide incomplete information or truncated content
+
+            - When you need complete step-by-step procedures or tutorials
+
+            - When you need troubleshooting sections, prerequisites, or detailed explanations
+
+            - When search results reference a specific page that seems highly relevant
+
+            - For comprehensive guides that require full context
+
+
+            ## Usage Pattern
+
+            Use this tool AFTER microsoft_docs_search when you identify specific high-value
+            pages that need complete content. The search tool gives you an overview;
+            this tool gives you the complete picture.
+
+
+            ## URL Requirements
+
+            - The URL must be a valid HTML documentation webpage from the microsoft.com
+            domain
+
+            - Binary files (PDF, DOCX, images, etc.) are not supported
+
+
+            ## Output Format
+
+            markdown with headings, code blocks, tables, and links preserved.'
+          input_schema:
+            properties:
+              url:
+                description: URL of the Microsoft documentation page to read
+                type: string
+            required:
+            - url
+            type: object
+          name: microsoft_docs_fetch
+        type: mcp_list_tools
+      - arguments: '{"url":"https://learn.microsoft.com/en-us/azure/azure-functions/functions-bindings-timer"}'
+        id: mcpr_0e52fad1fcf3ca04006af99bfcaeb887d289b0339bf7df2520
+        name: microsoft_docs_fetch
+        server_label: microsoft_learn
+        type: mcp_approval_request
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        - microsoft_docs_fetch
+        headers: null
+        require_approval:
+          always: null
+          never:
+            read_only: null
+            tool_names:
+            - microsoft_docs_search
+        server_description: null
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 548
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 39
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 587
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      input: Call microsoft_docs_search exactly once with the query 'Azure Functions
+        timer trigger'. Do not call any other tool. Then reply DONE.
+      max_output_tokens: 4096
+      model: gpt-5.6-sol
+      store: true
+      stream: false
+      tools:
+      - require_approval:
+          never:
+            tool_names:
+            - microsoft_docs_search
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794743297
+      created_at: 1794743294
+      error: null
+      frequency_penalty: 0.0
+      id: resp_00c71a97813ccb70006af99bfe02ec87d2b01df6a0257f3465
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_00c71a97813ccb70006af99bfe1aec87d2b119104409f13917
+        server_label: microsoft_learn
+        tools:
+        - annotations:
+            read_only: true
+          description: 'Search official Microsoft/Azure documentation to find the
+            most relevant and trustworthy content for a user''s query. This tool returns
+            up to 10 high-quality content chunks (each max 500 tokens), extracted
+            from Microsoft Learn and other official sources. Each result includes
+            the article title, URL, and a self-contained content excerpt optimized
+            for fast retrieval and reasoning. Always use this tool to quickly ground
+            your answers in accurate, first-party Microsoft/Azure knowledge.
+
+
+            ## Follow-up Pattern
+
+            To ensure completeness, use microsoft_docs_fetch when high-value pages
+            are identified by search. The fetch tool complements search by providing
+            the full detail. This is a required step for comprehensive results.'
+          input_schema:
+            properties:
+              query:
+                default: null
+                description: a query or topic about Microsoft/Azure products, services,
+                  platforms, developer tools, frameworks, or APIs
+                type: string
+            type: object
+          name: microsoft_docs_search
+        - annotations:
+            read_only: true
+          description: 'Search for code snippets and examples in official Microsoft
+            Learn documentation. This tool retrieves relevant code samples from Microsoft
+            documentation pages providing developers with practical implementation
+            examples and best practices for Microsoft/Azure products and services
+            related coding tasks. This tool will help you use the **LATEST OFFICIAL**
+            code snippets to empower coding capabilities.
+
+
+            ## When to Use This Tool
+
+            - When you are going to provide sample Microsoft/Azure related code snippets
+            in your answers.
+
+            - When you are **generating any Microsoft/Azure related code**.
+
+
+            ## Usage Pattern
+
+            Input a descriptive query, or SDK/class/method name to retrieve related
+            code samples. The optional parameter `language` can help to filter results.
+
+
+            Eligible values for `language` parameter include: csharp javascript typescript
+            python powershell azurecli al sql java kusto cpp go rust ruby php'
+          input_schema:
+            properties:
+              language:
+                default: null
+                description: 'Optional parameter specifying the programming language
+                  of code snippets to retrieve. Can significantly improve search quality
+                  if provided. Eligible values: csharp javascript typescript python
+                  powershell azurecli al sql java kusto cpp go rust ruby php'
+                type: string
+              query:
+                description: a descriptive query, SDK name, method name or code snippet
+                  related to Microsoft/Azure products, services, platforms, developer
+                  tools, frameworks, APIs or SDKs
+                type: string
+            required:
+            - query
+            type: object
+          name: microsoft_code_sample_search
+        - annotations:
+            read_only: true
+          description: 'Fetch and convert a Microsoft Learn documentation webpage
+            to markdown format. This tool retrieves the latest complete content of
+            Microsoft documentation webpages including Azure, .NET, Microsoft 365,
+            and other Microsoft technologies.
+
+
+            ## When to Use This Tool
+
+            - When search results provide incomplete information or truncated content
+
+            - When you need complete step-by-step procedures or tutorials
+
+            - When you need troubleshooting sections, prerequisites, or detailed explanations
+
+            - When search results reference a specific page that seems highly relevant
+
+            - For comprehensive guides that require full context
+
+
+            ## Usage Pattern
+
+            Use this tool AFTER microsoft_docs_search when you identify specific high-value
+            pages that need complete content. The search tool gives you an overview;
+            this tool gives you the complete picture.
+
+
+            ## URL Requirements
+
+            - The URL must be a valid HTML documentation webpage from the microsoft.com
+            domain
+
+            - Binary files (PDF, DOCX, images, etc.) are not supported
+
+
+            ## Output Format
+
+            markdown with headings, code blocks, tables, and links preserved.'
+          input_schema:
+            properties:
+              url:
+                description: URL of the Microsoft documentation page to read
+                type: string
+            required:
+            - url
+            type: object
+          name: microsoft_docs_fetch
+        type: mcp_list_tools
+      - approval_request_id: null
+        arguments: '{"query":"Azure Functions timer trigger"}'
+        error: null
+        id: mcp_00c71a97813ccb70006af99bffb6d487d2bf096da8883c1d9e
+        name: microsoft_docs_search
+        output: '{"results": [{"title": "Timer trigger for Azure Functions (programming-language-csharp)",
+          "content": "# Timer trigger for Azure Functions (programming-language-csharp)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-powershell)",
+          "content": "# Timer trigger for Azure Functions (programming-language-powershell)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-javascript)",
+          "content": "# Timer trigger for Azure Functions (programming-language-javascript)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-typescript)",
+          "content": "# Timer trigger for Azure Functions (programming-language-typescript)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-python)",
+          "content": "# Timer trigger for Azure Functions (programming-language-python)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-java)",
+          "content": "# Timer trigger for Azure Functions (programming-language-java)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-powershell)",
+          "content": "# Timer trigger for Azure Functions (programming-language-powershell)\n##
+          Configuration\nThe following table explains the binding configuration properties
+          that you set in the *function.json* file.\n| function.json property | Description|
+          \n|  --- | ---  |\n| **type** | Must be set to \"timerTrigger\". This property
+          is set automatically when you create the trigger in the Azure portal. |\n|
+          **direction** | Must be set to \"in\". This property is set automatically
+          when you create the trigger in the Azure portal. |\n| **name** | The name
+          of the variable that represents the timer object in function code. |\n|
+          **schedule** | A NCRONTAB expression or a TimeSpan value. A `TimeSpan` can
+          be used only for a function app that runs on an App Service Plan. You can
+          put the schedule expression in an app setting and set this property to the
+          app setting name wrapped in **%** signs, as in this example: \"%ScheduleAppSetting%\".
+          For more information, see [Work with application settings](https://learn.microsoft.com/azure/azure-functions/functions-how-to-use-azure-function-app-settings#settings).
+          |\n| **runOnStartup** | If `true`, the function is invoked when the runtime
+          starts. For example, the runtime starts when the function app wakes up after
+          going idle due to inactivity, when the function app restarts due to function
+          changes, and when the function app scales out. *Use with caution.***runOnStartup**
+          should rarely if ever be set to `true`, especially in production. |\n| **useMonitor**
+          | Set to `true` or `false` to indicate whether the schedule should be monitored.
+          Schedule monitoring persists schedule occurrences to aid in ensuring the
+          schedule is maintained correctly even when function app instances restart.
+          If not set explicitly, the default is `true` for schedules that have a recurrence
+          interval greater than or equal to 1 minute. For schedules that trigger more
+          than once per minute, the default is `false`. |\n\nWhen you''re developing
+          locally, add your application settings in the [local.settings.json file](https://learn.microsoft.com/azure/azure-functions/functions-develop-local#local-settings-file)
+          in the `Values` collection.\nCaution", "contentUrl": "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#configuration"},
+          {"title": "Timer trigger for Azure Functions (programming-language-javascript)",
+          "content": "# Timer trigger for Azure Functions (programming-language-javascript)\n##
+          Configuration\n### **Model v3**\nThe following table explains the binding
+          configuration properties that you set in the *function.json* file.\n| Property
+          | Description| \n|  --- | ---  |\n| **type** | Must be set to \"timerTrigger\".
+          This property is set automatically when you create the trigger in the Azure
+          portal. |\n| **direction** | Must be set to \"in\". This property is set
+          automatically when you create the trigger in the Azure portal. |\n| **name**
+          | The name of the variable that represents the timer object in function
+          code. |\n| **schedule** | A NCRONTAB expression or a TimeSpan value. A `TimeSpan`
+          can be used only for a function app that runs on an App Service Plan. You
+          can put the schedule expression in an app setting and set this property
+          to the app setting name wrapped in **%** signs, as in this example: \"%ScheduleAppSetting%\".
+          For more information, see [Work with application settings](https://learn.microsoft.com/azure/azure-functions/functions-how-to-use-azure-function-app-settings#settings).
+          |\n| **runOnStartup** | If `true`, the function is invoked when the runtime
+          starts. For example, the runtime starts when the function app wakes up after
+          going idle due to inactivity, when the function app restarts due to function
+          changes, and when the function app scales out. *Use with caution.***runOnStartup**
+          should rarely if ever be set to `true`, especially in production. |\n| **useMonitor**
+          | Set to `true` or `false` to indicate whether the schedule should be monitored.
+          Schedule monitoring persists schedule occurrences to aid in ensuring the
+          schedule is maintained correctly even when function app instances restart.
+          If not set explicitly, the default is `true` for schedules that have a recurrence
+          interval greater than or equal to 1 minute. For schedules that trigger more
+          than once per minute, the default is `false`. |\n\nWhen you''re developing
+          locally, add your application settings in the [local.settings.json file](https://learn.microsoft.com/azure/azure-functions/functions-develop-local#local-settings-file)
+          in the `Values` collection.\nCaution", "contentUrl": "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#configuration"},
+          {"title": "Timer trigger for Azure Functions (programming-language-javascript)",
+          "content": "# Timer trigger for Azure Functions (programming-language-javascript)\n##
+          Configuration\n### **Model v4**\nThe following table explains the properties
+          that you can set on the `options` object passed to the `app.timer()` method.\n|
+          Property | Description| \n|  --- | ---  |\n| **schedule** | A NCRONTAB expression
+          or a TimeSpan value. A `TimeSpan` can be used only for a function app that
+          runs on an App Service Plan. You can put the schedule expression in an app
+          setting and set this property to the app setting name wrapped in **%** signs,
+          as in this example: \"%ScheduleAppSetting%\". For more information, see
+          [Work with application settings](https://learn.microsoft.com/azure/azure-functions/functions-how-to-use-azure-function-app-settings#settings).
+          |\n| **runOnStartup** | If `true`, the function is invoked when the runtime
+          starts. For example, the runtime starts when the function app wakes up after
+          going idle due to inactivity, when the function app restarts due to function
+          changes, and when the function app scales out. *Use with caution.***runOnStartup**
+          should rarely if ever be set to `true`, especially in production. |\n| **useMonitor**
+          | Set to `true` or `false` to indicate whether the schedule should be monitored.
+          Schedule monitoring persists schedule occurrences to aid in ensuring the
+          schedule is maintained correctly even when function app instances restart.
+          If not set explicitly, the default is `true` for schedules that have a recurrence
+          interval greater than or equal to 1 minute. For schedules that trigger more
+          than once per minute, the default is `false`. |\n", "contentUrl": "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#configuration"},
+          {"title": "Timer trigger for Azure Functions (programming-language-typescript)",
+          "content": "# Timer trigger for Azure Functions (programming-language-typescript)\n##
+          Configuration\n### **Model v3**\nThe following table explains the binding
+          configuration properties that you set in the *function.json* file.\n| Property
+          | Description| \n|  --- | ---  |\n| **type** | Must be set to \"timerTrigger\".
+          This property is set automatically when you create the trigger in the Azure
+          portal. |\n| **direction** | Must be set to \"in\". This property is set
+          automatically when you create the trigger in the Azure portal. |\n| **name**
+          | The name of the variable that represents the timer object in function
+          code. |\n| **schedule** | A NCRONTAB expression or a TimeSpan value. A `TimeSpan`
+          can be used only for a function app that runs on an App Service Plan. You
+          can put the schedule expression in an app setting and set this property
+          to the app setting name wrapped in **%** signs, as in this example: \"%ScheduleAppSetting%\".
+          For more information, see [Work with application settings](https://learn.microsoft.com/azure/azure-functions/functions-how-to-use-azure-function-app-settings#settings).
+          |\n| **runOnStartup** | If `true`, the function is invoked when the runtime
+          starts. For example, the runtime starts when the function app wakes up after
+          going idle due to inactivity, when the function app restarts due to function
+          changes, and when the function app scales out. *Use with caution.***runOnStartup**
+          should rarely if ever be set to `true`, especially in production. |\n| **useMonitor**
+          | Set to `true` or `false` to indicate whether the schedule should be monitored.
+          Schedule monitoring persists schedule occurrences to aid in ensuring the
+          schedule is maintained correctly even when function app instances restart.
+          If not set explicitly, the default is `true` for schedules that have a recurrence
+          interval greater than or equal to 1 minute. For schedules that trigger more
+          than once per minute, the default is `false`. |\n\nWhen you''re developing
+          locally, add your application settings in the [local.settings.json file](https://learn.microsoft.com/azure/azure-functions/functions-develop-local#local-settings-file)
+          in the `Values` collection.\nCaution", "contentUrl": "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#configuration"}]}'
+        server_label: microsoft_learn
+        status: completed
+        type: mcp_call
+      - content:
+        - annotations: []
+          logprobs: []
+          text: DONE
+          type: output_text
+        id: msg_00c71a97813ccb70006af99c014a8487d2a6073ed0b7c90273
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools: null
+        headers: null
+        require_approval:
+          always: null
+          never:
+            read_only: null
+            tool_names:
+            - microsoft_docs_search
+        server_description: null
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 6048
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 31
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 6079
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body:
+      input: Call microsoft_docs_search exactly once with the query 'Azure Functions
+        timer trigger'. Do not call any other tool. Then reply DONE.
+      max_output_tokens: 4096
+      model: gpt-5.6-sol
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        - microsoft_docs_fetch
+        require_approval:
+          always:
+            tool_names:
+            - microsoft_docs_fetch
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794743300
+      created_at: 1794743298
+      error: null
+      frequency_penalty: 0.0
+      id: resp_04c3c40a34666bf5006af99c02da5887d2936f4e83c785e1c1
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_04c3c40a34666bf5006af99c02e93c87d2b59f8a83695f8a92
+        server_label: microsoft_learn
+        tools:
+        - annotations:
+            read_only: true
+          description: 'Search official Microsoft/Azure documentation to find the
+            most relevant and trustworthy content for a user''s query. This tool returns
+            up to 10 high-quality content chunks (each max 500 tokens), extracted
+            from Microsoft Learn and other official sources. Each result includes
+            the article title, URL, and a self-contained content excerpt optimized
+            for fast retrieval and reasoning. Always use this tool to quickly ground
+            your answers in accurate, first-party Microsoft/Azure knowledge.
+
+
+            ## Follow-up Pattern
+
+            To ensure completeness, use microsoft_docs_fetch when high-value pages
+            are identified by search. The fetch tool complements search by providing
+            the full detail. This is a required step for comprehensive results.'
+          input_schema:
+            properties:
+              query:
+                default: null
+                description: a query or topic about Microsoft/Azure products, services,
+                  platforms, developer tools, frameworks, or APIs
+                type: string
+            type: object
+          name: microsoft_docs_search
+        - annotations:
+            read_only: true
+          description: 'Fetch and convert a Microsoft Learn documentation webpage
+            to markdown format. This tool retrieves the latest complete content of
+            Microsoft documentation webpages including Azure, .NET, Microsoft 365,
+            and other Microsoft technologies.
+
+
+            ## When to Use This Tool
+
+            - When search results provide incomplete information or truncated content
+
+            - When you need complete step-by-step procedures or tutorials
+
+            - When you need troubleshooting sections, prerequisites, or detailed explanations
+
+            - When search results reference a specific page that seems highly relevant
+
+            - For comprehensive guides that require full context
+
+
+            ## Usage Pattern
+
+            Use this tool AFTER microsoft_docs_search when you identify specific high-value
+            pages that need complete content. The search tool gives you an overview;
+            this tool gives you the complete picture.
+
+
+            ## URL Requirements
+
+            - The URL must be a valid HTML documentation webpage from the microsoft.com
+            domain
+
+            - Binary files (PDF, DOCX, images, etc.) are not supported
+
+
+            ## Output Format
+
+            markdown with headings, code blocks, tables, and links preserved.'
+          input_schema:
+            properties:
+              url:
+                description: URL of the Microsoft documentation page to read
+                type: string
+            required:
+            - url
+            type: object
+          name: microsoft_docs_fetch
+        type: mcp_list_tools
+      - arguments: '{"query":"Azure Functions timer trigger"}'
+        id: mcpr_04c3c40a34666bf5006af99c04397887d28f2f776161a068fe
+        name: microsoft_docs_search
+        server_label: microsoft_learn
+        type: mcp_approval_request
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        - microsoft_docs_fetch
+        headers: null
+        require_approval:
+          always:
+            read_only: null
+            tool_names:
+            - microsoft_docs_fetch
+          never: null
+        server_description: null
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 536
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 26
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 562
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body:
+      input: Call microsoft_docs_search exactly once with the query 'Azure Functions
+        timer trigger'. Do not call any other tool. Then reply DONE.
+      max_output_tokens: 4096
+      model: gpt-5.6-sol
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        require_approval:
+          never:
+            read_only: true
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794743305
+      created_at: 1794743301
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0afead39c1d72699006af99c05a02087d28048862f4cc4ecd9
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_0afead39c1d72699006af99c05af4487d2bf4bddd7ffa207a0
+        server_label: microsoft_learn
+        tools:
+        - annotations:
+            read_only: true
+          description: 'Search official Microsoft/Azure documentation to find the
+            most relevant and trustworthy content for a user''s query. This tool returns
+            up to 10 high-quality content chunks (each max 500 tokens), extracted
+            from Microsoft Learn and other official sources. Each result includes
+            the article title, URL, and a self-contained content excerpt optimized
+            for fast retrieval and reasoning. Always use this tool to quickly ground
+            your answers in accurate, first-party Microsoft/Azure knowledge.
+
+
+            ## Follow-up Pattern
+
+            To ensure completeness, use microsoft_docs_fetch when high-value pages
+            are identified by search. The fetch tool complements search by providing
+            the full detail. This is a required step for comprehensive results.'
+          input_schema:
+            properties:
+              query:
+                default: null
+                description: a query or topic about Microsoft/Azure products, services,
+                  platforms, developer tools, frameworks, or APIs
+                type: string
+            type: object
+          name: microsoft_docs_search
+        type: mcp_list_tools
+      - approval_request_id: null
+        arguments: '{"query":"Azure Functions timer trigger"}'
+        error: null
+        id: mcp_0afead39c1d72699006af99c07783487d2b8db6a5c8be39948
+        name: microsoft_docs_search
+        output: '{"results": [{"title": "Timer trigger for Azure Functions (programming-language-csharp)",
+          "content": "# Timer trigger for Azure Functions (programming-language-csharp)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-powershell)",
+          "content": "# Timer trigger for Azure Functions (programming-language-powershell)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-javascript)",
+          "content": "# Timer trigger for Azure Functions (programming-language-javascript)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-typescript)",
+          "content": "# Timer trigger for Azure Functions (programming-language-typescript)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-python)",
+          "content": "# Timer trigger for Azure Functions (programming-language-python)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-java)",
+          "content": "# Timer trigger for Azure Functions (programming-language-java)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-go)",
+          "content": "# Timer trigger for Azure Functions (programming-language-go)\n##
+          Usage\n| Functions version | Setting| \n|  --- | ---  |\n| 2.x (and higher)
+          | `AzureFunctionsWebHost__hostid` environment variable |\n| 1.x | `id` in
+          *host.json* |\n\nYou can omit the identifying value or manually set each
+          function app''s identifying configuration to a different value.\nThe timer
+          trigger uses a storage lock to ensure that there is only one timer instance
+          when a function app scales out to multiple instances. If two function apps
+          share the same identifying configuration and each uses a timer trigger,
+          only one timer runs.\n### Retry behavior\nUnlike the queue trigger, the
+          timer trigger doesn''t retry after a function fails. When a function fails,
+          it isn''t called again until the next time on the schedule.\n### Manually
+          invoke a timer trigger\nThe timer trigger for Azure Functions provides an
+          HTTP webhook that can be invoked to manually trigger the function. This
+          can be extremely useful in the following scenarios.\n1. Integration testing\n2.
+          Slot swaps as part of a smoke test or warmup activity\n3. Initial deployment
+          of a function to immediately populate a cache or lookup table in a database\nPlease
+          refer to [manually run a non HTTP-triggered function](https://learn.microsoft.com/azure/azure-functions/functions-manually-run-non-http)
+          for details on how to manually invoke a timer triggered function.\n### Troubleshooting\nFor
+          information about what to do when the timer trigger doesn''t work as expected,
+          see [Investigating and reporting issues with timer triggered functions not
+          firing](https://github.com/Azure/azure-functions-host/wiki/Investigating-and-reporting-issues-with-timer-triggered-functions-not-firing).\n##
+          Connections\nTimer triggers have an implicit dependency on blob storage,
+          except when run locally through the Azure Functions Core Tools. The system
+          uses blob storage to coordinate across multiple instances when the app scales
+          out. It accesses blob storage using the host storage (`AzureWebJobsStorage`)
+          connection. If you configure the host storage to use an [identity-based
+          connection](https://learn.microsoft.com/azure/azure-functions/manage-connections?tabs=host,identity#define-connections),
+          the identity should have the [Storage Blob Data Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#storage-blob-data-owner)
+          role, which is the default requirement for host storage.", "contentUrl":
+          "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#usage"},
+          {"title": "Timer trigger for Azure Functions (programming-language-powershell)",
+          "content": "# Timer trigger for Azure Functions (programming-language-powershell)\n##
+          Configuration\nThe following table explains the binding configuration properties
+          that you set in the *function.json* file.\n| function.json property | Description|
+          \n|  --- | ---  |\n| **type** | Must be set to \"timerTrigger\". This property
+          is set automatically when you create the trigger in the Azure portal. |\n|
+          **direction** | Must be set to \"in\". This property is set automatically
+          when you create the trigger in the Azure portal. |\n| **name** | The name
+          of the variable that represents the timer object in function code. |\n|
+          **schedule** | A NCRONTAB expression or a TimeSpan value. A `TimeSpan` can
+          be used only for a function app that runs on an App Service Plan. You can
+          put the schedule expression in an app setting and set this property to the
+          app setting name wrapped in **%** signs, as in this example: \"%ScheduleAppSetting%\".
+          For more information, see [Work with application settings](https://learn.microsoft.com/azure/azure-functions/functions-how-to-use-azure-function-app-settings#settings).
+          |\n| **runOnStartup** | If `true`, the function is invoked when the runtime
+          starts. For example, the runtime starts when the function app wakes up after
+          going idle due to inactivity, when the function app restarts due to function
+          changes, and when the function app scales out. *Use with caution.***runOnStartup**
+          should rarely if ever be set to `true`, especially in production. |\n| **useMonitor**
+          | Set to `true` or `false` to indicate whether the schedule should be monitored.
+          Schedule monitoring persists schedule occurrences to aid in ensuring the
+          schedule is maintained correctly even when function app instances restart.
+          If not set explicitly, the default is `true` for schedules that have a recurrence
+          interval greater than or equal to 1 minute. For schedules that trigger more
+          than once per minute, the default is `false`. |\n\nWhen you''re developing
+          locally, add your application settings in the [local.settings.json file](https://learn.microsoft.com/azure/azure-functions/functions-develop-local#local-settings-file)
+          in the `Values` collection.\nCaution", "contentUrl": "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#configuration"},
+          {"title": "Timer trigger for Azure Functions (programming-language-javascript)",
+          "content": "# Timer trigger for Azure Functions (programming-language-javascript)\n##
+          Configuration\n### **Model v3**\nThe following table explains the binding
+          configuration properties that you set in the *function.json* file.\n| Property
+          | Description| \n|  --- | ---  |\n| **type** | Must be set to \"timerTrigger\".
+          This property is set automatically when you create the trigger in the Azure
+          portal. |\n| **direction** | Must be set to \"in\". This property is set
+          automatically when you create the trigger in the Azure portal. |\n| **name**
+          | The name of the variable that represents the timer object in function
+          code. |\n| **schedule** | A NCRONTAB expression or a TimeSpan value. A `TimeSpan`
+          can be used only for a function app that runs on an App Service Plan. You
+          can put the schedule expression in an app setting and set this property
+          to the app setting name wrapped in **%** signs, as in this example: \"%ScheduleAppSetting%\".
+          For more information, see [Work with application settings](https://learn.microsoft.com/azure/azure-functions/functions-how-to-use-azure-function-app-settings#settings).
+          |\n| **runOnStartup** | If `true`, the function is invoked when the runtime
+          starts. For example, the runtime starts when the function app wakes up after
+          going idle due to inactivity, when the function app restarts due to function
+          changes, and when the function app scales out. *Use with caution.***runOnStartup**
+          should rarely if ever be set to `true`, especially in production. |\n| **useMonitor**
+          | Set to `true` or `false` to indicate whether the schedule should be monitored.
+          Schedule monitoring persists schedule occurrences to aid in ensuring the
+          schedule is maintained correctly even when function app instances restart.
+          If not set explicitly, the default is `true` for schedules that have a recurrence
+          interval greater than or equal to 1 minute. For schedules that trigger more
+          than once per minute, the default is `false`. |\n\nWhen you''re developing
+          locally, add your application settings in the [local.settings.json file](https://learn.microsoft.com/azure/azure-functions/functions-develop-local#local-settings-file)
+          in the `Values` collection.\nCaution", "contentUrl": "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#configuration"},
+          {"title": "Timer trigger for Azure Functions (programming-language-javascript)",
+          "content": "# Timer trigger for Azure Functions (programming-language-javascript)\n##
+          Configuration\n### **Model v4**\nThe following table explains the properties
+          that you can set on the `options` object passed to the `app.timer()` method.\n|
+          Property | Description| \n|  --- | ---  |\n| **schedule** | A NCRONTAB expression
+          or a TimeSpan value. A `TimeSpan` can be used only for a function app that
+          runs on an App Service Plan. You can put the schedule expression in an app
+          setting and set this property to the app setting name wrapped in **%** signs,
+          as in this example: \"%ScheduleAppSetting%\". For more information, see
+          [Work with application settings](https://learn.microsoft.com/azure/azure-functions/functions-how-to-use-azure-function-app-settings#settings).
+          |\n| **runOnStartup** | If `true`, the function is invoked when the runtime
+          starts. For example, the runtime starts when the function app wakes up after
+          going idle due to inactivity, when the function app restarts due to function
+          changes, and when the function app scales out. *Use with caution.***runOnStartup**
+          should rarely if ever be set to `true`, especially in production. |\n| **useMonitor**
+          | Set to `true` or `false` to indicate whether the schedule should be monitored.
+          Schedule monitoring persists schedule occurrences to aid in ensuring the
+          schedule is maintained correctly even when function app instances restart.
+          If not set explicitly, the default is `true` for schedules that have a recurrence
+          interval greater than or equal to 1 minute. For schedules that trigger more
+          than once per minute, the default is `false`. |\n", "contentUrl": "https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer#configuration"}]}'
+        server_label: microsoft_learn
+        status: completed
+        type: mcp_call
+      - content:
+        - annotations: []
+          logprobs: []
+          text: DONE
+          type: output_text
+        id: msg_0afead39c1d72699006af99c0988f087d2bcf6e43195c5d531
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        headers: null
+        require_approval:
+          always: null
+          never:
+            read_only: true
+            tool_names: []
+        server_description: null
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 5573
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 31
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 5604
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body:
+      input: Call microsoft_docs_search exactly once with the query 'Azure Functions
+        timer trigger'. Do not call any other tool. Then reply DONE.
+      max_output_tokens: 4096
+      model: gpt-5.6-sol
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        require_approval:
+          always:
+            tool_names:
+            - microsoft_docs_search
+          never:
+            tool_names:
+            - microsoft_docs_search
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794743308
+      created_at: 1794743307
+      error: null
+      frequency_penalty: 0.0
+      id: resp_037d85dc2611d9f2006af99c0b4b9087d299e731d361437b4f
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_037d85dc2611d9f2006af99c0b588887d2ac0014e46565d3eb
+        server_label: microsoft_learn
+        tools:
+        - annotations:
+            read_only: true
+          description: 'Search official Microsoft/Azure documentation to find the
+            most relevant and trustworthy content for a user''s query. This tool returns
+            up to 10 high-quality content chunks (each max 500 tokens), extracted
+            from Microsoft Learn and other official sources. Each result includes
+            the article title, URL, and a self-contained content excerpt optimized
+            for fast retrieval and reasoning. Always use this tool to quickly ground
+            your answers in accurate, first-party Microsoft/Azure knowledge.
+
+
+            ## Follow-up Pattern
+
+            To ensure completeness, use microsoft_docs_fetch when high-value pages
+            are identified by search. The fetch tool complements search by providing
+            the full detail. This is a required step for comprehensive results.'
+          input_schema:
+            properties:
+              query:
+                default: null
+                description: a query or topic about Microsoft/Azure products, services,
+                  platforms, developer tools, frameworks, or APIs
+                type: string
+            type: object
+          name: microsoft_docs_search
+        type: mcp_list_tools
+      - arguments: '{"query":"Azure Functions timer trigger"}'
+        id: mcpr_037d85dc2611d9f2006af99c0cef9487d2a076410ecfe1878d
+        name: microsoft_docs_search
+        server_label: microsoft_learn
+        type: mcp_approval_request
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        headers: null
+        require_approval:
+          always:
+            read_only: null
+            tool_names:
+            - microsoft_docs_search
+          never:
+            read_only: null
+            tool_names:
+            - microsoft_docs_search
+        server_description: null
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 304
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 26
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 330
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200

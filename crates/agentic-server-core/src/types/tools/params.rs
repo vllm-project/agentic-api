@@ -4,6 +4,7 @@ mod file_search;
 pub use file_search::FileSearchToolParam;
 
 use super::domain::DomainFilters;
+use super::mcp_approval::McpApprovalPolicy;
 pub use super::tool_search::{ToolSearchExecution, ToolSearchStatus, ToolSearchToolParam};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -215,7 +216,7 @@ pub struct McpToolParam {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allowed_tools: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub require_approval: Option<String>,
+    pub require_approval: Option<McpApprovalPolicy>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub defer_loading: Option<bool>,
     /// `async` applies only to function and custom tools; captured so declaration validation can reject it.

@@ -22,6 +22,16 @@ All notable changes to Agentic API are documented here.
   payload's `file_id` references first, or pass an empty map when the payload has none.
 - `executor::upstream_request` is now async: it resolves the `file_id` references in the input it lowers
   from its `ExecutionContext`. Callers await it, and the lookup no longer lives on `RequestContext`.
+- An MCP declaration's `require_approval` is now typed (`McpApprovalPolicy`) and parses the Responses API filter
+  object as well as `"always"` and `"never"` (part of #145). There is still no approval step, so a request is
+  accepted only when no tool it can call needs approval: `"never"`, or a filter whose `never.tool_names` lists every
+  tool discovery returns (narrow `allowed_tools` if needed). A discovered tool the filter gates fails the request
+  with a 400 naming the server and tool; `"always"`, `read_only` filters, and a tool listed under both `always` and
+  `never` are rejected by request validation. Before, any object form failed to deserialize. A filter is echoed and
+  stored as the Responses API echoes it: both sides, `null` when absent, each with `read_only` (`null` when absent)
+  and `tool_names` (`[]` when absent). Recordings of every form against OpenAI and the gateway are in
+  `tests/cassettes/mcp/mcp-approval-*`.
+  `agentic_core`: `McpToolParam::require_approval` is `Option<McpApprovalPolicy>` instead of `Option<String>`.
 
 ## [0.10.0] - 2026-11-09
 

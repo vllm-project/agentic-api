@@ -861,6 +861,54 @@ COMPACTION_SCENARIOS: dict[str, tuple[Callable[..., None], int]] = {
 }
 
 
+MCP_APPROVAL_SERVER = {"type": "mcp", "server_label": "microsoft_learn", "server_url": "https://learn.microsoft.com/api/mcp"}
+MCP_APPROVAL_SEARCH = "microsoft_docs_search"
+MCP_APPROVAL_FETCH = "microsoft_docs_fetch"
+MCP_APPROVAL_PROMPTS = {
+    MCP_APPROVAL_SEARCH: f"Call {MCP_APPROVAL_SEARCH} exactly once with the query 'Azure Functions timer trigger'. "
+                         "Do not call any other tool. Then reply DONE.",
+    MCP_APPROVAL_FETCH: f"Call {MCP_APPROVAL_FETCH} exactly once with the URL "
+                        "https://learn.microsoft.com/en-us/azure/azure-functions/functions-bindings-timer. "
+                        "Do not call any other tool. Then reply DONE.",
+}
+# (require_approval, allowed_tools or None for every tool, the tool the prompt asks for), one turn each.
+MCP_APPROVAL_CASES: list[tuple[Any, list[str] | None, str]] = [
+    ("never", [MCP_APPROVAL_SEARCH], MCP_APPROVAL_SEARCH),
+    ("always", [MCP_APPROVAL_SEARCH], MCP_APPROVAL_SEARCH),
+    ({"never": {"tool_names": [MCP_APPROVAL_SEARCH]}}, [MCP_APPROVAL_SEARCH], MCP_APPROVAL_SEARCH),
+    ({"never": {"tool_names": [MCP_APPROVAL_SEARCH]}}, [MCP_APPROVAL_SEARCH, MCP_APPROVAL_FETCH], MCP_APPROVAL_FETCH),
+    ({"never": {"tool_names": [MCP_APPROVAL_SEARCH]}}, None, MCP_APPROVAL_SEARCH),
+    ({"always": {"tool_names": [MCP_APPROVAL_FETCH]}}, [MCP_APPROVAL_SEARCH, MCP_APPROVAL_FETCH], MCP_APPROVAL_SEARCH),
+    ({"never": {"read_only": True}}, [MCP_APPROVAL_SEARCH], MCP_APPROVAL_SEARCH),
+    ({"always": {"tool_names": [MCP_APPROVAL_SEARCH]}, "never": {"tool_names": [MCP_APPROVAL_SEARCH]}},
+     [MCP_APPROVAL_SEARCH], MCP_APPROVAL_SEARCH),
+]
+
+
+def _record_mcp_approval(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
+    """Record one turn per MCP `require_approval` form, each asking for one Microsoft Learn MCP tool.
+
+    t1 "never" and t2 "always"; t3 a never.tool_names filter calling its listed tool, the only allowed one; t4 the
+    same filter calling an allowed tool it does not list; t5 the same filter calling its listed tool with every tool
+    allowed; t6 always.tool_names calling a tool neither side lists; t7 a read_only filter; t8 a tool listed under
+    both always and never. Each response shows whether the call ran, waits for approval or is rejected, and how the
+    declaration is echoed; a rejected turn is kept as evidence.
+    """
+    for require_approval, allowed_tools, tool in MCP_APPROVAL_CASES:
+        declaration = {**MCP_APPROVAL_SERVER, "require_approval": require_approval}
+        if allowed_tools is not None:
+            declaration["allowed_tools"] = allowed_tools
+        _observed_turn(client, proxy_url, {
+            "model": model, "store": True, "stream": stream, "input": MCP_APPROVAL_PROMPTS[tool],
+            "tools": [declaration], "max_output_tokens": 4096,
+        })
+
+
+MCP_SCENARIOS: dict[str, tuple[Callable[..., None], int]] = {
+    "mcp-approval": (_record_mcp_approval, len(MCP_APPROVAL_CASES)),
+}
+
+
 def _record_competing_tool_outputs(client: httpx.Client, proxy_url: str, model: str) -> None:
     """Resolve one pending function call twice: streamed turn B (21) and, while B streams, turn C (5).
 
@@ -1025,6 +1073,9 @@ def run_items(
         return
     if scenario in COMPACTION_SCENARIOS:
         COMPACTION_SCENARIOS[scenario][0](client, proxy_url, model, stream)
+        return
+    if scenario in MCP_SCENARIOS:
+        MCP_SCENARIOS[scenario][0](client, proxy_url, model, stream)
         return
     if scenario in ("stale-compaction", "competing-tool-outputs", "overlapping-multi-agent"):
         if not stream:
@@ -3158,7 +3209,7 @@ def run_responses(
 )
 @click.option(
     "--items-scenario",
-    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "concurrent-writes", "stale-compaction", *COMPACTION_SCENARIOS, "competing-tool-outputs", "overlapping-multi-agent", "store-false", "multi-agent-store-false", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items", "response-call-ids"]),
+    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "concurrent-writes", "stale-compaction", *COMPACTION_SCENARIOS, *MCP_SCENARIOS, "competing-tool-outputs", "overlapping-multi-agent", "store-false", "multi-agent-store-false", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items", "response-call-ids"]),
     default="continuation",
     help="Fixed Conversation Items or Responses API scenario (for --mode items).",
 )
@@ -3449,6 +3500,7 @@ def main(
                           22 if items_scenario == "concurrent-writes" else
                           10 if items_scenario == "stale-compaction" else
                           COMPACTION_SCENARIOS[items_scenario][1] if items_scenario in COMPACTION_SCENARIOS else
+                          MCP_SCENARIOS[items_scenario][1] if items_scenario in MCP_SCENARIOS else
                           9 if items_scenario == "competing-tool-outputs" else
                           7 if items_scenario == "overlapping-multi-agent" else 5)
         if turns != expected_turns:
