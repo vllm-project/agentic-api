@@ -5,6 +5,9 @@ pub mod event;
 pub mod file_search;
 pub mod io;
 pub mod messages;
+pub mod model_capabilities;
+mod parameters;
+pub use parameters::{ReasoningEffortLevel, RequestField, ServiceTier};
 pub mod request_response;
 pub mod tools;
 

@@ -110,7 +110,7 @@ impl StandardResponseFields {
         self.temperature = request.temperature.unwrap_or(1.0);
         self.max_output_tokens = request.max_output_tokens;
         self.reasoning = request.reasoning.as_deref().map(|reasoning| ResponseReasoning {
-            effort: reasoning.effort.clone(),
+            effort: reasoning.effort.map(|effort| effort.as_str().to_owned()),
             summary: reasoning.summary.clone(),
         });
         self.metadata = request.metadata.clone().unwrap_or_default();

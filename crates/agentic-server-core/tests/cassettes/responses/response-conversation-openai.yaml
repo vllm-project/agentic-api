@@ -12,8 +12,8 @@ turns:
     query_params: {}
   response:
     body:
-      created_at: 1792738271
-      id: conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f
+      created_at: 1794803004
+      id: conv_6afa853c44948194a4899676a70709b005eadf22d7ced714
       metadata: {}
       object: conversation
     headers:
@@ -31,7 +31,7 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f/items
+    path: /v1/conversations/conv_6afa853c44948194a4899676a70709b005eadf22d7ced714/items
     query_params: {}
   response:
     body:
@@ -39,13 +39,13 @@ turns:
       - content:
         - text: Remember SAPPHIRE.
           type: input_text
-        id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+        id: msg_6afa853cf3088194a1956010a18ddace05eadf22d7ced714
         role: user
         status: completed
         type: message
-      first_id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+      first_id: msg_6afa853cf3088194a1956010a18ddace05eadf22d7ced714
       has_more: false
-      last_id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+      last_id: msg_6afa853cf3088194a1956010a18ddace05eadf22d7ced714
       object: list
     headers:
       content-type: application/json
@@ -53,7 +53,7 @@ turns:
 - filename: t3
   request:
     body:
-      conversation: conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f
+      conversation: conv_6afa853c44948194a4899676a70709b005eadf22d7ced714
       input:
       - content: Reply with only SAPPHIRE.
         role: user
@@ -74,14 +74,17 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1792738273
+      completed_at: 1794803007
       conversation:
-        id: conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f
-      created_at: 1792738273
+        id: conv_6afa853c44948194a4899676a70709b005eadf22d7ced714
+      created_at: 1794803006
       error: null
       frequency_penalty: 0.0
-      id: resp_0186b7532502d89f006adb03e0cd348197a454dbacff6b234c
+      id: resp_05eadf22d7ced714006afa853e641881948a455c68696d3c4b
+      image:
+        context_compression: disabled
       incomplete_details: null
+      input_transformations: []
       instructions: null
       max_output_tokens: null
       max_tool_calls: null
@@ -95,7 +98,7 @@ turns:
           logprobs: []
           text: SAPPHIRE.
           type: output_text
-        id: msg_0186b7532502d89f006adb03e1b6608197a9104e4c499c3bb8
+        id: msg_05eadf22d7ced714006afa853fa49c819483ba30bf06bea9ff
         role: assistant
         status: completed
         type: message
@@ -139,6 +142,9 @@ turns:
         input_tokens: 25
         input_tokens_details:
           cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
           cached_tokens: 0
         output_tokens: 6
         output_tokens_details:
@@ -156,7 +162,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0186b7532502d89f006adb03e0cd348197a454dbacff6b234c/input_items
+    path: /v1/responses/resp_05eadf22d7ced714006afa853e641881948a455c68696d3c4b/input_items
     query_params:
       order: asc
   response:
@@ -165,20 +171,20 @@ turns:
       - content:
         - text: Remember SAPPHIRE.
           type: input_text
-        id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+        id: msg_6afa853cf3088194a1956010a18ddace05eadf22d7ced714
         role: user
         status: completed
         type: message
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0186b7532502d89f006adb03e178788197ab9cda68741a4f92
+        id: msg_05eadf22d7ced714006afa853efd3c8194804a59d60c673e6e
         role: user
         status: completed
         type: message
-      first_id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+      first_id: msg_6afa853cf3088194a1956010a18ddace05eadf22d7ced714
       has_more: false
-      last_id: msg_0186b7532502d89f006adb03e178788197ab9cda68741a4f92
+      last_id: msg_05eadf22d7ced714006afa853efd3c8194804a59d60c673e6e
       object: list
     headers:
       content-type: application/json
@@ -195,7 +201,7 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f/items
+    path: /v1/conversations/conv_6afa853c44948194a4899676a70709b005eadf22d7ced714/items
     query_params: {}
   response:
     body:
@@ -203,13 +209,13 @@ turns:
       - content:
         - text: Now remember ORCHID.
           type: input_text
-        id: msg_6adb03e33fa0819787cbdb0d1682bd790186b7532502d89f
+        id: msg_6afa8542156c8194b3696664ffac705805eadf22d7ced714
         role: user
         status: completed
         type: message
-      first_id: msg_6adb03e33fa0819787cbdb0d1682bd790186b7532502d89f
+      first_id: msg_6afa8542156c8194b3696664ffac705805eadf22d7ced714
       has_more: false
-      last_id: msg_6adb03e33fa0819787cbdb0d1682bd790186b7532502d89f
+      last_id: msg_6afa8542156c8194b3696664ffac705805eadf22d7ced714
       object: list
     headers:
       content-type: application/json
@@ -222,7 +228,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0186b7532502d89f006adb03e0cd348197a454dbacff6b234c/input_items
+    path: /v1/responses/resp_05eadf22d7ced714006afa853e641881948a455c68696d3c4b/input_items
     query_params:
       order: asc
   response:
@@ -231,20 +237,20 @@ turns:
       - content:
         - text: Remember SAPPHIRE.
           type: input_text
-        id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+        id: msg_6afa853cf3088194a1956010a18ddace05eadf22d7ced714
         role: user
         status: completed
         type: message
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0186b7532502d89f006adb03e178788197ab9cda68741a4f92
+        id: msg_05eadf22d7ced714006afa853efd3c8194804a59d60c673e6e
         role: user
         status: completed
         type: message
-      first_id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+      first_id: msg_6afa853cf3088194a1956010a18ddace05eadf22d7ced714
       has_more: false
-      last_id: msg_0186b7532502d89f006adb03e178788197ab9cda68741a4f92
+      last_id: msg_05eadf22d7ced714006afa853efd3c8194804a59d60c673e6e
       object: list
     headers:
       content-type: application/json
@@ -252,7 +258,7 @@ turns:
 - filename: t7
   request:
     body:
-      conversation: conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f
+      conversation: conv_6afa853c44948194a4899676a70709b005eadf22d7ced714
       input:
       - content: Reply with only ORCHID.
         role: user
@@ -273,14 +279,17 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1792738277
+      completed_at: 1794803012
       conversation:
-        id: conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f
-      created_at: 1792738276
+        id: conv_6afa853c44948194a4899676a70709b005eadf22d7ced714
+      created_at: 1794803011
       error: null
       frequency_penalty: 0.0
-      id: resp_0186b7532502d89f006adb03e451988197846ca60742726a66
+      id: resp_05eadf22d7ced714006afa85430f188194b78680856cff06b0
+      image:
+        context_compression: disabled
       incomplete_details: null
+      input_transformations: []
       instructions: null
       max_output_tokens: null
       max_tool_calls: null
@@ -294,7 +303,7 @@ turns:
           logprobs: []
           text: ORCHID.
           type: output_text
-        id: msg_0186b7532502d89f006adb03e4f3648197b1d3d884ff5c1cf8
+        id: msg_05eadf22d7ced714006afa8544420c819493016791eef07759
         role: assistant
         status: completed
         type: message
@@ -338,6 +347,9 @@ turns:
         input_tokens: 55
         input_tokens_details:
           cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
           cached_tokens: 0
         output_tokens: 5
         output_tokens_details:
@@ -355,7 +367,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0186b7532502d89f006adb03e451988197846ca60742726a66/input_items
+    path: /v1/responses/resp_05eadf22d7ced714006afa85430f188194b78680856cff06b0/input_items
     query_params:
       order: asc
   response:
@@ -364,14 +376,14 @@ turns:
       - content:
         - text: Remember SAPPHIRE.
           type: input_text
-        id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+        id: msg_6afa853cf3088194a1956010a18ddace05eadf22d7ced714
         role: user
         status: completed
         type: message
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0186b7532502d89f006adb03e178788197ab9cda68741a4f92
+        id: msg_05eadf22d7ced714006afa853efd3c8194804a59d60c673e6e
         role: user
         status: completed
         type: message
@@ -380,27 +392,27 @@ turns:
           logprobs: []
           text: SAPPHIRE.
           type: output_text
-        id: msg_0186b7532502d89f006adb03e1b6608197a9104e4c499c3bb8
+        id: msg_05eadf22d7ced714006afa853fa49c819483ba30bf06bea9ff
         role: assistant
         status: completed
         type: message
       - content:
         - text: Now remember ORCHID.
           type: input_text
-        id: msg_6adb03e33fa0819787cbdb0d1682bd790186b7532502d89f
+        id: msg_6afa8542156c8194b3696664ffac705805eadf22d7ced714
         role: user
         status: completed
         type: message
       - content:
         - text: Reply with only ORCHID.
           type: input_text
-        id: msg_0186b7532502d89f006adb03e4899081978fb72810bff05971
+        id: msg_05eadf22d7ced714006afa8543a2d081948837410e63928ae4
         role: user
         status: completed
         type: message
-      first_id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+      first_id: msg_6afa853cf3088194a1956010a18ddace05eadf22d7ced714
       has_more: false
-      last_id: msg_0186b7532502d89f006adb03e4899081978fb72810bff05971
+      last_id: msg_05eadf22d7ced714006afa8543a2d081948837410e63928ae4
       object: list
     headers:
       content-type: application/json
@@ -413,7 +425,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/conversations/conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f/items
+    path: /v1/conversations/conv_6afa853c44948194a4899676a70709b005eadf22d7ced714/items
     query_params:
       order: asc
   response:
@@ -422,14 +434,14 @@ turns:
       - content:
         - text: Remember SAPPHIRE.
           type: input_text
-        id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+        id: msg_6afa853cf3088194a1956010a18ddace05eadf22d7ced714
         role: user
         status: completed
         type: message
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0186b7532502d89f006adb03e178788197ab9cda68741a4f92
+        id: msg_05eadf22d7ced714006afa853efd3c8194804a59d60c673e6e
         role: user
         status: completed
         type: message
@@ -438,21 +450,21 @@ turns:
           logprobs: []
           text: SAPPHIRE.
           type: output_text
-        id: msg_0186b7532502d89f006adb03e1b6608197a9104e4c499c3bb8
+        id: msg_05eadf22d7ced714006afa853fa49c819483ba30bf06bea9ff
         role: assistant
         status: completed
         type: message
       - content:
         - text: Now remember ORCHID.
           type: input_text
-        id: msg_6adb03e33fa0819787cbdb0d1682bd790186b7532502d89f
+        id: msg_6afa8542156c8194b3696664ffac705805eadf22d7ced714
         role: user
         status: completed
         type: message
       - content:
         - text: Reply with only ORCHID.
           type: input_text
-        id: msg_0186b7532502d89f006adb03e4899081978fb72810bff05971
+        id: msg_05eadf22d7ced714006afa8543a2d081948837410e63928ae4
         role: user
         status: completed
         type: message
@@ -461,13 +473,13 @@ turns:
           logprobs: []
           text: ORCHID.
           type: output_text
-        id: msg_0186b7532502d89f006adb03e4f3648197b1d3d884ff5c1cf8
+        id: msg_05eadf22d7ced714006afa8544420c819493016791eef07759
         role: assistant
         status: completed
         type: message
-      first_id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+      first_id: msg_6afa853cf3088194a1956010a18ddace05eadf22d7ced714
       has_more: false
-      last_id: msg_0186b7532502d89f006adb03e4f3648197b1d3d884ff5c1cf8
+      last_id: msg_05eadf22d7ced714006afa8544420c819493016791eef07759
       object: list
     headers:
       content-type: application/json
@@ -480,12 +492,12 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: DELETE
-    path: /v1/conversations/conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f/items/msg_6adb03e33fa0819787cbdb0d1682bd790186b7532502d89f
+    path: /v1/conversations/conv_6afa853c44948194a4899676a70709b005eadf22d7ced714/items/msg_6afa8542156c8194b3696664ffac705805eadf22d7ced714
     query_params: {}
   response:
     body:
-      created_at: 1792738271
-      id: conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f
+      created_at: 1794803004
+      id: conv_6afa853c44948194a4899676a70709b005eadf22d7ced714
       metadata: {}
       object: conversation
     headers:
@@ -499,7 +511,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0186b7532502d89f006adb03e451988197846ca60742726a66/input_items
+    path: /v1/responses/resp_05eadf22d7ced714006afa85430f188194b78680856cff06b0/input_items
     query_params:
       order: asc
   response:
@@ -508,14 +520,14 @@ turns:
       - content:
         - text: Remember SAPPHIRE.
           type: input_text
-        id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+        id: msg_6afa853cf3088194a1956010a18ddace05eadf22d7ced714
         role: user
         status: completed
         type: message
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0186b7532502d89f006adb03e178788197ab9cda68741a4f92
+        id: msg_05eadf22d7ced714006afa853efd3c8194804a59d60c673e6e
         role: user
         status: completed
         type: message
@@ -524,27 +536,27 @@ turns:
           logprobs: []
           text: SAPPHIRE.
           type: output_text
-        id: msg_0186b7532502d89f006adb03e1b6608197a9104e4c499c3bb8
+        id: msg_05eadf22d7ced714006afa853fa49c819483ba30bf06bea9ff
         role: assistant
         status: completed
         type: message
       - content:
         - text: Now remember ORCHID.
           type: input_text
-        id: msg_6adb03e33fa0819787cbdb0d1682bd790186b7532502d89f
+        id: msg_6afa8542156c8194b3696664ffac705805eadf22d7ced714
         role: user
         status: completed
         type: message
       - content:
         - text: Reply with only ORCHID.
           type: input_text
-        id: msg_0186b7532502d89f006adb03e4899081978fb72810bff05971
+        id: msg_05eadf22d7ced714006afa8543a2d081948837410e63928ae4
         role: user
         status: completed
         type: message
-      first_id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+      first_id: msg_6afa853cf3088194a1956010a18ddace05eadf22d7ced714
       has_more: false
-      last_id: msg_0186b7532502d89f006adb03e4899081978fb72810bff05971
+      last_id: msg_05eadf22d7ced714006afa8543a2d081948837410e63928ae4
       object: list
     headers:
       content-type: application/json
@@ -557,7 +569,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0186b7532502d89f006adb03e0cd348197a454dbacff6b234c/input_items
+    path: /v1/responses/resp_05eadf22d7ced714006afa853e641881948a455c68696d3c4b/input_items
     query_params:
       order: asc
   response:
@@ -566,20 +578,20 @@ turns:
       - content:
         - text: Remember SAPPHIRE.
           type: input_text
-        id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+        id: msg_6afa853cf3088194a1956010a18ddace05eadf22d7ced714
         role: user
         status: completed
         type: message
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0186b7532502d89f006adb03e178788197ab9cda68741a4f92
+        id: msg_05eadf22d7ced714006afa853efd3c8194804a59d60c673e6e
         role: user
         status: completed
         type: message
-      first_id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+      first_id: msg_6afa853cf3088194a1956010a18ddace05eadf22d7ced714
       has_more: false
-      last_id: msg_0186b7532502d89f006adb03e178788197ab9cda68741a4f92
+      last_id: msg_05eadf22d7ced714006afa853efd3c8194804a59d60c673e6e
       object: list
     headers:
       content-type: application/json
@@ -592,12 +604,12 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: DELETE
-    path: /v1/responses/resp_0186b7532502d89f006adb03e0cd348197a454dbacff6b234c
+    path: /v1/responses/resp_05eadf22d7ced714006afa853e641881948a455c68696d3c4b
     query_params: {}
   response:
     body:
       deleted: true
-      id: resp_0186b7532502d89f006adb03e0cd348197a454dbacff6b234c
+      id: resp_05eadf22d7ced714006afa853e641881948a455c68696d3c4b
       object: response.deleted
     headers:
       content-type: application/json
@@ -610,7 +622,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0186b7532502d89f006adb03e451988197846ca60742726a66/input_items
+    path: /v1/responses/resp_05eadf22d7ced714006afa85430f188194b78680856cff06b0/input_items
     query_params:
       order: asc
   response:
@@ -619,14 +631,14 @@ turns:
       - content:
         - text: Remember SAPPHIRE.
           type: input_text
-        id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+        id: msg_6afa853cf3088194a1956010a18ddace05eadf22d7ced714
         role: user
         status: completed
         type: message
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0186b7532502d89f006adb03e178788197ab9cda68741a4f92
+        id: msg_05eadf22d7ced714006afa853efd3c8194804a59d60c673e6e
         role: user
         status: completed
         type: message
@@ -635,27 +647,27 @@ turns:
           logprobs: []
           text: SAPPHIRE.
           type: output_text
-        id: msg_0186b7532502d89f006adb03e1b6608197a9104e4c499c3bb8
+        id: msg_05eadf22d7ced714006afa853fa49c819483ba30bf06bea9ff
         role: assistant
         status: completed
         type: message
       - content:
         - text: Now remember ORCHID.
           type: input_text
-        id: msg_6adb03e33fa0819787cbdb0d1682bd790186b7532502d89f
+        id: msg_6afa8542156c8194b3696664ffac705805eadf22d7ced714
         role: user
         status: completed
         type: message
       - content:
         - text: Reply with only ORCHID.
           type: input_text
-        id: msg_0186b7532502d89f006adb03e4899081978fb72810bff05971
+        id: msg_05eadf22d7ced714006afa8543a2d081948837410e63928ae4
         role: user
         status: completed
         type: message
-      first_id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+      first_id: msg_6afa853cf3088194a1956010a18ddace05eadf22d7ced714
       has_more: false
-      last_id: msg_0186b7532502d89f006adb03e4899081978fb72810bff05971
+      last_id: msg_05eadf22d7ced714006afa8543a2d081948837410e63928ae4
       object: list
     headers:
       content-type: application/json
@@ -668,7 +680,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/conversations/conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f/items
+    path: /v1/conversations/conv_6afa853c44948194a4899676a70709b005eadf22d7ced714/items
     query_params:
       order: asc
   response:
@@ -677,14 +689,14 @@ turns:
       - content:
         - text: Remember SAPPHIRE.
           type: input_text
-        id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+        id: msg_6afa853cf3088194a1956010a18ddace05eadf22d7ced714
         role: user
         status: completed
         type: message
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0186b7532502d89f006adb03e178788197ab9cda68741a4f92
+        id: msg_05eadf22d7ced714006afa853efd3c8194804a59d60c673e6e
         role: user
         status: completed
         type: message
@@ -693,14 +705,14 @@ turns:
           logprobs: []
           text: SAPPHIRE.
           type: output_text
-        id: msg_0186b7532502d89f006adb03e1b6608197a9104e4c499c3bb8
+        id: msg_05eadf22d7ced714006afa853fa49c819483ba30bf06bea9ff
         role: assistant
         status: completed
         type: message
       - content:
         - text: Reply with only ORCHID.
           type: input_text
-        id: msg_0186b7532502d89f006adb03e4899081978fb72810bff05971
+        id: msg_05eadf22d7ced714006afa8543a2d081948837410e63928ae4
         role: user
         status: completed
         type: message
@@ -709,13 +721,13 @@ turns:
           logprobs: []
           text: ORCHID.
           type: output_text
-        id: msg_0186b7532502d89f006adb03e4f3648197b1d3d884ff5c1cf8
+        id: msg_05eadf22d7ced714006afa8544420c819493016791eef07759
         role: assistant
         status: completed
         type: message
-      first_id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+      first_id: msg_6afa853cf3088194a1956010a18ddace05eadf22d7ced714
       has_more: false
-      last_id: msg_0186b7532502d89f006adb03e4f3648197b1d3d884ff5c1cf8
+      last_id: msg_05eadf22d7ced714006afa8544420c819493016791eef07759
       object: list
     headers:
       content-type: application/json
@@ -728,7 +740,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0186b7532502d89f006adb03e451988197846ca60742726a66
+    path: /v1/responses/resp_05eadf22d7ced714006afa85430f188194b78680856cff06b0
     query_params: {}
   response:
     body:
@@ -736,14 +748,17 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1792738277
+      completed_at: 1794803012
       conversation:
-        id: conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f
-      created_at: 1792738276
+        id: conv_6afa853c44948194a4899676a70709b005eadf22d7ced714
+      created_at: 1794803011
       error: null
       frequency_penalty: 0.0
-      id: resp_0186b7532502d89f006adb03e451988197846ca60742726a66
+      id: resp_05eadf22d7ced714006afa85430f188194b78680856cff06b0
+      image:
+        context_compression: disabled
       incomplete_details: null
+      input_transformations: []
       instructions: null
       max_output_tokens: null
       max_tool_calls: null
@@ -757,7 +772,7 @@ turns:
           logprobs: []
           text: ORCHID.
           type: output_text
-        id: msg_0186b7532502d89f006adb03e4f3648197b1d3d884ff5c1cf8
+        id: msg_05eadf22d7ced714006afa8544420c819493016791eef07759
         role: assistant
         status: completed
         type: message
@@ -801,6 +816,9 @@ turns:
         input_tokens: 55
         input_tokens_details:
           cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
           cached_tokens: 0
         output_tokens: 5
         output_tokens_details:
@@ -818,12 +836,12 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: DELETE
-    path: /v1/conversations/conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f
+    path: /v1/conversations/conv_6afa853c44948194a4899676a70709b005eadf22d7ced714
     query_params: {}
   response:
     body:
       deleted: true
-      id: conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f
+      id: conv_6afa853c44948194a4899676a70709b005eadf22d7ced714
       object: conversation.deleted
     headers:
       content-type: application/json
@@ -836,7 +854,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0186b7532502d89f006adb03e451988197846ca60742726a66/input_items
+    path: /v1/responses/resp_05eadf22d7ced714006afa85430f188194b78680856cff06b0/input_items
     query_params: {}
   response:
     body:
@@ -844,14 +862,14 @@ turns:
       - content:
         - text: Reply with only ORCHID.
           type: input_text
-        id: msg_0186b7532502d89f006adb03e4899081978fb72810bff05971
+        id: msg_05eadf22d7ced714006afa8543a2d081948837410e63928ae4
         role: user
         status: completed
         type: message
       - content:
         - text: Now remember ORCHID.
           type: input_text
-        id: msg_6adb03e33fa0819787cbdb0d1682bd790186b7532502d89f
+        id: msg_6afa8542156c8194b3696664ffac705805eadf22d7ced714
         role: user
         status: completed
         type: message
@@ -860,27 +878,27 @@ turns:
           logprobs: []
           text: SAPPHIRE.
           type: output_text
-        id: msg_0186b7532502d89f006adb03e1b6608197a9104e4c499c3bb8
+        id: msg_05eadf22d7ced714006afa853fa49c819483ba30bf06bea9ff
         role: assistant
         status: completed
         type: message
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0186b7532502d89f006adb03e178788197ab9cda68741a4f92
+        id: msg_05eadf22d7ced714006afa853efd3c8194804a59d60c673e6e
         role: user
         status: completed
         type: message
       - content:
         - text: Remember SAPPHIRE.
           type: input_text
-        id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+        id: msg_6afa853cf3088194a1956010a18ddace05eadf22d7ced714
         role: user
         status: completed
         type: message
-      first_id: msg_0186b7532502d89f006adb03e4899081978fb72810bff05971
+      first_id: msg_05eadf22d7ced714006afa8543a2d081948837410e63928ae4
       has_more: false
-      last_id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+      last_id: msg_6afa853cf3088194a1956010a18ddace05eadf22d7ced714
       object: list
     headers:
       content-type: application/json
@@ -893,7 +911,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0186b7532502d89f006adb03e451988197846ca60742726a66
+    path: /v1/responses/resp_05eadf22d7ced714006afa85430f188194b78680856cff06b0
     query_params: {}
   response:
     body:
@@ -901,14 +919,17 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1792738277
+      completed_at: 1794803012
       conversation:
-        id: conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f
-      created_at: 1792738276
+        id: conv_6afa853c44948194a4899676a70709b005eadf22d7ced714
+      created_at: 1794803011
       error: null
       frequency_penalty: 0.0
-      id: resp_0186b7532502d89f006adb03e451988197846ca60742726a66
+      id: resp_05eadf22d7ced714006afa85430f188194b78680856cff06b0
+      image:
+        context_compression: disabled
       incomplete_details: null
+      input_transformations: []
       instructions: null
       max_output_tokens: null
       max_tool_calls: null
@@ -922,7 +943,7 @@ turns:
           logprobs: []
           text: ORCHID.
           type: output_text
-        id: msg_0186b7532502d89f006adb03e4f3648197b1d3d884ff5c1cf8
+        id: msg_05eadf22d7ced714006afa8544420c819493016791eef07759
         role: assistant
         status: completed
         type: message
@@ -966,6 +987,9 @@ turns:
         input_tokens: 55
         input_tokens_details:
           cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
           cached_tokens: 0
         output_tokens: 5
         output_tokens_details:
@@ -975,3 +999,112 @@ turns:
     headers:
       content-type: application/json
     status_code: 200
+- filename: t20
+  request:
+    body:
+      conversation: conv_6afa853c44948194a4899676a70709b005eadf22d7ced714
+      input: Reply with only SAPPHIRE.
+      model: gpt-4.1
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Conversation with id 'conv_6afa853c44948194a4899676a70709b005eadf22d7ced714'
+          not found.
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t21
+  request:
+    body:
+      conversation: conv_a301432771b2633546e9f1fb449e66e00d25057d4f883c06
+      input: Reply with only SAPPHIRE.
+      model: gpt-4.1
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Conversation with id 'conv_a301432771b2633546e9f1fb449e66e00d25057d4f883c06'
+          not found.
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t22
+  request:
+    body:
+      conversation: conv_a301432771b2633546e9f1fb449e66e00d25057d4f883c06
+      input: Reply with only SAPPHIRE.
+      model: gpt-4.1
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Conversation with id 'conv_a301432771b2633546e9f1fb449e66e00d25057d4f883c06'
+          not found.
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t23
+  request:
+    body:
+      conversation:
+        id: conv_a301432771b2633546e9f1fb449e66e00d25057d4f883c06
+      input: Reply with only SAPPHIRE.
+      model: gpt-4.1
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Conversation with id 'conv_a301432771b2633546e9f1fb449e66e00d25057d4f883c06'
+          not found.
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404

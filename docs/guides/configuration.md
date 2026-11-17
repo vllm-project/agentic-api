@@ -74,9 +74,15 @@ max_stream_event_bytes = 16777216
 input_modalities = ["text", "image"]
 
 [models."zai-org/GLM-5.3-Flash"]
-# Reasoning effort levels to offer for this served model ID, in the order Codex lists them.
-# Accepted values are "low", "medium", "high", "xhigh", and "max".
+# Reasoning effort levels to advertise and accept for this exact served model ID.
+# Accepted names are "none", "minimal", "low", "medium", "high", "xhigh", and "max".
 supported_reasoning_levels = ["low", "high", "max"]
+
+# Optional Responses limits for another exact served model ID.
+[models."gpt-6-astra"]
+sampling_supported = false
+logprobs_supported = false
+supported_reasoning_levels = ["low", "medium", "high", "xhigh", "max"]
 
 [mcp_servers.counter]
 url = "https://mcp.example.com/mcp"
@@ -101,11 +107,32 @@ This matters because Codex reads its local model catalog and strips image conten
 when the catalog says the model is text-only, so a missing override blocks image input even against a vision-capable
 upstream.
 
-`supported_reasoning_levels` lists the reasoning effort levels Codex offers for that served model, in the order the
-catalog advertises them. A model without the setting keeps `["low", "medium", "high"]`, so existing catalogs are
-unchanged. Levels use the shared effort vocabulary (`low`, `medium`, `high`, `xhigh`, and `max`); unknown level names,
-empty lists, and repeated levels are rejected at startup with the offending file and line. Each level's Codex-facing
-description comes from a fixed per-level table rather than from the configuration file.
+`supported_reasoning_levels` lists the reasoning effort levels Codex offers and Responses requests may explicitly
+select for that served model, in catalog order. Levels use the shared vocabulary (`none`, `minimal`, `low`, `medium`,
+`high`, `xhigh`, and `max`); unknown names, empty lists, and repeated levels are rejected at startup. Each level's
+Codex-facing description comes from a fixed table. Without this setting, the catalog displays `["low", "medium",
+"high"]`, but that fallback does not restrict requests.
+
+Existing explicit `supported_reasoning_levels` lists now also govern request admission, rather than only catalog
+display. Check that deployed lists include every effort clients should be allowed to request.
+
+The same `[models."<served-model-id>"]` table accepts optional Responses capability settings:
+
+| Setting | Request admission |
+| --- | --- |
+| `sampling_supported = false` | Reject non-null `temperature` and `top_p`. |
+| `logprobs_supported = false` | Reject non-null `top_logprobs` (including zero) and `message.output_text.logprobs` in `include`. |
+| `supported_reasoning_levels` | Allow explicitly requested `reasoning.effort` values from this list. |
+| `service_tiers` | Allow explicitly requested tiers from this deployment's list: `auto`, `default`, `flex`, `scale`, `priority`, `fast`, or `ultrafast`. Empty lists, repeated tiers, and unknown tier names are rejected at startup. |
+| `prompt_cache_options_supported` | Override `[responses] prompt_cache_options_supported` for this model; the deployment default is `false`. |
+| `prompt_cache_retention_supported = false` | Reject non-null legacy `prompt_cache_retention`. |
+
+Only explicit settings restrict their corresponding request fields; model names do not enable built-in profiles.
+The typed request parser still applies to every model. Set service-tier limits only for known deployment restrictions;
+the upstream determines actual account and regional availability. Enable cache options only after qualifying mode/TTL
+support for that model, or for all models using the deployment fallback. Ordinary `/v1/models` responses remain
+upstream-owned; local settings feed the Codex catalog without adding admission fields to its output.
+See [Responses capability policies](../api/index.md#model-capability-policies) for errors and compatibility details.
 
 `max_request_body_size_bytes` bounds the serialized request the gateway accepts on `/v1/responses`,
 `/v1/responses/compact`, `/v1/conversations`, the Anthropic Messages endpoints, the Responses WebSocket, and the
@@ -181,6 +208,12 @@ To use an operator-configured MCP server, declare its label without sending its 
 Configured `allowed_tools` form the maximum tool set; request-provided `allowed_tools` may narrow it. A configured
 `require_approval = "never"` lets requests omit that field. If a label exists in `config.toml`, a request cannot
 override it with `server_url`; otherwise the existing request-declared HTTP MCP flow remains available.
+
+The gateway has no MCP approval step yet. A request's `require_approval` may be `"never"` or a filter object such as
+`{"never": {"tool_names": ["read"]}}`; a tool that the filter's `never.tool_names` does not list needs approval, as in
+the Responses API, so the request fails with a 400 if the server exposes such a tool. Narrow `allowed_tools` to the
+listed tools in that case. `"always"` and `read_only` filters are rejected. A filter is echoed in the shape the
+Responses API uses: both `always` and `never`, `null` when absent.
 
 Web search provider settings are described in [Web search providers](web-search.md), and the gateway-run web search
 and web fetch tools for Claude Code in [Gateway server tools on `/v1/messages`](messages-server-tools.md).

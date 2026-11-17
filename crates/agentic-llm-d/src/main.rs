@@ -1,6 +1,7 @@
 //! `agentic-llm-d` — the coordinator calls `hydrate`, runs inference against its
 //! own model fleet, then calls `persist`. This binary does neither.
 
+use agentic_core::types::model_capabilities::ModelCapabilities;
 use clap::Parser;
 use tokio_util::sync::CancellationToken;
 
@@ -48,6 +49,7 @@ async fn main() -> Result<(), runner::Error> {
         sqlite: SqliteConfig::default(),
         tools: ToolRuntimeConfig::default(),
         responses: ResponsesConfig::default(),
+        model_capabilities: ModelCapabilities::default(),
     };
 
     let shutdown = CancellationToken::new();

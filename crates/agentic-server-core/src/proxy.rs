@@ -404,6 +404,7 @@ async fn relay_upstream_response(sent: Result<reqwest::Response, reqwest::Error>
 mod tests {
     use super::*;
     use crate::config::Config;
+    use crate::types::model_capabilities::ModelCapabilities;
 
     fn test_config() -> Config {
         Config {
@@ -417,6 +418,7 @@ mod tests {
             sqlite: crate::config::SqliteConfig::default(),
             tools: crate::config::ToolRuntimeConfig::default(),
             responses: crate::config::ResponsesConfig::default(),
+            model_capabilities: ModelCapabilities::default(),
         }
     }
 

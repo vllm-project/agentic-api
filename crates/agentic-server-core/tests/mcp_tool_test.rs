@@ -7,7 +7,7 @@ use agentic_core::tool::{GatewayExecutors, ToolOwnership, ToolRegistry, ToolType
 use agentic_core::types::io::output::McpListTools;
 use agentic_core::types::io::{ItemPage, McpCall, OutputItem, ToolChoice};
 use agentic_core::types::request_response::RequestPayload;
-use agentic_core::types::tools::ResponsesTool;
+use agentic_core::types::tools::{McpApprovalMode, McpApprovalPolicy, ResponsesTool};
 use axum::Router;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
@@ -638,6 +638,233 @@ async fn mcp_declarations_stay_public_on_streaming_lifecycle_snapshots() {
     assert_lowered_forecast_upstream(&bodies[0], "streaming turn");
 }
 
+fn forecast_request_with_approval(stream: bool, server_url: &str, policy: &Value) -> RequestPayload {
+    serde_json::from_value(json!({
+        "model": "test-model", "input": "forecast Tokyo", "stream": stream, "store": true,
+        "tools": [{"type": "mcp", "server_label": "stub", "server_url": server_url, "require_approval": policy}]
+    }))
+    .expect("MCP request with an approval filter")
+}
+
+/// A `require_approval` filter that lets every exposed tool run without approval executes the call and echoes the
+/// filter, in the response and the stored one, as `OpenAI` does; one that gates an exposed tool is a 400 before any
+/// inference request (in a stream, its only event).
+#[tokio::test]
+async fn mcp_approval_filters_run_ungated_tools_and_reject_gated_ones() {
+    let mcp_url = spawn_forecast_mcp().await;
+    let ungated = json!({"never": {"tool_names": ["forecast"]}});
+    let echoed = json!({"always": null, "never": {"read_only": null, "tool_names": ["forecast"]}});
+    for stream in [false, true] {
+        let fixture = support::TestFixture::new_with_responses(mcp_inference_responses(
+            stream,
+            "mcp__stub__forecast",
+            &json!({"city": "Tokyo"}),
+        ))
+        .await;
+        let response =
+            complete_mcp_response(forecast_request_with_approval(stream, &mcp_url, &ungated), &fixture).await;
+        let call = response["output"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["type"] == "mcp_call")
+            .expect("the ungated MCP call runs");
+        assert_eq!(call["name"], "forecast");
+        assert_eq!(call["status"], "completed");
+        assert_eq!(call["output"], "forecast result");
+        assert_eq!(response["tools"][0]["require_approval"], echoed);
+        let stored = fixture
+            .exec_ctx
+            .resp_handler
+            .get_snapshot(response["id"].as_str().unwrap())
+            .await
+            .expect("stored response");
+        assert_eq!(
+            serde_json::to_value(&stored).unwrap()["tools"][0]["require_approval"],
+            echoed
+        );
+    }
+
+    for policy in [
+        json!({"never": {"tool_names": ["other"]}}),
+        json!({"always": {"tool_names": ["forecast"]}}),
+        json!({}),
+    ] {
+        for stream in [false, true] {
+            let fixture = support::TestFixture::new_with_responses(Vec::new()).await;
+            let gated = "MCP server 'stub' requires approval for tool 'forecast'";
+            match ExecuteRequest::new(
+                forecast_request_with_approval(stream, &mcp_url, &policy),
+                Arc::clone(&fixture.exec_ctx),
+            )
+            .run()
+            .await
+            {
+                Err(error) => {
+                    assert!(!stream, "{policy}: discovery runs inside the stream");
+                    assert_eq!(error.http_status(), StatusCode::BAD_REQUEST, "{policy}");
+                    assert!(error.to_string().contains(gated), "{error}");
+                }
+                Ok(Either::Right(events)) => {
+                    let chunks: Vec<_> = events.collect().await;
+                    let events = support::streamed_sse_events(&chunks);
+                    assert_eq!(events.len(), 1, "{policy}: {events:?}");
+                    assert_eq!(events[0]["type"], "error");
+                    assert_eq!(events[0]["status"], 400);
+                    assert!(
+                        events[0]["error"]["message"].as_str().unwrap().contains(gated),
+                        "{}",
+                        events[0]
+                    );
+                }
+                Ok(Either::Left(response)) => panic!("{policy} gates forecast: {}", response.id),
+            }
+            assert!(fixture.request_bodies().await.is_empty(), "no inference for {policy}");
+        }
+    }
+}
+
+const APPROVAL_OPENAI: &str = "mcp-approval-openai-gpt-5.6-sol-nonstreaming.yaml";
+const APPROVAL_GATEWAY: &str = "mcp-approval-gateway-gpt-5.6-sol-nonstreaming.yaml";
+
+/// The `require_approval` recordings (`MCP_RECORD_CASE=approval`): one non-streaming turn per form against the
+/// Microsoft Learn MCP server, the same declaration and input on both providers.
+fn approval_recordings() -> (support::Cassette, support::Cassette) {
+    let openai = load_mcp_cassette(APPROVAL_OPENAI);
+    let gateway = load_mcp_cassette(APPROVAL_GATEWAY);
+    assert_eq!(openai.turns.len(), 8);
+    assert_eq!(gateway.turns.len(), 8);
+    for (openai, gateway) in openai.turns.iter().zip(&gateway.turns) {
+        assert_eq!(openai.filename, gateway.filename);
+        assert_eq!(
+            openai.request.body.tools, gateway.request.body.tools,
+            "{}",
+            openai.filename
+        );
+        assert_eq!(
+            openai.request.body.input, gateway.request.body.input,
+            "{}",
+            openai.filename
+        );
+    }
+    (openai, gateway)
+}
+
+fn recorded_body(turn: &support::Turn) -> &Value {
+    turn.response.body.as_ref().expect("non-streaming response body")
+}
+
+fn recorded_items<'a>(turn: &'a support::Turn, kind: &str) -> Vec<&'a Value> {
+    recorded_body(turn)["output"]
+        .as_array()
+        .expect("output array")
+        .iter()
+        .filter(|item| item["type"] == kind)
+        .collect()
+}
+
+/// `OpenAI` answers each form with what `McpApprovalPolicy::requires_approval` decides for the tool the model
+/// called: an `mcp_approval_request` when it needs approval, a completed `mcp_call` when not. A tool that
+/// `never.tool_names` leaves out needs approval (t4, t6), and one under both sides does too (t8). t7's `read_only`
+/// filter is the form the policy does not decide (the gateway rejects it); `OpenAI` ran the read-only tool.
+#[test]
+fn openai_approval_recordings_follow_the_policy_default() {
+    let (openai, _) = approval_recordings();
+    for turn in &openai.turns {
+        let name = &turn.filename;
+        assert_eq!(turn.response.status_code, Some(200), "{name}");
+        assert_eq!(recorded_body(turn)["status"], "completed", "{name}");
+        let requests = recorded_items(turn, "mcp_approval_request");
+        let calls = recorded_items(turn, "mcp_call");
+        let (item, gated) = match (requests.as_slice(), calls.as_slice()) {
+            ([request], []) => (*request, true),
+            ([], [call]) => (*call, false),
+            _ => panic!("{name}: expected one mcp_approval_request or one mcp_call"),
+        };
+        if !gated {
+            assert_eq!(item["status"], "completed", "{name}");
+        }
+        if name == "t7" {
+            assert!(!gated, "{name}: never.read_only runs the read-only tool");
+            continue;
+        }
+        let policy: McpApprovalPolicy =
+            serde_json::from_value(turn.request.body.tools[0]["require_approval"].clone()).expect("policy");
+        let tool = item["name"].as_str().expect("tool name");
+        assert_eq!(policy.requires_approval(tool), gated, "{name}: {tool}");
+    }
+}
+
+/// Both providers echo the declared policy the same way: string forms unchanged, a filter with both sides (`null`
+/// when absent) and each side's `read_only` (`null`) and `tool_names` (`[]` when absent).
+#[test]
+fn approval_policy_echo_matches_openai() {
+    let (openai, gateway) = approval_recordings();
+    for (openai, gateway) in openai.turns.iter().zip(&gateway.turns) {
+        let name = &openai.filename;
+        let echoed = &recorded_body(openai)["tools"][0]["require_approval"];
+        let policy: McpApprovalPolicy =
+            serde_json::from_value(openai.request.body.tools[0]["require_approval"].clone()).expect("policy");
+        assert_eq!(&serde_json::to_value(&policy).unwrap(), echoed, "{name}");
+        if gateway.response.status_code == Some(200) {
+            assert_eq!(
+                &recorded_body(gateway)["tools"][0]["require_approval"],
+                echoed,
+                "{name}"
+            );
+        }
+    }
+}
+
+/// The gateway completes the forms that leave every callable tool ungated (t1, t3) with `OpenAI`'s listing and call,
+/// and answers the others with a 400 where `OpenAI` returned an `mcp_approval_request` (t2, t4, t6, t8) or ran a
+/// tool the filter leaves ungated (t5, t7): with no approval step yet, a request is refused when a tool it can call
+/// needs approval.
+#[test]
+fn gateway_approval_recordings_complete_ungated_forms_and_reject_the_rest() {
+    let (openai, gateway) = approval_recordings();
+    let gated = |tool: &str| format!("MCP server 'microsoft_learn' requires approval for tool '{tool}'");
+    let expected = [
+        ("t1", None),
+        ("t2", Some("MCP require_approval supports only 'never'".to_owned())),
+        ("t3", None),
+        ("t4", Some(gated("microsoft_docs_fetch"))),
+        ("t5", Some(gated("microsoft_code_sample_search"))),
+        ("t6", Some(gated("microsoft_docs_search"))),
+        ("t7", Some("read_only is not supported".to_owned())),
+        (
+            "t8",
+            Some("lists tool 'microsoft_docs_search' under both always and never".to_owned()),
+        ),
+    ];
+    for ((openai, gateway), (name, rejection)) in openai.turns.iter().zip(&gateway.turns).zip(expected) {
+        assert_eq!(gateway.filename, name);
+        let Some(message) = rejection else {
+            assert_eq!(gateway.response.status_code, Some(200), "{name}");
+            let openai_output = response_output(openai);
+            let gateway_output = response_output(gateway);
+            assert_list_tools_output_matches_openai(&openai_output, &gateway_output);
+            let (openai_calls, gateway_calls) = (mcp_calls(&openai_output), mcp_calls(&gateway_output));
+            assert_eq!((openai_calls.len(), gateway_calls.len()), (1, 1), "{name}");
+            assert_eq!(gateway_calls[0].name, openai_calls[0].name, "{name}");
+            assert_eq!(gateway_calls[0].status, openai_calls[0].status, "{name}");
+            assert_eq!(
+                normalized_json_string(&gateway_calls[0].arguments),
+                normalized_json_string(&openai_calls[0].arguments),
+                "{name}"
+            );
+            continue;
+        };
+        assert_eq!(gateway.response.status_code, Some(400), "{name}");
+        let error = &recorded_body(gateway)["error"];
+        assert_eq!(error["type"], "invalid_request_error", "{name}");
+        assert!(
+            error["message"].as_str().expect("error message").contains(&message),
+            "{name}: {error}"
+        );
+    }
+}
+
 #[tokio::test]
 async fn mcp_declarations_stay_public_in_json_and_stored_responses() {
     let mcp_url = spawn_forecast_mcp().await;
@@ -853,7 +1080,10 @@ fn native_mcp_declaration_uses_server_identity_without_a_tool_name() {
         param.allowed_tools.as_deref(),
         Some(["increment".to_owned()].as_slice())
     );
-    assert_eq!(param.require_approval.as_deref(), Some("never"));
+    assert_eq!(
+        param.require_approval,
+        Some(McpApprovalPolicy::Mode(McpApprovalMode::Never))
+    );
 }
 
 #[test]
@@ -1398,16 +1628,13 @@ async fn continuation_keeps_reasoning_before_the_mcp_call_it_led_to() {
     // live round's; the order must not.
     let bodies = fixture.request_bodies().await;
     assert_eq!(bodies.len(), 3);
-    let kinds = |body: &Value| -> Vec<Value> {
-        body["input"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|item| item["type"].clone())
-            .collect()
-    };
-    let live = kinds(&bodies[1]);
+    let live = support::input_item_types(&bodies[1]);
     assert_eq!(live, ["message", "reasoning", "function_call", "function_call_output"]);
-    assert_eq!(kinds(&bodies[2])[..live.len()], live[..], "{:#?}", bodies[2]["input"]);
+    assert_eq!(
+        support::input_item_types(&bodies[2])[..live.len()],
+        live[..],
+        "{:#?}",
+        bodies[2]["input"]
+    );
     assert_eq!(bodies[2]["input"][1], bodies[1]["input"][1], "the same reasoning");
 }
