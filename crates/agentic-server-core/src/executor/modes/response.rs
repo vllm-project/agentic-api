@@ -192,7 +192,6 @@ impl ResponseHandler {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
     use crate::types::io::ResponsesInput;
     use crate::types::request_response::RequestPayload;
