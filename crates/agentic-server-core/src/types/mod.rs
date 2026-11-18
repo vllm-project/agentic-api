@@ -47,4 +47,6 @@ pub mod agent_tree;
 
 pub mod injection;
 
+pub mod session_id;
+
 pub mod websocket;

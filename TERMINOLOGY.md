@@ -348,6 +348,14 @@ OpenAI-compatible provider. Upstream is a request-flow role, not necessarily a t
 Model generation performed by the upstream. Tool execution, storage, transport handling, and rehydration are
 orchestration rather than inference.
 
+### session ID
+
+The client's name for the session a Messages request belongs to, sent as `x-claude-code-session-id` or
+`X-Session-ID`. The gateway forwards a tenant-scoped value derived from it as `X-Session-ID`, which vLLM reads as a
+routing and retention hint. It is unrelated to a response session (`ResponseSession`), which holds transient
+continuation state for serial Responses requests, and it is not KV-cache identity: it names no cached blocks and does
+not prove they are resident.
+
 ## Protocol-specific vocabulary
 
 When documenting another protocol, preserve that protocol's exact names and state the mapping instead of silently

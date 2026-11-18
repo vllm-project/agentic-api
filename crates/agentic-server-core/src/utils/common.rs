@@ -1,3 +1,5 @@
+use std::fmt::Write as _;
+
 use chrono::Utc;
 use uuid::Uuid;
 
@@ -9,6 +11,16 @@ pub fn uuid7_str(prefix: &str) -> String {
 #[must_use]
 pub fn utcnow_str() -> i64 {
     Utc::now().timestamp()
+}
+
+/// `bytes` as lowercase hex, two digits per byte.
+#[must_use]
+pub fn lowercase_hex(bytes: &[u8]) -> String {
+    let mut hex = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        let _ = write!(hex, "{byte:02x}");
+    }
+    hex
 }
 
 /// A stable 64-bit FNV-1a hash, for names that must not change across processes.

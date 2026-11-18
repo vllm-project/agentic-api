@@ -20,6 +20,7 @@ use agentic_core::types::messages::thread::MESSAGE_THREADS_BETA;
 use super::super::common::{
     convert_response, read_bytes_with_auth, sse_response_with_headers, upstream_error_response,
 };
+use super::session_identity::scope_session_id;
 use crate::app::AppState;
 use crate::auth::AuthenticatedPrincipal;
 
@@ -120,11 +121,14 @@ async fn execute_messages(
     tag = "messages",
 ))]
 pub async fn messages(State(state): State<AppState>, request: Request) -> Response {
-    let (parts, body) = request.into_parts();
+    let (mut parts, body) = request.into_parts();
     let bytes: Bytes = match read_bytes_with_auth(body, ProxyAuth::Anthropic, state.max_request_body_size).await {
         Ok(bytes) => bytes,
         Err(response) => return response,
     };
+    if let Err(error) = scope_session_id(&mut parts, &bytes) {
+        return error.into();
+    }
 
     match ParsedMessagesRequest::parse_for_gateway(&bytes, &state.exec_ctx.messages_gateway_tools) {
         Ok(Some(parsed)) if parsed.is_thread() => {
@@ -254,11 +258,14 @@ fn replayed_body(state: &AppState, request: &mut serde_json::Value) -> ReplayedB
     tag = "messages",
 ))]
 pub async fn count_tokens(State(state): State<AppState>, request: Request) -> Response {
-    let (parts, body) = request.into_parts();
+    let (mut parts, body) = request.into_parts();
     let mut bytes: Bytes = match read_bytes_with_auth(body, ProxyAuth::Anthropic, state.max_request_body_size).await {
         Ok(bytes) => bytes,
         Err(response) => return response,
     };
+    if let Err(error) = scope_session_id(&mut parts, &bytes) {
+        return error.into();
+    }
     if let Ok(mut request_json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
         if request_json.get("thread").is_some() {
             return messages_error_response(ExecutorError::InvalidRequest(
