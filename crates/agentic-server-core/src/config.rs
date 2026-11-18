@@ -33,6 +33,11 @@ pub const DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS: NonZeroUsize = NonZeroUsize::new
 /// Brave Search's free plan allows roughly one request per second.
 pub const DEFAULT_BRAVE_MAX_CONCURRENT_QUERIES: NonZeroUsize = NonZeroUsize::new(1).expect("default is nonzero");
 
+mod background;
+pub use background::{
+    BACKGROUND_MAX_CONCURRENT_ENV, BACKGROUND_MAX_QUEUED_ENV, BACKGROUND_TIMEOUT_SECONDS_ENV, BackgroundConfig,
+    DEFAULT_BACKGROUND_MAX_CONCURRENT, DEFAULT_BACKGROUND_MAX_QUEUED, DEFAULT_BACKGROUND_TIMEOUT_SECONDS,
+};
 mod responses;
 pub use responses::{
     DEFAULT_MAX_RETAINED_RESPONSE_BYTES, DEFAULT_MAX_STREAM_EVENT_BYTES, DEFAULT_MAX_UPSTREAM_JSON_BYTES,

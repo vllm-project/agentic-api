@@ -427,6 +427,10 @@ mod tests {
             .execute(pool.as_ref())
             .await
             .unwrap();
+        sqlx::raw_sql(include_str!("../../migrations/0013_background_responses.sql"))
+            .execute(pool.as_ref())
+            .await
+            .unwrap();
         verify_persistence_ready(pool.as_ref()).await.unwrap();
         wrapper.ensure_schema_ready_with_marker(true).await.unwrap();
     }
@@ -534,6 +538,7 @@ mod tests {
             include_str!("../../migrations/0010_drop_conversation_revision.sql"),
             include_str!("../../migrations/0011_file_search_vec_map.sql"),
             include_str!("../../migrations/0012_message_threads.sql"),
+            include_str!("../../migrations/0013_background_responses.sql"),
         ] {
             sqlx::raw_sql(migration).execute(&mut *connection).await.unwrap();
         }
@@ -585,6 +590,7 @@ mod tests {
             include_str!("../../migrations/0010_drop_conversation_revision.sql"),
             include_str!("../../migrations/0011_file_search_vec_map.sql"),
             include_str!("../../migrations/0012_message_threads.sql"),
+            include_str!("../../migrations/0013_background_responses.sql"),
         ] {
             sqlx::raw_sql(migration)
                 .execute(&mut *connection)

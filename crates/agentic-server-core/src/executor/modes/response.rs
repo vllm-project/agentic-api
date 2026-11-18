@@ -1,5 +1,7 @@
 //! Response storage handler — owns all response store operations.
 
+mod background;
+
 use std::collections::HashSet;
 
 use crate::storage::{ResponseCheckpoint, ResponseData, ResponseMetadata, ResponseStore, StorageError};
@@ -7,6 +9,7 @@ use crate::types::io::InOutItem;
 use crate::types::io::{ItemOrder, ItemPage, ListItemsResponse};
 use crate::types::request_response::ResponsePayload;
 
+use crate::executor::background::{expire_if_stale, now_millis};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::request::RequestContext;
 
@@ -25,16 +28,22 @@ impl ResponseHandler {
         Self { store }
     }
 
-    /// Retrieves the terminal payload of a response created with `store=true`.
+    /// Retrieves the stored payload of a response created with `store=true`: the terminal response, or a background
+    /// response's current status.
     ///
     /// # Errors
     /// Returns `ResponseNotFound` for missing IDs, a storage error for unavailable storage, and a conflict
     /// for records stored without a snapshot, such as `store: false` session checkpoints.
     pub async fn get_snapshot(&self, response_id: &str) -> ExecutorResult<ResponsePayload> {
-        self.store
+        let snapshot = self
+            .store
             .get_snapshot(response_id)
             .await?
-            .ok_or_else(|| ExecutorError::Conflict(NOT_RETRIEVABLE.into()))
+            .ok_or_else(|| ExecutorError::Conflict(NOT_RETRIEVABLE.into()))?;
+        // A background response whose owner stopped renewing its lease is failed when it is read.
+        Ok(expire_if_stale(self, response_id, &snapshot, now_millis())
+            .await?
+            .unwrap_or(snapshot))
     }
 
     /// Deletes a stored response.

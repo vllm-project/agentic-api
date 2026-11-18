@@ -3,8 +3,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use super::messages_threads::MessagesThreadStore;
-use crate::config::{Config, ResponsesConfig, SqliteConfig, default_database_url};
+use crate::config::{BackgroundConfig, Config, ResponsesConfig, SqliteConfig, default_database_url};
 use crate::error::Error;
+use crate::executor::background::BackgroundJobs;
+#[cfg(test)]
+use crate::executor::background::LeaseTiming;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway::GatewaySchedulerPolicy;
 use crate::executor::messages_server_tools::sealing::{MessagesResultKey, process_result_key};
@@ -132,6 +135,7 @@ pub struct ExecutionContext {
     /// globally registered meter provider at construction time.
     pub metrics: ExecutorMetrics,
     storage_pool: Option<Arc<crate::storage::DbPool>>,
+    background: BackgroundJobs,
 }
 
 impl ExecutionContext {
@@ -150,6 +154,7 @@ impl ExecutionContext {
         llm_base_url: String,
     ) -> Self {
         let gateway_executors = GatewayExecutors::from_env(Arc::clone(&client));
+        let background = BackgroundJobs::new(resp_handler.clone(), BackgroundConfig::default());
         Self {
             file_handler: FileHandler::default(),
             max_request_body_size: DEFAULT_MAX_REQUEST_BODY_SIZE_BYTES,
@@ -167,6 +172,7 @@ impl ExecutionContext {
             model_capabilities: ModelCapabilities::default(),
             metrics: ExecutorMetrics::from_global(),
             storage_pool: None,
+            background,
         }
     }
 
@@ -178,9 +184,12 @@ impl ExecutionContext {
         self
     }
 
+    /// Replace the response limits. Call before serving requests: the
+    /// background jobs are rebuilt with the new limits.
     #[must_use]
     pub fn with_responses_config(mut self, responses_config: ResponsesConfig) -> Self {
         self.responses_config = responses_config;
+        self.background = BackgroundJobs::new(self.resp_handler.clone(), responses_config.background);
         self
     }
 
@@ -191,6 +200,19 @@ impl ExecutionContext {
         self
     }
 
+    /// Rebuild the background jobs with a lease short enough for tests to observe renewals.
+    #[cfg(test)]
+    pub(crate) fn with_background_timing(mut self, timing: LeaseTiming) -> Self {
+        self.background =
+            BackgroundJobs::with_timing(self.resp_handler.clone(), self.responses_config.background, timing);
+        self
+    }
+
+    /// The background jobs this context admits, cancels, and shuts down.
+    #[must_use]
+    pub fn background_jobs(&self) -> &BackgroundJobs {
+        &self.background
+    }
     #[must_use]
     pub fn with_gateway_executor(mut self, executor: impl Into<GatewayExecutorRegistration>) -> Self {
         self.gateway_executors.insert(executor);
@@ -268,6 +290,13 @@ impl ExecutionContext {
 
         let conv_handler = ConversationHandler::new(ConversationStore::new(pool.clone()));
         let resp_handler = ResponseHandler::new(ResponseStore::new(pool.clone()));
+        let background = BackgroundJobs::new(resp_handler.clone(), cfg.responses.background);
+        // Rows whose owner stopped renewing are failed now; live instances keep theirs.
+        match background.recover().await {
+            Ok(0) => {}
+            Ok(failed) => tracing::info!(failed, "failed background responses left by a stopped gateway instance"),
+            Err(error) => tracing::warn!(error = %error, "cannot recover background responses at startup"),
+        }
         let client = Arc::new(
             reqwest::Client::builder()
                 .connect_timeout(Duration::from_secs(10))
@@ -317,6 +346,7 @@ impl ExecutionContext {
             model_capabilities: cfg.model_capabilities.clone(),
             metrics: ExecutorMetrics::from_global(),
             storage_pool: Some(pool),
+            background,
         })
     }
 }

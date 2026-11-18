@@ -1,6 +1,6 @@
 //! Streaming ownership for transports that retain delivery after public completion.
 use super::run_until_gateway_tools_complete;
-use super::streaming::StreamFailureContext;
+use super::streaming::ResponseShell;
 use crate::executor::inference::UpstreamHeaders;
 use crate::executor::{
     error::{ExecutorError, ExecutorResult},
@@ -283,7 +283,7 @@ pub(super) fn start(
         settings.tools = tools.public_effective_tools().map(<[_]>::to_vec);
     }
     let response_id = ctx.response_id.clone();
-    let failure_context = StreamFailureContext::from(&ctx);
+    let failure_context = ResponseShell::from(&ctx);
     let (sender, receiver) = mpsc::channel(STREAM_EVENT_BUFFER);
     let sink = ResponseEventSink::new(sender, max_bytes);
     let relay = StreamRelay::response(sink.clone(), RelayLimits::with_event_bytes(max_bytes));

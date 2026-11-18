@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::sync::Arc;
 
+use super::models::background::{self, Claim};
 use super::models::conversation::ConversationHistory;
 use super::models::{conversation, item, response};
 use super::pool::{DbPool, DbTransaction};
@@ -11,13 +12,22 @@ use super::types::conversation::encode_metadata;
 use super::types::item::{decode_public, encode};
 use super::types::response::decode_turn_metadata;
 use super::types::{
-    ConversationData, ConversationSnapshot, ResponseCheckpoint, ResponseMetadata, StorageError, StoreResult,
+    ConversationData, ConversationSnapshot, QueuedTurn, ResponseCheckpoint, ResponseMetadata, StorageError, StoreResult,
 };
 use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 use crate::types::io::ItemOrder;
 use crate::types::request_response::ResponsePayload;
 use crate::utils::common::{serialize_to_string, uuid7_str};
+
+/// One turn's writes: its response row, items, snapshot and metadata, and the claim of a queued background turn.
+struct TurnWrite<'a> {
+    response_id: &'a str,
+    items: Vec<InOutItem>,
+    snapshot: Option<&'a ResponsePayload>,
+    metadata: &'a ResponseMetadata,
+    claim: Option<Claim<'a>>,
+}
 
 /// Conversation storage operations.
 #[derive(Clone, Debug)]
@@ -132,8 +142,51 @@ impl ConversationStore {
         snapshot: Option<&ResponsePayload>,
         metadata: &ResponseMetadata,
     ) -> StoreResult<()> {
+        let turn = TurnWrite {
+            response_id,
+            items: new_items,
+            snapshot,
+            metadata,
+            claim: None,
+        };
+        self.insert(conversation_id, checkpoint, turn).await
+    }
+
+    /// [`Self::persist`] for a background turn stored as `queued` before it runs; its job appends the output.
+    ///
+    /// # Errors
+    /// As [`Self::persist`].
+    pub(crate) async fn enqueue_background(
+        &self,
+        conversation_id: &str,
+        checkpoint: &ResponseCheckpoint,
+        turn: QueuedTurn<'_>,
+    ) -> StoreResult<()> {
+        let turn = TurnWrite {
+            response_id: turn.response_id,
+            items: turn.items,
+            snapshot: Some(turn.snapshot),
+            metadata: turn.metadata,
+            claim: Some(turn.claim),
+        };
+        self.insert(conversation_id, checkpoint, turn).await
+    }
+
+    async fn insert(
+        &self,
+        conversation_id: &str,
+        checkpoint: &ResponseCheckpoint,
+        turn: TurnWrite<'_>,
+    ) -> StoreResult<()> {
+        let TurnWrite {
+            response_id,
+            items,
+            snapshot,
+            metadata,
+            claim,
+        } = turn;
         let pool = self.pool()?;
-        let new_items = new_items.iter().map(encode).collect::<StoreResult<Vec<_>>>()?;
+        let new_items = items.iter().map(encode).collect::<StoreResult<Vec<_>>>()?;
         let snapshot_json = snapshot.map(String::try_from).transpose()?;
         let metadata_json = String::try_from(metadata)?;
 
@@ -164,6 +217,9 @@ impl ConversationStore {
             Some(&metadata_json),
         )
         .await?;
+        if let Some(claim) = claim {
+            background::claim_in_tx(&mut tx, response_id, claim).await?;
+        }
         conversation::set_latest_response_in_tx(&mut tx, conversation_id, response_id).await?;
         tx.commit().await?;
 

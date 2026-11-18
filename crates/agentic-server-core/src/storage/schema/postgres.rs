@@ -2,7 +2,7 @@
 
 use super::DbResult;
 
-pub(super) const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 59;
+pub(super) const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 62;
 pub(super) const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 21;
 pub(super) const REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT: i64 = 4;
 
@@ -36,6 +36,9 @@ where
                  ('responses', 'created_at', 'integer', 'NO'), \
                  ('responses', 'tenant_id', 'text', 'YES'), \
                  ('responses', 'raw_tokens', 'text', 'YES'), \
+                 ('responses', 'background_status', 'text', 'YES'), \
+                 ('responses', 'background_owner', 'text', 'YES'), \
+                 ('responses', 'background_lease_expires_at', 'bigint', 'YES'), \
                  ('file_search_files', 'id', 'text', 'NO'), \
                  ('file_search_files', 'created_at', 'bigint', 'NO'), \
                  ('file_search_files', 'data', 'text', 'NO'), \

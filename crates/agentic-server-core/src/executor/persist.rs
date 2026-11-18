@@ -3,13 +3,15 @@
 //! Writes the completed response and output items to storage, routing to the
 //! appropriate handler based on whether the turn belongs to a conversation.
 
+use crate::executor::background::BackgroundRun;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::multi_agent::ValidatedTreeCheckpoint;
 use crate::executor::prepare::prepare_request_tools;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::session::ResponseContinuation;
 use crate::executor::telemetry::metrics::Stage;
-use crate::storage::{ResponseMetadata, StorageError};
+use crate::storage::models::background::Claim;
+use crate::storage::{BackgroundStatus, QueuedTurn, ResponseMetadata, StorageError};
 use crate::tool::{ToolSearchMetadata, ToolSearchState};
 use crate::types::event::ResponseStatus;
 use crate::types::io::InOutItem;
@@ -25,6 +27,8 @@ pub(crate) enum TurnOutput<'a> {
     Empty,
     /// A standalone compaction's window: stored whatever `store` says, so `previous_response_id` can continue it.
     Compaction,
+    /// A background turn's response, finishing the row [`enqueue_background`] stored for its job.
+    Background(&'a ResponsePayload, &'a BackgroundRun),
 }
 
 /// Decides whether a completed turn reaches the storage handlers.
@@ -53,7 +57,7 @@ pub(crate) async fn persist(
     if !matches!(output, TurnOutput::Compaction) && !should_persist(&ctx) {
         return Ok(());
     }
-    if let TurnOutput::Response(payload) = output
+    if let TurnOutput::Response(payload) | TurnOutput::Background(payload, _) = output
         && (payload.id.is_empty()
             || !matches!(
                 payload.status.parse::<ResponseStatus>().unwrap_or_default(),
@@ -63,7 +67,7 @@ pub(crate) async fn persist(
         return Ok(());
     }
     let compaction = matches!(output, TurnOutput::Compaction);
-    let generated = matches!(output, TurnOutput::Response(_));
+    let generated = matches!(output, TurnOutput::Response(_) | TurnOutput::Background(..));
     let timer = exec_ctx.metrics.stage(Stage::Persist);
     let persisted = Box::pin(write_turn(ctx, output, tool_search_metadata, exec_ctx)).await;
     match &persisted {
@@ -76,7 +80,12 @@ pub(crate) async fn persist(
         Err(ExecutorError::Storage(StorageError::NotConfigured)) if compaction => Ok(()),
         // A turn that generated nothing reports the failure to its caller as it is, such as a parent that is gone.
         Err(error) if !generated => Err(error),
-        Err(error @ (ExecutorError::Conflict(_) | ExecutorError::PayloadTooLarge(_))) => Err(error),
+        // A lost background claim means another writer finished the row: expected, not a storage failure.
+        Err(
+            error @ (ExecutorError::Conflict(_)
+            | ExecutorError::PayloadTooLarge(_)
+            | ExecutorError::Storage(StorageError::BackgroundClaimLost { .. })),
+        ) => Err(error),
         Err(source) => {
             error!(error = ?source, "failed to persist response");
             Err(ExecutorError::Persistence(Box::new(source)))
@@ -108,9 +117,12 @@ async fn write_turn(
     exec_ctx: &ExecutionContext,
 ) -> ExecutorResult<()> {
     let metadata = prepare_metadata(&mut ctx, tool_search_metadata);
+    if let TurnOutput::Background(payload, run) = output {
+        return finish_background(ctx, payload, run, &metadata, exec_ctx).await;
+    }
     let (output_items, snapshot) = match output {
         TurnOutput::Response(payload) => (payload.output.as_slice(), ctx.original_request.store.then_some(payload)),
-        TurnOutput::Empty | TurnOutput::Compaction => (&[][..], None),
+        TurnOutput::Empty | TurnOutput::Compaction | TurnOutput::Background(..) => (&[][..], None),
     };
     // A standalone compaction stores the window it built.
     if !matches!(output, TurnOutput::Compaction) {
@@ -165,6 +177,72 @@ fn turn_items(
             .map(|(_, item)| InOutItem::Output(item.clone())),
     );
     items
+}
+
+/// Stores a background turn as `queued` before its job runs it: the request's items, as a finished turn would store
+/// them, with the history it continues, so `input_items` and continuation see them while it runs. `queued` is the
+/// retrievable snapshot until the job finishes the row.
+///
+/// # Errors
+/// As [`persist`] for a generated response, with nothing stored.
+pub(crate) async fn enqueue_background(
+    ctx: &RequestContext,
+    queued: &ResponsePayload,
+    claim: Claim<'_>,
+    exec_ctx: &ExecutionContext,
+) -> ExecutorResult<()> {
+    let metadata = queued_metadata(ctx);
+    let turn = QueuedTurn {
+        response_id: &ctx.response_id,
+        items: InOutItem::filter_for_compaction(ctx.new_input_items.clone()),
+        snapshot: queued,
+        metadata: &metadata,
+        claim,
+    };
+    if ctx.original_request.conversation.is_some() {
+        exec_ctx.conv_handler.enqueue_background(ctx, turn).await
+    } else {
+        exec_ctx.resp_handler.enqueue_background(ctx, turn).await
+    }
+}
+
+/// Finishes the row a background turn was queued in: the items the turn added to its input (such as file-search
+/// context), then its public output, appended to the history the row holds.
+async fn finish_background(
+    mut ctx: RequestContext,
+    payload: &ResponsePayload,
+    run: &BackgroundRun,
+    metadata: &ResponseMetadata,
+    exec_ctx: &ExecutionContext,
+) -> ExecutorResult<()> {
+    let status = if payload.status == BackgroundStatus::Incomplete.as_str() {
+        BackgroundStatus::Incomplete
+    } else {
+        BackgroundStatus::Completed
+    };
+    // The queued row already holds the request's own items.
+    let queued = run.queued_items().min(ctx.new_input_items.len());
+    ctx.new_input_items.drain(..queued);
+    let items = turn_items(&mut ctx, &payload.output, None);
+    exec_ctx
+        .resp_handler
+        .finish_background(&ctx, run.owner(), status, items, payload, metadata)
+        .await?;
+    Ok(())
+}
+
+/// What a continuation of a queued background turn needs until the turn finishes: its effective settings. The turn
+/// has run no tool search yet, and background mode runs no multi-agent tree.
+fn queued_metadata(ctx: &RequestContext) -> ResponseMetadata {
+    ResponseMetadata {
+        multi_agent_tree: None,
+        model: ctx.enriched_request.model.clone(),
+        previous_response_id: ctx.original_request.previous_response_id.clone(),
+        effective_tools: ctx.enriched_request.tools.clone(),
+        tool_search_loaded_tools: None,
+        effective_tool_choice: ctx.public_tool_choice().cloned().unwrap_or_default(),
+        effective_instructions: ctx.enriched_request.instructions.clone(),
+    }
 }
 
 /// The metadata this turn stores for its continuation: the effective settings, the tool-search state, and the

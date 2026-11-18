@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::sync::Arc;
 
+use super::models::background::{Claim, claim_in_tx};
 use super::models::{item, response};
 use super::pool::DbPool;
 use super::types::item::{decode_public, encode};
@@ -12,6 +13,8 @@ use super::types::{ResponseCheckpoint, ResponseData, ResponseMetadata, StorageEr
 use crate::types::io::InOutItem;
 use crate::types::request_response::ResponsePayload;
 use crate::utils::common::serialize_to_string;
+
+mod background;
 
 /// Response storage operations.
 #[derive(Clone, Debug)]
@@ -189,6 +192,20 @@ impl ResponseStore {
         snapshot: Option<&ResponsePayload>,
         metadata: &ResponseMetadata,
     ) -> StoreResult<Vec<String>> {
+        self.insert(response_id, parent, new_items, snapshot, metadata, None)
+            .await
+    }
+
+    /// [`Self::persist`], also marking the row as a `queued` background response for `claim`'s owner.
+    async fn insert(
+        &self,
+        response_id: &str,
+        parent: Option<&ResponseCheckpoint>,
+        new_items: Vec<InOutItem>,
+        snapshot: Option<&ResponsePayload>,
+        metadata: &ResponseMetadata,
+        claim: Option<Claim<'_>>,
+    ) -> StoreResult<Vec<String>> {
         let pool = self.pool()?;
 
         let previous_response_id = parent.and_then(|parent| parent.response_id.as_deref());
@@ -219,6 +236,9 @@ impl ResponseStore {
             Some(&metadata_json),
         )
         .await?;
+        if let Some(claim) = claim {
+            claim_in_tx(&mut tx, response_id, claim).await?;
+        }
         tx.commit().await?;
 
         Ok(item_ids)

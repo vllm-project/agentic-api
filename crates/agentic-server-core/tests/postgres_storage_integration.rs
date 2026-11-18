@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use agentic_core::config::{PostgresConfig, SqliteConfig};
 use agentic_core::storage::{
-    ConversationStore, ResponseCheckpoint, ResponseMetadata, ResponseStore, create_pool_with_configs,
+    ConversationStore, DbPool, ResponseCheckpoint, ResponseMetadata, ResponseStore, create_pool_with_configs,
     create_pool_with_schema_and_configs,
 };
 use agentic_core::types::io::InOutItem;
@@ -415,4 +415,153 @@ async fn postgres_lock_wait_is_bounded_without_blocking_other_conversations() {
         .expect("release conversation row lock");
     first_pool.close().await;
     second_pool.close().await;
+}
+
+/// A `queued` background row of `owner` whose lease expires at `lease_expires_at`.
+async fn enqueue_background_row(pool: &DbPool, owner: &str, lease_expires_at: i64) -> String {
+    use agentic_core::storage::models::background::{Claim, claim_in_tx};
+    use agentic_core::storage::models::response;
+
+    let id = format!("resp_background_{}", uuid::Uuid::now_v7());
+    let mut tx = pool.begin().await.expect("begin");
+    response::create_in_tx(&mut tx, &id, None, None, Some("[]"), Some("{}"), Some("{}"))
+        .await
+        .expect("insert the response");
+    claim_in_tx(
+        &mut tx,
+        &id,
+        Claim {
+            owner,
+            lease_expires_at,
+        },
+    )
+    .await
+    .expect("claim it");
+    tx.commit().await.expect("commit");
+    id
+}
+
+#[tokio::test]
+#[ignore = "requires TEST_POSTGRES_URL pointing to an isolated PostgreSQL database"]
+async fn postgres_background_rows_change_only_through_their_allowed_writer() {
+    use agentic_core::storage::BackgroundStatus::{Cancelled, Failed, InProgress, Queued};
+    use agentic_core::storage::models::background::{Writer, active_lease, expired, hold_in_tx, renew, transition};
+
+    let database_url = std::env::var("TEST_POSTGRES_URL").expect("TEST_POSTGRES_URL must be set");
+    let pool =
+        create_pool_with_schema_and_configs(Some(&database_url), SqliteConfig::default(), PostgresConfig::default())
+            .await
+            .expect("initialize PostgreSQL database");
+    let pool = pool.as_ref();
+    let active = [Queued, InProgress];
+    let id = enqueue_background_row(pool, "bgo_a", 1_000).await;
+
+    // Only the owner claims and renews its row.
+    assert!(
+        !transition(pool, &id, &[Queued], Writer::Owner("bgo_b"), InProgress, "{}")
+            .await
+            .unwrap()
+    );
+    assert!(
+        transition(pool, &id, &[Queued], Writer::Owner("bgo_a"), InProgress, "{}")
+            .await
+            .unwrap()
+    );
+    assert!(!renew(pool, &id, "bgo_b", 5_000).await.unwrap());
+    assert!(renew(pool, &id, "bgo_a", 2_000).await.unwrap());
+    assert_eq!(active_lease(pool, &id).await.unwrap(), Some(2_000));
+
+    // Recovery may fail the row only after its lease expires.
+    assert!(!expired(pool, 2_000, 100).await.unwrap().contains(&id));
+    assert!(expired(pool, 2_001, 100).await.unwrap().contains(&id));
+    let recovery = |now| Writer::Recovery { now };
+    assert!(
+        !transition(pool, &id, &active, recovery(2_000), Failed, "{}")
+            .await
+            .unwrap()
+    );
+
+    // A client cancels it; a terminal row never moves again, and its owner cannot hold it to finish.
+    assert!(
+        transition(pool, &id, &active, Writer::Client, Cancelled, "{}")
+            .await
+            .unwrap()
+    );
+    for writer in [Writer::Owner("bgo_a"), Writer::Client, recovery(i64::MAX)] {
+        assert!(!transition(pool, &id, &active, writer, Failed, "{}").await.unwrap());
+    }
+    assert!(!renew(pool, &id, "bgo_a", 9_000).await.unwrap());
+    assert_eq!(active_lease(pool, &id).await.unwrap(), None);
+    let mut tx = pool.begin().await.expect("begin");
+    assert!(!hold_in_tx(&mut tx, &id, "bgo_a").await.unwrap());
+    tx.rollback().await.expect("rollback");
+}
+
+#[tokio::test]
+#[ignore = "requires TEST_POSTGRES_URL pointing to an isolated PostgreSQL database"]
+async fn postgres_background_owner_finishes_its_row_and_recovery_uses_the_index() {
+    use agentic_core::storage::BackgroundStatus::{Completed, InProgress, Queued};
+    use agentic_core::storage::models::background::{FinishedRow, Writer, finish_in_tx, hold_in_tx, transition};
+
+    let database_url = std::env::var("TEST_POSTGRES_URL").expect("TEST_POSTGRES_URL must be set");
+    let pool =
+        create_pool_with_schema_and_configs(Some(&database_url), SqliteConfig::default(), PostgresConfig::default())
+            .await
+            .expect("initialize PostgreSQL database");
+    let pool = pool.as_ref();
+    let id = enqueue_background_row(pool, "bgo_a", i64::MAX).await;
+    assert!(
+        transition(pool, &id, &[Queued], Writer::Owner("bgo_a"), InProgress, "{}")
+            .await
+            .unwrap()
+    );
+    let mut tx = pool.begin().await.expect("begin");
+    assert!(
+        !hold_in_tx(&mut tx, &id, "bgo_b").await.unwrap(),
+        "only the owner holds its row"
+    );
+    assert!(hold_in_tx(&mut tx, &id, "bgo_a").await.unwrap());
+    let row = FinishedRow {
+        id: &id,
+        history_item_ids: "[\"item_a\"]",
+        snapshot: "{\"status\":\"completed\"}",
+        metadata: "{\"model\":\"m\"}",
+    };
+    finish_in_tx(&mut tx, row, Completed).await.expect("finish");
+    tx.commit().await.expect("commit");
+    let (status, history, snapshot): (String, String, String) =
+        sqlx::query_as("SELECT background_status, history_item_ids, snapshot FROM responses WHERE id = $1")
+            .bind(&id)
+            .fetch_one(pool)
+            .await
+            .expect("read the finished row");
+    assert_eq!(
+        (status.as_str(), history.as_str(), snapshot.as_str()),
+        ("completed", "[\"item_a\"]", "{\"status\":\"completed\"}")
+    );
+    let mut tx = pool.begin().await.expect("begin");
+    assert!(
+        !hold_in_tx(&mut tx, &id, "bgo_a").await.unwrap(),
+        "a finished row is not held again"
+    );
+    tx.rollback().await.expect("rollback");
+
+    // The recovery scan's predicate matches the partial index.
+    let mut connection = pool.acquire().await.expect("acquire");
+    sqlx::query("SET enable_seqscan = off")
+        .execute(&mut *connection)
+        .await
+        .expect("prefer index scans");
+    let plan: Vec<String> = sqlx::query_scalar(
+        "EXPLAIN SELECT id FROM responses \
+         WHERE background_status IN ('queued', 'in_progress') AND background_lease_expires_at < 1 \
+         ORDER BY background_lease_expires_at, id LIMIT 100",
+    )
+    .fetch_all(&mut *connection)
+    .await
+    .expect("explain the recovery scan");
+    assert!(
+        plan.iter().any(|line| line.contains("idx_responses_background_active")),
+        "{plan:#?}"
+    );
 }

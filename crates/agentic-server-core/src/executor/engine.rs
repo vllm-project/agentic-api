@@ -6,6 +6,7 @@
 //! need per-request configuration.
 
 mod agent_turn;
+mod background;
 mod execute;
 mod multi_agent;
 pub(crate) mod retained;
@@ -27,6 +28,7 @@ use either::Either;
 
 use super::compaction::summarize_items;
 use super::gateway::emit_response_start_events;
+use crate::executor::background::BackgroundRun;
 use crate::executor::error::ExecutorResult;
 use crate::executor::persist::{TurnOutput, persist};
 use crate::executor::pipeline::AgentPipeline;
@@ -271,24 +273,28 @@ fn finalize_loop(
     ctx.inject_ids(payload);
 }
 
+/// Run a turn to its terminal payload and persist it. A background turn keeps
+/// its admission identity and completes the row its job owns instead of inserting one.
 async fn run_blocking(
     ctx: RequestContext,
     tool_search_state: Option<ToolSearchState>,
     exec_ctx: &ExecutionContext,
     auth: Option<&UpstreamHeaders>,
+    background: Option<&BackgroundRun>,
 ) -> ExecutorResult<ResponsePayload> {
     let mut agent = AgentPipeline::new(ctx, tool_search_state, StreamRelay::detached());
-    let (payload, tool_search_metadata) =
+    let (mut payload, tool_search_metadata) =
         Box::pin(run_until_gateway_tools_complete(&mut agent, exec_ctx, auth, false)).await?;
     let (ctx, _) = agent.into_parts();
 
-    Box::pin(persist(
-        ctx,
-        TurnOutput::Response(&payload),
-        tool_search_metadata,
-        exec_ctx,
-    ))
-    .await?;
+    let output = match background {
+        Some(run) => {
+            run.apply(&mut payload);
+            TurnOutput::Background(&payload, run)
+        }
+        None => TurnOutput::Response(&payload),
+    };
+    Box::pin(persist(ctx, output, tool_search_metadata, exec_ctx)).await?;
 
     Ok(payload)
 }
