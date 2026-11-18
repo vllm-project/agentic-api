@@ -74,6 +74,10 @@ pub enum StorageError {
     #[error("Item already in conversation")]
     ItemAlreadyInConversation,
 
+    /// Two incoming items reuse the same stored item.
+    #[error("The item was modified or deleted while it was being added. Please retry your request.")]
+    ItemConflict,
+
     /// Serialization or deserialization of data failed.
     ///
     /// Wraps `serde_json::Error` and automatically converts from it via `#[from]`.

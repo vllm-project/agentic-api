@@ -417,31 +417,23 @@ async fn regression_database_rejects_duplicate_items_and_rolls_back_all_batches(
         )
         .await
         .unwrap();
-    for conflict in ["msg_new_0", "msg_existing"] {
-        // More items than one INSERT permits: a conflict in the second SQL batch
-        // must roll back the earlier successful batch as well.
-        let mut items: Vec<_> = (0..250)
-            .map(|index| message_with_id(&format!("msg_new_{index}"), "new"))
-            .collect();
-        items.push(message_with_id(conflict, "conflict"));
-        let error = store
-            .create_items("default_tenant", &conversation.conversation_id, items)
-            .await
-            .unwrap_err();
-        if conflict == "msg_existing" {
-            assert!(error.is_validation());
-            assert!(matches!(error, StorageError::ItemAlreadyInConversation));
-        } else {
-            assert!(error.is_unique_violation());
-        }
-        let rows = conversation_rows(&store, &conversation.conversation_id).await;
-        assert_eq!(rows.len(), 1, "failed insertion must leave the history unchanged");
-        assert_eq!(rows[0].public_id, "msg_existing");
-        assert_eq!(
-            InOutItem::try_from(&rows[0]).unwrap(),
-            message_with_id("msg_existing", "original")
-        );
-    }
+    // More items than one INSERT permits: a conflict in the second SQL batch must roll back the earlier batch as well.
+    let mut items: Vec<_> = (0..250)
+        .map(|index| message_with_id(&format!("msg_new_{index}"), "new"))
+        .collect();
+    items.push(message_with_id("msg_existing", "conflict"));
+    let error = store
+        .create_items("default_tenant", &conversation.conversation_id, items)
+        .await
+        .unwrap_err();
+    assert!(matches!(error, StorageError::ItemAlreadyInConversation));
+    let rows = conversation_rows(&store, &conversation.conversation_id).await;
+    assert_eq!(rows.len(), 1, "failed insertion must leave the history unchanged");
+    assert_eq!(rows[0].public_id, "msg_existing");
+    assert_eq!(
+        InOutItem::try_from(&rows[0]).unwrap(),
+        message_with_id("msg_existing", "original")
+    );
     store
         .create_items(
             "default_tenant",
@@ -457,25 +449,33 @@ async fn regression_database_rejects_duplicate_items_and_rolls_back_all_batches(
 
 #[tokio::test]
 async fn regression_duplicate_initial_items_roll_back_conversation_creation() {
+    use agentic_core::storage::StorageError;
+
     let store = test_store().await;
+    let stored = message_with_id("msg_duplicate", "first");
+    store
+        .create(
+            "default_tenant",
+            &ConversationMetadata::new(),
+            std::slice::from_ref(&stored),
+        )
+        .await
+        .unwrap();
     let error = store
         .create(
             "default_tenant",
             &ConversationMetadata::new(),
-            &[
-                message_with_id("msg_duplicate", "first"),
-                message_with_id("msg_duplicate", "second"),
-            ],
+            &[stored, message_with_id("msg_duplicate", "second")],
         )
         .await
         .unwrap_err();
-    assert!(error.is_unique_violation());
+    assert!(matches!(error, StorageError::ItemConflict));
     for query in ["SELECT COUNT(*) FROM conversations", "SELECT COUNT(*) FROM items"] {
         let count: i64 = sqlx::query_scalar(query)
             .fetch_one(store.pool().unwrap())
             .await
             .unwrap();
-        assert_eq!(count, 0);
+        assert_eq!(count, 1, "{query}");
     }
 }
 
