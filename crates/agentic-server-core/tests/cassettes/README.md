@@ -158,6 +158,12 @@ Listed items get OpenAI's omitted statuses: a client function call is
 before that tolerate their absence while checking other values. Function, custom, and shell result types retain their IDs
 and statuses. Stored results use `fc_`, `ctco_`, and `sho_` IDs respectively.
 Explicit statuses are kept.
+
+The `background` replay mocks inference by prompt: each prompt gets its recorded
+completion, and the long prompt stays open until a cancel drops it. After a short
+background create, the replay polls the gateway until the response finishes, as
+the recorder polled the provider. The final `store: false` turn is not replayed:
+OpenAI queues it, and the gateway returns `400`.
 Gateway-created function results receive their identity and completed status at
 creation. Input-item listings return stored items without classifying gateway call/result
 pairs by their projected IDs. The gateway tool capture predates removal of that

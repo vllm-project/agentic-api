@@ -1,5 +1,7 @@
 //! Replay recorded Responses management calls through the gateway.
 //! Only model inference is mocked; storage and management endpoints run locally.
+#[path = "responses_api/background.rs"]
+mod background;
 #[path = "responses_api/recordings.rs"]
 mod recordings;
 
