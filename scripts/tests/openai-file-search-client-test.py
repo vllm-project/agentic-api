@@ -14,7 +14,7 @@ import urllib.error
 import urllib.request
 import warnings
 
-from openai import OpenAI
+from openai import BadRequestError, OpenAI
 from file_search_citation_fixtures import citation_upstream, exercise_citations
 
 
@@ -81,7 +81,27 @@ def run() -> None:
                     assert file.filename == "offices.txt"
                     assert client.files.retrieve(file.id).id == file.id
                     assert any(item.id == file.id for item in client.files.list().data)
-                    assert client.files.content(file.id).read() == content
+                    # OpenAI rejects content downloads for every purpose but `vision`; the
+                    # gateway reproduces that recorded row.
+                    try:
+                        client.files.content(file.id)
+                    except BadRequestError as error:
+                        assert error.status_code == 400
+                        assert (
+                            error.body["message"] == "Not allowed to download files of purpose: assistants"
+                        ), error.body
+                    else:
+                        raise AssertionError("assistants content download must be rejected")
+
+                    image_path = (
+                        REPO / "crates/agentic-server-core/tests/cassettes/images/inputs/red-blue-64.png"
+                    )
+                    image_content = image_path.read_bytes()
+                    image_upload = BytesIO(image_content)
+                    image_upload.name = "red-blue-64.png"
+                    image = client.files.create(file=image_upload, purpose="vision")
+                    assert client.files.content(image.id).read() == image_content
+                    assert client.files.delete(image.id).deleted
 
                     store = client.vector_stores.create(name="offices")
                     assert client.vector_stores.retrieve(store.id).id == store.id

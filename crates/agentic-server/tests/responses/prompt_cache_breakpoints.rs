@@ -159,7 +159,7 @@ async fn unsupported_marked_parts_are_rejected_before_inference_and_storage() {
     for (part, reason) in [
         (
             json!({"type":"input_file","file_id":"file_test","prompt_cache_breakpoint":{"mode":"explicit"}}),
-            "input_file with file_id is not supported",
+            "input_file with file_id requires the gateway file store",
         ),
         (
             json!({"type":"future_part","prompt_cache_breakpoint":{"mode":"explicit"}}),

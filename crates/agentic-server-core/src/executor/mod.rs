@@ -45,11 +45,10 @@ pub use messages_server_tools::may_carry_gateway_server_tool_blocks;
 pub use messages_server_tools::replay::replay_server_tool_blocks;
 pub use messages_server_tools::sealing::{MESSAGES_RESULT_KEY_ENV, MessagesResultKey, MessagesResultKeyError};
 pub use messages_stream::run_messages_stream;
-pub use modes::{ConversationHandler, ResponseHandler};
+pub use modes::{ConversationHandler, FileHandler, ResponseHandler};
 pub use persist::{commit, persist_turn};
 pub use rehydrate::{rehydrate_conversation, rehydrate_in_session};
-pub use request::ExecutionContext;
-pub use request::RequestContext;
+pub use request::{DEFAULT_MAX_REQUEST_BODY_SIZE_BYTES, ExecutionContext, RequestContext};
 pub use session::{ResponseSession, ResponseSessionGroup};
 pub use upstream::{UpstreamBody, decode_upstream, upstream_request};
 

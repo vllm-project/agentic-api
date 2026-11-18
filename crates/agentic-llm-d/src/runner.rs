@@ -102,6 +102,7 @@ mod tests {
             db_url: Some("sqlite://?mode=memory".to_owned()),
             postgres: PostgresConfig::default(),
             sqlite: SqliteConfig::default(),
+            max_request_body_size: agentic_core::executor::DEFAULT_MAX_REQUEST_BODY_SIZE_BYTES,
             tools: ToolRuntimeConfig::default(),
             responses: ResponsesConfig::default(),
             model_capabilities: ModelCapabilities::default(),

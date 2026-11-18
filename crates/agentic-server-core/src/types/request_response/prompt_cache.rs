@@ -70,6 +70,8 @@ fn present_value<'de, D: Deserializer<'de>, T: Deserialize<'de>>(deserializer: D
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
     use crate::types::request_response::{RequestPayload, ResponseTextConfig, UnsupportedParameterError};
     use serde_json::json;
@@ -86,7 +88,8 @@ mod tests {
             .unwrap();
         let restored: RequestPayload = serde_json::from_value(serde_json::to_value(&request).unwrap()).unwrap();
         for stream in [false, true] {
-            let upstream = serde_json::to_value(restored.to_upstream_request(stream).unwrap()).unwrap();
+            let upstream =
+                serde_json::to_value(restored.to_upstream_request(stream, &HashMap::default()).unwrap()).unwrap();
             assert_eq!(upstream["prompt_cache_options"], wire["prompt_cache_options"]);
             assert_eq!(upstream["input"], wire["input"]);
         }

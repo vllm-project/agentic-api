@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use serde_json::{Value, json, value::RawValue};
 
 use super::{RequestPayload, ResponseTextConfig, UnsupportedParameterError, UpstreamRequestError};
+use crate::types::io::input::ResolvedFiles;
 use crate::types::model_capabilities::{ModelCapabilities, ModelOverride, SupportedReasoningLevels};
 use crate::types::{ReasoningEffortLevel, RequestField};
 
@@ -27,7 +28,8 @@ fn typed_top_logprobs_survives_mapping_round_trip_and_upstream_serialization() {
         let restored: RequestPayload = serde_json::from_str(&serde_json::to_string(&request).unwrap()).unwrap();
         assert_eq!(request.top_logprobs, restored.top_logprobs);
         for stream in [false, true] {
-            let body = serde_json::to_string(&restored.to_upstream_request(stream).unwrap()).unwrap();
+            let body = serde_json::to_string(&restored.to_upstream_request(stream, &ResolvedFiles::default()).unwrap())
+                .unwrap();
             assert_eq!(body.matches("\"top_logprobs\":").count(), usize::from(value.is_some()));
             let upstream: Value = serde_json::from_str(&body).unwrap();
             assert_eq!(upstream.get("top_logprobs"), value.as_ref());
@@ -49,7 +51,7 @@ fn programmatic_extension_cannot_bypass_admission_or_duplicate_a_typed_upstream_
                 Err(UnsupportedParameterError::TopLogprobsExtension)
             );
             assert!(matches!(
-                request.to_upstream_request(false),
+                request.to_upstream_request(false, &ResolvedFiles::default()),
                 Err(UpstreamRequestError::Parameter(
                     UnsupportedParameterError::TopLogprobsExtension
                 ))

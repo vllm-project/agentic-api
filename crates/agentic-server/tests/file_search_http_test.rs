@@ -40,10 +40,18 @@ async fn gateway_with(api_key: Option<&str>, body_limit: Option<NonZeroUsize>) -
     Gateway { url, task, files }
 }
 
-fn multipart(filename: &str, text: &str) -> String {
-    format!(
-        "--upload\r\nContent-Disposition: form-data; name=\"purpose\"\r\n\r\nassistants\r\n--upload\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\nContent-Type: text/plain\r\n\r\n{text}\r\n--upload--\r\n"
+fn multipart(filename: &str, text: &str) -> Vec<u8> {
+    multipart_with(filename, "text/plain", "assistants", text.as_bytes())
+}
+
+fn multipart_with(filename: &str, content_type: &str, purpose: &str, body: &[u8]) -> Vec<u8> {
+    let mut encoded = format!(
+        "--upload\r\nContent-Disposition: form-data; name=\"purpose\"\r\n\r\n{purpose}\r\n--upload\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\nContent-Type: {content_type}\r\n\r\n"
     )
+    .into_bytes();
+    encoded.extend_from_slice(body);
+    encoded.extend_from_slice(b"\r\n--upload--\r\n");
+    encoded
 }
 
 #[tokio::test]
@@ -124,15 +132,17 @@ async fn local_file_search_routes_require_the_configured_api_key() {
         client.delete(&file_resource_url).send().await.unwrap().status(),
         StatusCode::UNAUTHORIZED
     );
+    let content = client
+        .get(format!("{file_resource_url}/content"))
+        .bearer_auth("secret")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(content.status(), StatusCode::BAD_REQUEST);
+    let content: Value = content.json().await.unwrap();
     assert_eq!(
-        client
-            .get(format!("{file_resource_url}/content"))
-            .bearer_auth("secret")
-            .send()
-            .await
-            .unwrap()
-            .status(),
-        StatusCode::OK
+        content["error"]["message"],
+        "Not allowed to download files of purpose: assistants"
     );
     assert_eq!(
         client
@@ -259,18 +269,15 @@ async fn detaching_or_deleting_a_vector_store_preserves_the_uploaded_file() {
     .await;
     assert_eq!(api_json(client.delete(&store_url)).await["deleted"], true);
     assert_eq!(api_json(client.get(&file_url)).await, file);
-    let bytes = client
-        .get(format!("{file_url}/content"))
-        .send()
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap()
-        .bytes()
-        .await
-        .unwrap();
-    assert_eq!(bytes.as_ref(), b"A retained document.");
-    assert_eq!(tokio::fs::read(server.files.path().join(file_id)).await.unwrap(), bytes);
+    assert_eq!(
+        client.get(format!("{file_url}/content")).send().await.unwrap().status(),
+        StatusCode::BAD_REQUEST,
+        "assistants files are not downloadable"
+    );
+    assert_eq!(
+        tokio::fs::read(server.files.path().join(file_id)).await.unwrap(),
+        b"A retained document."
+    );
 }
 
 #[tokio::test]
@@ -332,17 +339,12 @@ async fn uploaded_file_is_searchable_and_deletion_removes_its_chunks() {
             .contains("seven")
     );
 
-    let bytes = client
+    let downloaded = client
         .get(format!("{}/v1/files/{file_id}/content", server.url))
         .send()
         .await
-        .unwrap()
-        .error_for_status()
-        .unwrap()
-        .bytes()
-        .await
         .unwrap();
-    assert_eq!(bytes.as_ref(), text.as_bytes());
+    assert_eq!(downloaded.status(), StatusCode::BAD_REQUEST);
     let deleted: Value = client
         .delete(format!("{}/v1/files/{file_id}", server.url))
         .send()
@@ -389,8 +391,13 @@ async fn file_search_http_rejects_invalid_upload_search_and_pagination() {
         .unwrap();
     assert_eq!(missing.status(), StatusCode::NOT_FOUND);
     let missing: Value = missing.json().await.unwrap();
-    assert_eq!(missing["error"]["type"], "not_found");
-    assert_eq!(missing["error"]["code"], "not_found");
+    assert_eq!(missing["error"]["type"], "invalid_request_error");
+    assert_eq!(missing["error"]["code"], Value::Null);
+    assert_eq!(missing["error"]["param"], "id");
+    assert_eq!(
+        missing["error"]["message"],
+        format!("No such File object: file-{}", uuid::Uuid::nil())
+    );
     assert_eq!(
         client
             .post(format!("{}/v1/files", server.url))
@@ -428,13 +435,10 @@ async fn files_api_preserves_binary_uploads_without_requiring_searchable_content
     let server = gateway().await;
     let client = reqwest::Client::new();
     let bytes = [0, 255, 128, 10, 0, 42];
-    let mut body = b"--upload\r\nContent-Disposition: form-data; name=\"purpose\"\r\n\r\nuser_data\r\n--upload\r\nContent-Disposition: form-data; name=\"file\"; filename=\"payload.bin\"\r\nContent-Type: application/octet-stream\r\n\r\n".to_vec();
-    body.extend_from_slice(&bytes);
-    body.extend_from_slice(b"\r\n--upload--\r\n");
     let response = client
         .post(format!("{}/v1/files", server.url))
         .header("content-type", "multipart/form-data; boundary=upload")
-        .body(body)
+        .body(multipart_with("payload.png", "image/png", "vision", &bytes))
         .send()
         .await
         .unwrap();
@@ -463,4 +467,90 @@ async fn files_api_preserves_binary_uploads_without_requiring_searchable_content
         .unwrap()
         .error_for_status()
         .unwrap();
+}
+
+#[tokio::test]
+async fn files_api_rows_follow_the_recorded_upload_lookup_and_delete_rules() {
+    let server = gateway().await;
+    let client = reqwest::Client::new();
+    let upload = |purpose: &str, filename: &str, content_type: &str, body: &[u8]| {
+        client
+            .post(format!("{}/v1/files", server.url))
+            .header("content-type", "multipart/form-data; boundary=upload")
+            .body(multipart_with(filename, content_type, purpose, body))
+            .send()
+    };
+    let error = |body: &Value| body["error"].clone();
+
+    let response = upload("vision", "notes.txt", "text/plain", b"notes").await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(error(&body)["type"], "invalid_request_error");
+    assert_eq!(error(&body)["code"], Value::Null);
+    assert_eq!(error(&body)["param"], Value::Null);
+    assert_eq!(
+        error(&body)["message"],
+        "Invalid file format text/plain. Supported formats: \"gif\", \"jpeg\", \"jpg\", \"png\", \"webp\""
+    );
+
+    let response = upload("user_data", "empty.txt", "text/plain", b"").await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(error(&body)["message"], "File is empty.");
+
+    let response = upload("bogus", "notes.txt", "text/plain", b"notes").await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(error(&body)["param"], "purpose");
+    assert_eq!(
+        error(&body)["message"],
+        "'bogus' is not one of ['fine-tune', 'assistants', 'batch', 'user_data', 'vision', 'evals'] - 'purpose'"
+    );
+
+    let response = client
+        .post(format!("{}/v1/files", server.url))
+        .header("content-type", "multipart/form-data; boundary=upload")
+        .body(
+            "--upload\r\nContent-Disposition: form-data; name=\"file\"; filename=\"notes.txt\"\r\n\
+             Content-Type: text/plain\r\n\r\nnotes\r\n--upload--\r\n",
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(error(&body)["param"], Value::Null);
+    assert_eq!(error(&body)["message"], "'purpose' is a required property");
+
+    let response = client
+        .post(format!("{}/v1/files", server.url))
+        .form(&[("purpose", "user_data")])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(error(&body)["message"], "'file' is a required property");
+
+    let file: Value = upload("vision", "colors.png", "image/png", b"png")
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let file_id = file["id"].as_str().unwrap();
+    let deleted = api_json(client.delete(format!("{}/v1/files/{file_id}", server.url))).await;
+    assert_eq!(deleted["object"], "file");
+    assert_eq!(deleted["deleted"], true);
+
+    let missing = format!("file-{}", uuid::Uuid::nil());
+    let response = client
+        .get(format!("{}/v1/files?limit=1&after={missing}", server.url))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(error(&body)["param"], "after");
+    assert_eq!(error(&body)["message"], format!("No such File object: {missing}"));
 }

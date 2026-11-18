@@ -704,7 +704,12 @@ goes through it, so it lowers the public records the model never read (search it
   Message-file conversion belongs to `input/file_text.rs`: supported inline UTF-8
   text files become model-facing text with their `prompt_cache_breakpoint` retained.
   Canonical history keeps the original file; unrelated file extensions are not copied
-  onto the text part.
+  onto the text part. `input/content.rs` holds the per-request lookup behind a
+  `file_id` reference: `InputFileContent::to_text`, `InputImageContent::inline_file`
+  and `ToolCallOutput::inline_files` replace an `input_file` with text or an
+  `input_image` with a data URL, choosing the type from the stored filename's
+  extension, while the client-facing part keeps its reference. The lookup starts
+  from `executor/modes/files.rs` and is never stored.
 
 - **`types/io/item.rs`** — `InOutItem` is the shared input/output union used by
   `ResponsesInput::Items`, conversation requests/resources, and retained history.
@@ -1010,6 +1015,13 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   Lookups and retrieval are separate methods (`get`, `create`, `retrieve`, `validate_exists`);
   **any new CRUD operation
   beyond persist/rehydrate belongs here**, added as a new method that delegates to the corresponding store.
+- **`modes/files.rs`** — `FileHandler`, the access seam to the gateway file store, next to the conversation and
+  response handlers. It owns the executor's one file service. One `resolve` returns the lookup for the input the
+  model-facing request will lower; `upstream_request` calls it while building that body, and `execute.rs::prepare`
+  builds the same body before tool preparation so a bad reference fails early. The lookup is used only by
+  `normalized_model_input` and is never stored, checkpointed, or snapshotted. It reports a missing reference with
+  `OpenAI`'s `Files [<id>...] were not found` envelope, and `upstream_request` checks the serialized body against
+  the request body limit when it carries resolved file content.
 - **`error.rs`** — `ExecutorError`, with the mapping methods (`http_status()`,
   `error_type()`, `into_response_body()`, ...) handlers use to render errors.
 

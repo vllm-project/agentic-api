@@ -5,6 +5,7 @@
 mod common;
 
 use agentic_core::types::conversations::ConversationMetadata;
+use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::sync::Arc;
 use std::time::Duration;
@@ -265,7 +266,7 @@ fn assert_file_error(body: &Value) {
     assert_eq!(body["error"]["type"], "invalid_request_error", "{body}");
     let message = body["error"]["message"].as_str().expect("error message");
     assert!(
-        message.contains("input_file") && message.contains("not supported"),
+        message.contains("input_file") && (message.contains("not supported") || message.contains("gateway file store")),
         "{message}"
     );
     assert!(
@@ -633,14 +634,14 @@ async fn conversation_file_is_rejected_by_websocket_prewarm() {
     assert_history_ws_rejected(true, false).await;
 }
 
-#[test]
-fn composed_upstream_request_cannot_bypass_file_validation() {
+#[tokio::test]
+async fn composed_upstream_request_cannot_bypass_file_validation() {
     use agentic_core::executor::{RequestContext, upstream_request};
     let request: RequestPayload =
         serde_json::from_value(json!({"model":"test-model", "input":user_input(&file_part())})).unwrap();
     for stream in [false, true] {
         let error = request
-            .to_upstream_request(stream)
+            .to_upstream_request(stream, &HashMap::default())
             .expect_err("typed construction validates input");
         assert!(error.to_string().contains("input[0].content[1]"));
         assert!(error.to_string().contains("input_file"));
@@ -655,8 +656,15 @@ fn composed_upstream_request_cannot_bypass_file_validation() {
         checkpoint: None,
         continuation: None,
     };
+    let exec_ctx = ExecutionContext::new(
+        ConversationHandler::new(ConversationStore::disabled()),
+        ResponseHandler::new(ResponseStore::disabled()),
+        Arc::new(reqwest::Client::new()),
+        "http://localhost:8000".to_owned(),
+    );
     for stream in [false, true] {
-        let error = upstream_request(&ctx, stream, None, None)
+        let error = upstream_request(&exec_ctx, &ctx, stream, None, None)
+            .await
             .expect_err("direct typed upstream preparation must reject files");
         assert_eq!(error.http_status().as_u16(), 400);
         assert!(error.error_message().contains("input_file"));
@@ -894,7 +902,7 @@ async fn unsupported_message_files_are_rejected_with_specific_reasons() {
     let cases = [
         (
             json!({"type":"input_file", "file_id":"file_test"}),
-            "input_file with file_id is not supported",
+            "input_file with file_id requires the gateway file store",
         ),
         (file_part(), "input_file with file_url is not supported"),
         (

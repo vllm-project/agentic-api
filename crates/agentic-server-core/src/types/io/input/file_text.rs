@@ -15,7 +15,7 @@ use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use thiserror::Error;
 
-mod kinds;
+pub(crate) mod kinds;
 
 use super::{InputFileContent, InputTextContent};
 
@@ -24,11 +24,9 @@ use super::{InputFileContent, InputTextContent};
 /// Messages never echo the file data, URL, name, or media type.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum InputFileError {
-    #[error(
-        "input_file with file_id is not supported in Responses input; send the file inline as \
-         file_data (a base64 UTF-8 text file) or as input_text"
-    )]
-    FileId,
+    /// `file_id` must be the only content field on the part.
+    #[error("input content must not combine file_id with {field}")]
+    MutuallyExclusive { field: &'static str },
     #[error(
         "input_file with file_url is not supported: the gateway does not fetch files; send the file inline as \
          file_data (a base64 UTF-8 text file) or as input_text"
@@ -43,12 +41,28 @@ pub enum InputFileError {
          a text extension; extract the text client-side and send it as input_text, or send pages as input_image"
     )]
     NotText,
+    #[error("Invalid input: Expected image type to be a supported format: .jpeg, .jpg, .png, .gif, .webp but got {0}.")]
+    NotImage(String),
+    #[error(
+        "Invalid input: Expected context stuffing file type to be a supported format: {formats} but got {extension}.",
+        formats = kinds::CONTEXT_STUFFING_EXTENSIONS
+    )]
+    NotTextFile { extension: String },
+    #[error("file_id reference was not resolved for the model-facing request")]
+    Unresolved,
     #[error("input_file file_data is not supported: data URLs must be base64-encoded (data:<media type>;base64,...)")]
     NotBase64DataUrl,
     #[error("input_file file_data is not supported: it is not valid base64")]
     InvalidBase64,
     #[error("input_file file_data is not supported: the decoded file is not valid UTF-8 text")]
     NotUtf8,
+}
+
+impl InputFileError {
+    /// Whether this is the recorded wrong-kind failure for a resolved `file_id`.
+    pub(crate) fn is_resolved_kind(&self) -> bool {
+        matches!(self, Self::NotImage(_) | Self::NotTextFile { .. })
+    }
 }
 
 /// Split a base64 data URL into its media type and payload.
@@ -68,9 +82,10 @@ fn parse_data_url(url: &str) -> Result<(&str, &str), InputFileError> {
 impl InputFileContent {
     /// Check the reference fields and media type without decoding, returning the base64 payload.
     fn text_payload(&self) -> Result<&str, InputFileError> {
-        if self.file_id.is_some() {
-            return Err(InputFileError::FileId);
-        }
+        debug_assert!(
+            self.file_id.is_none(),
+            "a file_id reference is lowered from its resolved content, not inline"
+        );
         if self.file_url.is_some() {
             return Err(InputFileError::FileUrl);
         }
@@ -92,37 +107,66 @@ impl InputFileContent {
             .map_err(|_| InputFileError::InvalidBase64)
     }
 
-    /// Check that the file can be sent to the model as text, without building the model-facing text.
+    /// Check the part's content fields and, for inline data, that it can be sent as text.
+    ///
+    /// A `file_id` part is valid input: resolution happens later, for the model-facing
+    /// request only. The reference must be the part's only content field, as `OpenAI`
+    /// requires, so it cannot be combined with `filename`, `file_data`, or `file_url`.
     ///
     /// # Errors
-    /// Returns why the file cannot be inlined: a file reference, missing data,
-    /// a non-text media type, or data that is not base64-encoded UTF-8.
+    /// Returns why the part is invalid: a content field combined with `file_id`, a
+    /// file URL, missing data, a non-text media type, invalid base64, or data that is
+    /// not UTF-8.
     pub(super) fn validate(&self) -> Result<(), InputFileError> {
+        if self.file_id.is_some() {
+            if self.file_data.is_some() {
+                return Err(InputFileError::MutuallyExclusive { field: "file_data" });
+            }
+            if self.filename.is_some() {
+                return Err(InputFileError::MutuallyExclusive { field: "filename" });
+            }
+            if self.file_url.is_some() {
+                return Err(InputFileError::MutuallyExclusive { field: "file_url" });
+            }
+            return Ok(());
+        }
         std::str::from_utf8(&self.decoded_bytes()?)
             .map(drop)
             .map_err(|_| InputFileError::NotUtf8)
     }
 }
 
-/// The model-facing text of an inline text file, prefixed with
-/// `File: <filename>` when a filename is set.
+/// The model-facing text of a text file, prefixed with `File: <filename>` when a filename is set.
+///
+/// Inline `file_data` and a stored `file_id` both build their text here, so the media
+/// rules, decoding, prefix, and retained cache boundary have one implementation.
+pub(super) fn text_content_from_bytes(
+    filename: Option<&str>,
+    bytes: &[u8],
+    extra: &serde_json::Map<String, serde_json::Value>,
+) -> Result<InputTextContent, InputFileError> {
+    let text = std::str::from_utf8(bytes).map_err(|_| InputFileError::NotUtf8)?;
+    let mut content = InputTextContent::new(match filename {
+        Some(filename) => format!("File: {filename}\n{text}"),
+        None => text.to_owned(),
+    });
+    // A cache boundary belongs to this content position after text inlining, too.
+    // Other file extensions may not apply to text (or may collide with `text`).
+    if let Some(breakpoint) = extra.get("prompt_cache_breakpoint") {
+        content
+            .extra
+            .insert("prompt_cache_breakpoint".to_owned(), breakpoint.clone());
+    }
+    Ok(content)
+}
+
+/// The model-facing text of an inline text file.
 impl TryFrom<&InputFileContent> for InputTextContent {
     type Error = InputFileError;
 
     fn try_from(file: &InputFileContent) -> Result<Self, Self::Error> {
-        let text = String::from_utf8(file.decoded_bytes()?).map_err(|_| InputFileError::NotUtf8)?;
-        let mut content = Self::new(match file.filename.as_deref() {
-            Some(filename) => format!("File: {filename}\n{text}"),
-            None => text,
-        });
-        // A cache boundary belongs to this content position after text inlining, too.
-        // Other file extensions may not apply to text (or may collide with `text`).
-        if let Some(breakpoint) = file.extra.get("prompt_cache_breakpoint") {
-            content
-                .extra
-                .insert("prompt_cache_breakpoint".to_owned(), breakpoint.clone());
-        }
-        Ok(content)
+        let bytes = file.decoded_bytes()?;
+        text_content_from_bytes(file.filename.as_deref(), &bytes, &file.extra)
     }
 }
 
@@ -273,15 +317,35 @@ mod tests {
     }
 
     #[test]
-    fn rejects_references_and_missing_data() {
-        let reference = file(json!({"file_id":"file_1", "file_data":"aGk=", "filename":"a.txt"}));
-        assert_eq!(text(&reference), Err(InputFileError::FileId));
+    fn references_are_valid_input_lowered_only_from_resolved_content() {
+        let reference = file(json!({"file_id":"file_1"}));
+        assert_eq!(reference.validate(), Ok(()));
+        for (fields, field) in [
+            (json!({"file_id":"file_1", "filename":"a.txt"}), "filename"),
+            (json!({"file_id":"file_1", "file_data":"aGk="}), "file_data"),
+            (
+                json!({"file_id":"file_1", "file_url":"https://example.invalid/a.txt"}),
+                "file_url",
+            ),
+            (
+                json!({"file_id":"file_1", "file_data":"aGk=", "filename":"a.txt"}),
+                "file_data",
+            ),
+        ] {
+            assert_eq!(
+                file(fields).validate(),
+                Err(InputFileError::MutuallyExclusive { field }),
+                "{field}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_urls_and_missing_data() {
         let url = file(json!({"file_url":"https://example.invalid/a.txt"}));
         assert_eq!(text(&url), Err(InputFileError::FileUrl));
-        assert_eq!(
-            text(&file(json!({"filename":"a.txt"}))),
-            Err(InputFileError::MissingData)
-        );
+        let missing = file(json!({"filename":"a.txt"}));
+        assert_eq!(text(&missing), Err(InputFileError::MissingData));
     }
 
     #[test]

@@ -463,6 +463,11 @@ fn build_config(llm_api_base: String, common: &CommonArgs, file: &FileConfig) ->
         db_url,
         postgres,
         sqlite,
+        max_request_body_size: resolve_max_request_body_size(
+            common.max_request_body_size_bytes,
+            file.server.max_request_body_size_bytes,
+        )?
+        .get(),
         tools: ToolRuntimeConfig {
             file_search: FileSearchConfig {
                 sqlite_vec_extension_path: std::env::var_os("AGENTIC_FILE_SEARCH_SQLITE_VEC_EXTENSION_PATH")

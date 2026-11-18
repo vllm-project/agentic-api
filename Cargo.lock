@@ -68,6 +68,7 @@ version = "0.10.0"
 dependencies = [
  "agentic-server-core",
  "axum",
+ "base64",
  "bytes",
  "clap",
  "criterion",

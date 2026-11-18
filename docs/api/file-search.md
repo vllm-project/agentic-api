@@ -77,9 +77,9 @@ filesystem for uploaded bytes. A persistent volume claim (PVC) mounted at the
 configured files directory uses this same local-files implementation.
 
 Rust integrations can instead supply implementations of `FileSearchRepository`
-and `FileBlobStore` through `FileSearchService::with_providers`, then install the
-service with `ExecutionContext::with_file_search_service`. The HTTP routes and
-Responses built-in tool use that service. A repository adapter
+and `FileBlobStore` through `FileSearchService::with_providers`, then wrap the
+service with `FileHandler::new` and assign it to `ExecutionContext.file_handler`.
+The HTTP routes and Responses built-in tool use that handler. A repository adapter
 can compose SQL metadata with Milvus or another vector index; a blob-store
 adapter can use S3, GCS, or Azure Blob Storage. This layer provides SQL and
 sqlite-vec repositories and the local blob store. Other adapters and a
@@ -123,7 +123,11 @@ The Files API accepts binary uploads independently of search ingestion. Files
 are limited to 20 MiB, and the configured gateway request-body limit also applies
 to multipart uploads and vector-store JSON requests. The default request-body
 limit is 10 MiB; raise `server.max_request_body_size_bytes` for larger uploads.
-Uploads must use purpose `assistants` or `user_data`. Attaching a
+Uploads accept the OpenAI purposes `fine-tune`, `assistants`, `batch`, `user_data`, `vision`, and
+`evals`. Use `vision` for images referenced from Responses input; a `vision` upload must use an
+image media type (`image/gif`, `image/jpeg`, `image/jpg`, `image/png`, or `image/webp`). The
+`GET /v1/files/{file_id}/content` route serves `vision` uploads only; another purpose returns 400
+`Not allowed to download files of purpose: <purpose>`, matching the recorded OpenAI rows. Attaching a
 file to a vector store validates its format: UTF-8 text, Markdown, CSV, JSON, source
 files, and other supported text formats work in the default build. The default
 chunk size is 800 tokens with a 400-token overlap. Override it with:
@@ -153,6 +157,30 @@ PDFs must contain extractable text; scanned PDFs require OCR before ingestion.
 Encrypted PDFs and documents exceeding parsing, decompression, or extracted-text
 limits are rejected. The default build can store and download PDFs, but returns
 an actionable error when a PDF is attached for ingestion.
+
+## Reference uploads from Responses input
+
+A message `input_image` can reference an uploaded image with `file_id` instead of an
+inline `image_url`, and a message `input_file` can reference an uploaded text file with
+`file_id` instead of inline `file_data`. When the gateway builds the model-facing request,
+it reads the file from the same store and substitutes the model-facing content: the text
+for an `input_file`, a base64 data URL for an `input_image`. Stored response
+and conversation history keep the client's reference, so each continuation resolves it
+again; deleting the file makes a later continuation fail with 404. Compaction windows and
+multi-agent tree snapshots keep the same client-facing item, including the reference.
+
+An `input_image` reference must resolve to a stored file whose filename has an accepted
+image extension: `.jpeg`, `.jpg`, `.png`, `.gif`, or `.webp`; upload those files with
+purpose `vision`. An `input_file` reference must resolve to a stored file whose filename
+passes the text filename rules (a stored file carries no client-visible media type), and
+its content must decode as UTF-8; the stored filename supplies the `File: <name>` prefix.
+A part must use `file_id` or its inline field, not both. A missing file returns 404
+`invalid_request_error` with `Files [<id>] were not found`; a wrong file type returns 400
+`invalid_request_error`. `file_url` is never fetched.
+
+Resolved content counts toward the same request body limit
+(`server.max_request_body_size_bytes`) as inline content. Exceeding the configured limit
+returns HTTP 413 with error code `body_too_large`.
 
 ## Search directly
 

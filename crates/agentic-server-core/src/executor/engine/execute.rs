@@ -443,8 +443,10 @@ async fn prepare(
             "run control requires streaming multi-agent inference".into(),
         ));
     }
-    // Fail before any tool preparation or response event if the model can't be given this input.
-    ctx.enriched_request.input.normalized_model_input(&[])?;
+    // Fail before any tool preparation or response event if the model can't be given this input:
+    // a missing referenced file returns its JSON 404 and a mismatched file type its 400 first.
+    let files = exec.file_handler.resolve(&ctx.enriched_request.input).await?;
+    ctx.enriched_request.input.normalized_model_input(&[], &files)?;
     prepare_request_tools(ctx)
 }
 

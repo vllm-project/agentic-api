@@ -204,7 +204,7 @@ impl From<&ExecutorError> for FailureCategory {
             ExecutorError::NetworkError(_) => Self::Network,
             ExecutorError::JsonError(_) | ExecutorError::ParseError(_) => Self::Parse,
             ExecutorError::StreamError(_) => Self::Stream,
-            ExecutorError::NotFound { .. } => Self::NotFound,
+            ExecutorError::NotFound { .. } | ExecutorError::FileReferencesNotFound { .. } => Self::NotFound,
             ExecutorError::InvalidRequest(_)
             | ExecutorError::InvalidInput(_)
             | ExecutorError::ClientItem(_)

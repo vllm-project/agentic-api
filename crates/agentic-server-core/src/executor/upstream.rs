@@ -65,19 +65,27 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
 }
 
 /// Builds the JSON body sent upstream: history inlined, continuation fields removed,
-/// and `store: false` preserved when the caller disables storage. `guidance` is appended
-/// as the last input item, and `withheld` names the registry whose gateway-executed tools
-/// are left out after a `max_tool_calls` refusal; neither changes the persisted request.
+/// and `store: false` preserved when the caller disables storage. The `file_id` references
+/// in the input being lowered are resolved here, so the lookup cannot get out of step with
+/// the body. `guidance` is appended as the last input item, and `withheld` names the registry
+/// whose gateway-executed tools are left out after a `max_tool_calls` refusal; neither
+/// changes the persisted request.
+///
+/// The serialized body must fit the request body limit when it carries resolved file content;
+/// the inbound limit alone does not bound it.
 ///
 /// # Errors
-/// Unsupported message content, a tool-configuration error, or a serialization failure.
-pub fn upstream_request(
+/// A missing or unreadable referenced file, unsupported message content, a tool-configuration
+/// error, a resolved body over the size limit, or a serialization failure.
+pub async fn upstream_request(
+    exec_ctx: &ExecutionContext,
     ctx: &RequestContext,
     stream: bool,
     guidance: Option<&InputMessage>,
     withheld: Option<&ToolRegistry>,
 ) -> ExecutorResult<String> {
-    let mut request = ctx.enriched_request.to_upstream_request(stream)?;
+    let files = exec_ctx.file_handler.resolve(&ctx.enriched_request.input).await?;
+    let mut request = ctx.enriched_request.to_upstream_request(stream, &files)?;
     if let Some(registry) = withheld {
         if let Some(tools) = request.tools.as_mut() {
             // Hosted search does not count toward `max_tool_calls`, so it stays available.
@@ -108,7 +116,14 @@ pub fn upstream_request(
     if let Some(guidance) = guidance {
         request.input.to_mut().push(InputItem::Message(guidance.clone()));
     }
-    serialize_to_string(&request).map_err(ExecutorError::JsonError)
+    let body = serialize_to_string(&request).map_err(ExecutorError::JsonError)?;
+    if !files.is_empty() && body.len() > exec_ctx.max_request_body_size {
+        return Err(ExecutorError::PayloadTooLarge(format!(
+            "resolved file_id references exceed the {}-byte request body limit",
+            exec_ctx.max_request_body_size
+        )));
+    }
+    Ok(body)
 }
 
 pub(super) async fn fetch_blocking_payload(
@@ -120,7 +135,7 @@ pub(super) async fn fetch_blocking_payload(
 ) -> ExecutorResult<ResponsePayload> {
     agent.ensure_request_prepared()?;
     let withheld = agent.builtin_tools_withheld().then_some(registry);
-    let upstream_json = upstream_request(&agent.request, false, agent.agent_guidance(), withheld)?;
+    let upstream_json = upstream_request(exec_ctx, &agent.request, false, agent.agent_guidance(), withheld).await?;
     let (body, _) = fetch_response_json(
         upstream_json,
         &exec_ctx.responses_url(),
@@ -186,7 +201,7 @@ pub(super) async fn fetch_stream_payload(
 ) -> ExecutorResult<ResponsePayload> {
     agent.ensure_request_prepared()?;
     let withheld = agent.builtin_tools_withheld().then_some(registry);
-    let upstream_json = upstream_request(&agent.request, true, agent.agent_guidance(), withheld)?;
+    let upstream_json = upstream_request(exec_ctx, &agent.request, true, agent.agent_guidance(), withheld).await?;
     // Keep sending lazy so the pipeline can cancel header waits at a steering boundary.
     let lines = async_stream::try_stream! {
         let resp = send_request(
@@ -216,19 +231,23 @@ pub(super) async fn fetch_stream_payload(
 
 #[cfg(test)]
 pub(super) mod tests {
+
     use super::*;
     use crate::events::SseLine;
     use crate::executor::error::ResourceLimit;
-    use crate::executor::modes::{ConversationHandler, ResponseHandler};
+    use crate::executor::modes::{ConversationHandler, FileHandler, ResponseHandler};
     use crate::executor::pipeline::RoundIngestion;
     use crate::executor::relay::RelayLimits;
-    use crate::storage::{ConversationStore, ResponseStore};
+    use crate::storage::{ConversationStore, ResponseStore, create_pool_with_schema};
+    use crate::tool::file_search::FileSearchService;
+    use crate::types::file_search::FileSearchConfig;
     use crate::types::io::ResponsesInput;
     use crate::types::request_response::RequestPayload;
     use serde_json::Value;
 
-    #[test]
-    fn agent_guidance_is_last_and_never_mutates_canonical_history() {
+    #[tokio::test]
+    async fn agent_guidance_is_last_and_never_mutates_canonical_history() {
+        let exec_ctx = execution_context();
         let mut ctx = request_context();
         ctx.enriched_request.instructions = Some("caller instructions".into());
         ctx.enriched_request.input = serde_json::from_value(serde_json::json!([
@@ -241,10 +260,15 @@ pub(super) mod tests {
             "role":"developer","content":"current child ownership"
         }))
         .unwrap();
-        let baseline: Value = serde_json::from_str(&upstream_request(&ctx, false, None, None).unwrap()).unwrap();
+        let baseline: Value =
+            serde_json::from_str(&upstream_request(&exec_ctx, &ctx, false, None, None).await.unwrap()).unwrap();
         for stream in [false, true] {
-            let body: Value =
-                serde_json::from_str(&upstream_request(&ctx, stream, Some(&guidance), None).unwrap()).unwrap();
+            let body: Value = serde_json::from_str(
+                &upstream_request(&exec_ctx, &ctx, stream, Some(&guidance), None)
+                    .await
+                    .unwrap(),
+            )
+            .unwrap();
             assert_eq!(body["instructions"], "caller instructions");
             let items = body["input"].as_array().unwrap();
             assert_eq!(&items[..3], baseline["input"].as_array().unwrap());
@@ -252,7 +276,8 @@ pub(super) mod tests {
             assert_eq!(items[3]["role"], "developer");
             assert_eq!(items[3]["content"], "current child ownership");
         }
-        let after: Value = serde_json::from_str(&upstream_request(&ctx, false, None, None).unwrap()).unwrap();
+        let after: Value =
+            serde_json::from_str(&upstream_request(&exec_ctx, &ctx, false, None, None).await.unwrap()).unwrap();
         assert_eq!(after, baseline);
         assert!(ctx.new_input_items.is_empty());
     }
@@ -484,12 +509,17 @@ pub(super) mod tests {
 
     #[tokio::test]
     async fn code_interpreter_and_mcp_declarations_stay_public_without_internal_fields() {
+        let exec_ctx = execution_context();
         let (request, public_tools) = code_interpreter_and_mcp_request();
 
         // Inference keeps the lowered function schemas, and never carries request-scoped
         // credentials or the discovered `tools/list` result.
-        let upstream: Value =
-            serde_json::from_str(&upstream_request(&request, false, None, None).expect("upstream body")).unwrap();
+        let upstream: Value = serde_json::from_str(
+            &upstream_request(&exec_ctx, &request, false, None, None)
+                .await
+                .expect("upstream body"),
+        )
+        .unwrap();
         let upstream_names: Vec<&str> = upstream["tools"]
             .as_array()
             .expect("lowered function schemas")
@@ -556,6 +586,15 @@ pub(super) mod tests {
             serde_json::to_value(&json_payload.tool_choice).unwrap(),
             serde_json::json!("required")
         );
+    }
+
+    fn execution_context() -> ExecutionContext {
+        ExecutionContext::new(
+            ConversationHandler::new(ConversationStore::disabled()),
+            ResponseHandler::new(ResponseStore::disabled()),
+            Arc::new(reqwest::Client::new()),
+            "http://localhost:8000".to_owned(),
+        )
     }
 
     pub(in crate::executor) fn request_context() -> RequestContext {
@@ -1325,5 +1364,41 @@ pub(super) mod tests {
             }
         ));
         server.abort();
+    }
+
+    #[tokio::test]
+    async fn resolved_file_content_counts_against_the_serialized_body_limit() {
+        let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
+        let files = tempfile::tempdir().unwrap();
+        let config = FileSearchConfig {
+            files_storage_dir: Some(files.path().to_owned()),
+            ..FileSearchConfig::default()
+        };
+        let service =
+            FileSearchService::new(pool, Arc::new(reqwest::Client::new()), config).expect("file search service");
+        let uploaded = service
+            .upload_file("notes.txt", "text/plain", "assistants", b"hello".to_vec())
+            .await
+            .unwrap();
+
+        let mut exec_ctx = execution_context();
+        exec_ctx.file_handler = FileHandler::new(service);
+        let mut ctx = request_context();
+        ctx.enriched_request.input = serde_json::from_value(serde_json::json!([
+            {"role": "user", "content": [{"type": "input_file", "file_id": uploaded.id}]}
+        ]))
+        .unwrap();
+
+        exec_ctx.max_request_body_size = usize::MAX;
+        upstream_request(&exec_ctx, &ctx, false, None, None)
+            .await
+            .expect("a body within the limit builds despite resolved content");
+
+        exec_ctx.max_request_body_size = 64;
+        let error = upstream_request(&exec_ctx, &ctx, false, None, None)
+            .await
+            .expect_err("resolved content over the limit must fail");
+        assert!(matches!(error, ExecutorError::PayloadTooLarge(_)), "{error:?}");
+        assert!(error.to_string().contains("request body limit"), "{error}");
     }
 }

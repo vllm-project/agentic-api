@@ -1,0 +1,758 @@
+turns:
+- filename: t1
+  request:
+    body_base64: LS00ODNlY2RiMjUzOGJhNmM4ZjkwMjE2ZDQ2NzVjZGU4Mg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tNDgzZWNkYjI1MzhiYTZjOGY5MDIxNmQ0Njc1Y2RlODINCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJub3Rlcy50eHQiDQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW4NCg0KRGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg0KLS00ODNlY2RiMjUzOGJhNmM4ZjkwMjE2ZDQ2NzVjZGU4Mi0tDQo=
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      content-type: multipart/form-data; boundary=483ecdb2538ba6c8f90216d4675cde82
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      bytes: 91
+      created_at: 1794836013
+      filename: notes.txt
+      id: file-01a1e490-211c-7e30-aa6a-0c41814b5b21
+      object: file
+      purpose: user_data
+      status: processed
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body_base64: LS0wYzdjNTNhZjQ3Y2NiNmQwOGQ4ZDQwNDg1ODY5MzZkOQ0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tMGM3YzUzYWY0N2NjYjZkMDhkOGQ0MDQ4NTg2OTM2ZDkNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJub3Rlcy5wZGYiDQpDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL3BkZg0KDQolUERGLTEuNAoxIDAgb2JqCjw8IC9UeXBlIC9DYXRhbG9nIC9QYWdlcyAyIDAgUiA+PgplbmRvYmoKMiAwIG9iago8PCAvVHlwZSAvUGFnZXMgL0tpZHMgWzMgMCBSXSAvQ291bnQgMSA+PgplbmRvYmoKMyAwIG9iago8PCAvVHlwZSAvUGFnZSAvUGFyZW50IDIgMCBSIC9NZWRpYUJveCBbMCAwIDYxMiA3OTJdIC9SZXNvdXJjZXMgPDwgL0ZvbnQgPDwgL0YxIDUgMCBSID4+ID4+IC9Db250ZW50cyA0IDAgUiA+PgplbmRvYmoKNCAwIG9iago8PCAvTGVuZ3RoIDEzOCA+PgpzdHJlYW0KQlQKL0YxIDE0IFRmCjcyIDcyMCBUZAoxOCBUTAooRGVwbG95bWVudCBjaGVja2xpc3QpICcKKC0gUmVnaW9uOiBldS13ZXN0KSAnCigtIFJlbGVhc2UgY29kZXdvcmQ6IFBBUEFZQS03KSAnCigtIE93bmVyOiBwbGF0Zm9ybSB0ZWFtKSAnCkVUCmVuZHN0cmVhbQplbmRvYmoKNSAwIG9iago8PCAvVHlwZSAvRm9udCAvU3VidHlwZSAvVHlwZTEgL0Jhc2VGb250IC9IZWx2ZXRpY2EgPj4KZW5kb2JqCnhyZWYKMCA2CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAwMDU4IDAwMDAwIG4gCjAwMDAwMDAxMTUgMDAwMDAgbiAKMDAwMDAwMDI0MSAwMDAwMCBuIAowMDAwMDAwNDMwIDAwMDAwIG4gCnRyYWlsZXIKPDwgL1NpemUgNiAvUm9vdCAxIDAgUiA+PgpzdGFydHhyZWYKNTAwCiUlRU9GCg0KLS0wYzdjNTNhZjQ3Y2NiNmQwOGQ4ZDQwNDg1ODY5MzZkOS0tDQo=
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      content-type: multipart/form-data; boundary=0c7c53af47ccb6d08d8d4048586936d9
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      bytes: 683
+      created_at: 1794836013
+      filename: notes.pdf
+      id: file-01a1e490-2123-7633-85df-f6c1008e89cc
+      object: file
+      purpose: user_data
+      status: processed
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input:
+      - content:
+        - text: Remember these deployment notes for later.
+          type: input_text
+        - file_id: file-01a1e490-211c-7e30-aa6a-0c41814b5b21
+          type: input_file
+        role: user
+        type: message
+      model: Qwen/Qwen2.5-3B-Instruct
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses/compact
+    query_params: {}
+  response:
+    body:
+      created_at: 1794836014
+      id: resp_01a1e490-212c-7101-b401-dad915f9a187
+      object: response.compaction
+      output:
+      - content:
+        - text: Remember these deployment notes for later.
+          type: input_text
+        - file_id: file-01a1e490-211c-7e30-aa6a-0c41814b5b21
+          type: input_file
+        id: msg_01a1e490-212c-7101-b401-dae40b15a3fa
+        role: user
+        status: completed
+        type: message
+      - encrypted_content: 'Handoff Summary:
+
+          - Deployment planned for Region: eu-west with release codeword: PAPAYA-7.
+
+          - Deployment responsibility attributed to the platform team.
+
+          - Unresolved work and critical references will be reviewed and updated before
+          proceeding with the deployment.'
+        id: cmp_01a1e490-25c7-7881-8f12-13e7a85db5a1
+        type: compaction
+      service_tier: auto
+      usage:
+        input_tokens: 116
+        input_tokens_details:
+          cache_write_tokens: 96
+          cached_tokens: 16
+        output_tokens: 53
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 169
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body:
+      input:
+      - content:
+        - text: Remember these deployment notes for later.
+          type: input_text
+        - file_id: file-01a1e490-211c-7e30-aa6a-0c41814b5b21
+          type: input_file
+        id: msg_01a1e490-212c-7101-b401-dae40b15a3fa
+        role: user
+        status: completed
+        type: message
+      - encrypted_content: 'Handoff Summary:
+
+          - Deployment planned for Region: eu-west with release codeword: PAPAYA-7.
+
+          - Deployment responsibility attributed to the platform team.
+
+          - Unresolved work and critical references will be reviewed and updated before
+          proceeding with the deployment.'
+        id: cmp_01a1e490-25c7-7881-8f12-13e7a85db5a1
+        type: compaction
+      - content: What was the release codeword in the file I attached earlier? Reply
+          with only the codeword.
+        role: user
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-3B-Instruct
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794836014
+      created_at: 1794836014
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1e490-25d5-7783-a1b5-c563ca1cba6f
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen2.5-3B-Instruct
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_adbb3a44673e057c
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 153
+        input_tokens_details:
+          cache_write_tokens: 80
+          cached_tokens: 64
+        output_tokens: 7
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 160
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      input:
+      - content:
+        - text: Remember these deployment notes for later.
+          type: input_text
+        - file_data: data:text/plain;base64,RGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg==
+          filename: notes.txt
+          type: input_file
+        role: user
+        type: message
+      model: Qwen/Qwen2.5-3B-Instruct
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses/compact
+    query_params: {}
+  response:
+    body:
+      created_at: 1794836016
+      id: resp_01a1e490-26a6-7912-a676-4950b31042bf
+      object: response.compaction
+      output:
+      - content:
+        - text: Remember these deployment notes for later.
+          type: input_text
+        - file_data: data:text/plain;base64,RGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg==
+          filename: notes.txt
+          type: input_file
+        id: msg_01a1e490-26a6-7912-a676-4961af0c461c
+        role: user
+        status: completed
+        type: message
+      - encrypted_content: 'Handoff Summary:
+
+          - Deployment to be performed in eu-west region with release codeword PAPAYA-7.
+
+          - Deployment responsibility assigned to platform team.
+
+          - Unresolved work and critical references not specified; however, any ongoing
+          issues or important documentation should be noted for future reference.'
+        id: cmp_01a1e490-2bc4-7831-bdf5-af377b8d8259
+        type: compaction
+      service_tier: auto
+      usage:
+        input_tokens: 116
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 112
+        output_tokens: 59
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 175
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body:
+      input:
+      - content:
+        - text: Remember these deployment notes for later.
+          type: input_text
+        - file_data: data:text/plain;base64,RGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg==
+          filename: notes.txt
+          type: input_file
+        id: msg_01a1e490-26a6-7912-a676-4961af0c461c
+        role: user
+        status: completed
+        type: message
+      - encrypted_content: 'Handoff Summary:
+
+          - Deployment to be performed in eu-west region with release codeword PAPAYA-7.
+
+          - Deployment responsibility assigned to platform team.
+
+          - Unresolved work and critical references not specified; however, any ongoing
+          issues or important documentation should be noted for future reference.'
+        id: cmp_01a1e490-2bc4-7831-bdf5-af377b8d8259
+        type: compaction
+      - content: What was the release codeword in the file I attached earlier? Reply
+          with only the codeword.
+        role: user
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-3B-Instruct
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794836016
+      created_at: 1794836016
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1e490-2be0-7430-bce7-8672600c7bd6
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen2.5-3B-Instruct
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_bb32d5cfe4a7a6a6
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 159
+        input_tokens_details:
+          cache_write_tokens: 80
+          cached_tokens: 64
+        output_tokens: 7
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 166
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body:
+      input:
+      - content:
+        - text: Remember these deployment notes for later.
+          type: input_text
+        - file_id: file-01a1e490-211c-7e30-aa6a-0c41814b5b21
+          type: input_file
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-3B-Instruct
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: null
+      created_at: 1794836017
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1e490-2cba-7eb1-b1b0-ffe6a1c1184a
+      incomplete_details:
+        reason: max_output_tokens
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen2.5-3B-Instruct
+      object: response
+      output: []
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: incomplete
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 69
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 64
+        output_tokens: 64
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 133
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body:
+      model: Qwen/Qwen2.5-3B-Instruct
+      previous_response_id: resp_01a1e490-2cba-7eb1-b1b0-ffe6a1c1184a
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses/compact
+    query_params: {}
+  response:
+    body:
+      created_at: 1794836018
+      id: resp_01a1e490-3280-7c10-846e-4f72b11a25ef
+      object: response.compaction
+      output:
+      - content:
+        - text: Remember these deployment notes for later.
+          type: input_text
+        - file_id: file-01a1e490-211c-7e30-aa6a-0c41814b5b21
+          type: input_file
+        id: msg_01a1e490-3281-7bf2-9c99-a0b66612cade
+        role: user
+        status: completed
+        type: message
+      - encrypted_content: 'Handoff Summary:
+
+          - Deployment target: eu-west region
+
+          - Codeword for release: PAPAYA-7
+
+          - Responsible team: platform team
+
+          - Unresolved tasks and critical references will be updated in the notes.txt
+          file.'
+        id: cmp_01a1e490-36f3-7b40-ba59-038062679638
+        type: compaction
+      service_tier: auto
+      usage:
+        input_tokens: 116
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 112
+        output_tokens: 50
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 166
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body:
+      input:
+      - content:
+        - text: Remember these deployment notes for later.
+          type: input_text
+        - file_id: file-01a1e490-211c-7e30-aa6a-0c41814b5b21
+          type: input_file
+        id: msg_01a1e490-3281-7bf2-9c99-a0b66612cade
+        role: user
+        status: completed
+        type: message
+      - encrypted_content: 'Handoff Summary:
+
+          - Deployment target: eu-west region
+
+          - Codeword for release: PAPAYA-7
+
+          - Responsible team: platform team
+
+          - Unresolved tasks and critical references will be updated in the notes.txt
+          file.'
+        id: cmp_01a1e490-36f3-7b40-ba59-038062679638
+        type: compaction
+      - content: What was the release codeword in the file I attached earlier? Reply
+          with only the codeword.
+        role: user
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-3B-Instruct
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794836019
+      created_at: 1794836019
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1e490-371f-72a3-8ac1-44459f4259b0
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen2.5-3B-Instruct
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_9356bb18c25b294d
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 150
+        input_tokens_details:
+          cache_write_tokens: 80
+          cached_tokens: 64
+        output_tokens: 7
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 157
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t10
+  request:
+    body:
+      items:
+      - content:
+        - text: Remember these deployment notes for later.
+          type: input_text
+        - file_id: file-01a1e490-2123-7633-85df-f6c1008e89cc
+          type: input_file
+        role: user
+        type: message
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1794836019
+      id: conv_01a1e490-3809-7c80-a543-de56e5db2090
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t11
+  request:
+    body:
+      conversation: conv_01a1e490-3809-7c80-a543-de56e5db2090
+      model: Qwen/Qwen2.5-3B-Instruct
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses/compact
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Compaction requires either `input` items or a `previous_response_id`.
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t12
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/files/file-01a1e490-211c-7e30-aa6a-0c41814b5b21
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: file-01a1e490-211c-7e30-aa6a-0c41814b5b21
+      object: file
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t13
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/files/file-01a1e490-2123-7633-85df-f6c1008e89cc
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: file-01a1e490-2123-7633-85df-f6c1008e89cc
+      object: file
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t14
+  request:
+    body:
+      input:
+      - content:
+        - text: Remember these deployment notes for later.
+          type: input_text
+        - file_id: file-01a1e490-211c-7e30-aa6a-0c41814b5b21
+          type: input_file
+        id: msg_01a1e490-212c-7101-b401-dae40b15a3fa
+        role: user
+        status: completed
+        type: message
+      - encrypted_content: 'Handoff Summary:
+
+          - Deployment planned for Region: eu-west with release codeword: PAPAYA-7.
+
+          - Deployment responsibility attributed to the platform team.
+
+          - Unresolved work and critical references will be reviewed and updated before
+          proceeding with the deployment.'
+        id: cmp_01a1e490-25c7-7881-8f12-13e7a85db5a1
+        type: compaction
+      - content: What was the release codeword in the file I attached earlier? Reply
+          with only the codeword.
+        role: user
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-3B-Instruct
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Files [file-01a1e490-211c-7e30-aa6a-0c41814b5b21] were not found
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t15
+  request:
+    body:
+      model: Qwen/Qwen2.5-3B-Instruct
+      previous_response_id: resp_01a1e490-2cba-7eb1-b1b0-ffe6a1c1184a
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses/compact
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Files [file-01a1e490-211c-7e30-aa6a-0c41814b5b21] were not found
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t16
+  request:
+    body:
+      conversation: conv_01a1e490-3809-7c80-a543-de56e5db2090
+      model: Qwen/Qwen2.5-3B-Instruct
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses/compact
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Compaction requires either `input` items or a `previous_response_id`.
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t17
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/conversations/conv_01a1e490-3809-7c80-a543-de56e5db2090
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: conv_01a1e490-3809-7c80-a543-de56e5db2090
+      object: conversation.deleted
+    headers:
+      content-type: application/json
+    status_code: 200

@@ -8,7 +8,7 @@ use crate::error::Error;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway::GatewaySchedulerPolicy;
 use crate::executor::messages_server_tools::sealing::{MessagesResultKey, process_result_key};
-use crate::executor::modes::{ConversationHandler, ResponseHandler};
+use crate::executor::modes::{ConversationHandler, FileHandler, ResponseHandler};
 use crate::executor::multi_agent::ValidatedTreeCheckpoint;
 use crate::executor::session::ResponseContinuation;
 use crate::executor::telemetry::ExecutorMetrics;
@@ -100,8 +100,11 @@ impl RequestContext {
 /// rather than stored here, keeping this context purely shared and immutable.
 #[derive(Clone, Debug)]
 pub struct ExecutionContext {
-    /// Shared in-tree file ingestion and retrieval, available when persistence is configured.
-    pub file_search: Option<FileSearchService>,
+    /// The executor's file ingestion and retrieval handler, available when persistence is
+    /// configured. It owns the one file service, which the HTTP Files API routes share.
+    pub file_handler: FileHandler,
+    /// Ceiling on serialized inbound request bytes; resolved file content counts against it.
+    pub(crate) max_request_body_size: usize,
     pub conv_handler: ConversationHandler,
     pub resp_handler: ResponseHandler,
     pub client: Arc<reqwest::Client>,
@@ -148,7 +151,8 @@ impl ExecutionContext {
     ) -> Self {
         let gateway_executors = GatewayExecutors::from_env(Arc::clone(&client));
         Self {
-            file_search: None,
+            file_handler: FileHandler::default(),
+            max_request_body_size: DEFAULT_MAX_REQUEST_BODY_SIZE_BYTES,
             conv_handler,
             resp_handler,
             client,
@@ -190,18 +194,6 @@ impl ExecutionContext {
     #[must_use]
     pub fn with_gateway_executor(mut self, executor: impl Into<GatewayExecutorRegistration>) -> Self {
         self.gateway_executors.insert(executor);
-        self
-    }
-
-    /// Installs one file search service for both the Files API and the
-    /// gateway-executed built-in tool.
-    #[must_use]
-    pub fn with_file_search_service(mut self, service: FileSearchService) -> Self {
-        self.gateway_executors
-            .insert(GatewayExecutorRegistration::FileSearch(Arc::new(
-                crate::tool::file_search::FileSearchHandler::new(service.clone()),
-            )));
-        self.file_search = Some(service);
         self
     }
 
@@ -282,7 +274,7 @@ impl ExecutionContext {
                 .build()
                 .map_err(|error| Error::Config(format!("failed to build upstream HTTP client: {error}")))?,
         );
-        let gateway_executors = GatewayExecutors::from_config(Arc::clone(&client), &cfg.tools)
+        let mut gateway_executors = GatewayExecutors::from_config(Arc::clone(&client), &cfg.tools)
             .map_err(|error| Error::Config(format!("failed to validate configured gateway tool policies: {error}")))?;
         let file_search =
             FileSearchService::configured(Arc::clone(&pool), Arc::clone(&client), cfg.tools.file_search.clone())
@@ -298,8 +290,12 @@ impl ExecutionContext {
         if let Err(error) = file_search.reconcile_blob_cleanup().await {
             tracing::warn!(%error, "file blob reconciliation will retry while the gateway runs");
         }
+        gateway_executors.insert(GatewayExecutorRegistration::FileSearch(Arc::new(
+            crate::tool::file_search::FileSearchHandler::new(file_search.clone()),
+        )));
         Ok(Self {
-            file_search: None,
+            file_handler: FileHandler::new(file_search),
+            max_request_body_size: cfg.max_request_body_size,
             conv_handler,
             resp_handler,
             client,
@@ -321,10 +317,13 @@ impl ExecutionContext {
             model_capabilities: cfg.model_capabilities.clone(),
             metrics: ExecutorMetrics::from_global(),
             storage_pool: Some(pool),
-        }
-        .with_file_search_service(file_search))
+        })
     }
 }
+
+/// Default ceiling on serialized inbound request bytes, used for resolved file content when the
+/// server does not supply its own limit.
+pub const DEFAULT_MAX_REQUEST_BODY_SIZE_BYTES: usize = 10 * 1024 * 1024;
 
 /// Default streaming chunk timeout when `STREAMING_CHUNK_TIMEOUT_S` is unset or
 /// unparseable. Generous to accommodate long-prefill / high-TTFT workloads.

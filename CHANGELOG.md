@@ -6,6 +6,14 @@ All notable changes to Agentic API are documented here.
 
 ### Added
 
+- Resolve Responses message `input_image` and `input_file` `file_id` references from the Files API when the
+  gateway builds the model-facing request, so stateless backends receive the referenced media inline. Stored
+  history, compaction windows, and multi-agent tree snapshots keep the client's reference and resolve it again
+  on each request; a reference part must not also carry its inline field (`image_url`, `file_data`, or
+  `file_url`), an `input_image` must reference a stored file with an accepted image filename, a missing file
+  returns `OpenAI`'s `Files [<id>] were not found` 404, and resolved content counts toward the request body
+  limit. A `file_id` in a structured function/custom tool call output is resolved the same way, while other
+  tool-output parts pass through unchanged. Upload purpose `vision` is now accepted (#356).
 - Added one tenant-scoped session id on `/v1/messages` and `/v1/messages/count_tokens` (#159).
   `x-claude-code-session-id` and `X-Session-ID` must agree or the request fails with HTTP 400 before any upstream
   call. The gateway forwards `X-Session-ID`, which vLLM reads as the request's `session_id`, set to a SHA-256 of the
@@ -14,6 +22,17 @@ All notable changes to Agentic API are documented here.
 
 ### Changed
 
+- `RequestPayload::to_upstream_request` now takes the per-request resolved-file lookup
+  (`&ResolvedFiles`) built with `FileHandler::resolve`. Embedders calling it directly must resolve the
+  payload's `file_id` references first, or pass an empty map when the payload has none.
+- `executor::upstream_request` is now async: it resolves the `file_id` references in the input it lowers
+  from its `ExecutionContext`. Callers await it, and the lookup no longer lives on `RequestContext`.
+- Files API rows now follow the recorded `OpenAI` behavior: only `vision` uploads can be downloaded
+  (`400 Not allowed to download files of purpose: <purpose>` otherwise), any unusable file ID is reported as
+  `404` `No such File object: <id>` naming `id`, `after`, or `before`, and upload rule failures use
+  `invalid_request_error` with `code: null`. These failures are `FileSearchError` row variants rendered by
+  `ExecutorError`; `ExecutionContext.file_search` is replaced by the `FileHandler` that owns the one service
+  (`FileHandler::new`, `FileHandler::service`).
 - Typed streaming inference uses `STREAMING_CHUNK_TIMEOUT_S` for response headers as well as body progress.
   The configured shared HTTP client has a fixed 10-second connect timeout; JSON waits remain unbounded and
   streaming has no total deadline. See [the timeout tradeoff](docs/guides/configuration.md#typed-upstream-timeouts).

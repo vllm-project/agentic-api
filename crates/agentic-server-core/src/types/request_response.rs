@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::conversations::ConversationMetadata;
-use super::io::input::{HistoryNaming, InputValidationError};
+use super::io::input::{HistoryNaming, InputValidationError, ResolvedFiles, file_references};
 use super::io::{FunctionTool, MultiAgentConfig, OutputItem, ResponseUsage, ResponsesInput, ToolChoice};
 use super::tools::ResponsesTool;
 use super::{ReasoningEffortLevel, RequestField, ServiceTier};
@@ -254,6 +254,10 @@ impl<T: ?Sized, C> RequestPayload<T, C> {
         if self.declares_async_tools() || self.input.has_async_call() {
             return Some("async tools");
         }
+        // Resolved file content comes from the gateway's file store before inference.
+        if !file_references(&self.input).is_empty() {
+            return Some("file_id references");
+        }
         if self.input.contains_compaction() || self.input.has_compaction_trigger() {
             return Some("compaction input");
         }
@@ -355,6 +359,9 @@ impl RequestPayload {
     /// declarations. `tool_choice` is resolved the same way via
     /// [`CodexNamespaceHandler::resolve_tool_choice`].
     ///
+    /// `files` is the per-request lookup the file handler resolved from the final
+    /// input; it is used only for this model-facing projection and is never stored.
+    ///
     /// # Errors
     ///
     /// Rejects unsupported message content before normalization. Returns a tool
@@ -362,7 +369,11 @@ impl RequestPayload {
     /// flat name collides with a top-level function tool or another namespace
     /// member, or when a custom tool declares a format whose constrained
     /// decoding cannot be preserved upstream.
-    pub fn to_upstream_request(&self, stream: bool) -> Result<UpstreamRequest<'_>, UpstreamRequestError> {
+    pub fn to_upstream_request(
+        &self,
+        stream: bool,
+        files: &ResolvedFiles,
+    ) -> Result<UpstreamRequest<'_>, UpstreamRequestError> {
         self.validate_modeled_extensions()?;
         self.input.validate()?;
         // This is only the upstream model-generation preference: it controls
@@ -379,7 +390,7 @@ impl RequestPayload {
         let history = HistoryNaming {
             functions: self.top_level_function_names(),
         };
-        let input = self.upstream_input(namespace_map.as_ref(), &history)?;
+        let input = self.upstream_input(namespace_map.as_ref(), &history, files)?;
         let tool_choice = CodexNamespaceHandler.resolve_tool_choice(namespace_map.as_ref(), self.tool_choice.as_ref());
         CustomHandler::validate_tool_choice(declarations.as_deref(), &tool_choice)?;
         crate::tool::file_search::FileSearchHandler::validate_tool_choice(declarations.as_deref(), &tool_choice)?;
@@ -480,7 +491,8 @@ mod tests {
             "known fields must not enter provider extensions"
         );
         for stream in [false, true] {
-            let upstream = serde_json::to_value(restored.to_upstream_request(stream).unwrap()).unwrap();
+            let upstream =
+                serde_json::to_value(restored.to_upstream_request(stream, &HashMap::default()).unwrap()).unwrap();
             assert_eq!(upstream["stream"], stream);
             assert_eq!(upstream["store"], false);
             for key in ["chat_template_kwargs", "top_k", "x_provider_option"] {
@@ -518,7 +530,8 @@ mod tests {
             let stored: RequestPayload = serde_json::from_value(serde_json::to_value(&request).unwrap()).unwrap();
             assert_eq!(stored.prompt_cache_retention, request.prompt_cache_retention);
             for stream in [false, true] {
-                let upstream = serde_json::to_value(stored.to_upstream_request(stream).unwrap()).unwrap();
+                let upstream =
+                    serde_json::to_value(stored.to_upstream_request(stream, &HashMap::default()).unwrap()).unwrap();
                 assert_eq!(
                     upstream.get("prompt_cache_retention"),
                     request
@@ -587,7 +600,9 @@ mod tests {
                 assert_eq!(payload.in_process_feature(), enabled.then_some("multi_agent"));
 
                 for stream in [false, true] {
-                    let upstream = serde_json::to_value(payload.to_upstream_request(stream).unwrap()).unwrap();
+                    let upstream =
+                        serde_json::to_value(payload.to_upstream_request(stream, &HashMap::default()).unwrap())
+                            .unwrap();
                     assert!(upstream.get("multi_agent").is_none());
                     assert_eq!(upstream["parallel_tool_calls"], parallel_tool_calls);
                 }
@@ -655,6 +670,32 @@ mod tests {
             request(sync_tool, call(true)).in_process_feature(),
             Some("async tools"),
             "a replayed async call keeps executor semantics after the tool is re-declared"
+        );
+    }
+
+    /// A `file_id` reference is resolved from the gateway file store before inference, so
+    /// neither the passthrough proxy nor split execution can serve it.
+    #[test]
+    fn file_references_require_the_in_process_executor() {
+        let request = |input: serde_json::Value| -> RequestPayload {
+            serde_json::from_value(serde_json::json!({"model": "test-model", "input": input})).unwrap()
+        };
+        for input in [
+            serde_json::json!([{"role": "user", "content": [
+                {"type": "input_file", "file_id": "file-1"}
+            ]}]),
+            serde_json::json!([{"role": "user", "content": [
+                {"type": "input_image", "file_id": "file-1"}
+            ]}]),
+            serde_json::json!([{"type": "function_call_output", "call_id": "call_1", "output": [
+                {"type": "input_file", "file_id": "file-1"}
+            ]}]),
+        ] {
+            assert_eq!(request(input).in_process_feature(), Some("file_id references"));
+        }
+        assert_eq!(
+            request(serde_json::json!([{"role": "user", "content": "hello"}])).in_process_feature(),
+            None
         );
     }
 
@@ -765,9 +806,12 @@ mod tests {
             assert_eq!(payload.ignore_eos, ignore_eos);
 
             for stream in [false, true] {
-                let upstream =
-                    serde_json::to_value(payload.to_upstream_request(stream).expect("request should normalize"))
-                        .expect("upstream request should serialize");
+                let upstream = serde_json::to_value(
+                    payload
+                        .to_upstream_request(stream, &HashMap::default())
+                        .expect("request should normalize"),
+                )
+                .expect("upstream request should serialize");
                 assert_eq!(
                     upstream.get("ignore_eos"),
                     ignore_eos.map(serde_json::Value::Bool).as_ref()
@@ -813,8 +857,12 @@ mod tests {
         }))
         .expect("request should deserialize");
 
-        let upstream = serde_json::to_value(payload.to_upstream_request(false).expect("request should normalize"))
-            .expect("upstream request should serialize");
+        let upstream = serde_json::to_value(
+            payload
+                .to_upstream_request(false, &HashMap::default())
+                .expect("request should normalize"),
+        )
+        .expect("upstream request should serialize");
 
         assert!(upstream.get("cache_salt").is_none());
 
@@ -825,8 +873,12 @@ mod tests {
         }))
         .expect("request should deserialize");
 
-        let upstream = serde_json::to_value(payload.to_upstream_request(false).expect("request should normalize"))
-            .expect("upstream request should serialize");
+        let upstream = serde_json::to_value(
+            payload
+                .to_upstream_request(false, &HashMap::default())
+                .expect("request should normalize"),
+        )
+        .expect("upstream request should serialize");
 
         assert_eq!(upstream["cache_salt"], "tenant-a");
     }
@@ -838,8 +890,12 @@ mod tests {
             "input": "hello"
         }))
         .expect("request should deserialize");
-        let upstream = serde_json::to_value(payload.to_upstream_request(false).expect("request should normalize"))
-            .expect("upstream request should serialize");
+        let upstream = serde_json::to_value(
+            payload
+                .to_upstream_request(false, &HashMap::default())
+                .expect("request should normalize"),
+        )
+        .expect("upstream request should serialize");
         assert!(upstream.get("prompt_cache_key").is_none());
 
         let payload: RequestPayload = serde_json::from_value(serde_json::json!({
@@ -848,8 +904,12 @@ mod tests {
             "prompt_cache_key": "workspace-a"
         }))
         .expect("request should deserialize");
-        let upstream = serde_json::to_value(payload.to_upstream_request(false).expect("request should normalize"))
-            .expect("upstream request should serialize");
+        let upstream = serde_json::to_value(
+            payload
+                .to_upstream_request(false, &HashMap::default())
+                .expect("request should normalize"),
+        )
+        .expect("upstream request should serialize");
         assert_eq!(upstream["prompt_cache_key"], "workspace-a");
 
         let null_payload: RequestPayload = serde_json::from_value(serde_json::json!({
@@ -860,7 +920,7 @@ mod tests {
         .expect("null should deserialize as an absent key");
         let upstream = serde_json::to_value(
             null_payload
-                .to_upstream_request(false)
+                .to_upstream_request(false, &HashMap::default())
                 .expect("request should normalize"),
         )
         .expect("upstream request should serialize");
@@ -888,8 +948,12 @@ mod tests {
             "service_tier": "priority"
         }))
         .expect("request should deserialize");
-        let upstream = serde_json::to_value(payload.to_upstream_request(false).expect("request should normalize"))
-            .expect("upstream request should serialize");
+        let upstream = serde_json::to_value(
+            payload
+                .to_upstream_request(false, &HashMap::default())
+                .expect("request should normalize"),
+        )
+        .expect("upstream request should serialize");
         assert_eq!(upstream["service_tier"], "priority");
 
         let payload: RequestPayload = serde_json::from_value(serde_json::json!({
@@ -898,8 +962,12 @@ mod tests {
             "service_tier": null
         }))
         .expect("null should deserialize as an absent tier");
-        let upstream = serde_json::to_value(payload.to_upstream_request(false).expect("request should normalize"))
-            .expect("upstream request should serialize");
+        let upstream = serde_json::to_value(
+            payload
+                .to_upstream_request(false, &HashMap::default())
+                .expect("request should normalize"),
+        )
+        .expect("upstream request should serialize");
         assert!(upstream.get("service_tier").is_none());
     }
 
@@ -920,8 +988,12 @@ mod tests {
         .expect("request should deserialize");
 
         for stream in [false, true] {
-            let upstream = serde_json::to_value(payload.to_upstream_request(stream).expect("request should normalize"))
-                .expect("upstream request should serialize");
+            let upstream = serde_json::to_value(
+                payload
+                    .to_upstream_request(stream, &HashMap::default())
+                    .expect("request should normalize"),
+            )
+            .expect("upstream request should serialize");
 
             assert_eq!(upstream["reasoning"], reasoning);
             assert_eq!(upstream["stream"], stream);
@@ -956,8 +1028,12 @@ mod tests {
         .expect("request should deserialize");
 
         for stream in [false, true] {
-            let upstream = serde_json::to_value(payload.to_upstream_request(stream).expect("request should normalize"))
-                .expect("upstream request should serialize");
+            let upstream = serde_json::to_value(
+                payload
+                    .to_upstream_request(stream, &HashMap::default())
+                    .expect("request should normalize"),
+            )
+            .expect("upstream request should serialize");
 
             assert_eq!(upstream["text"], text);
             assert_eq!(upstream["stream"], stream);
@@ -982,8 +1058,12 @@ mod tests {
                 "text": text
             }))
             .expect("valid text configuration should deserialize");
-            let upstream = serde_json::to_value(payload.to_upstream_request(false).expect("request should normalize"))
-                .expect("upstream request should serialize");
+            let upstream = serde_json::to_value(
+                payload
+                    .to_upstream_request(false, &HashMap::default())
+                    .expect("request should normalize"),
+            )
+            .expect("upstream request should serialize");
 
             assert_eq!(upstream["text"], text);
         }
@@ -994,8 +1074,12 @@ mod tests {
             "text": null
         }))
         .expect("null text configuration should remain absent");
-        let upstream = serde_json::to_value(payload.to_upstream_request(false).expect("request should normalize"))
-            .expect("upstream request should serialize");
+        let upstream = serde_json::to_value(
+            payload
+                .to_upstream_request(false, &HashMap::default())
+                .expect("request should normalize"),
+        )
+        .expect("upstream request should serialize");
         assert!(upstream.get("text").is_none());
 
         for text in [
@@ -1067,8 +1151,12 @@ mod tests {
                 "reasoning": reasoning
             }))
             .expect("valid reasoning object should deserialize");
-            let upstream = serde_json::to_value(payload.to_upstream_request(false).expect("request should normalize"))
-                .expect("upstream request should serialize");
+            let upstream = serde_json::to_value(
+                payload
+                    .to_upstream_request(false, &HashMap::default())
+                    .expect("request should normalize"),
+            )
+            .expect("upstream request should serialize");
 
             assert_eq!(upstream["reasoning"], reasoning);
         }
@@ -1088,7 +1176,7 @@ mod tests {
                 let upstream = serde_json::to_value(
                     parsed
                         .expect("null should be treated as absent")
-                        .to_upstream_request(false)
+                        .to_upstream_request(false, &HashMap::default())
                         .expect("request should normalize"),
                 )
                 .expect("upstream request should serialize");
@@ -1142,7 +1230,12 @@ mod tests {
         let payload: RequestPayload =
             serde_json::from_value(serde_json::json!({"model": "test", "input": input, "tools": tools}))
                 .expect("request");
-        let upstream = serde_json::to_value(payload.to_upstream_request(false).expect("upstream")).expect("JSON");
+        let upstream = serde_json::to_value(
+            payload
+                .to_upstream_request(false, &HashMap::default())
+                .expect("upstream"),
+        )
+        .expect("JSON");
         upstream["input"]
             .as_array()
             .expect("items")
@@ -1201,7 +1294,9 @@ mod tests {
         assert_eq!(payload.instructions.as_deref(), Some("rules"));
         assert!(matches!(&payload.input, ResponsesInput::Text(text) if text == "hi"));
 
-        let upstream = payload.to_upstream_request(false).expect("valid upstream request");
+        let upstream = payload
+            .to_upstream_request(false, &HashMap::default())
+            .expect("valid upstream request");
         let value = serde_json::to_value(upstream).unwrap();
         assert_eq!(value["instructions"], "rules");
         assert_eq!(value["input"], "hi");
@@ -1216,7 +1311,9 @@ mod tests {
         }))
         .unwrap();
 
-        let upstream = payload.to_upstream_request(false).expect("valid upstream request");
+        let upstream = payload
+            .to_upstream_request(false, &HashMap::default())
+            .expect("valid upstream request");
         let value = serde_json::to_value(upstream).unwrap();
         assert_eq!(value["parallel_tool_calls"], false);
     }
@@ -1232,7 +1329,7 @@ mod tests {
         .unwrap();
 
         let upstream = payload
-            .to_upstream_request(false)
+            .to_upstream_request(false, &HashMap::default())
             .expect("function tools allow parallel calls");
         let value = serde_json::to_value(upstream).unwrap();
         assert_eq!(value["parallel_tool_calls"], true);
@@ -1255,7 +1352,7 @@ mod tests {
 
                 let value = serde_json::to_value(
                     payload
-                        .to_upstream_request(false)
+                        .to_upstream_request(false, &HashMap::default())
                         .expect("mixed tools preserve the client's parallel_tool_calls value"),
                 )
                 .unwrap();
@@ -1275,7 +1372,7 @@ mod tests {
             .unwrap();
 
             let upstream = payload
-                .to_upstream_request(false)
+                .to_upstream_request(false, &HashMap::default())
                 .expect("omitted parallel_tool_calls defaults to false");
             let value = serde_json::to_value(upstream).unwrap();
             assert_eq!(value["parallel_tool_calls"], false);
@@ -1294,7 +1391,7 @@ mod tests {
             .unwrap();
 
             let upstream = payload
-                .to_upstream_request(false)
+                .to_upstream_request(false, &HashMap::default())
                 .expect("built-in tools allow parallel calls");
             let value = serde_json::to_value(upstream).unwrap();
             assert_eq!(value["parallel_tool_calls"], true);
@@ -1313,7 +1410,7 @@ mod tests {
             .unwrap();
 
             let upstream = payload
-                .to_upstream_request(false)
+                .to_upstream_request(false, &HashMap::default())
                 .expect("serial built-in tool request is valid");
             let value = serde_json::to_value(upstream).unwrap();
             assert_eq!(value["parallel_tool_calls"], false);
@@ -1359,7 +1456,9 @@ mod tests {
         };
         assert_eq!(namespace.tools.len(), 2);
 
-        let upstream = payload.to_upstream_request(false).expect("valid upstream request");
+        let upstream = payload
+            .to_upstream_request(false, &HashMap::default())
+            .expect("valid upstream request");
         let value = serde_json::to_value(upstream).unwrap();
         assert_eq!(value["tools"].as_array().expect("upstream tools").len(), 1);
         assert_eq!(value["tools"][0]["name"], "agentic_ns__mcp__shell__run");
@@ -1381,7 +1480,7 @@ mod tests {
         }))
         .unwrap();
 
-        let Err(err) = payload.to_upstream_request(false) else {
+        let Err(err) = payload.to_upstream_request(false, &HashMap::default()) else {
             panic!("colliding namespace member should be rejected");
         };
 
@@ -1414,7 +1513,7 @@ mod tests {
         }))
         .unwrap();
 
-        let request = payload.to_upstream_request(false).unwrap();
+        let request = payload.to_upstream_request(false, &HashMap::default()).unwrap();
         let tools = request.tools.as_ref().expect("mixed upstream tools");
         let UpstreamTool::Function(first) = &tools[0];
         let UpstreamTool::Function(second) = &tools[1];
@@ -1463,7 +1562,7 @@ mod tests {
         .expect("request");
 
         let error = payload
-            .to_upstream_request(false)
+            .to_upstream_request(false, &HashMap::default())
             .expect_err("unsupported grammar must fail closed");
         assert!(error.to_string().contains("cannot preserve constrained decoding"));
     }
@@ -1491,7 +1590,7 @@ mod tests {
         let public_choice = serde_json::to_value(payload.tool_choice.as_ref().unwrap()).unwrap();
         assert_eq!(public_choice["tools"][1]["type"], "custom");
 
-        let upstream = serde_json::to_value(payload.to_upstream_request(false).unwrap()).unwrap();
+        let upstream = serde_json::to_value(payload.to_upstream_request(false, &HashMap::default()).unwrap()).unwrap();
         assert_eq!(upstream["tool_choice"]["type"], "allowed_tools");
         assert_eq!(upstream["tool_choice"]["mode"], "required");
         assert_eq!(upstream["tool_choice"]["tools"][0]["type"], "function");
@@ -1510,7 +1609,7 @@ mod tests {
         .expect("request");
 
         let error = payload
-            .to_upstream_request(false)
+            .to_upstream_request(false, &HashMap::default())
             .expect_err("a custom selector must match a custom declaration");
         assert!(error.to_string().contains("no matching custom tool is declared"));
     }
@@ -1530,7 +1629,7 @@ mod tests {
         .expect("request");
 
         let error = payload
-            .to_upstream_request(false)
+            .to_upstream_request(false, &HashMap::default())
             .expect_err("an allowed custom selector must match a custom declaration");
         assert!(error.to_string().contains("no matching custom tool is declared"));
     }

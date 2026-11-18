@@ -16,6 +16,11 @@ executor and shared persistence layer.
    `file_search` built-in tool. Both routes use the same Rust search service.
 5. The existing tool loop supplies retrieved content to inference and exposes
    `file_search_call` output items, results on request, and file citations.
+6. Model-facing lowering resolves message `input_image` and `input_file` `file_id`
+   references from the same service: images become inline base64 data URLs and text
+   files become `input_text` parts in the request. Canonical history, compaction
+   windows, and multi-agent tree snapshots keep the client's reference, so each
+   request resolves it again.
 
 ## Boundaries
 
@@ -124,7 +129,9 @@ Use deterministic real SQL and fixture files, mocking only inference and embeddi
 HTTP boundaries. Cover persistence across service recreation, deletion, malformed
 input, transactional ingestion failure, Unicode chunk boundaries, semantic search
 independent of lexical overlap, filter isolation, global ordering/limits, empty
-results, embedding failures, and streamed/blocking Responses tool loops. Existing
+results, embedding failures, streamed/blocking Responses tool loops, and
+file-reference resolution from new input and restored history, including image and
+text validation, missing files, and the request body limit. Existing
 cassettes remain unchanged; new captured cassettes require the recorder workflow.
 Run focused tests, the full workspace suite, Clippy, formatting, OpenAPI checks, and
 all pre-commit hooks before publishing a PR.

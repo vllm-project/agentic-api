@@ -1,0 +1,615 @@
+turns:
+- filename: t1
+  request:
+    body_base64: LS1hMTA5ZDc1NTlkOGRmNjJjMmI3ZmVlYzE0ZThiOThmYg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQphc3Npc3RhbnRzDQotLWExMDlkNzU1OWQ4ZGY2MmMyYjdmZWVjMTRlOGI5OGZiDQpDb250ZW50LURpc3Bvc2l0aW9uOiBmb3JtLWRhdGE7IG5hbWU9ImZpbGUiOyBmaWxlbmFtZT0ibm90ZXMudHh0Ig0KQ29udGVudC1UeXBlOiB0ZXh0L3BsYWluDQoNCkRlcGxveW1lbnQgY2hlY2tsaXN0Ci0gUmVnaW9uOiBldS13ZXN0Ci0gUmVsZWFzZSBjb2Rld29yZDogUEFQQVlBLTcKLSBPd25lcjogcGxhdGZvcm0gdGVhbQoNCi0tYTEwOWQ3NTU5ZDhkZjYyYzJiN2ZlZWMxNGU4Yjk4ZmItLQ0K
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: multipart/form-data; boundary=a109d7559d8df62c2b7feec14e8b98fb
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      bytes: 91
+      created_at: 1794805734
+      expires_at: null
+      filename: notes.txt
+      id: file-WG4PUMzJ1sgksyLdP12S6m
+      object: file
+      purpose: assistants
+      status: processed
+      status_details: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body_base64: LS0yZGIwODAxNGMyYTNjZGY3OTMzZTIzZTc1ZmI0NWYzNA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tMmRiMDgwMTRjMmEzY2RmNzkzM2UyM2U3NWZiNDVmMzQNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJub3Rlcy50eHQiDQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW4NCg0KRGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg0KLS0yZGIwODAxNGMyYTNjZGY3OTMzZTIzZTc1ZmI0NWYzNC0tDQo=
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: multipart/form-data; boundary=2db08014c2a3cdf7933e23e75fb45f34
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      bytes: 91
+      created_at: 1794805735
+      expires_at: null
+      filename: notes.txt
+      id: file-XXdFGpRfmMYkucdyGxjkcK
+      object: file
+      purpose: user_data
+      status: processed
+      status_details: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body_base64: LS0yYTI3ODcwYjg2MTYzMzIyMjhlMzM4OWRhODAzN2ZiMg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp2aXNpb24NCi0tMmEyNzg3MGI4NjE2MzMyMjI4ZTMzODlkYTgwMzdmYjINCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJjb2xvcnMucG5nIg0KQ29udGVudC1UeXBlOiBpbWFnZS9wbmcNCg0KiVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PsQkAAAzDsPz/dHpCp2wCzwalybTxvgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+Dq47PDiz8p6GQAAAABJRU5ErkJggg0KLS0yYTI3ODcwYjg2MTYzMzIyMjhlMzM4OWRhODAzN2ZiMi0tDQo=
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: multipart/form-data; boundary=2a27870b8616332228e3389da8037fb2
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      bytes: 136
+      created_at: 1794805736
+      expires_at: null
+      filename: colors.png
+      id: file-HLxCyzuZTJChaDgg9uZxQC
+      object: file
+      purpose: vision
+      status: processed
+      status_details: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body_base64: LS1iYzI2OWQzNmZkZDY3NjZmZDI0NTE2MDA2NDRlYmZjYw0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tYmMyNjlkMzZmZGQ2NzY2ZmQyNDUxNjAwNjQ0ZWJmY2MNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJjb2xvcnMucG5nIg0KQ29udGVudC1UeXBlOiBpbWFnZS9wbmcNCg0KiVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PsQkAAAzDsPz/dHpCp2wCzwalybTxvgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+Dq47PDiz8p6GQAAAABJRU5ErkJggg0KLS1iYzI2OWQzNmZkZDY3NjZmZDI0NTE2MDA2NDRlYmZjYy0tDQo=
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: multipart/form-data; boundary=bc269d36fdd6766fd2451600644ebfcc
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      bytes: 136
+      created_at: 1794805736
+      expires_at: null
+      filename: colors.png
+      id: file-Gnr75RjbC4sD8APk5Cdan4
+      object: file
+      purpose: user_data
+      status: processed
+      status_details: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body_base64: LS0xNjZkNjllYWQ0MWIxNGFkMWFiZjc0YzllYjMwZTgxMA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp2aXNpb24NCi0tMTY2ZDY5ZWFkNDFiMTRhZDFhYmY3NGM5ZWIzMGU4MTANCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJub3Rlcy50eHQiDQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW4NCg0KRGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg0KLS0xNjZkNjllYWQ0MWIxNGFkMWFiZjc0YzllYjMwZTgxMC0tDQo=
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: multipart/form-data; boundary=166d69ead41b14ad1abf74c9eb30e810
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      detail:
+        code: null
+        message: 'Invalid file format text/plain. Supported formats: "gif", "jpeg",
+          "jpg", "png", "webp"'
+      error:
+        code: null
+        message: 'Invalid file format text/plain. Supported formats: "gif", "jpeg",
+          "jpg", "png", "webp"'
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t6
+  request:
+    body_base64: LS04NzQ1MjA2M2FmMThmZjYyMDhhY2Q3ZWM3ZjhmY2MwNg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tODc0NTIwNjNhZjE4ZmY2MjA4YWNkN2VjN2Y4ZmNjMDYNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJub3Rlcy5wZGYiDQpDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL3BkZg0KDQolUERGLTEuNAoxIDAgb2JqCjw8IC9UeXBlIC9DYXRhbG9nIC9QYWdlcyAyIDAgUiA+PgplbmRvYmoKMiAwIG9iago8PCAvVHlwZSAvUGFnZXMgL0tpZHMgWzMgMCBSXSAvQ291bnQgMSA+PgplbmRvYmoKMyAwIG9iago8PCAvVHlwZSAvUGFnZSAvUGFyZW50IDIgMCBSIC9NZWRpYUJveCBbMCAwIDYxMiA3OTJdIC9SZXNvdXJjZXMgPDwgL0ZvbnQgPDwgL0YxIDUgMCBSID4+ID4+IC9Db250ZW50cyA0IDAgUiA+PgplbmRvYmoKNCAwIG9iago8PCAvTGVuZ3RoIDEzOCA+PgpzdHJlYW0KQlQKL0YxIDE0IFRmCjcyIDcyMCBUZAoxOCBUTAooRGVwbG95bWVudCBjaGVja2xpc3QpICcKKC0gUmVnaW9uOiBldS13ZXN0KSAnCigtIFJlbGVhc2UgY29kZXdvcmQ6IFBBUEFZQS03KSAnCigtIE93bmVyOiBwbGF0Zm9ybSB0ZWFtKSAnCkVUCmVuZHN0cmVhbQplbmRvYmoKNSAwIG9iago8PCAvVHlwZSAvRm9udCAvU3VidHlwZSAvVHlwZTEgL0Jhc2VGb250IC9IZWx2ZXRpY2EgPj4KZW5kb2JqCnhyZWYKMCA2CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAwMDU4IDAwMDAwIG4gCjAwMDAwMDAxMTUgMDAwMDAgbiAKMDAwMDAwMDI0MSAwMDAwMCBuIAowMDAwMDAwNDMwIDAwMDAwIG4gCnRyYWlsZXIKPDwgL1NpemUgNiAvUm9vdCAxIDAgUiA+PgpzdGFydHhyZWYKNTAwCiUlRU9GCg0KLS04NzQ1MjA2M2FmMThmZjYyMDhhY2Q3ZWM3ZjhmY2MwNi0tDQo=
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: multipart/form-data; boundary=87452063af18ff6208acd7ec7f8fcc06
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      bytes: 683
+      created_at: 1794805737
+      expires_at: null
+      filename: notes.pdf
+      id: file-HjZBPmuH1DSwNZ3UJ6wjxp
+      object: file
+      purpose: user_data
+      status: processed
+      status_details: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body_base64: LS03YTYyOWY4NTk5NDA0N2RmYWNlMWQxOGRlZThhNzM3NQ0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tN2E2MjlmODU5OTQwNDdkZmFjZTFkMThkZWU4YTczNzUNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJlbXB0eS50eHQiDQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW4NCg0KDQotLTdhNjI5Zjg1OTk0MDQ3ZGZhY2UxZDE4ZGVlOGE3Mzc1LS0NCg==
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: multipart/form-data; boundary=7a629f85994047dface1d18dee8a7375
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      detail:
+        code: null
+        message: File is empty.
+      error:
+        code: null
+        message: File is empty.
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t8
+  request:
+    body_base64: LS04NzA3MGZiZDFjODExMGI5Yjk1ZjY0OTY3YjFjNjhiOA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tODcwNzBmYmQxYzgxMTBiOWI5NWY2NDk2N2IxYzY4YjgNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJkYXRhLmJpbiINCkNvbnRlbnQtVHlwZTogYXBwbGljYXRpb24vb2N0ZXQtc3RyZWFtDQoNCgABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj9AQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpbXF1eX2BhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ent8fX5/gIGCg4SFhoeIiYqLjI2Oj5CRkpOUlZaXmJmam5ydnp+goaKjpKWmp6ipqqusra6vsLGys7S1tre4ubq7vL2+v8DBwsPExcbHyMnKy8zNzs/Q0dLT1NXW19jZ2tvc3d7f4OHi4+Tl5ufo6err7O3u7/Dx8vP09fb3+Pn6+/z9/v8NCi0tODcwNzBmYmQxYzgxMTBiOWI5NWY2NDk2N2IxYzY4YjgtLQ0K
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: multipart/form-data; boundary=87070fbd1c8110b9b95f64967b1c68b8
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      bytes: 256
+      created_at: 1794805738
+      expires_at: null
+      filename: data.bin
+      id: file-135QCtiE4Uuyc4bpmZnBxG
+      object: file
+      purpose: user_data
+      status: processed
+      status_details: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/files
+    query_params:
+      limit: '2'
+  response:
+    body:
+      data:
+      - bytes: 256
+        created_at: 1794805738
+        expires_at: null
+        filename: data.bin
+        id: file-135QCtiE4Uuyc4bpmZnBxG
+        object: file
+        purpose: user_data
+        status: processed
+        status_details: null
+      - bytes: 683
+        created_at: 1794805737
+        expires_at: null
+        filename: notes.pdf
+        id: file-HjZBPmuH1DSwNZ3UJ6wjxp
+        object: file
+        purpose: user_data
+        status: processed
+        status_details: null
+      first_id: file-135QCtiE4Uuyc4bpmZnBxG
+      has_more: true
+      last_id: file-HjZBPmuH1DSwNZ3UJ6wjxp
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t10
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/files
+    query_params:
+      after: file-HjZBPmuH1DSwNZ3UJ6wjxp
+      limit: '1'
+  response:
+    body:
+      data:
+      - bytes: 136
+        created_at: 1794805736
+        expires_at: null
+        filename: colors.png
+        id: file-Gnr75RjbC4sD8APk5Cdan4
+        object: file
+        purpose: user_data
+        status: processed
+        status_details: null
+      first_id: file-Gnr75RjbC4sD8APk5Cdan4
+      has_more: true
+      last_id: file-Gnr75RjbC4sD8APk5Cdan4
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t11
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/files
+    query_params:
+      limit: '1'
+      purpose: vision
+  response:
+    body:
+      data:
+      - bytes: 136
+        created_at: 1794805736
+        expires_at: null
+        filename: colors.png
+        id: file-HLxCyzuZTJChaDgg9uZxQC
+        object: file
+        purpose: vision
+        status: processed
+        status_details: null
+      first_id: file-HLxCyzuZTJChaDgg9uZxQC
+      has_more: false
+      last_id: file-HLxCyzuZTJChaDgg9uZxQC
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t12
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/files
+    query_params:
+      limit: '0'
+  response:
+    body:
+      detail:
+        code: null
+        message: "0 is less than the minimum of 1\n\nFailed validating 'minimum' in\
+          \ schema:\n    {'type': 'integer', 'example': 20, 'minimum': 1, 'maximum':\
+          \ 10000}\n\nOn instance:\n    0"
+      error:
+        code: null
+        message: "0 is less than the minimum of 1\n\nFailed validating 'minimum' in\
+          \ schema:\n    {'type': 'integer', 'example': 20, 'minimum': 1, 'maximum':\
+          \ 10000}\n\nOn instance:\n    0"
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t13
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/files
+    query_params:
+      order: sideways
+  response:
+    body:
+      detail:
+        code: null
+        message: "'sideways' is not one of ['asc', 'desc']\n\nFailed validating 'enum'\
+          \ in schema:\n    {'type': 'string', 'enum': ['asc', 'desc']}\n\nOn instance:\n\
+          \    'sideways'"
+      error:
+        code: null
+        message: "'sideways' is not one of ['asc', 'desc']\n\nFailed validating 'enum'\
+          \ in schema:\n    {'type': 'string', 'enum': ['asc', 'desc']}\n\nOn instance:\n\
+          \    'sideways'"
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t14
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/files
+    query_params:
+      after: file-00000000-0000-7000-8000-000000000000
+      limit: '1'
+  response:
+    body:
+      detail:
+        code: null
+        message: 'No such File object: file-00000000-0000-7000-8000-000000000000'
+      error:
+        code: null
+        message: 'No such File object: file-00000000-0000-7000-8000-000000000000'
+        param: after
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t15
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/files/file-WG4PUMzJ1sgksyLdP12S6m
+    query_params: {}
+  response:
+    body:
+      bytes: 91
+      created_at: 1794805734
+      expires_at: null
+      filename: notes.txt
+      id: file-WG4PUMzJ1sgksyLdP12S6m
+      object: file
+      purpose: assistants
+      status: processed
+      status_details: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t16
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/files/file-WG4PUMzJ1sgksyLdP12S6m/content
+    query_params: {}
+  response:
+    body:
+      detail:
+        code: null
+        message: 'Not allowed to download files of purpose: assistants'
+      error:
+        code: null
+        message: 'Not allowed to download files of purpose: assistants'
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t17
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/files/file-WG4PUMzJ1sgksyLdP12S6m
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: file-WG4PUMzJ1sgksyLdP12S6m
+      object: file
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t18
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/files/file-WG4PUMzJ1sgksyLdP12S6m
+    query_params: {}
+  response:
+    body:
+      detail:
+        code: null
+        message: 'No such File object: file-WG4PUMzJ1sgksyLdP12S6m'
+      error:
+        code: null
+        message: 'No such File object: file-WG4PUMzJ1sgksyLdP12S6m'
+        param: id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t19
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/files/file-WG4PUMzJ1sgksyLdP12S6m
+    query_params: {}
+  response:
+    body:
+      detail:
+        code: null
+        message: 'No such File object: file-WG4PUMzJ1sgksyLdP12S6m'
+      error:
+        code: null
+        message: 'No such File object: file-WG4PUMzJ1sgksyLdP12S6m'
+        param: id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t20
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/files/file-WG4PUMzJ1sgksyLdP12S6m/content
+    query_params: {}
+  response:
+    body:
+      detail:
+        code: null
+        message: 'No such File object: file-WG4PUMzJ1sgksyLdP12S6m'
+      error:
+        code: null
+        message: 'No such File object: file-WG4PUMzJ1sgksyLdP12S6m'
+        param: id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t21
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/files/file-XXdFGpRfmMYkucdyGxjkcK
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: file-XXdFGpRfmMYkucdyGxjkcK
+      object: file
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t22
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/files/file-HLxCyzuZTJChaDgg9uZxQC
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: file-HLxCyzuZTJChaDgg9uZxQC
+      object: file
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t23
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/files/file-Gnr75RjbC4sD8APk5Cdan4
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: file-Gnr75RjbC4sD8APk5Cdan4
+      object: file
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t24
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/files/file-HjZBPmuH1DSwNZ3UJ6wjxp
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: file-HjZBPmuH1DSwNZ3UJ6wjxp
+      object: file
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t25
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/files/file-135QCtiE4Uuyc4bpmZnBxG
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: file-135QCtiE4Uuyc4bpmZnBxG
+      object: file
+    headers:
+      content-type: application/json
+    status_code: 200

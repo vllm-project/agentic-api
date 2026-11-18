@@ -11,6 +11,9 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+/// Upload purposes the Files API accepts, in the order `OpenAI` reports them.
+pub const FILE_PURPOSES: [&str; 6] = ["fine-tune", "assistants", "batch", "user_data", "vision", "evals"];
+
 /// Failures retain diagnostic sources without returning provider or database details to callers.
 #[derive(Debug, thiserror::Error)]
 pub enum FileSearchError {
@@ -18,6 +21,15 @@ pub enum FileSearchError {
     InvalidRequest(String),
     #[error("{0}")]
     NotFound(String),
+    /// A Files API lookup that matches no stored file, as the recorded response reports it.
+    #[error("No such File object: {id}")]
+    FileNotFound { id: String, param: &'static str },
+    /// A Files API request the recorded responses reject: `invalid_request_error`, `code: null`.
+    #[error("{message}")]
+    FileRejected {
+        message: String,
+        param: Option<&'static str>,
+    },
     #[error("{0}")]
     Conflict(String),
     #[error("{0}")]
@@ -55,10 +67,10 @@ impl FileSearchError {
     #[must_use]
     pub const fn status_code(&self) -> u16 {
         match self {
-            Self::InvalidRequest(_) => 400,
+            Self::InvalidRequest(_) | Self::FileRejected { .. } => 400,
             #[cfg(feature = "file-search-pdf")]
             Self::PdfParse(_) => 400,
-            Self::NotFound(_) => 404,
+            Self::NotFound(_) | Self::FileNotFound { .. } => 404,
             Self::Conflict(_) => 409,
             Self::Unavailable(_) | Self::FileStorage { .. } | Self::BlobStore(_) => 503,
             Self::Provider(_) | Self::ProviderProtocol | Self::ProviderDecode(_) => 502,
@@ -77,6 +89,8 @@ impl FileSearchError {
             | Self::NotFound(message)
             | Self::Conflict(message)
             | Self::Unavailable(message) => message.clone(),
+            Self::FileNotFound { id, .. } => format!("No such File object: {id}"),
+            Self::FileRejected { message, .. } => message.clone(),
             Self::Provider(_) | Self::ProviderProtocol | Self::ProviderDecode(_) => {
                 "Embedding service request failed".into()
             }

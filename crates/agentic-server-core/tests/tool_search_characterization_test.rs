@@ -691,7 +691,7 @@ fn lowered_fixture_tools(tools: &Value, input: &Value) -> Value {
         .prepare_inference_request(&mut request)
         .expect("fixture should prepare private inference state");
     let upstream = request
-        .to_upstream_request(false)
+        .to_upstream_request(false, &HashMap::default())
         .expect("fixture should lower into an upstream request");
     serde_json::to_value(upstream).expect("upstream fixture should serialize")["tools"].clone()
 }

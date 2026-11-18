@@ -221,6 +221,60 @@ impl FileBlobStore for PausedBlobs {
 }
 
 #[tokio::test]
+async fn vision_upload_is_readable_through_the_files_api() {
+    let service = service().await;
+    let file = service
+        .upload_file("plot.png", "image/png; charset=binary", "vision", b"png".to_vec())
+        .await
+        .unwrap();
+    assert_eq!(file.filename, "plot.png");
+    assert_eq!(file.purpose, "vision");
+    assert_eq!(service.file_content(&file.id).await.unwrap(), b"png");
+    assert_eq!(
+        service
+            .file_content("file-01a15d85-a1db-76f3-918e-b31d6819a316")
+            .await
+            .unwrap_err()
+            .status_code(),
+        404
+    );
+}
+
+#[tokio::test]
+async fn unknown_upload_purpose_is_rejected() {
+    let service = service().await;
+    let error = service
+        .upload_file("notes.txt", "text/plain", "bogus", b"text".to_vec())
+        .await
+        .unwrap_err();
+    assert_eq!(error.status_code(), 400);
+    assert_eq!(
+        error.public_message(),
+        "'bogus' is not one of ['fine-tune', 'assistants', 'batch', 'user_data', 'vision', 'evals'] - 'purpose'"
+    );
+}
+
+#[tokio::test]
+async fn vision_upload_rejects_non_image_content_and_empty_files() {
+    let service = service().await;
+    let error = service
+        .upload_file("notes.txt", "text/plain", "vision", b"text".to_vec())
+        .await
+        .unwrap_err();
+    assert_eq!(error.status_code(), 400);
+    assert_eq!(
+        error.public_message(),
+        "Invalid file format text/plain. Supported formats: \"gif\", \"jpeg\", \"jpg\", \"png\", \"webp\""
+    );
+    let error = service
+        .upload_file("empty.txt", "text/plain", "user_data", Vec::new())
+        .await
+        .unwrap_err();
+    assert_eq!(error.status_code(), 400);
+    assert_eq!(error.public_message(), "File is empty.");
+}
+
+#[tokio::test]
 async fn injected_blob_store_shares_the_sql_search_service() {
     let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
     let blobs = Arc::new(MemoryBlobs::default());
@@ -650,7 +704,7 @@ async fn local_files_accept_binary_uploads_but_validate_ingestion() {
 }
 
 #[tokio::test]
-async fn local_files_reject_malformed_keys_and_missing_blobs_are_storage_failures() {
+async fn local_files_report_malformed_keys_as_missing_and_missing_blobs_as_storage_failures() {
     let files = tempfile::tempdir().unwrap();
     let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
     let service = FileSearchService::new(pool, Arc::new(reqwest::Client::new()), file_config(&files)).unwrap();
@@ -661,8 +715,8 @@ async fn local_files_reject_malformed_keys_and_missing_blobs_are_storage_failure
         "file-invalid",
         "file-00000000-0000-0000-0000-000000000000/child",
     ] {
-        assert_eq!(service.file_content(key).await.unwrap_err().status_code(), 400);
-        assert_eq!(service.delete_file(key).await.unwrap_err().status_code(), 400);
+        assert_eq!(service.file_content(key).await.unwrap_err().status_code(), 404);
+        assert_eq!(service.delete_file(key).await.unwrap_err().status_code(), 404);
     }
     let file = service
         .upload_file("lost.txt", "text/plain", "assistants", b"lost".to_vec())

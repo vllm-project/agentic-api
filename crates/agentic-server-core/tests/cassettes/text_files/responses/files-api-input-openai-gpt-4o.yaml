@@ -1,0 +1,2539 @@
+turns:
+- filename: t1
+  request:
+    body_base64: LS01YjFlMGY1OGQ0ODE4MTFjMTYxZGFkY2RlNDZhZjA3ZA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tNWIxZTBmNThkNDgxODExYzE2MWRhZGNkZTQ2YWYwN2QNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJub3Rlcy50eHQiDQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW4NCg0KRGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg0KLS01YjFlMGY1OGQ0ODE4MTFjMTYxZGFkY2RlNDZhZjA3ZC0tDQo=
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: multipart/form-data; boundary=5b1e0f58d481811c161dadcde46af07d
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      bytes: 91
+      created_at: 1794807024
+      expires_at: null
+      filename: notes.txt
+      id: file-SKg8eTXho6oEueE1yHkgYo
+      object: file
+      purpose: user_data
+      status: processed
+      status_details: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body_base64: LS1hM2ExMTYwNjAxYjFmM2QzMmM0OTI4MWEyY2M4ZWFlYg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tYTNhMTE2MDYwMWIxZjNkMzJjNDkyODFhMmNjOGVhZWINCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJub3Rlcy5wZGYiDQpDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL3BkZg0KDQolUERGLTEuNAoxIDAgb2JqCjw8IC9UeXBlIC9DYXRhbG9nIC9QYWdlcyAyIDAgUiA+PgplbmRvYmoKMiAwIG9iago8PCAvVHlwZSAvUGFnZXMgL0tpZHMgWzMgMCBSXSAvQ291bnQgMSA+PgplbmRvYmoKMyAwIG9iago8PCAvVHlwZSAvUGFnZSAvUGFyZW50IDIgMCBSIC9NZWRpYUJveCBbMCAwIDYxMiA3OTJdIC9SZXNvdXJjZXMgPDwgL0ZvbnQgPDwgL0YxIDUgMCBSID4+ID4+IC9Db250ZW50cyA0IDAgUiA+PgplbmRvYmoKNCAwIG9iago8PCAvTGVuZ3RoIDEzOCA+PgpzdHJlYW0KQlQKL0YxIDE0IFRmCjcyIDcyMCBUZAoxOCBUTAooRGVwbG95bWVudCBjaGVja2xpc3QpICcKKC0gUmVnaW9uOiBldS13ZXN0KSAnCigtIFJlbGVhc2UgY29kZXdvcmQ6IFBBUEFZQS03KSAnCigtIE93bmVyOiBwbGF0Zm9ybSB0ZWFtKSAnCkVUCmVuZHN0cmVhbQplbmRvYmoKNSAwIG9iago8PCAvVHlwZSAvRm9udCAvU3VidHlwZSAvVHlwZTEgL0Jhc2VGb250IC9IZWx2ZXRpY2EgPj4KZW5kb2JqCnhyZWYKMCA2CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAwMDU4IDAwMDAwIG4gCjAwMDAwMDAxMTUgMDAwMDAgbiAKMDAwMDAwMDI0MSAwMDAwMCBuIAowMDAwMDAwNDMwIDAwMDAwIG4gCnRyYWlsZXIKPDwgL1NpemUgNiAvUm9vdCAxIDAgUiA+PgpzdGFydHhyZWYKNTAwCiUlRU9GCg0KLS1hM2ExMTYwNjAxYjFmM2QzMmM0OTI4MWEyY2M4ZWFlYi0tDQo=
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: multipart/form-data; boundary=a3a1160601b1f3d32c49281a2cc8eaeb
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      bytes: 683
+      created_at: 1794807025
+      expires_at: null
+      filename: notes.pdf
+      id: file-MPLTXjWk3NLN9dJe1RuAeY
+      object: file
+      purpose: user_data
+      status: processed
+      status_details: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body_base64: LS0zOTQwYzkxYjNkNTJjOWFjZjJhN2RhYzE5ZjM3NjZmNQ0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp2aXNpb24NCi0tMzk0MGM5MWIzZDUyYzlhY2YyYTdkYWMxOWYzNzY2ZjUNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJjb2xvcnMucG5nIg0KQ29udGVudC1UeXBlOiBpbWFnZS9wbmcNCg0KiVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PsQkAAAzDsPz/dHpCp2wCzwalybTxvgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+Dq47PDiz8p6GQAAAABJRU5ErkJggg0KLS0zOTQwYzkxYjNkNTJjOWFjZjJhN2RhYzE5ZjM3NjZmNS0tDQo=
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: multipart/form-data; boundary=3940c91b3d52c9acf2a7dac19f3766f5
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      bytes: 136
+      created_at: 1794807026
+      expires_at: null
+      filename: colors.png
+      id: file-NpoGxHKeUWMgTkxBD3rSSS
+      object: file
+      purpose: vision
+      status: processed
+      status_details: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body:
+      input:
+      - content:
+        - text: What is the release codeword in the attached file? Reply with only
+            the codeword.
+          type: input_text
+        - file_id: file-MPLTXjWk3NLN9dJe1RuAeY
+          type: input_file
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794807029
+      created_at: 1794807028
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0442d3ad2aa3d82d006afa94f325ac87d284ae1cc6b7822366
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_0442d3ad2aa3d82d006afa94f5bac887d2855ae86600ddf6d5
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 67
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 6
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 73
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      input:
+      - content:
+        - text: What is the release codeword in the attached file? Reply with only
+            the codeword.
+          type: input_text
+        - file_data: data:application/pdf;base64,JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIgNzkyXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA1IDAgUiA+PiA+PiAvQ29udGVudHMgNCAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCAxMzggPj4Kc3RyZWFtCkJUCi9GMSAxNCBUZgo3MiA3MjAgVGQKMTggVEwKKERlcGxveW1lbnQgY2hlY2tsaXN0KSAnCigtIFJlZ2lvbjogZXUtd2VzdCkgJwooLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNykgJwooLSBPd25lcjogcGxhdGZvcm0gdGVhbSkgJwpFVAplbmRzdHJlYW0KZW5kb2JqCjUgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1OCAwMDAwMCBuIAowMDAwMDAwMTE1IDAwMDAwIG4gCjAwMDAwMDAyNDEgMDAwMDAgbiAKMDAwMDAwMDQzMCAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXplIDYgL1Jvb3QgMSAwIFIgPj4Kc3RhcnR4cmVmCjUwMAolJUVPRgo=
+          filename: notes.pdf
+          type: input_file
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794807031
+      created_at: 1794807030
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01d146b3989a3f0c006afa94f68b4887d28fc52e6a1ffb4f35
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_01d146b3989a3f0c006afa94f7dfa487d2b178134df79fc307
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 67
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 6
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 73
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body:
+      input:
+      - content:
+        - text: What is the release codeword in the attached file? Reply with only
+            the codeword.
+          type: input_text
+        - file_url: https://raw.githubusercontent.com/vllm-project/agentic-api/main/crates/agentic-server-core/tests/cassettes/text_files/inputs/notes.txt
+          type: input_file
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794807033
+      created_at: 1794807033
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0ce0223952f02868006afa94f8c85c87d2a712f2daa9c76462
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_0ce0223952f02868006afa94f9a24087d28c6c6f515a426ee2
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 54
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 6
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 60
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body:
+      input:
+      - content:
+        - text: What is the release codeword in the attached file? Reply with only
+            the codeword.
+          type: input_text
+        - file_id: file-SKg8eTXho6oEueE1yHkgYo
+          filename: renamed.txt
+          type: input_file
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: mutually_exclusive_parameters
+        message: 'Mutually exclusive parameters: ''input[0].content[1]''. Ensure you
+          are only providing one of: ''file_id'' or ''filename''.'
+        param: input[0].content[1]
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t8
+  request:
+    body:
+      input:
+      - content:
+        - text: What is the release codeword in the attached file? Reply with only
+            the codeword.
+          type: input_text
+        - file_data: data:text/plain;base64,RGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg==
+          file_id: file-SKg8eTXho6oEueE1yHkgYo
+          filename: notes.txt
+          type: input_file
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: mutually_exclusive_parameters
+        message: 'Mutually exclusive parameters: ''input[0].content[1]''. Ensure you
+          are only providing one of: ''file_id'' or ''file_data''.'
+        param: input[0].content[1]
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t9
+  request:
+    body:
+      input:
+      - content:
+        - text: Which two colors are in the image? Reply with only the two color names.
+          type: input_text
+        - file_id: file-NpoGxHKeUWMgTkxBD3rSSS
+          type: input_file
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: 'Invalid input: Expected context stuffing file type to be a supported
+          format: .art, .bat, .brf, .c, .cls, .css, .csv, .diff, .doc, .docx, .dot,
+          .eml, .epub, .es, .h, .hs, .htm, .html, .hwp, .hwpx, .ics, .ifb, .java,
+          .js, .json, .keynote, .ksh, .ltx, .mail, .markdown, .md, .mht, .mhtml, .mjs,
+          .msg, .nws, .odp, .ods, .odt, .otp, .ots, .pages, .patch, .pdf, .pl, .pm,
+          .pot, .potm, .potx, .ppa, .pps, .ppsm, .ppsx, .ppt, .pptm, .pptx, .pwz,
+          .py, .rst, .rtf, .scala, .sh, .shtml, .srt, .sty, .svg, .svgz, .tex, .text,
+          .txt, .tsv, .vcf, .vtt, .wiz, .xla, .xlb, .xlc, .xlm, .xls, .xlsx, .xlt,
+          .xlw, .xml, .yaml, .yml but got .png.'
+        param: input
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t10
+  request:
+    body:
+      input:
+      - content:
+        - text: Which two colors are in the image? Reply with only the two color names.
+          type: input_text
+        - file_id: file-MPLTXjWk3NLN9dJe1RuAeY
+          type: input_image
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: 'Invalid input: Expected image type to be a supported format: .jpeg,
+          .jpg, .png, .gif, .webp but got .pdf.'
+        param: input
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t11
+  request:
+    body:
+      input:
+      - content:
+        - text: Which two colors are in the image? Reply with only the two color names.
+          type: input_text
+        - file_id: file-NpoGxHKeUWMgTkxBD3rSSS
+          image_url: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PsQkAAAzDsPz/dHpCp2wCzwalybTxvgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+Dq47PDiz8p6GQAAAABJRU5ErkJggg==
+          type: input_image
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: mutually_exclusive_parameters
+        message: 'Mutually exclusive parameters: ''input[0].content[1]''. Ensure you
+          are only providing one of: ''file_id'' or ''image_url''.'
+        param: input[0].content[1]
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t12
+  request:
+    body:
+      input:
+      - content:
+        - text: Which two colors are in the image? Reply with only the two color names.
+          type: input_text
+        - detail: low
+          file_id: file-NpoGxHKeUWMgTkxBD3rSSS
+          type: input_image
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794807040
+      created_at: 1794807039
+      error: null
+      frequency_penalty: 0.0
+      id: resp_06ec7c855e7cc497006afa94fe49b887d2bd22ef0c1b9f9964
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: Red, Blue
+          type: output_text
+        id: msg_06ec7c855e7cc497006afa95004c6087d28b0a99ab716aadf6
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 108
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 4
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 112
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t13
+  request:
+    body:
+      input:
+      - content:
+        - text: What is the release codeword in the attached file? Reply with only
+            the codeword.
+          type: input_text
+        - file_id: file-00000000-0000-7000-8000-000000000000
+          type: input_file
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Files [file-00000000-0000-7000-8000-000000000000] were not found
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t14
+  request:
+    body:
+      input:
+      - content:
+        - text: What is the release codeword in the attached file? Reply with only
+            the codeword.
+          type: input_text
+        - file_id: file-SKg8eTXho6oEueE1yHkgYo
+          type: input_file
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: gpt-4o
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794807043
+      created_at: 1794807043
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0ccc264f3b2c57ae016afa950204dc87d29f3da6865a931fb1
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_0ccc264f3b2c57ae016afa9503b99887d298fd3d9736b3ae40
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 54
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 6
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 60
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t15
+  request:
+    body:
+      input:
+      - content:
+        - text: What is the release codeword in the attached file? Reply with only
+            the codeword.
+          type: input_text
+        - file_id: file-SKg8eTXho6oEueE1yHkgYo
+          type: input_file
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: true
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_04cc64a4a5c7e455006afa95042ffc87d2ab0cdfa5f30c6c04","object":"response","created_at":1794807045,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"image":{"context_compression":"disabled"},"incomplete_details":null,"input_transformations":[],"instructions":null,"max_output_tokens":64,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_04cc64a4a5c7e455006afa95042ffc87d2ab0cdfa5f30c6c04","object":"response","created_at":1794807045,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"image":{"context_compression":"disabled"},"incomplete_details":null,"input_transformations":[],"instructions":null,"max_output_tokens":64,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"msg_04cc64a4a5c7e455006afa9505d46487d29df6f99828fc7f21","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_04cc64a4a5c7e455006afa9505d46487d29df6f99828fc7f21","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"P","item_id":"msg_04cc64a4a5c7e455006afa9505d46487d29df6f99828fc7f21","logprobs":[],"obfuscation":"Mnqr1OMin0COZ7s","output_index":0,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"AP","item_id":"msg_04cc64a4a5c7e455006afa9505d46487d29df6f99828fc7f21","logprobs":[],"obfuscation":"kWOEmvW8K8qg05","output_index":0,"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"AYA","item_id":"msg_04cc64a4a5c7e455006afa9505d46487d29df6f99828fc7f21","logprobs":[],"obfuscation":"XiQwFhihbE9VS","output_index":0,"sequence_number":6}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"-","item_id":"msg_04cc64a4a5c7e455006afa9505d46487d29df6f99828fc7f21","logprobs":[],"obfuscation":"1eZF6S6BXs7V2XM","output_index":0,"sequence_number":7}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"7","item_id":"msg_04cc64a4a5c7e455006afa9505d46487d29df6f99828fc7f21","logprobs":[],"obfuscation":"VW3wZy49Fdw1Coa","output_index":0,"sequence_number":8}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_04cc64a4a5c7e455006afa9505d46487d29df6f99828fc7f21","logprobs":[],"output_index":0,"sequence_number":9,"text":"PAPAYA-7"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_04cc64a4a5c7e455006afa9505d46487d29df6f99828fc7f21","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"PAPAYA-7"},"sequence_number":10}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"msg_04cc64a4a5c7e455006afa9505d46487d29df6f99828fc7f21","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"PAPAYA-7"}],"role":"assistant"},"output_index":0,"sequence_number":11}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_04cc64a4a5c7e455006afa95042ffc87d2ab0cdfa5f30c6c04","object":"response","created_at":1794807045,"status":"completed","access_programs":null,"background":false,"completed_at":1794807045,"error":null,"frequency_penalty":0.0,"image":{"context_compression":"disabled"},"incomplete_details":null,"input_transformations":[],"instructions":null,"max_output_tokens":64,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[{"id":"msg_04cc64a4a5c7e455006afa9505d46487d29df6f99828fc7f21","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"PAPAYA-7"}],"role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":54,"input_tokens_details":{"cache_write_tokens":0,"cache_write_tokens_details":{"ttl_12h_tokens":0,"ttl_30m_tokens":0},"cached_tokens":0},"output_tokens":6,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":60},"user":null,"metadata":{}},"sequence_number":12}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t16
+  request:
+    body:
+      input:
+      - content:
+        - text: What is the release codeword in the attached file? Reply with only
+            the codeword.
+          type: input_text
+        - file_id: file-00000000-0000-7000-8000-000000000000
+          type: input_file
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: true
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Files [file-00000000-0000-7000-8000-000000000000] were not found
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t17
+  request:
+    body:
+      input:
+      - content:
+        - file_id: file-SKg8eTXho6oEueE1yHkgYo
+          type: input_file
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: null
+      created_at: 1794807048
+      error: null
+      frequency_penalty: 0.0
+      id: resp_00ba2625597b2973006afa950795c487d28b5a7acb4a339b10
+      image:
+        context_compression: disabled
+      incomplete_details:
+        reason: max_output_tokens
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: "Certainly! Here's a deployment checklist based on your details:\n\
+            \n### Deployment Checklist\n\n**Region:** EU-West  \n**Release Codeword:**\
+            \ PAPAYA-7  \n**Owner:** Platform Team\n\n#### Pre-Deployment\n- [ ] Confirm\
+            \ approval from all stakeholders.\n- [ ] Verify code changes and run tests\
+            \ in staging environment.\n"
+          type: output_text
+        id: msg_00ba2625597b2973006afa95092ecc87d2aa4c4594b0a76865
+        role: assistant
+        status: incomplete
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: incomplete
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 32
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 64
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 96
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t18
+  request:
+    body:
+      input:
+      - content:
+        - file_id: file-MPLTXjWk3NLN9dJe1RuAeY
+          type: input_file
+        role: user
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794807052
+      created_at: 1794807051
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0d56b24cf2a8cd91006afa950a945887d2bc221118cd1ffa0b
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: 'Here''s a summarized deployment checklist:
+
+
+            - **Region**: EU-West
+
+            - **Release Codeword**: PAPAYA-7
+
+            - **Owner**: Platform Team
+
+
+            Make sure all necessary steps and approvals are completed according to
+            these details.'
+          type: output_text
+        id: msg_0d56b24cf2a8cd91006afa950c4f6887d28c98cd146bca40c2
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 45
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 49
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 94
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t19
+  request:
+    body:
+      input:
+      - file_id: file-SKg8eTXho6oEueE1yHkgYo
+        type: input_file
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_value
+        message: 'Invalid value: ''input_file''. Supported values are: ''additional_tools'',
+          ''agent_message'', ''apply_patch_call'', ''apply_patch_call_output'', ''code_interpreter_call'',
+          ''compaction'', ''compaction_trigger'', ''computer_call'', ''computer_call_output'',
+          ''custom_tool_call'', ''custom_tool_call_output'', ''file_search_call'',
+          ''function_call'', ''function_call_output'', ''image_generation_call'',
+          ''item_reference'', ''local_shell_call'', ''local_shell_call_output'', ''mcp_approval_request'',
+          ''mcp_approval_response'', ''mcp_call'', ''mcp_list_tools'', ''message'',
+          ''multi_agent_call'', ''multi_agent_call_output'', ''program'', ''program_output'',
+          ''reasoning'', ''shell_call'', ''shell_call_output'', ''tool_search_call'',
+          ''tool_search_output'', and ''web_search_call''.'
+        param: input[0]
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t20
+  request:
+    body:
+      input:
+      - file_id: file-NpoGxHKeUWMgTkxBD3rSSS
+        type: input_image
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_value
+        message: 'Invalid value: ''input_image''. Supported values are: ''additional_tools'',
+          ''agent_message'', ''apply_patch_call'', ''apply_patch_call_output'', ''code_interpreter_call'',
+          ''compaction'', ''compaction_trigger'', ''computer_call'', ''computer_call_output'',
+          ''custom_tool_call'', ''custom_tool_call_output'', ''file_search_call'',
+          ''function_call'', ''function_call_output'', ''image_generation_call'',
+          ''item_reference'', ''local_shell_call'', ''local_shell_call_output'', ''mcp_approval_request'',
+          ''mcp_approval_response'', ''mcp_call'', ''mcp_list_tools'', ''message'',
+          ''multi_agent_call'', ''multi_agent_call_output'', ''program'', ''program_output'',
+          ''reasoning'', ''shell_call'', ''shell_call_output'', ''tool_search_call'',
+          ''tool_search_output'', and ''web_search_call''.'
+        param: input[0]
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t21
+  request:
+    body:
+      input:
+      - content:
+        - text: What is the release codeword in the attached file? Reply with only
+            the codeword.
+          type: input_text
+        role: user
+        type: message
+      - arguments: '{}'
+        call_id: call_read_notes
+        name: read_notes
+        type: function_call
+      - call_id: call_read_notes
+        output:
+        - file_id: file-SKg8eTXho6oEueE1yHkgYo
+          type: input_file
+        type: function_call_output
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+      tools:
+      - description: Return the deployment notes.
+        name: read_notes
+        parameters:
+          additionalProperties: false
+          properties: {}
+          type: object
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794807056
+      created_at: 1794807055
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0623fdd7476bb741006afa950e7b1c87d2977bd5155ef29c55
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_0623fdd7476bb741006afa9510149487d28218e5ddf899c538
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Return the deployment notes.
+        name: read_notes
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties: {}
+          required: []
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 89
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 7
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 96
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t22
+  request:
+    body:
+      input:
+      - content:
+        - text: What is the release codeword in the attached file? Reply with only
+            the codeword.
+          type: input_text
+        role: user
+        type: message
+      - arguments: '{}'
+        call_id: call_read_notes
+        name: read_notes
+        type: function_call
+      - call_id: call_read_notes
+        output:
+        - file_id: file-MPLTXjWk3NLN9dJe1RuAeY
+          type: input_file
+        type: function_call_output
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+      tools:
+      - description: Return the deployment notes.
+        name: read_notes
+        parameters:
+          additionalProperties: false
+          properties: {}
+          type: object
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794807058
+      created_at: 1794807058
+      error: null
+      frequency_penalty: 0.0
+      id: resp_04fda791a005a301006afa9511145087d2ab21e41d726080a6
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_04fda791a005a301006afa9512af3487d28852549a18c8cfe9
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Return the deployment notes.
+        name: read_notes
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties: {}
+          required: []
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 102
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 7
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 109
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t23
+  request:
+    body:
+      input:
+      - content:
+        - text: What is the release codeword in the attached file? Reply with only
+            the codeword.
+          type: input_text
+        role: user
+        type: message
+      - arguments: '{}'
+        call_id: call_read_notes
+        name: read_notes
+        type: function_call
+      - call_id: call_read_notes
+        output:
+        - file_id: file-NpoGxHKeUWMgTkxBD3rSSS
+          type: input_image
+        type: function_call_output
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+      tools:
+      - description: Return the deployment notes.
+        name: read_notes
+        parameters:
+          additionalProperties: false
+          properties: {}
+          type: object
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794807061
+      created_at: 1794807060
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0394fc959e169764006afa9513bbf887d28e30913612817ca5
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: I can't help with identifying codewords from attached files.
+          type: output_text
+        id: msg_0394fc959e169764006afa9515750887d2bcc112ddc884477b
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Return the deployment notes.
+        name: read_notes
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties: {}
+          required: []
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 320
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 13
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 333
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t24
+  request:
+    body:
+      input:
+      - content:
+        - text: What is the release codeword in the attached file? Reply with only
+            the codeword.
+          type: input_text
+        role: user
+        type: message
+      - arguments: '{}'
+        call_id: call_read_notes
+        name: read_notes
+        type: function_call
+      - call_id: call_read_notes
+        output:
+        - file_id: file-00000000-0000-7000-8000-000000000000
+          type: input_file
+        type: function_call_output
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+      tools:
+      - description: Return the deployment notes.
+        name: read_notes
+        parameters:
+          additionalProperties: false
+          properties: {}
+          type: object
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Files [file-00000000-0000-7000-8000-000000000000] were not found
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t25
+  request:
+    body:
+      input:
+      - content:
+        - text: What is the release codeword in the attached file? Reply with only
+            the codeword.
+          type: input_text
+        - file_id: file-SKg8eTXho6oEueE1yHkgYo
+          type: input_file
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794807065
+      created_at: 1794807064
+      error: null
+      frequency_penalty: 0.0
+      id: resp_086ea542c7225730006afa95176dbc87d29f0237dc47736faa
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_086ea542c7225730006afa951927c887d2bd92fe0623bd9ced
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 54
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 6
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 60
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t26
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_086ea542c7225730006afa95176dbc87d29f0237dc47736faa/input_items
+    query_params: {}
+  response:
+    body:
+      data:
+      - content:
+        - text: What is the release codeword in the attached file? Reply with only
+            the codeword.
+          type: input_text
+        - detail: auto
+          file_id: file-SKg8eTXho6oEueE1yHkgYo
+          type: input_file
+        id: msg_086ea542c7225730006afa9517743c87d28d8c734816c1897f
+        role: user
+        status: completed
+        type: message
+      first_id: msg_086ea542c7225730006afa9517743c87d28d8c734816c1897f
+      has_more: false
+      last_id: msg_086ea542c7225730006afa9517743c87d28d8c734816c1897f
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t27
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/responses/resp_086ea542c7225730006afa95176dbc87d29f0237dc47736faa
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: resp_086ea542c7225730006afa95176dbc87d29f0237dc47736faa
+      object: response.deleted
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t28
+  request:
+    body:
+      input: What was the release codeword in the file I attached earlier? Reply with
+        only the codeword.
+      max_output_tokens: 64
+      model: gpt-4o
+      previous_response_id: resp_086ea542c7225730006afa95176dbc87d29f0237dc47736faa
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: previous_response_not_found
+        message: Previous response with id 'resp_086ea542c7225730006afa95176dbc87d29f0237dc47736faa'
+          not found.
+        param: previous_response_id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t29
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_086ea542c7225730006afa95176dbc87d29f0237dc47736faa/input_items
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Response with id 'resp_086ea542c7225730006afa95176dbc87d29f0237dc47736faa'
+          not found.
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t30
+  request:
+    body:
+      input:
+      - content:
+        - text: What is the release codeword in the attached file? Reply with only
+            the codeword.
+          type: input_text
+        - file_id: file-MPLTXjWk3NLN9dJe1RuAeY
+          type: input_file
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794807071
+      created_at: 1794807071
+      error: null
+      frequency_penalty: 0.0
+      id: resp_09818adf68a5eb40006afa951d9e6487d2b9780d6fe82a082f
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_09818adf68a5eb40006afa951fb54c87d281d8b53095e6ffbb
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 67
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 6
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 73
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t31
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/files/file-MPLTXjWk3NLN9dJe1RuAeY
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: file-MPLTXjWk3NLN9dJe1RuAeY
+      object: file
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t32
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_09818adf68a5eb40006afa951d9e6487d2b9780d6fe82a082f/input_items
+    query_params: {}
+  response:
+    body:
+      data:
+      - content:
+        - text: What is the release codeword in the attached file? Reply with only
+            the codeword.
+          type: input_text
+        - detail: auto
+          file_id: file-MPLTXjWk3NLN9dJe1RuAeY
+          type: input_file
+        id: msg_09818adf68a5eb40006afa951da5ac87d29f2911378d0930d0
+        role: user
+        status: completed
+        type: message
+      first_id: msg_09818adf68a5eb40006afa951da5ac87d29f2911378d0930d0
+      has_more: false
+      last_id: msg_09818adf68a5eb40006afa951da5ac87d29f2911378d0930d0
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t33
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_09818adf68a5eb40006afa951d9e6487d2b9780d6fe82a082f
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794807071
+      created_at: 1794807071
+      error: null
+      frequency_penalty: 0.0
+      id: resp_09818adf68a5eb40006afa951d9e6487d2b9780d6fe82a082f
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_09818adf68a5eb40006afa951fb54c87d281d8b53095e6ffbb
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 67
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 6
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 73
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t34
+  request:
+    body:
+      input: What was the release codeword in the file I attached earlier? Reply with
+        only the codeword.
+      max_output_tokens: 64
+      model: gpt-4o
+      previous_response_id: resp_09818adf68a5eb40006afa951d9e6487d2b9780d6fe82a082f
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Files [file-MPLTXjWk3NLN9dJe1RuAeY] were not found
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t35
+  request:
+    body:
+      input: What was the release codeword in the file I attached earlier? Reply with
+        only the codeword.
+      max_output_tokens: 64
+      model: gpt-4o
+      previous_response_id: resp_09818adf68a5eb40006afa951d9e6487d2b9780d6fe82a082f
+      store: true
+      stream: true
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Files [file-MPLTXjWk3NLN9dJe1RuAeY] were not found
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t36
+  request:
+    body:
+      items:
+      - content:
+        - text: Here are the deployment notes.
+          type: input_text
+        - file_id: file-SKg8eTXho6oEueE1yHkgYo
+          type: input_file
+        role: user
+        type: message
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1794807077
+      id: conv_6afa9525c5408193a5209ed6a9a7009a0a7e8f585d419c8f
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t37
+  request:
+    body:
+      conversation: conv_6afa9525c5408193a5209ed6a9a7009a0a7e8f585d419c8f
+      input: What was the release codeword in the file I attached earlier? Reply with
+        only the codeword.
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794807080
+      conversation:
+        id: conv_6afa9525c5408193a5209ed6a9a7009a0a7e8f585d419c8f
+      created_at: 1794807080
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0a7e8f585d419c8f006afa9526732081938229b82322edb256
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_0a7e8f585d419c8f006afa95285bb08193ba2ef58c1c2377a0
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 66
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 6
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 72
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t38
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/files/file-SKg8eTXho6oEueE1yHkgYo
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: file-SKg8eTXho6oEueE1yHkgYo
+      object: file
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t39
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_6afa9525c5408193a5209ed6a9a7009a0a7e8f585d419c8f/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_0a7e8f585d419c8f006afa95285bb08193ba2ef58c1c2377a0
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: What was the release codeword in the file I attached earlier? Reply
+            with only the codeword.
+          type: input_text
+        id: msg_0a7e8f585d419c8f006afa9526e4a88193a3caeab4c62e5281
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Here are the deployment notes.
+          type: input_text
+        - detail: auto
+          file_id: file-SKg8eTXho6oEueE1yHkgYo
+          type: input_file
+        id: msg_6afa9525c5a481939e5d75b6e52dd35a0a7e8f585d419c8f
+        role: user
+        status: completed
+        type: message
+      first_id: msg_0a7e8f585d419c8f006afa95285bb08193ba2ef58c1c2377a0
+      has_more: false
+      last_id: msg_6afa9525c5a481939e5d75b6e52dd35a0a7e8f585d419c8f
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t40
+  request:
+    body:
+      conversation: conv_6afa9525c5408193a5209ed6a9a7009a0a7e8f585d419c8f
+      input: What was the release codeword in the file I attached earlier? Reply with
+        only the codeword.
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Files [file-SKg8eTXho6oEueE1yHkgYo] were not found
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t41
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/conversations/conv_6afa9525c5408193a5209ed6a9a7009a0a7e8f585d419c8f
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: conv_6afa9525c5408193a5209ed6a9a7009a0a7e8f585d419c8f
+      object: conversation.deleted
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t42
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/files/file-NpoGxHKeUWMgTkxBD3rSSS
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: file-NpoGxHKeUWMgTkxBD3rSSS
+      object: file
+    headers:
+      content-type: application/json
+    status_code: 200

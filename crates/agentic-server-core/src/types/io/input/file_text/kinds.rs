@@ -188,10 +188,44 @@ fn split_filename(filename: &str) -> (&str, Option<&str>) {
     (basename, extension)
 }
 
-fn is_text_filename(filename: &str) -> bool {
+/// Whether a filename names a text file by its extension or a known text basename.
+pub(crate) fn is_text_filename(filename: &str) -> bool {
     let (basename, extension) = split_filename(filename);
     contains(TEXT_FILENAMES, basename) || extension.is_some_and(|extension| contains(TEXT_EXTENSIONS, extension))
 }
+
+/// Image media types an upload accepts, as the recorded `OpenAI` row lists them.
+pub(crate) const IMAGE_MEDIA_TYPES: [&str; 5] = ["image/gif", "image/jpeg", "image/jpg", "image/png", "image/webp"];
+
+/// Whether an upload's media type is an accepted image format.
+pub(crate) fn is_image_media_type(media_type: &str) -> bool {
+    IMAGE_MEDIA_TYPES
+        .iter()
+        .any(|accepted| media_type.eq_ignore_ascii_case(accepted))
+}
+
+/// The media type for an accepted image filename.
+pub(crate) fn image_media_type(filename: &str) -> Option<&'static str> {
+    let extension = split_filename(filename).1?.to_ascii_lowercase();
+    let subtype = if extension == "jpg" { "jpeg" } else { extension.as_str() };
+    IMAGE_MEDIA_TYPES
+        .iter()
+        .find(|media_type| media_type.strip_prefix("image/") == Some(subtype))
+        .copied()
+}
+
+/// The filename extension shown in a wrong-file-type error, including a leading dot.
+pub(crate) fn extension_label(filename: &str) -> String {
+    format!(".{}", split_filename(filename).1.unwrap_or_default())
+}
+
+/// The formats `OpenAI` lists for context stuffing, used verbatim in a wrong-file-type error.
+pub(crate) const CONTEXT_STUFFING_EXTENSIONS: &str = ".art, .bat, .brf, .c, .cls, .css, .csv, .diff, .doc, .docx, .dot, \
+     .eml, .epub, .es, .h, .hs, .htm, .html, .hwp, .hwpx, .ics, .ifb, .java, .js, .json, .keynote, .ksh, .ltx, .mail, \
+     .markdown, .md, .mht, .mhtml, .mjs, .msg, .nws, .odp, .ods, .odt, .otp, .ots, .pages, .patch, .pdf, .pl, .pm, \
+     .pot, .potm, .potx, .ppa, .pps, .ppsm, .ppsx, .ppt, .pptm, .pptx, .pwz, .py, .rst, .rtf, .scala, .sh, .shtml, \
+     .srt, .sty, .svg, .svgz, .tex, .text, .txt, .tsv, .vcf, .vtt, .wiz, .xla, .xlb, .xlc, .xlm, .xls, .xlsx, .xlt, \
+     .xlw, .xml, .yaml, .yml";
 
 /// Media types a text filename cannot override.
 fn is_binary_media_type(media_type: &str, filename: &str) -> bool {
@@ -210,7 +244,7 @@ fn is_binary_media_type(media_type: &str, filename: &str) -> bool {
 ///
 /// A text media type is enough on its own. Otherwise a text filename decides,
 /// unless the media type is PDF, image, audio, or video.
-pub(super) fn is_text_file(media_type: &str, filename: Option<&str>) -> bool {
+pub(crate) fn is_text_file(media_type: &str, filename: Option<&str>) -> bool {
     is_text_media_type(media_type)
         || filename.is_some_and(|filename| is_text_filename(filename) && !is_binary_media_type(media_type, filename))
 }
@@ -218,6 +252,23 @@ pub(super) fn is_text_file(media_type: &str, filename: Option<&str>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn image_media_types_follow_the_accepted_extensions() {
+        for (filename, media_type) in [
+            ("plot.jpeg", "image/jpeg"),
+            ("plot.JPG", "image/jpeg"),
+            ("plot.png", "image/png"),
+            ("plot.gif", "image/gif"),
+            ("plot.webp", "image/webp"),
+        ] {
+            assert_eq!(image_media_type(filename), Some(media_type), "{filename}");
+            assert!(is_image_media_type(media_type), "{media_type}");
+        }
+        for filename in ["plot.svg", "plot.bin", "plot", ".png"] {
+            assert_eq!(image_media_type(filename), None, "{filename}");
+        }
+    }
 
     #[test]
     fn text_media_types_need_no_filename() {

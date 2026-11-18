@@ -40,7 +40,7 @@ pub(crate) fn router(max_request_body_size: usize) -> Router<AppState> {
 }
 
 fn service(state: &AppState) -> Result<&FileSearchService, Box<Response>> {
-    state.exec_ctx.file_search.as_ref().ok_or_else(|| {
+    state.exec_ctx.file_handler.service().ok_or_else(|| {
         Box::new(error(FileSearchError::Unavailable(
             "File search requires configured persistence".into(),
         )))
@@ -57,6 +57,18 @@ fn invalid(message: impl Into<String>) -> Response {
 
 fn payload_too_large() -> Response {
     executor_error_response(ExecutorError::PayloadTooLarge("Request body exceeds the limit".into()))
+}
+
+/// A Files API upload rejection, in the recorded envelope: `invalid_request_error`, `code: null`.
+fn rejected(message: impl Into<String>) -> Response {
+    error(FileSearchError::FileRejected {
+        message: message.into(),
+        param: None,
+    })
+}
+
+fn required(field: &str) -> Response {
+    rejected(format!("'{field}' is a required property"))
 }
 
 fn result<T: Serialize>(value: Result<T, FileSearchError>) -> Response {
@@ -101,7 +113,9 @@ pub(crate) async fn upload_file(
     let mut multipart = match multipart {
         Ok(multipart) => multipart,
         Err(rejection) if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE => return payload_too_large(),
-        Err(_) => return invalid("Expected multipart/form-data with file and purpose fields"),
+        // The recorded missing-file request posts a form without a file part at all; report the
+        // required upload field instead of the transport-level rejection.
+        Err(_) => return required("file"),
     };
     let mut purpose = None;
     let mut uploaded = None;
@@ -117,14 +131,11 @@ pub(crate) async fn upload_file(
                     Ok(value) => value,
                     Err(failure) => return multipart_error(&failure),
                 };
-                if value.len() > 32 {
-                    return invalid("Invalid file purpose");
-                }
                 purpose = Some(value);
             }
             Some("file") if uploaded.is_none() => {
                 let Some(filename) = field.file_name().map(str::to_owned) else {
-                    return invalid("File field requires a filename");
+                    return rejected("File field requires a filename");
                 };
                 let content_type = field.content_type().unwrap_or("application/octet-stream").to_owned();
                 let mut field = field;
@@ -145,20 +156,26 @@ pub(crate) async fn upload_file(
                 }
                 uploaded = Some((filename, content_type, bytes));
             }
-            _ => return invalid("Expected exactly one file and one purpose field"),
+            _ => return rejected("Expected exactly one file and one purpose field"),
         }
     }
-    let (Some(purpose), Some((filename, content_type, bytes))) = (purpose, uploaded) else {
-        return invalid("Both file and purpose are required");
+    let Some(purpose) = purpose else {
+        return required("purpose");
     };
-    result(search.upload_file(&filename, &content_type, &purpose, bytes).await)
+    let Some((filename, content_type, bytes)) = uploaded else {
+        return required("file");
+    };
+    match search.upload_file(&filename, &content_type, &purpose, bytes).await {
+        Ok(file) => Json(file).into_response(),
+        Err(failure) => error(failure),
+    }
 }
 
 fn multipart_error(failure: &MultipartError) -> Response {
     if failure.status() == StatusCode::PAYLOAD_TOO_LARGE {
         payload_too_large()
     } else {
-        invalid("Malformed multipart upload")
+        rejected("Malformed multipart upload")
     }
 }
 
@@ -208,6 +225,13 @@ pub(crate) async fn file_content(State(state): State<AppState>, Path(id): Path<S
         Ok(service) => service,
         Err(error) => return *error,
     };
+    let file = match search.get_file(&id).await {
+        Ok(file) => file,
+        Err(failure) => return error(failure),
+    };
+    if file.purpose != "vision" {
+        return rejected(format!("Not allowed to download files of purpose: {}", file.purpose));
+    }
     match search.file_content(&id).await {
         Ok(bytes) => (
             [

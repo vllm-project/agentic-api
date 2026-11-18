@@ -30,8 +30,8 @@ use crate::utils::uuid7_str;
 /// - no ids:                 normalize the complete history supplied by the client
 ///
 /// # Errors
-/// Returns [`ExecutorError`] if storage is unavailable, a referenced ID does not exist,
-/// or the new/resolved input contains unsupported message files.
+/// Returns [`ExecutorError`] if storage is unavailable, a referenced ID does not exist, or the
+/// new/resolved input contains unsupported message content.
 pub async fn rehydrate_conversation(
     request: RequestPayload,
     exec_ctx: &ExecutionContext,
