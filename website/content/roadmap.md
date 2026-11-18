@@ -250,7 +250,6 @@ independent WebSocket lanes, async calls, and steering have distinct semantics.
   ([#485](https://github.com/vllm-project/agentic-api/pull/485)), pluggable indexed retrieval with a
   sqlite-vec provider ([#483](https://github.com/vllm-project/agentic-api/pull/483),
   [#484](https://github.com/vllm-project/agentic-api/pull/484)), and the gateway-executed `file_search` tool with
-  citations ([#486](https://github.com/vllm-project/agentic-api/pull/486), [#513](https://github.com/vllm-project/agentic-api/pull/513)).
   citations ([#486](https://github.com/vllm-project/agentic-api/pull/486), [#513](https://github.com/vllm-project/agentic-api/pull/513)),
   and Responses `input_image`/`input_file` `file_id` reference resolution against the same file store
   ([#356](https://github.com/vllm-project/agentic-api/issues/356)).
