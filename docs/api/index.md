@@ -289,8 +289,10 @@ Differences from OpenAI:
   round, the stream delivers the async call after that tool completes, keeping output
   indexes in order. Async calls before or without gateway calls stream immediately.
 
-`prompt_cache_key` is forwarded unchanged on direct and executor-backed HTTP
-requests, WebSocket requests, gateway tool rounds, automatic compaction,
+#### Prompt-cache controls and service tiers
+
+`prompt_cache_key` is forwarded unchanged on HTTP and WebSocket requests,
+gateway tool rounds, automatic compaction,
 standalone `/v1/responses/compact` requests, and summary inference requested by
 a `compaction_trigger` input item.
 
@@ -310,23 +312,24 @@ checked on October 11, 2026. The object accepts optional `mode` (`"implicit"` or
 an empty object; the gateway inserts no defaults. Present members must be non-null.
 The top-level absent or `null` object is treated as unset by typed execution.
 
-For typed execution, the configured upstream must implement these semantics for
-every served model. Options are rejected by default on that path. After verifying
-that contract, an operator can enable forwarding in `config.toml`:
+Cache options are rejected by default. After verifying mode and TTL support for a
+served model, an operator can enable forwarding for its exact ID in `config.toml`:
 
 ```toml
-[responses]
+[models."qualified-model"]
 prompt_cache_options_supported = true
 ```
 
-This switch is an operator assertion, not model-name detection or a capability probe.
-Unsupported typed options return `400` with `param: "prompt_cache_options"` and
-`code: "unsupported_parameter"` before history lookup, tool discovery, or inference.
-Enabling the switch does not add typed support for prewarming, diagnostics, or future
-members: `prewarm`, `comparison_response_id`, unknown members, invalid mode/TTL
-values, and non-object options return `400` on executor routes.
-`prompt_cache_options` and `prompt_cache_retention` are independent: both may be
-provided and are forwarded without translating either into the other.
+This setting overrides `[responses] prompt_cache_options_supported`; models without
+an override use that deployment default, which is `false` unless configured. Qualify
+all models using the fallback before setting it to `true`. This is an operator
+assertion, not model-name detection or a capability probe. Disabled options return
+`400` with `param: "prompt_cache_options"` and `code: "unsupported_parameter"`
+before history lookup, tool discovery, or inference. The typed parser rejects
+`prewarm`, `comparison_response_id`, unknown members, invalid mode/TTL values, and
+non-object options even when forwarding is enabled. `prompt_cache_options` and
+`prompt_cache_retention` are independent: when allowed, both are forwarded without
+translating either into the other.
 
 An accepted typed object is forwarded through HTTP JSON/SSE, WebSocket execution,
 gateway tool rounds, multi-agent execution, automatic compaction,
@@ -347,16 +350,12 @@ objects do not echo options.
 
 | Path | Mode/TTL handling | Continuation behavior |
 | --- | --- | --- |
-| HTTP JSON/SSE and WebSocket | Object forwarded; absent/null omitted upstream; current request echoed in Responses objects | Top-level options are not inherited |
+| HTTP JSON/SSE and WebSocket | Object forwarded when enabled; absent/null omitted upstream; current request echoed in Responses objects | Top-level options are not inherited |
 | Gateway tool rounds and multi-agent execution | Current request's options retained in every inference round | Current request scope |
 | Automatic, trigger, and standalone compaction | Current request's options forwarded to summary inference | Loading a previous response does not inherit its options |
 
-This matrix contributes to [#314](https://github.com/vllm-project/agentic-api/issues/314)
-and [#330](https://github.com/vllm-project/agentic-api/issues/330).
-Model-specific capability profiles and upstream-reported cache diagnostics remain follow-ups.
-
 `prompt_cache_retention` accepts the legacy `"in_memory"` and `"24h"` values.
-An explicit value is forwarded through HTTP JSON/SSE, WebSocket execution,
+An allowed explicit value is forwarded through HTTP JSON/SSE, WebSocket execution,
 gateway tool rounds, multi-agent execution, automatic compaction,
 `compaction_trigger` summary inference, and `/v1/responses/compact`.
 Continuations restore item history but do not inherit a previous request's
@@ -372,20 +371,63 @@ retention into `cache_salt` or `prompt_cache_options.ttl`. See the
 Forwarding is not a capability guarantee: the
 [vLLM Responses request contract](https://github.com/vllm-project/vllm/blob/840c7c2f4bc72c7c55edb2dea6d23f9a9c9734e0/vllm/entrypoints/openai/responses/protocol.py)
 checked on October 1, 2026 does not define `prompt_cache_retention`, so this field should not be
-used to configure vLLM cache lifetime. Model-specific backend capability enforcement
-remains a follow-up in
-[#330](https://github.com/vllm-project/agentic-api/issues/330).
+used to configure vLLM cache lifetime. Set `prompt_cache_retention_supported = false`
+for a model whose deployment cannot honor it.
 
-`service_tier` is also request-scoped. Direct and executor-backed HTTP requests,
-WebSocket requests, gateway tool rounds, automatic compaction, standalone
+`service_tier` is also request-scoped. HTTP and WebSocket requests,
+gateway tool rounds, automatic compaction, standalone
 `/v1/responses/compact` requests, and `compaction_trigger` summary inference
-forward an explicit value unchanged. An absent or `null` value is not inherited
-by a continuation. When the upstream reports the tier that actually served the
-terminal inference round, that value is returned to the client and retained in stored response snapshots; it may
-differ from the requested value. The gateway does not select a tier or silently
-retry with another one. In multi-agent execution, the last root-agent inference
-round determines the returned tier; child-agent tiers do not override it, and a
-missing final root tier clears any earlier value.
+forward an allowed explicit value unchanged. An absent or `null` value is omitted
+and not inherited by a continuation. The actual tier from the final answer inference
+is returned to the client and retained in the stored response snapshot; it may differ
+from the requested value. The gateway does not select a tier or silently retry with
+another one. In multi-agent execution, the last root-agent answer inference determines
+the returned tier; child-agent and post-answer summary tiers do not override it, and
+a missing final root tier clears any earlier value. Standalone compaction reports the
+tier of its summary inference when present.
+
+#### Model capability policies
+
+Responses admission and the Codex catalog share the
+[`[models."<served-model-id>"]` configuration](../guides/configuration.md).
+Admission selects explicit capabilities by the current request's exact `model`,
+including on continuations. A configured `supported_reasoning_levels` list governs
+both catalog display and allowed request values. The catalog's fallback levels do
+not restrict models without an explicit list. Other limits are opt-in, except for
+the deployment fallback governing cache options.
+
+The request parser models these fields explicitly. Known effort and tier values
+follow the [Responses API](https://developers.openai.com/api/reference/resources/responses/methods/create):
+
+- `reasoning.effort`: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`.
+- `service_tier`: `auto`, `default`, `flex`, `scale`, `priority`, `fast`, or `ultrafast`.
+- `top_logprobs`: a signed 64-bit integer or `null`. Omission remains omission;
+  explicit `null` remains `null` upstream. The gateway applies no universal `0..20`
+  range: vLLM also accepts `-1` subject to its configured logprobs limit. See the
+  [vLLM parameter validation](https://github.com/vllm-project/vllm/blob/5039f736e612ae637099eba3fa645031d416ef53/vllm/sampling_params.py#L925).
+
+Unknown effort/tier strings and malformed `top_logprobs` now fail request decoding,
+even without a model policy. This is stricter than the previous string/extension
+forwarding. Actual upstream response tiers and stored response metadata keep their
+existing string representation. Rust callers must set the typed `top_logprobs`
+field; admission rejects the same name in `extra` to prevent duplicate keys and
+validation bypass. Clients continue to send the field at the JSON top level.
+
+Configured capability checks run before history lookup, tool discovery, or inference
+for HTTP JSON/SSE and WebSocket. A violation returns HTTP `400` or a WebSocket
+`error` event with `type: "invalid_request_error"` and the affected `param`.
+The code is `unsupported_value`, except disabled cache options use
+`unsupported_parameter`. The same validation runs before summary inference;
+standalone compaction uses the model and fields in its own request.
+
+WebSocket typed admission rejections preserve the transient parent for retry, including
+model-policy limits and unsupported gateway parameters (`background`, `prompt`, or
+MCP `tool_choice`). Decode
+errors follow the existing checkpoint cleanup rules instead: an unknown effort or
+tier, or a malformed `top_logprobs`, can evict the matching parent. Correcting such
+a request may therefore require resending history. An upstream rejection after
+local admission retains its ordinary transport error behavior, including account
+and regional tier restrictions; configured support does not establish live availability.
 
 #### Content-part cache breakpoints
 
@@ -422,6 +464,26 @@ window rather than assuming the old prefix is still present. The gateway does no
 recalculate cache boundaries, move them to summaries, or establish cache hits.
 This matrix is covered with deterministic mock-upstream tests, without claims
 about live-model reuse or TTL enforcement.
+
+#### Responses capability matrix
+
+This matrix contributes to [#314](https://github.com/vllm-project/agentic-api/issues/314)
+and [#330](https://github.com/vllm-project/agentic-api/issues/330).
+
+| Control | Forwarding and history | Local rejection / evidence |
+| --- | --- | --- |
+| `prompt_cache_key` | Current request only, including tool and summary calls; absent/null omitted. | Invalid non-string values; [#412](https://github.com/vllm-project/agentic-api/pull/412). |
+| `prompt_cache_options` | Qualified mode/TTL forwarded; Responses objects echo current options. Continuations do not inherit them. | Disabled forwarding, invalid shapes/values, unknown members; [#436](https://github.com/vllm-project/agentic-api/pull/436) and capability tests. |
+| `prompt_cache_retention` | Allowed legacy values forwarded independently of options and salt; no continuation inheritance. | Invalid values or explicit model restriction; [#413](https://github.com/vllm-project/agentic-api/pull/413) and capability tests. |
+| Content breakpoints | Supported parts retain boundaries through history and normalization, including inline text files; explicit mode stays explicit. | Unsupported message files/content; [#467](https://github.com/vllm-project/agentic-api/pull/467). |
+| `service_tier` | Allowed current request tier forwarded; actual final answer/root tier retained in response and storage. | Unknown values or configured exclusion; upstream account/region errors preserved; [#389](https://github.com/vllm-project/agentic-api/pull/389) and capability tests. |
+| Sampling, logprobs, reasoning effort | Known typed values forwarded subject to explicit model limits; top-logprobs omission/null preserved. | Type/enum errors and configured limits; capability and WebSocket retry tests. |
+| Cache-read/write usage | Upstream-reported reads and writes accumulate across inference rounds; missing writes remain omitted, explicit zero retained. | No inferred writes or billing; [#421](https://github.com/vllm-project/agentic-api/pull/421). |
+
+Deterministic tests verify gateway admission, forwarding, and error propagation;
+they do not measure cache hits or qualify a live model's capabilities. `cache_salt`
+propagation through compaction remains a separate fix tracked by #330; this
+capability work alone does not close that issue.
 
 #### `max_tool_calls`
 
@@ -597,7 +659,10 @@ Conversations API behavior: `store:false` reads existing history without appendi
 
 A failed ordinary same-lane continuation evicts its referenced cached parent. Failed forks
 preserve the source lane's parent. Admission rejections (429) preserve existing
-checkpoints and accepted queued work. Parent lookup happens when execution begins.
+checkpoints and accepted queued work. Model-policy rejections also preserve the
+parent for retry; malformed typed parameters follow the existing parse-error
+cleanup instead (see [capability policies](#model-capability-policies)). Parent
+lookup happens when execution begins.
 
 For a single-agent response on the current connection, send a steering update
 while generation or tool execution is in progress:

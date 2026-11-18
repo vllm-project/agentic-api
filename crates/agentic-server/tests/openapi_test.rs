@@ -3,6 +3,7 @@
 
 mod common;
 
+use agentic_core::types::RequestPayload;
 use agentic_server::app::{AppState, ServerConfig, build_router};
 use common::{spawn_mock_llm, test_config, test_state};
 use tokio::net::TcpListener;
@@ -46,6 +47,48 @@ async fn prompt_cache_options_schema_exposes_the_closed_mode_ttl_contract() {
     for name in ["RequestPayload", "CompactRequest", "ResponsePayload"] {
         assert!(!schemas[name]["properties"]["prompt_cache_options"].is_null());
     }
+}
+
+#[tokio::test]
+async fn responses_capability_parameter_schemas_match_typed_decoding() {
+    let spec = fetch_spec().await;
+    let schema = serde_json::json!({
+        "$ref":"#/components/schemas/RequestPayload", "components":spec["components"]
+    });
+    let validator = jsonschema::validator_for(&schema).expect("Responses request schema");
+    for fields in [
+        serde_json::json!({}),
+        serde_json::json!({"top_logprobs":null,"reasoning":{"effort":null},"service_tier":null}),
+        serde_json::json!({"top_logprobs":-1,"reasoning":{"effort":"none"},"service_tier":"fast"}),
+        serde_json::json!({"top_logprobs":21,"reasoning":{"effort":"minimal"},"service_tier":"ultrafast"}),
+        serde_json::json!({"reasoning":{"effort":"max"},"service_tier":"scale"}),
+    ] {
+        let mut wire = serde_json::json!({"model":"test-model","input":"hi"});
+        wire.as_object_mut()
+            .unwrap()
+            .extend(fields.as_object().unwrap().clone());
+        assert!(validator.is_valid(&wire), "schema rejected {wire}");
+        assert!(serde_json::from_value::<RequestPayload>(wire).is_ok());
+    }
+    for fields in [
+        serde_json::json!({"top_logprobs":"3"}),
+        serde_json::json!({"top_logprobs":1.5}),
+        serde_json::json!({"reasoning":{"effort":"hgih"}}),
+        serde_json::json!({"service_tier":"custom"}),
+    ] {
+        let mut wire = serde_json::json!({"model":"test-model","input":"hi"});
+        wire.as_object_mut()
+            .unwrap()
+            .extend(fields.as_object().unwrap().clone());
+        assert!(!validator.is_valid(&wire), "schema accepted {wire}");
+        assert!(serde_json::from_value::<RequestPayload>(wire).is_err());
+    }
+    let compact = serde_json::json!({
+        "$ref":"#/components/schemas/CompactRequest", "components":spec["components"]
+    });
+    let validator = jsonschema::validator_for(&compact).expect("compact request schema");
+    assert!(validator.is_valid(&serde_json::json!({"model":"test-model","service_tier":"flex"})));
+    assert!(!validator.is_valid(&serde_json::json!({"model":"test-model","service_tier":"custom"})));
 }
 
 #[tokio::test]

@@ -11,6 +11,13 @@
 #   Blocking happy path:
 #     5. call say_hello successfully
 #
+# MCP_RECORD_CASE=approval records the `mcp-approval` items scenario of
+# record_cassette.py instead: one non-streaming turn per `require_approval`
+# form against the public Microsoft Learn MCP server, so no counter server is
+# needed. Every turn is kept, including the ones a provider rejects; only the
+# "never" turn must complete. The gateway must allow learn.microsoft.com
+# (AGENTIC_MCP_ALLOWED_HOSTS=learn.microsoft.com).
+#
 # MCP resources are intentionally not recorded here. Agentic API implements
 # the OpenAI Responses MCP contract (`tools/list` and `tools/call`); resource
 # discovery and `resources/read` belong to MCP host applications.
@@ -31,6 +38,8 @@
 #   MCP_RECORD_SET=openai \
 #     OPENAI_MCP_SERVER_URL=https://your-counter.example/mcp \
 #     bash crates/agentic-server-core/tests/cassettes/record_mcp_cassettes.sh
+#   MCP_RECORD_CASE=approval \
+#     bash crates/agentic-server-core/tests/cassettes/record_mcp_cassettes.sh
 
 set -euo pipefail
 
@@ -42,6 +51,7 @@ GATEWAY_URL="${GATEWAY_URL:-http://localhost:9000}"
 MODEL="${MODEL:-Qwen/Qwen3.5-35B-A3B-FP8}"
 MODEL_SLUG="$(echo "$MODEL" | tr '/: ' '---')"
 MCP_RECORD_SET="${MCP_RECORD_SET:-all}"
+MCP_RECORD_CASE="${MCP_RECORD_CASE:-counter}"
 COUNTER_SERVER_LABEL="${COUNTER_SERVER_LABEL:-counter}"
 COUNTER_MCP_SERVER_URL="${COUNTER_MCP_SERVER_URL:-}"
 GATEWAY_COUNTER_MCP_SERVER_URL="${GATEWAY_COUNTER_MCP_SERVER_URL:-$COUNTER_MCP_SERVER_URL}"
@@ -274,6 +284,74 @@ case "$MCP_RECORD_SET" in
     exit 1
     ;;
 esac
+
+record_approval_case() {
+  local provider="$1"
+  local endpoint_flag="$2"
+  local endpoint="$3"
+  local model="$4"
+  local output="$5"
+  local temporary_output
+
+  bold "$provider MCP cassette — require_approval forms (Microsoft Learn MCP)"
+  bold "Endpoint: $endpoint"
+  bold "Model:    $model"
+  temporary_output="$(mktemp "$BASE_DIR/.mcp-cassette.XXXXXX")"
+  if ! python "$SCRIPTS_DIR/record_cassette.py" \
+      --mode items \
+      --items-scenario mcp-approval \
+      --turns 8 \
+      --no-stream \
+      --model "$model" \
+      "$endpoint_flag" "$endpoint" \
+      --output "$temporary_output"
+  then
+    rm -f -- "$temporary_output"
+    return 1
+  fi
+  if ! python - "$temporary_output" <<'PY'
+import sys
+from pathlib import Path
+
+import yaml
+
+path = Path(sys.argv[1])
+turns = (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("turns") or []
+if len(turns) != 8:
+    raise SystemExit(f"ERROR: expected 8 recorded turns in {path}, found {len(turns)}")
+first = turns[0].get("response") or {}
+body = first.get("body") or {}
+if first.get("status_code") != 200 or not isinstance(body, dict) or body.get("status") != "completed":
+    raise SystemExit(f"ERROR: the require_approval \"never\" turn did not complete: {body}")
+PY
+  then
+    rm -f -- "$temporary_output"
+    return 1
+  fi
+  sanitize_cassette "$temporary_output"
+  mv -- "$temporary_output" "$output"
+  green "✓ MCP approval cassette recorded -> $output"
+}
+
+if [[ "$MCP_RECORD_CASE" == "approval" ]]; then
+  if [[ "$MCP_RECORD_SET" == "openai" || "$MCP_RECORD_SET" == "all" ]] && [[ -z "${OPENAI_API_KEY:-}" ]]; then
+    echo "ERROR: OPENAI_API_KEY must be set for MCP_RECORD_SET=$MCP_RECORD_SET" >&2
+    exit 1
+  fi
+  mkdir -p "$BASE_DIR"
+  if [[ "$MCP_RECORD_SET" == "openai" || "$MCP_RECORD_SET" == "all" ]]; then
+    record_approval_case OpenAI --openai https://api.openai.com "$OPENAI_MODEL" \
+      "$BASE_DIR/mcp-approval-openai-${OPENAI_MODEL_SLUG}-nonstreaming.yaml"
+  fi
+  if [[ "$MCP_RECORD_SET" == "gateway" || "$MCP_RECORD_SET" == "all" ]]; then
+    record_approval_case Gateway --gateway "$GATEWAY_URL" "$MODEL" \
+      "$BASE_DIR/mcp-approval-gateway-${MODEL_SLUG}-nonstreaming.yaml"
+  fi
+  exit 0
+elif [[ "$MCP_RECORD_CASE" != "counter" ]]; then
+  echo "ERROR: MCP_RECORD_CASE must be counter or approval" >&2
+  exit 1
+fi
 
 # Validate the OpenAI requirements before recording the gateway suite. This
 # prevents a default `all` run from leaving only half of the cassette pairs.

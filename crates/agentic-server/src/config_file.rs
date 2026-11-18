@@ -1,5 +1,7 @@
 mod file_search;
+mod models;
 use file_search::{FileSearchFileConfig, FilesFileConfig};
+use models::ModelFileConfig;
 
 use std::collections::{BTreeMap, HashMap};
 use std::io::Write;
@@ -10,7 +12,7 @@ use std::time::Duration;
 use agentic_core::McpServerEntry;
 use agentic_core::config::{CONFIG_FILE_NAME, CodeInterpreterRuntimeConfig, WebSearchProviderKind};
 use agentic_core::error::Error;
-use agentic_server::model_capabilities::{InputModalities, ModelCapabilities, ModelOverride, SupportedReasoningLevels};
+use agentic_core::types::model_capabilities::{ModelCapabilities, ModelOverride};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -196,23 +198,6 @@ impl MessagesGatewayFileConfig {
     }
 }
 
-/// Per-model overrides for capabilities the gateway cannot infer from upstream metadata.
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[serde(default, deny_unknown_fields)]
-pub(crate) struct ModelFileConfig {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub input_modalities: Option<InputModalities>,
-    /// Reasoning effort levels to advertise for this model, in catalog order.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub supported_reasoning_levels: Option<SupportedReasoningLevels>,
-}
-
-impl ModelFileConfig {
-    fn is_empty(&self) -> bool {
-        self.input_modalities.is_none() && self.supported_reasoning_levels.is_none()
-    }
-}
-
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 #[allow(clippy::struct_field_names)]
@@ -376,15 +361,7 @@ impl FileConfig {
             self.models
                 .iter()
                 .filter(|(_, model)| !model.is_empty())
-                .map(|(model_id, model)| {
-                    (
-                        model_id.clone(),
-                        ModelOverride {
-                            input_modalities: model.input_modalities,
-                            supported_reasoning_levels: model.supported_reasoning_levels.clone(),
-                        },
-                    )
-                })
+                .map(|(model_id, model)| (model_id.clone(), ModelOverride::from(model)))
                 .collect(),
         )
     }
@@ -441,18 +418,7 @@ impl FileConfig {
             )));
         }
         for (model_id, model) in &self.models {
-            if model_id.trim().is_empty() {
-                return Err(Error::Config(format!(
-                    "configuration file {} contains an empty model ID",
-                    path.display()
-                )));
-            }
-            if model.is_empty() {
-                return Err(Error::Config(format!(
-                    "configuration file {} contains no settings for model {model_id:?}; set input_modalities or supported_reasoning_levels",
-                    path.display()
-                )));
-            }
+            model.validate(path, model_id)?;
         }
         if let Some(label) = self.mcp_servers.keys().find(|label| label.trim().is_empty()) {
             return Err(Error::Config(format!(
@@ -854,6 +820,60 @@ mod tests {
 
             let error = FileConfig::load(home.path()).expect_err("an unusable modality list must fail");
             assert!(error.to_string().contains(expected), "{modalities}: {error}");
+        }
+    }
+
+    #[test]
+    fn model_capability_only_sections_are_loaded_and_preserved() {
+        for setting in [
+            "sampling_supported = false",
+            "logprobs_supported = false",
+            "prompt_cache_options_supported = false",
+            "prompt_cache_retention_supported = false",
+            "service_tiers = [\"default\"]",
+        ] {
+            let home = tempdir().expect("temp home");
+            fs::write(
+                home.path().join("config.toml"),
+                format!("[models.example]\n{setting}\n"),
+            )
+            .expect("write config");
+            let file = FileConfig::load(home.path())
+                .expect("a capability is a model setting")
+                .expect("config file exists");
+            let capabilities = file.model_capabilities();
+            let model = capabilities.for_model("example").expect("configured model");
+            assert!(model.supported_reasoning_levels.is_none());
+            assert_eq!(
+                capabilities.resolve_reasoning_levels("example"),
+                DEFAULT_REASONING_LEVELS
+            );
+            assert!(
+                capabilities.for_model("EXAMPLE").is_none(),
+                "model IDs are case-sensitive"
+            );
+            let encoded = toml::to_string(&file).unwrap();
+            assert!(encoded.contains(setting), "{encoded}");
+            let restored: FileConfig = toml::from_str(&encoded).unwrap();
+            assert_eq!(restored.model_capabilities().for_model("example"), Some(model));
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_model_service_tiers() {
+        for (tiers, expected) in [
+            ("[]", "must list at least one tier"),
+            ("[\"default\", \"default\"]", "more than once"),
+            ("[\"custom\"]", "unknown variant"),
+        ] {
+            let home = tempdir().expect("temp home");
+            fs::write(
+                home.path().join("config.toml"),
+                format!("[models.example]\nservice_tiers = {tiers}\n"),
+            )
+            .expect("write config");
+            let error = FileConfig::load(home.path()).expect_err("invalid tier list must fail");
+            assert!(error.to_string().contains(expected), "{tiers}: {error}");
         }
     }
 

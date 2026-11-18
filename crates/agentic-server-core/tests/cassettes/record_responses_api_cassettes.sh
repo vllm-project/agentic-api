@@ -49,7 +49,7 @@ record() {
         lifecycle) turns=19; mode=response-lifecycle ;;
         pagination) turns=16; mode=response-pagination ;;
         edge-cases) turns=23; mode=response-edge-cases ;;
-        conversation) turns=19; mode=response-conversation ;;
+        conversation) turns=23; mode=response-conversation ;;
         replayed-items) turns=14; mode=response-replayed-items ;;
         tool-items) turns=48; mode=response-tool-items; read_timeout="${HTTP_READ_TIMEOUT:-900}" ;;
         call-ids) turns=17; mode=response-call-ids ;;
@@ -115,6 +115,8 @@ elif scenario == "edge-cases":
 elif scenario == "conversation":
     assert sum(turn["request"]["method"] == "DELETE" for turn in turns) == 3
     assert any(turn["request"]["body"].get("conversation") for turn in turns)
+    assert all(turn["request"]["body"].get("conversation") for turn in turns[-4:])
+    assert [turn["request"]["body"]["store"] for turn in turns[-4:]] == [True, True, False, True]
 elif scenario == "replayed-items":
     assert sum(turn["request"]["method"] == "POST" for turn in turns) == 5
     assert any(len(turn["request"]["body"].get("input", [])) == 3 for turn in turns)

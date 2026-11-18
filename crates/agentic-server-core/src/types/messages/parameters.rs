@@ -1,6 +1,6 @@
 //! Typed Messages parameters shared by admission, fingerprints, and forwarding.
 
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 #[cfg(feature = "openapi")]
@@ -12,54 +12,7 @@ use utoipa::{
     },
 };
 
-/// Create-only fields distinguish omission from an explicit null on continuation.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub enum RequestField<T> {
-    #[default]
-    Missing,
-    Null,
-    Value(T),
-}
-
-impl<T> RequestField<T> {
-    #[must_use]
-    pub fn is_missing(&self) -> bool {
-        matches!(self, Self::Missing)
-    }
-    #[must_use]
-    pub fn is_null(&self) -> bool {
-        matches!(self, Self::Null)
-    }
-    #[must_use]
-    pub fn as_ref(&self) -> Option<&T> {
-        if let Self::Value(value) = self {
-            Some(value)
-        } else {
-            None
-        }
-    }
-    #[must_use]
-    pub fn into_option(self) -> Option<T> {
-        if let Self::Value(value) = self {
-            Some(value)
-        } else {
-            None
-        }
-    }
-}
-impl<'de, T: Deserialize<'de>> Deserialize<'de> for RequestField<T> {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Ok(Option::<T>::deserialize(deserializer)?.map_or(Self::Null, Self::Value))
-    }
-}
-impl<T: Serialize> Serialize for RequestField<T> {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match self {
-            Self::Value(value) => value.serialize(serializer),
-            Self::Missing | Self::Null => serializer.serialize_none(),
-        }
-    }
-}
+pub use crate::types::RequestField;
 
 /// Known thinking parameters validate their payload; future provider types retain all fields.
 #[derive(Debug, Clone, PartialEq, Serialize)]

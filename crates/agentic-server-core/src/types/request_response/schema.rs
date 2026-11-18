@@ -1,3 +1,5 @@
+use crate::types::ServiceTier;
+
 use super::{
     MultiAgentConfig, PromptCacheOptions, PromptCacheRetention, RequestPayload, ResponsePayload, ResponseTextFormat,
 };
@@ -98,6 +100,7 @@ impl utoipa::PartialSchema for RequestPayload {
             .property("text", nullable_ref("ResponseTextConfig"))
             .property("temperature", nullable_num())
             .property("top_p", nullable_num())
+            .property("top_logprobs", nullable_int())
             .property("max_output_tokens", nullable_int())
             .property("max_tool_calls", nullable_int())
             .property("ignore_eos", nullable_bool())
@@ -120,7 +123,10 @@ impl utoipa::PartialSchema for RequestPayload {
                     .item(<PromptCacheOptions as utoipa::PartialSchema>::schema())
                     .item(null_type()),
             )
-            .property("service_tier", nullable_str())
+            .property(
+                "service_tier",
+                OneOfBuilder::new().item(ServiceTier::schema()).item(null_type()),
+            )
             .property(
                 "multi_agent",
                 OneOfBuilder::new()
