@@ -298,3 +298,10 @@ Licensed under the [Apache License 2.0](LICENSE).
 **⭐ If Agentic API saves you from writing one more client-side tool loop, star the repo! ⭐**
 
 </div>
+
+### Conversation memory prototype
+
+A local Rust [memory-service prototype](docs/design/conversation-memory.md) stores
+conversation summaries and searchable transcripts using file search, with
+owner-filtered recall and deletion. Run `cargo run -p agentic-server-core --example memory_demo`
+for the SQLite restart/recall demonstration. Automatic Responses memory is not yet enabled.
