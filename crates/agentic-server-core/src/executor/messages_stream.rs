@@ -35,7 +35,7 @@ use serde_json::{Value, json};
 use tracing::Instrument as _;
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::inference::{BoxStream, response_lines, send_request};
+use crate::executor::inference::{BoxStream, UpstreamHeaders, response_lines, send_request};
 use crate::executor::messages_context::MessagesRequestContext;
 use crate::executor::messages_round::{MessagesRoundDecision, decide_round};
 use crate::executor::messages_server_tools::{NativeServerTools, ServerToolView};
@@ -125,8 +125,7 @@ async fn open_round(
             &exec_ctx.client,
             upstream.url(),
             body,
-            None,
-            Some(upstream.headers()),
+            Some(&UpstreamHeaders::Forwarded(upstream.headers().clone())),
             exec_ctx.streaming_timeout,
         )
         .await

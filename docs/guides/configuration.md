@@ -217,3 +217,31 @@ Responses API uses: both `always` and `never`, `null` when absent.
 
 Web search provider settings are described in [Web search providers](web-search.md), and the gateway-run web search
 and web fetch tools for Claude Code in [Gateway server tools on `/v1/messages`](messages-server-tools.md).
+
+### Typed upstream timeouts
+
+The shared HTTP client constructed by `ExecutionContext::from_config` has a fixed
+10-second connect timeout. `ExecutionContext::new` accepts an existing client unchanged;
+embedders must set its connection policy themselves. This shared client is also used by
+configured gateway tools. Transparent HTTP proxying has its own transport policy.
+
+`STREAMING_CHUNK_TIMEOUT_S` (default 600 seconds; zero disables it) bounds the complete
+request-send/response-header wait for typed streaming inference and each subsequent wait
+for a body chunk, including HTTP error bodies. It measures **wire progress**, not semantic
+token progress: partial lines, SSE comments, or other bytes reset the body wait. Waiting
+on downstream delivery is outside a pending upstream chunk read.
+
+Typed JSON inference passes `Duration::ZERO` for both headers and body reads because
+non-streaming upstreams may generate the whole response before sending headers. Connection
+setup is still bounded for the configured shared client, but JSON header and body waits
+can remain unbounded after connection. JSON and SSE line byte ceilings still apply, as does
+the 1 MiB error-body ceiling; unreadable error bodies retain the upstream status and headers.
+
+There is no total inference-round deadline. This avoids aborting legitimate long generations
+and agent sessions while upstream data continues arriving. It is deliberately narrower than
+the original finite connect/header/total deadline proposal in PR #540 and is **not security-equivalent**:
+a continuous byte trickle may keep a stream alive indefinitely without producing tokens
+(for example, bounded SSE comment lines evade a cumulative semantic-output budget). A single
+unterminated line still hits the line-size limit. Zero also disables streaming header/progress
+bounds. Operators requiring a hard lifetime bound must enforce a separate request policy;
+these progress and size limits do not provide one.

@@ -117,7 +117,7 @@ pub struct ExecutionContext {
     /// Base URL for the LLM backend, e.g. `"http://localhost:8000"`.
     pub llm_base_url: String,
     /// Maximum wait for the next body chunk in a streaming request, including HTTP error bodies.
-    /// Applies after response headers arrive; `Duration::ZERO` disables the timeout.
+    /// Bounds sending/receiving response headers and each body chunk read; `Duration::ZERO` disables the timeout.
     /// Sourced from the `STREAMING_CHUNK_TIMEOUT_S` environment variable, defaulting to
     /// [`DEFAULT_STREAMING_TIMEOUT`] when unset or unparseable.
     pub streaming_timeout: Duration,
@@ -138,6 +138,7 @@ impl ExecutionContext {
         format!("{}/v1/responses", self.llm_base_url)
     }
 
+    /// Uses the supplied client unchanged; embedders must configure its connect timeout.
     #[must_use]
     pub fn new(
         conv_handler: ConversationHandler,
@@ -275,7 +276,12 @@ impl ExecutionContext {
 
         let conv_handler = ConversationHandler::new(ConversationStore::new(pool.clone()));
         let resp_handler = ResponseHandler::new(ResponseStore::new(pool.clone()));
-        let client = Arc::new(reqwest::Client::new());
+        let client = Arc::new(
+            reqwest::Client::builder()
+                .connect_timeout(Duration::from_secs(10))
+                .build()
+                .map_err(|error| Error::Config(format!("failed to build upstream HTTP client: {error}")))?,
+        );
         let gateway_executors = GatewayExecutors::from_config(Arc::clone(&client), &cfg.tools)
             .map_err(|error| Error::Config(format!("failed to validate configured gateway tool policies: {error}")))?;
         let file_search =

@@ -6,6 +6,12 @@ All notable changes to Agentic API are documented here.
 
 ### Changed
 
+- Typed streaming inference uses `STREAMING_CHUNK_TIMEOUT_S` for response headers as well as body progress.
+  The configured shared HTTP client has a fixed 10-second connect timeout; JSON waits remain unbounded and
+  streaming has no total deadline. See [the timeout tradeoff](docs/guides/configuration.md#typed-upstream-timeouts).
+  The Rust `executor::call_inference` re-export and `inference::call_inference`/`call_inference_limited` helpers
+  are removed; transport is internal to the typed executor and receives explicit headers and configured limits.
+
 - An MCP declaration's `require_approval` is now typed (`McpApprovalPolicy`) and parses the Responses API filter
   object as well as `"always"` and `"never"` (part of #145). There is still no approval step, so a request is
   accepted only when no tool it can call needs approval: `"never"`, or a filter whose `never.tool_names` lists every

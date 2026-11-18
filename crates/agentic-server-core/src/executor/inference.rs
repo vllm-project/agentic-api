@@ -3,16 +3,12 @@
 //! Handles sending requests, reading streaming chunks, and mapping network
 //! and HTTP errors to [`ExecutorError`].
 
-use std::sync::Arc;
 use std::time::Duration;
 
 use async_stream::stream;
 use futures::{Stream, StreamExt};
 use tracing::Instrument as _;
 
-#[cfg(test)]
-use crate::config::DEFAULT_MAX_UPSTREAM_JSON_BYTES;
-use crate::config::DEFAULT_MAX_UPSTREAM_SSE_LINE_BYTES;
 use crate::executor::error::{ExecutorError, ExecutorResult, ResourceLimit};
 use crate::proxy::processed_response_headers;
 
@@ -38,8 +34,25 @@ pub type BoxStream = std::pin::Pin<Box<dyn Stream<Item = String> + Send>>;
 
 /// Wire-format marker signalling end-of-stream to the client.
 pub(super) const DONE_MARKER: &str = "data: [DONE]\n\n";
-#[cfg(test)]
-pub(super) const MAX_SSE_LINE_BYTES: usize = DEFAULT_MAX_UPSTREAM_SSE_LINE_BYTES;
+
+fn llm_transport_error(is_timeout: bool) -> ExecutorError {
+    ExecutorError::LLMTransport {
+        status: if is_timeout {
+            http::StatusCode::GATEWAY_TIMEOUT
+        } else {
+            http::StatusCode::BAD_GATEWAY
+        },
+        message: if is_timeout { "LLM timeout" } else { "LLM unavailable" },
+    }
+}
+
+fn classify_reqwest_error(source: reqwest::Error) -> ExecutorError {
+    if source.is_timeout() {
+        llm_transport_error(true)
+    } else {
+        ExecutorError::NetworkError(source)
+    }
+}
 
 /// Fetch the next raw bytes chunk from a streaming response.
 ///
@@ -56,13 +69,7 @@ where
             ExecutorError::StreamError("chunk timeout: no data received within the configured window".into())
         })?
     };
-    item.transpose().map_err(ExecutorError::NetworkError)
-}
-
-#[cfg(test)]
-fn drain_complete_utf8_lines(buffer: &mut Vec<u8>) -> ExecutorResult<Vec<String>> {
-    let mut scanned = 0;
-    drain_complete_utf8_lines_limited(buffer, &mut scanned, MAX_SSE_LINE_BYTES)
+    item.transpose().map_err(classify_reqwest_error)
 }
 
 fn drain_complete_utf8_lines_limited(
@@ -125,20 +132,18 @@ pub(super) const MAX_ERROR_RESPONSE_BYTES: usize = 1024 * 1024;
 
 /// Build, send, and validate an HTTP POST to the LLM backend.
 ///
-/// Shared by both the blocking path (caller consumes a bounded byte stream) and
-/// the streaming path (caller reads `.bytes_stream()`). Maps connect/timeout failures and
-/// non-2xx status codes to [`ExecutorError::LLMRequest`] and connection
-/// failures to [`ExecutorError::LLMTransport`]. The chunk timeout also bounds error-body
-/// reads after headers arrive; unreadable bodies are discarded while retaining status and headers.
+/// Connection failures map to 502 and connect/header timeouts to 504. Non-success
+/// responses retain their status and filtered headers. `chunk_timeout` bounds the
+/// entire send/header wait and each error-body read; zero disables these bounds.
+/// There is no total deadline. Unreadable error bodies are discarded.
 pub(super) async fn send_request(
     client: &reqwest::Client,
     url: &str,
     body: String,
-    auth: Option<&str>,
-    forwarded_headers: Option<&reqwest::header::HeaderMap>,
+    upstream_headers: Option<&UpstreamHeaders>,
     chunk_timeout: Duration,
 ) -> ExecutorResult<reqwest::Response> {
-    send_request_traced(client, url, body, auth, forwarded_headers, chunk_timeout)
+    send_request_traced(client, url, body, upstream_headers, chunk_timeout)
         .instrument(super::telemetry::stages::http_client(url))
         .await
 }
@@ -147,10 +152,10 @@ async fn send_request_traced(
     client: &reqwest::Client,
     url: &str,
     body: String,
-    auth: Option<&str>,
-    forwarded_headers: Option<&reqwest::header::HeaderMap>,
+    upstream_headers: Option<&UpstreamHeaders>,
     chunk_timeout: Duration,
 ) -> ExecutorResult<reqwest::Response> {
+    let (auth, forwarded_headers) = upstream_headers.map_or((None, None), UpstreamHeaders::transport_parts);
     let mut headers = forwarded_headers.cloned().unwrap_or_default();
     super::telemetry::stages::inject_context(&mut headers);
     headers
@@ -161,25 +166,25 @@ async fn send_request_traced(
         req = req.bearer_auth(key);
     }
 
-    let resp = req
-        .send()
-        .await
-        .inspect_err(|e| {
-            tracing::Span::current().record("error.type", if e.is_timeout() { "timeout" } else { "transport" });
+    let sent = if chunk_timeout.is_zero() {
+        Ok(req.send().await)
+    } else {
+        tokio::time::timeout(chunk_timeout, req.send()).await
+    };
+    let resp = match sent {
+        Ok(Ok(resp)) => resp,
+        Ok(Err(error)) => {
+            let is_timeout = error.is_timeout();
+            tracing::Span::current().record("error.type", if is_timeout { "timeout" } else { "transport" });
             tracing::Span::current().record("otel.status_code", "ERROR");
-        })
-        .map_err(|e| ExecutorError::LLMTransport {
-            status: if e.is_timeout() {
-                http::StatusCode::GATEWAY_TIMEOUT
-            } else {
-                http::StatusCode::BAD_GATEWAY
-            },
-            message: if e.is_timeout() {
-                "LLM timeout"
-            } else {
-                "LLM unavailable"
-            },
-        })?;
+            return Err(llm_transport_error(is_timeout));
+        }
+        Err(_) => {
+            tracing::Span::current().record("error.type", "timeout");
+            tracing::Span::current().record("otel.status_code", "ERROR");
+            return Err(llm_transport_error(true));
+        }
+    };
 
     tracing::Span::current().record("http.response.status_code", i64::from(resp.status().as_u16()));
     if !resp.status().is_success() {
@@ -203,126 +208,19 @@ async fn send_request_traced(
     Ok(resp)
 }
 
-/// Makes a non-streaming HTTP POST to the LLM backend and returns the full JSON body.
-///
-/// Used by `run_blocking` so it can pass the result to [`ResponseAccumulator::from_json`](crate::executor::accumulator::ResponseAccumulator::from_json).
-#[cfg(test)]
+/// Fetch a size-bounded JSON body and filtered response headers.
+/// Generation may finish before headers arrive, so JSON has no header or body idle timeout.
 pub(super) async fn fetch_response_json(
     upstream_json: String,
     url: &str,
     client: &reqwest::Client,
-    auth: Option<&str>,
-) -> ExecutorResult<String> {
-    let auth = auth.map(|token| UpstreamHeaders::Bearer(token.to_owned()));
-    fetch_response_json_limited(
-        upstream_json,
-        url,
-        client,
-        auth.as_ref(),
-        DEFAULT_MAX_UPSTREAM_JSON_BYTES,
-    )
-    .await
-}
-
-pub(super) async fn fetch_response_json_limited(
-    upstream_json: String,
-    url: &str,
-    client: &reqwest::Client,
-    auth: Option<&UpstreamHeaders>,
-    max_upstream_json_bytes: usize,
-) -> ExecutorResult<String> {
-    let (auth, headers) = auth.map_or((None, None), UpstreamHeaders::transport_parts);
-    let resp = send_request(client, url, upstream_json, auth, headers, Duration::ZERO).await?;
-    // Preserve the reqwest::Error as the typed source (NetworkError).
-    response_text_limited(resp, Duration::ZERO, max_upstream_json_bytes).await
-}
-
-/// Makes a non-streaming HTTP POST with caller-supplied upstream headers.
-pub(super) async fn fetch_response_json_with_headers(
-    upstream_json: String,
-    url: &str,
-    client: &reqwest::Client,
-    headers: &reqwest::header::HeaderMap,
+    headers: Option<&UpstreamHeaders>,
     max_upstream_json_bytes: usize,
 ) -> ExecutorResult<(String, http::HeaderMap)> {
-    let resp = send_request(client, url, upstream_json, None, Some(headers), Duration::ZERO).await?;
+    let resp = send_request(client, url, upstream_json, headers, Duration::ZERO).await?;
     let response_headers = processed_response_headers(resp.headers());
     let body = response_text_limited(resp, Duration::ZERO, max_upstream_json_bytes).await?;
     Ok((body, response_headers))
-}
-
-/// Step 2 — Call the LLM inference backend; yields raw SSE lines (`data: …`).
-///
-/// Always requests `stream=true` upstream. Stops on `[DONE]`.
-///
-/// # Errors
-/// Each stream item is `Result<String, ExecutorError>`. The stream yields `Err` on:
-/// - [`ExecutorError::LLMTransport`] — connect timeout (504) or connection failure (502)
-/// - [`ExecutorError::LLMRequest`] — non-2xx HTTP status from the backend
-/// - [`ExecutorError::NetworkError`] — network failure while reading the response body
-pub fn call_inference(
-    upstream_json: String,
-    url: String,
-    client: Arc<reqwest::Client>,
-    auth: Option<String>,
-    chunk_timeout: Duration,
-) -> impl Stream<Item = Result<String, ExecutorError>> + Send + 'static {
-    call_inference_limited(
-        upstream_json,
-        url,
-        client,
-        auth,
-        chunk_timeout,
-        DEFAULT_MAX_UPSTREAM_SSE_LINE_BYTES,
-    )
-}
-
-/// Stream upstream SSE lines with a configured maximum line size.
-pub fn call_inference_limited(
-    upstream_json: String,
-    url: String,
-    client: Arc<reqwest::Client>,
-    auth: Option<String>,
-    chunk_timeout: Duration,
-    max_sse_line_bytes: usize,
-) -> impl Stream<Item = Result<String, ExecutorError>> + Send + 'static {
-    call_inference_with_headers_limited(
-        upstream_json,
-        url,
-        client,
-        auth.map(UpstreamHeaders::Bearer),
-        chunk_timeout,
-        max_sse_line_bytes,
-    )
-}
-
-pub(super) fn call_inference_with_headers_limited(
-    upstream_json: String,
-    url: String,
-    client: Arc<reqwest::Client>,
-    auth: Option<UpstreamHeaders>,
-    chunk_timeout: Duration,
-    max_sse_line_bytes: usize,
-) -> impl Stream<Item = Result<String, ExecutorError>> + Send + 'static {
-    stream! {
-        let (auth, headers) = auth.as_ref().map_or((None, None), UpstreamHeaders::transport_parts);
-        let resp = match send_request(
-            &client,
-            &url,
-            upstream_json,
-            auth,
-            headers,
-            chunk_timeout,
-        ).await {
-            Ok(r) => r,
-            Err(e) => { yield Err(e); return; }
-        };
-
-        let mut lines = Box::pin(response_lines(resp, chunk_timeout, max_sse_line_bytes));
-        while let Some(line) = lines.next().await {
-            yield line;
-        }
-    }
 }
 
 /// Convert a successful upstream response body into SSE data lines with a `data: ` prefix.
@@ -372,228 +270,4 @@ pub(super) fn response_lines(
 }
 
 #[cfg(test)]
-mod tests {
-    use std::convert::Infallible;
-
-    use axum::body::Body;
-    use axum::http::StatusCode;
-    use axum::response::Response;
-    use axum::routing::post;
-    use bytes::Bytes;
-    use futures::stream;
-
-    use super::*;
-
-    async fn read_sse_body(body: String, keep_open: bool) -> Vec<ExecutorResult<String>> {
-        let app = axum::Router::new().route(
-            "/v1/responses",
-            post(move || {
-                let body = body.clone();
-                async move {
-                    let chunks = async_stream::stream! {
-                        yield Ok::<_, Infallible>(Bytes::from(body));
-                        if keep_open {
-                            std::future::pending::<()>().await;
-                        }
-                    };
-                    Response::builder()
-                        .header("content-type", "text/event-stream")
-                        .body(Body::from_stream(chunks))
-                        .unwrap()
-                }
-            }),
-        );
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let url = format!("http://{}/v1/responses", listener.local_addr().unwrap());
-        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-        let result = call_inference(
-            "{}".to_owned(),
-            url,
-            Arc::new(reqwest::Client::new()),
-            None,
-            Duration::from_secs(1),
-        )
-        .collect()
-        .await;
-        server.abort();
-        let _ = server.await;
-        result
-    }
-
-    #[tokio::test]
-    async fn sse_data_spacing_preserves_field_values() {
-        let lines = read_sse_body(
-            concat!(
-                ":comment\r\nevent: ignored\r\nid: 1\r\nretry: 1000\r\n",
-                "Data: ignored\r\ndatabase: ignored\r\n data: ignored\r\n",
-                "data:{\"delta\":\"雪 ☃: data: text\"}\r\n\r\n",
-                "data: {\"spaced\":true}\n\n",
-                "data:  {\"leading_space\":true}\n\n",
-                "data:\t{\"tab\":true}\n\n",
-                "data:\n\ndata: \n\ndata:{malformed}\n\n",
-                "data:  [DONE]\n\ndata:[DONE]extra\n\n",
-            )
-            .to_owned(),
-            false,
-        )
-        .await
-        .into_iter()
-        .collect::<ExecutorResult<Vec<_>>>()
-        .unwrap();
-        assert_eq!(
-            lines,
-            [
-                "data: {\"delta\":\"雪 ☃: data: text\"}",
-                "data: {\"spaced\":true}",
-                "data:  {\"leading_space\":true}",
-                "data: \t{\"tab\":true}",
-                "data: ",
-                "data: ",
-                "data: {malformed}",
-                "data:  [DONE]",
-                "data: [DONE]extra",
-            ]
-        );
-    }
-
-    #[tokio::test]
-    async fn sse_data_spacing_stops_at_both_done_markers() {
-        for separator in ["", " "] {
-            let body = format!("data: {{}}\n\ndata:{separator}[DONE]\r\n\r\ndata: ignored\n\n");
-            let lines = read_sse_body(body, true)
-                .await
-                .into_iter()
-                .collect::<ExecutorResult<Vec<_>>>()
-                .expect("[DONE] must stop without waiting for upstream EOF or a chunk timeout");
-            assert_eq!(lines, ["data: {}"]);
-        }
-    }
-
-    #[tokio::test]
-    async fn sse_data_spacing_preserves_line_limit() {
-        for separator in ["", " "] {
-            let prefix = format!("data:{separator}");
-            let line = format!("{prefix}{}", "x".repeat(MAX_SSE_LINE_BYTES - prefix.len()));
-            let accepted = read_sse_body(format!("{line}\n\n"), false).await;
-            assert_eq!(accepted.len(), 1);
-            assert_eq!(
-                accepted[0].as_ref().unwrap().len(),
-                MAX_SSE_LINE_BYTES + usize::from(separator.is_empty())
-            );
-
-            let rejected = read_sse_body(format!("{line}x\n\n"), false).await;
-            assert_eq!(rejected.len(), 1);
-            assert!(
-                rejected[0]
-                    .as_ref()
-                    .unwrap_err()
-                    .to_string()
-                    .contains("upstream SSE line exceeded")
-            );
-        }
-    }
-
-    #[tokio::test]
-    async fn sse_data_spacing_preserves_chunk_timeout_without_done() {
-        let lines = read_sse_body("data:{}\n\n".to_owned(), true).await;
-        assert_eq!(lines.len(), 2);
-        assert_eq!(lines[0].as_ref().unwrap(), "data: {}");
-        assert!(lines[1].as_ref().unwrap_err().to_string().contains("chunk timeout"));
-    }
-
-    async fn oversized_body_server(status: StatusCode) -> (String, tokio::task::JoinHandle<()>) {
-        let limit = if status.is_success() {
-            DEFAULT_MAX_UPSTREAM_JSON_BYTES
-        } else {
-            MAX_ERROR_RESPONSE_BYTES
-        };
-        let app = axum::Router::new().route(
-            "/v1/responses",
-            post(move || async move {
-                let half = limit / 2;
-                let chunks = stream::iter([
-                    Ok::<_, Infallible>(Bytes::from(vec![b'x'; half + 1])),
-                    Ok(Bytes::from(vec![b'x'; limit - half])),
-                ]);
-                Response::builder()
-                    .status(status)
-                    .body(Body::from_stream(chunks))
-                    .unwrap()
-            }),
-        );
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("bind response limit server");
-        let address = listener.local_addr().expect("response limit server address");
-        let server = tokio::spawn(async move {
-            axum::serve(listener, app).await.ok();
-        });
-        (format!("http://{address}/v1/responses"), server)
-    }
-
-    #[test]
-    fn utf8_line_reader_preserves_split_multibyte_characters() {
-        let snowman = "\u{2603}";
-        let line = format!(r#"data: {{"delta":"snow {snowman}"}}"#);
-        let bytes = format!("{line}\n").into_bytes();
-        let split_at = bytes
-            .windows(snowman.len())
-            .position(|window| window == snowman.as_bytes())
-            .expect("snowman bytes present")
-            + 1;
-        let mut buffer = bytes[..split_at].to_vec();
-
-        assert!(
-            drain_complete_utf8_lines(&mut buffer)
-                .expect("partial UTF-8 line")
-                .is_empty()
-        );
-
-        buffer.extend_from_slice(&bytes[split_at..]);
-        let lines = drain_complete_utf8_lines(&mut buffer).expect("complete UTF-8 line");
-
-        assert!(buffer.is_empty());
-        assert_eq!(lines, vec![line]);
-        assert!(!lines[0].contains('\u{FFFD}'));
-    }
-
-    #[test]
-    fn utf8_line_reader_rejects_an_oversized_unterminated_line() {
-        let mut buffer = vec![b'x'; MAX_SSE_LINE_BYTES + 1];
-        let error = drain_complete_utf8_lines(&mut buffer).expect_err("oversized SSE line must fail");
-        assert!(error.to_string().contains("upstream SSE line exceeded"));
-    }
-
-    #[tokio::test]
-    async fn blocking_response_reader_rejects_a_cumulative_oversized_body() {
-        let (url, server) = oversized_body_server(StatusCode::OK).await;
-        let error = fetch_response_json("{}".to_owned(), &url, &reqwest::Client::new(), None)
-            .await
-            .expect_err("oversized successful response must fail");
-
-        assert!(error.to_string().contains("upstream response exceeded"));
-        server.abort();
-    }
-
-    #[tokio::test]
-    async fn non_success_response_discards_a_cumulative_oversized_body() {
-        let (url, server) = oversized_body_server(StatusCode::BAD_GATEWAY).await;
-        let error = send_request(
-            &reqwest::Client::new(),
-            &url,
-            "{}".to_owned(),
-            None,
-            None,
-            Duration::ZERO,
-        )
-        .await
-        .expect_err("non-success response must fail");
-
-        let ExecutorError::LLMRequest { status, body, .. } = error else {
-            panic!("expected upstream request error");
-        };
-        assert_eq!(status, StatusCode::BAD_GATEWAY);
-        assert!(body.is_empty());
-        server.abort();
-    }
-}
+mod tests;
