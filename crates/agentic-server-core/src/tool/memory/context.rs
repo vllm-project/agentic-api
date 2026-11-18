@@ -15,20 +15,24 @@ impl MemoryContext {
         for result in &results.data {
             for content in &result.content {
                 let remaining = budget.saturating_sub(text.len() + 1);
-                let mut length = content.text.len().min(remaining);
-                let encoded = loop {
-                    let snippet = prefix(&content.text, length);
-                    if snippet.trim().is_empty() {
-                        break None;
-                    }
-                    let encoded = serde_json::to_string(snippet)?;
+                let mut low = 0;
+                let mut high = content.text.len().min(remaining);
+                // Find a fitting JSON-encoded UTF-8 prefix. Subtracting the
+                // escaped excess can discard every character even when a
+                // shorter, useful excerpt fits the available context budget.
+                while low < high {
+                    let middle = low + (high - low).div_ceil(2);
+                    let encoded = serde_json::to_string(prefix(&content.text, middle))?;
                     if encoded.len() <= remaining {
-                        break Some(encoded);
+                        low = middle;
+                    } else {
+                        high = middle - 1;
                     }
-                    // JSON escaping can expand content. Remove at least the
-                    // excess, then retry at a UTF-8 boundary within the budget.
-                    length = snippet.len().saturating_sub(encoded.len() - remaining);
-                };
+                }
+                let snippet = prefix(&content.text, low);
+                let encoded = (!snippet.trim().is_empty())
+                    .then(|| serde_json::to_string(snippet))
+                    .transpose()?;
                 let Some(encoded) = encoded else { continue };
                 text.push_str(&encoded);
                 text.push('\n');
@@ -61,4 +65,35 @@ pub(super) fn prefix(text: &str, max_bytes: usize) -> &str {
         end -= 1;
     }
     &text[..end]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MemoryContext, PREAMBLE};
+    use crate::types::file_search::{FileAttributes, SearchContent, SearchResponse, SearchResult};
+
+    #[test]
+    fn escaped_excerpts_keep_useful_content_when_only_a_prefix_fits() {
+        let results = SearchResponse {
+            object: "vector_store.search_results.page".into(),
+            search_query: vec!["launch".into()],
+            data: vec![SearchResult {
+                file_id: "file-test".into(),
+                filename: "memory.md".into(),
+                score: 1.0,
+                attributes: FileAttributes::default(),
+                content: vec![SearchContent {
+                    type_: "text".into(),
+                    text: "\\".repeat(1000),
+                }],
+            }],
+            has_more: false,
+            next_page: None,
+        };
+        let budget = PREAMBLE.len() + 41;
+        let context = MemoryContext::from_results(&results, budget).unwrap().unwrap();
+        assert!(context.as_str().len() <= budget);
+        let excerpt: String = serde_json::from_str(context.as_str().strip_prefix(PREAMBLE).unwrap().trim()).unwrap();
+        assert_eq!(excerpt, "\\".repeat(19));
+    }
 }

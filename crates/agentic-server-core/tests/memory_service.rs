@@ -141,7 +141,7 @@ async fn recall_survives_a_real_database_and_service_restart_then_forget_removes
     );
     assert!(matches!(
         search.get_file(&file_id).await,
-        Err(FileSearchError::NotFound(_))
+        Err(FileSearchError::FileNotFound { .. })
     ));
 }
 
@@ -480,5 +480,42 @@ async fn an_attachment_failure_cleans_up_the_uploaded_memory_file() {
             .unwrap()
             .data
             .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn failed_forget_keeps_the_memory_manageable_until_the_delete_can_be_retried() {
+    let fixture = Fixture::new().await;
+    let file_id = fixture.write("alice", "Launch color teal.", "").await;
+    sqlx::raw_sql("CREATE TRIGGER reject_memory_delete BEFORE DELETE ON file_search_files BEGIN SELECT RAISE(ABORT, 'injected deletion failure'); END;")
+        .execute(fixture.pool.as_ref()).await.unwrap();
+    assert!(fixture.memory.forget(&owner_id("alice"), &file_id).await.is_err());
+    assert!(
+        fixture
+            .search
+            .get_vector_store_file(&fixture.store_id, &file_id)
+            .await
+            .is_ok()
+    );
+    assert!(
+        fixture
+            .memory
+            .recall(&owner_id("alice"), &MemoryOptions::default(), "launch color")
+            .await
+            .unwrap()
+            .is_some()
+    );
+    sqlx::raw_sql("DROP TRIGGER reject_memory_delete")
+        .execute(fixture.pool.as_ref())
+        .await
+        .unwrap();
+    fixture.memory.forget(&owner_id("alice"), &file_id).await.unwrap();
+    assert!(
+        fixture
+            .memory
+            .recall(&owner_id("alice"), &MemoryOptions::default(), "launch color")
+            .await
+            .unwrap()
+            .is_none()
     );
 }

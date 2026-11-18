@@ -1,7 +1,7 @@
 # Conversation memory: local prototype and integration proposal
 
-Status: **library prototype**, based on main at `81a65c5`. This does not enable
-memory on `/v1/responses`, add an OpenAI wire tool, or change stored item history.
+Status: **library prototype**. Integration RFC:
+[#563](https://github.com/vllm-project/agentic-api/issues/563). This does not enable memory on `/v1/responses`, add an OpenAI wire tool, or change stored item history.
 No inference, model summarization, or automatic background writes run in this slice.
 
 ## Behavioral reference
@@ -57,9 +57,11 @@ The complete formatted context stays within four bytes per configured approximat
 token, including framing and escaping. This is a byte bound, not a tokenizer's
 exact token count. A budget too small to fit the framing returns no context.
 
-`forget` checks memory and owner attributes, detaches the artifact from recall,
-then deletes the underlying file. These operations use existing file-search
-persistence and blob cleanup. Delete failures remain visible to the caller.
+`forget` checks memory and owner attributes, then uses the existing Files deletion
+transaction to remove metadata, attachments, and searchable chunks together.
+A failed SQL deletion preserves the attachment so the operation can be retried.
+Failed blob removal retains the existing durable cleanup intent. Delete failures
+remain visible to the caller.
 
 The prototype writes immutable artifacts. It does **not** yet implement automatic
 summarization, conversation replacement, durable write jobs, deduplication, default
@@ -73,8 +75,8 @@ is no process-local cache whose loss breaks recall, and no new background worker
 Before changing a protected core contract, follow the repository's
 [maintainer standards](../../.agents/skills/maintainer-standards/SKILL.md) and
 [protected-core rules](../../.agents/skills/maintainer-standards/references/protected-core.md):
-prepare an RFC issue and obtain maintainer agreement. This local proposal is the
-reviewable input to that step; it is not a published RFC or a substitute approval.
+obtain maintainer agreement on [RFC #563](https://github.com/vllm-project/agentic-api/issues/563).
+This prototype does not change the protected request path.
 
 1. **Admission and types.** Add a typed, documented `memory` request extension and
    operator configuration, disabled by default. Treat use and generation as separate
@@ -147,12 +149,16 @@ integration needs executor tests across transports, lease/concurrency/crash test
 forgotten-data resurrection tests, authorization checks through every Files route,
 and representative long-conversation recall evaluation.
 
-## Local validation results
+## Types and dependencies
 
-- `cargo test -p agentic-server-core --test memory_service --test file_search_service --test file_search_tool_test --offline`: **48 passed, 1 ignored**. The existing PostgreSQL file-search test requires `TEST_POSTGRES_URL` and was not run.
-- `cargo clippy -p agentic-server-core --all-targets --offline -- -D warnings`: **passed**, after correcting two documentation lint findings.
-- `uvx --offline pre-commit run --files ...`: **passed** for all eleven changed/new files, including production file-size checks and rustfmt.
-- `cargo run -p agentic-server-core --example memory_demo --offline`: **passed**; reopening the SQLite database retained Alice's teal launch color, Bob's memory-service recall was empty, and forgetting removed the artifact.
-- Initial compilation failed because system OpenSSL development files were unavailable. Successful builds used the existing headers and static libraries under `/tmp/pr278-build-deps/runtime`, via `OPENSSL_INCLUDE_DIR`, `OPENSSL_LIB_DIR`, `OPENSSL_STATIC=1`, and the corresponding architecture include directory in `CFLAGS`. No dependency or toolchain versions were changed.
-
-These were targeted checks, not a full workspace or live-model test run.
+```mermaid
+classDiagram
+    MemoryService --> FileSearchService : reuses ingestion and retrieval
+    MemoryService --> MemoryOwner : requires resolved owner
+    MemoryService --> MemoryOptions : validates controls and budgets
+    MemoryService --> MemoryDocument : stores summary and transcript
+    MemoryService --> MemoryContext : returns temporary recall context
+    MemoryContext --> InputMessage : model-facing projection
+    FileSearchService --> FileSearchRepository : existing persistence/index
+    FileSearchService --> FileBlobStore : existing blob lifecycle
+```

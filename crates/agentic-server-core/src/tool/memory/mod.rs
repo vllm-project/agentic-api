@@ -174,8 +174,8 @@ impl MemoryService {
         {
             return Err(FileSearchError::NotFound("Memory not found".into()));
         }
-        // Detach first, so the memory cannot be recalled even if blob cleanup fails.
-        self.search.detach_file(&self.store_id, file_id).await?;
+        // Reuse the Files deletion transaction: attachments and chunks disappear
+        // with metadata, and blob cleanup remains durable if removal fails.
         self.search.delete_file(file_id).await?;
         Ok(())
     }
