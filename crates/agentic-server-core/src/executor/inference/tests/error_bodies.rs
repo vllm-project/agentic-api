@@ -4,14 +4,13 @@ use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;
 
-use agentic_core::executor::ExecutorError;
-use agentic_core::executor::inference::call_inference;
+use super::super::{ExecutorError, send_request};
 use axum::Router;
 use axum::body::Body;
 use axum::response::Response;
 use axum::routing::post;
 use bytes::Bytes;
-use futures::{Stream, StreamExt};
+use futures::Stream;
 use http::StatusCode;
 use tokio::net::TcpListener;
 
@@ -52,9 +51,11 @@ where
 }
 
 async fn read_error(url: String, timeout: Duration) -> Vec<Result<String, ExecutorError>> {
-    call_inference("{}".to_owned(), url, Arc::new(reqwest::Client::new()), None, timeout)
-        .collect()
-        .await
+    vec![
+        send_request(&reqwest::Client::new(), &url, "{}".to_owned(), None, timeout)
+            .await
+            .map(|_| String::new()),
+    ]
 }
 
 fn assert_error(mut result: Vec<Result<String, ExecutorError>>, expected_status: StatusCode, expected_body: &str) {

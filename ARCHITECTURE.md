@@ -909,8 +909,13 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   It builds `UpstreamRequest`s, snapshots registry classification facts into an owned
   `TranslationContext`, passes the shared retained-data budget into ingestion, and
   passes each live JSON or SSE body to `AgentPipeline`. It does not charge SSE wire bytes.
-- **`inference.rs`** — `call_inference()`: the raw HTTP/SSE transport to vLLM. No
-  parsing beyond splitting `data: ...` lines and stopping at `[DONE]`.
+- **`inference.rs`** — `send_request`, `fetch_response_json`, and `response_lines` own
+  raw HTTP/SSE transport. No parsing beyond splitting `data: ...` lines and stopping at
+  `[DONE]`. The shared client built by `ExecutionContext::from_config` has a 10-second
+  connect timeout. Streaming header waits and body reads use the existing progress window;
+  JSON uses zero (no timeout), and there is no total inference deadline. Progress means
+  wire bytes, not semantic tokens. Body byte ceilings remain enforced. See the
+  [configuration guide](docs/guides/configuration.md#typed-upstream-timeouts) for the security tradeoff.
 - **`pipeline.rs`, `pipeline/`** — `AgentPipeline`, the request-owned entry point for
   both response body formats. `RoundIngestion` owns the synchronous per-round semantic
   core; its `StreamRelay` (`relay.rs`, `relay/`) owns awaited, ordered client delivery

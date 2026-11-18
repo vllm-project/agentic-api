@@ -6,6 +6,12 @@
 
 ---
 
+> Transport update (PR #540): the historical `call_inference` API below is no longer public.
+> Typed execution uses internal `send_request`, `fetch_response_json`, and `response_lines` functions;
+> callers pass explicit headers and configured limits. See [current architecture](https://github.com/vllm-project/agentic-api/blob/main/ARCHITECTURE.md)
+> and [timeout policy](../guides/configuration.md#typed-upstream-timeouts). The PR #46 examples below
+> describe the original design rather than the current transport API.
+
 ## Foundation: PR #46
 
 [PR #46](https://github.com/vllm-project/agentic-api/pull/46) by @maralbahari implements the base executor loop for text-only stateful conversations:
