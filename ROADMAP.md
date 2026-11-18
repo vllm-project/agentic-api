@@ -265,6 +265,33 @@ capability. Reuse the cassette recorder workflow; document intentional
 differences and unsupported upstream combinations rather than implying full
 OpenAI conformance from request-schema coverage alone.
 
+## Containerized Harness Swarms
+
+Explore swarms of independently deployed harnesses that branch work from a
+conversation, run in separate containers, communicate, and return their outputs
+to a coordinator
+([#564](https://github.com/vllm-project/agentic-api/issues/564)). This extends the
+shipped Responses multi-agent runtime with harness deployment and lifecycle
+coordination.
+
+- Explore declarative configuration for harnesses, container images, model
+  settings, tools, workspaces, and bounded concurrency and resource budgets.
+- Use the Conversations API for durable item history; define branch checkpoints,
+  parent/child lineage, and isolated worker conversations and workspaces.
+- Provide a memory tool to search authorized conversation history and retrieve
+  source items, with explicit freshness, retention, and deletion behavior.
+- Define addressed messaging, task status, cancellation, restart recovery,
+  artifact exchange, and container cleanup through deployment adapters.
+- Evaluate current Codex subagent and memory settings alongside other harnesses,
+  then validate a small prototype against a single-harness baseline.
+
+The RFC leaves the configuration schema, coordination topology, and first
+container backend open. Reuse existing execution and storage paths, coordinate
+external environment lifecycle with
+[#352](https://github.com/vllm-project/agentic-api/issues/352), and enforce
+authenticated state ownership through
+[#107](https://github.com/vllm-project/agentic-api/issues/107).
+
 ## Enterprise Readiness
 
 [Enterprise Readiness](https://github.com/vllm-project/agentic-api/issues/316)
