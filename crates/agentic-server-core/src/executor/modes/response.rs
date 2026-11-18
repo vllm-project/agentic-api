@@ -247,6 +247,52 @@ mod tests {
         assert!(result.is_err());
     }
 
+    /// A call and its output may share an ID prefix, so a reference resolves to the stored item whatever kind the
+    /// client named. The recorded `OpenAI` Responses and Conversations behavior does the same.
+    #[tokio::test]
+    async fn stored_reference_resolves_to_the_stored_item_kind() {
+        use crate::storage::create_pool_with_schema;
+        use serde_json::json;
+
+        let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await.unwrap();
+        let store = ResponseStore::new(pool);
+        let stored: Vec<InOutItem> = serde_json::from_value(json!([
+            {"type": "function_call", "id": "fc_call", "call_id": "call_seed", "name": "lookup", "arguments": "{}"},
+            {"type": "function_call_output", "id": "fc_output", "call_id": "call_seed", "output": "done"},
+            {"type": "shell_call_output", "id": "sho_output", "call_id": "call_shell", "output": []}
+        ]))
+        .unwrap();
+        store
+            .persist("resp_seed", None, stored, None, &ResponseMetadata::default())
+            .await
+            .unwrap();
+        let mut references: Vec<InOutItem> = serde_json::from_value(json!([
+            {"type": "function_call_output", "id": "fc_call", "call_id": "call_other", "output": "changed"},
+            {"type": "function_call", "id": "fc_output", "call_id": "call_other", "name": "other", "arguments": "{}"},
+            {"type": "shell_call", "id": "sho_output", "call_id": "call_other", "action": {"commands": ["pwd"]}}
+        ]))
+        .unwrap();
+        ResponseHandler::new(store)
+            .resolve_input_items(&mut references)
+            .await
+            .unwrap();
+        let resolved: Vec<_> = serde_json::to_value(&references)
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| (item["id"].clone(), item["type"].clone(), item["call_id"].clone()))
+            .collect();
+        assert_eq!(
+            resolved,
+            [
+                (json!("fc_call"), json!("function_call"), json!("call_seed")),
+                (json!("fc_output"), json!("function_call_output"), json!("call_seed")),
+                (json!("sho_output"), json!("shell_call_output"), json!("call_shell")),
+            ]
+        );
+    }
+
     #[tokio::test]
     async fn persisted_metadata_keeps_public_selector_after_inference_relaxation() {
         use crate::storage::create_pool_with_schema;

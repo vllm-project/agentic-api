@@ -12,6 +12,7 @@ A focused PR is not authorization for a broader refactor, feature expansion, com
 ## Before coding or reviewing
 
 1. Establish the branch, base/head or working-tree diff, and user-authorized scope. Preserve unrelated local work.
+   Check the task against the [maintainer standards](../maintainer-standards/SKILL.md).
 2. Read `AGENTS.md`, `TERMINOLOGY.md`, and `ARCHITECTURE.md`. **Scan the whole repository**, not just the reported file:
    inventory workspace crates, module roots, public APIs, tests and cassettes, Python tooling, scripts, configuration,
    docs, CI, and existing skills. Use [architecture and reuse](references/architecture-and-reuse.md) to build the map.

@@ -488,6 +488,16 @@ replay_tests! {
     (replay_call_ids_gateway, "call-ids", "gateway"),
 }
 
+/// Replays the ID-prefix admission turns. The later turns seed stored items and resolve a kind mismatch to them in
+/// both recordings, but only `OpenAI` then rejects the unpaired call at ingress, so they are not replayed.
+#[tokio::test]
+async fn replay_item_id_prefixes() {
+    for provider in ["openai", "gateway"] {
+        let turns = cassette("item-id-prefixes", provider).expect("required Responses recording missing");
+        replay("item-id-prefixes", provider, &turns[..5]).await;
+    }
+}
+
 #[tokio::test]
 async fn replay_client_tool_input_items_gateway() {
     let turns = cassette("tool-items", "gateway").expect("gateway tool-execution recording");

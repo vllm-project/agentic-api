@@ -251,7 +251,7 @@ impl ExecutorError {
                 | ToolError::UpstreamWithheldFunctionCall,
             )
             | Self::CompactionFailed { .. } => StatusCode::BAD_GATEWAY,
-            Self::Conflict(_) => StatusCode::CONFLICT,
+            Self::Conflict(_) | Self::Storage(StorageError::ItemConflict) => StatusCode::CONFLICT,
             Self::McpListToolsFailed(_) => StatusCode::FAILED_DEPENDENCY,
             Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
             Self::ParseError(_) => StatusCode::UNPROCESSABLE_ENTITY,
@@ -295,7 +295,8 @@ impl ExecutorError {
             | Self::JsonError(_)
             | Self::PayloadTooLarge(_)
             | Self::Storage(
-                StorageError::ItemCursorNotFound { .. }
+                StorageError::ItemConflict
+                | StorageError::ItemCursorNotFound { .. }
                 | StorageError::ResponseNotFound { .. }
                 | StorageError::PreviousResponseNotFound { .. }
                 | StorageError::ConversationNotFound { .. },
@@ -327,6 +328,7 @@ impl ExecutorError {
             Self::Conflict(_) => "response_already_stored",
             Self::ClientItem(error) => error.code(),
             Self::Storage(StorageError::ItemAlreadyInConversation) => "item_already_in_conversation",
+            Self::Storage(StorageError::ItemConflict) => "item_conflict",
             Self::PayloadTooLarge(_) => "body_too_large",
             Self::ResourceLimitExceeded { .. } => "response_resource_limit_exceeded",
             Self::InvalidMaxToolCalls(error) => error.code(),
@@ -352,6 +354,7 @@ impl ExecutorError {
             Self::Tool(ToolError::UnknownParameter { param }) => Some(param),
             Self::UnsupportedValue { param, .. } => param.as_deref(),
             Self::Storage(StorageError::ItemAlreadyInConversation) => Some("items"),
+            Self::Storage(StorageError::ItemConflict) => Some("item"),
             Self::Storage(StorageError::ItemCursorNotFound { .. }) => Some("after"),
             Self::ConversationLocked { .. } => Some("conversation"),
             Self::Storage(StorageError::PreviousResponseNotFound { .. }) => Some("previous_response_id"),
@@ -371,6 +374,7 @@ impl ExecutorError {
             Self::FileSearch(error) | Self::Tool(ToolError::FileSearch(error)) => error.public_message(),
             Self::Storage(
                 error @ (StorageError::ItemAlreadyInConversation
+                | StorageError::ItemConflict
                 | StorageError::ItemCursorNotFound { .. }
                 | StorageError::ResponseNotFound { .. }
                 | StorageError::PreviousResponseNotFound { .. }

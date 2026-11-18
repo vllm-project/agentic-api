@@ -20,7 +20,7 @@ Modes:
   responses   No conversation created. Chains turns purely via
               previous_response_id. Supports --openai, --vllm, and --gateway backends.
   items       Records flat conversation/item API steps. Select --items-scenario
-              continuation, deletion, branch, pagination, edge-cases, concurrent-writes,
+              continuation, deletion, branch, pagination, edge-cases, item-id-prefixes, concurrent-writes,
               stale-compaction, competing-tool-outputs, or overlapping-multi-agent.
 
 Usage:
@@ -460,6 +460,45 @@ def _item_response(
     return result
 
 
+_SHELL_OUTPUT = [{"stdout": "ok\n", "stderr": "", "outcome": {"type": "exit", "exit_code": 0}}]
+_TOOL_PAIRS = {
+    "function": ({"type": "function_call", "name": "test_fn", "arguments": "{}"},
+                 {"type": "function_call_output", "output": "done"}),
+    "custom": ({"type": "custom_tool_call", "name": "test_tool", "input": "x"},
+               {"type": "custom_tool_call_output", "output": "done"}),
+    "shell": ({"type": "shell_call", "action": {"commands": ["pwd"]}, "status": "completed"},
+              {"type": "shell_call_output", "output": _SHELL_OUTPUT}),
+}
+
+
+def _id_prefix_items() -> list[dict]:
+    """Items whose supplied ID uses another admitted prefix (seven) or the call's prefix on an output (three).
+
+    A call accepts its output's prefix and a function output accepts `fco_`, while an output refuses its call's prefix.
+    """
+    (function_call, function_output), (custom_call, custom_output), (shell_call, shell_output) = _TOOL_PAIRS.values()
+    cases = (("fco_", function_call), ("fco_", function_output), ("fc_", function_output), ("ctco_", custom_call),
+             ("ctco_", custom_output), ("sho_", shell_call), ("sho_", shell_output), ("xyz_", function_output),
+             ("ctc_", custom_output), ("sh_", shell_output))
+    return [{**item, "id": f"{prefix}{secrets.token_hex(12)}", "call_id": f"call_prefix_{index}"}
+            for index, (prefix, item) in enumerate(cases)]
+
+
+def _kind_seed_items() -> list[dict]:
+    """One stored call and output for each tool family whose call and output IDs can share a prefix."""
+    return [{**item, "call_id": f"call_seed_{kind}"} for kind, pair in _TOOL_PAIRS.items() for item in pair]
+
+
+def _kind_mismatch_items(stored: list[dict]) -> list[dict]:
+    """Items that name one kind but reuse the public ID of a stored item of the other kind in the same family."""
+    by_type = {item["type"]: item["id"] for item in stored}
+    (function_call, function_output), (custom_call, _), (shell_call, _) = _TOOL_PAIRS.values()
+    return [{**item, "id": by_type[stored_type], "call_id": f"call_kind_{index}"}
+            for index, (item, stored_type) in enumerate((
+                (function_call, "function_call_output"), (function_output, "function_call"),
+                (custom_call, "custom_tool_call_output"), (shell_call, "shell_call_output")))]
+
+
 def _record_duplicate_items(
     client: httpx.Client, proxy_url: str, source_items_path: str, item_id: str
 ) -> None:
@@ -478,6 +517,16 @@ def _record_duplicate_items(
     _item_request(client, proxy_url, "POST", source_items_path,
                   body={"items": [first]}, expected_status=None)
     _item_request(client, proxy_url, "GET", source_items_path, params={"order": "asc"})
+    # A new ID repeated in one request reuses nothing, so each copy is stored as its own item: deleting the first
+    # leaves the second listed.
+    unseen = f"msg_{secrets.token_hex(24)}"
+    conversation = _create_conversation(client, proxy_url)
+    items_path = f"/v1/conversations/{conversation}/items"
+    copies = _item_request(client, proxy_url, "POST", items_path, expected_status=None,
+                           body={"items": [{**first, "id": unseen}, {**second, "id": unseen}]})
+    _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
+    _item_request(client, proxy_url, "DELETE", f"{items_path}/{copies['data'][0]['id']}")
+    _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
 
 
 def _record_concurrent_writes(client: httpx.Client, proxy_url: str, model: str) -> None:
@@ -1291,6 +1340,31 @@ def run_items(
             _item_request(client, proxy_url, "GET", f"/v1/responses/{response_id}/input_items",
                           params={"order": "asc"}, expected_status=None)
             _item_request(client, proxy_url, "GET", seed_items, params={"order": "asc"})
+        return
+    if scenario == "item-id-prefixes":
+        conversation = _create_conversation(client, proxy_url)
+        items_path = f"/v1/conversations/{conversation}/items"
+        for item in _id_prefix_items():
+            _item_request(client, proxy_url, "POST", items_path, body={"items": [item]}, expected_status=None)
+        _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
+        stored = _item_request(client, proxy_url, "POST", items_path, body={"items": _kind_seed_items()})["data"]
+        target_path = f"/v1/conversations/{_create_conversation(client, proxy_url)}/items"
+        for item in _kind_mismatch_items(stored):
+            _item_request(client, proxy_url, "POST", target_path, body={"items": [item]})
+        return
+    if scenario == "response-item-id-prefixes":
+        user = {"role": "user", "content": "Reply with only OK."}
+        items = _id_prefix_items()
+        # Each call is paired with an output: two admitted pairs, then three whose output uses the call's prefix.
+        for index, (call, output) in enumerate(((0, 1), (5, 6), (0, 7), (3, 8), (5, 9))):
+            pair = [{**items[position], "call_id": f"call_pair_{index}"} for position in (call, output)]
+            _item_request(client, proxy_url, "POST", "/v1/responses", expected_status=None,
+                          body={"model": model, "input": [*pair, user], "store": False, "stream": False})
+        items_path = f"/v1/conversations/{_create_conversation(client, proxy_url)}/items"
+        stored = _item_request(client, proxy_url, "POST", items_path, body={"items": _kind_seed_items()})["data"]
+        for item in _kind_mismatch_items(stored):
+            _item_request(client, proxy_url, "POST", "/v1/responses", expected_status=None,
+                          body={"model": model, "input": [item, user], "store": False, "stream": False})
         return
     if scenario == "edge-cases":
         for item in (
@@ -3209,7 +3283,7 @@ def run_responses(
 )
 @click.option(
     "--items-scenario",
-    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "concurrent-writes", "stale-compaction", *COMPACTION_SCENARIOS, *MCP_SCENARIOS, "competing-tool-outputs", "overlapping-multi-agent", "store-false", "multi-agent-store-false", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items", "response-call-ids"]),
+    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "item-id-prefixes", "concurrent-writes", "stale-compaction", *COMPACTION_SCENARIOS, *MCP_SCENARIOS, "competing-tool-outputs", "overlapping-multi-agent", "store-false", "multi-agent-store-false", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items", "response-call-ids", "response-item-id-prefixes"]),
     default="continuation",
     help="Fixed Conversation Items or Responses API scenario (for --mode items).",
 )
@@ -3496,7 +3570,9 @@ def main(
                           17 if items_scenario == "response-call-ids" else
                           10 if items_scenario == "pagination" else
                           6 if items_scenario == "branch" else
-                          19 if items_scenario == "edge-cases" else
+                          24 if items_scenario == "edge-cases" else
+                          18 if items_scenario == "item-id-prefixes" else
+                          11 if items_scenario == "response-item-id-prefixes" else
                           22 if items_scenario == "concurrent-writes" else
                           10 if items_scenario == "stale-compaction" else
                           COMPACTION_SCENARIOS[items_scenario][1] if items_scenario in COMPACTION_SCENARIOS else

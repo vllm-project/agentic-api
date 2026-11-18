@@ -1,5 +1,6 @@
 //! Conversation history item stored in the database.
 
+use std::collections::HashSet;
 use std::fmt::Write;
 
 use super::super::pool::{DbPool, DbResult, DbTransaction};
@@ -77,7 +78,8 @@ fn item_values_clause(row_count: usize, first_bind_index: usize, sequence_from_c
 /// row ID, so a repeated public ID can be stored once per occurrence. Rows are returned in input order.
 ///
 /// # Errors
-/// Returns an error if insertion fails or an item already belongs to the conversation.
+/// Returns an error if insertion fails, an item already belongs to the conversation, or two items reuse one stored
+/// item.
 pub async fn create_in_tx(
     tx: &mut DbTransaction<'_>,
     items: Vec<Item>,
@@ -186,6 +188,7 @@ async fn create_in_tx_with_next_conversation_seq(
              WHERE existing.conversation_id = $1 \
                AND (CAST($2 AS BIGINT) IS NULL OR existing.seq < $2) \
          ) \
+         AND NOT EXISTS (SELECT 1 FROM source_rows GROUP BY source_id HAVING COUNT(*) > 1) \
          ORDER BY incoming.seq \
          RETURNING *"
     );
@@ -207,9 +210,32 @@ async fn create_in_tx_with_next_conversation_seq(
 
     let rows = query.fetch_all(&mut **tx).await?;
     if rows.is_empty() {
-        return Err(StorageError::ItemAlreadyInConversation);
+        // Each guard refuses the whole batch; only a repeated public ID can reuse one stored item twice.
+        let mut seen = HashSet::new();
+        return Err(if items.iter().all(|item| seen.insert(&item.public_id)) {
+            StorageError::ItemAlreadyInConversation
+        } else {
+            StorageError::ItemConflict
+        });
     }
     Ok(rows)
+}
+
+/// The public IDs among `ids` that the tenant has stored.
+///
+/// # Errors
+/// Returns `DbResult::Err` if the database query fails.
+pub async fn stored_public_ids(pool: &DbPool, tenant_id: &str, ids: &[String]) -> DbResult<HashSet<String>> {
+    let placeholders = (2..ids.len() + 2)
+        .map(|index| format!("${index}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!("SELECT DISTINCT public_id FROM items WHERE tenant_id = $1 AND public_id IN ({placeholders})");
+    let mut query = sqlx::query_scalar::<_, String>(&sql).bind(tenant_id);
+    for id in ids {
+        query = query.bind(id);
+    }
+    Ok(query.fetch_all(pool).await?.into_iter().collect())
 }
 
 /// Get items by IDs.
@@ -474,6 +500,37 @@ mod tests {
         assert_eq!(original.data, r#"{"original":"a"}"#);
         assert!(get_items_by_public_id(&pool, &[]).await.unwrap().is_empty());
         pool.close().await;
+    }
+
+    /// A stored public ID repeated in one batch is refused and nothing is written.
+    #[tokio::test]
+    async fn repeated_stored_public_id_in_one_conversation_batch() {
+        let pool = crate::storage::create_pool_with_schema(Some("sqlite://?mode=memory"))
+            .await
+            .unwrap();
+        let mut transaction = pool.begin().await.unwrap();
+        for conversation_id in ["conv_source", "conv_target"] {
+            conversation::create_in_tx(&mut transaction, conversation_id, None, None)
+                .await
+                .unwrap();
+        }
+        create_in_tx(
+            &mut transaction,
+            vec![row("msg_stored".to_owned())],
+            Some("conv_source"),
+        )
+        .await
+        .unwrap();
+        let repeated = vec![row("msg_stored".to_owned()), row("msg_stored".to_owned())];
+        let refused = create_in_tx(&mut transaction, repeated, Some("conv_target")).await;
+        assert!(matches!(refused, Err(StorageError::ItemConflict)));
+        transaction.commit().await.unwrap();
+        let stored = conversation::get_with_items(&pool, "conv_target")
+            .await
+            .unwrap()
+            .unwrap()
+            .items;
+        assert!(stored.is_empty());
     }
 
     #[tokio::test]

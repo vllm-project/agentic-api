@@ -1,5 +1,6 @@
 //! Conversation storage operations.
 
+use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::sync::Arc;
 
@@ -208,6 +209,14 @@ impl ConversationStore {
         conversation::delete_in_tx(&mut tx, id).await?;
         tx.commit().await?;
         Ok(())
+    }
+
+    /// The supplied public item IDs the tenant has stored.
+    ///
+    /// # Errors
+    /// Returns an error if storage is unavailable or the query fails.
+    pub async fn stored_item_ids(&self, tenant_id: &str, ids: &[String]) -> StoreResult<HashSet<String>> {
+        Ok(item::stored_public_ids(self.pool()?, tenant_id, ids).await?)
     }
 
     /// Append items in order, sharing sequence allocation with Responses persistence.

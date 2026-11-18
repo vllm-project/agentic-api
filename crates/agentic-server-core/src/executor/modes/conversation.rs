@@ -37,10 +37,29 @@ impl ConversationHandler {
             ));
         }
         InOutItem::admit_all(items, "items")?;
+        let mut items = items.to_vec();
+        self.mint_unknown_ids(tenant_id, &mut items).await?;
         self.store
-            .create(tenant_id, metadata, items)
+            .create(tenant_id, metadata, &items)
             .await
             .map_err(ExecutorError::Storage)
+    }
+
+    /// `OpenAI` reuses a stored item named by a supplied ID and gives every other supplied ID a new one, so each copy of
+    /// a repeated new ID becomes its own item.
+    async fn mint_unknown_ids(&self, tenant_id: &str, items: &mut [InOutItem]) -> ExecutorResult<()> {
+        let supplied: Vec<String> = items.iter().filter_map(InOutItem::id).map(str::to_owned).collect();
+        if supplied.is_empty() {
+            return Ok(());
+        }
+        let stored = self.store.stored_item_ids(tenant_id, &supplied).await?;
+        for item in items
+            .iter_mut()
+            .filter(|item| item.id().is_some_and(|id| !stored.contains(id)))
+        {
+            item.set_id(item.minted_id());
+        }
+        Ok(())
     }
 
     /// Retrieves a tenant-owned conversation.
@@ -103,7 +122,7 @@ impl ConversationHandler {
         &self,
         tenant_id: &str,
         conversation_id: &str,
-        items: Vec<InOutItem>,
+        mut items: Vec<InOutItem>,
     ) -> ExecutorResult<Vec<InOutItem>> {
         if items.is_empty() || items.len() > 20 {
             return Err(ExecutorError::InvalidRequest(
@@ -111,7 +130,7 @@ impl ConversationHandler {
             ));
         }
         InOutItem::admit_all(&items, "items")?;
-
+        self.mint_unknown_ids(tenant_id, &mut items).await?;
         self.store
             .create_items(tenant_id, conversation_id, items)
             .await

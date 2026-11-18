@@ -2,7 +2,7 @@
 # Record short, flat Conversation Items API sequences against OpenAI and a gateway.
 # Each filename: tN is one HTTP request in execution order.
 # CONVERSATIONS_RECORD_SET=all|openai|gateway (default: all)
-# CONVERSATIONS_SCENARIO=all|edge-cases|concurrent-writes|competing-tool-outputs|overlapping-multi-agent|continuation|continuation-stream|deletion|deletion-stream|branch|branch-stream|pagination|pagination-stream
+# CONVERSATIONS_SCENARIO=all|edge-cases|item-id-prefixes|concurrent-writes|competing-tool-outputs|overlapping-multi-agent|continuation|continuation-stream|deletion|deletion-stream|branch|branch-stream|pagination|pagination-stream
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,7 +19,7 @@ case "$RECORD_SET" in
     *) echo "CONVERSATIONS_RECORD_SET must be all, openai, or gateway" >&2; exit 2 ;;
 esac
 case "$SCENARIO" in
-    all|edge-cases|concurrent-writes|competing-tool-outputs|overlapping-multi-agent|continuation|continuation-stream|deletion|deletion-stream|branch|branch-stream|pagination|pagination-stream) ;;
+    all|edge-cases|item-id-prefixes|concurrent-writes|competing-tool-outputs|overlapping-multi-agent|continuation|continuation-stream|deletion|deletion-stream|branch|branch-stream|pagination|pagination-stream) ;;
     *) echo "Invalid CONVERSATIONS_SCENARIO: $SCENARIO" >&2; exit 2 ;;
 esac
 if [[ "$RECORD_SET" != gateway && -z "${OPENAI_API_KEY:-}" ]]; then
@@ -33,7 +33,8 @@ record() {
     local turns=5
     if [[ "$mode" == branch ]]; then turns=6; fi
     if [[ "$mode" == pagination ]]; then turns=10; fi
-    if [[ "$mode" == edge-cases ]]; then turns=19; fi
+    if [[ "$mode" == edge-cases ]]; then turns=24; fi
+    if [[ "$mode" == item-id-prefixes ]]; then turns=18; fi
     if [[ "$mode" == concurrent-writes ]]; then turns=22; fi
     if [[ "$mode" == competing-tool-outputs ]]; then turns=9; fi
     if [[ "$mode" == overlapping-multi-agent ]]; then turns=7; fi
@@ -57,7 +58,7 @@ from yaml import safe_load
 cassette = safe_load(Path(sys.argv[1]).read_text())
 mode, scenario = sys.argv[2:]
 turns = cassette["turns"]
-expected = {"pagination": 10, "branch": 6, "edge-cases": 19, "concurrent-writes": 22,
+expected = {"pagination": 10, "branch": 6, "edge-cases": 24, "item-id-prefixes": 18, "concurrent-writes": 22,
             "competing-tool-outputs": 9, "overlapping-multi-agent": 7}.get(mode, 5)
 assert list(cassette) == ["turns"], "cassette must be one flat turns list"
 assert len(turns) == expected
@@ -123,6 +124,21 @@ if mode == "overlapping-multi-agent":
     streamed = [index for index, turn in enumerate(turns, 1) if turn["request"]["body"].get("stream")]
     assert streamed == [3], streamed
     sys.exit(0)
+if mode == "item-id-prefixes":
+    assert (requests[0]["method"], requests[0]["path"]) == ("POST", "/v1/conversations")
+    items_path = f"/v1/conversations/{turns[0]['response']['body']['id']}/items"
+    assert all((request["method"], request["path"]) == ("POST", items_path) for request in requests[1:11])
+    prefixes = [request["body"]["items"][0]["id"].split("_", 1)[0] + "_" for request in requests[1:11]]
+    assert prefixes == ["fco_", "fco_", "fc_", "ctco_", "ctco_", "sho_", "sho_", "xyz_", "ctc_", "sh_"], prefixes
+    assert [turn["response"]["status_code"] for turn in turns[1:11]] == [200] * 7 + [400] * 3
+    assert (requests[11]["method"], requests[11]["path"]) == ("GET", items_path)
+    assert (requests[12]["method"], requests[12]["path"]) == ("POST", items_path)
+    assert (requests[13]["method"], requests[13]["path"]) == ("POST", "/v1/conversations")
+    target_path = f"/v1/conversations/{turns[13]['response']['body']['id']}/items"
+    stored = {item["id"] for item in turns[12]["response"]["body"]["data"]}
+    assert all((request["method"], request["path"]) == ("POST", target_path) for request in requests[14:18])
+    assert all(request["body"]["items"][0]["id"] in stored for request in requests[14:18])
+    sys.exit(0)
 if mode == "edge-cases":
     for start, kind, prefix in ((0, "message", "item_wrongprefix_"),
                                 (3, "function_call", "msg_wrongprefix_")):
@@ -164,6 +180,15 @@ if mode == "edge-cases":
     assert requests[17]["body"] == requests[12]["body"]
     assert (requests[18]["method"], requests[18]["path"]) == ("GET", items_path)
     assert requests[18]["query_params"] == {"order": "asc"}
+    assert (requests[19]["method"], requests[19]["path"]) == ("POST", "/v1/conversations")
+    unseen_path = f"/v1/conversations/{turns[19]['response']['body']['id']}/items"
+    assert (requests[20]["method"], requests[20]["path"]) == ("POST", unseen_path)
+    unseen = [item["id"] for item in requests[20]["body"]["items"]]
+    assert len(unseen) == 2 and unseen[0] == unseen[1] and unseen[0] != reused_id
+    assert (requests[21]["method"], requests[21]["path"]) == ("GET", unseen_path)
+    first_copy = turns[20]["response"]["body"]["data"][0]["id"]
+    assert (requests[22]["method"], requests[22]["path"]) == ("DELETE", f"{unseen_path}/{first_copy}")
+    assert (requests[23]["method"], requests[23]["path"]) == ("GET", unseen_path)
     sys.exit(0)
 assert (requests[1]["method"], requests[1]["path"]) == ("POST", "/v1/responses")
 assert "conversation" in requests[1]["body"] and "previous_response_id" not in requests[1]["body"]
@@ -218,6 +243,9 @@ for provider in openai gateway; do
     done
     if [[ "$SCENARIO" == all || "$SCENARIO" == edge-cases ]]; then
         record "$provider" edge-cases edge-cases "$model" --no-stream
+    fi
+    if [[ "$SCENARIO" == all || "$SCENARIO" == item-id-prefixes ]]; then
+        record "$provider" item-id-prefixes item-id-prefixes "$model" --no-stream
     fi
     for mode in concurrent-writes competing-tool-outputs overlapping-multi-agent; do
         if [[ "$SCENARIO" == all || "$SCENARIO" == "$mode" ]]; then

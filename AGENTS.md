@@ -198,8 +198,7 @@ needs, and give data read by another path its own column. Use
 
 ## Pull Requests
 
-- Target the `main` branch.
-- Include two sections in the PR description:
-  - **Summary** -- what the PR does and why.
-  - **Test Plan** -- how the changes were verified.
+- Target the `main` branch and follow the pull request requirements in the
+  [maintainer standards](.agents/skills/maintainer-standards/SKILL.md), including the open-PR limit and the
+  [PR description](.agents/skills/maintainer-standards/references/pr-description.md) format.
 - Ensure all pre-commit hooks pass before opening the PR.
