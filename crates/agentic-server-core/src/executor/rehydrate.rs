@@ -3,6 +3,7 @@
 //! Builds a [`RequestContext`] by loading prior turns from storage and
 //! injecting them into the enriched request before it is forwarded to the LLM.
 
+use std::collections::HashSet;
 use std::convert::identity;
 
 use super::session::{ResponseContinuation, ResponseSession};
@@ -266,6 +267,11 @@ fn missing_previous_response_id() -> ExecutorError {
 /// `OpenAI` Conversations contract. A conversation turn does not inherit the stored settings.
 async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) -> ExecutorResult<()> {
     let ConversationSnapshot { items, mut checkpoint } = exec_ctx.conv_handler.rehydrate(ctx).await?;
+    // The conversation's items are prepended to the input, so resending one of them repeats it in the input.
+    let new_ids: HashSet<&str> = ctx.new_input_items.iter().filter_map(InOutItem::id).collect();
+    if let Some(id) = items.iter().filter_map(InOutItem::id).find(|id| new_ids.contains(id)) {
+        return Err(ExecutorError::duplicate_input_item(id));
+    }
     ctx.conversation_id.clone_from(&ctx.original_request.conversation);
     checkpoint.continue_from_compaction(&items, &ctx.enriched_request);
     if !restore_agent_tree(ctx, &checkpoint.metadata, exec_ctx.responses_config.max_retained_bytes)? {

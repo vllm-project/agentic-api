@@ -178,6 +178,17 @@ impl From<UpstreamRequestError> for ExecutorError {
 }
 
 impl ExecutorError {
+    /// The error `OpenAI` returns for a model input that holds the item `id` twice.
+    pub(crate) fn duplicate_input_item(id: &str) -> Self {
+        Self::UnsupportedValue {
+            param: Some("input".into()),
+            code: None,
+            message: format!(
+                "Duplicate item found with id {id}. Remove duplicate items from your input and try again."
+            ),
+        }
+    }
+
     pub(crate) fn is_invalid_upstream_tool_search(&self) -> bool {
         matches!(
             self,
