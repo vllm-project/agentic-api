@@ -933,6 +933,86 @@ async fn compact_endpoint_cache_key_is_request_scoped_with_previous_response() {
 }
 
 #[tokio::test]
+async fn compact_endpoint_cache_salt_is_request_scoped_with_previous_response() {
+    use agentic_core::executor::{
+        ExecutionContext,
+        modes::{ConversationHandler, ResponseHandler},
+    };
+    use agentic_core::storage::{ConversationStore, ResponseStore, create_pool_with_schema};
+
+    let (model_url, requests, model) = spawn_compaction_model().await;
+    let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
+    let mut state = test_state(&test_config(&model_url));
+    state.exec_ctx = Arc::new(ExecutionContext::new(
+        ConversationHandler::new(ConversationStore::new(pool.clone())),
+        ResponseHandler::new(ResponseStore::new(pool)),
+        Arc::new(reqwest::Client::new()),
+        model_url,
+    ));
+    let (gateway_url, gateway) = spawn_gateway(state).await;
+    let client = reqwest::Client::new();
+    let response = client
+        .post(format!("{gateway_url}/v1/responses"))
+        .json(&serde_json::json!({"model":"test-model","input":"salted context","store":true,"cache_salt":"tenant-a"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    let parent: serde_json::Value = response.json().await.unwrap();
+    for salt in [
+        None,
+        Some(serde_json::Value::Null),
+        Some(serde_json::json!("compact-salt")),
+    ] {
+        let mut request = serde_json::json!({"model":"test-model","previous_response_id":parent["id"]});
+        if let Some(salt) = salt {
+            request["cache_salt"] = salt;
+        }
+        let response = client
+            .post(format!("{gateway_url}/v1/responses/compact"))
+            .json(&request)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
+    }
+    let requests = requests.lock().await;
+    assert_eq!(requests.len(), 4);
+    assert_eq!(requests[0]["cache_salt"], "tenant-a");
+    assert!(requests[1].get("cache_salt").is_none());
+    assert!(requests[2].get("cache_salt").is_none());
+    assert_eq!(requests[3]["cache_salt"], "compact-salt");
+    for request in &requests[1..] {
+        assert!(request["input"].to_string().contains("salted context"));
+    }
+    model.abort();
+    gateway.abort();
+}
+
+#[tokio::test]
+async fn compact_endpoint_rejects_invalid_cache_salt_before_inference() {
+    let (model_url, requests, model) = spawn_compaction_model().await;
+    let (gateway_url, gateway) = spawn_gateway(test_state(&test_config(&model_url))).await;
+    for salt in [
+        serde_json::json!(42),
+        serde_json::json!(true),
+        serde_json::json!([]),
+        serde_json::json!({}),
+    ] {
+        let response = reqwest::Client::new()
+            .post(format!("{gateway_url}/v1/responses/compact"))
+            .json(&serde_json::json!({"model":"test-model","input":"retain context","cache_salt":salt}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::BAD_REQUEST);
+    }
+    assert!(requests.lock().await.is_empty());
+    model.abort();
+    gateway.abort();
+}
+
+#[tokio::test]
 async fn compact_endpoint_preserves_request_scoped_prompt_cache_retention() {
     let (model_url, requests, _model) = spawn_compaction_model().await;
     let pool = agentic_core::storage::create_pool_with_schema(Some("sqlite::memory:"))

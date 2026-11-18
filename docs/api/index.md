@@ -302,6 +302,10 @@ a `compaction_trigger` input item.
 - The same request-scoped behavior applies when `/v1/responses/compact` loads
   history through `previous_response_id`. The key is not echoed in responses.
 
+Compaction summary requests (automatic, `compaction_trigger`, multi-agent, and
+`/v1/responses/compact`) carry the current request's `cache_salt` the same way:
+it is not taken from a `previous_response_id`.
+
 The configured upstream decides whether a request receives a cache hit.
 
 Typed execution supports the mode/TTL subset of `prompt_cache_options` from the
