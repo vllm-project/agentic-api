@@ -5,15 +5,14 @@ use futures::TryStreamExt;
 use std::collections::HashSet;
 
 use super::StoredChunk;
-use crate::storage::{DbPool, DbTransaction};
+use crate::storage::{DbPool, schema::pgvector::PgvectorSchema};
 mod filter;
 use crate::types::file_search::{FileSearchError, PgvectorConfig, PgvectorIndex, SearchFilter, SearchMode, invalid};
 use filter::{CandidateSql, push_filter};
 
 #[derive(Clone)]
 pub(crate) struct PgvectorStorage {
-    dimensions: u16,
-    index: PgvectorIndex,
+    schema: PgvectorSchema,
     limit: u16,
 }
 
@@ -24,111 +23,15 @@ impl PgvectorStorage {
             return invalid("pgvector requires PostgreSQL");
         }
         let index = Self {
-            dimensions: config.dimensions,
-            index: config.index,
+            schema: PgvectorSchema::new(config),
             limit: config.candidate_limit,
         };
-        index.initialize_schema(pool).await?;
+        index.schema.ensure_ready(pool).await?;
         Ok(index)
     }
 
     pub(crate) fn dimensions(&self) -> usize {
-        usize::from(self.dimensions)
-    }
-
-    async fn initialize_schema(&self, pool: &DbPool) -> Result<(), FileSearchError> {
-        let mut tx = pool.begin().await?;
-        // Serialize optional schema setup across independent service instances.
-        sqlx::query("SELECT pg_advisory_xact_lock(752041291)")
-            .execute(&mut *tx)
-            .await?;
-        sqlx::query("CREATE EXTENSION IF NOT EXISTS vector")
-            .execute(&mut *tx)
-            .await?;
-        let version: String = sqlx::query_scalar("SELECT extversion FROM pg_extension WHERE extname = 'vector'")
-            .fetch_one(&mut *tx)
-            .await?;
-        let parts = version.split('.').map(str::parse::<u32>).collect::<Result<Vec<_>, _>>();
-        if !parts.is_ok_and(|parts| parts.len() == 3 && parts.as_slice() >= [0, 8, 0].as_slice()) {
-            return invalid("pgvector 0.8.0 or later is required for filtered iterative index scans");
-        }
-        sqlx::query("ALTER TABLE file_search_chunks ADD COLUMN IF NOT EXISTS embedding vector GENERATED ALWAYS AS (l2_normalize((data::jsonb ->> 'embedding')::vector)) STORED")
-            .execute(&mut *tx).await?;
-        self.configure_index(&mut tx).await?;
-        sqlx::query("CREATE INDEX IF NOT EXISTS file_search_chunks_text ON file_search_chunks USING gin (to_tsvector('simple', data::jsonb ->> 'text'))")
-            .execute(&mut *tx).await?;
-        tx.commit().await?;
-        Ok(())
-    }
-
-    fn index_configuration(&self) -> (&'static str, String) {
-        match self.index {
-            PgvectorIndex::Hnsw { m, ef_construction, .. } => {
-                ("hnsw", format!("m = {m}, ef_construction = {ef_construction}"))
-            }
-            PgvectorIndex::Ivfflat { lists, .. } => ("ivfflat", format!("lists = {lists}")),
-        }
-    }
-
-    async fn index_is_current(&self, tx: &mut DbTransaction<'_>) -> Result<bool, FileSearchError> {
-        let (method, options) = self.index_configuration();
-        let existing: Option<String> =
-            sqlx::query_scalar("SELECT obj_description(oid, 'pg_class') FROM pg_class WHERE oid = to_regclass($1)")
-                .bind(format!("file_search_vector_{}", self.dimensions))
-                .fetch_optional(&mut **tx)
-                .await?
-                .flatten();
-        Ok(existing.as_deref() == Some(format!("{method} {options}").as_str()))
-    }
-
-    async fn maintain_index(&self, pool: &DbPool) -> Result<(), FileSearchError> {
-        // Established indexes need only an unlocked catalog read. Missing or
-        // changed indexes are rechecked under the maintenance lock. Commit
-        // before retrieval so the lock never covers streamed candidate queries.
-        let mut tx = pool.begin().await?;
-        if !self.index_is_current(&mut tx).await? {
-            self.configure_index(&mut tx).await?;
-        }
-        tx.commit().await?;
-        Ok(())
-    }
-
-    async fn configure_index(&self, tx: &mut DbTransaction<'_>) -> Result<(), FileSearchError> {
-        sqlx::query("SELECT pg_advisory_xact_lock(752041291)")
-            .execute(&mut **tx)
-            .await?;
-        let dims = self.dimensions;
-        let (method, options) = self.index_configuration();
-        let name = format!("file_search_vector_{dims}");
-        let signature = format!("{method} {options}");
-        if !self.index_is_current(tx).await? {
-            sqlx::query(&format!("DROP INDEX IF EXISTS {name}"))
-                .execute(&mut **tx)
-                .await?;
-            if let PgvectorIndex::Ivfflat { lists, .. } = self.index {
-                let rows: i64 =
-                    sqlx::query_scalar("SELECT COUNT(*) FROM file_search_chunks WHERE vector_dims(embedding) = $1")
-                        .bind(i32::from(dims))
-                        .fetch_one(&mut **tx)
-                        .await?;
-                // Match OGX's conservative training floor. Until then, bounded
-                // SQL distance retrieval remains available without an ANN index.
-                if rows < i64::from(lists) * 1000 {
-                    return Ok(());
-                }
-            }
-            // One selected ANN index per dimension; reconfiguration rebuilds it
-            // atomically so PostgreSQL cannot silently pick an obsolete index.
-            // Identifiers and DDL values are exclusively validated integer configuration.
-            let sql = format!(
-                "CREATE INDEX {name} ON file_search_chunks USING {method} ((embedding::vector({dims})) vector_cosine_ops) WITH ({options}) WHERE vector_dims(embedding) = {dims}"
-            );
-            sqlx::query(&sql).execute(&mut **tx).await?;
-            sqlx::query(&format!("COMMENT ON INDEX {name} IS '{signature}'"))
-                .execute(&mut **tx)
-                .await?;
-        }
-        Ok(())
+        usize::from(self.schema.dimensions())
     }
 
     pub(crate) async fn candidates(
@@ -140,11 +43,11 @@ impl PgvectorStorage {
         mode: SearchMode,
         filter: Option<&SearchFilter>,
     ) -> Result<Vec<StoredChunk>, FileSearchError> {
-        if mode != SearchMode::Keyword && matches!(self.index, PgvectorIndex::Ivfflat { .. }) {
-            self.maintain_index(pool).await?;
+        if mode != SearchMode::Keyword && matches!(self.schema.index(), PgvectorIndex::Ivfflat { .. }) {
+            self.schema.maintain_index(pool).await?;
         }
         let mut tx = pool.begin().await?;
-        let settings = match self.index {
+        let settings = match self.schema.index() {
             PgvectorIndex::Hnsw { ef_search, .. } => [
                 ("hnsw.ef_search", ef_search.to_string()),
                 ("hnsw.iterative_scan", "strict_order".into()),
@@ -185,7 +88,7 @@ impl PgvectorStorage {
                 if semantic {
                     let vector = vectors.get(i).ok_or(FileSearchError::ProviderProtocol)?;
                     validate_vector(vector, self.dimensions())?;
-                    let dims = self.dimensions;
+                    let dims = self.schema.dimensions();
                     sql.push(format!(
                         " AND vector_dims(embedding) = {dims} ORDER BY embedding::vector({dims}) <=> "
                     ));

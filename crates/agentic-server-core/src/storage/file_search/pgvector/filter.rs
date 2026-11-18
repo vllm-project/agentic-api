@@ -103,3 +103,7 @@ impl CandidateSql {
         self
     }
 }
+
+#[cfg(test)]
+#[path = "filter_tests.rs"]
+mod tests;

@@ -8,18 +8,16 @@ use crate::{
     storage::{
         DbPool,
         file_search::{
-            Collection, FilePublicationFailure, FileSearchStorage, PreparedAttachment, StoredVectorStore, UploadedFile,
+            FileSearchStorage, PreparedAttachment,
             pgvector::{PgvectorStorage, validate_vector},
         },
     },
     types::file_search::{
-        FileObject, FileSearchError, ListParams, PgvectorConfig, SearchMode, SearchRequest, SearchResult,
-        VectorStoreFileObject, VectorStoreObject, invalid,
+        FileSearchError, PgvectorConfig, SearchMode, SearchRequest, SearchResult, VectorStoreObject, invalid,
     },
 };
 use futures::future::BoxFuture;
 use std::sync::Arc;
-use tokio_util::sync::CancellationToken;
 
 /// PostgreSQL metadata with native HNSW or `IVFFlat` cosine candidates.
 /// Implements the same provider contract as SQL exact search and sqlite-vec.
@@ -66,34 +64,12 @@ impl PgvectorRepository {
 }
 
 impl FileSearchRepository for PgvectorRepository {
+    fn metadata(&self) -> &FileSearchStorage {
+        &self.metadata
+    }
+
     fn index_identity(&self) -> Option<&str> {
         Some(&self.identity)
-    }
-
-    fn upload_file_metadata<'a>(
-        &'a self,
-        file: &'a FileObject,
-        content_type: &'a str,
-        owner_token: &'a str,
-        cancelled: &'a CancellationToken,
-    ) -> BoxFuture<'a, Result<(), FilePublicationFailure>> {
-        Box::pin(self.metadata.upload(file, content_type, owner_token, cancelled))
-    }
-
-    fn file<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<UploadedFile, FileSearchError>> {
-        Box::pin(self.metadata.file(id))
-    }
-
-    fn file_object<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<FileObject, FileSearchError>> {
-        Box::pin(self.metadata.file_object(id))
-    }
-
-    fn store<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<StoredVectorStore, FileSearchError>> {
-        Box::pin(self.metadata.store(id))
-    }
-
-    fn store_object<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<VectorStoreObject, FileSearchError>> {
-        Box::pin(self.metadata.store_object(id))
     }
 
     fn create_store<'a>(
@@ -122,90 +98,6 @@ impl FileSearchRepository for PgvectorRepository {
             self.validate_attachment(attachment)?;
             self.metadata.attach(store_id, embedding_identity, attachment).await
         })
-    }
-
-    fn attachment<'a>(
-        &'a self,
-        store_id: &'a str,
-        file_id: &'a str,
-    ) -> BoxFuture<'a, Result<Option<VectorStoreFileObject>, FileSearchError>> {
-        Box::pin(self.metadata.attachment(store_id, file_id))
-    }
-
-    fn delete<'a>(
-        &'a self,
-        collection: Collection,
-        id: &'a str,
-        store_id: Option<&'a str>,
-    ) -> BoxFuture<'a, Result<(), FileSearchError>> {
-        Box::pin(self.metadata.delete(collection, id, store_id))
-    }
-
-    fn stage_blob_cleanup<'a>(
-        &'a self,
-        id: &'a str,
-        owner_token: &'a str,
-        lease_expires_at: i64,
-    ) -> BoxFuture<'a, Result<(), FileSearchError>> {
-        Box::pin(self.metadata.stage_blob_cleanup(id, owner_token, lease_expires_at))
-    }
-
-    fn refresh_blob_cleanup<'a>(
-        &'a self,
-        id: &'a str,
-        owner_token: &'a str,
-        lease_expires_at: i64,
-    ) -> BoxFuture<'a, Result<bool, FileSearchError>> {
-        Box::pin(self.metadata.refresh_blob_cleanup(id, owner_token, lease_expires_at))
-    }
-
-    fn pending_blob_cleanup<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<Option<String>, FileSearchError>> {
-        Box::pin(self.metadata.pending_blob_cleanup(id))
-    }
-
-    fn complete_blob_cleanup<'a>(
-        &'a self,
-        id: &'a str,
-        owner_token: &'a str,
-    ) -> BoxFuture<'a, Result<(), FileSearchError>> {
-        Box::pin(self.metadata.complete_blob_cleanup(id, owner_token))
-    }
-
-    fn blob_cleanup_batch(&self, limit: i64, now: i64) -> BoxFuture<'_, Result<Vec<String>, FileSearchError>> {
-        Box::pin(self.metadata.blob_cleanup_batch(limit, now))
-    }
-
-    fn claim_blob_cleanup<'a>(
-        &'a self,
-        id: &'a str,
-        owner_token: &'a str,
-        now: i64,
-        lease_expires_at: i64,
-    ) -> BoxFuture<'a, Result<bool, FileSearchError>> {
-        Box::pin(self.metadata.claim_blob_cleanup(id, owner_token, now, lease_expires_at))
-    }
-
-    fn list_files<'a>(&'a self, params: &'a ListParams) -> BoxFuture<'a, Result<Vec<FileObject>, FileSearchError>> {
-        Box::pin(self.metadata.list(Collection::Files, None, params))
-    }
-
-    fn list_stores<'a>(
-        &'a self,
-        params: &'a ListParams,
-    ) -> BoxFuture<'a, Result<Vec<VectorStoreObject>, FileSearchError>> {
-        Box::pin(self.metadata.list_stores(params))
-    }
-
-    fn list_attachments<'a>(
-        &'a self,
-        store_id: &'a str,
-        params: &'a ListParams,
-    ) -> BoxFuture<'a, Result<Vec<VectorStoreFileObject>, FileSearchError>> {
-        Box::pin(self.metadata.list(Collection::Attachments, Some(store_id), params))
-    }
-
-    fn has_chunks<'a>(&'a self, store_ids: &'a [String]) -> BoxFuture<'a, Result<bool, FileSearchError>> {
-        Box::pin(self.metadata.has_chunks(store_ids))
     }
 
     fn search<'a>(

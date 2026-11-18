@@ -1898,8 +1898,11 @@ for the five-minute lifetime, serialized-size budget, and crash recovery rules.
   admits 256 MiB. Its keyword, hybrid, and filtered semantic paths use that
   same provider limit when they read chunks for exact ranking.
   The optional pgvector adapter uses `storage/file_search/pgvector.rs` for
-  PostgreSQL projection and index setup, bounded native candidate selection,
-  and typed SQL filters. Generated vector columns share metadata transactions;
+  bounded native candidate selection and typed SQL filters. Optional projection
+  and index DDL live in `storage/schema/pgvector.rs`, which verifies without DDL
+  in supervisor mode (including deferred IVFFlat maintenance). Shared metadata
+  forwarding lives in `FileSearchRepository` defaults over `metadata()`.
+  Generated vector columns share metadata transactions;
   no extension is required by portable migrations. Its repository in
   `tool/file_search/pgvector.rs` implements the same injectable provider contract
   and uses the shared final ranker. See the file-search guide for startup DDL

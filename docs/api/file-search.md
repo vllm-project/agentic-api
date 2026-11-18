@@ -84,6 +84,10 @@ can compose SQL metadata with Milvus or another vector index; a blob-store
 adapter can use S3, GCS, or Azure Blob Storage. This layer provides SQL and
 sqlite-vec and pgvector repositories and the local blob store. Other adapters and a
 configuration-file provider catalog are follow-up work.
+Repository adapters expose their shared `FileSearchStorage` through `metadata()`;
+trait defaults forward metadata and blob-cleanup operations there. Adapters
+implement index identity, publication, and search, and override deletion when
+index cleanup needs extra coordination (as sqlite-vec does).
 
 Repository implementations must publish an attachment only after its chunks
 are searchable, keep store embedding identities and dimensions compatible, and
@@ -300,15 +304,25 @@ Per-store ingestion retains the SQL provider's 64 MiB and 10,000-chunk limits.
 
 ### Startup and existing data
 
-Startup creates the optional `vector` extension, a stored generated vector
-projection of chunk data (unit-normalized after float32 conversion), a full-text GIN index, and one ANN index per configured
-dimension. This is optional provider setup, separate from portable migrations;
-SQLite and unconfigured PostgreSQL databases do not require the extension.
+The PostgreSQL backend schema step in `storage/schema/pgvector.rs` creates the
+optional `vector` extension, a stored generated vector projection of chunk data
+(unit-normalized after float32 conversion), a full-text GIN index, and one ANN
+index per configured dimension. This is an optional backend schema step after
+portable migrations; SQLite and unconfigured PostgreSQL databases do not require
+the extension.
 Projection updates and cascading deletion occur in the same transaction as
 metadata, so failed publication cannot expose partial attachments.
 
 The database role needs extension, table-alteration, and index-creation privileges;
 managed services may require an administrator to install `vector` first.
+With `AGENTIC_API_SCHEMA_READY`, startup only verifies the extension version,
+generated projection, GIN index, and configured ANN index. It rejects missing or
+incompatible objects without changing them. Operators must prepare these objects
+with the same index construction settings before enabling supervisor mode.
+An untrained IVFFlat configuration may use exact distance retrieval below its
+training floor; once it reaches the floor, the operator must build its index.
+Supervisor-managed searches never create or rebuild indexes.
+
 Projection backfill and index construction acquire database locks and can be
 expensive on populated databases. Plan an initialization window. Index changes
 rebuild the selected dimension's index transactionally, so replicas sharing a

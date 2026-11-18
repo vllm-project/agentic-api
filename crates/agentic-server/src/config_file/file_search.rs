@@ -52,11 +52,6 @@ impl FileSearchFileConfig {
             )));
         }
         if let Some(pgvector) = &self.pgvector {
-            if self.sqlite_vec_extension_path.is_some() {
-                return Err(Error::Config(
-                    "configure only one of sqlite_vec_extension_path and pgvector".into(),
-                ));
-            }
             pgvector
                 .validate()
                 .map_err(|error| Error::Config(format!("configuration file {}: {error}", path.display())))?;
@@ -97,6 +92,7 @@ ef_search = 100
         assert!(invalid.validate(Path::new("config.toml")).is_err());
         let conflicting: FileSearchFileConfig =
             toml::from_str(&format!("sqlite_vec_extension_path = '/vec0.so'\n{input}")).unwrap();
-        assert!(conflicting.validate(Path::new("config.toml")).is_err());
+        // Provider selection is validated once by FileSearchService::configured.
+        conflicting.validate(Path::new("config.toml")).unwrap();
     }
 }

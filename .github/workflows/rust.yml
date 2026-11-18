@@ -301,7 +301,9 @@ jobs:
         run: cargo test -p agentic-server-core --test file_search_service postgres_file_search -- --ignored --test-threads=1
 
       - name: Verify PostgreSQL pgvector indexing and provider parity
-        run: cargo test -p agentic-server-core --test pgvector_repository -- --ignored --test-threads=1
+        run: |
+          cargo test -p agentic-server-core --lib postgres_pgvector_ -- --ignored --test-threads=1
+          cargo test -p agentic-server-core --test pgvector_repository -- --ignored --test-threads=1
 
       - name: Verify pgvector HTTP search and citations with the official OpenAI client
         run: |
