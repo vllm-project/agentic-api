@@ -150,7 +150,8 @@ Catalog display defaults do not become admission limits.
 - **`server.rs`** (binary-private) owns process lifecycle: `build_state` (constructs
   `ExecutionContext::from_config`, i.e. where the DB pool actually gets created),
   `serve_gateway`/`serve_gateway_until_signal` (bind, serve, graceful shutdown with a
-  bounded drain), and `run`/`run_with_llm` (standalone mode, optionally spawning a vLLM
+  bounded drain; the shutdown signal also stops background admission and jobs, and the
+  drain waits for each job to record its row `failed`), and `run`/`run_with_llm` (standalone mode, optionally spawning a vLLM
   subprocess). It serves with `into_make_service_with_connect_info::<SocketAddr>()`, so
   middleware can read each connection's peer address.
 - **`main.rs`** (binary-private) is the `clap` CLI front end: parses config from
@@ -170,6 +171,7 @@ Catalog display defaults do not become admission limits.
 |---|---|---|
 | `POST /v1/responses` | `responses` | `handler/http/responses.rs` |
 | `GET /v1/responses/{response_id}` | `retrieve_response` | `handler/http/responses.rs` |
+| `POST /v1/responses/{response_id}/cancel` | `cancel_response` | `handler/http/responses.rs` |
 | `POST /v1/responses/compact` | `compact_response` | `handler/http/responses.rs` |
 | `POST /v1/conversations` | `create_conversation` | `handler/http/conversations.rs` |
 | `GET/POST/DELETE /v1/conversations/{id}` | Conversation CRUD | `handler/http/conversations.rs` |
@@ -528,8 +530,9 @@ OIDC bearer-token authentication: discovery, JWKS fetch/cache/refresh, and the
 `require_oidc` axum middleware layered onto protected routes in `app.rs`. The
 WebSocket handler also reads the resulting `AuthenticatedPrincipal` extension directly,
 to detect token expiry mid-session. `auth/api_key.rs` holds `require_api_key`, which
-guards stored-response retrieval when OIDC is off and `OPENAI_API_KEY` is set, because
-that route reads local storage and never reaches an upstream that would check the key.
+guards the stored-response routes (retrieval, deletion, input items, and cancellation)
+when OIDC is off and `OPENAI_API_KEY` is set, because those routes act on local storage
+and never reach an upstream that would check the key.
 
 ### Request admission: authentication, then rate limits
 
@@ -542,8 +545,9 @@ every protected request is admitted in this order:
    unavailable).
 2. `rate_limit::enforce_rate_limit` (when a rate is configured) charges the request to
    its caller's bucket, or rejects with 429.
-3. On `GET /v1/responses/{response_id}` only, `auth::api_key::require_api_key` (OIDC
-   off, `OPENAI_API_KEY` set).
+3. On the stored-response routes only (`GET`/`DELETE /v1/responses/{response_id}`,
+   `/input_items`, and `/cancel`), `auth::api_key::require_api_key` (OIDC off,
+   `OPENAI_API_KEY` set).
 4. The handler.
 
 Authentication must come first because the limiter keys a bucket by the verified
@@ -1918,6 +1922,50 @@ The serving future polls expiry and renews active leases every ten seconds witho
 holding a database transaction across inference. See [the API guide](docs/api/index.md#messages)
 for the five-minute lifetime, serialized-size budget, and crash recovery rules.
 
+#### Background responses (`executor/background.rs`, `engine/background.rs`)
+
+`background: true` on HTTP `POST /v1/responses` is taken by `ExecuteRequest::run_http`
+before rehydration and runs as `ExecuteRequest::run_background`. Every other entry point
+(WebSocket, split-execution hydration, `run`) still reaches the shared
+`ensure_supported_parameters` check and rejects it. The work is split by ownership:
+
+- **`executor/background.rs`** owns admission, ownership, cancellation, recovery, and
+  shutdown, never inference. `BackgroundJobs` (one per `ExecutionContext`) holds two
+  semaphores: `admitted` (`background_max_concurrent + background_max_queued` permits,
+  taken with `try_acquire`, so a full instance answers `503` instead of buffering) and
+  `running` (`background_max_concurrent`, awaited while a job is `queued`). There is no
+  channel. A `std::sync::Mutex` registry maps response IDs to `CancellationToken`s
+  (children of one shutdown token) and is locked only for map operations. Jobs run on a
+  `TaskTracker`, which shutdown closes and awaits.
+- **`engine/background.rs`** is the driver. After the same `prepare` a foreground request
+  uses, it stores the turn as `queued` through `persist::enqueue_background` and spawns a
+  supervisor. The supervisor waits for a run slot, claims the row, and runs `run_blocking`
+  on a tracked task with a `BackgroundRun`, which keeps the admission `created_at` and makes
+  persistence finish the queued row (`TurnOutput::Background`) instead of inserting one.
+  It renews the lease while it waits, and stops the task on cancellation, shutdown,
+  `background_timeout_seconds`, or a lost lease, by aborting and joining it. That drops the
+  in-flight upstream request and gateway tool calls before the outcome is recorded. A
+  panic arrives as a `JoinError` and becomes `failed`. The engine still owns the inference
+  rounds, the tool loop, and persistence; there is no second execution loop.
+
+The database row is authoritative, so instances that share one database (the Kubernetes
+base runs two replicas) cooperate without a coordinator. Each status change is one
+conditional `UPDATE` that names the statuses it may leave and its writer:
+
+| Writer | May move | Condition |
+|---|---|---|
+| The owning job | `queued`→`in_progress`; `in_progress`→`completed`/`incomplete` (inside the persistence transaction); active→`failed` | `background_owner` matches |
+| A client (cancel) | active→`cancelled` | none; the owner stops locally at once, or at its next renewal |
+| Recovery | active→`failed` | `background_lease_expires_at < now` |
+
+Terminal statuses are never left, so a race resolves to whichever update matches first;
+a job that loses its row rolls back its item inserts and writes nothing. The owner renews
+a 30-second lease every 10 seconds. Recovery runs at startup
+(`ExecutionContext::from_config`) and lazily when a retrieval or cancellation reads an
+active row with an expired lease; live instances, including this one, keep their jobs.
+Retrieval reads by response ID with no principal check, like every stored-response route
+([#107](https://github.com/vllm-project/agentic-api/issues/107)).
+
 ### `storage/` — persistence
 
 - **`pool.rs`** — `DbPool = sqlx::Pool<sqlx::Any>`, driver-agnostic across SQLite and
@@ -1947,7 +1995,9 @@ for the five-minute lifetime, serialized-size budget, and crash recovery rules.
   `Response`) plus one SQL function per table operation (`create_in_tx`, `get`,
   `lock_in_tx`, ...). This is the literal DB row shape: JSON columns are still strings
   here. Query SQL is portable across SQLite and PostgreSQL; `lock_in_tx` is the one
-  backend-specific operation, because SQLite has no row locks. `conversation::get_with_items` reads
+  backend-specific operation, because SQLite has no row locks. `models/background.rs` holds the conditional
+  updates on the background lifecycle columns of `responses` (`background_status`, `background_owner`,
+  `background_lease_expires_at`, all `NULL` for a foreground response). `conversation::get_with_items` reads
   a conversation's `latest_response_id`, the latest turn's metadata, and its items in
   one `UNION ALL` statement and orders the items in Rust, so the database does not sort item data.
 - **`types/`** — the only place stored JSON is read or written. Each column has one
@@ -2028,6 +2078,12 @@ One typed flow carries history through a turn:
 - **Sessions.** A WebSocket session publishes the same checkpoint in memory for the next turn on the connection. It
   is durable only when the request is stored; a stored child of an unstored parent stores the parent's history
   itself.
+- **Background.** A background turn is stored when it is queued: `persist::enqueue_background` writes the request's
+  items, the history it continues, and the `queued` snapshot through the same insert as `persist`, so `input_items`
+  and continuation see its input while it runs. When the turn finishes, its job first takes the row
+  (`background::hold_in_tx`, a write, so SQLite takes its write lock before the transaction reads), then appends the
+  items the turn added (file-search context) and its output to the history the row holds then, and stores the
+  terminal snapshot. A cancelled or failed turn keeps its input and has no output.
 
 What a continuation sees, and therefore what each turn's list holds, follows OpenAI's recorded behavior:
 

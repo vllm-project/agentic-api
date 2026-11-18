@@ -58,6 +58,7 @@ flowchart LR
 - 🤝 **Multi-agent orchestration**: one Responses request can spawn and coordinate subagents server-side ([details](#-multi-agent-responses)).
 - 📡 **Every transport**: non-streaming HTTP, SSE streaming, and WebSocket with `stream_id` multiplexing.
 - 🧰 **Codex and Claude Code ready**: Codex-shaped Responses traffic and Anthropic Messages traffic keep the tool declarations and item shapes each client depends on.
+- ⏳ **Background responses**: `background: true` returns a queued response at once; poll or cancel it later ([details](docs/api/index.md#background-mode)).
 - 🗜️ **Compaction**: automatic and explicit context compaction through `/v1/responses/compact` ([guide](docs/guides/responses-compaction.md)).
 - 🔭 **Observability**: opt-in OpenTelemetry traces and metrics over OTLP ([guide](docs/deploying/observability.md)).
 - ✅ **Compatibility tested**: validated against the [Open Responses](https://www.openresponses.org/) suite, with replay-cassette tests for OpenAI, vLLM, SGLang, and NVIDIA Dynamo traffic.
@@ -66,8 +67,9 @@ flowchart LR
 
 | Endpoint | Description |
 | --- | --- |
-| `POST /v1/responses` · `GET /v1/responses` (WebSocket) | Responses API with state, tools, and streaming |
-| `GET` · `DELETE /v1/responses/{id}` · `GET /v1/responses/{id}/input_items` | Retrieve, delete, and list the input of a stored response |
+| `POST /v1/responses` · `GET /v1/responses` (WebSocket) | Responses API with state, tools, streaming, and background mode |
+| `GET` · `DELETE /v1/responses/{id}` · `GET /v1/responses/{id}/input_items` | Retrieve (or poll a background response), delete, and list the input of a stored response |
+| `POST /v1/responses/{id}/cancel` | Cancel a background response |
 | `POST /v1/responses/compact` | Compact direct input or a stored response chain |
 | `/v1/conversations` · `/v1/conversations/{id}/items` | Conversations API |
 | `POST /v1/messages` · `POST /v1/messages/count_tokens` | Anthropic Messages API with a server-side loop for gateway-owned tools |
