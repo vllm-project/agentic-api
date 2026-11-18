@@ -468,7 +468,8 @@ impl Gateway {
     }
 
     /// The text of each item in a conversation, oldest first.
-    pub async fn conversation_texts(&self, conversation: &str) -> Vec<String> {
+    /// The conversation's items, oldest first.
+    pub async fn conversation_items(&self, conversation: &str) -> Value {
         let (status, body) = self
             .send(
                 self.client
@@ -476,7 +477,11 @@ impl Gateway {
             )
             .await;
         assert_eq!(status, StatusCode::OK, "{body}");
-        texts(&body)
+        body
+    }
+
+    pub async fn conversation_texts(&self, conversation: &str) -> Vec<String> {
+        texts(&self.conversation_items(conversation).await)
     }
 
     pub async fn input_items(&self, id: &str) -> (StatusCode, Value) {

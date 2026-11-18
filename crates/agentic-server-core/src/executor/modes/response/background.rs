@@ -4,8 +4,7 @@ use super::ResponseHandler;
 use crate::executor::error::ExecutorResult;
 use crate::executor::request::RequestContext;
 use crate::storage::models::background::Writer;
-use crate::storage::{BackgroundStatus, QueuedTurn, ResponseMetadata};
-use crate::types::io::InOutItem;
+use crate::storage::{BackgroundStatus, FinishedTurn, QueuedTurn};
 use crate::types::request_response::ResponsePayload;
 
 impl ResponseHandler {
@@ -27,8 +26,7 @@ impl ResponseHandler {
         Ok(())
     }
 
-    /// Finishes the `in_progress` row `owner` holds: appends `items` to its history and stores the turn's snapshot,
-    /// metadata, and `status`.
+    /// Finishes the `in_progress` row `owner` holds with `turn`, appending its items to the row's history.
     ///
     /// # Errors
     /// [`crate::storage::StorageError::BackgroundClaimLost`] when another writer finished the row first, or a storage
@@ -37,15 +35,9 @@ impl ResponseHandler {
         &self,
         ctx: &RequestContext,
         owner: &str,
-        status: BackgroundStatus,
-        items: Vec<InOutItem>,
-        snapshot: &ResponsePayload,
-        metadata: &ResponseMetadata,
+        turn: FinishedTurn<'_>,
     ) -> ExecutorResult<Vec<String>> {
-        Ok(self
-            .store
-            .finish_background(&ctx.response_id, owner, status, items, snapshot, metadata)
-            .await?)
+        Ok(self.store.finish_background(&ctx.response_id, owner, turn).await?)
     }
 
     /// Moves the active background row `response_id` to `to` with `snapshot`, if `writer` may. Returns whether the

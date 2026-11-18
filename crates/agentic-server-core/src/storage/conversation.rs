@@ -152,7 +152,9 @@ impl ConversationStore {
         self.insert(conversation_id, checkpoint, turn).await
     }
 
-    /// [`Self::persist`] for a background turn stored as `queued` before it runs; its job appends the output.
+    /// [`Self::persist`] for a background turn stored as `queued` before it runs. The response keeps the request's
+    /// items so they are listed and continued while it runs, but the conversation gains them, with the output, only
+    /// when the turn finishes, as `OpenAI`'s does: a cancelled or failed turn leaves the conversation unchanged.
     ///
     /// # Errors
     /// As [`Self::persist`].
@@ -202,7 +204,9 @@ impl ConversationStore {
         // The response keeps the history the turn continued, as OpenAI does: items added to or removed from the
         // conversation while the turn ran are not part of it.
         let mut history_item_ids = checkpoint.history_item_ids.clone();
-        let created = item::create_in_tx(&mut tx, new_items, Some(conversation_id)).await?;
+        // A queued background turn's items join the conversation when it finishes.
+        let joins = claim.is_none().then_some(conversation_id);
+        let created = item::create_in_tx(&mut tx, new_items, joins).await?;
         history_item_ids.extend(created.into_iter().map(|row| row.id));
         let history_item_ids_json = serialize_to_string(&history_item_ids)?;
 
@@ -217,10 +221,10 @@ impl ConversationStore {
             Some(&metadata_json),
         )
         .await?;
-        if let Some(claim) = claim {
-            background::claim_in_tx(&mut tx, response_id, claim).await?;
+        match claim {
+            Some(claim) => background::claim_in_tx(&mut tx, response_id, claim).await?,
+            None => conversation::set_latest_response_in_tx(&mut tx, conversation_id, response_id).await?,
         }
-        conversation::set_latest_response_in_tx(&mut tx, conversation_id, response_id).await?;
         tx.commit().await?;
 
         Ok(())

@@ -531,9 +531,11 @@ from them, while the job runs and after the response is cancelled or fails; such
 continuation sees the input and no output. The job runs the same engine path as a
 foreground request, including gateway-executed tools, and appends the turn's output
 when it finishes, so a completed or incomplete background response is an ordinary
-stored response. In a `conversation`, the input joins the conversation when the
-response is queued and the output when it finishes. `created_at` keeps the
-admission time.
+stored response. In a `conversation`, the input and output join the conversation
+together when the response completes or is incomplete, after any turn that
+finished first; a cancelled or failed response leaves the conversation unchanged.
+`input_items` lists the input meanwhile, under the IDs the conversation later
+holds. `created_at` keeps the admission time.
 
 | Request | Result |
 | --- | --- |
@@ -543,9 +545,10 @@ admission time.
 | Running and queued jobs already at the limits below | `503`, `type: "server_error"`, `code: "background_capacity_exceeded"` |
 | The gateway is shutting down | `503`, `type: "server_error"`, `code: "server_shutting_down"` |
 
-OpenAI also accepts `store: false` background responses and keeps them for about
-ten minutes, and it can stream a background response. The gateway does not yet;
-both are follow-up work tracked from
+OpenAI also accepts `store: false` background responses (the `background`
+recording shows `200` with `status: "queued"`) and keeps them for about ten
+minutes, and it can stream a background response. The gateway does not yet; both
+are follow-up work tracked from
 [#357](https://github.com/vllm-project/agentic-api/issues/357).
 
 Limits apply per gateway instance and are set in the `[responses]` table or the
@@ -660,11 +663,10 @@ Authentication matches response retrieval.
 | Response | Result |
 | --- | --- |
 | Unknown ID | `404`, as on retrieval |
-| Created without `background: true` | `400`, `code: "response_not_cancellable"`, `param: "response_id"`, message `Only responses created with background=true can be cancelled.` |
-| `completed`, `incomplete`, or `failed` | `400`, `code: "response_not_cancellable"`, `param: "response_id"`, message `Cannot cancel a response with status '<status>'.` |
+| Created without `background: true` | `400`, `type: "invalid_request_error"`, `code: null`, `param: null`, message `Cannot cancel a synchronous response.` |
+| `completed`, `incomplete`, or `failed` | `400`, `type: "invalid_request_error"`, `code: null`, `param: null`, message `Cannot cancel a <status> response.` |
 
-OpenAI documents no error for cancelling a finished response; the gateway rejects
-it, as vLLM does, so a client cannot mistake a completed result for a cancellation.
+These match OpenAI's responses in the `background` recording.
 
 ### `DELETE /v1/responses/{response_id}`
 

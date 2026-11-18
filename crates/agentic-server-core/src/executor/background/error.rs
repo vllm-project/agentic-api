@@ -22,9 +22,9 @@ pub enum BackgroundError {
     CapacityExceeded,
     #[error("the gateway is shutting down; retry the request on another instance")]
     ShuttingDown,
-    #[error("Only responses created with background=true can be cancelled.")]
+    #[error("Cannot cancel a synchronous response.")]
     NotBackground,
-    #[error("Cannot cancel a response with status '{0}'.")]
+    #[error("Cannot cancel a {0} response.")]
     NotCancellable(BackgroundStatus),
     #[error("the background response exceeded its {0}-second timeout")]
     TimedOut(u64),
@@ -81,6 +81,7 @@ impl BackgroundError {
             Self::StreamingRetrieval { .. } => "unsupported_parameter",
             Self::CapacityExceeded => "background_capacity_exceeded",
             Self::ShuttingDown => "server_shutting_down",
+            // Logged only: `OpenAI` sends these with a null code and param.
             Self::NotBackground | Self::NotCancellable(_) => "response_not_cancellable",
             Self::TimedOut(_) | Self::Interrupted | Self::Panicked => "server_error",
         }
@@ -93,11 +94,14 @@ impl BackgroundError {
             Self::Streaming => Some("stream"),
             Self::MultiAgent => Some("multi_agent"),
             Self::StreamingRetrieval { param } => Some(param),
-            Self::NotBackground | Self::NotCancellable(_) => Some("response_id"),
             Self::SessionContinuation => Some("previous_response_id"),
-            Self::CapacityExceeded | Self::ShuttingDown | Self::TimedOut(_) | Self::Interrupted | Self::Panicked => {
-                None
-            }
+            Self::NotBackground
+            | Self::NotCancellable(_)
+            | Self::CapacityExceeded
+            | Self::ShuttingDown
+            | Self::TimedOut(_)
+            | Self::Interrupted
+            | Self::Panicked => None,
         }
     }
 }

@@ -417,6 +417,7 @@ impl ExecutorError {
             ) | Self::UnsupportedValue { code: None, .. }
                 | Self::FileReferencesNotFound { .. }
                 | Self::FileSearch(FileSearchError::FileNotFound { .. } | FileSearchError::FileRejected { .. })
+                | Self::Background(BackgroundError::NotBackground | BackgroundError::NotCancellable(_))
         ) {
             serde_json::Value::Null
         } else {
@@ -435,6 +436,7 @@ impl ExecutorError {
                 | Self::FileReferencesNotFound { .. }
                 | Self::FileSearch(FileSearchError::FileRejected { param: None, .. })
                 | Self::Tool(ToolError::FileSearch(FileSearchError::FileRejected { param: None, .. }))
+                | Self::Background(BackgroundError::NotBackground | BackgroundError::NotCancellable(_))
         ) {
             error.insert("param".to_owned(), serde_json::Value::Null);
         }

@@ -17,7 +17,8 @@ All notable changes to Agentic API are documented here.
 - Added background mode for HTTP `POST /v1/responses` (#357). `background: true` validates and prepares the request as
   a foreground request would, stores it as `queued` with its input items, and returns at once; a supervised job runs
   it on the same engine path and appends its output to the `completed` or `incomplete` result, or records `failed`.
-  `input_items` and `previous_response_id` see the input while it runs and after it is cancelled or fails.
+  `input_items` and `previous_response_id` see the input while it runs and after it is cancelled or fails; in a
+  conversation, the input and output join it when the response finishes, as OpenAI's do.
   `GET /v1/responses/{response_id}` reports the current status, and the new `POST /v1/responses/{response_id}/cancel`
   cancels a queued or running response (cancelling twice returns the same response; cancelling a finished one returns
   `400`). Admission is bounded per instance by `[responses] background_max_concurrent` (default 16) and

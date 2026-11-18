@@ -2083,7 +2083,10 @@ One typed flow carries history through a turn:
   and continuation see its input while it runs. When the turn finishes, its job first takes the row
   (`background::hold_in_tx`, a write, so SQLite takes its write lock before the transaction reads), then appends the
   items the turn added (file-search context) and its output to the history the row holds then, and stores the
-  terminal snapshot. A cancelled or failed turn keeps its input and has no output.
+  terminal snapshot. A cancelled or failed turn keeps its input and has no output. A conversation turn's items join
+  the conversation only when it finishes, as OpenAI's do: enqueueing stores the input outside the conversation, under
+  the IDs `persist::enqueue_background` assigns, and finishing adds that input and the output after whatever the
+  conversation holds then and makes the turn the latest one.
 
 What a continuation sees, and therefore what each turn's list holds, follows OpenAI's recorded behavior:
 

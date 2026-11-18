@@ -90,20 +90,19 @@ async fn admit(request: BackgroundRequest) -> ExecutorResult<(Admission, Backgro
 /// Store the prepared turn as `queued` and spawn its supervisor.
 async fn enqueue(
     admission: Admission,
-    turn: BackgroundTurn,
+    mut turn: BackgroundTurn,
     execution: ExecutionSpan,
 ) -> ExecutorResult<ResponsePayload> {
-    let ctx = &turn.ctx;
-    let mut queued = ResponseShell::from(ctx).payload(BackgroundStatus::Queued.as_str());
+    let mut queued = ResponseShell::from(&turn.ctx).payload(BackgroundStatus::Queued.as_str());
     queued.standard_fields.background = true;
     // The shell's declarations are stripped of request-scoped credentials before this row is stored.
-    queued.tool_choice = ctx.public_tool_choice().cloned();
-    let job = admission.register(ctx.response_id.clone());
+    queued.tool_choice = turn.ctx.public_tool_choice().cloned();
+    let job = admission.register(turn.ctx.response_id.clone());
     let claim = Claim {
         owner: job.owner(),
         lease_expires_at: job.lease_deadline(),
     };
-    if let Err(error) = enqueue_background(ctx, &queued, claim, &turn.exec_ctx).await {
+    if let Err(error) = enqueue_background(&mut turn.ctx, &queued, claim, &turn.exec_ctx).await {
         return Err(not_started(execution, error));
     }
     let supervisor = Supervisor {

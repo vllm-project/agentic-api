@@ -19,6 +19,18 @@ pub struct QueuedTurn<'a> {
     pub claim: Claim<'a>,
 }
 
+/// What a background turn's job stores when it finishes the row it was queued in.
+#[derive(Debug)]
+pub struct FinishedTurn<'a> {
+    pub status: BackgroundStatus,
+    /// The request's items as [`QueuedTurn`] stored them. A conversation turn adds them to its conversation now.
+    pub queued: Vec<InOutItem>,
+    /// The items the turn added: those it added to its input, such as file-search context, then its output.
+    pub items: Vec<InOutItem>,
+    pub snapshot: &'a ResponsePayload,
+    pub metadata: &'a ResponseMetadata,
+}
+
 /// The `status` of a response created with `background: true`, as stored in
 /// `responses.background_status` and reported in its snapshot.
 ///

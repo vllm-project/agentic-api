@@ -228,8 +228,8 @@ async fn cancel_is_idempotent_and_rejects_finished_foreground_and_unknown_respon
     assert_eq!(
         body,
         json!({"error": {
-            "message": "Cannot cancel a response with status 'completed'.",
-            "type": "invalid_request_error", "code": "response_not_cancellable", "param": "response_id"
+            "message": "Cannot cancel a completed response.",
+            "type": "invalid_request_error", "code": null, "param": null
         }})
     );
 
@@ -240,8 +240,8 @@ async fn cancel_is_idempotent_and_rejects_finished_foreground_and_unknown_respon
     assert_eq!(
         body,
         json!({"error": {
-            "message": "Only responses created with background=true can be cancelled.",
-            "type": "invalid_request_error", "code": "response_not_cancellable", "param": "response_id"
+            "message": "Cannot cancel a synchronous response.",
+            "type": "invalid_request_error", "code": null, "param": null
         }})
     );
 
@@ -349,11 +349,12 @@ async fn startup_fails_only_rows_whose_owner_lease_expired() {
 }
 
 #[tokio::test]
-async fn a_background_turn_joins_its_conversation_when_queued_and_answers_when_it_completes() {
+async fn a_background_turn_joins_its_conversation_when_it_finishes() {
     let mut model = Model::start(vec![
         Turn::Hold("background answer"),
         Turn::Hold("late answer"),
         Turn::Answer("foreground answer"),
+        Turn::Hold("never sent"),
     ])
     .await;
     let db = TestDb::new().await;
@@ -364,11 +365,13 @@ async fn a_background_turn_joins_its_conversation_when_queued_and_answers_when_i
         .create_background(json!({"conversation": conversation, "input": "first"}))
         .await;
     model.wait_started(0).await;
-    assert_eq!(
-        gateway.conversation_texts(&conversation).await,
-        ["first"],
-        "the queued input joins the conversation"
+    assert!(
+        gateway.conversation_texts(&conversation).await.is_empty(),
+        "a running turn's input is not in the conversation yet"
     );
+    let (status, items) = gateway.input_items(id(&first)).await;
+    assert_eq!(status, StatusCode::OK, "{items}");
+    assert_eq!(texts(&items), ["first"], "the response lists its input while it runs");
     model.release();
     let completed = gateway.wait_for_status(id(&first), "completed").await;
     assert_eq!(completed["conversation"]["id"], conversation.as_str());
@@ -376,8 +379,14 @@ async fn a_background_turn_joins_its_conversation_when_queued_and_answers_when_i
         gateway.conversation_texts(&conversation).await,
         ["first", "background answer"]
     );
+    let (_, items) = gateway.input_items(id(&first)).await;
+    assert_eq!(
+        items["data"][0]["id"],
+        gateway.conversation_items(&conversation).await["data"][0]["id"],
+        "the conversation holds the item the response listed"
+    );
 
-    // A turn that commits while a background turn runs appends after its input; the background output follows.
+    // A turn that finishes while a background turn runs comes first; the background turn's input and output follow.
     let late = gateway
         .create_background(json!({"conversation": conversation, "input": "second"}))
         .await;
@@ -393,9 +402,9 @@ async fn a_background_turn_joins_its_conversation_when_queued_and_answers_when_i
         [
             "first",
             "background answer",
-            "second",
             "third",
             "foreground answer",
+            "second",
             "late answer"
         ]
     );
@@ -405,6 +414,18 @@ async fn a_background_turn_joins_its_conversation_when_queued_and_answers_when_i
         texts(&items),
         ["second", "background answer", "first"],
         "the background turn's history is what it started from (newest first)"
+    );
+
+    let cancelled = gateway
+        .create_background(json!({"conversation": conversation, "input": "fourth"}))
+        .await;
+    model.wait_started(3).await;
+    assert_eq!(gateway.cancel(id(&cancelled)).await.0, StatusCode::OK);
+    model.wait_dropped(1).await;
+    assert_eq!(
+        gateway.conversation_texts(&conversation).await.len(),
+        6,
+        "a cancelled turn leaves the conversation unchanged"
     );
 }
 

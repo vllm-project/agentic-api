@@ -11,7 +11,7 @@ use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::session::ResponseContinuation;
 use crate::executor::telemetry::metrics::Stage;
 use crate::storage::models::background::Claim;
-use crate::storage::{BackgroundStatus, QueuedTurn, ResponseMetadata, StorageError};
+use crate::storage::{BackgroundStatus, FinishedTurn, QueuedTurn, ResponseMetadata, StorageError};
 use crate::tool::{ToolSearchMetadata, ToolSearchState};
 use crate::types::event::ResponseStatus;
 use crate::types::io::InOutItem;
@@ -186,11 +186,17 @@ fn turn_items(
 /// # Errors
 /// As [`persist`] for a generated response, with nothing stored.
 pub(crate) async fn enqueue_background(
-    ctx: &RequestContext,
+    ctx: &mut RequestContext,
     queued: &ResponsePayload,
     claim: Claim<'_>,
     exec_ctx: &ExecutionContext,
 ) -> ExecutorResult<()> {
+    // The model request is already built. A conversation turn adds these items to its conversation when it
+    // finishes, under the IDs stored now.
+    for item in ctx.new_input_items.iter_mut().filter(|item| item.id().is_none()) {
+        item.set_id(item.minted_id());
+    }
+    let ctx = &*ctx;
     let metadata = queued_metadata(ctx);
     let turn = QueuedTurn {
         response_id: &ctx.response_id,
@@ -207,7 +213,8 @@ pub(crate) async fn enqueue_background(
 }
 
 /// Finishes the row a background turn was queued in: the items the turn added to its input (such as file-search
-/// context), then its public output, appended to the history the row holds.
+/// context), then its public output, appended to the history the row holds. A conversation turn also adds its queued
+/// input to the conversation.
 async fn finish_background(
     mut ctx: RequestContext,
     payload: &ResponsePayload,
@@ -222,12 +229,15 @@ async fn finish_background(
     };
     // The queued row already holds the request's own items.
     let queued = run.queued_items().min(ctx.new_input_items.len());
-    ctx.new_input_items.drain(..queued);
-    let items = turn_items(&mut ctx, &payload.output, None);
-    exec_ctx
-        .resp_handler
-        .finish_background(&ctx, run.owner(), status, items, payload, metadata)
-        .await?;
+    let queued = InOutItem::filter_for_compaction(ctx.new_input_items.drain(..queued).collect());
+    let turn = FinishedTurn {
+        status,
+        queued,
+        items: turn_items(&mut ctx, &payload.output, None),
+        snapshot: payload,
+        metadata,
+    };
+    exec_ctx.resp_handler.finish_background(&ctx, run.owner(), turn).await?;
     Ok(())
 }
 

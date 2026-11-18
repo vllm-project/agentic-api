@@ -12,7 +12,7 @@ use crate::executor::modes::{ConversationHandler, ResponseHandler};
 use crate::executor::{ExecuteRequest, ExecutionContext};
 use crate::storage::models::background::Claim;
 use crate::storage::{
-    ConversationStore, QueuedTurn, ResponseMetadata, ResponseStore, StorageError, create_pool_with_schema,
+    ConversationStore, FinishedTurn, QueuedTurn, ResponseMetadata, ResponseStore, StorageError, create_pool_with_schema,
 };
 use crate::types::io::{InOutItem, InputItem, OutputItem};
 
@@ -272,10 +272,13 @@ async fn a_queued_turn_lists_its_input_and_finishing_appends_its_output() {
         .finish_background(
             "resp_turn",
             "bgo_live",
-            BackgroundStatus::Completed,
-            vec![InOutItem::Output(output)],
-            &completed,
-            &ResponseMetadata::default(),
+            FinishedTurn {
+                status: BackgroundStatus::Completed,
+                queued: vec![message("msg_input")],
+                items: vec![InOutItem::Output(output)],
+                snapshot: &completed,
+                metadata: &ResponseMetadata::default(),
+            },
         )
         .await
         .unwrap();
@@ -310,10 +313,13 @@ async fn a_turn_that_lost_its_row_stores_none_of_its_items() {
         .finish_background(
             "resp_lost",
             "bgo_live",
-            BackgroundStatus::Completed,
-            vec![message("msg_kept_out")],
-            &cancelled,
-            &ResponseMetadata::default(),
+            FinishedTurn {
+                status: BackgroundStatus::Completed,
+                queued: Vec::new(),
+                items: vec![message("msg_kept_out")],
+                snapshot: &cancelled,
+                metadata: &ResponseMetadata::default(),
+            },
         )
         .await
         .unwrap_err();
