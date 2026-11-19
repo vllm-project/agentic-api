@@ -152,11 +152,20 @@ async fn replay_background(provider: &str, turns: &[Value]) {
 
 /// The recorded `store: false` background request, the last turn, is not replayed: `OpenAI` queues it, while the
 /// gateway rejects it with `400` until it can keep an unstored response for polling.
+async fn replay_recording(provider: &str, unstored_status: u64) {
+    let turns = cassette("background", provider).expect("required Responses recording missing");
+    let (last, replayed) = turns.split_last().unwrap();
+    assert_eq!(last["request"]["body"]["store"], false);
+    assert_eq!(last["response"]["status_code"], unstored_status);
+    replay_background(provider, replayed).await;
+}
+
 #[tokio::test]
 async fn replay_background_openai() {
-    let turns = cassette("background", "openai").expect("required Responses recording missing");
-    let last = turns.last().unwrap();
-    assert_eq!(last["request"]["body"]["store"], false);
-    assert_eq!(last["response"]["body"]["status"], "queued");
-    replay_background("openai", &turns[..turns.len() - 1]).await;
+    replay_recording("openai", 200).await;
+}
+
+#[tokio::test]
+async fn replay_background_gateway() {
+    replay_recording("gateway", 400).await;
 }
