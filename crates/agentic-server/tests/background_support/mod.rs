@@ -467,7 +467,6 @@ impl Gateway {
         body["id"].as_str().expect("conversation id").to_owned()
     }
 
-    /// The text of each item in a conversation, oldest first.
     /// The conversation's items, oldest first.
     pub async fn conversation_items(&self, conversation: &str) -> Value {
         let (status, body) = self
@@ -480,6 +479,7 @@ impl Gateway {
         body
     }
 
+    /// The text of each item in a conversation, oldest first.
     pub async fn conversation_texts(&self, conversation: &str) -> Vec<String> {
         texts(&self.conversation_items(conversation).await)
     }

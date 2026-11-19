@@ -9,7 +9,7 @@ use std::num::NonZeroUsize;
 use std::time::Duration;
 
 use agentic_core::config::{BackgroundConfig, Config};
-use background_support::{Gateway, Model, TestDb, Turn, bounded, id};
+use background_support::{Gateway, Model, TestDb, Turn, bounded, id, texts};
 use http::StatusCode;
 use serde_json::{Value, json};
 
@@ -108,8 +108,13 @@ async fn max_concurrent_jobs_run_together_and_a_zero_queue_rejects_the_next() {
 }
 
 #[tokio::test]
-async fn a_job_past_its_timeout_fails_and_one_within_it_completes() {
-    let model = Model::start(vec![Turn::Answer("quick"), Turn::Hold("slow")]).await;
+async fn a_job_past_its_timeout_fails_keeping_its_input_and_one_within_it_completes() {
+    let model = Model::start(vec![
+        Turn::Answer("quick"),
+        Turn::Hold("slow"),
+        Turn::Answer("after failure"),
+    ])
+    .await;
     let db = TestDb::new().await;
     let background = BackgroundConfig {
         timeout: Duration::from_secs(1),
@@ -129,6 +134,26 @@ async fn a_job_past_its_timeout_fails_and_one_within_it_completes() {
         })
     );
     model.wait_dropped(1).await;
+
+    // As after a cancel, the failed response keeps the input it was queued with.
+    let (status, items) = gateway.input_items(id(&slow)).await;
+    assert_eq!(status, StatusCode::OK, "{items}");
+    assert_eq!(texts(&items), ["hi"], "the queued input, and no output");
+    let (status, continued) = gateway
+        .create(json!({"model": "test-model", "input": "again", "previous_response_id": slow["id"]}))
+        .await;
+    assert_eq!(status, StatusCode::OK, "{continued}");
+    assert_eq!(
+        continued["output"][0]["content"][0]["text"], "after failure",
+        "{continued}"
+    );
+    let (status, items) = gateway.input_items(id(&continued)).await;
+    assert_eq!(status, StatusCode::OK, "{items}");
+    assert_eq!(
+        texts(&items),
+        ["again", "hi"],
+        "a continuation sees the input (newest first)"
+    );
 }
 
 #[tokio::test]
