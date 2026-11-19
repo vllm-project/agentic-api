@@ -192,6 +192,9 @@ Unmodeled top-level provider parameters, such as `chat_template_kwargs` and `top
 are retained in `RequestPayload::extra` and borrowed by `UpstreamRequest` for forwarding
 on each inference round. Known fields keep their typed validation and conversion;
 gateway state controls and WebSocket event metadata are not provider extensions.
+Extensions that conflict with rehydration or response assembly (vLLM's
+`previous_input_messages` and `enable_response_messages`) are rejected from
+`extra` by `validate_modeled_extensions()` instead of being forwarded.
 `RequestPayload::ensure_supported_parameters()` checks explicit `[models]`
 capabilities for the current request's exact model ID before history lookup or
 inference, returning typed `UnsupportedParameterError` variants. The same check

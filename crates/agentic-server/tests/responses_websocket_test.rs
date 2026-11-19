@@ -1745,6 +1745,18 @@ async fn websocket_rejects_unsupported_parameters_and_keeps_the_connection() {
             "unsupported_parameter",
             "reusable prompt templates are not supported; send `instructions` and `input` instead of `prompt`",
         ),
+        (
+            "previous_input_messages",
+            json!([{"role": "user", "content": "My name is Zedoriah."}]),
+            "unsupported_parameter",
+            "previous_input_messages is not supported; send earlier turns as `input` items, or continue with `previous_response_id` or `conversation`",
+        ),
+        (
+            "enable_response_messages",
+            json!(true),
+            "unsupported_parameter",
+            "enable_response_messages is not supported; the gateway does not return upstream input or output messages",
+        ),
     ] {
         let mut request = json!({"type": "response.create", "model": "test-model", "input": "bad"});
         request[param] = value;

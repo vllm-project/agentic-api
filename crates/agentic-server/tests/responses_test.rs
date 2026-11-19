@@ -1613,6 +1613,18 @@ async fn test_unsupported_parameters_are_rejected_for_both_store_values() {
             "unsupported_parameter",
             "reusable prompt templates are not supported; send `instructions` and `input` instead of `prompt`",
         ),
+        (
+            "previous_input_messages",
+            serde_json::json!([{"role": "user", "content": "My name is Zedoriah."}]),
+            "unsupported_parameter",
+            "previous_input_messages is not supported; send earlier turns as `input` items, or continue with `previous_response_id` or `conversation`",
+        ),
+        (
+            "enable_response_messages",
+            serde_json::json!(true),
+            "unsupported_parameter",
+            "enable_response_messages is not supported; the gateway does not return upstream input or output messages",
+        ),
     ];
 
     // All HTTP Responses requests validate before inference.
