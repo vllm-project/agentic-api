@@ -519,6 +519,15 @@ discovery, storage, or inference.
 | --- | --- | --- | --- |
 | HTTP JSON/SSE, WebSocket, and split-execution hydration | Absent, `null`, or `false` accepted and not forwarded; `true` returns `code: "unsupported_value"`, and any other value returns `code: "invalid_type"`, both with `param: "background"` | Absent or `null` accepted; any other value returns `code: "unsupported_parameter"`, `param: "prompt"` | `code: "unsupported_value"`, `param: "tool_choice"` |
 
+vLLM Agentic API also rejects the vLLM extensions `previous_input_messages`
+and `enable_response_messages` on these paths. It builds the item history from
+`input` and conversation state, and assembles the response itself, so
+forwarding them would send a second item history upstream or request messages
+the response never returns. Absent, `null`, and `[]` (`previous_input_messages`)
+or `false` (`enable_response_messages`) are accepted; any other value returns
+`code: "unsupported_parameter"` with the member as `param`. Send earlier turns
+as `input` items, or continue with `previous_response_id` or `conversation`.
+
 Background mode is tracked in
 [#357](https://github.com/vllm-project/agentic-api/issues/357). This matrix
 contributes to [#314](https://github.com/vllm-project/agentic-api/issues/314).

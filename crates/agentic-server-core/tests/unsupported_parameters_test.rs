@@ -18,7 +18,7 @@ fn request(extra: &Value) -> RequestPayload {
     serde_json::from_value(body).unwrap()
 }
 
-fn cases() -> [(Value, UnsupportedParameterError); 6] {
+fn cases() -> [(Value, UnsupportedParameterError); 9] {
     [
         (json!({"background": true}), UnsupportedParameterError::BackgroundMode),
         (
@@ -40,6 +40,18 @@ fn cases() -> [(Value, UnsupportedParameterError); 6] {
         (
             json!({"prompt": {"id": "pmpt_1"}, "stream": true}),
             UnsupportedParameterError::PromptTemplate,
+        ),
+        (
+            json!({"previous_input_messages": [{"role": "user", "content": "My name is Zedoriah."}]}),
+            UnsupportedParameterError::PreviousInputMessages,
+        ),
+        (
+            json!({"previous_input_messages": [{"role": "user", "content": "My name is Zedoriah."}], "stream": true}),
+            UnsupportedParameterError::PreviousInputMessages,
+        ),
+        (
+            json!({"enable_response_messages": true}),
+            UnsupportedParameterError::EnableResponseMessages,
         ),
     ]
 }

@@ -8,6 +8,7 @@ use std::fmt;
 
 use serde::de::{self, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
+use serde_json::Value;
 
 use super::{JsonKind, RequestPayload};
 use crate::types::io::ItemInclude;
@@ -19,6 +20,10 @@ pub const BACKGROUND_PARAM: &str = "background";
 pub const PROMPT_PARAM: &str = "prompt";
 /// Request parameter name for the tool selector.
 pub const TOOL_CHOICE_PARAM: &str = "tool_choice";
+/// vLLM extension that renders a client-supplied item history before `input`.
+const PREVIOUS_INPUT_MESSAGES_PARAM: &str = "previous_input_messages";
+/// vLLM extension that returns the rendered upstream messages in the response.
+const ENABLE_RESPONSE_MESSAGES_PARAM: &str = "enable_response_messages";
 
 /// A request member recognized only to be rejected: any JSON value
 /// deserializes, and none of it is retained.
@@ -119,6 +124,12 @@ pub enum UnsupportedParameterError {
     PromptCacheOptions,
     #[error("top_logprobs must use its typed request field, not extra")]
     TopLogprobsExtension,
+    #[error(
+        "previous_input_messages is not supported; send earlier turns as `input` items, or continue with `previous_response_id` or `conversation`"
+    )]
+    PreviousInputMessages,
+    #[error("enable_response_messages is not supported; the gateway does not return upstream input or output messages")]
+    EnableResponseMessages,
 }
 
 impl UnsupportedParameterError {
@@ -137,6 +148,8 @@ impl UnsupportedParameterError {
             Self::ServiceTier => "service_tier",
             Self::PromptCacheRetention => "prompt_cache_retention",
             Self::PromptCacheOptions => "prompt_cache_options",
+            Self::PreviousInputMessages => PREVIOUS_INPUT_MESSAGES_PARAM,
+            Self::EnableResponseMessages => ENABLE_RESPONSE_MESSAGES_PARAM,
         }
     }
 
@@ -155,7 +168,10 @@ impl UnsupportedParameterError {
             | Self::PromptCacheRetention
             | Self::TopLogprobsExtension => "unsupported_value",
             Self::BackgroundType(_) => "invalid_type",
-            Self::PromptTemplate | Self::PromptCacheOptions => "unsupported_parameter",
+            Self::PromptTemplate
+            | Self::PromptCacheOptions
+            | Self::PreviousInputMessages
+            | Self::EnableResponseMessages => "unsupported_parameter",
         }
     }
 }
@@ -164,6 +180,22 @@ impl RequestPayload {
     pub(super) fn validate_modeled_extensions(&self) -> Result<(), UnsupportedParameterError> {
         if self.extra.contains_key("top_logprobs") {
             return Err(UnsupportedParameterError::TopLogprobsExtension);
+        }
+        // Rehydration builds the item history and the gateway assembles the response, so forwarding
+        // these vLLM extensions would add a second item history upstream or drop the requested messages.
+        if self
+            .extra
+            .get(PREVIOUS_INPUT_MESSAGES_PARAM)
+            .is_some_and(|value| !value.is_null() && value.as_array().is_none_or(|messages| !messages.is_empty()))
+        {
+            return Err(UnsupportedParameterError::PreviousInputMessages);
+        }
+        if self
+            .extra
+            .get(ENABLE_RESPONSE_MESSAGES_PARAM)
+            .is_some_and(|value| !matches!(value, Value::Null | Value::Bool(false)))
+        {
+            return Err(UnsupportedParameterError::EnableResponseMessages);
         }
         Ok(())
     }
@@ -266,10 +298,43 @@ mod tests {
             json!({"background": null}),
             json!({"background": false}),
             json!({"prompt": null}),
+            json!({"previous_input_messages": null}),
+            json!({"previous_input_messages": []}),
+            json!({"enable_response_messages": null}),
+            json!({"enable_response_messages": false}),
         ] {
             assert_eq!(
                 parse(&extra).ensure_supported_parameters(None, false),
                 Ok(()),
+                "{extra}"
+            );
+        }
+    }
+
+    #[test]
+    fn vllm_history_and_message_extensions_are_unsupported_parameters() {
+        for (extra, expected, param) in [
+            (
+                json!({"previous_input_messages": [{"role": "user", "content": "My name is Zedoriah."}]}),
+                UnsupportedParameterError::PreviousInputMessages,
+                "previous_input_messages",
+            ),
+            (
+                json!({"previous_input_messages": "history"}),
+                UnsupportedParameterError::PreviousInputMessages,
+                "previous_input_messages",
+            ),
+            (
+                json!({"enable_response_messages": true}),
+                UnsupportedParameterError::EnableResponseMessages,
+                "enable_response_messages",
+            ),
+        ] {
+            let error = parse(&extra).ensure_supported_parameters(None, false).unwrap_err();
+            assert_eq!(error, expected, "{extra}");
+            assert_eq!(
+                (error.param(), error.code()),
+                (param, "unsupported_parameter"),
                 "{extra}"
             );
         }
