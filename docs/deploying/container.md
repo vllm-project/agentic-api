@@ -52,6 +52,22 @@ CI also records the workflow name and run URL in the vLLM-compatible image label
 
 Pass `--build-arg CARGO_BUILD_JOBS=<n>` if the builder needs a different concurrency limit. For multi-platform publishing, use a Buildx builder with native workers where available; emulation is slower.
 
+### Build with PDF ingestion
+
+Published release and nightly images can store and download PDFs. Attaching a PDF to a vector store
+requires the optional PDF ingestion feature, which those images do not include.
+
+To enable it, pass the `CARGO_FEATURES` argument when building from the repository root.
+
+```console
+DOCKER_BUILDKIT=1 docker build \
+  --build-arg CARGO_FEATURES=agentic-server/file-search-pdf \
+  --tag agentic-api:pdf \
+  .
+```
+
+Use `agentic-api:pdf` in the run command below.
+
 ## Configure the gateway
 
 The image starts `agentic-server` in standalone mode. At minimum, set `LLM_API_BASE` to an external OpenAI-compatible or vLLM endpoint. Production deployments should also set `DATABASE_URL` to an external PostgreSQL database.

@@ -20,12 +20,13 @@ RUN cargo chef prepare --recipe-path recipe.json
 FROM chef AS rust-build
 
 ARG CARGO_BUILD_JOBS=4
+ARG CARGO_FEATURES=""
 ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
 
 WORKDIR /workspace
 
 COPY --from=planner /workspace/recipe.json recipe.json
-RUN cargo chef cook --locked --release --recipe-path recipe.json
+RUN cargo chef cook --locked --release ${CARGO_FEATURES:+--features="$CARGO_FEATURES"} --recipe-path recipe.json
 
 RUN rm -rf crates
 COPY Cargo.toml Cargo.lock ./
@@ -36,7 +37,7 @@ RUN cargo clean \
       -p agentic-server \
       -p agentic-praxis \
       -p agentic-llm-d && \
-    cargo build --locked --release -p agentic-server -p agentic-llm-d && \
+    cargo build --locked --release -p agentic-server -p agentic-llm-d ${CARGO_FEATURES:+--features="$CARGO_FEATURES"} && \
     install -Dm755 -s target/release/agentic-server /out/agentic-server && \
     install -Dm755 -s target/release/agentic-llm-d /out/agentic-llm-d
 
