@@ -1331,6 +1331,34 @@ async fn test_prompt_cache_key_matches_stateless_and_stored_execution() {
 }
 
 #[tokio::test]
+async fn test_safety_identifier_is_forwarded_and_echoed_on_the_response() {
+    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture().await;
+    let fixture = storage_backed_state(&llm_url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let client = reqwest::Client::new();
+
+    let response = client
+        .post(format!("{gateway_url}/v1/responses"))
+        .json(&serde_json::json!({
+            "model": "test",
+            "input": "hi",
+            "safety_identifier": "end-user-1234",
+            "store": false,
+            "stream": false
+        }))
+        .send()
+        .await
+        .expect("response request");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: serde_json::Value = response.json().await.expect("typed response body");
+    assert_eq!(body["safety_identifier"], "end-user-1234");
+
+    let requests = requests.lock().await;
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0]["safety_identifier"], "end-user-1234");
+}
+
+#[tokio::test]
 async fn test_service_tier_matches_stateless_and_stored_execution() {
     let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture_body(serde_json::json!({
         "id": "mock_id",

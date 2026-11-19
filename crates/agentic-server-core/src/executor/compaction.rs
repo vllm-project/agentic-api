@@ -268,6 +268,7 @@ pub async fn compact_response(
         instructions: request.instructions,
         previous_response_id: request.previous_response_id,
         service_tier: request.service_tier,
+        safety_identifier: request.safety_identifier,
         prompt_cache_key: request.prompt_cache_key,
         prompt_cache_retention: request.prompt_cache_retention,
         prompt_cache_options: request.prompt_cache_options,

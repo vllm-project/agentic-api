@@ -112,6 +112,9 @@ pub struct RequestPayload<T: ?Sized = ResponseTextConfig, C = PromptCacheOptions
     /// Independent of the model's `parallel_tool_calls` generation preference.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub multi_agent: Option<MultiAgentConfig>,
+    /// A stable end-user identifier for abuse detection, echoed on the response per the `OpenAI` contract.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub safety_identifier: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt_cache_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -190,6 +193,8 @@ pub struct UpstreamRequest<'a> {
     pub metadata: Option<&'a ConversationMetadata>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parallel_tool_calls: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub safety_identifier: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_cache_key: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -317,6 +322,7 @@ impl<T: ?Sized, C> RequestPayload<T, C> {
             truncation: self.truncation,
             metadata: self.metadata,
             parallel_tool_calls: self.parallel_tool_calls,
+            safety_identifier: self.safety_identifier,
             prompt_cache_key: self.prompt_cache_key,
             prompt_cache_retention: self.prompt_cache_retention,
             prompt_cache_options: self.prompt_cache_options.map(map_cache).transpose()?,
@@ -413,6 +419,7 @@ impl RequestPayload {
             truncation: self.truncation.as_deref(),
             metadata: self.metadata.as_ref(),
             parallel_tool_calls,
+            safety_identifier: self.safety_identifier.as_deref(),
             prompt_cache_key: self.prompt_cache_key.as_deref(),
             prompt_cache_retention: self.prompt_cache_retention,
             prompt_cache_options: self.prompt_cache_options.as_ref(),
@@ -937,6 +944,66 @@ mod tests {
                 "prompt_cache_key": invalid
             }));
             assert!(result.is_err(), "non-string prompt_cache_key must be rejected");
+        }
+    }
+
+    #[test]
+    fn request_payload_omits_absent_and_forwards_present_safety_identifier_upstream() {
+        let payload: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test-model",
+            "input": "hello"
+        }))
+        .expect("request should deserialize");
+        let upstream = serde_json::to_value(
+            payload
+                .to_upstream_request(false, &HashMap::default())
+                .expect("request should normalize"),
+        )
+        .expect("upstream request should serialize");
+        assert!(upstream.get("safety_identifier").is_none());
+        assert!(!payload.extra.contains_key("safety_identifier"));
+
+        let payload: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test-model",
+            "input": "hello",
+            "safety_identifier": "end-user-1234"
+        }))
+        .expect("request should deserialize");
+        assert_eq!(payload.safety_identifier.as_deref(), Some("end-user-1234"));
+        assert!(!payload.extra.contains_key("safety_identifier"));
+        let upstream = serde_json::to_value(
+            payload
+                .to_upstream_request(false, &HashMap::default())
+                .expect("request should normalize"),
+        )
+        .expect("upstream request should serialize");
+        assert_eq!(upstream["safety_identifier"], "end-user-1234");
+
+        let null_payload: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test-model",
+            "input": "hello",
+            "safety_identifier": null
+        }))
+        .expect("null should deserialize as an absent identifier");
+        let upstream = serde_json::to_value(
+            null_payload
+                .to_upstream_request(false, &HashMap::default())
+                .expect("request should normalize"),
+        )
+        .expect("upstream request should serialize");
+        assert!(upstream.get("safety_identifier").is_none());
+
+        for invalid in [
+            serde_json::json!(1),
+            serde_json::json!(true),
+            serde_json::json!({"tenant": "a"}),
+        ] {
+            let result = serde_json::from_value::<RequestPayload>(serde_json::json!({
+                "model": "test-model",
+                "input": "hello",
+                "safety_identifier": invalid
+            }));
+            assert!(result.is_err(), "non-string safety_identifier must be rejected");
         }
     }
 
