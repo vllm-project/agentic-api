@@ -190,11 +190,14 @@ impl ToolsFileConfig {
 pub(crate) struct MessagesGatewayFileConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_aliases: Option<String>,
+    /// Comma-separated native server-tool types the upstream runs itself.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub upstream_server_tools: Option<String>,
 }
 
 impl MessagesGatewayFileConfig {
     fn is_empty(&self) -> bool {
-        self.tool_aliases.is_none()
+        self.tool_aliases.is_none() && self.upstream_server_tools.is_none()
     }
 }
 

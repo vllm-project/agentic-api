@@ -26,7 +26,11 @@ fn create_cli() -> Value {
 }
 
 async fn start(store: &MessagesThreadStore, create: &Value) -> String {
-    let mut ctx = prepare_cli(store, create).await.unwrap().into_context().unwrap();
+    let mut ctx = prepare_cli(store, create)
+        .await
+        .unwrap()
+        .into_context(&UpstreamServerTools::default())
+        .unwrap();
     let id = ctx.thread_message_id().unwrap().to_owned();
     let upstream: Value = serde_json::from_str(&ctx.upstream_body().unwrap()).unwrap();
     assert_eq!(upstream["system"], json!([create["system"][1]]));
@@ -49,7 +53,11 @@ async fn full_and_inherited_cli_fields_preserve_one_prompt_and_one_history() {
         } else {
             json!([attribution("new")])
         };
-        let mut ctx = prepare_cli(&store, &next).await.unwrap().into_context().unwrap();
+        let mut ctx = prepare_cli(&store, &next)
+            .await
+            .unwrap()
+            .into_context(&UpstreamServerTools::default())
+            .unwrap();
         let upstream: Value = serde_json::from_str(&ctx.upstream_body().unwrap()).unwrap();
         assert_eq!(upstream["system"], json!([create["system"][1]]));
         assert_eq!(upstream["tools"], create["tools"]);
@@ -97,7 +105,11 @@ async fn cli_compatibility_rejects_changed_fields_before_consuming_the_parent() 
     }
     let mut next = continuation(&id);
     next["system"] = json!([attribution("new")]);
-    let ctx = prepare_cli(&store, &next).await.unwrap().into_context().unwrap();
+    let ctx = prepare_cli(&store, &next)
+        .await
+        .unwrap()
+        .into_context(&UpstreamServerTools::default())
+        .unwrap();
     drop(ctx);
     store.shutdown().await;
     assert!(prepare_cli(&store, &next).await.is_ok());
@@ -107,7 +119,11 @@ async fn cli_compatibility_rejects_changed_fields_before_consuming_the_parent() 
 async fn ordinary_threads_keep_create_only_rules_and_literal_system_text() {
     let (store, _pool) = new_store().await;
     let create = create_cli();
-    let mut ctx = prepare(&store, &create).await.unwrap().into_context().unwrap();
+    let mut ctx = prepare(&store, &create)
+        .await
+        .unwrap()
+        .into_context(&UpstreamServerTools::default())
+        .unwrap();
     let id = ctx.thread_message_id().unwrap().to_owned();
     let upstream: Value = serde_json::from_str(&ctx.upstream_body().unwrap()).unwrap();
     assert_eq!(upstream["system"], create["system"]);
@@ -137,7 +153,11 @@ async fn checkpoints_do_not_retain_attribution() {
     assert!(!checkpoint.contains("x-anthropic-billing-header:"));
     let mut next = continuation(&id);
     next["system"] = json!([attribution("rotated")]);
-    let mut ctx = prepare_cli(&store, &next).await.unwrap().into_context().unwrap();
+    let mut ctx = prepare_cli(&store, &next)
+        .await
+        .unwrap()
+        .into_context(&UpstreamServerTools::default())
+        .unwrap();
     assert!(!ctx.upstream_body().unwrap().contains("x-anthropic-billing-header:"));
     let child = ctx.thread_message_id().unwrap().to_owned();
     ctx.complete_thread(&json!([]), ThreadRetention::Ready).await.unwrap();
@@ -154,7 +174,11 @@ async fn attribution_only_system_does_not_create_a_phantom_prompt() {
     let (store, _pool) = new_store().await;
     let mut create = request(&json!({"type":"create"}));
     create["system"] = json!([attribution("old")]);
-    let mut ctx = prepare_cli(&store, &create).await.unwrap().into_context().unwrap();
+    let mut ctx = prepare_cli(&store, &create)
+        .await
+        .unwrap()
+        .into_context(&UpstreamServerTools::default())
+        .unwrap();
     let id = ctx.thread_message_id().unwrap().to_owned();
     assert!(
         serde_json::from_str::<Value>(&ctx.upstream_body().unwrap())
@@ -165,7 +189,11 @@ async fn attribution_only_system_does_not_create_a_phantom_prompt() {
     ctx.complete_thread(&json!([]), ThreadRetention::Ready).await.unwrap();
     let mut next = continuation(&id);
     next["system"] = json!([attribution("new")]);
-    let ctx = prepare_cli(&store, &next).await.unwrap().into_context().unwrap();
+    let ctx = prepare_cli(&store, &next)
+        .await
+        .unwrap()
+        .into_context(&UpstreamServerTools::default())
+        .unwrap();
     assert!(
         serde_json::from_str::<Value>(&ctx.upstream_body().unwrap())
             .unwrap()

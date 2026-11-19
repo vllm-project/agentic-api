@@ -19,7 +19,7 @@ use crate::storage::{
 };
 use crate::tool::{GatewayExecutorRegistration, GatewayExecutors, file_search::FileSearchService};
 use crate::types::io::{InOutItem, ToolChoice};
-use crate::types::messages::GatewayToolMap;
+use crate::types::messages::{GatewayToolMap, UpstreamServerTools};
 use crate::types::model_capabilities::ModelCapabilities;
 use crate::types::request_response::{RequestPayload, ResponsePayload};
 
@@ -27,6 +27,9 @@ use crate::types::request_response::{RequestPayload, ResponsePayload};
 /// (e.g. `WebSearch=web_search`). Empty/unset means no aliases — client
 /// functions stay client-owned (the ownership doctrine's default).
 const GATEWAY_TOOL_ALIASES_ENV: &str = "MESSAGES_GATEWAY_TOOL_ALIASES";
+/// Env var naming native server tools the upstream runs itself; the constant
+/// is the typed policy's own so docs and parsing share one spelling.
+const UPSTREAM_SERVER_TOOLS_ENV: &str = crate::types::messages::UPSTREAM_SERVER_TOOLS_ENV;
 
 /// Context built by `rehydrate_conversation`, threaded through the execute pipeline.
 #[derive(Debug)]
@@ -112,6 +115,9 @@ pub struct ExecutionContext {
     /// Client-tool → gateway-executor aliases for the `/v1/messages` loop
     /// (e.g. Claude Code's `WebSearch` → `web_search`). Empty unless configured.
     pub messages_gateway_tools: GatewayToolMap,
+    /// Native server-tool versions the upstream runs itself; their
+    /// declarations and blocks pass through unchanged. Empty by default.
+    pub messages_upstream_server_tools: UpstreamServerTools,
     /// The operator's key for search results returned to Messages clients;
     /// without one, a key generated once per process is used.
     messages_result_key: Option<Arc<MessagesResultKey>>,
@@ -158,6 +164,7 @@ impl ExecutionContext {
             client,
             gateway_executors,
             messages_gateway_tools: messages_gateway_tools_from_env(),
+            messages_upstream_server_tools: messages_upstream_server_tools_from_env(),
             messages_result_key: None,
             messages_threads: MessagesThreadStore::default(),
             llm_base_url,
@@ -202,6 +209,15 @@ impl ExecutionContext {
     #[must_use]
     pub fn with_messages_result_key(mut self, key: MessagesResultKey) -> Self {
         self.messages_result_key = Some(Arc::new(key));
+        self
+    }
+
+    /// List the native server-tool versions this context's upstream runs
+    /// itself, instead of the gateway. Used by tests and embedders; the server
+    /// loads the value from configuration in [`ExecutionContext::from_config`].
+    #[must_use]
+    pub fn with_messages_upstream_server_tools(mut self, upstream: UpstreamServerTools) -> Self {
+        self.messages_upstream_server_tools = upstream;
         self
     }
 
@@ -306,6 +322,16 @@ impl ExecutionContext {
                 .or(cfg.tools.messages_gateway_tool_aliases.as_deref())
                 .map(GatewayToolMap::from_env_str)
                 .unwrap_or_default(),
+            messages_upstream_server_tools: {
+                let env_value = std::env::var(UPSTREAM_SERVER_TOOLS_ENV).ok();
+                let raw = env_value
+                    .as_deref()
+                    .or(cfg.tools.messages_upstream_server_tools.as_deref());
+                match raw {
+                    Some(raw) => UpstreamServerTools::parse(raw).map_err(Error::Config)?,
+                    None => UpstreamServerTools::default(),
+                }
+            },
             messages_result_key: MessagesResultKey::from_env()
                 .map_err(|error| Error::Config(error.to_string()))?
                 .map(Arc::new),
@@ -376,6 +402,20 @@ fn messages_gateway_tools_from_env() -> GatewayToolMap {
         .ok()
         .map(|raw| GatewayToolMap::from_env_str(&raw))
         .unwrap_or_default()
+}
+
+/// Load the native server tools the upstream runs itself from the
+/// environment. A malformed value cannot keep an infallible context from
+/// constructing (tests, embedders); it is logged and ignored. The server's
+/// configuration-validating constructor parses the same value as an error.
+fn messages_upstream_server_tools_from_env() -> UpstreamServerTools {
+    match std::env::var(UPSTREAM_SERVER_TOOLS_ENV) {
+        Ok(raw) => UpstreamServerTools::parse(&raw).unwrap_or_else(|error| {
+            tracing::error!("{error}; running every native server tool in the gateway");
+            UpstreamServerTools::default()
+        }),
+        Err(_) => UpstreamServerTools::default(),
+    }
 }
 
 #[cfg(test)]

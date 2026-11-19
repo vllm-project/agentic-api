@@ -117,7 +117,11 @@ pub async fn with_web_search(
         Offer::Alias => GatewayToolMap::from_pairs([("WebSearch", "web_search")]),
     };
     let tools: Vec<ToolParam> = serde_json::from_value(offer.tools()).unwrap();
-    let mut params = registry_tools(Some(&tools), &exec_ctx.messages_gateway_tools);
+    let mut params = registry_tools(
+        Some(&tools),
+        &exec_ctx.messages_gateway_tools,
+        &exec_ctx.messages_upstream_server_tools,
+    );
     let mut executors = exec_ctx.gateway_executors.clone();
     let registry = ToolRegistry::build_with_handlers(&mut params, &mut executors)
         .await

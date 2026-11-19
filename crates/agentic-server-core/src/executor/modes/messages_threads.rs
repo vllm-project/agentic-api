@@ -20,7 +20,7 @@ use crate::types::messages::thread::{
     MessageThreadErrorInfo, MessageThreadErrorKind, MessageThreadErrorType, MessageThreadParam, MessagesThreadOwner,
     ThreadFingerprint,
 };
-use crate::types::messages::{MessageContent, MessageParam, MessagesRequest};
+use crate::types::messages::{MessageContent, MessageParam, MessagesRequest, UpstreamServerTools};
 use validation::validate_request;
 
 /// Thread protocol or persistence failure, separate from inference failures.
@@ -265,9 +265,9 @@ impl PreparedMessagesThread {
     ///
     /// # Errors
     /// Returns an existing Messages validation error for an invalid restored request.
-    pub fn into_context(mut self) -> ExecutorResult<MessagesRequestContext> {
+    pub fn into_context(mut self, upstream: &UpstreamServerTools) -> ExecutorResult<MessagesRequestContext> {
         self.parsed.project_thread_history()?;
-        let mut context = MessagesRequestContext::new(self.parsed)?;
+        let mut context = MessagesRequestContext::new(self.parsed, upstream)?;
         context.thread = Some(self.turn);
         Ok(context)
     }

@@ -19,8 +19,8 @@ use agentic_core::executor::{
 use agentic_core::storage::{ConversationStore, ResponseStore};
 use agentic_core::tool::registry_tools;
 use agentic_core::tool::{GatewayExecutorRegistration, GatewayExecutors, ToolRegistry, WebFetchHandler};
-use agentic_core::types::messages::GatewayToolMap;
 use agentic_core::types::messages::tool_seam::NATIVE_WEB_FETCH_VERSIONS;
+use agentic_core::types::messages::{GatewayToolMap, UpstreamServerTools};
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -235,7 +235,7 @@ fn native_fetch(extra: &Value) -> Value {
 }
 
 async fn registry(harness: &Harness, ctx: &MessagesRequestContext) -> ToolRegistry {
-    let mut tools = registry_tools(ctx.tools(), &GatewayToolMap::default());
+    let mut tools = registry_tools(ctx.tools(), &GatewayToolMap::default(), &UpstreamServerTools::default());
     let mut executors = harness.exec_ctx.gateway_executors.clone();
     ToolRegistry::build_with_handlers(&mut tools, &mut executors)
         .await
@@ -801,7 +801,7 @@ async fn a_client_function_named_web_fetch_stays_client_owned() {
 #[tokio::test]
 async fn a_disabled_executor_fails_registry_construction() {
     let ctx = MessagesRequestContext::from_value(request("x", &native_fetch(&json!({})), false)).unwrap();
-    let mut tools = registry_tools(ctx.tools(), &GatewayToolMap::default());
+    let mut tools = registry_tools(ctx.tools(), &GatewayToolMap::default(), &UpstreamServerTools::default());
     let error = ToolRegistry::build_with_handlers(&mut tools, &mut GatewayExecutors::default())
         .await
         .expect_err("a disabled executor must not register a placeholder");

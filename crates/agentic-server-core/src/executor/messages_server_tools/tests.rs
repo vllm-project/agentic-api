@@ -60,7 +60,7 @@ fn only_native_declarations_show_their_calls() {
                   {"name": "WebSearch", "input_schema": {"type": "object"}}]
     }))
     .unwrap();
-    let native = NativeServerTools::from_declarations(tools.tools.as_ref());
+    let native = NativeServerTools::from_declarations(tools.tools.as_ref(), &UpstreamServerTools::default());
     assert_eq!(native.tool("web_search"), Some(NativeTool::WebSearch));
     assert_eq!(native.tool("web_fetch"), Some(NativeTool::WebFetch));
     assert_eq!(native.tool("WebSearch"), None, "an alias stays hidden");
@@ -71,14 +71,36 @@ fn only_native_declarations_show_their_calls() {
                   {"type": "web_search_20250305", "name": "search_the_web"}]
     }))
     .unwrap();
-    let native = NativeServerTools::from_declarations(plain.tools.as_ref());
+    let native = NativeServerTools::from_declarations(plain.tools.as_ref(), &UpstreamServerTools::default());
     assert_eq!(
         native.tool("web_search"),
         None,
         "a plain function named web_search stays hidden"
     );
     assert_eq!(native.tool("search_the_web"), None);
-    assert_eq!(NativeServerTools::from_declarations(None).tool("web_fetch"), None);
+    assert_eq!(
+        NativeServerTools::from_declarations(None, &UpstreamServerTools::default()).tool("web_fetch"),
+        None
+    );
+}
+
+#[test]
+fn upstream_run_native_declarations_are_not_shown_as_gateway_calls() {
+    let tools: MessagesRequest = serde_json::from_value(json!({
+        "model": "m", "max_tokens": 1, "messages": [],
+        "tools": [{"type": "web_search_20250305", "name": "web_search"},
+                  {"type": "web_fetch_20250910", "name": "web_fetch"}]
+    }))
+    .unwrap();
+    let policy = UpstreamServerTools::parse("web_search_20250305").unwrap();
+    let native = NativeServerTools::from_declarations(tools.tools.as_ref(), &policy);
+    assert_eq!(native.tool("web_search"), None, "the upstream runs this one");
+    assert_eq!(native.tool("web_fetch"), Some(NativeTool::WebFetch));
+
+    let both = UpstreamServerTools::parse("web_search_20250305,web_fetch_20250910").unwrap();
+    let native = NativeServerTools::from_declarations(tools.tools.as_ref(), &both);
+    assert_eq!(native.tool("web_search"), None);
+    assert_eq!(native.tool("web_fetch"), None);
 }
 
 #[test]

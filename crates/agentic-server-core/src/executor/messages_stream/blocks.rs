@@ -49,7 +49,7 @@ impl BufferedBlock {
     /// input that does not parse as an object is recorded as `{}`.
     pub(super) fn completed_block(&self) -> Value {
         let mut block = self.block.clone();
-        if block["type"] == "tool_use" {
+        if matches!(block["type"].as_str(), Some("tool_use" | "server_tool_use")) {
             block["input"] = history_input(&parse_input(&self.input_json));
         }
         block
@@ -60,17 +60,22 @@ impl BufferedBlock {
     /// empty object. The legacy history fallback is preserved separately.
     pub(super) fn into_parts(self) -> (Value, Option<MessagesToolCall>) {
         let mut block = self.block;
-        if block["type"] != "tool_use" {
-            return (block, None);
+        if matches!(block["type"].as_str(), Some("tool_use" | "server_tool_use")) {
+            // A `server_tool_use` the upstream ran streams its input through
+            // `input_json_delta` like a `tool_use`; restore it so a mixed round
+            // the gateway continues gives the upstream the block unchanged.
+            let input = parse_input(&self.input_json);
+            block["input"] = history_input(&input);
+            if block["type"] == "tool_use" {
+                let call = self.is_gateway_tool.then(|| MessagesToolCall {
+                    id: block["id"].as_str().unwrap_or_default().to_owned(),
+                    name: block["name"].as_str().unwrap_or_default().to_owned(),
+                    input,
+                });
+                return (block, call);
+            }
         }
-        let input = parse_input(&self.input_json);
-        block["input"] = history_input(&input);
-        let call = self.is_gateway_tool.then(|| MessagesToolCall {
-            id: block["id"].as_str().unwrap_or_default().to_owned(),
-            name: block["name"].as_str().unwrap_or_default().to_owned(),
-            input,
-        });
-        (block, call)
+        (block, None)
     }
 }
 
@@ -97,6 +102,39 @@ fn append_str(block: &mut Value, field: &str, fragment: Option<&Value>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn streamed_server_tool_use_keeps_its_input_in_history() {
+        let mut block = BufferedBlock {
+            closed: false,
+            block: json!({"type": "server_tool_use", "id": "srvtoolu_01", "name": "web_search", "input": {}}),
+            input_json: String::new(),
+            is_gateway_tool: false,
+        };
+        block.apply_delta(&json!({"type": "input_json_delta", "partial_json": "{\"quer"}));
+        block.apply_delta(&json!({"type": "input_json_delta", "partial_json": "y\":\"x\"}"}));
+        block.closed = true;
+        let (history, call) = block.into_parts();
+        assert_eq!(
+            history["input"],
+            json!({"query": "x"}),
+            "the next round keeps the upstream block"
+        );
+        assert!(call.is_none(), "an upstream server block never dispatches");
+    }
+
+    #[test]
+    fn malformed_streamed_server_tool_use_input_becomes_an_empty_object() {
+        let block = BufferedBlock {
+            closed: true,
+            block: json!({"type": "server_tool_use", "id": "s", "name": "web_search", "input": {}}),
+            input_json: "{".to_owned(),
+            is_gateway_tool: false,
+        };
+        let (history, call) = block.into_parts();
+        assert_eq!(history["input"], json!({}));
+        assert!(call.is_none());
+    }
 
     #[test]
     fn string_deltas_reuse_existing_allocation() {

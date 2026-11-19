@@ -219,7 +219,11 @@ impl Harness {
             "tools":[{"name":"web_search", "input_schema":{"type":"object"}}]
         }))
         .unwrap();
-        let mut declarations = registry_tools(context.tools(), &exec.messages_gateway_tools);
+        let mut declarations = registry_tools(
+            context.tools(),
+            &exec.messages_gateway_tools,
+            &exec.messages_upstream_server_tools,
+        );
         let registry = ToolRegistry::build_with_handlers(&mut declarations, &mut exec.gateway_executors)
             .await
             .unwrap();

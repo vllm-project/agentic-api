@@ -13,7 +13,9 @@
 //! here, in [`ToolDeclaration::WebFetch`].
 
 use crate::types::messages::request::ToolParam;
-use crate::types::messages::tool_seam::{GatewayToolMap, WEB_SEARCH_EXECUTOR, is_native_web_fetch_type};
+use crate::types::messages::tool_seam::{
+    GatewayToolMap, UpstreamServerTools, WEB_SEARCH_EXECUTOR, is_native_web_fetch_type,
+};
 use crate::types::tools::{
     CodeInterpreterToolParam, CodexNamespaceMember, CodexNamespaceToolParam, CustomToolParam, DomainFilters,
     FileSearchToolParam, FunctionToolParam, McpToolParam, ResponsesTool, ShellToolParam, ToolSearchToolParam,
@@ -182,14 +184,24 @@ pub fn record_discovered_mcp_tools(declarations: Vec<ToolDeclaration>, tools: &m
 /// `web_fetch_*` declaration becomes [`ToolDeclaration::WebFetch`]. Everything
 /// else is a client-owned function.
 #[must_use]
-pub fn registry_tools(tools: Option<&Vec<ToolParam>>, map: &GatewayToolMap) -> Vec<ToolDeclaration> {
+pub fn registry_tools(
+    tools: Option<&Vec<ToolParam>>,
+    map: &GatewayToolMap,
+    upstream: &UpstreamServerTools,
+) -> Vec<ToolDeclaration> {
     let Some(tools) = tools else {
         return Vec::new();
     };
-    tools.iter().filter_map(|tool| map_tool(tool, map)).collect()
+    tools.iter().filter_map(|tool| map_tool(tool, map, upstream)).collect()
 }
 
-fn map_tool(tool: &ToolParam, map: &GatewayToolMap) -> Option<ToolDeclaration> {
+fn map_tool(tool: &ToolParam, map: &GatewayToolMap, upstream: &UpstreamServerTools) -> Option<ToolDeclaration> {
+    // A version the upstream runs itself is forwarded unchanged and never
+    // binds a gateway executor (an optional executor, e.g. web_fetch, that is
+    // disabled must not fail a request the upstream answers).
+    if upstream.contains(tool.tool_type()) {
+        return None;
+    }
     match tool {
         ToolParam::WebFetch(_) => web_fetch_config(tool).map(ToolDeclaration::WebFetch),
         // Keep unsupported fetch versions on the validation path; they must not
@@ -275,6 +287,10 @@ mod tests {
     use crate::tool::ToolType;
     use crate::types::messages::request::MessagesRequest;
     use crate::types::messages::tool_seam::{NATIVE_WEB_FETCH_VERSIONS, NATIVE_WEB_SEARCH_VERSIONS};
+
+    fn registry_tools(tools: Option<&Vec<ToolParam>>, map: &GatewayToolMap) -> Vec<ToolDeclaration> {
+        super::registry_tools(tools, map, &UpstreamServerTools::default())
+    }
     use crate::types::tools::McpDiscoveredToolParam;
 
     fn tools_of(json_req: Value) -> Option<Vec<ToolParam>> {

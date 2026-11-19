@@ -24,12 +24,12 @@ use crate::tool::domain_policy::EXCLUSIVE_LISTS_RULE;
 use crate::tool::web_fetch::{self, WebFetchErrorCode, WebFetchHandler};
 use crate::tool::web_search::WebSearchHandler;
 use crate::types::io::FunctionTool;
-use crate::types::messages::GatewayToolResult;
 use crate::types::messages::request::ToolParam;
 use crate::types::messages::tool_seam::{
     NATIVE_WEB_FETCH_VERSIONS, NATIVE_WEB_SEARCH_VERSIONS, NativeToolVersion, WEB_FETCH_EXECUTOR, WEB_SEARCH_EXECUTOR,
     is_native_web_fetch_type, tool_result_block,
 };
+use crate::types::messages::{GatewayToolResult, UpstreamServerTools};
 use crate::types::tools::WebFetchToolParam;
 
 /// One request-wide `max_uses` budget, counted in the tool's unit of use.
@@ -274,6 +274,7 @@ fn handler_function_tool<H: ToolHandler>(
 fn normalize_web_search_declaration(
     tool: &Value,
     max_uses: &mut Option<usize>,
+    upstream: &UpstreamServerTools,
 ) -> ExecutorResult<Option<FunctionTool>> {
     let Some(tool_type) = tool
         .get("type")
@@ -283,6 +284,10 @@ fn normalize_web_search_declaration(
         return Ok(None);
     };
     if tool.get("name").and_then(Value::as_str) != Some(WEB_SEARCH_EXECUTOR) {
+        return Ok(None);
+    }
+    // The upstream runs this version itself: forward the declaration unchanged.
+    if upstream.contains(Some(tool_type)) {
         return Ok(None);
     }
     let version = declared_version(WEB_SEARCH_EXECUTOR, NATIVE_WEB_SEARCH_VERSIONS, tool_type)?;
@@ -302,7 +307,11 @@ fn normalize_web_search_declaration(
 /// cannot honour are rejected rather than ignored. The shared parameters are
 /// read once into [`WebFetchToolParam`] and validated by [`WebFetchHandler`];
 /// every supported version is rewritten into the same function tool.
-fn normalize_web_fetch_declaration(tool: &Value, max_uses: &mut Option<usize>) -> ExecutorResult<Option<FunctionTool>> {
+fn normalize_web_fetch_declaration(
+    tool: &Value,
+    max_uses: &mut Option<usize>,
+    upstream: &UpstreamServerTools,
+) -> ExecutorResult<Option<FunctionTool>> {
     let Some(tool_type) = tool
         .get("type")
         .and_then(Value::as_str)
@@ -310,6 +319,10 @@ fn normalize_web_fetch_declaration(tool: &Value, max_uses: &mut Option<usize>) -
     else {
         return Ok(None);
     };
+    // The upstream runs this version itself: forward the declaration unchanged.
+    if upstream.contains(Some(tool_type)) {
+        return Ok(None);
+    }
     let version = declared_version(WEB_FETCH_EXECUTOR, NATIVE_WEB_FETCH_VERSIONS, tool_type)?;
     if tool.get("name").and_then(Value::as_str) != Some(WEB_FETCH_EXECUTOR) {
         return Err(invalid(format!(
@@ -337,13 +350,17 @@ fn normalize_web_fetch_declaration(tool: &Value, max_uses: &mut Option<usize>) -
     handler_function_tool(&WebFetchHandler::spec_only(), WEB_FETCH_EXECUTOR, &params).map(Some)
 }
 
-/// Whether the request declares a native web-fetch server tool of any version.
+/// Whether the request declares a native web-fetch server tool the gateway
+/// must run, i.e. a `web_fetch_*` declaration the upstream does not run
+/// itself. Unsupported versions count too, so the disabled-executor gate and
+/// declaration validation both still fire without an upstream policy.
 #[must_use]
-pub fn declares_native_web_fetch(request: &Value) -> bool {
+pub fn declares_gateway_native_web_fetch(request: &Value, upstream: &UpstreamServerTools) -> bool {
     request.get("tools").and_then(Value::as_array).is_some_and(|tools| {
-        tools
-            .iter()
-            .any(|tool| is_native_web_fetch_type(tool.get("type").and_then(Value::as_str)))
+        tools.iter().any(|tool| {
+            let tool_type = tool.get("type").and_then(Value::as_str);
+            is_native_web_fetch_type(tool_type) && !upstream.contains(tool_type)
+        })
     })
 }
 
@@ -353,8 +370,11 @@ pub fn declares_native_web_fetch(request: &Value) -> bool {
 /// # Errors
 /// Returns [`ExecutorError::InvalidRequest`] for unsupported or invalid native
 /// declarations.
-pub fn normalize_native_server_tools_for_upstream(request: &mut Value) -> ExecutorResult<bool> {
-    rewrite_native_server_tools(request).map(|(_, rewritten)| rewritten)
+pub fn normalize_native_server_tools_for_upstream(
+    request: &mut Value,
+    upstream: &UpstreamServerTools,
+) -> ExecutorResult<bool> {
+    rewrite_native_server_tools(request, upstream).map(|(_, rewritten)| rewritten)
 }
 
 /// Kept for callers that predate `web_fetch`; behaves exactly like
@@ -364,7 +384,7 @@ pub fn normalize_native_server_tools_for_upstream(request: &mut Value) -> Execut
 /// Returns [`ExecutorError::InvalidRequest`] for unsupported or invalid native
 /// declarations.
 pub fn normalize_native_web_search_for_upstream(request: &mut Value) -> ExecutorResult<bool> {
-    normalize_native_server_tools_for_upstream(request)
+    normalize_native_server_tools_for_upstream(request, &UpstreamServerTools::default())
 }
 
 pub(super) fn web_search_budget_exhausted_result(tool_use_id: &str) -> GatewayToolResult {
@@ -402,22 +422,28 @@ fn anthropic_function_tool(function: &FunctionTool) -> Value {
 /// Anthropic function-tool shape accepted by vLLM. The gateway executes the
 /// resulting `tool_use` internally, so this is an upstream-only representation
 /// change; the client request itself remains Anthropic-native.
-pub(super) fn normalize_native_server_tools(request: &mut Value) -> ExecutorResult<ServerToolBudgets> {
-    rewrite_native_server_tools(request).map(|(budgets, _)| budgets)
+pub(super) fn normalize_native_server_tools(
+    request: &mut Value,
+    upstream: &UpstreamServerTools,
+) -> ExecutorResult<ServerToolBudgets> {
+    rewrite_native_server_tools(request, upstream).map(|(budgets, _)| budgets)
 }
 
 /// The rewrite behind both entry points: the request-wide budgets, and whether
 /// any declaration was rewritten, decided by the rewrite itself so the two can
 /// never disagree about which declarations are native.
-fn rewrite_native_server_tools(request: &mut Value) -> ExecutorResult<(ServerToolBudgets, bool)> {
+fn rewrite_native_server_tools(
+    request: &mut Value,
+    upstream: &UpstreamServerTools,
+) -> ExecutorResult<(ServerToolBudgets, bool)> {
     let mut searches = None;
     let mut fetches = None;
     let mut rewritten = false;
     if let Some(tools) = request.get_mut("tools").and_then(Value::as_array_mut) {
         for tool in tools {
-            let function = match normalize_web_search_declaration(tool, &mut searches)? {
+            let function = match normalize_web_search_declaration(tool, &mut searches, upstream)? {
                 Some(function) => Some(function),
-                None => normalize_web_fetch_declaration(tool, &mut fetches)?,
+                None => normalize_web_fetch_declaration(tool, &mut fetches, upstream)?,
             };
             if let Some(function) = function {
                 *tool = anthropic_function_tool(&function);
@@ -438,6 +464,16 @@ mod tests {
     use crate::types::messages::tool_seam::{NATIVE_WEB_FETCH_TYPE, NATIVE_WEB_SEARCH_TYPE};
     use crate::types::tools::WebSearchToolParam;
 
+    // Tests exercise the gateway-run default; the upstream-run policy has its
+    // own cases that call the two-argument functions directly.
+    fn normalize_native_server_tools(request: &mut Value) -> ExecutorResult<ServerToolBudgets> {
+        super::normalize_native_server_tools(request, &UpstreamServerTools::default())
+    }
+
+    fn normalize_native_server_tools_for_upstream(request: &mut Value) -> ExecutorResult<bool> {
+        super::normalize_native_server_tools_for_upstream(request, &UpstreamServerTools::default())
+    }
+
     fn fetch_request(extra: &Value) -> Value {
         let mut tool = json!({"type": "web_fetch_20250910", "name": "web_fetch"});
         for (key, value) in extra.as_object().expect("object") {
@@ -457,7 +493,10 @@ mod tests {
     fn native_web_fetch_is_rewritten_into_the_function_tool_with_its_budget() {
         let mut request = fetch_request(&json!({"max_uses": 3, "allowed_domains": ["example.com"],
             "max_content_tokens": 5000, "citations": {"enabled": false}, "allowed_callers": ["direct"]}));
-        assert!(declares_native_web_fetch(&request));
+        assert!(declares_gateway_native_web_fetch(
+            &request,
+            &UpstreamServerTools::default()
+        ));
         let mut budgets = normalize_native_server_tools(&mut request).unwrap();
         assert_eq!(request["tools"][0]["name"], "web_fetch");
         assert!(request["tools"][0].get("type").is_none());
@@ -493,9 +532,62 @@ mod tests {
         assert!(!normalize_native_server_tools_for_upstream(&mut request).unwrap());
         let mut plain = json!({"model": "m", "max_tokens": 8, "messages": [],
             "tools": [{"name": "web_fetch", "input_schema": {"type": "object"}}]});
-        assert!(!declares_native_web_fetch(&plain));
+        assert!(!declares_gateway_native_web_fetch(
+            &plain,
+            &UpstreamServerTools::default()
+        ));
         assert!(!normalize_native_server_tools_for_upstream(&mut plain).unwrap());
         assert!(plain["tools"][0].get("type").is_none());
+    }
+
+    fn upstream(types: &[&str]) -> UpstreamServerTools {
+        UpstreamServerTools::parse(&types.join(",")).unwrap()
+    }
+
+    #[test]
+    fn an_upstream_run_version_is_forwarded_unchanged_without_a_budget() {
+        let mut request = json!({"model": "m", "max_tokens": 8, "messages": [], "tools": [
+            {"type": "web_search_20250305", "name": "web_search", "max_uses": 1,
+             "allowed_domains": ["example.com"]}
+        ]});
+        let policy = upstream(&["web_search_20250305"]);
+        let before = request.clone();
+        let mut budgets = super::normalize_native_server_tools(&mut request, &policy).unwrap();
+        assert_eq!(request, before, "the upstream keeps the native declaration");
+        assert!(budgets.searches.admit(1000), "no gateway budget is enforced");
+        assert!(
+            !super::normalize_native_server_tools_for_upstream(&mut request, &policy).unwrap(),
+            "nothing to rewrite for the upstream"
+        );
+        assert!(!declares_gateway_native_web_fetch(&request, &policy));
+    }
+
+    #[test]
+    fn mixed_owners_rewrite_only_the_gateway_run_declarations() {
+        let mut request = json!({"model": "m", "max_tokens": 8, "messages": [], "tools": [
+            {"type": "web_search_20250305", "name": "web_search"},
+            {"type": "web_fetch_20250910", "name": "web_fetch"}
+        ]});
+        let policy = upstream(&["web_search_20250305"]);
+        let mut budgets = super::normalize_native_server_tools(&mut request, &policy).unwrap();
+        assert_eq!(request["tools"][0]["type"], "web_search_20250305", "upstream tool kept");
+        assert!(request["tools"][1].get("type").is_none(), "gateway tool rewritten");
+        assert_eq!(request["tools"][1]["name"], "web_fetch");
+        assert!(budgets.searches.admit(1000));
+        assert!(budgets.fetches.admit(1000), "unlimited without max_uses");
+
+        // The fetch listed as upstream-run is the one that skips the executor gate.
+        let fetched = json!({"tools": [
+            {"type": "web_search_20250305", "name": "web_search"},
+            {"type": "web_fetch_20250910", "name": "web_fetch"}
+        ]});
+        let both = upstream(&["web_search_20250305", "web_fetch_20250910"]);
+        assert!(!declares_gateway_native_web_fetch(&fetched, &both));
+        assert!(declares_gateway_native_web_fetch(&fetched, &policy));
+        // An unsupported future fetch version is not upstream-run and stays on
+        // the gateway's validation path.
+        let future = json!({"tools": [{"type": "web_fetch_20990101", "name": "web_fetch"}]});
+        assert!(declares_gateway_native_web_fetch(&future, &both));
     }
 
     #[test]

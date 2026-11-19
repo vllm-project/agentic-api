@@ -23,7 +23,9 @@ use serde_json::Value;
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::messages_usage::ServerToolUses;
-use crate::types::messages::{GatewayToolMap, GatewayToolResult, ServerToolResultBlock, ServerToolUseBlock, ToolParam};
+use crate::types::messages::{
+    GatewayToolMap, GatewayToolResult, ServerToolResultBlock, ServerToolUseBlock, ToolParam, UpstreamServerTools,
+};
 pub(super) use model_text::fetch_error_message;
 pub(super) use projection::{project_native_call, replayed_tool_result};
 use sealing::MessagesResultKey;
@@ -67,20 +69,26 @@ pub(super) struct NativeServerTools {
 }
 
 impl NativeServerTools {
-    pub(super) fn from_declarations(tools: Option<&Vec<ToolParam>>) -> Self {
+    pub(super) fn from_declarations(tools: Option<&Vec<ToolParam>>, upstream: &UpstreamServerTools) -> Self {
         tools
             .into_iter()
             .flatten()
             .fold(Self::default(), |native, tool| match tool {
-                ToolParam::WebSearch(tool) if tool.fields.name == "web_search" => Self {
-                    web_search: true,
-                    ..native
-                },
-                ToolParam::WebFetch(_) => Self {
+                ToolParam::WebSearch(tool)
+                    if tool.fields.name == "web_search" && !upstream.contains(Some(tool.version().type_name)) =>
+                {
+                    Self {
+                        web_search: true,
+                        ..native
+                    }
+                }
+                ToolParam::WebFetch(tool) if !upstream.contains(Some(tool.version().type_name)) => Self {
                     web_fetch: true,
                     ..native
                 },
-                ToolParam::WebSearch(_) | ToolParam::Function(_) | ToolParam::Provider(_) => native,
+                ToolParam::WebSearch(_) | ToolParam::WebFetch(_) | ToolParam::Function(_) | ToolParam::Provider(_) => {
+                    native
+                }
             })
     }
 

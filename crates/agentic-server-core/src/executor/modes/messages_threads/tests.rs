@@ -20,7 +20,11 @@ async fn prepare(store: &MessagesThreadStore, value: &Value) -> Result<PreparedM
 }
 
 async fn finish(store: &MessagesThreadStore, value: &Value, stop: &str, content: &Value) -> String {
-    let mut ctx = prepare(store, value).await.unwrap().into_context().unwrap();
+    let mut ctx = prepare(store, value)
+        .await
+        .unwrap()
+        .into_context(&UpstreamServerTools::default())
+        .unwrap();
     let id = ctx.thread_message_id().unwrap().to_owned();
     ctx.complete_thread(
         content,
@@ -61,7 +65,11 @@ async fn rehydrates_lossless_messages_system_and_client_tools() {
     next["messages"][0]["content"] = json!([{"type":"tool_result","tool_use_id":"call","content":[
         {"type":"image","source":{"type":"base64","data":"result"}}],"is_error":true}]);
     next["max_tokens"] = json!(64);
-    let ctx = prepare(&store, &next).await.unwrap().into_context().unwrap();
+    let ctx = prepare(&store, &next)
+        .await
+        .unwrap()
+        .into_context(&UpstreamServerTools::default())
+        .unwrap();
     let upstream: Value = serde_json::from_str(&ctx.upstream_body().unwrap()).unwrap();
     assert!(upstream.get("thread").is_none());
     assert_eq!(upstream["system"], create["system"]);
@@ -255,7 +263,7 @@ async fn oversized_checkpoint_fails_without_consuming_parent() {
     let mut ctx = prepare(&store, &continuation(&id))
         .await
         .unwrap()
-        .into_context()
+        .into_context(&UpstreamServerTools::default())
         .unwrap();
     let huge = json!([{"type":"text","text":"x".repeat(MAX_CHECKPOINT_BYTES)}]);
     assert!(matches!(
@@ -279,7 +287,11 @@ async fn mcp_authorization_can_rotate_while_configuration_remains_fixed() {
     next["mcp_servers"][0]["authorization_token"] = json!("rotated");
     next["container"] = create["container"].clone();
     next["container"]["id"] = json!("new");
-    let ctx = prepare(&store, &next).await.unwrap().into_context().unwrap();
+    let ctx = prepare(&store, &next)
+        .await
+        .unwrap()
+        .into_context(&UpstreamServerTools::default())
+        .unwrap();
     let upstream: Value = serde_json::from_str(&ctx.upstream_body().unwrap()).unwrap();
     assert_eq!(upstream["mcp_servers"][0]["authorization_token"], "rotated");
     assert_eq!(upstream["container"]["id"], "new");

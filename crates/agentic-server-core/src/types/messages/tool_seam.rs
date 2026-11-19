@@ -12,7 +12,7 @@
 //! These are pure conversions with no I/O — the loop (`executor::messages_loop`)
 //! and the registry supply the behaviour around them.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde_json::{Map, Value, json};
 
@@ -35,6 +35,70 @@ pub use super::tools::NATIVE_WEB_SEARCH_TYPE;
 /// The second built-in gateway executor on `/v1/messages`, reachable only
 /// through a native `web_fetch_*` declaration (`tool::web_fetch`).
 pub const WEB_FETCH_EXECUTOR: &str = "web_fetch";
+
+/// Env var naming the native server-tool versions the upstream endpoint runs
+/// itself, e.g. `MESSAGES_UPSTREAM_SERVER_TOOLS=web_search_20250305`. Empty by
+/// default: every supported native declaration is rewritten into a function
+/// tool and run by the gateway. See [`UpstreamServerTools`].
+pub const UPSTREAM_SERVER_TOOLS_ENV: &str = "MESSAGES_UPSTREAM_SERVER_TOOLS";
+
+/// The native server-tool versions the configured upstream executes itself,
+/// rather than the gateway.
+///
+/// A listed declaration is forwarded to the upstream unchanged — its `type`,
+/// settings, calls, and result blocks all pass through — and the gateway does
+/// not bind an executor for it. A declaration the gateway still runs is
+/// rewritten and executed exactly as without this policy. The decision is per
+/// declared version, so one request can mix both owners.
+///
+/// Only versions the gateway itself supports can be listed: a typo fails at
+/// configuration load instead of silently falling back to gateway execution.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct UpstreamServerTools {
+    /// Native tool `type` names the upstream runs itself.
+    types: HashSet<String>,
+}
+
+impl UpstreamServerTools {
+    /// Parse the `MESSAGES_UPSTREAM_SERVER_TOOLS` value: a comma-separated
+    /// list of supported native tool types. Whitespace is trimmed and empty
+    /// entries ignored.
+    ///
+    /// # Errors
+    /// Returns a message naming the offending entry and the supported types
+    /// when an entry is not a version the gateway recognises.
+    pub fn parse(raw: &str) -> Result<Self, String> {
+        let supported: Vec<&str> = NATIVE_WEB_SEARCH_VERSIONS
+            .iter()
+            .chain(NATIVE_WEB_FETCH_VERSIONS.iter())
+            .map(|version| version.type_name)
+            .collect();
+        let mut types = HashSet::new();
+        for entry in raw.split(',').map(str::trim).filter(|entry| !entry.is_empty()) {
+            if !supported.contains(&entry) {
+                return Err(format!(
+                    "unknown native server tool '{entry}' in {UPSTREAM_SERVER_TOOLS_ENV}; \
+                     supported types are {}",
+                    supported.join(", ")
+                ));
+            }
+            types.insert(entry.to_owned());
+        }
+        Ok(Self { types })
+    }
+
+    /// Whether the upstream runs a declaration of `tool_type` itself.
+    #[must_use]
+    pub fn contains(&self, tool_type: Option<&str>) -> bool {
+        tool_type.is_some_and(|tool_type| self.types.contains(tool_type))
+    }
+
+    /// Whether no version is listed as upstream-run.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.types.is_empty()
+    }
+}
 
 /// Claude's basic native web-fetch server tool version. Every version the
 /// gateway executes is listed in [`NATIVE_WEB_FETCH_VERSIONS`].
@@ -129,13 +193,17 @@ impl GatewayToolMap {
 /// True if the request declares at least one gateway-owned tool — the routing
 /// gate that decides loop vs. transparent proxy. Gateway ownership is resolved
 /// against the operator-configured [`GatewayToolMap`], plus the native server
-/// tools only the gateway can execute.
+/// tools the gateway runs; a native version listed in [`UpstreamServerTools`]
+/// stays with the upstream and never routes here by itself.
 #[must_use]
-pub fn has_gateway_tool(tools: Option<&Vec<ToolParam>>, map: &GatewayToolMap) -> bool {
+pub fn has_gateway_tool(tools: Option<&Vec<ToolParam>>, map: &GatewayToolMap, upstream: &UpstreamServerTools) -> bool {
     tools.is_some_and(|tools| {
-        tools
-            .iter()
-            .any(|t| map.is_gateway_owned(t.name()) || is_native_web_fetch_type(t.tool_type()))
+        tools.iter().any(|tool| {
+            if upstream.contains(tool.tool_type()) {
+                return false;
+            }
+            map.is_gateway_owned(tool.name()) || is_native_web_fetch_type(tool.tool_type())
+        })
     })
 }
 
@@ -259,6 +327,10 @@ mod tests {
     use super::*;
     use crate::types::messages::request::MessagesRequest;
 
+    fn has_gateway_tool(tools: Option<&Vec<ToolParam>>, map: &GatewayToolMap) -> bool {
+        super::has_gateway_tool(tools, map, &UpstreamServerTools::default())
+    }
+
     fn tools_of(json_req: Value) -> Option<Vec<ToolParam>> {
         serde_json::from_value::<MessagesRequest>(json_req)
             .unwrap()
@@ -376,9 +448,61 @@ mod tests {
         assert_eq!(out["include_domains"], json!(["a.com"]));
     }
 
+    #[test]
+    fn upstream_server_tools_policy_lists_versions_the_gateway_skips() {
+        assert!(UpstreamServerTools::parse("").unwrap().is_empty());
+        assert!(UpstreamServerTools::parse(" , ").unwrap().is_empty());
+        let upstream = UpstreamServerTools::parse(" web_search_20250305 , web_fetch_20250910 ").unwrap();
+        assert!(upstream.contains(Some("web_search_20250305")));
+        assert!(upstream.contains(Some("web_fetch_20250910")));
+        assert!(!upstream.contains(Some("web_search_20260209")));
+        assert!(!upstream.contains(None));
+        let error = UpstreamServerTools::parse("web_search_20250305,not_a_tool").unwrap_err();
+        assert!(error.contains("not_a_tool"), "{error}");
+        assert!(error.contains("web_search_20250305"), "lists supported types: {error}");
+        assert!(error.contains(UPSTREAM_SERVER_TOOLS_ENV), "{error}");
+
+        // A version the upstream runs itself does not route to the gateway.
+        let tools = tools_of(json!({
+            "model": "m", "max_tokens": 10, "messages": [],
+            "tools": [{"type": "web_search_20250305", "name": "web_search"}]
+        }));
+        assert!(has_gateway_tool(tools.as_ref(), &default_map()));
+        assert!(!super::has_gateway_tool(tools.as_ref(), &default_map(), &upstream));
+
+        let fetches = tools_of(json!({
+            "model": "m", "max_tokens": 10, "messages": [],
+            "tools": [{"type": "web_fetch_20250910", "name": "web_fetch"}]
+        }));
+        assert!(has_gateway_tool(fetches.as_ref(), &default_map()));
+        assert!(!super::has_gateway_tool(fetches.as_ref(), &default_map(), &upstream));
+
+        // A mixed request still routes: only the gateway-run declaration counts.
+        let mixed = tools_of(json!({
+            "model": "m", "max_tokens": 10, "messages": [],
+            "tools": [
+                {"type": "web_search_20250305", "name": "web_search"},
+                {"type": "web_fetch_20260318", "name": "web_fetch",
+                 "allowed_callers": ["direct"]}
+            ]
+        }));
+        assert!(super::has_gateway_tool(mixed.as_ref(), &default_map(), &upstream));
+
+        // An operator alias stays gateway-owned next to an upstream tool.
+        let aliased = tools_of(json!({
+            "model": "m", "max_tokens": 10, "messages": [],
+            "tools": [
+                {"type": "web_search_20250305", "name": "web_search"},
+                {"name": "WebSearch", "input_schema": {"type": "object"}}
+            ]
+        }));
+        assert!(super::has_gateway_tool(aliased.as_ref(), &alias_map(), &upstream));
+    }
+
     // M1 + M3: tool_use object args -> stringified; id seeds id + call_id.
     #[test]
     fn tool_use_maps_to_function_call() {
+        // M1 + M3: tool_use object args -> stringified; id seeds id + call_id.
         let call = tool_use_to_call("toolu_1", "web_search", &json!({"query": "rust"}), &default_map());
         assert_eq!(call.id, "toolu_1");
         assert_eq!(call.call_id, "toolu_1");
