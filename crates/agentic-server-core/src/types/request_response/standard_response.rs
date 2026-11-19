@@ -114,6 +114,7 @@ impl StandardResponseFields {
             summary: reasoning.summary.clone(),
         });
         self.metadata = request.metadata.clone().unwrap_or_default();
+        self.safety_identifier.clone_from(&request.safety_identifier);
         self.prompt_cache_key.clone_from(&request.prompt_cache_key);
         self.prompt_cache_options = request.prompt_cache_options;
     }
@@ -122,6 +123,22 @@ impl StandardResponseFields {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn safety_identifier_is_echoed_from_the_request_and_cleared_when_absent() {
+        let mut fields = StandardResponseFields::default();
+        let request = RequestPayload {
+            safety_identifier: Some("end-user-1234".to_owned()),
+            ..Default::default()
+        };
+        fields.apply_request(&request);
+        let serialized = serde_json::to_value(&fields).unwrap();
+        assert_eq!(serialized["safety_identifier"], "end-user-1234");
+
+        fields.apply_request(&RequestPayload::default());
+        let serialized = serde_json::to_value(&fields).unwrap();
+        assert!(serialized["safety_identifier"].is_null());
+    }
 
     #[test]
     fn legacy_snapshot_defaults_and_current_request_options_round_trip() {

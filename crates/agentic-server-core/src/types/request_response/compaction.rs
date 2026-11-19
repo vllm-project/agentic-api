@@ -38,6 +38,8 @@ pub struct CompactRequest {
     pub prompt_cache_options: Option<PromptCacheOptions>,
     #[serde(default)]
     pub prompt_cache_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub safety_identifier: Option<String>,
     /// Compatibility fields sent by current SDK and Codex clients.
     #[serde(flatten)]
     pub compatibility: HashMap<String, Value>,
@@ -95,6 +97,7 @@ impl RequestPayload {
         Self {
             model: self.model.clone(),
             instructions: self.instructions.clone(),
+            safety_identifier: self.safety_identifier.clone(),
             prompt_cache_key: self.prompt_cache_key.clone(),
             prompt_cache_retention: self.prompt_cache_retention,
             prompt_cache_options: self.prompt_cache_options,

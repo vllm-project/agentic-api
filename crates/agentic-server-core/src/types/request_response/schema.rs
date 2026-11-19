@@ -110,6 +110,7 @@ impl utoipa::PartialSchema for RequestPayload {
                 ObjectBuilder::new().schema_type(SchemaType::from_iter([Type::Object, Type::Null])),
             )
             .property("parallel_tool_calls", nullable_bool())
+            .property("safety_identifier", nullable_str())
             .property("prompt_cache_key", nullable_str())
             .property(
                 "prompt_cache_retention",

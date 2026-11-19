@@ -472,6 +472,7 @@ and [#330](https://github.com/vllm-project/agentic-api/issues/330).
 | Control | Forwarding and history | Local rejection / evidence |
 | --- | --- | --- |
 | `prompt_cache_key` | Current request only, including tool and summary calls; absent/null omitted. | Invalid non-string values; [#412](https://github.com/vllm-project/agentic-api/pull/412). |
+| `safety_identifier` | Current request only, including tool and summary calls; forwarded unchanged and echoed on the Responses object; absent/null omitted. | Invalid non-string values. |
 | `prompt_cache_options` | Qualified mode/TTL forwarded; Responses objects echo current options. Continuations do not inherit them. | Disabled forwarding, invalid shapes/values, unknown members; [#436](https://github.com/vllm-project/agentic-api/pull/436) and capability tests. |
 | `prompt_cache_retention` | Allowed legacy values forwarded independently of options and salt; no continuation inheritance. | Invalid values or explicit model restriction; [#413](https://github.com/vllm-project/agentic-api/pull/413) and capability tests. |
 | Content breakpoints | Supported parts retain boundaries through history and normalization, including inline text files; explicit mode stays explicit. | Unsupported message files/content; [#467](https://github.com/vllm-project/agentic-api/pull/467). |
