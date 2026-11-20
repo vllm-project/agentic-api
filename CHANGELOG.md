@@ -57,6 +57,8 @@ All notable changes to Agentic API are documented here.
 
 - A streamed `compaction_trigger` turn's `response.created` and `response.in_progress` events no longer carry a
   `completed_at` time; it is `null` until the response completes, as on every other response (#549).
+- Multi-agent automatic compaction counts a compaction item that carries its window as that window, as
+  single-agent compaction does, so an agent that continues a compacted history compacts at the same threshold (#549).
 
 ## [0.10.0] - 2026-11-09
 
