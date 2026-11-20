@@ -2,7 +2,7 @@
 
 use super::DbResult;
 
-pub(super) const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 59;
+pub(super) const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 60;
 pub(super) const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 21;
 pub(super) const REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT: i64 = 4;
 
@@ -41,6 +41,7 @@ where
                  ('file_search_files', 'data', 'text', 'NO'), \
                  ('file_search_files', 'content_type', 'text', 'NO'), \
                  ('file_search_files', 'content_base64', 'text', 'NO'), \
+                 ('file_search_files', 'purpose', 'text', 'NO'), \
                  ('file_search_blob_cleanup', 'file_id', 'text', 'NO'), \
                  ('file_search_blob_cleanup', 'owner_token', 'text', 'NO'), \
                  ('file_search_blob_cleanup', 'intent', 'text', 'NO'), \

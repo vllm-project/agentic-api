@@ -401,6 +401,7 @@ pub struct ListParams {
     pub after: Option<String>,
     pub before: Option<String>,
     pub order: Option<ListOrder>,
+    pub purpose: Option<String>,
 }
 
 impl SearchRequest {
