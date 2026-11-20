@@ -53,6 +53,11 @@ All notable changes to Agentic API are documented here.
   `rehydrate_in_session` (#549). Pass `None` for a turn outside a session, or `Some(&session)` for a session turn,
   which begins there for the request's `previous_response_id`. `RequestPayload::multi_agent_enabled` is added.
 
+### Fixed
+
+- A streamed `compaction_trigger` turn's `response.created` and `response.in_progress` events no longer carry a
+  `completed_at` time; it is `null` until the response completes, as on every other response (#549).
+
 ## [0.10.0] - 2026-11-09
 
 ### Upgrade notes
