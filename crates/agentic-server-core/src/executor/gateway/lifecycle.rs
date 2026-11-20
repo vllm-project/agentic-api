@@ -132,6 +132,7 @@ pub(in crate::executor) async fn emit_response_start_events(
     "in_progress".clone_into(&mut response.status);
     response.output.clear();
     response.usage = None;
+    response.standard_fields.completed_at = None;
     let response = serialize_to_value(&response).map_err(ExecutorError::JsonError)?;
     for event_type in [SSEEventType::ResponseCreated, SSEEventType::ResponseInProgress] {
         let mut event = synthetic_event(event_type, [("response".to_owned(), response.clone())])?;
@@ -481,4 +482,45 @@ fn planned_event(scheduler: &GatewayScheduler, call_index: usize) -> ExecutorRes
     scheduler
         .event_plan(call_index)
         .ok_or_else(|| ExecutorError::StreamError("a gateway call has no event plan".to_owned()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::executor::gateway_accumulator::StreamEvent;
+    use crate::executor::relay::RelayLimits;
+
+    /// A response the gateway completes before streaming it, such as a `compaction_trigger` turn, still starts as an
+    /// in-progress response with no completion time.
+    #[tokio::test]
+    async fn start_events_carry_no_completion_time() {
+        let payload: ResponsePayload = deserialize_from_value(serde_json::json!({
+            "id": "resp_1",
+            "object": "response",
+            "created_at": 1,
+            "model": "test-model",
+            "status": "completed",
+            "completed_at": 2,
+        }))
+        .unwrap();
+        let (sender, mut receiver) = mpsc::channel(4);
+        let mut relay = StreamRelay::client(sender, RelayLimits::default());
+
+        emit_response_start_events(&payload, &mut relay).await.unwrap();
+        drop(relay);
+
+        let mut started = Vec::new();
+        while let Some(StreamEvent::Frame(frame)) = receiver.recv().await {
+            let data = frame
+                .content
+                .lines()
+                .find_map(|line| line.strip_prefix("data: "))
+                .unwrap();
+            let event: serde_json::Value = serde_json::from_str(data).unwrap();
+            assert_eq!(event["response"]["status"], "in_progress");
+            assert!(event["response"]["completed_at"].is_null(), "{event}");
+            started.push(event["type"].as_str().unwrap().to_owned());
+        }
+        assert_eq!(started, ["response.created", "response.in_progress"]);
+    }
 }

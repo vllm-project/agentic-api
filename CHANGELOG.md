@@ -55,6 +55,11 @@ All notable changes to Agentic API are documented here.
   `ResponseHandler::rehydrate` now returns the checkpoint already trimmed to the latest compaction a turn produced.
   `RequestPayload::multi_agent_enabled` is added.
 
+### Fixed
+
+- A streamed `compaction_trigger` turn's `response.created` and `response.in_progress` events no longer carry a
+  `completed_at` time; it is `null` until the response completes, as on every other response (#549).
+
 ## [0.10.0] - 2026-11-09
 
 ### Upgrade notes
