@@ -135,43 +135,6 @@ async fn harness(cassette: &str) -> Harness {
 }
 
 impl Harness {
-    fn recorded_blocks(&self) -> Vec<Value> {
-        let first = &self.turns[0];
-        if let Some(frames) = &first.sse {
-            let mut blocks: Vec<Value> = Vec::new();
-            let mut inputs: std::collections::BTreeMap<usize, String> = std::collections::BTreeMap::new();
-            for frame in frames {
-                let data = frame
-                    .strip_prefix("data: ")
-                    .unwrap_or_else(|| frame.strip_prefix("data:").unwrap_or(""));
-                let Ok(event) = serde_json::from_str::<Value>(data.trim()) else {
-                    continue;
-                };
-                let index = usize::try_from(event["index"].as_u64().unwrap_or(0)).expect("block index");
-                match event["type"].as_str() {
-                    Some("content_block_start") => {
-                        if index == blocks.len() {
-                            blocks.push(event["content_block"].clone());
-                        }
-                    }
-                    Some("content_block_delta") if event["delta"]["type"] == "input_json_delta" => {
-                        inputs
-                            .entry(index)
-                            .or_default()
-                            .push_str(event["delta"]["partial_json"].as_str().unwrap_or(""));
-                    }
-                    _ => {}
-                }
-            }
-            for (index, input) in inputs {
-                blocks[index]["input"] = serde_json::from_str(&input).expect("recorded input_json_delta is valid JSON");
-            }
-            blocks
-        } else {
-            first.body["content"].as_array().unwrap().clone()
-        }
-    }
-
     fn upstream_requests(&self) -> Vec<(String, Value)> {
         self.backend.requests.lock().unwrap().clone()
     }
@@ -280,15 +243,22 @@ async fn recorded_streaming_native_passthrough_reconstructs_real_input() {
         .collect();
     assert!(!deltas.is_empty(), "real input_json_delta frames are forwarded");
     let reconstructed: Value = serde_json::from_str(&deltas.join("")).expect("reconstructed input is valid JSON");
-    let expected_input = harness
-        .recorded_blocks()
+
+    // The expected input comes from the recorded *follow-up* request (the
+    // assistant blocks the client sent back on turn 2), not from the same SSE
+    // frames above. That keeps this assertion from being circular: a gateway
+    // replay error that corrupts the block would diverge from the recorded
+    // client request.
+    let follow_up = &harness.turns[1].request;
+    let replayed_assistant = follow_up["messages"][1]["content"].as_array().unwrap();
+    let expected_input = replayed_assistant
         .iter()
         .find(|b| b["type"] == "server_tool_use")
         .map(|b| b["input"].clone())
-        .expect("recorded server_tool_use input");
+        .expect("recorded server_tool_use input in the turn-2 follow-up");
     assert_eq!(
         reconstructed, expected_input,
-        "delta reconstruction matches the provider's input"
+        "streamed delta reconstruction matches the input the client replayed"
     );
 
     assert!(frames.contains("srvtoolu_"), "upstream id passes through");
@@ -296,7 +266,34 @@ async fn recorded_streaming_native_passthrough_reconstructs_real_input() {
     assert!(!frames.contains("srvtoolu_gw_"), "no gateway-rewritten id");
     assert!(!frames.contains("event: error"), "no error frame: {frames}");
 
+    // Turn 2: send the recorded streaming follow-up through the gateway and
+    // assert the real server-tool blocks reach the upstream unchanged, as the
+    // non-streaming test does.
+    assert_real_server_tool_blocks(replayed_assistant);
+    let second = reqwest::Client::new()
+        .post(format!("{}/v1/messages", harness.url))
+        .json(follow_up)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(second.status(), 200);
+    assert!(
+        second
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("text/event-stream")
+    );
+    let _ = second.text().await.unwrap();
+
     let requests = harness.upstream_requests();
+    assert_eq!(requests.len(), 2, "one upstream request per turn");
     assert_eq!(requests[0].1["messages"], recorded["messages"]);
     assert_native_declaration_forwarded(&requests[0].1);
+    assert_eq!(
+        requests[1].1["messages"], follow_up["messages"],
+        "replayed streaming blocks reach the upstream verbatim"
+    );
 }
