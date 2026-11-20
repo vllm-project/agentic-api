@@ -141,10 +141,7 @@ async fn open_round(
     }
 }
 
-/// Record the terminal execution outcome to match the frames `finish` emits.
-/// A clean HTTP EOF without `message_stop` produces an error frame, not a
-/// successful terminal, so telemetry must report a failure rather than a
-/// completed turn.
+/// A clean EOF without `message_stop` is a failure, not a completed turn.
 fn record_terminal_outcome(acc: &MessagesStreamAccumulator, execution: &mut ExecutionSpan) {
     if acc.has_completed_round() {
         execution.completed_with_stop_reason(acc.stop_reason());
