@@ -160,6 +160,11 @@ async fn run_messages_loop_traced(
         // the Anthropic error envelope).
         if message.get("type").and_then(Value::as_str) == Some("error") {
             execution.failed_with(FailureCategory::UpstreamError);
+            // #315: the failing round ends the turn, but the usage already
+            // observed from committed tool rounds is still real cost. Report it
+            // as partial (the error envelope marks the turn incomplete) instead
+            // of dropping it. Nothing is committed, so no total is fabricated.
+            turn.usage.finish_partial(&mut message);
             return Ok(MessagesResponse {
                 body: message,
                 headers: response_headers,
@@ -228,14 +233,19 @@ async fn run_messages_loop_traced(
     // Reaching here means every round emitted a gateway tool_use; surface a
     // minimal terminal so the client isn't left hanging.
     execution.failed_with(FailureCategory::RoundBudget);
+    // #315: every round hit its cap while continuing the loop, so `turn.usage`
+    // holds real cost that would otherwise be dropped with the error. Report it
+    // as partial; the error envelope marks the turn incomplete.
+    let mut body = json!({
+        "type": "error",
+        "error": {
+            "type": "api_error",
+            "message": format!("gateway tool loop exceeded {MAX_GATEWAY_TOOL_ROUNDS} rounds")
+        }
+    });
+    turn.usage.finish_partial(&mut body);
     Ok(MessagesResponse {
-        body: json!({
-            "type": "error",
-            "error": {
-                "type": "api_error",
-                "message": format!("gateway tool loop exceeded {MAX_GATEWAY_TOOL_ROUNDS} rounds")
-            }
-        }),
+        body,
         headers: http::HeaderMap::new(),
     })
 }

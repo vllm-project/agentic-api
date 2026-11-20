@@ -143,10 +143,48 @@ impl MessagesUsageTotals {
     /// dropped; any other unrecognised `usage` shape is left as it is.
     pub(super) fn finish(&mut self, carrier: &mut Value) {
         self.record(carrier.get("usage"));
-        let server_totals = self.server_tool_totals();
-        if self.rounds < 2 || (self.committed.iter().all(Option::is_none) && server_totals.is_none()) {
+        let (counters, server_totals) = self.combined_totals();
+        if self.rounds < 2 || (counters.iter().all(Option::is_none) && server_totals.is_none()) {
             return;
         }
+        Self::write_totals(carrier, counters, server_totals);
+    }
+
+    /// Report the usage observed so far on an error path, without fabricating a
+    /// terminal round. The failing round's own `usage` (if any) is overlaid onto
+    /// the current round, but nothing is committed: the counters written to the
+    /// carrier are the saturating totals of the committed rounds plus that
+    /// current round. The error envelope itself marks the turn as incomplete, so
+    /// no extra wire field is needed to signal that these totals are partial.
+    /// A counter absent everywhere stays absent; nothing is invented.
+    pub(super) fn finish_partial(&mut self, carrier: &mut Value) {
+        self.observe(carrier.get("usage"));
+        let (counters, server_totals) = self.combined_totals();
+        if counters.iter().all(Option::is_none) && server_totals.is_none() {
+            return;
+        }
+        Self::write_totals(carrier, counters, server_totals);
+    }
+
+    /// Totals across the committed rounds plus the current (not yet committed)
+    /// round, including the gateway's native server-tool calls.
+    fn combined_totals(&self) -> (Counters, Option<ServerToolCounters>) {
+        let mut counters = self.committed;
+        add_counters(&mut counters, self.round);
+        let mut server = self.server_committed;
+        add_counters(&mut server, self.server_round);
+        for (total, uses) in server.iter_mut().zip(self.gateway.counters()) {
+            if uses > 0 {
+                *total = Some(total.unwrap_or(0).saturating_add(uses));
+            }
+        }
+        let server = server.iter().any(Option::is_some).then_some(server);
+        (counters, server)
+    }
+
+    /// Insert the given totals into the carrier's `usage` object, preserving any
+    /// non-counter fields the final round reported.
+    fn write_totals(carrier: &mut Value, counters: Counters, server_totals: Option<ServerToolCounters>) {
         let Some(fields) = carrier.as_object_mut() else {
             return;
         };
@@ -157,7 +195,7 @@ impl MessagesUsageTotals {
         let Some(usage) = usage.as_object_mut() else {
             return;
         };
-        insert_counters(usage, &self.committed, &COUNTERS);
+        insert_counters(usage, &counters, &COUNTERS);
         if let Some(server_totals) = server_totals {
             let server = usage
                 .entry("server_tool_use")
@@ -169,18 +207,6 @@ impl MessagesUsageTotals {
                 insert_counters(server, &server_totals, &SERVER_TOOL_COUNTERS);
             }
         }
-    }
-
-    /// The turn's server tool counters: what the upstream reported plus the
-    /// gateway's own calls, or `None` when neither reported any.
-    fn server_tool_totals(&self) -> Option<ServerToolCounters> {
-        let mut totals = self.server_committed;
-        for (total, uses) in totals.iter_mut().zip(self.gateway.counters()) {
-            if uses > 0 {
-                *total = Some(total.unwrap_or(0).saturating_add(uses));
-            }
-        }
-        totals.iter().any(Option::is_some).then_some(totals)
     }
 }
 
@@ -376,5 +402,66 @@ mod tests {
         let mut event = json!("not an object");
         recorded(&[json!({"input_tokens": 10})]).finish(&mut event);
         assert_eq!(event, json!("not an object"));
+    }
+
+    #[test]
+    fn partial_usage_reports_committed_rounds_without_fabricating_a_terminal_round() {
+        let mut totals = recorded(&[json!({"input_tokens": 10, "output_tokens": 4})]);
+        // A failing round whose own usage is absent: only the committed round
+        // contributes, and nothing is committed by the partial report.
+        let mut error = json!({"type": "error", "error": {"type": "overloaded_error"}});
+        totals.finish_partial(&mut error);
+        assert_eq!(error["usage"], json!({"input_tokens": 10, "output_tokens": 4}));
+        assert_eq!(error["type"], "error", "the error envelope is preserved");
+        // The partial report did not consume the current round.
+        let mut final_message = json!({"usage": {"input_tokens": 2, "output_tokens": 1}});
+        totals.finish(&mut final_message);
+        assert_eq!(
+            final_message["usage"],
+            json!({"input_tokens": 12, "output_tokens": 5}),
+            "committed rounds are still counted once after a partial report"
+        );
+    }
+
+    #[test]
+    fn partial_usage_folds_in_the_failing_rounds_own_usage() {
+        let mut totals = recorded(&[json!({"input_tokens": 10, "output_tokens": 4})]);
+        let mut error = json!({
+            "type": "error",
+            "usage": {"input_tokens": 3, "output_tokens": 1, "cache_read_input_tokens": 5}
+        });
+        totals.finish_partial(&mut error);
+        assert_eq!(
+            error["usage"],
+            json!({"input_tokens": 13, "output_tokens": 5, "cache_read_input_tokens": 5})
+        );
+    }
+
+    #[test]
+    fn partial_usage_includes_gateway_server_tool_calls() {
+        let mut totals = recorded(&[json!({"input_tokens": 10})]);
+        totals.add_server_tool_uses(ServerToolUses {
+            web_search_requests: 2,
+            web_fetch_requests: 1,
+        });
+        let mut error = json!({"type": "error"});
+        totals.finish_partial(&mut error);
+        assert_eq!(
+            error["usage"],
+            json!({"input_tokens": 10, "server_tool_use": {
+                "web_search_requests": 2, "web_fetch_requests": 1
+            }})
+        );
+    }
+
+    #[test]
+    fn partial_usage_invents_nothing_when_no_round_reported_a_counter() {
+        let mut error = json!({"type": "error", "error": {"type": "overloaded_error"}});
+        MessagesUsageTotals::default().finish_partial(&mut error);
+        assert_eq!(
+            error,
+            json!({"type": "error", "error": {"type": "overloaded_error"}}),
+            "no counters anywhere: the error body is left untouched"
+        );
     }
 }

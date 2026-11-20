@@ -1078,6 +1078,30 @@ async fn messages_loop_surfaces_upstream_error_body() {
     assert_eq!(result["error"]["type"], "overloaded_error");
 }
 
+// #315: an upstream error after a hidden gateway round reports the usage already
+// observed as partial, instead of dropping it with the error envelope.
+#[tokio::test]
+async fn messages_loop_reports_partial_usage_on_upstream_error() {
+    let tool_round = serde_json::json!({
+        "id": "m1", "type": "message", "role": "assistant", "model": "qwen3",
+        "content": [{"type": "tool_use", "id": "t1", "name": "web_search", "input": {"query": "rust"}}],
+        "stop_reason": "tool_use", "usage": {"input_tokens": 10, "output_tokens": 4}
+    });
+    let err = serde_json::json!({
+        "type": "error", "error": {"type": "overloaded_error", "message": "busy"},
+        "usage": {"input_tokens": 3, "output_tokens": 1}
+    });
+    let (result, calls) = run_against(vec![tool_round, err], web_search_request()).await;
+    assert_eq!(calls, 2, "the error round is surfaced after the tool round");
+    assert_eq!(result["type"], "error");
+    assert_eq!(result["error"]["type"], "overloaded_error");
+    assert_eq!(
+        result["usage"],
+        serde_json::json!({"input_tokens": 13, "output_tokens": 5}),
+        "the committed tool round plus the failing round's own usage are reported as partial"
+    );
+}
+
 // E4: the loop caps at MAX rounds. Feed an unbounded run of tool_use rounds and
 // assert it terminates with an error rather than looping forever.
 #[tokio::test]
@@ -1104,6 +1128,13 @@ async fn messages_loop_caps_at_max_rounds() {
     assert!(
         result["error"]["message"].as_str().unwrap().contains("rounds"),
         "error mentions the round cap"
+    );
+    // #315: the cost of the committed tool rounds is reported as partial
+    // (10 rounds x 1/1), not dropped with the error envelope.
+    assert_eq!(
+        result["usage"],
+        serde_json::json!({"input_tokens": 10, "output_tokens": 10}),
+        "round-budget exhaustion reports the usage observed so far"
     );
 }
 
