@@ -180,12 +180,7 @@ fn prepare_metadata(ctx: &mut RequestContext, tool_search_metadata: Option<ToolS
         previous_response_id: ctx.original_request.previous_response_id.clone(),
         effective_tools,
         tool_search_loaded_tools,
-        effective_tool_choice: ctx
-            .original_request
-            .tool_choice
-            .take()
-            .or_else(|| ctx.enriched_request.tool_choice.take())
-            .unwrap_or_default(),
+        effective_tool_choice: ctx.take_public_tool_choice().unwrap_or_default(),
         effective_instructions: ctx.enriched_request.instructions.take(),
     }
 }
@@ -222,8 +217,7 @@ pub async fn commit(
     {
         // A split context omits the checkpoint. Load the parent with its history, so the turn's history starts where
         // rehydration starts it: at the latest compaction a turn produced.
-        if let Some((mut checkpoint, history)) = exec_ctx.resp_handler.rehydrate(&ctx).await? {
-            checkpoint.continue_from_compaction(&history, &ctx.enriched_request);
+        if let Some((checkpoint, _)) = exec_ctx.resp_handler.rehydrate(&ctx).await? {
             ctx.checkpoint = Some(checkpoint);
         }
     }

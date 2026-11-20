@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use agentic_core::executor::{
     ConversationHandler, ExecuteRequest, ExecutionContext, ExecutorError, RequestContext, ResponseHandler,
-    ResponseSession, ResponseSessionGroup, commit, rehydrate_in_session,
+    ResponseSession, ResponseSessionGroup, commit, rehydrate,
 };
 use agentic_core::storage::{
     ConversationStore, ResponseMetadata, ResponseStore, StorageError, create_pool_with_schema,
@@ -468,18 +468,21 @@ async fn grouped_session_fork_pins_parent_while_source_advances() {
     );
     let source = group.new_session().unwrap();
     let fork = group.new_session().unwrap();
-    let ctx = rehydrate_in_session(request(None, json!("source prompt")), &exec, &source)
+    let lease = source.begin(None).unwrap();
+    let ctx = rehydrate(request(None, json!("source prompt")), &exec, Some(lease))
         .await
         .unwrap();
     let parent_id = ctx.response_id.clone();
     let output = response(&ctx, json!([]));
     commit(ctx, output, &exec).await.unwrap();
 
-    let fork_ctx = rehydrate_in_session(request(Some(&parent_id), json!("fork prompt")), &exec, &fork)
+    let lease = fork.begin(Some(&parent_id)).unwrap();
+    let fork_ctx = rehydrate(request(Some(&parent_id), json!("fork prompt")), &exec, Some(lease))
         .await
         .expect("a grouped session can fork the cached source parent");
     let fork_id = fork_ctx.response_id.clone();
-    let source_ctx = rehydrate_in_session(request(Some(&parent_id), json!("source advanced")), &exec, &source)
+    let lease = source.begin(Some(&parent_id)).unwrap();
+    let source_ctx = rehydrate(request(Some(&parent_id), json!("source advanced")), &exec, Some(lease))
         .await
         .expect("source and fork can execute concurrently");
     let source_id = source_ctx.response_id.clone();
@@ -492,7 +495,8 @@ async fn grouped_session_fork_pins_parent_while_source_advances() {
         (&source, &source_id, "source advanced", "fork prompt"),
         (&fork, &fork_id, "fork prompt", "source advanced"),
     ] {
-        let ctx = rehydrate_in_session(request(Some(id), json!("next")), &exec, session)
+        let lease = session.begin(Some(id)).unwrap();
+        let ctx = rehydrate(request(Some(id), json!("next")), &exec, Some(lease))
             .await
             .unwrap();
         let history = serde_json::to_value(&ctx.enriched_request.input).unwrap();
@@ -515,7 +519,8 @@ async fn grouped_session_failed_fork_preserves_source_tool_continuation() {
     let source = group.new_session().unwrap();
     let fork = group.new_session().unwrap();
     let parent = parent_with_call(&exec, &source).await;
-    let error = rehydrate_in_session(request(Some(&parent), json!("missing output")), &exec, &fork)
+    let lease = fork.begin(Some(&parent)).unwrap();
+    let error = rehydrate(request(Some(&parent), json!("missing output")), &exec, Some(lease))
         .await
         .unwrap_err();
     assert!(matches!(error, ExecutorError::Tool(_)));
@@ -536,16 +541,18 @@ async fn grouped_session_late_fork_does_not_restore_an_evicted_transient_parent(
     let source = group.new_session().unwrap();
     let fork = group.new_session().unwrap();
     let parent = parent_with_call(&exec, &source).await;
-    rehydrate_in_session(request(Some(&parent), json!("missing output")), &exec, &source)
+    let lease = source.begin(Some(&parent)).unwrap();
+    rehydrate(request(Some(&parent), json!("missing output")), &exec, Some(lease))
         .await
         .unwrap_err();
-    let error = rehydrate_in_session(
+    let lease = fork.begin(Some(&parent)).unwrap();
+    let error = rehydrate(
         request(
             Some(&parent),
             json!([{"type":"function_call_output", "call_id":"call_first", "output":"sunny"}]),
         ),
         &exec,
-        &fork,
+        Some(lease),
     )
     .await
     .unwrap_err();
@@ -580,7 +587,8 @@ async fn grouped_session_budget_failure_does_not_evict_the_source_parent() {
     let ctx = resolved_continuation(&exec, &source, &parent).await;
     let output = response(&ctx, json!([]));
     commit(ctx, output, &exec).await.unwrap();
-    rehydrate_in_session(request(None, json!("fresh fork")), &exec, &fork)
+    let lease = fork.begin(None).unwrap();
+    rehydrate(request(None, json!("fresh fork")), &exec, Some(lease))
         .await
         .expect("failed publication must release the fork's execution slot");
 }
@@ -590,15 +598,15 @@ async fn session_cache_miss_does_not_mask_disabled_durable_storage() {
     let exec = execution();
     let session = session();
     let mut payload = request(Some("resp_missing"), json!("next"));
-    let missing = rehydrate_in_session(payload.clone(), &exec, &session)
-        .await
-        .unwrap_err();
+    let lease = session.begin(payload.previous_response_id.as_deref()).unwrap();
+    let missing = rehydrate(payload.clone(), &exec, Some(lease)).await.unwrap_err();
     assert!(matches!(
         missing,
         ExecutorError::Storage(StorageError::PreviousResponseNotFound { .. })
     ));
     payload.store = true;
-    let unavailable = rehydrate_in_session(payload, &exec, &session).await.unwrap_err();
+    let lease = session.begin(payload.previous_response_id.as_deref()).unwrap();
+    let unavailable = rehydrate(payload, &exec, Some(lease)).await.unwrap_err();
     assert!(matches!(
         unavailable,
         ExecutorError::Storage(StorageError::NotConfigured)
@@ -606,7 +614,8 @@ async fn session_cache_miss_does_not_mask_disabled_durable_storage() {
 }
 
 async fn parent_with_call(exec: &ExecutionContext, session: &ResponseSession) -> String {
-    let ctx = rehydrate_in_session(request(None, json!("first")), exec, session)
+    let lease = session.begin(None).unwrap();
+    let ctx = rehydrate(request(None, json!("first")), exec, Some(lease))
         .await
         .unwrap();
     let payload = response(&ctx, json!([function_call("call_first")]));
@@ -618,7 +627,8 @@ async fn parent_with_call(exec: &ExecutionContext, session: &ResponseSession) ->
 }
 
 async fn resolved_continuation(exec: &ExecutionContext, session: &ResponseSession, parent: &str) -> RequestContext {
-    rehydrate_in_session(
+    let lease = session.begin(Some(parent)).unwrap();
+    rehydrate(
         request(
             Some(parent),
             json!([
@@ -626,7 +636,7 @@ async fn resolved_continuation(exec: &ExecutionContext, session: &ResponseSessio
             ]),
         ),
         exec,
-        session,
+        Some(lease),
     )
     .await
     .expect("cached call output resolves its parent")
@@ -645,7 +655,8 @@ async fn session_commit_accepts_a_new_call_without_reading_disabled_storage() {
         "a cached history must not require durable storage: {result:?}"
     );
     let second = result.unwrap().id;
-    let next = rehydrate_in_session(
+    let lease = session.begin(Some(&second)).unwrap();
+    let next = rehydrate(
         request(
             Some(&second),
             json!([
@@ -653,7 +664,7 @@ async fn session_commit_accepts_a_new_call_without_reading_disabled_storage() {
             ]),
         ),
         &exec,
-        &session,
+        Some(lease),
     )
     .await
     .expect("second call is also retained in the checkpoint");
@@ -670,7 +681,8 @@ async fn session_continuation_accepts_a_call_id_the_pinned_history_already_used(
     let payload = response(&ctx, json!([function_call("call_first")]));
     // As on OpenAI, a call_id may repeat: the turn is stored and a turn answering it continues.
     let repeated = commit(ctx, payload, &exec).await.expect("the turn is stored").id;
-    let next = rehydrate_in_session(
+    let lease = session.begin(Some(&repeated)).unwrap();
+    let next = rehydrate(
         request(
             Some(&repeated),
             json!([
@@ -678,7 +690,7 @@ async fn session_continuation_accepts_a_call_id_the_pinned_history_already_used(
             ]),
         ),
         &exec,
-        &session,
+        Some(lease),
     )
     .await
     .expect("a repeated call_id continues without reading disabled storage");
@@ -733,7 +745,8 @@ async fn session_automatic_compaction_fits_the_replaced_history_budget() {
     payload.context_management =
         Some(serde_json::from_value(json!([{"type":"compaction", "compact_threshold":1}])).unwrap());
     let second = execute_local(&model, &session, payload).await;
-    let next = rehydrate_in_session(request(Some(&second.id), json!("third user")), &model.exec, &session)
+    let lease = session.begin(Some(&second.id)).unwrap();
+    let next = rehydrate(request(Some(&second.id), json!("third user")), &model.exec, Some(lease))
         .await
         .unwrap();
     let history = serde_json::to_value(&next.enriched_request.input).unwrap();
@@ -772,9 +785,14 @@ async fn session_compaction_trigger_replaces_history_before_retention() {
     )
     .await;
     assert_eq!(serde_json::to_value(&second.output).unwrap()[0]["type"], "compaction");
-    let next = rehydrate_in_session(request(Some(&second.id), json!("second user")), &model.exec, &session)
-        .await
-        .unwrap();
+    let lease = session.begin(Some(&second.id)).unwrap();
+    let next = rehydrate(
+        request(Some(&second.id), json!("second user")),
+        &model.exec,
+        Some(lease),
+    )
+    .await
+    .unwrap();
     let history = serde_json::to_value(&next.enriched_request.input).unwrap();
     // The compaction carries its window, the kept user message, which the model sees expanded before the summary.
     assert_eq!(history.as_array().unwrap().len(), 2);
@@ -816,7 +834,8 @@ async fn session_compacted_transient_parent_promotes_only_the_canonical_window()
     let fresh = ResponseSession::new(NonZeroUsize::new(4).unwrap(), NonZeroUsize::new(100_000).unwrap());
     let mut continuation = request(Some(&second.id), json!("third user"));
     continuation.store = true;
-    let restored = rehydrate_in_session(continuation, &model.exec, &fresh).await.unwrap();
+    let lease = fresh.begin(continuation.previous_response_id.as_deref()).unwrap();
+    let restored = rehydrate(continuation, &model.exec, Some(lease)).await.unwrap();
     // A continuation restores only the window from the latest compaction.
     let restored_input = serde_json::to_value(&restored.enriched_request.input).unwrap();
     assert_eq!(restored_input.as_array().unwrap().len(), 2, "{restored_input}");
@@ -840,7 +859,8 @@ async fn session_failed_response_evicts_only_a_referenced_parent() {
         // The existing core status enum normalizes upstream "failed" to "error".
         assert_eq!(failed.status, "error");
         assert_eq!(failed.error.as_ref().unwrap()["code"], "upstream_error");
-        let result = rehydrate_in_session(request(Some(&first.id), json!("retry")), &model.exec, &session).await;
+        let lease = session.begin(Some(&first.id)).unwrap();
+        let result = rehydrate(request(Some(&first.id), json!("retry")), &model.exec, Some(lease)).await;
         if references_parent {
             assert!(matches!(
                 result,
@@ -850,11 +870,12 @@ async fn session_failed_response_evicts_only_a_referenced_parent() {
             assert!(result.is_ok(), "an unrelated failed turn must not erase the checkpoint");
         }
         drop(result);
+        let lease = session.begin(Some(&failed.id)).unwrap();
         assert!(matches!(
-            rehydrate_in_session(
+            rehydrate(
                 request(Some(&failed.id), json!("retry failed id")),
                 &model.exec,
-                &session
+                Some(lease)
             )
             .await,
             Err(ExecutorError::Storage(StorageError::PreviousResponseNotFound { .. }))
@@ -872,7 +893,8 @@ async fn session_incomplete_response_keeps_partial_output_for_continuation() {
     let session = session();
     let first = execute_local(&model, &session, request(None, json!("first user"))).await;
     assert_eq!(first.status, "incomplete");
-    let next = rehydrate_in_session(request(Some(&first.id), json!("continue")), &model.exec, &session)
+    let lease = session.begin(Some(&first.id)).unwrap();
+    let next = rehydrate(request(Some(&first.id), json!("continue")), &model.exec, Some(lease))
         .await
         .unwrap();
     let history = serde_json::to_value(&next.enriched_request.input).unwrap();
@@ -923,7 +945,8 @@ async fn session_tool_round_compaction_does_not_restore_superseded_output() {
             assert_eq!(requests[2]["input"].as_array().unwrap().len(), 2);
             assert!(!requests[2]["input"].to_string().contains(&obsolete));
         }
-        let next = rehydrate_in_session(request(Some(&result.id), json!("next")), &model.exec, &session)
+        let lease = session.begin(Some(&result.id)).unwrap();
+        let next = rehydrate(request(Some(&result.id), json!("next")), &model.exec, Some(lease))
             .await
             .unwrap();
         let history = serde_json::to_value(&next.enriched_request.input).unwrap();
@@ -970,7 +993,8 @@ async fn grouped_aggregate_rejection_precedes_durable_child_writes_and_preserves
         let mut payload = request(None, json!("source"));
         payload.store = durable_parent;
         let parent = execute_local(&model, &source, payload).await;
-        let target_ctx = rehydrate_in_session(request(None, json!("unrelated target")), &model.exec, &target)
+        let lease = target.begin(None).unwrap();
+        let target_ctx = rehydrate(request(None, json!("unrelated target")), &model.exec, Some(lease))
             .await
             .unwrap();
         let target_id = target_ctx.response_id.clone();
@@ -996,10 +1020,11 @@ async fn grouped_aggregate_rejection_precedes_durable_child_writes_and_preserves
         assert_eq!(after, before, "aggregate admission must precede the durable write");
         let recovered = execute_local(&model, &target, request(Some(&target_id), json!("retry own target"))).await;
         assert_eq!(recovered.status, "completed");
-        rehydrate_in_session(
+        let lease = source.begin(Some(&parent.id)).unwrap();
+        rehydrate(
             request(Some(&parent.id), json!("source still available")),
             &model.exec,
-            &source,
+            Some(lease),
         )
         .await
         .unwrap();
@@ -1019,7 +1044,8 @@ async fn grouped_aggregate_reservation_is_rolled_back_when_durable_storage_fails
     );
     let source = group.new_session().unwrap();
     let target = group.new_session().unwrap();
-    let source_ctx = rehydrate_in_session(request(None, json!("s".repeat(2_000))), &exec, &source)
+    let lease = source.begin(None).unwrap();
+    let source_ctx = rehydrate(request(None, json!("s".repeat(2_000))), &exec, Some(lease))
         .await
         .unwrap();
     let source_id = source_ctx.response_id.clone();
@@ -1027,7 +1053,8 @@ async fn grouped_aggregate_reservation_is_rolled_back_when_durable_storage_fails
     commit(source_ctx, output, &exec).await.unwrap();
     let mut payload = request(None, json!("t".repeat(2_000)));
     payload.store = true;
-    let ctx = rehydrate_in_session(payload, &exec, &target).await.unwrap();
+    let lease = target.begin(payload.previous_response_id.as_deref()).unwrap();
+    let ctx = rehydrate(payload, &exec, Some(lease)).await.unwrap();
     let output = response(&ctx, json!([]));
     let result = commit(ctx, output, &exec).await;
     let Err(ExecutorError::Persistence(cause)) = result else {
@@ -1036,14 +1063,16 @@ async fn grouped_aggregate_reservation_is_rolled_back_when_durable_storage_fails
     assert!(matches!(*cause, ExecutorError::Storage(StorageError::NotConfigured)));
     // Two such checkpoints fit, but a third does not. Recovery proves that the
     // failed persistence did not leak its already-reserved candidate charge.
-    let ctx = rehydrate_in_session(request(None, json!("t".repeat(2_000))), &exec, &target)
+    let lease = target.begin(None).unwrap();
+    let ctx = rehydrate(request(None, json!("t".repeat(2_000))), &exec, Some(lease))
         .await
         .unwrap();
     let output = response(&ctx, json!([]));
     commit(ctx, output, &exec)
         .await
         .expect("failed durable write must return its reservation");
-    rehydrate_in_session(request(Some(&source_id), json!("source survives")), &exec, &source)
+    let lease = source.begin(Some(&source_id)).unwrap();
+    rehydrate(request(Some(&source_id), json!("source survives")), &exec, Some(lease))
         .await
         .unwrap();
 }
@@ -1064,7 +1093,8 @@ async fn grouped_aggregate_sql_failure_rolls_back_items_and_releases_capacity() 
         let source = group.new_session().unwrap();
         let destination = group.new_session().unwrap();
         let probe = group.new_session().unwrap();
-        let source_ctx = rehydrate_in_session(request(None, json!("s".repeat(2_000))), &exec, &source)
+        let lease = source.begin(None).unwrap();
+        let source_ctx = rehydrate(request(None, json!("s".repeat(2_000))), &exec, Some(lease))
             .await
             .unwrap();
         let source_id = source_ctx.response_id.clone();
@@ -1074,7 +1104,8 @@ async fn grouped_aggregate_sql_failure_rolls_back_items_and_releases_capacity() 
         let target = if fork { &destination } else { &source };
         let mut payload = request(Some(&source_id), json!("continue"));
         payload.store = true;
-        let ctx = rehydrate_in_session(payload, &exec, target).await.unwrap();
+        let lease = target.begin(payload.previous_response_id.as_deref()).unwrap();
+        let ctx = rehydrate(payload, &exec, Some(lease)).await.unwrap();
         let failed_id = ctx.response_id.clone();
         // Seed only the response ID, not its items. The real persist path inserts
         // the candidate's items before hitting this duplicate response ID.
@@ -1109,23 +1140,30 @@ async fn grouped_aggregate_sql_failure_rolls_back_items_and_releases_capacity() 
         let after = store.get(&failed_id).await.unwrap();
         assert_eq!(after.history_item_ids, existing.history_item_ids);
         assert_eq!(after.created_at, existing.created_at);
+        let lease = target.begin(Some(&failed_id)).unwrap();
         assert!(matches!(
-            rehydrate_in_session(request(Some(&failed_id), json!("no failed checkpoint")), &exec, target).await,
+            rehydrate(
+                request(Some(&failed_id), json!("no failed checkpoint")),
+                &exec,
+                Some(lease)
+            )
+            .await,
             Err(ExecutorError::Storage(StorageError::PreviousResponseNotFound { .. }))
         ));
 
         // With a leaked prepared checkpoint neither size fits. A failed fork
         // retains its source charge; a failed own continuation evicts it.
         let recovery_bytes = if fork { 2_000 } else { 4_000 };
-        let recovered = rehydrate_in_session(request(None, json!("r".repeat(recovery_bytes))), &exec, &probe)
+        let lease = probe.begin(None).unwrap();
+        let recovered = rehydrate(request(None, json!("r".repeat(recovery_bytes))), &exec, Some(lease))
             .await
             .unwrap();
         let output = response(&recovered, json!([]));
         commit(recovered, output, &exec)
             .await
             .expect("SQL failure must return its prepared-checkpoint reservation");
-        let source_result =
-            rehydrate_in_session(request(Some(&source_id), json!("source check")), &exec, &source).await;
+        let lease = source.begin(Some(&source_id)).unwrap();
+        let source_result = rehydrate(request(Some(&source_id), json!("source check")), &exec, Some(lease)).await;
         if fork {
             let source_ctx = source_result.expect("a failed fork must preserve its source checkpoint");
             assert!(
@@ -1159,7 +1197,8 @@ async fn grouped_aggregate_cancellation_while_waiting_for_storage_releases_capac
         let source = group.new_session().unwrap();
         let destination = group.new_session().unwrap();
         let probe = group.new_session().unwrap();
-        let source_ctx = rehydrate_in_session(request(None, json!("s".repeat(2_000))), &exec, &source)
+        let lease = source.begin(None).unwrap();
+        let source_ctx = rehydrate(request(None, json!("s".repeat(2_000))), &exec, Some(lease))
             .await
             .unwrap();
         let source_id = source_ctx.response_id.clone();
@@ -1169,7 +1208,8 @@ async fn grouped_aggregate_cancellation_while_waiting_for_storage_releases_capac
         let target = if fork { &destination } else { &source };
         let mut payload = request(Some(&source_id), json!("continue"));
         payload.store = true;
-        let ctx = rehydrate_in_session(payload, &exec, target).await.unwrap();
+        let lease = target.begin(payload.previous_response_id.as_deref()).unwrap();
+        let ctx = rehydrate(payload, &exec, Some(lease)).await.unwrap();
         let output = response(&ctx, json!([]));
         // Holding the pool's only connection stops persistence before any write.
         // One poll reaches that wait after the candidate's budget reservation.
@@ -1181,7 +1221,8 @@ async fn grouped_aggregate_cancellation_while_waiting_for_storage_releases_capac
                 .with_session(target, None)
                 .is_err()
         );
-        let probe_ctx = rehydrate_in_session(request(None, json!("p".repeat(2_000))), &exec, &probe)
+        let lease = probe.begin(None).unwrap();
+        let probe_ctx = rehydrate(request(None, json!("p".repeat(2_000))), &exec, Some(lease))
             .await
             .unwrap();
         let output = response(&probe_ctx, json!([]));
@@ -1209,15 +1250,16 @@ async fn grouped_aggregate_cancellation_while_waiting_for_storage_releases_capac
         // For a fork the source stays charged; for an own continuation it is
         // evicted. Either recovery would exceed 6000 if the candidate leaked.
         let recovery_bytes = if fork { 2_000 } else { 4_000 };
-        let recovered = rehydrate_in_session(request(None, json!("r".repeat(recovery_bytes))), &exec, &probe)
+        let lease = probe.begin(None).unwrap();
+        let recovered = rehydrate(request(None, json!("r".repeat(recovery_bytes))), &exec, Some(lease))
             .await
             .unwrap();
         let output = response(&recovered, json!([]));
         commit(recovered, output, &exec)
             .await
             .expect("cancelled persistence must return its reserved capacity");
-        let source_result =
-            rehydrate_in_session(request(Some(&source_id), json!("source check")), &exec, &source).await;
+        let lease = source.begin(Some(&source_id)).unwrap();
+        let source_result = rehydrate(request(Some(&source_id), json!("source check")), &exec, Some(lease)).await;
         if fork {
             let source_ctx = source_result.expect("cancelling a fork must preserve its source checkpoint");
             assert!(
@@ -1320,8 +1362,9 @@ async fn session_budget_rejection_does_not_partially_store_a_child() {
             .await
             .unwrap();
             assert_eq!(after, before, "a failed budget check must precede durable writes");
+            let lease = session.begin(Some(&parent.id)).unwrap();
             assert!(matches!(
-                rehydrate_in_session(request(Some(&parent.id), json!("next")), &model.exec, &session).await,
+                rehydrate(request(Some(&parent.id), json!("next")), &model.exec, Some(lease)).await,
                 Err(ExecutorError::Storage(StorageError::PreviousResponseNotFound { .. }))
             ));
             let recovery = execute_local(&model, &session, request(None, json!("fresh"))).await;
@@ -1360,7 +1403,8 @@ async fn session_tool_round_preserves_reasoning_message_call_output_order() {
         payload.store = store_durable;
         payload.tools = Some(serde_json::from_value(json!([{"type":"web_search_preview"}])).unwrap());
         let result = execute_local(&model, &session, payload).await;
-        let next = rehydrate_in_session(request(Some(&result.id), json!("next")), &model.exec, &session)
+        let lease = session.begin(Some(&result.id)).unwrap();
+        let next = rehydrate(request(Some(&result.id), json!("next")), &model.exec, Some(lease))
             .await
             .unwrap();
         let history = serde_json::to_value(&next.enriched_request.input).unwrap();
@@ -1413,13 +1457,14 @@ async fn session_mixed_tool_round_records_calls_once_before_client_continuation(
     let result = execute_local(&model, &session, payload).await;
     assert_eq!(result.output.len(), 3);
     assert_eq!(calls.load(Ordering::Relaxed), 1);
-    let next = rehydrate_in_session(
+    let lease = session.begin(Some(&result.id)).unwrap();
+    let next = rehydrate(
         request(
             Some(&result.id),
             json!([{"type":"function_call_output", "call_id":"client", "output":"sunny"}]),
         ),
         &model.exec,
-        &session,
+        Some(lease),
     )
     .await
     .expect("the client call is retained exactly once despite the mixed round");
@@ -1446,7 +1491,8 @@ async fn session_round_limit_retains_the_final_call_output_in_order() {
     let result = execute_local(&model, &session, search_request()).await;
     assert_eq!(result.status, "incomplete");
     assert_eq!(calls.load(Ordering::Relaxed), 10);
-    let next = rehydrate_in_session(request(Some(&result.id), json!("continue")), &model.exec, &session)
+    let lease = session.begin(Some(&result.id)).unwrap();
+    let next = rehydrate(request(Some(&result.id), json!("continue")), &model.exec, Some(lease))
         .await
         .expect("round exhaustion must not leave an unanswered built-in call");
     let history = serde_json::to_value(&next.enriched_request.input).unwrap();
@@ -1484,7 +1530,8 @@ async fn session_repeated_in_round_compaction_retains_only_the_latest_window() {
     );
     assert_eq!(calls.load(Ordering::Relaxed), 2);
     assert_eq!(model.requests.lock().await.len(), 5);
-    let next = rehydrate_in_session(request(Some(&result.id), json!("next")), &model.exec, &session)
+    let lease = session.begin(Some(&result.id)).unwrap();
+    let next = rehydrate(request(Some(&result.id), json!("next")), &model.exec, Some(lease))
         .await
         .unwrap();
     let history = serde_json::to_value(&next.enriched_request.input).unwrap();
@@ -1546,7 +1593,8 @@ async fn session_compacted_durable_parent_restores_within_the_canonical_budget()
         let mut payload = request(Some(&compacted.id), json!("third user"));
         payload.store = true;
         let child = execute_local(&model, &restored, payload).await;
-        let ctx = rehydrate_in_session(request(Some(&child.id), json!("next")), &model.exec, &restored)
+        let lease = restored.begin(Some(&child.id)).unwrap();
+        let ctx = rehydrate(request(Some(&child.id), json!("next")), &model.exec, Some(lease))
             .await
             .unwrap();
         let history = serde_json::to_value(&ctx.enriched_request.input).unwrap();
@@ -1569,7 +1617,8 @@ async fn replayed_compaction_is_used_for_its_turn_only() {
     let exec = execution();
     for pending_call in [false, true] {
         let session = ResponseSession::new(NonZeroUsize::new(2).unwrap(), NonZeroUsize::new(100_000).unwrap());
-        let ctx = rehydrate_in_session(request(None, json!("obsolete question")), &exec, &session)
+        let lease = session.begin(None).unwrap();
+        let ctx = rehydrate(request(None, json!("obsolete question")), &exec, Some(lease))
             .await
             .unwrap();
         let parent = ctx.response_id.clone();
@@ -1580,7 +1629,8 @@ async fn replayed_compaction_is_used_for_its_turn_only() {
         };
         let output = response(&ctx, items);
         commit(ctx, output, &exec).await.unwrap();
-        let ctx = rehydrate_in_session(
+        let lease = session.begin(Some(&parent)).unwrap();
+        let ctx = rehydrate(
             request(
                 Some(&parent),
                 json!([
@@ -1588,14 +1638,15 @@ async fn replayed_compaction_is_used_for_its_turn_only() {
                 ]),
             ),
             &exec,
-            &session,
+            Some(lease),
         )
         .await
         .expect("the replayed window is this turn's model input");
         let child = ctx.response_id.clone();
         let output = response(&ctx, json!([]));
         commit(ctx, output, &exec).await.expect("the turn is stored");
-        let next = rehydrate_in_session(request(Some(&child), json!([])), &exec, &session).await;
+        let lease = session.begin(Some(&child)).unwrap();
+        let next = rehydrate(request(Some(&child), json!([])), &exec, Some(lease)).await;
         if pending_call {
             assert!(
                 matches!(next, Err(ExecutorError::Tool(_))),
@@ -1619,7 +1670,8 @@ async fn session_continuation_keeps_history_a_replayed_compaction_superseded() {
     let exec = execution();
     let session = session();
     let parent = parent_with_call(&exec, &session).await;
-    let ctx = rehydrate_in_session(
+    let lease = session.begin(Some(&parent)).unwrap();
+    let ctx = rehydrate(
         request(
             Some(&parent),
             json!([
@@ -1627,7 +1679,7 @@ async fn session_continuation_keeps_history_a_replayed_compaction_superseded() {
             ]),
         ),
         &exec,
-        &session,
+        Some(lease),
     )
     .await
     .unwrap();
@@ -1650,4 +1702,26 @@ async fn session_continuation_keeps_history_a_replayed_compaction_superseded() {
         "{types:?}"
     );
     assert_eq!(types.last(), Some(&"function_call_output"));
+}
+
+#[tokio::test]
+async fn session_lease_begun_for_another_response_is_rejected() {
+    let exec = execution();
+    let session = ResponseSession::new(NonZeroUsize::new(100).unwrap(), NonZeroUsize::new(100_000).unwrap());
+    let lease = session.begin(None).unwrap();
+    let ctx = rehydrate(request(None, json!("first")), &exec, Some(lease))
+        .await
+        .unwrap();
+    let parent_id = ctx.response_id.clone();
+    let output = response(&ctx, json!([]));
+    commit(ctx, output, &exec).await.unwrap();
+
+    let continuation = session.begin(Some(&parent_id)).unwrap();
+    let error = rehydrate(request(Some("resp_other"), json!("next")), &exec, Some(continuation))
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(&error, ExecutorError::InvalidRequest(message) if message.contains("different previous_response_id")),
+        "{error}"
+    );
 }

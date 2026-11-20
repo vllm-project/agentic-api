@@ -20,8 +20,8 @@ policy) or that lifts a lower module's data up into a shared object because that
 Every transport (HTTP, SSE, WebSocket, split execution) and every state source (conversation, previous response,
 session parent, stateless input, restored agent tree) runs the same path:
 
-1. **Rehydration** (`executor/rehydrate.rs`: `rehydrate_conversation`, `rehydrate_in_session`,
-   `rehydrate_with_continuation`) builds the turn from the request and its history, with one branch per state source.
+1. **Rehydration** (`executor/rehydrate.rs`: `rehydrate`, with an optional session continuation) builds the turn
+   from the request and its history, with one branch per state source.
    Input is validated at entry and once more on the final assembled input.
 2. **Engine execution** (`engine.rs` and the stages in "Target streaming pipeline and ownership boundaries" in
    `ARCHITECTURE.md`) runs the inference rounds and the tool loop. The response accumulator (`executor/accumulator/`)

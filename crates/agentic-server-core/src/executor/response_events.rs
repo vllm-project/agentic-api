@@ -7,8 +7,8 @@ use tokio::sync::{mpsc, oneshot, watch};
 use crate::events::{EventFrame, EventPayload, SSEEventType, WireEvent};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway_accumulator::{
-    GatewayStreamAccumulator, StreamEvent, StreamFrame, checked_stream_event_limited, executor_error_frame,
-    synthetic_event, terminal_response_frame,
+    GatewayStreamAccumulator, StreamEvent, StreamFrame, checked_stream_event, executor_error_frame, synthetic_event,
+    terminal_response_frame,
 };
 use crate::executor::telemetry::metrics::ExecutionClock;
 use crate::types::{injection::InjectionEvent, request_response::ResponsePayload, websocket::SteeringEvent};
@@ -303,7 +303,7 @@ impl ResponseEventSink {
         if !published.process_event(frame, offset) {
             return Ok(false);
         }
-        let content = checked_stream_event_limited(frame, self.max_bytes)?;
+        let content = checked_stream_event(frame, self.max_bytes)?;
         let sequence_number = frame.sequence_number().expect("delivery assigned a sequence");
         let created = if frame.event_type == SSEEventType::ResponseCreated {
             // The relay rewrites wire IDs to gateway IDs without rewriting the
@@ -348,7 +348,7 @@ impl ResponseEventSink {
         let mut frame = terminal_response_frame(payload)?;
         // Late acknowledgements may advance the counter during persistence.
         frame.wire.sequence_number = Some(u64::MAX);
-        checked_stream_event_limited(&frame, self.max_bytes)?;
+        checked_stream_event(&frame, self.max_bytes)?;
         Ok(())
     }
 

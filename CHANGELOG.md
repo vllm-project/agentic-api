@@ -49,6 +49,11 @@ All notable changes to Agentic API are documented here.
   and `tool_names` (`[]` when absent). Recordings of every form against OpenAI and the gateway are in
   `tests/cassettes/mcp/mcp-approval-*`.
   `agentic_core`: `McpToolParam::require_approval` is `Option<McpApprovalPolicy>` instead of `Option<String>`.
+- `agentic_core`: one `executor::rehydrate(request, exec_ctx, continuation)` replaces `rehydrate_conversation` and
+  `rehydrate_in_session` (#549). Pass `None` for a turn outside a session; for a session turn, pass the lease from
+  `ResponseSession::begin(previous_response_id)`, which is now public, as is the `ResponseContinuation` re-export.
+  `ResponseHandler::rehydrate` now returns the checkpoint already trimmed to the latest compaction a turn produced.
+  `RequestPayload::multi_agent_enabled` is added.
 
 ## [0.10.0] - 2026-11-09
 

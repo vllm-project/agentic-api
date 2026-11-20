@@ -28,7 +28,7 @@ caller-authored context. Callers treat it as opaque.
 
 ## Composition
 
-Neither step reimplements the storage flow. `hydrate` calls `rehydrate_conversation` and `upstream_request`; `persist` calls
+Neither step reimplements the storage flow. `hydrate` calls `rehydrate` and `upstream_request`; `persist` calls
 `decode_upstream` and `commit`. All four are core operations the in-process executor already uses or shares, so a change
 to how a turn is rehydrated or stored reaches both paths at once. The llm-d crate contains no storage access or
 request-building logic of its own.

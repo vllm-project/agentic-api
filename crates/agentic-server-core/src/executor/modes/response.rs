@@ -128,7 +128,8 @@ impl ResponseHandler {
         })
     }
 
-    /// Loads the previous response and its full history in one storage query.
+    /// Loads the previous response and its full history in one storage query. The checkpoint continues from the
+    /// latest compaction a turn produced, where rehydration and persistence both start the turn's history.
     ///
     /// Returns `None` when the request does not continue a previous response.
     ///
@@ -142,13 +143,14 @@ impl ResponseHandler {
         let Some(prev_id) = ctx.original_request.previous_response_id.as_deref() else {
             return Ok(None);
         };
-        let (stored, history) = self.store.rehydrate(prev_id).await.map_err(|error| {
+        let (mut stored, history) = self.store.rehydrate(prev_id).await.map_err(|error| {
             if error.is_not_found() {
                 StorageError::PreviousResponseNotFound { id: prev_id.to_owned() }.into()
             } else {
                 ExecutorError::Storage(error)
             }
         })?;
+        stored.continue_from_compaction(&history, &ctx.enriched_request);
         Ok(Some((stored, history)))
     }
 

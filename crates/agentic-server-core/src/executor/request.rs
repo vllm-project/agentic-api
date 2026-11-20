@@ -21,14 +21,15 @@ use crate::tool::{GatewayExecutorRegistration, GatewayExecutors, file_search::Fi
 use crate::types::io::{InOutItem, ToolChoice};
 use crate::types::messages::GatewayToolMap;
 use crate::types::model_capabilities::ModelCapabilities;
-use crate::types::request_response::{RequestPayload, ResponsePayload};
+use crate::types::request_response::{RequestPayload, ResponsePayload, StandardResponseFields};
+use crate::utils::common::utcnow_str;
 
 /// Env var configuring client-tool → gateway-executor aliases for `/v1/messages`
 /// (e.g. `WebSearch=web_search`). Empty/unset means no aliases — client
 /// functions stay client-owned (the ownership doctrine's default).
 const GATEWAY_TOOL_ALIASES_ENV: &str = "MESSAGES_GATEWAY_TOOL_ALIASES";
 
-/// Context built by `rehydrate_conversation`, threaded through the execute pipeline.
+/// Context built by `rehydrate`, threaded through the execute pipeline.
 #[derive(Debug)]
 pub struct RequestContext {
     /// Private canonical tree for stored or connection-local continuation.
@@ -54,6 +55,25 @@ pub struct RequestContext {
 }
 
 impl RequestContext {
+    /// A context attached to no stored turn, conversation, or session yet, and with no input items of its own to
+    /// persist: an internal summary or agent-round request as it stays, or a client turn before rehydration.
+    pub(super) fn fresh(
+        original_request: RequestPayload,
+        enriched_request: RequestPayload,
+        response_id: String,
+    ) -> Self {
+        Self {
+            multi_agent_tree: None,
+            original_request,
+            enriched_request,
+            new_input_items: Vec::new(),
+            response_id,
+            conversation_id: None,
+            checkpoint: None,
+            continuation: None,
+        }
+    }
+
     /// Submitted or inherited selector for public metadata and continuation settings.
     /// The enriched selector is only a fallback before any inference override.
     pub(super) fn public_tool_choice(&self) -> Option<&ToolChoice> {
@@ -61,6 +81,14 @@ impl RequestContext {
             .tool_choice
             .as_ref()
             .or(self.enriched_request.tool_choice.as_ref())
+    }
+
+    /// Moves the public selector out, as persistence records it.
+    pub(super) fn take_public_tool_choice(&mut self) -> Option<ToolChoice> {
+        self.original_request
+            .tool_choice
+            .take()
+            .or_else(|| self.enriched_request.tool_choice.take())
     }
 
     /// Allow a follow-up inference to finish after tool execution, retaining the
@@ -79,9 +107,40 @@ impl RequestContext {
         self.original_request.max_tool_calls_limit().ok().flatten()
     }
 
+    /// A gateway-built response with this request's identity and echoed settings and no output yet. It stamps no
+    /// `completed_at`, unlike [`Self::inject_ids`], since a shell can be presented before the response completes.
+    pub(super) fn response_shell(&self, model: String, status: &str) -> ResponsePayload {
+        let mut payload = ResponsePayload {
+            id: String::new(),
+            object: "response".to_owned(),
+            created_at: utcnow_str(),
+            model,
+            status: status.to_owned(),
+            output: Vec::new(),
+            usage: None,
+            incomplete_details: None,
+            error: None,
+            previous_response_id: None,
+            conversation: None,
+            instructions: None,
+            max_tool_calls: None,
+            service_tier: None,
+            tools: None,
+            tool_choice: None,
+            standard_fields: StandardResponseFields::default(),
+        };
+        self.inject_identity(&mut payload);
+        payload
+    }
+
     /// Inject our `response_id` and `conversation` into a `ResponsePayload`
     /// received from the LLM (which carries the upstream's own IDs).
     pub(crate) fn inject_ids(&self, payload: &mut ResponsePayload) {
+        self.inject_identity(payload);
+        payload.standard_fields.completed_at = (payload.status == "completed").then(utcnow_str);
+    }
+
+    fn inject_identity(&self, payload: &mut ResponsePayload) {
         payload.id.clone_from(&self.response_id);
         payload.conversation.clone_from(&self.conversation_id);
         payload
@@ -89,7 +148,6 @@ impl RequestContext {
             .clone_from(&self.original_request.previous_response_id);
         payload.max_tool_calls = self.max_tool_calls().map(NonZeroU64::get);
         payload.standard_fields.apply_request(&self.original_request);
-        payload.standard_fields.completed_at = (payload.status == "completed").then(crate::utils::common::utcnow_str);
     }
 }
 

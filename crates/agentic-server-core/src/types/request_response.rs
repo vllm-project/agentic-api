@@ -232,12 +232,18 @@ impl<T: ?Sized, C> RequestPayload<T, C> {
             .is_some_and(|tools| tools.iter().any(declares_async))
     }
 
+    /// Whether the request turns on multi-agent collaboration.
+    #[must_use]
+    pub fn multi_agent_enabled(&self) -> bool {
+        self.multi_agent.as_ref().is_some_and(|config| config.enabled)
+    }
+
     /// Names the feature in this request that only the in-process executor
     /// implements, if any — neither the passthrough proxy nor split execution
     /// can serve it.
     #[must_use]
     pub fn in_process_feature(&self) -> Option<&'static str> {
-        if self.multi_agent.as_ref().is_some_and(|config| config.enabled) {
+        if self.multi_agent_enabled() {
             return Some("multi_agent");
         }
         if self.conversation.is_some() {

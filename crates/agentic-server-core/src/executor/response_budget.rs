@@ -505,18 +505,26 @@ pub(in crate::executor) fn retained_response_parts_bytes(
     response_id: &str,
     output: &[OutputItem],
     service_tier: Option<&str>,
+    incomplete_details: Option<&IncompleteDetails>,
+    error: Option<&Value>,
 ) -> usize {
     RETAINED_CONTAINER_OVERHEAD_BYTES
         + response_id.len()
         + sum_retained(output)
         + service_tier.map_or(0, |tier| RETAINED_CONTAINER_OVERHEAD_BYTES + tier.len())
+        + incomplete_details.map_or(0, RetainedSize::retained_bytes)
+        + error.map_or(0, RetainedSize::retained_bytes)
 }
 
 #[cfg(test)]
 pub(in crate::executor) fn retained_response_bytes(response: &ResponsePayload) -> usize {
-    retained_response_parts_bytes(&response.id, &response.output, response.service_tier.as_deref())
-        + response.incomplete_details.retained_bytes()
-        + response.error.retained_bytes()
+    retained_response_parts_bytes(
+        &response.id,
+        &response.output,
+        response.service_tier.as_deref(),
+        response.incomplete_details.as_ref(),
+        response.error.as_ref(),
+    )
 }
 
 #[cfg(test)]
@@ -754,7 +762,7 @@ mod tests {
         let expected = RETAINED_CONTAINER_OVERHEAD_BYTES + "resp_test".len() + RETAINED_CONTAINER_OVERHEAD_BYTES;
         assert_eq!(retained_response_bytes(&payload), expected);
         assert_eq!(
-            retained_response_parts_bytes(&payload.id, &payload.output, None),
+            retained_response_parts_bytes(&payload.id, &payload.output, None, None, None),
             expected
         );
 

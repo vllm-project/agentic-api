@@ -16,9 +16,7 @@ use tracing::warn;
 
 use agentic_core::executor::request::RequestContext;
 
-use agentic_core::executor::{
-    ExecutorError, UpstreamBody, commit, decode_upstream, rehydrate_conversation, upstream_request,
-};
+use agentic_core::executor::{ExecutorError, UpstreamBody, commit, decode_upstream, rehydrate, upstream_request};
 use agentic_core::types::request_response::RequestPayload;
 
 use crate::BackendState;
@@ -100,7 +98,7 @@ async fn build_hydration(
     state: &BackendState,
 ) -> agentic_core::executor::ExecutorResult<Hydration> {
     ensure_splittable(&request)?;
-    let ctx = rehydrate_conversation(request, state.exec_ctx.as_ref()).await?;
+    let ctx = rehydrate(request, state.exec_ctx.as_ref(), None).await?;
     // Rehydration can restore a gateway-owned tool from the stored turn, so
     // check what will actually run.
     ensure_splittable(&ctx.enriched_request)?;

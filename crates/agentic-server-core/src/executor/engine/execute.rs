@@ -18,7 +18,7 @@ use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::inference::BoxStream;
 use crate::executor::multi_agent::RunControlReceiver;
 use crate::executor::prepare::prepare_request_tools;
-use crate::executor::rehydrate::rehydrate_with_continuation;
+use crate::executor::rehydrate::rehydrate;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::session::{ResponseCheckpointPin, ResponseContinuation, ResponseSession, SteeringQueue};
 use crate::executor::telemetry::{Api, ExecutionSpan, Route};
@@ -380,7 +380,7 @@ impl ExecuteRequest {
             ctx,
             tool_search_state,
             &self.exec_ctx,
-            self.client_auth.as_ref(),
+            self.client_auth.map(Arc::new),
         ))
         .await;
         match result {
@@ -429,14 +429,10 @@ async fn prepare(
     continuation: Option<ResponseContinuation>,
     controlled: bool,
 ) -> ExecutorResult<(RequestContext, Option<ToolSearchState>)> {
-    let ctx = rehydrate_with_continuation(payload, exec, continuation).await?;
+    let ctx = rehydrate(payload, exec, continuation).await?;
     if controlled
         && (!ctx.original_request.stream
-            || !ctx
-                .enriched_request
-                .multi_agent
-                .as_ref()
-                .is_some_and(|config| config.enabled)
+            || !ctx.enriched_request.multi_agent_enabled()
             || ctx.original_request.input.has_compaction_trigger())
     {
         return Err(ExecutorError::InvalidRequest(
@@ -458,7 +454,7 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::*;
-    use crate::executor::{ConversationHandler, ResponseHandler, commit, rehydrate_in_session};
+    use crate::executor::{ConversationHandler, ResponseHandler, commit, rehydrate};
     use crate::storage::{ConversationStore, ResponseStore, StorageError};
     use crate::tool::ToolError;
     use crate::types::io::{InputItem, InputMessageContent, ResponsesInput};
@@ -503,9 +499,13 @@ mod tests {
         session: &ResponseSession,
         output: Value,
     ) -> ResponseCheckpointPin {
-        let ctx = rehydrate_in_session(request(None, json!("parent prompt")), exec, session)
-            .await
-            .unwrap();
+        let ctx = rehydrate(
+            request(None, json!("parent prompt")),
+            exec,
+            Some(session.begin(None).unwrap()),
+        )
+        .await
+        .unwrap();
         let parent_id = ctx.response_id.clone();
         let payload = deserialize_from_value(json!({
             "id": parent_id, "object": "response", "created_at": 0,

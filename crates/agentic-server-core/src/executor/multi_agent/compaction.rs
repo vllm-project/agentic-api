@@ -9,6 +9,7 @@ use crate::types::agent::AgentIdentity;
 use crate::types::io::input::async_records;
 use crate::types::io::{CompactionItem, InputItem, ResponseUsage, ResponsesInput};
 use crate::types::request_response::RequestPayload;
+use std::sync::Arc;
 
 pub struct CompactionPlan {
     agent: AgentIdentity,
@@ -69,7 +70,7 @@ impl CompactionPlan {
     pub(in crate::executor) async fn execute(
         self,
         exec: &ExecutionContext,
-        auth: Option<&UpstreamHeaders>,
+        auth: Option<Arc<UpstreamHeaders>>,
     ) -> ExecutorResult<CompactionResult> {
         let prefix_len = self.prefix.len();
         let carried = self

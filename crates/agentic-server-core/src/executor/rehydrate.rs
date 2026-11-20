@@ -5,7 +5,7 @@
 
 use std::convert::identity;
 
-use super::session::{ResponseContinuation, ResponseSession};
+use super::session::ResponseContinuation;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::multi_agent::{CheckpointLimits, ValidatedTreeCheckpoint};
 use crate::executor::pending_calls::CallLedger;
@@ -29,33 +29,17 @@ use crate::utils::uuid7_str;
 /// - `conversation`:         rehydrate from the conversation
 /// - no ids:                 normalize the complete history supplied by the client
 ///
+/// A transient-session turn passes the `continuation` its session began for this request's `previous_response_id`
+/// (see [`crate::executor::ResponseSession::begin`]); the turn then continues the session's retained parent without
+/// changing the durable Conversations API. A continuation begun for another response is rejected.
+///
 /// # Errors
 /// Returns [`ExecutorError`] if storage is unavailable, a referenced ID does not exist, or the
 /// new/resolved input contains unsupported message content.
-pub async fn rehydrate_conversation(
-    request: RequestPayload,
-    exec_ctx: &ExecutionContext,
-) -> ExecutorResult<RequestContext> {
-    rehydrate_with_continuation(request, exec_ctx, None).await
-}
-
-/// Resolve one turn in a transient session without changing the durable Conversations API.
-///
-/// # Errors
-/// Returns an error when the session is busy/closed or the requested history is unavailable.
-pub async fn rehydrate_in_session(
-    request: RequestPayload,
-    exec_ctx: &ExecutionContext,
-    session: &ResponseSession,
-) -> ExecutorResult<RequestContext> {
-    let continuation = session.begin(request.previous_response_id.as_deref())?;
-    rehydrate_with_continuation(request, exec_ctx, Some(continuation)).await
-}
-
 #[tracing::instrument(name = "agentic.rehydrate", skip_all, fields(
     agentic.rehydrate.source = super::telemetry::stages::StateSource::from_request(&request).as_str()
 ))]
-pub(crate) async fn rehydrate_with_continuation(
+pub async fn rehydrate(
     request: RequestPayload,
     exec_ctx: &ExecutionContext,
     continuation: Option<ResponseContinuation>,
@@ -86,14 +70,9 @@ pub(crate) async fn rehydrate_with_continuation(
         // One clone for the unmodified original; `request` is moved as enriched_request.
         let original_request = request.clone();
         let mut ctx = RequestContext {
-            multi_agent_tree: None,
-            enriched_request: request,
-            original_request,
             new_input_items,
-            response_id,
-            conversation_id: None,
-            checkpoint: None,
             continuation,
+            ..RequestContext::fresh(original_request, request, response_id)
         };
 
         match (
@@ -114,11 +93,7 @@ pub(crate) async fn rehydrate_with_continuation(
         // The explicit trigger extension cannot return a resumable stateless tree.
         if !ctx.original_request.store
             && ctx.original_request.input.has_compaction_trigger()
-            && ctx
-                .enriched_request
-                .multi_agent
-                .as_ref()
-                .is_some_and(|config| config.enabled)
+            && ctx.enriched_request.multi_agent_enabled()
         {
             return Err(ExecutorError::InvalidRequest(
                 "compaction_trigger is not supported with multi_agent and store: false; use automatic compaction"
@@ -193,16 +168,18 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
     if ctx.continuation.is_some() {
         return from_session_response(ctx, exec_ctx).await;
     }
-    let (mut checkpoint, history) = exec_ctx
+    let (checkpoint, history) = exec_ctx
         .resp_handler
         .rehydrate(ctx)
         .await?
         .ok_or_else(missing_previous_response_id)?;
-    checkpoint.continue_from_compaction(&history, &ctx.enriched_request);
-    if !restore_agent_tree(ctx, &checkpoint.metadata, exec_ctx.responses_config.max_retained_bytes)? {
-        set_model_input(ctx, InOutItem::into_input_items(history), identity)?;
-        apply_effective_settings(ctx, &checkpoint.metadata);
-    }
+    continue_parent(
+        ctx,
+        &checkpoint.metadata,
+        || InOutItem::into_input_items(history),
+        identity,
+        exec_ctx,
+    )?;
     ctx.checkpoint = Some(checkpoint);
     Ok(())
 }
@@ -214,6 +191,12 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
         .as_ref()
         .and_then(|continuation| continuation.parent.clone());
     let parent = if let Some(parent) = cached {
+        // A lease begun for another response must not continue this one.
+        if parent.response_id.as_deref() != ctx.original_request.previous_response_id.as_deref() {
+            return Err(ExecutorError::InvalidRequest(
+                "session continuation was begun for a different previous_response_id".to_owned(),
+            ));
+        }
         parent
     } else {
         let previous_id = ctx.original_request.previous_response_id.as_deref().unwrap_or_default();
@@ -228,17 +211,19 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
             .rehydrate(ctx)
             .await?
             .ok_or_else(missing_previous_response_id)?;
-        checkpoint.continue_from_compaction(&history, &ctx.enriched_request);
         checkpoint.history = retain_window(InOutItem::into_input_items(history));
         let continuation = ctx.continuation.as_ref().ok_or_else(|| {
             ExecutorError::InvalidRequest("session response requires a continuation lease".to_owned())
         })?;
         std::sync::Arc::new(continuation.retain_parent(checkpoint)?)
     };
-    if !restore_agent_tree(ctx, &parent.metadata, exec_ctx.responses_config.max_retained_bytes)? {
-        set_model_input(ctx, parent.history.clone(), retain_window)?;
-        apply_effective_settings(ctx, &parent.metadata);
-    }
+    continue_parent(
+        ctx,
+        &parent.metadata,
+        || parent.history.clone(),
+        retain_window,
+        exec_ctx,
+    )?;
     // The model input holds the parent's history; the turn's checkpoint keeps what persistence extends.
     ctx.checkpoint = Some(ResponseCheckpoint {
         response_id: parent.response_id.clone(),
@@ -276,12 +261,24 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
     }
     // A multi-agent tree is the latest turn's snapshot, not appended history: a multi-agent turn, which continues or
     // builds one, must be stored right after the turn it continued, or it would replace another turn's tree.
-    checkpoint.requires_latest |= ctx
-        .enriched_request
-        .multi_agent
-        .as_ref()
-        .is_some_and(|config| config.enabled);
+    checkpoint.requires_latest |= ctx.enriched_request.multi_agent_enabled();
     ctx.checkpoint = Some(checkpoint);
+    Ok(())
+}
+
+/// Continues a stored parent: restores its multi-agent tree, or else makes its history the model input and inherits
+/// its effective settings.
+fn continue_parent(
+    ctx: &mut RequestContext,
+    metadata: &ResponseMetadata,
+    history: impl FnOnce() -> Vec<InputItem>,
+    window: fn(Vec<InputItem>) -> Vec<InputItem>,
+    exec_ctx: &ExecutionContext,
+) -> ExecutorResult<()> {
+    if !restore_agent_tree(ctx, metadata, exec_ctx.responses_config.max_retained_bytes)? {
+        set_model_input(ctx, history(), window)?;
+        apply_effective_settings(ctx, metadata);
+    }
     Ok(())
 }
 

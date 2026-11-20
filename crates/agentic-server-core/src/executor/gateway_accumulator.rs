@@ -93,7 +93,7 @@ impl GatewayStreamAccumulator {
         let mut chunk = String::new();
         for mut frame in frames {
             if self.process_event(&mut frame, 0) {
-                chunk.push_str(&checked_stream_event_limited(&frame, self.max_stream_event_bytes)?);
+                chunk.push_str(&checked_stream_event(&frame, self.max_stream_event_bytes)?);
             }
         }
         Ok(chunk)
@@ -102,21 +102,21 @@ impl GatewayStreamAccumulator {
     pub(crate) fn terminal_response_chunk(&mut self, payload: &ResponsePayload) -> ExecutorResult<String> {
         let mut frame = terminal_response_frame(payload)?;
         self.stamp_event(&mut frame, 0);
-        checked_stream_event_limited(&frame, self.max_stream_event_bytes)
+        checked_stream_event(&frame, self.max_stream_event_bytes)
     }
 
     #[cfg(test)]
     pub(crate) fn executor_error_chunk(&mut self, error: &ExecutorError) -> String {
         let mut frame = executor_error_frame(error);
         self.stamp_event(&mut frame, 0);
-        checked_stream_event(&frame)
+        checked_stream_event(&frame, DEFAULT_MAX_STREAM_EVENT_BYTES)
             .unwrap_or_else(|_| error_sse_chunk(&error.to_string(), frame.sequence_number().unwrap_or(0)))
     }
 
     pub(crate) fn executor_error_chunk_at(error: &ExecutorError, sequence_number: u64) -> String {
         let mut frame = executor_error_frame(error);
         frame.wire.sequence_number = Some(sequence_number);
-        checked_stream_event(&frame).unwrap_or_else(|_| {
+        checked_stream_event(&frame, DEFAULT_MAX_STREAM_EVENT_BYTES).unwrap_or_else(|_| {
             error_sse_chunk("executor error event exceeded the response size limit", sequence_number)
         })
     }
@@ -235,7 +235,7 @@ pub(super) async fn emit_sse_frame_limited(
     let sequence_number = frame
         .sequence_number()
         .ok_or_else(|| ExecutorError::StreamError("stream event has no sequence number".to_owned()))?;
-    let content = checked_stream_event_limited(frame, max_bytes)?;
+    let content = checked_stream_event(frame, max_bytes)?;
     sender
         .send(StreamEvent::Frame(StreamFrame {
             content,
@@ -246,11 +246,7 @@ pub(super) async fn emit_sse_frame_limited(
         .map_err(|_| ExecutorError::StreamError("stream receiver closed while emitting gateway event".to_owned()))
 }
 
-pub(super) fn checked_stream_event(frame: &EventFrame) -> ExecutorResult<String> {
-    checked_stream_event_limited(frame, DEFAULT_MAX_STREAM_EVENT_BYTES)
-}
-
-pub(super) fn checked_stream_event_limited(frame: &EventFrame, max_bytes: usize) -> ExecutorResult<String> {
+pub(super) fn checked_stream_event(frame: &EventFrame, max_bytes: usize) -> ExecutorResult<String> {
     let content = serialize_sse_frame(frame)?;
     if content.len() > max_bytes {
         return Err(ExecutorError::ResourceLimitExceeded {
