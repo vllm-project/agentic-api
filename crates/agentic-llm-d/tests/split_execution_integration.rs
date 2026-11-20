@@ -7,7 +7,7 @@ use std::sync::Arc;
 use agentic_core::executor::request::RequestContext;
 use agentic_core::executor::{
     ConversationHandler, ExecutionContext, ExecutorError, ExecutorResult, ResponseHandler, UpstreamBody, commit,
-    decode_upstream, rehydrate_conversation, upstream_request,
+    decode_upstream, rehydrate, upstream_request,
 };
 use agentic_core::storage::{ConversationStore, ResponseStore, create_pool_with_schema};
 use agentic_core::types::model_capabilities::{ModelCapabilities, ModelOverride, SupportedReasoningLevels};
@@ -138,7 +138,7 @@ fn signing_key() -> SigningKey {
 /// What the hydrate handler composes.
 async fn hydrate(request: RequestPayload, ctx: &ExecutionContext) -> ExecutorResult<Hydration> {
     ensure_splittable(&request)?;
-    let live = rehydrate_conversation(request, ctx).await?;
+    let live = rehydrate(request, ctx, None).await?;
     ensure_splittable(&live.enriched_request)?;
     let stream = live.original_request.stream;
     let body = RawValue::from_string(upstream_request(ctx, &live, stream, None, None).await?)
@@ -651,7 +651,7 @@ fn the_boundary_check_names_what_cannot_be_split() {
 #[tokio::test]
 async fn the_wire_context_round_trips_into_an_equal_context() {
     let ctx = exec_ctx().await;
-    let live = rehydrate_conversation(request("What is 2+2?", None), &ctx)
+    let live = rehydrate(request("What is 2+2?", None), &ctx, None)
         .await
         .expect("rehydrate");
     let (id, items) = (live.response_id.clone(), live.new_input_items.len());

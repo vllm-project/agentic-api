@@ -2,7 +2,6 @@ use futures::StreamExt;
 
 use crate::executor::accumulator::Validation;
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::inference::UpstreamHeaders;
 use crate::executor::inference::{fetch_response_json, response_lines, send_request};
 use crate::executor::multi_agent::collaboration;
 use crate::executor::pipeline::AgentPipeline;
@@ -14,7 +13,6 @@ use crate::tool::{ToolRegistry, ToolSearchState};
 use crate::types::io::{InputItem, InputMessage, MultiAgentAction};
 use crate::types::request_response::{ResponsePayload, UpstreamTool};
 use crate::utils::common::serialize_to_string;
-#[cfg(test)]
 use std::sync::Arc;
 
 /// Snapshot tool facts at the orchestration boundary, excluding all execution bindings.
@@ -30,14 +28,7 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
         state.is_some_and(ToolSearchState::is_active),
     )
     .with_self_namespaced_functions(registry.hosted_deferred_functions())
-    .with_collaboration(
-        agent
-            .request
-            .enriched_request
-            .multi_agent
-            .as_ref()
-            .is_some_and(|config| config.enabled),
-    )
+    .with_collaboration(agent.request.enriched_request.multi_agent_enabled())
     .with_gateway_owned_names(
         registry
             .tool_classifications()
@@ -95,12 +86,7 @@ pub async fn upstream_request(
         }
         request.tools = request.tools.filter(|tools| !tools.is_empty());
     }
-    if ctx
-        .enriched_request
-        .multi_agent
-        .as_ref()
-        .is_some_and(|config| config.enabled)
-    {
+    if ctx.enriched_request.multi_agent_enabled() {
         let tools = request.tools.get_or_insert_with(Vec::new);
         for tool in tools.iter() {
             let UpstreamTool::Function(function) = tool;
@@ -126,16 +112,33 @@ pub async fn upstream_request(
     Ok(body)
 }
 
+/// The upstream body for the pipeline's next round, once its request is prepared. The future borrows the request
+/// and guidance, never the pipeline, so it stays `Send`.
+fn round_upstream_request<'a>(
+    agent: &'a AgentPipeline,
+    exec_ctx: &'a ExecutionContext,
+    registry: &'a ToolRegistry,
+    stream: bool,
+) -> ExecutorResult<impl Future<Output = ExecutorResult<String>> + 'a> {
+    agent.ensure_request_prepared()?;
+    let withheld = agent.builtin_tools_withheld().then_some(registry);
+    Ok(upstream_request(
+        exec_ctx,
+        &agent.request,
+        stream,
+        agent.agent_guidance(),
+        withheld,
+    ))
+}
+
 pub(super) async fn fetch_blocking_payload(
     agent: &mut AgentPipeline,
     exec_ctx: &ExecutionContext,
-    auth: Option<&UpstreamHeaders>,
     registry: &ToolRegistry,
     response_budget: Option<&ExecutorResponseBudget>,
 ) -> ExecutorResult<ResponsePayload> {
-    agent.ensure_request_prepared()?;
-    let withheld = agent.builtin_tools_withheld().then_some(registry);
-    let upstream_json = upstream_request(exec_ctx, &agent.request, false, agent.agent_guidance(), withheld).await?;
+    let upstream_json = round_upstream_request(agent, exec_ctx, registry, false)?.await?;
+    let auth = agent.upstream_headers().map(Arc::as_ref);
     let (body, _) = fetch_response_json(
         upstream_json,
         &exec_ctx.responses_url(),
@@ -168,7 +171,7 @@ pub async fn decode_upstream(
     ctx: RequestContext,
     body: UpstreamBody<'_>,
 ) -> ExecutorResult<(ResponsePayload, RequestContext)> {
-    let mut agent = AgentPipeline::new(ctx, None, StreamRelay::detached());
+    let mut agent = AgentPipeline::new(ctx, None, StreamRelay::detached(), None);
     let payload = match body {
         UpstreamBody::Json(body) => {
             agent.run_with_json_body(body, Validation::Strict, TranslationContext::default(), None)?
@@ -194,21 +197,19 @@ pub async fn decode_upstream(
 pub(super) async fn fetch_stream_payload(
     agent: &mut AgentPipeline,
     exec_ctx: &ExecutionContext,
-    auth: Option<&UpstreamHeaders>,
     registry: &ToolRegistry,
     output_offset: usize,
     response_budget: &ExecutorResponseBudget,
 ) -> ExecutorResult<ResponsePayload> {
-    agent.ensure_request_prepared()?;
-    let withheld = agent.builtin_tools_withheld().then_some(registry);
-    let upstream_json = upstream_request(exec_ctx, &agent.request, true, agent.agent_guidance(), withheld).await?;
+    let upstream_json = round_upstream_request(agent, exec_ctx, registry, true)?.await?;
+    let auth = agent.upstream_headers().cloned();
     // Keep sending lazy so the pipeline can cancel header waits at a steering boundary.
     let lines = async_stream::try_stream! {
         let resp = send_request(
             &exec_ctx.client,
             &exec_ctx.responses_url(),
             upstream_json,
-            auth,
+            auth.as_deref(),
             exec_ctx.streaming_timeout,
         ).await?;
         let lines = response_lines(resp, exec_ctx.streaming_timeout, exec_ctx.responses_config.max_upstream_sse_line_bytes);
@@ -302,7 +303,7 @@ pub(super) mod tests {
         // The registry takes the prepared catalog, as `build_tool_registry` does.
         let catalog = state.take_catalog().expect("prepared catalog");
         registry.attach_tool_search(catalog, state.synthetic_tool_search().cloned(), false, &[]);
-        let agent = AgentPipeline::new(request_context(), Some(state), StreamRelay::detached());
+        let agent = AgentPipeline::new(request_context(), Some(state), StreamRelay::detached(), None);
         let context = translation_context(&registry, &agent);
         drop(registry);
         assert_eq!(context.tool_type("raw_echo"), ToolType::Custom);
@@ -340,7 +341,7 @@ pub(super) mod tests {
         let registry = ToolRegistry::build_with_handlers(&mut declarations, &mut GatewayExecutors::default())
             .await
             .unwrap();
-        let mut agent = AgentPipeline::new(request, state, StreamRelay::detached());
+        let mut agent = AgentPipeline::new(request, state, StreamRelay::detached(), None);
         let stream_context = translation_context(&registry, &agent);
         let json_context = translation_context(&registry, &agent);
         drop(registry);
@@ -411,7 +412,7 @@ pub(super) mod tests {
         request.enriched_request.tool_choice = Some(ToolChoice::Required);
         let public_tools = serde_json::to_value(&request.enriched_request.tools).unwrap();
         let registry = ToolRegistry::from_tool_types(std::collections::HashMap::new());
-        let mut agent = AgentPipeline::new(request, None, StreamRelay::detached());
+        let mut agent = AgentPipeline::new(request, None, StreamRelay::detached(), None);
         // Preserve an inherited selector before relaxing the inference request.
         assert!(agent.request.original_request.tool_choice.is_none());
         agent.request.relax_tool_choice();
@@ -535,7 +536,7 @@ pub(super) mod tests {
         }
 
         let registry = ToolRegistry::from_tool_types(std::collections::HashMap::new());
-        let mut agent = AgentPipeline::new(request, None, StreamRelay::detached());
+        let mut agent = AgentPipeline::new(request, None, StreamRelay::detached(), None);
         let stream_context = translation_context(&registry, &agent);
         let json_context = translation_context(&registry, &agent);
         drop(registry);
@@ -683,28 +684,15 @@ pub(super) mod tests {
             request_context(),
             None,
             StreamRelay::client(sender, RelayLimits::default()),
+            None,
         );
-        let live = fetch_stream_payload(
-            &mut live_agent,
-            &exec_ctx,
-            None,
-            &registry,
-            0,
-            &ExecutorResponseBudget::new(),
-        )
-        .await
-        .unwrap();
-        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
-        let collected = fetch_stream_payload(
-            &mut agent,
-            &exec_ctx,
-            None,
-            &registry,
-            0,
-            &ExecutorResponseBudget::new(),
-        )
-        .await
-        .unwrap();
+        let live = fetch_stream_payload(&mut live_agent, &exec_ctx, &registry, 0, &ExecutorResponseBudget::new())
+            .await
+            .unwrap();
+        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached(), None);
+        let collected = fetch_stream_payload(&mut agent, &exec_ctx, &registry, 0, &ExecutorResponseBudget::new())
+            .await
+            .unwrap();
         server.abort();
         let mut live_payload = serde_json::to_value(live).unwrap();
         let mut collected_payload = serde_json::to_value(collected).unwrap();
@@ -757,17 +745,10 @@ pub(super) mod tests {
                 } else {
                     StreamRelay::detached()
                 };
-                let mut agent = AgentPipeline::new(request_context(), None, relay);
-                let error = fetch_stream_payload(
-                    &mut agent,
-                    &exec_ctx,
-                    None,
-                    &registry,
-                    0,
-                    &ExecutorResponseBudget::new(),
-                )
-                .await
-                .expect_err("translation must reject the stream");
+                let mut agent = AgentPipeline::new(request_context(), None, relay, None);
+                let error = fetch_stream_payload(&mut agent, &exec_ctx, &registry, 0, &ExecutorResponseBudget::new())
+                    .await
+                    .expect_err("translation must reject the stream");
                 assert!(error.to_string().contains(expected_error), "{error}");
                 errors.push(error.to_string());
             }
@@ -843,8 +824,8 @@ pub(super) mod tests {
         );
         let budget = ExecutorResponseBudget::with_limit(500 * 1024);
 
-        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
-        let error = fetch_stream_payload(&mut agent, &exec_ctx, None, &ToolRegistry::default(), 0, &budget)
+        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached(), None);
+        let error = fetch_stream_payload(&mut agent, &exec_ctx, &ToolRegistry::default(), 0, &budget)
             .await
             .expect_err("cumulative streamed response must be bounded");
         assert!(matches!(
@@ -956,32 +937,25 @@ pub(super) mod tests {
         // because wire bytes charged 1,048,582 bytes. Now it succeeds!
         let budget_1byte = ExecutorResponseBudget::with_limit(1024 * 1024);
         let (exec_ctx, server) = streaming_test_upstream(&events_1byte).await;
-        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
-        let result_1byte =
-            fetch_stream_payload(&mut agent, &exec_ctx, None, &ToolRegistry::default(), 0, &budget_1byte)
-                .await
-                .expect("1-byte chunks must succeed under 1 MiB budget");
+        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached(), None);
+        let result_1byte = fetch_stream_payload(&mut agent, &exec_ctx, &ToolRegistry::default(), 0, &budget_1byte)
+            .await
+            .expect("1-byte chunks must succeed under 1 MiB budget");
         server.abort();
 
         // 2. Stream with 1024-byte chunks
         let budget_1024byte = ExecutorResponseBudget::with_limit(1024 * 1024);
         let (exec_ctx, server) = streaming_test_upstream(&events_1024byte).await;
-        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
-        let result_1024byte = fetch_stream_payload(
-            &mut agent,
-            &exec_ctx,
-            None,
-            &ToolRegistry::default(),
-            0,
-            &budget_1024byte,
-        )
-        .await
-        .expect("1024-byte chunks must succeed");
+        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached(), None);
+        let result_1024byte =
+            fetch_stream_payload(&mut agent, &exec_ctx, &ToolRegistry::default(), 0, &budget_1024byte)
+                .await
+                .expect("1024-byte chunks must succeed");
         server.abort();
 
         // 3. JSON body
         let budget_json = ExecutorResponseBudget::with_limit(1024 * 1024);
-        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
+        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached(), None);
         let result_json = agent
             .run_with_json_body(
                 &json_response.to_string(),
@@ -1010,14 +984,14 @@ pub(super) mod tests {
         let (json_response, events) = synthetic_events(1000, 100);
         let budget = ExecutorResponseBudget::with_limit(1024 * 1024);
         let (exec_ctx, server) = streaming_test_upstream(&events).await;
-        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
-        let result = fetch_stream_payload(&mut agent, &exec_ctx, None, &ToolRegistry::default(), 0, &budget)
+        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached(), None);
+        let result = fetch_stream_payload(&mut agent, &exec_ctx, &ToolRegistry::default(), 0, &budget)
             .await
             .unwrap();
         server.abort();
 
         let budget_json = ExecutorResponseBudget::with_limit(1024 * 1024);
-        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
+        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached(), None);
         let _ = agent
             .run_with_json_body(
                 &json_response.to_string(),
@@ -1037,11 +1011,10 @@ pub(super) mod tests {
         let (exec_ctx, server) = streaming_test_upstream(&events).await;
         let (sender, mut receiver) = tokio::sync::mpsc::channel(128);
         let limits = RelayLimits::with_event_bytes(exec_ctx.responses_config.max_stream_event_bytes);
-        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::client(sender, limits));
+        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::client(sender, limits), None);
         let result = fetch_stream_payload(
             &mut agent,
             &exec_ctx,
-            None,
             &ToolRegistry::default(),
             0,
             &ExecutorResponseBudget::new(),
@@ -1098,8 +1071,8 @@ pub(super) mod tests {
         ];
         let (exec_ctx, server) = streaming_test_upstream(&events).await;
         let budget = ExecutorResponseBudget::with_limit(1024 * 1024);
-        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
-        let result = fetch_stream_payload(&mut agent, &exec_ctx, None, &ToolRegistry::default(), 0, &budget)
+        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached(), None);
+        let result = fetch_stream_payload(&mut agent, &exec_ctx, &ToolRegistry::default(), 0, &budget)
             .await
             .expect("lenient stream with done-only text should reconcile and succeed");
         server.abort();
@@ -1140,8 +1113,8 @@ pub(super) mod tests {
         ];
         let (exec_ctx, server) = streaming_test_upstream(&events).await;
         let budget = ExecutorResponseBudget::with_limit(4000);
-        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
-        let error = fetch_stream_payload(&mut agent, &exec_ctx, None, &ToolRegistry::default(), 0, &budget)
+        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached(), None);
+        let error = fetch_stream_payload(&mut agent, &exec_ctx, &ToolRegistry::default(), 0, &budget)
             .await
             .expect_err("stream exceeding budget on done payload must fail promptly");
         server.abort();
@@ -1209,8 +1182,8 @@ pub(super) mod tests {
         let events = two_part_stream_events(false);
         let (exec_ctx, server) = streaming_test_upstream(&events).await;
         let budget = ExecutorResponseBudget::with_limit(1024 * 1024);
-        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
-        let result = fetch_stream_payload(&mut agent, &exec_ctx, None, &ToolRegistry::default(), 0, &budget)
+        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached(), None);
+        let result = fetch_stream_payload(&mut agent, &exec_ctx, &ToolRegistry::default(), 0, &budget)
             .await
             .expect("two-part done-only stream must succeed");
         server.abort();
@@ -1227,11 +1200,10 @@ pub(super) mod tests {
         let delta_events = two_part_stream_events(true);
         let (exec_ctx_delta, server_delta) = streaming_test_upstream(&delta_events).await;
         let delta_budget = ExecutorResponseBudget::with_limit(1024 * 1024);
-        let mut agent_delta = AgentPipeline::new(request_context(), None, StreamRelay::detached());
+        let mut agent_delta = AgentPipeline::new(request_context(), None, StreamRelay::detached(), None);
         let result_delta = fetch_stream_payload(
             &mut agent_delta,
             &exec_ctx_delta,
-            None,
             &ToolRegistry::default(),
             0,
             &delta_budget,
@@ -1254,16 +1226,16 @@ pub(super) mod tests {
 
         // Round 1 consumes ~400 KiB
         let (exec_ctx, server) = streaming_test_upstream(&events).await;
-        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
-        let _ = fetch_stream_payload(&mut agent, &exec_ctx, None, &ToolRegistry::default(), 0, &budget)
+        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached(), None);
+        let _ = fetch_stream_payload(&mut agent, &exec_ctx, &ToolRegistry::default(), 0, &budget)
             .await
             .expect("round 1 must fit within budget");
         server.abort();
 
         // Round 2 tries to consume another ~400 KiB and must exceed the 500 KiB budget
         let (exec_ctx, server) = streaming_test_upstream(&events).await;
-        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
-        let error = fetch_stream_payload(&mut agent, &exec_ctx, None, &ToolRegistry::default(), 0, &budget)
+        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached(), None);
+        let error = fetch_stream_payload(&mut agent, &exec_ctx, &ToolRegistry::default(), 0, &budget)
             .await
             .expect_err("round 2 must exceed shared budget");
         assert!(matches!(
@@ -1307,11 +1279,10 @@ pub(super) mod tests {
         );
         exec_ctx.responses_config.max_upstream_sse_line_bytes = 500;
 
-        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
+        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached(), None);
         let error = fetch_stream_payload(
             &mut agent,
             &exec_ctx,
-            None,
             &ToolRegistry::default(),
             0,
             &ExecutorResponseBudget::new(),
@@ -1352,8 +1323,8 @@ pub(super) mod tests {
         );
         exec_ctx.responses_config.max_upstream_json_bytes = 1000;
 
-        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
-        let error = fetch_blocking_payload(&mut agent, &exec_ctx, None, &ToolRegistry::default(), None)
+        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached(), None);
+        let error = fetch_blocking_payload(&mut agent, &exec_ctx, &ToolRegistry::default(), None)
             .await
             .expect_err("body exceeding max_upstream_json_bytes must fail");
         assert!(matches!(

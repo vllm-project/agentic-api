@@ -1,11 +1,11 @@
 //! Request members the gateway recognizes but cannot honour are rejected at
 //! admission, before any upstream call or storage work, on every core entry
-//! point: the executor in both stream modes and `rehydrate_conversation`,
+//! point: the executor in both stream modes and `rehydrate`,
 //! which split execution and embedders call directly.
 
 use std::sync::Arc;
 
-use agentic_core::executor::{ExecuteRequest, ExecutorError, rehydrate_conversation};
+use agentic_core::executor::{ExecuteRequest, ExecutorError, rehydrate};
 use agentic_core::types::request_response::{JsonKind, RequestPayload, UnsupportedParameterError};
 use serde_json::{Value, json};
 
@@ -82,7 +82,7 @@ async fn rehydration_rejects_unsupported_members() {
     for (extra, expected) in cases() {
         let fixture = TestFixture::new_with_responses(Vec::new()).await;
 
-        let result = rehydrate_conversation(request(&extra), &fixture.exec_ctx).await;
+        let result = rehydrate(request(&extra), &fixture.exec_ctx, None).await;
 
         let Err(error) = result else {
             panic!("{extra} was admitted");

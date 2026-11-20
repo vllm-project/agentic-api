@@ -22,13 +22,11 @@ use crate::tool::{ToolSearchMetadata, ToolSearchState};
 use crate::types::io::OutputItem;
 use crate::types::io::output::McpListTools;
 use crate::types::request_response::ResponsePayload;
-use crate::types::tools::ResponsesTool;
 use crate::utils::common::serialize_to_value;
 use crate::utils::common::utcnow_str;
 use async_stream::stream;
 use futures::StreamExt;
 use producer::ProducerEvent;
-use std::num::NonZeroU64;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::Instrument as _;
@@ -72,17 +70,11 @@ pub(super) async fn run_stream(
         let (event_tx, event_rx) = mpsc::channel(STREAM_EVENT_BUFFER);
         let exec_ctx_for_run = Arc::clone(&exec_ctx);
         let relay = StreamRelay::client(event_tx, RelayLimits::with_event_bytes(options.max_event_bytes));
-        let mut agent = AgentPipeline::new(ctx, tool_search_state, relay);
+        let mut agent = AgentPipeline::new(ctx, tool_search_state, relay, auth.map(Arc::new));
         agent.control = control;
         agent.set_execution_clock(clock.clone());
         let run = async move {
-            let result = Box::pin(run_until_gateway_tools_complete(
-                &mut agent,
-                exec_ctx_for_run.as_ref(),
-                auth.as_ref(),
-                true,
-            ))
-            .await;
+            let result = Box::pin(run_until_gateway_tools_complete(&mut agent, exec_ctx_for_run.as_ref())).await;
             let (ctx, stream_accumulator) = agent.into_parts();
             (result.map(|(payload, metadata)| (payload, ctx, metadata)), stream_accumulator)
         };
@@ -267,73 +259,41 @@ async fn completed_stream_chunk(
     }
 }
 
-pub(super) struct StreamFailureContext {
-    response_id: String,
-    conversation_id: Option<String>,
-    model: String,
-    previous_response_id: Option<String>,
-    instructions: Option<String>,
-    max_tool_calls: Option<u64>,
-    /// The public declarations, stripped of credentials and discovery details, as every lifecycle frame echoes them.
-    tools: Option<Vec<ResponsesTool>>,
-    standard_fields: crate::types::request_response::StandardResponseFields,
-}
+/// The `response.failed` payload, built before the request context moves into the run; a failure sets its time and
+/// error.
+pub(super) struct StreamFailureContext(ResponsePayload);
 
 impl From<&RequestContext> for StreamFailureContext {
     fn from(ctx: &RequestContext) -> Self {
-        Self {
-            response_id: ctx.response_id.clone(),
-            conversation_id: ctx.conversation_id.clone(),
-            model: ctx.enriched_request.model.clone(),
-            previous_response_id: ctx.original_request.previous_response_id.clone(),
-            instructions: ctx.original_request.instructions.clone(),
-            max_tool_calls: ctx.max_tool_calls().map(NonZeroU64::get),
-            tools: ctx.original_request.tools.clone().map(|mut tools| {
-                for tool in &mut tools {
-                    tool.sanitize_for_persistence();
-                }
-                tools
-            }),
-            standard_fields: {
-                let mut fields = crate::types::request_response::StandardResponseFields::default();
-                fields.apply_request(&ctx.original_request);
-                fields
-            },
-        }
+        let mut payload = ctx.response_shell(ctx.enriched_request.model.clone(), "failed");
+        payload.instructions.clone_from(&ctx.original_request.instructions);
+        // The public declarations, stripped of credentials and discovery details, as every lifecycle frame echoes them.
+        payload.tools = ctx.original_request.tools.clone().map(|mut tools| {
+            for tool in &mut tools {
+                tool.sanitize_for_persistence();
+            }
+            tools
+        });
+        Self(payload)
     }
 }
 
 impl StreamFailureContext {
     pub(super) fn failed_payload(&self, error: &ExecutorError) -> ResponsePayload {
-        ResponsePayload {
-            id: self.response_id.clone(),
-            object: "response".to_owned(),
-            created_at: utcnow_str(),
-            model: self.model.clone(),
-            status: "failed".to_owned(),
-            output: Vec::new(),
-            usage: None,
-            incomplete_details: None,
-            error: Some({
-                let mut details = serde_json::json!({
-                    "message": error.error_message(),
-                    "type": error.error_type(),
-                    "code": error.error_code(),
-                });
-                if let Some(param) = error.error_param() {
-                    details["param"] = serde_json::json!(param);
-                }
-                details
-            }),
-            previous_response_id: self.previous_response_id.clone(),
-            conversation: self.conversation_id.clone(),
-            instructions: self.instructions.clone(),
-            max_tool_calls: self.max_tool_calls,
-            service_tier: None,
-            tools: self.tools.clone(),
-            tool_choice: None,
-            standard_fields: self.standard_fields.clone(),
-        }
+        let mut payload = self.0.clone();
+        payload.created_at = utcnow_str();
+        payload.error = Some({
+            let mut details = serde_json::json!({
+                "message": error.error_message(),
+                "type": error.error_type(),
+                "code": error.error_code(),
+            });
+            if let Some(param) = error.error_param() {
+                details["param"] = serde_json::json!(param);
+            }
+            details
+        });
+        payload
     }
 }
 

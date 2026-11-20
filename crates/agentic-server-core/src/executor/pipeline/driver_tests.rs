@@ -21,7 +21,7 @@ fn search_context() -> TranslationContext {
 #[tokio::test]
 async fn steering_wakes_an_idle_stream_at_a_completed_item_boundary() {
     let (sink, _events) = ResponseEventSink::channel(4096);
-    let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
+    let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached(), None);
     agent.steering = Some(sink.clone());
     let item = json!({"type":"function_call", "id":"fc_1", "call_id":"call_1", "name":"lookup",
         "arguments":"{}", "status":"completed"});
@@ -53,7 +53,7 @@ async fn steering_wakes_an_idle_stream_at_a_completed_item_boundary() {
 async fn steering_drains_all_open_items_before_dropping_the_upstream_body() {
     let (sink, _events) = ResponseEventSink::channel(4096);
     sink.request_steering_boundary();
-    let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
+    let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached(), None);
     agent.steering = Some(sink);
     let item = |index| {
         if index == 0 {
@@ -106,6 +106,7 @@ async fn live_delivery_applies_backpressure_and_disconnect_stops_input() {
         request_context(),
         None,
         StreamRelay::client(sender, RelayLimits::default()),
+        None,
     );
     let polled = AtomicUsize::new(0);
     let body = futures::stream::iter([
@@ -154,6 +155,7 @@ async fn gateway_sequence_and_lifecycle_survive_rounds_while_items_start_fresh()
         request_context(),
         None,
         StreamRelay::client(sender, RelayLimits::default()),
+        None,
     );
     let registry = ToolRegistry::default();
     for round in 0..2 {
@@ -205,7 +207,7 @@ async fn gateway_sequence_and_lifecycle_survive_rounds_while_items_start_fresh()
 async fn json_and_sse_preserve_the_same_terminal_metadata_and_request_ids() {
     for status in ["completed", "incomplete", "failed"] {
         let response = json!({"id":"upstream","status":status,"output":[],"error":{"code":"test","message":"detail"},"incomplete_details":{"reason":"max_output_tokens"},"usage":{"input_tokens":2,"output_tokens":3,"total_tokens":5}});
-        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
+        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached(), None);
         let mut from_json = serde_json::to_value(
             agent
                 .run_with_json_body(
@@ -244,7 +246,7 @@ async fn json_and_sse_preserve_the_same_terminal_metadata_and_request_ids() {
 #[test]
 fn json_preserves_nonterminal_status_and_strict_validation_rejects_it() {
     let body = r#"{"id":"upstream","status":"in_progress","output":[]}"#;
-    let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
+    let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached(), None);
     assert_eq!(
         agent
             .run_with_json_body(body, Validation::Lenient, TranslationContext::default(), None)
@@ -267,7 +269,7 @@ fn json_search_validation_precedes_lenient_item_loading() {
         json!({"type":"function_call","name":"tool_search","arguments":"{}","status":"completed"}),
         json!({"type":"function_call","id":"fc_1","call_id":"call_1","name":"hidden","arguments":"{}","status":"completed"}),
     ] {
-        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
+        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached(), None);
         let body = json!({"id":"upstream","status":"completed","output":[item]}).to_string();
         assert!(
             agent
@@ -286,7 +288,7 @@ fn json_search_projection_handles_completed_and_aborted_calls() {
             ("{\"query\":", "in_progress")
         };
         let body = json!({"id":"upstream","status":status,"output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"tool_search","arguments":arguments,"status":call_status}]}).to_string();
-        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
+        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached(), None);
         let payload = agent
             .run_with_json_body(&body, Validation::Lenient, search_context(), None)
             .unwrap();
@@ -321,7 +323,7 @@ fn prepared_search_state_survives_rounds_and_is_taken_once_for_persistence() {
     );
     request.enriched_request.parallel_tool_calls = Some(false);
     request.original_request = request.enriched_request.clone();
-    let unprepared = AgentPipeline::new(request, None, StreamRelay::detached());
+    let unprepared = AgentPipeline::new(request, None, StreamRelay::detached(), None);
     assert!(
         unprepared
             .ensure_request_prepared()
@@ -334,7 +336,7 @@ fn prepared_search_state_survives_rounds_and_is_taken_once_for_persistence() {
         serde_json::from_value(json!([{"type":"function","name":"weather","defer_loading":true}])).unwrap();
     let mut state = ToolSearchState::build_with_loaded_tools(&request.enriched_request, &loaded, false).unwrap();
     state.prepare_inference_request(&mut request.enriched_request).unwrap();
-    let mut agent = AgentPipeline::new(request, Some(state), StreamRelay::detached());
+    let mut agent = AgentPipeline::new(request, Some(state), StreamRelay::detached(), None);
     for _ in 0..2 {
         agent.ensure_request_prepared().unwrap();
         let state = agent.tool_search_state().expect("request keeps prepared search state");
