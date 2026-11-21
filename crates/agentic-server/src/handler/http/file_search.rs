@@ -181,7 +181,7 @@ fn multipart_error(failure: &MultipartError) -> Response {
 
 #[cfg_attr(feature = "openapi", utoipa::path(
     get, path = "/v1/files",
-    params(("limit" = Option<usize>, Query, description = "Page size, 1 to 100"), ("after" = Option<String>, Query), ("before" = Option<String>, Query), ("order" = Option<String>, Query)),
+    params(("limit" = Option<usize>, Query, description = "Page size, 1 to 100"), ("after" = Option<String>, Query), ("before" = Option<String>, Query), ("order" = Option<String>, Query), ("purpose" = Option<String>, Query, description = "Filter files by purpose")),
     responses((status = 200, description = "Success", body = agentic_core::types::file_search::ListResponse<agentic_core::types::file_search::FileObject>), (status = 400, description = "Invalid request", body = crate::openapi::ApiErrorResponse), (status = 404, description = "Object not found", body = crate::openapi::ApiErrorResponse)),
     security(("bearer_auth" = [])), tag = "file_search",
 ))]

@@ -251,7 +251,8 @@ client function happens to be named `file_search`.
 | Retrieve/detach a store file | `GET` / `DELETE /v1/vector_stores/{store_id}/files/{file_id}` |
 | Search a store | `POST /v1/vector_stores/{store_id}/search` |
 
-Lists accept `limit`, `after`, `before`, and `order`. Detaching a file preserves the
+Lists accept `limit`, `after`, `before`, and `order`; `GET /v1/files` additionally accepts
+`purpose` to return only files uploaded for that purpose. Detaching a file preserves the
 original upload. Deleting an upload removes its metadata, attachments, and chunks
 from all stores, then removes its local file bytes. Deleting a vector store
 preserves uploaded files.

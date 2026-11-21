@@ -157,7 +157,7 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                 "SELECT id FROM conversations LIMIT 0",
                 "SELECT id FROM items LIMIT 0",
                 "SELECT id FROM responses LIMIT 0",
-                "SELECT id, created_at, data, content_type, content_base64 FROM file_search_files LIMIT 0",
+                "SELECT id, created_at, data, content_type, content_base64, purpose FROM file_search_files LIMIT 0",
                 "SELECT file_id, owner_token, intent, lease_expires_at FROM file_search_blob_cleanup LIMIT 0",
                 "SELECT id, created_at, data, embedding_identity, embedding_dimensions FROM file_search_stores LIMIT 0",
                 "SELECT store_id, file_id, created_at, usage_bytes, storage_bytes, data FROM file_search_attachments LIMIT 0",
