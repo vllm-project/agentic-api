@@ -141,6 +141,15 @@ async fn open_round(
     }
 }
 
+/// A clean EOF without `message_stop` is a failure, not a completed turn.
+fn record_terminal_outcome(acc: &MessagesStreamAccumulator, execution: &mut ExecutionSpan) {
+    if acc.has_completed_round() {
+        execution.completed_with_stop_reason(acc.stop_reason());
+    } else {
+        execution.failed_with(FailureCategory::Stream);
+    }
+}
+
 /// The client-facing frame stream. `execution` lives inside it: every exit
 /// states the outcome before its last frame, and dropping the stream
 /// finalizes it as cancelled.
@@ -211,10 +220,10 @@ fn messages_stream_body(
                     break;
                 }
             }
-            // Release an upstream body that can remain open after its terminal,
-            // including before awaiting gateway tool execution for the next round.
+            // Release a body still open after its terminal before the next round.
             drop(response_stream);
-            stage.finish(None);
+            // Clean EOF without `message_stop` fails the stage like the execution.
+            stage.finish((!acc.has_completed_round()).then_some(FailureCategory::Stream));
             let (input_tokens, output_tokens) = acc.usage.round_tokens();
             exec_ctx.metrics.record_token_usage(Api::Messages, input_tokens, output_tokens);
 
@@ -230,7 +239,7 @@ fn messages_stream_body(
                         yield executor_error_sse(&error);
                         return;
                     }
-                    execution.completed_with_stop_reason(acc.stop_reason());
+                    record_terminal_outcome(&acc, &mut execution);
                     execution.delivered();
                     for (out, text) in acc.terminal_frames(decision) {
                         clock.client_event(text);
