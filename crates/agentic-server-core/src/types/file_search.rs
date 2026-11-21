@@ -3,7 +3,7 @@
 mod config;
 mod filter;
 mod id;
-pub use config::FileSearchConfig;
+pub use config::{FileSearchConfig, PgvectorConfig, PgvectorIndex};
 pub(crate) use id::cancelled_upload_error;
 pub use id::validate_file_id;
 

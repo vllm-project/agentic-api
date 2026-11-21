@@ -250,7 +250,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+        image: pgvector/pgvector:0.8.2-pg17-bookworm@sha256:e04af45eb526378554a24ed05b37d9ea56fd623feca9adf264d4f47d875c9a93
         env:
           POSTGRES_DB: agentic_api_test
           POSTGRES_PASSWORD: postgres
@@ -299,6 +299,18 @@ jobs:
 
       - name: Verify PostgreSQL file search persistence
         run: cargo test -p agentic-server-core --test file_search_service postgres_file_search -- --ignored --test-threads=1
+
+      - name: Verify PostgreSQL pgvector indexing and provider parity
+        run: |
+          cargo test -p agentic-server-core --lib postgres_pgvector_ -- --ignored --test-threads=1
+          cargo test -p agentic-server-core --test pgvector_repository -- --ignored --test-threads=1
+
+      - name: Verify pgvector HTTP search and citations with the official OpenAI client
+        run: |
+          cargo build -p agentic-server --bin agentic-server
+          python3 -m venv "${RUNNER_TEMP}/openai-pgvector-client"
+          "${RUNNER_TEMP}/openai-pgvector-client/bin/python" -m pip install --disable-pip-version-check openai==3.8.0
+          "${RUNNER_TEMP}/openai-pgvector-client/bin/python" scripts/tests/openai-file-search-client-test.py
 
       - name: Verify bounded PDF ingestion
         run: cargo test -p agentic-server-core --features file-search-pdf --test file_search_service pdf

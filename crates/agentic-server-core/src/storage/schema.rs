@@ -1,6 +1,7 @@
 //! Database schema management and migrations.
 
 mod outdated;
+pub(crate) mod pgvector;
 mod postgres;
 mod readiness;
 use outdated::recreate_or_reject_outdated;
