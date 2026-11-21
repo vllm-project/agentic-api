@@ -9,7 +9,7 @@ use tracing::debug;
 
 use agentic_core::executor::telemetry::Api;
 use agentic_core::executor::{
-    ExecutorError, MessagesRequestContext, MessagesUpstream, ParsedMessagesRequest, declares_native_web_fetch,
+    ExecutorError, MessagesRequestContext, MessagesUpstream, ParsedMessagesRequest, declares_gateway_native_web_fetch,
     may_carry_gateway_server_tool_blocks, normalize_native_server_tools_for_upstream, replay_server_tool_blocks,
     run_messages_loop, run_messages_stream,
 };
@@ -71,7 +71,8 @@ async fn execute_messages(
     // ownership (incl. configured aliases like Claude Code's `WebSearch`) is
     // resolved against the operator-configured map.
     let gateway_map = &state.exec_ctx.messages_gateway_tools;
-    let mut tools = registry_tools(ctx.tools(), gateway_map);
+    let upstream_tools = &state.exec_ctx.messages_upstream_server_tools;
+    let mut tools = registry_tools(ctx.tools(), gateway_map, upstream_tools);
     let mut executors = state.exec_ctx.gateway_executors.clone();
     let registry = match ToolRegistry::build_with_handlers(&mut tools, &mut executors).await {
         Ok(r) => r,
@@ -130,7 +131,11 @@ pub async fn messages(State(state): State<AppState>, request: Request) -> Respon
         return error.into();
     }
 
-    match ParsedMessagesRequest::parse_for_gateway(&bytes, &state.exec_ctx.messages_gateway_tools) {
+    match ParsedMessagesRequest::parse_for_gateway(
+        &bytes,
+        &state.exec_ctx.messages_gateway_tools,
+        &state.exec_ctx.messages_upstream_server_tools,
+    ) {
         Ok(Some(parsed)) if parsed.is_thread() => {
             let forwarded = upstream_request_headers(&parts.headers, &state.proxy_state.config, ProxyAuth::Anthropic);
             let principal = parts.extensions.get::<AuthenticatedPrincipal>();
@@ -166,7 +171,7 @@ pub async fn messages(State(state): State<AppState>, request: Request) -> Respon
                     return (status, axum::Json(error.into_body())).into_response();
                 }
             };
-            let ctx = match prepared.into_context() {
+            let ctx = match prepared.into_context(&state.exec_ctx.messages_upstream_server_tools) {
                 Ok(ctx) => ctx,
                 Err(error) => return messages_error_response(error),
             };
@@ -195,7 +200,7 @@ pub async fn messages(State(state): State<AppState>, request: Request) -> Respon
                 stream = parsed.stream(),
                 "routing HTTP messages request"
             );
-            let ctx = match MessagesRequestContext::new(parsed) {
+            let ctx = match MessagesRequestContext::new(parsed, &state.exec_ctx.messages_upstream_server_tools) {
                 Ok(ctx) => ctx,
                 Err(error) => return messages_error_response(error),
             };
@@ -275,14 +280,15 @@ pub async fn count_tokens(State(state): State<AppState>, request: Request) -> Re
         // The executors own the availability policy: a disabled executor
         // refuses the declaration here too, so counting tokens and sending the
         // request answer alike.
-        if declares_native_web_fetch(&request_json)
+        let upstream_tools = &state.exec_ctx.messages_upstream_server_tools;
+        if declares_gateway_native_web_fetch(&request_json, upstream_tools)
             && let Err(error) = state.exec_ctx.gateway_executors.require_web_fetch()
         {
             return messages_error_response(ExecutorError::from(error));
         }
         // Count what the upstream would receive: rewritten native declarations
         // and the rounds behind earlier gateway server tool blocks.
-        let normalized = match normalize_native_server_tools_for_upstream(&mut request_json) {
+        let normalized = match normalize_native_server_tools_for_upstream(&mut request_json, upstream_tools) {
             Ok(normalized) => normalized,
             Err(error) => return messages_error_response(error),
         };

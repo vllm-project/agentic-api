@@ -20,7 +20,7 @@ use agentic_core::storage::{ConversationStore, ResponseStore};
 use agentic_core::tool::registry_tools;
 use agentic_core::tool::{ToolRegistry, WebSearchHandler};
 use agentic_core::types::messages::tool_seam::NATIVE_WEB_SEARCH_VERSIONS;
-use agentic_core::types::messages::{GatewayToolMap, ToolParam};
+use agentic_core::types::messages::{GatewayToolMap, ToolParam, UpstreamServerTools};
 use axum::extract::State;
 use axum::http::Uri;
 use axum::response::{IntoResponse, Response};
@@ -88,7 +88,11 @@ async fn streamed_text_is_live_and_cancellation_before_terminal_never_dispatches
         let exec_ctx = build_exec_ctx(&url, &search_url).await;
         let request = case.request(true);
         let tools = serde_json::from_value(request["tools"].clone()).unwrap();
-        let mut declarations = registry_tools(Some(&tools), &GatewayToolMap::default());
+        let mut declarations = registry_tools(
+            Some(&tools),
+            &GatewayToolMap::default(),
+            &UpstreamServerTools::default(),
+        );
         let mut executors = exec_ctx.gateway_executors.clone();
         let registry = Arc::new(
             ToolRegistry::build_with_handlers(&mut declarations, &mut executors)
@@ -135,14 +139,7 @@ async fn streamed_round_decisions_preserve_execution_history_and_terminal_policy
         let (search_url, captured, _s) = spawn_recording_search().await;
         let exec_ctx = build_exec_ctx(&vllm_url, &search_url).await;
         let request = case.request(true);
-        let tools = serde_json::from_value(request["tools"].clone()).unwrap();
-        let mut declarations = registry_tools(Some(&tools), &GatewayToolMap::default());
-        let mut executors = exec_ctx.gateway_executors.clone();
-        let registry = Arc::new(
-            ToolRegistry::build_with_handlers(&mut declarations, &mut executors)
-                .await
-                .unwrap(),
-        );
+        let registry = registry_for(&request, &exec_ctx).await;
         let sse = run_test_messages_stream(request, registry, Arc::clone(&exec_ctx))
             .await
             .collect::<Vec<_>>()
@@ -373,6 +370,23 @@ async fn build_exec_ctx(vllm_url: &str, search_url: &str) -> Arc<ExecutionContex
     )
 }
 
+/// Build the tool registry for a request's declarations with the default
+/// upstream-server-tool policy; shared by the multi-case streaming tests.
+async fn registry_for(request: &Value, exec_ctx: &ExecutionContext) -> Arc<ToolRegistry> {
+    let tools: Vec<ToolParam> = serde_json::from_value(request["tools"].clone()).unwrap();
+    let mut declarations = registry_tools(
+        Some(&tools),
+        &GatewayToolMap::default(),
+        &UpstreamServerTools::default(),
+    );
+    let mut executors = exec_ctx.gateway_executors.clone();
+    Arc::new(
+        ToolRegistry::build_with_handlers(&mut declarations, &mut executors)
+            .await
+            .unwrap(),
+    )
+}
+
 async fn run_test_messages_stream(
     request: Value,
     registry: Arc<ToolRegistry>,
@@ -419,7 +433,11 @@ async fn assert_messages_stream_presents_one_message(streams: Vec<String>) -> St
             "input_schema": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}]
     });
     let tools: Vec<ToolParam> = serde_json::from_value(request["tools"].clone()).unwrap();
-    let mut registry_tool_params = registry_tools(Some(&tools), &GatewayToolMap::default());
+    let mut registry_tool_params = registry_tools(
+        Some(&tools),
+        &GatewayToolMap::default(),
+        &UpstreamServerTools::default(),
+    );
     let mut gateway_executors = exec_ctx.gateway_executors.clone();
     let registry = Arc::new(
         ToolRegistry::build_with_handlers(&mut registry_tool_params, &mut gateway_executors)
@@ -508,7 +526,11 @@ async fn messages_stream_preserves_error_event_after_gateway_tool_round() {
         "tools": [{"name": "web_search", "description": "s", "input_schema": {"type": "object"}}]
     });
     let tools: Vec<ToolParam> = serde_json::from_value(request["tools"].clone()).unwrap();
-    let mut registry_tool_params = registry_tools(Some(&tools), &GatewayToolMap::default());
+    let mut registry_tool_params = registry_tools(
+        Some(&tools),
+        &GatewayToolMap::default(),
+        &UpstreamServerTools::default(),
+    );
     let mut gateway_executors = exec_ctx.gateway_executors.clone();
     let registry = Arc::new(
         ToolRegistry::build_with_handlers(&mut registry_tool_params, &mut gateway_executors)
@@ -544,7 +566,11 @@ async fn messages_stream_forwards_upstream_sse_error_and_stops() {
         "tools": [{"name": "web_search", "description": "s", "input_schema": {"type": "object"}}]
     });
     let tools: Vec<ToolParam> = serde_json::from_value(request["tools"].clone()).unwrap();
-    let mut registry_tool_params = registry_tools(Some(&tools), &GatewayToolMap::default());
+    let mut registry_tool_params = registry_tools(
+        Some(&tools),
+        &GatewayToolMap::default(),
+        &UpstreamServerTools::default(),
+    );
     let mut gateway_executors = exec_ctx.gateway_executors.clone();
     let registry = Arc::new(
         ToolRegistry::build_with_handlers(&mut registry_tool_params, &mut gateway_executors)
@@ -597,7 +623,11 @@ async fn messages_stream_hides_a_gateway_call_on_a_terminal_round() {
         "tools": [{"type": "web_search_20250305", "name": "web_search"}]
     });
     let tools: Vec<ToolParam> = serde_json::from_value(request["tools"].clone()).unwrap();
-    let mut params = registry_tools(Some(&tools), &GatewayToolMap::default());
+    let mut params = registry_tools(
+        Some(&tools),
+        &GatewayToolMap::default(),
+        &UpstreamServerTools::default(),
+    );
     let mut executors = exec_ctx.gateway_executors.clone();
     let registry = Arc::new(
         ToolRegistry::build_with_handlers(&mut params, &mut executors)
@@ -695,7 +725,11 @@ async fn every_native_web_search_version_streams_as_the_basic_search() {
                 "tools": [tool]
             });
             let tools: Vec<ToolParam> = serde_json::from_value(request["tools"].clone()).unwrap();
-            let mut params = registry_tools(Some(&tools), &GatewayToolMap::default());
+            let mut params = registry_tools(
+                Some(&tools),
+                &GatewayToolMap::default(),
+                &UpstreamServerTools::default(),
+            );
             let mut executors = exec_ctx.gateway_executors.clone();
             let registry = Arc::new(
                 ToolRegistry::build_with_handlers(&mut params, &mut executors)
@@ -814,7 +848,11 @@ async fn streamed_search_outcomes(
         request["tools"][0]["max_uses"] = max_uses.into();
     }
     let tools: Vec<ToolParam> = serde_json::from_value(request["tools"].clone()).unwrap();
-    let mut params = registry_tools(Some(&tools), &GatewayToolMap::default());
+    let mut params = registry_tools(
+        Some(&tools),
+        &GatewayToolMap::default(),
+        &UpstreamServerTools::default(),
+    );
     let mut executors = exec_ctx.gateway_executors.clone();
     let registry = Arc::new(
         ToolRegistry::build_with_handlers(&mut params, &mut executors)
@@ -972,7 +1010,11 @@ async fn messages_stream_multiround_single_lifecycle() {
             "input_schema": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}]
     });
     let tools: Vec<ToolParam> = serde_json::from_value(request["tools"].clone()).unwrap();
-    let mut registry_tool_params = registry_tools(Some(&tools), &GatewayToolMap::default());
+    let mut registry_tool_params = registry_tools(
+        Some(&tools),
+        &GatewayToolMap::default(),
+        &UpstreamServerTools::default(),
+    );
     let mut gateway_executors = exec_ctx.gateway_executors.clone();
     let registry = Arc::new(
         ToolRegistry::build_with_handlers(&mut registry_tool_params, &mut gateway_executors)
@@ -1066,7 +1108,11 @@ async fn messages_stream_preserves_multi_block_system_across_rounds() {
             "input_schema": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}]
     });
     let tools: Vec<ToolParam> = serde_json::from_value(request["tools"].clone()).unwrap();
-    let mut registry_tool_params = registry_tools(Some(&tools), &GatewayToolMap::default());
+    let mut registry_tool_params = registry_tools(
+        Some(&tools),
+        &GatewayToolMap::default(),
+        &UpstreamServerTools::default(),
+    );
     let mut gateway_executors = exec_ctx.gateway_executors.clone();
     let registry = Arc::new(
         ToolRegistry::build_with_handlers(&mut registry_tool_params, &mut gateway_executors)
@@ -1111,7 +1157,11 @@ async fn messages_stream_preserves_claude_code_cache_control_across_rounds() {
     let original_user_message = request["messages"][0].clone();
     let original_tools = request["tools"].clone();
     let tools: Vec<ToolParam> = serde_json::from_value(original_tools.clone()).unwrap();
-    let mut registry_tool_params = registry_tools(Some(&tools), &exec_ctx.messages_gateway_tools);
+    let mut registry_tool_params = registry_tools(
+        Some(&tools),
+        &exec_ctx.messages_gateway_tools,
+        &exec_ctx.messages_upstream_server_tools,
+    );
     let mut gateway_executors = exec_ctx.gateway_executors.clone();
     let registry = Arc::new(
         ToolRegistry::build_with_handlers(&mut registry_tool_params, &mut gateway_executors)
@@ -1217,7 +1267,11 @@ async fn assert_failed_stream(streams: Vec<String>, expected_searches: usize, ex
         "tools":[{"name":"web_search", "input_schema":{"type":"object"}}]
     });
     let tools: Vec<ToolParam> = serde_json::from_value(request["tools"].clone()).unwrap();
-    let mut params = registry_tools(Some(&tools), &GatewayToolMap::default());
+    let mut params = registry_tools(
+        Some(&tools),
+        &GatewayToolMap::default(),
+        &UpstreamServerTools::default(),
+    );
     let mut handlers = exec_ctx.gateway_executors.clone();
     let registry = Arc::new(
         ToolRegistry::build_with_handlers(&mut params, &mut handlers)

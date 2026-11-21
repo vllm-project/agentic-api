@@ -16,7 +16,8 @@ use crate::executor::messages_server_tools::sealing::MessagesResultKey;
 use crate::executor::messages_threads::{MessagesThreadTurn, ThreadRetention};
 use crate::types::messages::request::MessagesToolDeclarations;
 use crate::types::messages::{
-    GatewayToolMap, GatewayToolResult, MessagesRequest, MessagesToolChoice, ToolParam, has_gateway_tool,
+    GatewayToolMap, GatewayToolResult, MessagesRequest, MessagesToolChoice, ToolParam, UpstreamServerTools,
+    has_gateway_tool,
 };
 use crate::utils::common::serialize_to_string;
 
@@ -49,13 +50,19 @@ impl ParsedMessagesRequest {
     ///
     /// # Errors
     /// Returns the parse error if a thread or gateway-tool request fails validation.
-    pub fn parse_for_gateway(body: &[u8], gateway_map: &GatewayToolMap) -> ExecutorResult<Option<Self>> {
+    pub fn parse_for_gateway(
+        body: &[u8],
+        gateway_map: &GatewayToolMap,
+        upstream: &UpstreamServerTools,
+    ) -> ExecutorResult<Option<Self>> {
         match Self::parse(body) {
-            Ok(parsed) => Ok((parsed.is_thread() || has_gateway_tool(parsed.tools(), gateway_map)).then_some(parsed)),
+            Ok(parsed) => {
+                Ok((parsed.is_thread() || has_gateway_tool(parsed.tools(), gateway_map, upstream)).then_some(parsed))
+            }
             Err(error) => {
                 let declares_gateway_tool =
                     serde_json::from_slice::<MessagesToolDeclarations>(body).is_ok_and(|request| {
-                        request.thread.is_some() || has_gateway_tool(request.tools.as_ref(), gateway_map)
+                        request.thread.is_some() || has_gateway_tool(request.tools.as_ref(), gateway_map, upstream)
                     });
                 if declares_gateway_tool { Err(error) } else { Ok(None) }
             }
@@ -192,8 +199,8 @@ impl MessagesRequestContext {
     /// Returns [`ExecutorError::JsonError`] if `body` is not valid JSON, or
     /// [`ExecutorError::InvalidRequest`] if it carries an unsupported or invalid
     /// native web search or web fetch declaration.
-    pub fn new(parsed: ParsedMessagesRequest) -> ExecutorResult<Self> {
-        Self::from_parts(parsed.typed, parsed.raw)
+    pub fn new(parsed: ParsedMessagesRequest, upstream: &UpstreamServerTools) -> ExecutorResult<Self> {
+        Self::from_parts(parsed.typed, parsed.raw, upstream)
     }
 
     /// Build the context from a raw JSON body alone, deriving the typed view
@@ -209,15 +216,15 @@ impl MessagesRequestContext {
     pub fn from_value(raw: Value) -> ExecutorResult<Self> {
         // Deserializing from the parsed tree avoids re-lexing the body text.
         let typed = MessagesRequest::deserialize(&raw).map_err(ExecutorError::JsonError)?;
-        Self::from_parts(typed, raw)
+        Self::from_parts(typed, raw, &UpstreamServerTools::default())
     }
 
-    fn from_parts(mut typed: MessagesRequest, mut raw: Value) -> ExecutorResult<Self> {
-        let budgets = normalize_native_server_tools(&mut raw)?;
+    fn from_parts(mut typed: MessagesRequest, mut raw: Value, upstream: &UpstreamServerTools) -> ExecutorResult<Self> {
+        let budgets = normalize_native_server_tools(&mut raw, upstream)?;
         Ok(Self {
             thread: None,
             tool_choice: typed.tool_choice.take(),
-            native: NativeServerTools::from_declarations(typed.tools.as_ref()),
+            native: NativeServerTools::from_declarations(typed.tools.as_ref(), upstream),
             typed: typed.into(),
             raw,
             budgets,
@@ -659,7 +666,7 @@ mod tests {
     fn parsed_request_builds_both_context_views_from_the_same_input() {
         let body = serde_json::to_vec(&request()).unwrap();
         let parsed = ParsedMessagesRequest::parse(&body).unwrap();
-        let ctx = MessagesRequestContext::new(parsed).unwrap();
+        let ctx = MessagesRequestContext::new(parsed, &UpstreamServerTools::default()).unwrap();
 
         assert_eq!(ctx.model(), "qwen3");
         assert_eq!(ctx.raw["messages"][0]["content"], "hi");
@@ -681,7 +688,7 @@ mod tests {
                 "tool_choice":{"type":"tool"}
             }))
             .unwrap();
-            let parsed = ParsedMessagesRequest::parse_for_gateway(&body, &map);
+            let parsed = ParsedMessagesRequest::parse_for_gateway(&body, &map, &UpstreamServerTools::default());
             if name == "client_echo" {
                 assert!(parsed.unwrap().is_none(), "proxy requests retain upstream validation");
             } else {
@@ -788,7 +795,8 @@ mod thread_routing_regressions {
         assert!(
             ParsedMessagesRequest::parse_for_gateway(
                 &serde_json::to_vec(&request).unwrap(),
-                &GatewayToolMap::default()
+                &GatewayToolMap::default(),
+                &UpstreamServerTools::default()
             )
             .unwrap()
             .is_none()
@@ -797,7 +805,8 @@ mod thread_routing_regressions {
         assert!(
             ParsedMessagesRequest::parse_for_gateway(
                 &serde_json::to_vec(&request).unwrap(),
-                &GatewayToolMap::default()
+                &GatewayToolMap::default(),
+                &UpstreamServerTools::default()
             )
             .is_err()
         );
@@ -813,10 +822,11 @@ mod thread_routing_regressions {
             let parsed = ParsedMessagesRequest::parse_for_gateway(
                 &serde_json::to_vec(&request).unwrap(),
                 &GatewayToolMap::default(),
+                &UpstreamServerTools::default(),
             )
             .unwrap()
             .unwrap();
-            let ctx = MessagesRequestContext::new(parsed).unwrap();
+            let ctx = MessagesRequestContext::new(parsed, &UpstreamServerTools::default()).unwrap();
             assert_eq!(ctx.raw["context_management"], request["context_management"]);
         }
     }

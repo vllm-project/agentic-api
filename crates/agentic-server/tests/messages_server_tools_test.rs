@@ -4,11 +4,13 @@
 #[allow(dead_code)]
 mod common;
 
+use std::fmt::Write as _;
 use std::sync::{Arc, Mutex};
 
 use agentic_core::executor::{ConversationHandler, ExecutionContext, MessagesResultKey, ResponseHandler};
 use agentic_core::storage::{ConversationStore, ResponseStore};
 use agentic_core::tool::WebSearchHandler;
+use agentic_core::types::messages::{GatewayToolMap, UpstreamServerTools};
 use axum::extract::{OriginalUri, State};
 use axum::http::Uri;
 use axum::response::IntoResponse;
@@ -16,6 +18,7 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use http::StatusCode;
 use serde_json::{Value, json};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::net::TcpListener;
 
 /// The scripted upstream, its token counter, and the search backend.
@@ -24,11 +27,17 @@ struct Backend {
     turns: Arc<Mutex<Vec<Value>>>,
     /// `(path, body)` of every inference and token-count request.
     requests: Arc<Mutex<Vec<(String, Value)>>>,
+    /// How often the gateway search provider was called.
+    search_hits: Arc<AtomicUsize>,
 }
 
 impl Backend {
     fn requests(&self) -> Vec<(String, Value)> {
         self.requests.lock().unwrap().clone()
+    }
+
+    fn search_hits(&self) -> usize {
+        self.search_hits.load(Ordering::Relaxed)
     }
 
     fn script(&self, turns: Vec<Value>) {
@@ -41,21 +50,30 @@ async fn upstream(
     State(backend): State<Backend>,
     OriginalUri(uri): OriginalUri,
     Json(body): Json<Value>,
-) -> impl IntoResponse {
+) -> axum::response::Response {
     let path = uri.path().to_owned();
+    let streaming = body.get("stream").and_then(Value::as_bool) == Some(true);
     let inference = {
         let mut requests = backend.requests.lock().unwrap();
         requests.push((path.clone(), body));
         requests.iter().filter(|(path, _)| path == "/v1/messages").count()
     };
     if path.ends_with("/count_tokens") {
-        return Json(json!({"input_tokens": 42}));
+        return Json(json!({"input_tokens": 42})).into_response();
     }
     let turn = backend.turns.lock().unwrap().get(inference - 1).cloned();
-    Json(turn.unwrap_or_else(|| json!({"type": "error", "error": {"type": "api_error", "message": "exhausted"}})))
+    let turn = turn.unwrap_or_else(|| json!({"type": "error", "error": {"type": "api_error", "message": "exhausted"}}));
+    if streaming {
+        return axum::response::Response::builder()
+            .header(http::header::CONTENT_TYPE, "text/event-stream")
+            .body(axum::body::Body::from(server_tool_sse(&turn)))
+            .unwrap();
+    }
+    Json(turn).into_response()
 }
 
-async fn search(uri: Uri) -> impl IntoResponse {
+async fn search(State(backend): State<Backend>, uri: Uri) -> impl IntoResponse {
+    backend.search_hits.fetch_add(1, Ordering::Relaxed);
     let query = url::form_urlencoded::parse(uri.query().unwrap_or_default().as_bytes())
         .find(|(key, _)| key == "query")
         .map(|(_, value)| value.into_owned())
@@ -64,6 +82,59 @@ async fn search(uri: Uri) -> impl IntoResponse {
         json!({"results": {"web": [{"url": format!("https://example.com/{query}"), "title": "Result",
         "description": "the page text"}]}}),
     )
+}
+
+/// A single-message Anthropic stream for the JSON `turn` a scripted upstream
+/// would answer: every content block verbatim, then its terminal.
+fn server_tool_sse(turn: &Value) -> String {
+    let mut out = String::new();
+    out.push_str("event: message_start\ndata: ");
+    out.push_str(
+        &json!({
+            "type": "message_start",
+            "message": {"id": turn["id"], "type": "message", "role": "assistant",
+                        "content": [], "model": "test-model", "stop_reason": null,
+                        "usage": {"input_tokens": 5, "output_tokens": 1}}
+        })
+        .to_string(),
+    );
+    out.push_str("\n\n");
+    for (index, block) in turn["content"].as_array().unwrap().iter().enumerate() {
+        let start = if block["type"] == "text" {
+            json!({"type": "content_block_start", "index": index,
+                   "content_block": {"type": "text", "text": ""}})
+        } else {
+            json!({"type": "content_block_start", "index": index, "content_block": block})
+        };
+        out.push_str("data: ");
+        out.push_str(&start.to_string());
+        out.push_str("\n\n");
+        let delta = if block["type"] == "text" {
+            json!({"type": "content_block_delta", "index": index,
+                   "delta": {"type": "text_delta", "text": block["text"].as_str().unwrap_or("")}})
+        } else {
+            json!({"type": "content_block_delta", "index": index,
+                   "delta": {"type": "input_json_delta", "partial_json": ""}})
+        };
+        out.push_str("data: ");
+        out.push_str(&delta.to_string());
+        out.push_str("\n\n");
+        writeln!(out, "data: {}\n", json!({"type": "content_block_stop", "index": index})).unwrap();
+    }
+    out.push_str("data: ");
+    out.push_str(
+        &json!({
+            "type": "message_delta",
+            "delta": {"stop_reason": turn["stop_reason"], "stop_sequence": Value::Null},
+            "usage": {"output_tokens": 3}
+        })
+        .to_string(),
+    );
+    out.push_str("\n\n");
+    out.push_str("data: ");
+    out.push_str(&json!({"type": "message_stop"}).to_string());
+    out.push_str("\n\n");
+    out
 }
 
 fn assistant(content: &[Value], stop_reason: &str) -> Value {
@@ -77,6 +148,12 @@ struct Gateway {
 }
 
 async fn gateway() -> Gateway {
+    gateway_with(None, &GatewayToolMap::default()).await
+}
+
+/// A gateway whose upstream runs `upstream_types` itself, with `aliases` as
+/// the operator alias map.
+async fn gateway_with(upstream_types: Option<&str>, aliases: &GatewayToolMap) -> Gateway {
     let backend = Backend::default();
     let app = Router::new()
         .route("/v1/messages", post(upstream))
@@ -88,22 +165,30 @@ async fn gateway() -> Gateway {
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
 
     let config = common::test_config(&backend_url);
-    let mut state = common::test_state(&config);
+    let state = common::test_state(&config);
     let client = Arc::new(reqwest::Client::new());
-    state.exec_ctx = Arc::new(
-        ExecutionContext::new(
-            ConversationHandler::new(ConversationStore::disabled()),
-            ResponseHandler::new(ResponseStore::disabled()),
-            Arc::clone(&client),
-            backend_url.clone(),
-        )
-        .with_gateway_executor(Arc::new(WebSearchHandler::with_api_key(
-            client,
-            "local-key".to_owned(),
-            &backend_url,
-        )))
-        .with_messages_result_key(MessagesResultKey::from_secret(b"an operator secret of thirty-two+ bytes").unwrap()),
-    );
+    let exec_ctx = ExecutionContext::new(
+        ConversationHandler::new(ConversationStore::disabled()),
+        ResponseHandler::new(ResponseStore::disabled()),
+        Arc::clone(&client),
+        backend_url.clone(),
+    )
+    .with_gateway_executor(Arc::new(WebSearchHandler::with_api_key(
+        client,
+        "local-key".to_owned(),
+        &backend_url,
+    )))
+    .with_messages_result_key(MessagesResultKey::from_secret(b"an operator secret of thirty-two+ bytes").unwrap());
+    let mut state = state;
+    state.exec_ctx = Arc::new({
+        let mut ctx = exec_ctx;
+        ctx.messages_gateway_tools = aliases.clone();
+        ctx.messages_upstream_server_tools = match upstream_types {
+            Some(raw) => UpstreamServerTools::parse(raw).unwrap(),
+            None => UpstreamServerTools::default(),
+        };
+        ctx
+    });
     let (url, _server) = common::spawn_gateway(state).await;
     Gateway { url, backend }
 }
@@ -250,4 +335,173 @@ async fn altered_server_tool_content_is_refused_on_every_path() {
             "{path}: nothing reached the upstream"
         );
     }
+}
+
+/// The blocks an upstream running web search itself returns, with its own id.
+fn upstream_search_blocks() -> Vec<Value> {
+    vec![
+        json!({"type": "server_tool_use", "id": "srvtoolu_01real", "name": "web_search",
+               "input": {"query": "rust"}}),
+        json!({"type": "web_search_tool_result", "tool_use_id": "srvtoolu_01real", "content": [
+            {"type": "web_search_result", "url": "https://example.com/rust", "title": "Rust",
+             "encrypted_content": "the upstream keeps this"}]}),
+    ]
+}
+
+async fn post_raw(url: &str, body: &Value) -> (StatusCode, String, String) {
+    let response = reqwest::Client::new().post(url).json(body).send().await.unwrap();
+    let status = response.status();
+    let content_type = response
+        .headers()
+        .get(http::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default()
+        .to_owned();
+    (status, content_type, response.text().await.unwrap())
+}
+
+#[tokio::test]
+async fn upstream_run_native_search_passes_through_unchanged_without_the_provider() {
+    let gateway = gateway_with(Some("web_search_20250305"), &GatewayToolMap::default()).await;
+    let mut blocks = upstream_search_blocks();
+    blocks.push(json!({"type": "text", "text": "Answer."}));
+    gateway.backend.script(vec![assistant(&blocks, "end_turn")]);
+
+    let request = json!({"model": "test-model", "max_tokens": 64,
+        "messages": [{"role": "user", "content": "Search."}],
+        "tools": [native_search()]});
+    let (status, message) = post_json(&format!("{}/v1/messages", gateway.url), &request).await;
+    assert_eq!(status, StatusCode::OK, "{message}");
+    assert_eq!(message["content"], Value::Array(blocks.clone()));
+    assert_eq!(message["stop_reason"], "end_turn");
+
+    let recorded = gateway.backend.requests();
+    assert_eq!(recorded.len(), 1, "one transparent inference, no gateway loop");
+    let (path, sent) = &recorded[0];
+    assert_eq!(path, "/v1/messages");
+    assert_eq!(sent["tools"][0], native_search(), "the declaration is not rewritten");
+    assert_eq!(sent["messages"], request["messages"], "the body is otherwise untouched");
+    assert_eq!(gateway.backend.search_hits(), 0, "the gateway provider never ran");
+
+    // count_tokens applies the same decision.
+    gateway.backend.script(Vec::new());
+    let (status, counted) = post_json(&format!("{}/v1/messages/count_tokens", gateway.url), &request).await;
+    assert_eq!((status, counted), (StatusCode::OK, json!({"input_tokens": 42})));
+    let (_, counted_body) = &gateway.backend.requests()[0];
+    assert_eq!(counted_body["tools"][0], native_search());
+
+    // A follow-up returning the upstream's blocks forwards them unchanged too.
+    let mut next = request.clone();
+    next["messages"] = json!([
+        {"role": "user", "content": "Search."},
+        {"role": "assistant", "content": blocks},
+        {"role": "user", "content": "And?"}
+    ]);
+    gateway
+        .backend
+        .script(vec![assistant(&[json!({"type": "text", "text": "More."})], "end_turn")]);
+    let (status, message) = post_json(&format!("{}/v1/messages", gateway.url), &next).await;
+    assert_eq!(status, StatusCode::OK, "{message}");
+    assert_eq!(message["content"], json!([{"type": "text", "text": "More."}]));
+    let (_, sent) = gateway.backend.requests()[0].clone();
+    assert_eq!(
+        sent["messages"], next["messages"],
+        "upstream blocks round-trip verbatim"
+    );
+    assert!(!sent.to_string().contains("srvtoolu_gw_"));
+    assert_eq!(gateway.backend.search_hits(), 0);
+}
+
+#[tokio::test]
+async fn upstream_run_native_search_streams_through_unchanged() {
+    let gateway = gateway_with(Some("web_search_20250305"), &GatewayToolMap::default()).await;
+    let mut blocks = upstream_search_blocks();
+    blocks.push(json!({"type": "text", "text": "Answer."}));
+    gateway.backend.script(vec![assistant(&blocks, "end_turn")]);
+
+    let request = json!({"model": "test-model", "max_tokens": 64, "stream": true,
+        "messages": [{"role": "user", "content": "Search."}],
+        "tools": [native_search()]});
+    let (status, content_type, body) = post_raw(&format!("{}/v1/messages", gateway.url), &request).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(content_type.contains("text/event-stream"), "{content_type}");
+    assert!(body.contains("srvtoolu_01real"), "{body}");
+    assert!(body.contains("web_search_tool_result"), "{body}");
+    assert!(body.contains("the upstream keeps this"));
+    assert_eq!(gateway.backend.search_hits(), 0);
+}
+
+#[tokio::test]
+async fn mixed_owners_run_only_the_gateway_call_and_replay_only_its_blocks() {
+    let aliases = GatewayToolMap::from_pairs([("Search", "web_search")]);
+    let gateway = gateway_with(Some("web_search_20250305"), &aliases).await;
+    let upstream_blocks = upstream_search_blocks();
+    let alias_call = json!({"type": "tool_use", "id": "toolu_g", "name": "Search",
+                            "input": {"query": "rust"}});
+    let mut first_turn = upstream_blocks.clone();
+    first_turn.push(alias_call.clone());
+    gateway.backend.script(vec![
+        assistant(&first_turn, "tool_use"),
+        assistant(&[json!({"type": "text", "text": "Done."})], "end_turn"),
+    ]);
+
+    let request = json!({"model": "test-model", "max_tokens": 64,
+        "messages": [{"role": "user", "content": "Search twice."}],
+        "tools": [native_search(),
+                  {"name": "Search", "description": "gateway search",
+                   "input_schema": {"type": "object", "properties": {}}}]});
+    let (status, message) = post_json(&format!("{}/v1/messages", gateway.url), &request).await;
+    assert_eq!(status, StatusCode::OK, "{message}");
+    let types: Vec<&str> = message["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|block| block["type"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        types,
+        ["server_tool_use", "web_search_tool_result", "text"],
+        "the upstream blocks show; the gateway alias call stays hidden"
+    );
+    assert_eq!(message["content"][0]["id"], "srvtoolu_01real");
+    assert_eq!(gateway.backend.search_hits(), 1, "only the alias call ran the provider");
+
+    let recorded = gateway.backend.requests();
+    assert_eq!(recorded.len(), 2, "the gateway loop ran one continuation round");
+    assert_eq!(
+        recorded[0].1["tools"][0],
+        native_search(),
+        "upstream declaration forwarded"
+    );
+    assert_eq!(recorded[0].1["tools"][1]["name"], "Search");
+    let round_two = &recorded[1].1["messages"];
+    assert_eq!(
+        round_two[1]["content"],
+        Value::Array(first_turn.clone()),
+        "the continuation keeps the upstream blocks and the gateway tool_use"
+    );
+    assert_eq!(round_two[2]["content"][0]["tool_use_id"], "toolu_g");
+    assert!(
+        !round_two.to_string().contains("srvtoolu_gw_"),
+        "the alias call was never shown, so it is not replayed"
+    );
+
+    // A later turn carries only what the client saw: the upstream blocks,
+    // proxied verbatim because they carry the upstream's id.
+    let mut follow_up = request.clone();
+    follow_up["messages"] = json!([
+        {"role": "user", "content": "Search twice."},
+        {"role": "assistant", "content": message["content"].clone()},
+        {"role": "user", "content": "Thanks."}
+    ]);
+    follow_up.as_object_mut().unwrap().remove("tools");
+    gateway.backend.script(vec![assistant(
+        &[json!({"type": "text", "text": "Welcome."})],
+        "end_turn",
+    )]);
+    let (status, _) = post_json(&format!("{}/v1/messages", gateway.url), &follow_up).await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, sent) = gateway.backend.requests()[0].clone();
+    assert_eq!(sent["messages"], follow_up["messages"]);
+    assert_eq!(gateway.backend.search_hits(), 1, "no provider call on the follow-up");
 }

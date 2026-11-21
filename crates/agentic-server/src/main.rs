@@ -488,6 +488,7 @@ fn build_config(llm_api_base: String, common: &CommonArgs, file: &FileConfig) ->
             mcp_servers: file.mcp_servers.clone(),
             mcp_allowed_hosts,
             messages_gateway_tool_aliases: file.messages_gateway.tool_aliases.clone(),
+            messages_upstream_server_tools: file.messages_gateway.upstream_server_tools.clone(),
             code_interpreter,
             max_concurrent_gateway_calls,
         },
@@ -529,6 +530,7 @@ fn generated_file_config(llm_api_base: String) -> FileConfig {
         code_interpreter: CodeInterpreterFileConfig::default(),
         messages_gateway: MessagesGatewayFileConfig {
             tool_aliases: environment_value("MESSAGES_GATEWAY_TOOL_ALIASES"),
+            upstream_server_tools: environment_value("MESSAGES_UPSTREAM_SERVER_TOOLS"),
         },
         responses: generated_responses_file_config(),
         mcp_servers: HashMap::new(),

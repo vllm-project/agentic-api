@@ -80,6 +80,19 @@ impl GatewayExecutor for RecordedTool {
 }
 
 /// `expected_usage` is the sum of both recorded rounds (part of #315).
+async fn registry_for(expected: &Value, ctx: &ExecutionContext) -> ToolRegistry {
+    let params: Vec<ToolParam> = serde_json::from_value(expected["tools"].clone()).unwrap();
+    let mut tools = registry_tools(
+        Some(&params),
+        &ctx.messages_gateway_tools,
+        &ctx.messages_upstream_server_tools,
+    );
+    let mut executors = ctx.gateway_executors.clone();
+    ToolRegistry::build_with_handlers(&mut tools, &mut executors)
+        .await
+        .unwrap()
+}
+
 async fn replay(path: &str, streaming: bool, expected_usage: Value) {
     let raw =
         std::fs::read_to_string(path).unwrap_or_else(|error| panic!("real recording required at {path}: {error}"));
@@ -137,11 +150,7 @@ async fn replay(path: &str, streaming: bool, expected_usage: Value) {
                 )
                 .with_gateway_executor(Arc::clone(&tool)),
             );
-            let params: Vec<ToolParam> = serde_json::from_value(expected[0]["tools"].clone()).unwrap();
-            let mut tools = registry_tools(Some(&params), &ctx.messages_gateway_tools);
-            let registry = ToolRegistry::build_with_handlers(&mut tools, &mut ctx.gateway_executors.clone())
-                .await
-                .unwrap();
+            let registry = registry_for(&expected[0], &ctx).await;
             let upstream = MessagesUpstream::new(&ctx.llm_base_url, None, http::HeaderMap::new());
             if streaming {
                 let request = MessagesRequestContext::from_value(expected[0].clone()).unwrap();

@@ -32,7 +32,7 @@ use agentic_core::executor::{
 use agentic_core::storage::{ConversationStore, ResponseStore};
 use agentic_core::tool::registry_tools;
 use agentic_core::tool::{GatewayExecutorRegistration, ToolRegistry, WebFetchHandler};
-use agentic_core::types::messages::GatewayToolMap;
+use agentic_core::types::messages::{GatewayToolMap, UpstreamServerTools};
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
@@ -353,7 +353,7 @@ fn normalized(value: &Value, live_origin: &str) -> Value {
 }
 
 async fn registry(harness: &Harness, ctx: &MessagesRequestContext) -> ToolRegistry {
-    let mut tools = registry_tools(ctx.tools(), &GatewayToolMap::default());
+    let mut tools = registry_tools(ctx.tools(), &GatewayToolMap::default(), &UpstreamServerTools::default());
     let mut executors = harness.exec_ctx.gateway_executors.clone();
     ToolRegistry::build_with_handlers(&mut tools, &mut executors)
         .await

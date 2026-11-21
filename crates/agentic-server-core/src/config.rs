@@ -518,6 +518,10 @@ pub struct ToolRuntimeConfig {
     pub mcp_servers: HashMap<String, McpServerEntry>,
     pub mcp_allowed_hosts: Vec<String>,
     pub messages_gateway_tool_aliases: Option<String>,
+    /// Native server-tool `type`s the upstream endpoint runs itself, as a
+    /// comma-separated list (e.g. `web_search_20250305`); `None` runs every
+    /// supported native server tool in the gateway.
+    pub messages_upstream_server_tools: Option<String>,
     /// Operator-only limits for the opt-in code interpreter. A default config
     /// is disabled and does not make the tool available.
     pub code_interpreter: CodeInterpreterRuntimeConfig,
@@ -539,6 +543,7 @@ impl Default for ToolRuntimeConfig {
             mcp_servers: HashMap::default(),
             mcp_allowed_hosts: Vec::default(),
             messages_gateway_tool_aliases: None,
+            messages_upstream_server_tools: None,
             code_interpreter: CodeInterpreterRuntimeConfig::default(),
             max_concurrent_gateway_calls: DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS,
         }

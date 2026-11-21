@@ -214,7 +214,11 @@ fn request(messages: &Value, tools: &Value, stream: bool) -> Value {
 }
 
 async fn registry(harness: &Harness, ctx: &MessagesRequestContext) -> ToolRegistry {
-    let mut tools = registry_tools(ctx.tools(), &harness.exec_ctx.messages_gateway_tools);
+    let mut tools = registry_tools(
+        ctx.tools(),
+        &harness.exec_ctx.messages_gateway_tools,
+        &harness.exec_ctx.messages_upstream_server_tools,
+    );
     let mut executors = harness.exec_ctx.gateway_executors.clone();
     ToolRegistry::build_with_handlers(&mut tools, &mut executors)
         .await

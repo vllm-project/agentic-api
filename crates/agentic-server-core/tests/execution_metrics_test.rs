@@ -709,7 +709,11 @@ async fn messages_web_fetch_is_a_web_fetch_tool_stage() {
         "tools": [{"type": "web_fetch_20250910", "name": "web_fetch"}]
     }))
     .unwrap();
-    let mut params = agentic_core::tool::registry_tools(ctx.tools(), &exec_ctx.messages_gateway_tools);
+    let mut params = agentic_core::tool::registry_tools(
+        ctx.tools(),
+        &exec_ctx.messages_gateway_tools,
+        &exec_ctx.messages_upstream_server_tools,
+    );
     let mut executors = exec_ctx.gateway_executors.clone();
     let registry = ToolRegistry::build_with_handlers(&mut params, &mut executors)
         .await

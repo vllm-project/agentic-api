@@ -39,7 +39,8 @@ pub use error::{ExecutorError, ExecutorResult, ResourceLimit};
 pub use messages_context::{MessagesRequestContext, ParsedMessagesRequest};
 pub use messages_loop::{MessagesResponse, MessagesUpstream, run_messages_loop};
 pub use messages_request::{
-    declares_native_web_fetch, normalize_native_server_tools_for_upstream, normalize_native_web_search_for_upstream,
+    declares_gateway_native_web_fetch, normalize_native_server_tools_for_upstream,
+    normalize_native_web_search_for_upstream,
 };
 pub use messages_server_tools::may_carry_gateway_server_tool_blocks;
 pub use messages_server_tools::replay::replay_server_tool_blocks;

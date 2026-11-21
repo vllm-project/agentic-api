@@ -251,7 +251,11 @@ async fn build_exec_ctx(vllm_url: &str, search_url: &str) -> ExecutionContext {
 }
 
 async fn build_tool_registry(tools: &Vec<ToolParam>, exec_ctx: &ExecutionContext) -> ToolRegistry {
-    let mut registry_tool_params = registry_tools(Some(tools), &exec_ctx.messages_gateway_tools);
+    let mut registry_tool_params = registry_tools(
+        Some(tools),
+        &exec_ctx.messages_gateway_tools,
+        &exec_ctx.messages_upstream_server_tools,
+    );
     let mut gateway_executors = exec_ctx.gateway_executors.clone();
     ToolRegistry::build_with_handlers(&mut registry_tool_params, &mut gateway_executors)
         .await
