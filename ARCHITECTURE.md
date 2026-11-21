@@ -2052,7 +2052,9 @@ What a continuation sees, and therefore what each turn's list holds, follows Ope
   was running at the time does not restore them.
 - **Conversations.** A conversation turn stores the history it started from plus its own items, appended at commit
   after whatever the conversation holds then. A turn that answers a pending call, or runs with multi-agent enabled,
-  must still continue the latest turn, and is refused with `conversation_locked` otherwise.
+  must still continue the latest turn, and is refused with `conversation_locked` otherwise. The conversation's items
+  come before the turn's input, so an input item the conversation already holds is refused before inference as a
+  duplicate input item.
 
 Evidence for each rule lives in the OpenAI and gateway cassettes (`compaction/`, `responses/`, `conversations/`). A
 change to what is persisted needs the same: record OpenAI with the recorder, then the gateway, and assert both.
