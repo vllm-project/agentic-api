@@ -135,3 +135,9 @@ text validation, missing files, and the request body limit. Existing
 cassettes remain unchanged; new captured cassettes require the recorder workflow.
 Run focused tests, the full workspace suite, Clippy, formatting, OpenAPI checks, and
 all pre-commit hooks before publishing a PR.
+
+## Conversation memory prototype
+
+The opt-in [conversation memory prototype](conversation-memory.md) reuses this
+service for summary/transcript ingestion and owner-filtered recall. It is a library
+prototype; it does not yet enable automatic memory on Responses requests.

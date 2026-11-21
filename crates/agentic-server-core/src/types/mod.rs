@@ -4,6 +4,7 @@ pub mod conversations;
 pub mod event;
 pub mod file_search;
 pub mod io;
+pub mod memory;
 pub mod messages;
 pub mod model_capabilities;
 mod parameters;

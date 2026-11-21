@@ -15,6 +15,7 @@ pub mod file_search;
 pub mod function;
 pub mod handler;
 pub mod mcp;
+pub mod memory;
 pub mod normalize;
 pub mod ownership;
 pub mod registry;

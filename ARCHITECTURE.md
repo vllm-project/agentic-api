@@ -2108,6 +2108,13 @@ new piece of data goes by who reads it:
 
 ### `tool/` — the tool framework
 
+`tool/memory/` provides an opt-in library prototype for summary/transcript storage,
+owner-scoped recall, and forgetting over `FileSearchService`. Its contracts live in
+`types/memory.rs`. It adds no automatic request-path hooks or new storage schema.
+See [conversation memory](docs/design/conversation-memory.md) for the tested scope
+and the proposed production integration.
+
+
 Wire shapes for tool declarations live in `types::tools` (see above); this module owns
 the behavioral layer — routing, handler traits, normalization, and execution.
 
