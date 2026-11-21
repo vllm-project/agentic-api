@@ -220,10 +220,10 @@ fn messages_stream_body(
                     break;
                 }
             }
-            // Release an upstream body that can remain open after its terminal,
-            // including before awaiting gateway tool execution for the next round.
+            // Release a body still open after its terminal before the next round.
             drop(response_stream);
-            stage.finish(None);
+            // Clean EOF without `message_stop` fails the stage like the execution.
+            stage.finish((!acc.has_completed_round()).then_some(FailureCategory::Stream));
             let (input_tokens, output_tokens) = acc.usage.round_tokens();
             exec_ctx.metrics.record_token_usage(Api::Messages, input_tokens, output_tokens);
 
