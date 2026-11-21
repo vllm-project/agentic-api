@@ -1875,7 +1875,11 @@ final round alone. A streamed round counts its `message_start.usage` overlaid by
 pass through from the final round, a single-round turn is returned unchanged, and a final
 round that omits `usage` still reports the hidden rounds' counters. `usage.server_tool_use`
 adds the gateway's successful native searches (one per query) and fetches to the counters
-the upstream reported.
+the upstream reported. When a JSON turn ends in an upstream error or round-budget
+exhaustion, the error body's `usage` carries the counters observed up to that point
+(committed rounds plus the failing round) as a partial total; no terminal round is
+fabricated and no counter absent everywhere is invented. The error envelope itself marks
+the turn incomplete, so the partial total needs no extra wire field.
 
 `modes/messages_threads.rs` owns local Anthropic message-thread admission, rehydration,
 exclusive continuation reservations, and bounded durable checkpoints.
