@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use agentic_core::executor::request::RequestContext;
 use agentic_core::executor::{ExecuteRequest, UpstreamBody, decode_upstream};
+use agentic_core::storage::ResponseStore;
 use agentic_core::types::io::InOutItem;
 use agentic_core::types::io::{InputItem, OutputItem, ResponsesInput, ShellCall, ShellCallStatus};
 use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
@@ -251,15 +252,10 @@ async fn client_shell_continuation_blocking_and_streaming() {
                 .iter()
                 .any(|item| item["type"] == "shell_call" || item["type"] == "shell_call_output")
         );
-        let mut stored_context = context();
-        stored_context.original_request.previous_response_id = Some(final_response.id.clone());
-        let (_, stored) = fixture
-            .exec_ctx
-            .resp_handler
-            .rehydrate(&stored_context)
+        let (_, stored) = ResponseStore::new(Arc::clone(&fixture.pool))
+            .rehydrate(&final_response.id)
             .await
-            .unwrap()
-            .expect("previous response");
+            .unwrap();
         assert!(
             stored
                 .iter()
@@ -307,15 +303,8 @@ async fn submitted_shell_items_preserve_public_fields_in_storage() {
             ctx.conversation_id = Some(id);
             fixture.exec_ctx.conv_handler.rehydrate(&ctx).await.unwrap().items
         } else {
-            ctx.original_request.previous_response_id = Some(response.id);
-            fixture
-                .exec_ctx
-                .resp_handler
-                .rehydrate(&ctx)
-                .await
-                .unwrap()
-                .expect("previous response")
-                .1
+            let store = ResponseStore::new(Arc::clone(&fixture.pool));
+            store.rehydrate(&response.id).await.unwrap().1
         };
         let inputs = stored
             .iter()

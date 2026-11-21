@@ -10,6 +10,7 @@ use agentic_core::executor::{ExecutionContext, execute};
 use agentic_core::storage::ConversationStore;
 use agentic_core::types::conversations::ConversationMetadata;
 use agentic_core::types::io::InOutItem;
+use agentic_core::types::request_response::RequestPayload;
 use serde_json::{Value, json};
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -692,4 +693,159 @@ async fn test_store_false_with_conversation_id_hydrates_without_persisting() {
             t2.request.body.input.as_str().expect("text cassette input")
         ]
     );
+}
+
+fn weather_tools() -> Value {
+    json!([{"type": "function", "name": "get_weather", "parameters": {"type": "object", "properties": {}}}])
+}
+
+fn weather_output() -> Value {
+    json!({"type": "function_call_output", "call_id": "call_weather", "output": "sunny"})
+}
+
+/// Sends `request` with the `get_weather` tool. Returns what the client receives and how many inference requests the
+/// turn made.
+async fn weather_turn(fixture: &TestFixture, mut request: RequestPayload) -> (Value, usize) {
+    request.tools = Some(serde_json::from_value(weather_tools()).expect("function tool"));
+    let before = fixture.request_bodies().await.len();
+    let outcome = match execute(request, Arc::clone(&fixture.exec_ctx)).await {
+        Err(error) => {
+            let status = error.http_status().as_u16();
+            let body: Value = serde_json::from_slice(&error.into_response_body()).expect("error body");
+            json!({"status": status, "body": body})
+        }
+        Ok(either::Either::Left(payload)) => json!({"status": 200, "id": payload.id, "output": payload.output}),
+        Ok(either::Either::Right(mut events)) => {
+            let mut types = Vec::new();
+            while let Some(chunk) = futures::StreamExt::next(&mut events).await {
+                types.extend(support::streamed_sse_event(&chunk).map(|event| event["type"].clone()));
+            }
+            json!({"status": 200, "events": types})
+        }
+    };
+    (outcome, fixture.request_bodies().await.len() - before)
+}
+
+/// Runs a stored first turn, in the conversation when one is given, in which the model calls `get_weather`. Returns
+/// the response's ID and the client's own history after the turn, as the function-calling guide keeps it: the user
+/// message, then the output.
+async fn awaiting_weather(fixture: &TestFixture, conversation_id: Option<&str>) -> (String, Vec<Value>) {
+    let user = json!({"role": "user", "content": "What is the weather?"});
+    let request = make_request(
+        vec![user.clone()],
+        true,
+        false,
+        None,
+        conversation_id.map(str::to_owned),
+    );
+    let (outcome, _) = weather_turn(fixture, request).await;
+    assert_eq!(outcome["output"][0]["id"], "fc_weather", "{outcome}");
+    let mut history = vec![user];
+    history.extend(outcome["output"].as_array().expect("output array").iter().cloned());
+    (outcome["id"].as_str().expect("response id").to_owned(), history)
+}
+
+/// A model that calls `get_weather`, then answers with its result.
+async fn weather_fixture() -> TestFixture {
+    TestFixture::new_with_responses(vec![
+        function_call_response("fc_weather", "call_weather", "get_weather", "{}"),
+        text_response("sunny"),
+    ])
+    .await
+}
+
+/// `OpenAI`'s refusal of an input that holds the item `fc_weather` twice.
+fn duplicate_weather_call() -> Value {
+    json!({"status": 400, "body": {"error": {
+        "message": "Duplicate item found with id fc_weather. Remove duplicate items from your input and try again.",
+        "type": "invalid_request_error",
+        "code": null,
+        "param": "input"
+    }}})
+}
+
+/// The function-calling guide's loop (`input_list += response.output`, then the tool output) used with `conversation`
+/// resends the function call the conversation already holds. `OpenAI` prepends the conversation's items to the input,
+/// so a stored turn holds the call twice and is refused before inference. The conversation stays usable.
+#[tokio::test]
+async fn stored_conversation_turn_resending_a_stored_item_is_refused_before_inference() {
+    for stream in [false, true] {
+        let fixture = weather_fixture().await;
+        let conversation_id = create_conversation(&fixture.exec_ctx).await;
+        let (_, mut input) = awaiting_weather(&fixture, Some(&conversation_id)).await;
+        let store_view = ConversationStore::new(Arc::clone(&fixture.pool));
+        let stored = store_view.rehydrate(&conversation_id).await.expect("rehydrate").items;
+        input.push(weather_output());
+
+        let request = make_request(input, true, stream, None, Some(conversation_id.clone()));
+        let (outcome, inference_requests) = weather_turn(&fixture, request).await;
+        assert_eq!(outcome, duplicate_weather_call(), "stream={stream}");
+        assert_eq!(inference_requests, 0, "stream={stream}");
+        assert_eq!(
+            store_view.rehydrate(&conversation_id).await.expect("rehydrate").items,
+            stored,
+            "stream={stream}"
+        );
+
+        // Sending only the new item, as the conversation-state guide does, completes the turn.
+        let request = make_request(vec![weather_output()], true, false, None, Some(conversation_id));
+        let (outcome, _) = weather_turn(&fixture, request).await;
+        assert_eq!(
+            outcome["output"][0]["content"][0]["text"], "sunny",
+            "stream={stream}: {outcome}"
+        );
+    }
+}
+
+/// `OpenAI` accepts the same resend with `store: false`: the turn runs, and the conversation is unchanged.
+#[tokio::test]
+async fn unstored_conversation_turn_resending_a_stored_item_is_accepted() {
+    let fixture = weather_fixture().await;
+    let conversation_id = create_conversation(&fixture.exec_ctx).await;
+    let (_, mut input) = awaiting_weather(&fixture, Some(&conversation_id)).await;
+    let store_view = ConversationStore::new(Arc::clone(&fixture.pool));
+    let stored = store_view.rehydrate(&conversation_id).await.expect("rehydrate").items;
+    input.push(weather_output());
+
+    let request = make_request(input, false, false, None, Some(conversation_id.clone()));
+    let (outcome, inference_requests) = weather_turn(&fixture, request).await;
+    assert_eq!(outcome["output"][0]["content"][0]["text"], "sunny", "{outcome}");
+    assert_eq!(inference_requests, 1);
+    assert_eq!(
+        store_view.rehydrate(&conversation_id).await.expect("rehydrate").items,
+        stored
+    );
+}
+
+/// The same loop with `previous_response_id`: the parent's history holds the call, so a stored turn is refused before
+/// inference, as on `OpenAI`, instead of storing the call twice. The response stays continuable.
+#[tokio::test]
+async fn stored_response_turn_resending_a_stored_item_is_refused_before_inference() {
+    let fixture = weather_fixture().await;
+    let (response_id, mut input) = awaiting_weather(&fixture, None).await;
+    input.push(weather_output());
+
+    let request = make_request(input, true, false, Some(response_id.clone()), None);
+    let (outcome, inference_requests) = weather_turn(&fixture, request).await;
+    assert_eq!(outcome, duplicate_weather_call());
+    assert_eq!(inference_requests, 0);
+
+    let request = make_request(vec![weather_output()], true, false, Some(response_id), None);
+    let (outcome, _) = weather_turn(&fixture, request).await;
+    assert_eq!(outcome["output"][0]["content"][0]["text"], "sunny", "{outcome}");
+}
+
+/// Only the conversation's own items repeat in its input: items stored in another conversation are accepted.
+#[tokio::test]
+async fn conversation_turn_accepts_items_stored_in_another_conversation() {
+    let fixture = weather_fixture().await;
+    let first = create_conversation(&fixture.exec_ctx).await;
+    let (_, mut input) = awaiting_weather(&fixture, Some(&first)).await;
+    input.push(weather_output());
+    let other = create_conversation(&fixture.exec_ctx).await;
+
+    let (outcome, inference_requests) =
+        weather_turn(&fixture, make_request(input, true, false, None, Some(other))).await;
+    assert_eq!(outcome["output"][0]["content"][0]["text"], "sunny", "{outcome}");
+    assert_eq!(inference_requests, 1);
 }

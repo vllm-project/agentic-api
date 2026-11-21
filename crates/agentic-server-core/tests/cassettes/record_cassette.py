@@ -1340,6 +1340,28 @@ def run_items(
             _item_request(client, proxy_url, "GET", f"/v1/responses/{response_id}/input_items",
                           params={"order": "asc"}, expected_status=None)
             _item_request(client, proxy_url, "GET", seed_items, params={"order": "asc"})
+        # The function-calling guide's loop (`input_list += response.output`, then the tool output) resends the
+        # call the continued history already holds: once per history source, stored and not. A conversation's
+        # items are listed after the resend.
+        user = {"role": "user", "content": "What's the weather in Paris?"}
+        for source, store in (("conversation", True), ("conversation", False),
+                              ("previous_response_id", True), ("previous_response_id", False)):
+            reference = {"conversation": _create_conversation(client, proxy_url)} if source == "conversation" else {}
+            first = _item_request(client, proxy_url, "POST", "/v1/responses", body={
+                "model": model, "input": [user], "tools": [WEATHER_TOOL], "tool_choice": "required",
+                "store": True, "stream": False, **reference})
+            calls = [item for item in first.get("output", []) if item.get("type") == "function_call"]
+            if not calls:
+                raise RuntimeError(f"{source}: expected a get_weather call, got {first}")
+            if source == "previous_response_id":
+                reference = {"previous_response_id": first["id"]}
+            output = {"type": "function_call_output", "call_id": calls[0]["call_id"], "output": "sunny"}
+            _item_request(client, proxy_url, "POST", "/v1/responses", expected_status=None, body={
+                "model": model, "input": [user, calls[0], output], "tools": [WEATHER_TOOL],
+                "store": store, "stream": False, **reference})
+            if source == "conversation":
+                _item_request(client, proxy_url, "GET", f"/v1/conversations/{reference['conversation']}/items",
+                              params={"order": "asc"})
         return
     if scenario == "item-id-prefixes":
         conversation = _create_conversation(client, proxy_url)
@@ -3565,7 +3587,7 @@ def main(
                           16 if items_scenario == "response-pagination" else
                           23 if items_scenario == "response-edge-cases" else
                           23 if items_scenario == "response-conversation" else
-                          14 if items_scenario == "response-replayed-items" else
+                          26 if items_scenario == "response-replayed-items" else
                           48 if items_scenario == "response-tool-items" else
                           17 if items_scenario == "response-call-ids" else
                           10 if items_scenario == "pagination" else

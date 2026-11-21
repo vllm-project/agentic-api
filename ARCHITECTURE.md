@@ -1988,7 +1988,8 @@ for the five-minute lifetime, serialized-size budget, and crash recovery rules.
   typed function per operation, taking and returning `InOutItem` and storage types rather
   than rows (`create`, `get`, `rehydrate`, `persist`, and the item CRUD).
   `ResponseStore::get` decodes `ResponseData` at the store boundary; handlers and executor callers receive the
-  typed value. Split commit reuses a checkpoint or loads only this parent row when its wire context omitted it.
+  typed value. Split commit reuses a checkpoint or, when its wire context omitted it, rehydrates the parent and
+  resolves the turn's input against it.
   Conversation `rehydrate` is one query; response `rehydrate` reads the response row and then its
   history items. Conversation `persist` locks the conversation and appends the turn after whatever it holds
   then, as OpenAI does. A turn that answers the history's pending call fails with `conversation_locked` when another
@@ -2043,7 +2044,9 @@ What a continuation sees, and therefore what each turn's list holds, follows Ope
   stored, except the user messages its window keeps. A stored compaction sent back stays history, and the stored
   window starts at it.
 - **Items sent back by ID.** A client item that names a stored item takes the stored item's content, not what the
-  client sent, and each occurrence gets its own history row, so a repeated public ID keeps every position.
+  client sent, and each occurrence gets its own history row, so a repeated public ID keeps every position. A stored
+  turn may not resend an item the conversation or response chain it continues already holds: it gets the error for an
+  ID repeated in its input, before inference. An unstored turn is not checked.
 - **Deletion.** Deleting a response removes its rows from every descendant's `history_item_ids`, and a turn that
   was running at the time does not restore them.
 - **Conversations.** A conversation turn stores the history it started from plus its own items, appended at commit

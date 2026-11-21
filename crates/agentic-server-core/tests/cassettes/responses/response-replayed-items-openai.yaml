@@ -22,12 +22,15 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1792738307
-      created_at: 1792738306
+      completed_at: 1795232103
+      created_at: 1795232102
       error: null
       frequency_penalty: 0.0
-      id: resp_0d0ddf1849dc41d3006adb0402ae7c87d19358aa976725cab0
+      id: resp_00c012fe2b4c73d8006b011166175487d1a2e9ba2d6077145b
+      image:
+        context_compression: disabled
       incomplete_details: null
+      input_transformations: []
       instructions: null
       max_output_tokens: null
       max_tool_calls: null
@@ -39,9 +42,9 @@ turns:
       - content:
         - annotations: []
           logprobs: []
-          text: SAPPHIRE
+          text: SAPPHIRE.
           type: output_text
-        id: msg_0d0ddf1849dc41d3006adb04032c1887d1ac3ab98ee608ec78
+        id: msg_00c012fe2b4c73d8006b011166f26087d19d556f25859558c6
         role: assistant
         status: completed
         type: message
@@ -85,11 +88,14 @@ turns:
         input_tokens: 15
         input_tokens_details:
           cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
           cached_tokens: 0
-        output_tokens: 5
+        output_tokens: 6
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 20
+        total_tokens: 21
       user: null
     headers:
       content-type: application/json
@@ -102,7 +108,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0d0ddf1849dc41d3006adb0402ae7c87d19358aa976725cab0/input_items
+    path: /v1/responses/resp_00c012fe2b4c73d8006b011166175487d1a2e9ba2d6077145b/input_items
     query_params:
       order: asc
   response:
@@ -111,13 +117,13 @@ turns:
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+        id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
         role: user
         status: completed
         type: message
-      first_id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+      first_id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
       has_more: false
-      last_id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+      last_id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
       object: list
     headers:
       content-type: application/json
@@ -127,7 +133,7 @@ turns:
     body:
       input:
       - content: Reply with only ORCHID.
-        id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+        id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
         role: user
         type: message
       model: gpt-4.1
@@ -147,12 +153,15 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1792738308
-      created_at: 1792738308
+      completed_at: 1795232104
+      created_at: 1795232103
       error: null
       frequency_penalty: 0.0
-      id: resp_0d0ddf1849dc41d3006adb04043eb487d1a24119a6ddfe941f
+      id: resp_00c012fe2b4c73d8006b0111678ab887d1b34cac2502fa31cf
+      image:
+        context_compression: disabled
       incomplete_details: null
+      input_transformations: []
       instructions: null
       max_output_tokens: null
       max_tool_calls: null
@@ -164,9 +173,9 @@ turns:
       - content:
         - annotations: []
           logprobs: []
-          text: SAPPHIRE.
+          text: SAPPHIRE
           type: output_text
-        id: msg_0d0ddf1849dc41d3006adb0404e0d487d191e40d604fc5c9de
+        id: msg_00c012fe2b4c73d8006b011168521087d1b46fe56df87bc619
         role: assistant
         status: completed
         type: message
@@ -210,11 +219,14 @@ turns:
         input_tokens: 15
         input_tokens_details:
           cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
           cached_tokens: 0
-        output_tokens: 6
+        output_tokens: 5
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 21
+        total_tokens: 20
       user: null
     headers:
       content-type: application/json
@@ -227,7 +239,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0d0ddf1849dc41d3006adb04043eb487d1a24119a6ddfe941f/input_items
+    path: /v1/responses/resp_00c012fe2b4c73d8006b0111678ab887d1b34cac2502fa31cf/input_items
     query_params:
       order: asc
   response:
@@ -236,13 +248,13 @@ turns:
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+        id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
         role: user
         status: completed
         type: message
-      first_id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+      first_id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
       has_more: false
-      last_id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+      last_id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
       object: list
     headers:
       content-type: application/json
@@ -255,7 +267,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0d0ddf1849dc41d3006adb0402ae7c87d19358aa976725cab0/input_items
+    path: /v1/responses/resp_00c012fe2b4c73d8006b011166175487d1a2e9ba2d6077145b/input_items
     query_params:
       order: asc
   response:
@@ -264,13 +276,13 @@ turns:
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+        id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
         role: user
         status: completed
         type: message
-      first_id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+      first_id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
       has_more: false
-      last_id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+      last_id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
       object: list
     headers:
       content-type: application/json
@@ -280,11 +292,11 @@ turns:
     body:
       input:
       - content: Reply with only ORCHID.
-        id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+        id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
         role: user
         type: message
       - content: Reply with only VIOLET.
-        id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+        id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
         role: user
         type: message
       model: gpt-4.1
@@ -302,7 +314,7 @@ turns:
     body:
       error:
         code: null
-        message: Duplicate item found with id msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c.
+        message: Duplicate item found with id msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35.
           Remove duplicate items from your input and try again.
         param: input
         type: invalid_request_error
@@ -317,7 +329,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0d0ddf1849dc41d3006adb0402ae7c87d19358aa976725cab0/input_items
+    path: /v1/responses/resp_00c012fe2b4c73d8006b011166175487d1a2e9ba2d6077145b/input_items
     query_params:
       order: asc
   response:
@@ -326,13 +338,13 @@ turns:
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+        id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
         role: user
         status: completed
         type: message
-      first_id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+      first_id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
       has_more: false
-      last_id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+      last_id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
       object: list
     headers:
       content-type: application/json
@@ -345,7 +357,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0d0ddf1849dc41d3006adb0402ae7c87d19358aa976725cab0/input_items
+    path: /v1/responses/resp_00c012fe2b4c73d8006b011166175487d1a2e9ba2d6077145b/input_items
     query_params:
       order: asc
   response:
@@ -354,13 +366,13 @@ turns:
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+        id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
         role: user
         status: completed
         type: message
-      first_id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+      first_id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
       has_more: false
-      last_id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+      last_id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
       object: list
     headers:
       content-type: application/json
@@ -370,7 +382,7 @@ turns:
     body:
       input:
       - content: Reply with only ORCHID.
-        id: item_wrongprefix_1ee813b549f151e7
+        id: item_wrongprefix_4212c4c26a8ea4fd
         role: user
         type: message
       model: gpt-4.1
@@ -388,7 +400,7 @@ turns:
     body:
       error:
         code: invalid_value
-        message: 'Invalid ''input[0].id'': ''item_wrongprefix_1ee813b549f151e7''.
+        message: 'Invalid ''input[0].id'': ''item_wrongprefix_4212c4c26a8ea4fd''.
           Expected an ID that begins with ''msg''.'
         param: input[0].id
         type: invalid_request_error
@@ -403,7 +415,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0d0ddf1849dc41d3006adb0402ae7c87d19358aa976725cab0/input_items
+    path: /v1/responses/resp_00c012fe2b4c73d8006b011166175487d1a2e9ba2d6077145b/input_items
     query_params:
       order: asc
   response:
@@ -412,13 +424,13 @@ turns:
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+        id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
         role: user
         status: completed
         type: message
-      first_id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+      first_id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
       has_more: false
-      last_id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+      last_id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
       object: list
     headers:
       content-type: application/json
@@ -431,7 +443,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0d0ddf1849dc41d3006adb0402ae7c87d19358aa976725cab0/input_items
+    path: /v1/responses/resp_00c012fe2b4c73d8006b011166175487d1a2e9ba2d6077145b/input_items
     query_params:
       order: asc
   response:
@@ -440,13 +452,13 @@ turns:
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+        id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
         role: user
         status: completed
         type: message
-      first_id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+      first_id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
       has_more: false
-      last_id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+      last_id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
       object: list
     headers:
       content-type: application/json
@@ -481,12 +493,15 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1792738313
-      created_at: 1792738313
+      completed_at: 1795232107
+      created_at: 1795232106
       error: null
       frequency_penalty: 0.0
-      id: resp_03872222178b552a006adb04095b6c87d1bca5ff94e6a26f88
+      id: resp_023d6b6dbe8aceed006b01116a876487d1abb9f0577d1a054d
+      image:
+        context_compression: disabled
       incomplete_details: null
+      input_transformations: []
       instructions: null
       max_output_tokens: null
       max_tool_calls: null
@@ -500,7 +515,7 @@ turns:
           logprobs: []
           text: SAPPHIRE
           type: output_text
-        id: msg_03872222178b552a006adb0409ae2887d1abd9cdfec30b3b7d
+        id: msg_023d6b6dbe8aceed006b01116b417087d1ab87f03c79c3dafe
         role: assistant
         status: completed
         type: message
@@ -544,6 +559,9 @@ turns:
         input_tokens: 32
         input_tokens_details:
           cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
           cached_tokens: 0
         output_tokens: 5
         output_tokens_details:
@@ -561,7 +579,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_03872222178b552a006adb04095b6c87d1bca5ff94e6a26f88/input_items
+    path: /v1/responses/resp_023d6b6dbe8aceed006b01116a876487d1abb9f0577d1a054d/input_items
     query_params:
       order: asc
   response:
@@ -569,25 +587,25 @@ turns:
       data:
       - arguments: '{}'
         call_id: call_history_probe
-        id: fc_03872222178b552a006adb0409621087d1ad182bf8c2d3d7ec
+        id: fc_023d6b6dbe8aceed006b01116a8e0887d1a6263ffcbc33f9d2
         name: lookup
         status: in_progress
         type: function_call
       - call_id: call_history_probe
-        id: fc_03872222178b552a006adb0409622c87d1a56cb8e7d8ed31f7
+        id: fc_023d6b6dbe8aceed006b01116a8e2487d195717bd8720674f2
         output: SAPPHIRE
         status: completed
         type: function_call_output
       - content:
         - text: Reply with only the lookup result.
           type: input_text
-        id: msg_03872222178b552a006adb0409624487d1bcf6af6e89f7851d
+        id: msg_023d6b6dbe8aceed006b01116a8e3487d19d7c011f79d4dd66
         role: user
         status: completed
         type: message
-      first_id: fc_03872222178b552a006adb0409621087d1ad182bf8c2d3d7ec
+      first_id: fc_023d6b6dbe8aceed006b01116a8e0887d1a6263ffcbc33f9d2
       has_more: false
-      last_id: msg_03872222178b552a006adb0409624487d1bcf6af6e89f7851d
+      last_id: msg_023d6b6dbe8aceed006b01116a8e3487d19d7c011f79d4dd66
       object: list
     headers:
       content-type: application/json
@@ -600,7 +618,7 @@ turns:
       authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_0d0ddf1849dc41d3006adb0402ae7c87d19358aa976725cab0/input_items
+    path: /v1/responses/resp_00c012fe2b4c73d8006b011166175487d1a2e9ba2d6077145b/input_items
     query_params:
       order: asc
   response:
@@ -609,14 +627,1007 @@ turns:
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+        id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
         role: user
         status: completed
         type: message
-      first_id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+      first_id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
       has_more: false
-      last_id: msg_0d0ddf1849dc41d3006adb0402b89c87d18d5ce807b0ef4e7c
+      last_id: msg_00c012fe2b4c73d8006b0111661ddc87d18136bf8cbd054f35
       object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t15
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1795232108
+      id: conv_6b01116cdc84819789ec73d56faa17fb0be26df1ccc2df3f
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t16
+  request:
+    body:
+      conversation: conv_6b01116cdc84819789ec73d56faa17fb0be26df1ccc2df3f
+      input:
+      - content: What's the weather in Paris?
+        role: user
+      model: gpt-4.1
+      store: true
+      stream: false
+      tool_choice: required
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1795232109
+      conversation:
+        id: conv_6b01116cdc84819789ec73d56faa17fb0be26df1ccc2df3f
+      created_at: 1795232109
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0be26df1ccc2df3f006b01116d19d48197a436380b90ceaafe
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - arguments: '{"city":"Paris"}'
+        call_id: call_mTBhNp6PwZqHgVs14sutIKBL
+        id: fc_0be26df1ccc2df3f006b01116ddbe48197ab38377edc566df6
+        name: get_weather
+        status: completed
+        type: function_call
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: required
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 54
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 6
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 60
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t17
+  request:
+    body:
+      conversation: conv_6b01116cdc84819789ec73d56faa17fb0be26df1ccc2df3f
+      input:
+      - content: What's the weather in Paris?
+        role: user
+      - arguments: '{"city":"Paris"}'
+        call_id: call_mTBhNp6PwZqHgVs14sutIKBL
+        id: fc_0be26df1ccc2df3f006b01116ddbe48197ab38377edc566df6
+        name: get_weather
+        status: completed
+        type: function_call
+      - call_id: call_mTBhNp6PwZqHgVs14sutIKBL
+        output: sunny
+        type: function_call_output
+      model: gpt-4.1
+      store: true
+      stream: false
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Duplicate item found with id fc_0be26df1ccc2df3f006b01116ddbe48197ab38377edc566df6.
+          Remove duplicate items from your input and try again.
+        param: input
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t18
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_6b01116cdc84819789ec73d56faa17fb0be26df1ccc2df3f/items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: What's the weather in Paris?
+          type: input_text
+        id: msg_0be26df1ccc2df3f006b01116d36a0819785a400c1061ba726
+        role: user
+        status: completed
+        type: message
+      - arguments: '{"city":"Paris"}'
+        call_id: call_mTBhNp6PwZqHgVs14sutIKBL
+        id: fc_0be26df1ccc2df3f006b01116ddbe48197ab38377edc566df6
+        name: get_weather
+        status: completed
+        type: function_call
+      first_id: msg_0be26df1ccc2df3f006b01116d36a0819785a400c1061ba726
+      has_more: false
+      last_id: fc_0be26df1ccc2df3f006b01116ddbe48197ab38377edc566df6
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t19
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1795232111
+      id: conv_6b01116f56308196b7aa3cfcf95a199700c0a8c108e1edcf
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t20
+  request:
+    body:
+      conversation: conv_6b01116f56308196b7aa3cfcf95a199700c0a8c108e1edcf
+      input:
+      - content: What's the weather in Paris?
+        role: user
+      model: gpt-4.1
+      store: true
+      stream: false
+      tool_choice: required
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1795232112
+      conversation:
+        id: conv_6b01116f56308196b7aa3cfcf95a199700c0a8c108e1edcf
+      created_at: 1795232111
+      error: null
+      frequency_penalty: 0.0
+      id: resp_00c0a8c108e1edcf006b01116fcf4c8196b9b2f41ff85a420c
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - arguments: '{"city":"Paris"}'
+        call_id: call_Khg56vrlO8vVemyB5oUmn2Zx
+        id: fc_00c0a8c108e1edcf006b011170568481968545457996a1fbb1
+        name: get_weather
+        status: completed
+        type: function_call
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: required
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 54
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 6
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 60
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t21
+  request:
+    body:
+      conversation: conv_6b01116f56308196b7aa3cfcf95a199700c0a8c108e1edcf
+      input:
+      - content: What's the weather in Paris?
+        role: user
+      - arguments: '{"city":"Paris"}'
+        call_id: call_Khg56vrlO8vVemyB5oUmn2Zx
+        id: fc_00c0a8c108e1edcf006b011170568481968545457996a1fbb1
+        name: get_weather
+        status: completed
+        type: function_call
+      - call_id: call_Khg56vrlO8vVemyB5oUmn2Zx
+        output: sunny
+        type: function_call_output
+      model: gpt-4.1
+      store: false
+      stream: false
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1795232113
+      conversation:
+        id: conv_6b01116f56308196b7aa3cfcf95a199700c0a8c108e1edcf
+      created_at: 1795232112
+      error: null
+      frequency_penalty: 0.0
+      id: resp_00c0a8c108e1edcf016b011170c97c8196afa1f7b1d196e931
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: The weather in Paris is currently sunny. If you need more details
+            or a forecast, let me know!
+          type: output_text
+        id: msg_00c0a8c108e1edcf016b01117181c08196b588be15285d1e8a
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 91
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 23
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 114
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t22
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_6b01116f56308196b7aa3cfcf95a199700c0a8c108e1edcf/items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: What's the weather in Paris?
+          type: input_text
+        id: msg_00c0a8c108e1edcf006b01116fe9388196b0d5a71dab43a1b5
+        role: user
+        status: completed
+        type: message
+      - arguments: '{"city":"Paris"}'
+        call_id: call_Khg56vrlO8vVemyB5oUmn2Zx
+        id: fc_00c0a8c108e1edcf006b011170568481968545457996a1fbb1
+        name: get_weather
+        status: completed
+        type: function_call
+      first_id: msg_00c0a8c108e1edcf006b01116fe9388196b0d5a71dab43a1b5
+      has_more: false
+      last_id: fc_00c0a8c108e1edcf006b011170568481968545457996a1fbb1
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t23
+  request:
+    body:
+      input:
+      - content: What's the weather in Paris?
+        role: user
+      model: gpt-4.1
+      store: true
+      stream: false
+      tool_choice: required
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1795232114
+      created_at: 1795232114
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0289adc0ce7ad9ef006b01117240e087d183c238fff2902681
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - arguments: '{"city":"Paris"}'
+        call_id: call_R9fEtTkC1FjK4F0iCQYfnIaP
+        id: fc_0289adc0ce7ad9ef006b011172a3fc87d19a5824ca2dd37dab
+        name: get_weather
+        status: completed
+        type: function_call
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: required
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 54
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 6
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 60
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t24
+  request:
+    body:
+      input:
+      - content: What's the weather in Paris?
+        role: user
+      - arguments: '{"city":"Paris"}'
+        call_id: call_R9fEtTkC1FjK4F0iCQYfnIaP
+        id: fc_0289adc0ce7ad9ef006b011172a3fc87d19a5824ca2dd37dab
+        name: get_weather
+        status: completed
+        type: function_call
+      - call_id: call_R9fEtTkC1FjK4F0iCQYfnIaP
+        output: sunny
+        type: function_call_output
+      model: gpt-4.1
+      previous_response_id: resp_0289adc0ce7ad9ef006b01117240e087d183c238fff2902681
+      store: true
+      stream: false
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Duplicate item found with id fc_0289adc0ce7ad9ef006b011172a3fc87d19a5824ca2dd37dab.
+          Remove duplicate items from your input and try again.
+        param: input
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t25
+  request:
+    body:
+      input:
+      - content: What's the weather in Paris?
+        role: user
+      model: gpt-4.1
+      store: true
+      stream: false
+      tool_choice: required
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1795232116
+      created_at: 1795232115
+      error: null
+      frequency_penalty: 0.0
+      id: resp_048357f5b801311d006b0111738a2087d1b0ec16ea2bd1b83d
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - arguments: '{"city":"Paris"}'
+        call_id: call_oFCZCdZuRP6DUTAUTKXFC2uK
+        id: fc_048357f5b801311d006b011173f56087d1a178f9c28c67c007
+        name: get_weather
+        status: completed
+        type: function_call
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: required
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 54
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 6
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 60
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t26
+  request:
+    body:
+      input:
+      - content: What's the weather in Paris?
+        role: user
+      - arguments: '{"city":"Paris"}'
+        call_id: call_oFCZCdZuRP6DUTAUTKXFC2uK
+        id: fc_048357f5b801311d006b011173f56087d1a178f9c28c67c007
+        name: get_weather
+        status: completed
+        type: function_call
+      - call_id: call_oFCZCdZuRP6DUTAUTKXFC2uK
+        output: sunny
+        type: function_call_output
+      model: gpt-4.1
+      previous_response_id: resp_048357f5b801311d006b0111738a2087d1b0ec16ea2bd1b83d
+      store: false
+      stream: false
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1795232117
+      created_at: 1795232116
+      error: null
+      frequency_penalty: 0.0
+      id: resp_048357f5b801311d016b01117461d887d191489620697e39bd
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: The weather in Paris is currently sunny.
+          type: output_text
+        id: msg_048357f5b801311d016b011174e3a087d19a152bc76532c6bb
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_048357f5b801311d006b0111738a2087d1b0ec16ea2bd1b83d
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 91
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 10
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 101
+      user: null
     headers:
       content-type: application/json
     status_code: 200

@@ -50,7 +50,7 @@ record() {
         pagination) turns=16; mode=response-pagination ;;
         edge-cases) turns=23; mode=response-edge-cases ;;
         conversation) turns=23; mode=response-conversation ;;
-        replayed-items) turns=14; mode=response-replayed-items ;;
+        replayed-items) turns=26; mode=response-replayed-items ;;
         tool-items) turns=48; mode=response-tool-items; read_timeout="${HTTP_READ_TIMEOUT:-900}" ;;
         call-ids) turns=17; mode=response-call-ids ;;
         item-id-prefixes) turns=11; mode=response-item-id-prefixes ;;
@@ -119,8 +119,13 @@ elif scenario == "conversation":
     assert all(turn["request"]["body"].get("conversation") for turn in turns[-4:])
     assert [turn["request"]["body"]["store"] for turn in turns[-4:]] == [True, True, False, True]
 elif scenario == "replayed-items":
-    assert sum(turn["request"]["method"] == "POST" for turn in turns) == 5
-    assert any(len(turn["request"]["body"].get("input", [])) == 3 for turn in turns)
+    assert sum(turn["request"]["method"] == "POST" for turn in turns) == 15
+    assert any(len(turn["request"]["body"].get("input", [])) == 3 for turn in turns[:14])
+    resends = [turn["request"]["body"] for turn in turns[14:]
+               if turn["request"]["path"] == "/v1/responses" and len(turn["request"]["body"]["input"]) == 3]
+    assert [("conversation" in body, body["store"]) for body in resends] == [
+        (True, True), (True, False), (False, True), (False, False)]
+    assert all(body["input"][1]["type"] == "function_call" and body["input"][1]["id"] for body in resends)
 elif scenario == "item-id-prefixes":
     posts = [(turn["request"]["method"], turn["request"]["path"]) for turn in turns]
     assert posts[:5] == [("POST", "/v1/responses")] * 5 and posts[5] == ("POST", "/v1/conversations")

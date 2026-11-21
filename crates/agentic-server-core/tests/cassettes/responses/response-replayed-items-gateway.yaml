@@ -5,12 +5,11 @@ turns:
       input:
       - content: Reply with only SAPPHIRE.
         role: user
-      model: Qwen/Qwen3.8-27B-FP8
+      model: Qwen/Qwen3-4B
       store: true
       stream: false
     headers:
       accept: '*/*'
-      authorization: Bearer ***
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
@@ -19,35 +18,49 @@ turns:
   response:
     body:
       background: false
-      completed_at: 1792748305
-      created_at: 1792748305
+      completed_at: 1795233111
+      created_at: 1795233111
       error: null
       frequency_penalty: 0.0
-      id: resp_01a16820-3b48-7372-bd98-214486197122
+      id: resp_01a1fc3b-3867-7762-b336-bb48fe187617
       incomplete_details: null
       instructions: null
       max_output_tokens: null
       max_tool_calls: null
       metadata: {}
-      model: Qwen/Qwen3.8-27B-FP8
+      model: Qwen/Qwen3-4B
       object: response
       output:
       - content:
-        - text: 'The user wants me to reply with only the word "SAPPHIRE".
-
-            '
+        - text: "\nOkay, the user wants me to reply with only \"SAPPHIRE.\" Let me\
+            \ make sure I understand the request correctly. They might be testing\
+            \ if I can strictly follow instructions or maybe they need a specific\
+            \ response for a system or application.\n\nFirst, I need to check if there's\
+            \ any hidden context. The user hasn't provided additional details, so\
+            \ it's likely a straightforward request. I should confirm that I'm not\
+            \ supposed to add anything else. Since the user emphasized \"only SAPPHIRE,\"\
+            \ I must ensure my response is exactly that without any extra text, punctuation,\
+            \ or formatting.\n\nI should also consider if there's a possibility of\
+            \ misunderstanding. Maybe they want a confirmation or a different form\
+            \ of the word. But the instruction is clear: reply with only the word\
+            \ \"SAPPHIRE.\" No variations, no explanations. \n\nI need to make sure\
+            \ my response is precise. If I include any other words or characters,\
+            \ it would violate the user's request. So, the correct approach is to\
+            \ output \"SAPPHIRE\" as is, without any additional content. That's it.\
+            \ No need for further action or questions. Just a simple, direct response.\n"
           type: reasoning_text
-        id: rs_a593f79b2097fe2d
+        id: rs_96046c20fbe78466
         summary: []
         type: reasoning
       - content:
         - annotations: []
+          logprobs: []
           text: '
 
 
             SAPPHIRE'
           type: output_text
-        id: msg_9548042b171a269a
+        id: msg_815cacb4169240ae
         role: assistant
         status: completed
         type: message
@@ -71,14 +84,14 @@ turns:
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 47
+        input_tokens: 15
         input_tokens_details:
           cache_write_tokens: 0
           cached_tokens: 0
-        output_tokens: 24
+        output_tokens: 245
         output_tokens_details:
-          reasoning_tokens: 17
-        total_tokens: 71
+          reasoning_tokens: 237
+        total_tokens: 260
     headers:
       content-type: application/json
     status_code: 200
@@ -87,10 +100,9 @@ turns:
     body: {}
     headers:
       accept: '*/*'
-      authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_01a16820-3b48-7372-bd98-214486197122/input_items
+    path: /v1/responses/resp_01a1fc3b-3867-7762-b336-bb48fe187617/input_items
     query_params:
       order: asc
   response:
@@ -99,13 +111,13 @@ turns:
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+        id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
         role: user
         status: completed
         type: message
-      first_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      first_id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
       has_more: false
-      last_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      last_id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
       object: list
     headers:
       content-type: application/json
@@ -115,15 +127,14 @@ turns:
     body:
       input:
       - content: Reply with only ORCHID.
-        id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+        id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
         role: user
         type: message
-      model: Qwen/Qwen3.8-27B-FP8
+      model: Qwen/Qwen3-4B
       store: true
       stream: false
     headers:
       accept: '*/*'
-      authorization: Bearer ***
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
@@ -132,35 +143,52 @@ turns:
   response:
     body:
       background: false
-      completed_at: 1792748306
-      created_at: 1792748306
+      completed_at: 1795233118
+      created_at: 1795233118
       error: null
       frequency_penalty: 0.0
-      id: resp_01a16820-3dae-7192-985f-b0b8cc948278
+      id: resp_01a1fc3b-5e71-7832-8d96-32d80f81ac2d
       incomplete_details: null
       instructions: null
       max_output_tokens: null
       max_tool_calls: null
       metadata: {}
-      model: Qwen/Qwen3.8-27B-FP8
+      model: Qwen/Qwen3-4B
       object: response
       output:
       - content:
-        - text: 'The user is asking me to reply with only the word "SAPPHIRE."
+        - text: '
+
+            Okay, the user wants me to reply with only SAPPHIRE. Let me make sure
+            I understand the request correctly. They might be looking for a specific
+            response, maybe a name, a color, or a term related to Sapphire. Since
+            the instruction is straightforward, I should focus on providing the exact
+            answer without any additional text.
+
+
+            First, I need to confirm that "SAPPHIRE" is the correct response. The
+            user might be testing if I can adhere strictly to their instructions.
+            I should avoid any extra explanations or formatting. Just the word "SAPPHIRE"
+            in the response. Let me check if there''s any ambiguity. Sapphire can
+            refer to the gemstone, the color, or a character from a game or movie.
+            But since the user didn''t specify, the safest bet is to provide the exact
+            term they asked for. No need to add more context. Just the word itself.
+            Alright, that should do it.
 
             '
           type: reasoning_text
-        id: rs_a3eb5300385d8c5a
+        id: rs_9b3a30daa3964a8e
         summary: []
         type: reasoning
       - content:
         - annotations: []
+          logprobs: []
           text: '
 
 
             SAPPHIRE'
           type: output_text
-        id: msg_97f8cea357370a3f
+        id: msg_85646f6d7b9003a1
         role: assistant
         status: completed
         type: message
@@ -184,14 +212,14 @@ turns:
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 47
+        input_tokens: 15
         input_tokens_details:
           cache_write_tokens: 0
           cached_tokens: 0
-        output_tokens: 25
+        output_tokens: 198
         output_tokens_details:
-          reasoning_tokens: 18
-        total_tokens: 72
+          reasoning_tokens: 190
+        total_tokens: 213
     headers:
       content-type: application/json
     status_code: 200
@@ -200,10 +228,9 @@ turns:
     body: {}
     headers:
       accept: '*/*'
-      authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_01a16820-3dae-7192-985f-b0b8cc948278/input_items
+    path: /v1/responses/resp_01a1fc3b-5e71-7832-8d96-32d80f81ac2d/input_items
     query_params:
       order: asc
   response:
@@ -212,13 +239,13 @@ turns:
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+        id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
         role: user
         status: completed
         type: message
-      first_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      first_id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
       has_more: false
-      last_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      last_id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
       object: list
     headers:
       content-type: application/json
@@ -228,10 +255,9 @@ turns:
     body: {}
     headers:
       accept: '*/*'
-      authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_01a16820-3b48-7372-bd98-214486197122/input_items
+    path: /v1/responses/resp_01a1fc3b-3867-7762-b336-bb48fe187617/input_items
     query_params:
       order: asc
   response:
@@ -240,13 +266,13 @@ turns:
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+        id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
         role: user
         status: completed
         type: message
-      first_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      first_id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
       has_more: false
-      last_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      last_id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
       object: list
     headers:
       content-type: application/json
@@ -256,19 +282,18 @@ turns:
     body:
       input:
       - content: Reply with only ORCHID.
-        id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+        id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
         role: user
         type: message
       - content: Reply with only VIOLET.
-        id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+        id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
         role: user
         type: message
-      model: Qwen/Qwen3.8-27B-FP8
+      model: Qwen/Qwen3-4B
       store: true
       stream: false
     headers:
       accept: '*/*'
-      authorization: Bearer ***
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
@@ -278,7 +303,7 @@ turns:
     body:
       error:
         code: null
-        message: Duplicate item found with id msg_01a16820-3d8b-7a11-b157-3c11de042d72.
+        message: Duplicate item found with id msg_01a1fc3b-5e44-7490-9735-521fa4854040.
           Remove duplicate items from your input and try again.
         param: input
         type: invalid_request_error
@@ -290,10 +315,9 @@ turns:
     body: {}
     headers:
       accept: '*/*'
-      authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_01a16820-3b48-7372-bd98-214486197122/input_items
+    path: /v1/responses/resp_01a1fc3b-3867-7762-b336-bb48fe187617/input_items
     query_params:
       order: asc
   response:
@@ -302,13 +326,13 @@ turns:
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+        id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
         role: user
         status: completed
         type: message
-      first_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      first_id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
       has_more: false
-      last_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      last_id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
       object: list
     headers:
       content-type: application/json
@@ -318,10 +342,9 @@ turns:
     body: {}
     headers:
       accept: '*/*'
-      authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_01a16820-3b48-7372-bd98-214486197122/input_items
+    path: /v1/responses/resp_01a1fc3b-3867-7762-b336-bb48fe187617/input_items
     query_params:
       order: asc
   response:
@@ -330,13 +353,13 @@ turns:
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+        id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
         role: user
         status: completed
         type: message
-      first_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      first_id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
       has_more: false
-      last_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      last_id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
       object: list
     headers:
       content-type: application/json
@@ -346,15 +369,14 @@ turns:
     body:
       input:
       - content: Reply with only ORCHID.
-        id: item_wrongprefix_d71598b4bf20d34f
+        id: item_wrongprefix_10160bbf61e682cc
         role: user
         type: message
-      model: Qwen/Qwen3.8-27B-FP8
+      model: Qwen/Qwen3-4B
       store: true
       stream: false
     headers:
       accept: '*/*'
-      authorization: Bearer ***
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
@@ -364,7 +386,7 @@ turns:
     body:
       error:
         code: invalid_value
-        message: 'Invalid ''input[0].id'': ''item_wrongprefix_d71598b4bf20d34f''.
+        message: 'Invalid ''input[0].id'': ''item_wrongprefix_10160bbf61e682cc''.
           Expected an ID that begins with ''msg''.'
         param: input[0].id
         type: invalid_request_error
@@ -376,10 +398,9 @@ turns:
     body: {}
     headers:
       accept: '*/*'
-      authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_01a16820-3b48-7372-bd98-214486197122/input_items
+    path: /v1/responses/resp_01a1fc3b-3867-7762-b336-bb48fe187617/input_items
     query_params:
       order: asc
   response:
@@ -388,13 +409,13 @@ turns:
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+        id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
         role: user
         status: completed
         type: message
-      first_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      first_id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
       has_more: false
-      last_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      last_id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
       object: list
     headers:
       content-type: application/json
@@ -404,10 +425,9 @@ turns:
     body: {}
     headers:
       accept: '*/*'
-      authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_01a16820-3b48-7372-bd98-214486197122/input_items
+    path: /v1/responses/resp_01a1fc3b-3867-7762-b336-bb48fe187617/input_items
     query_params:
       order: asc
   response:
@@ -416,13 +436,13 @@ turns:
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+        id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
         role: user
         status: completed
         type: message
-      first_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      first_id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
       has_more: false
-      last_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      last_id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
       object: list
     headers:
       content-type: application/json
@@ -440,12 +460,11 @@ turns:
         type: function_call_output
       - content: Reply with only the lookup result.
         role: user
-      model: Qwen/Qwen3.8-27B-FP8
+      model: Qwen/Qwen3-4B
       store: true
       stream: false
     headers:
       accept: '*/*'
-      authorization: Bearer ***
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
@@ -454,36 +473,53 @@ turns:
   response:
     body:
       background: false
-      completed_at: 1792748307
-      created_at: 1792748307
+      completed_at: 1795233127
+      created_at: 1795233127
       error: null
       frequency_penalty: 0.0
-      id: resp_01a16820-4190-7cf3-aed2-e40d5f1b45da
+      id: resp_01a1fc3b-7bf1-7fc0-8879-80bfa3c58aed
       incomplete_details: null
       instructions: null
       max_output_tokens: null
       max_tool_calls: null
       metadata: {}
-      model: Qwen/Qwen3.8-27B-FP8
+      model: Qwen/Qwen3-4B
       object: response
       output:
       - content:
-        - text: 'The user wants me to reply with only the lookup result from the previous
-            turn. The lookup result was "SAPPHIRE".
+        - text: '
+
+            Okay, the user sent "SAPPHIRE" and said to reply with only the lookup
+            result. The previous message had a lookup with empty arguments. Maybe
+            they want me to look up "Sapphire" in some database or list. But since
+            I don''t have access to external databases, I should check if there''s
+            a standard definition or common information about Sapphire.
+
+
+            Sapphire is a gemstone, a precious stone, a variety of corundum with blue
+            color. It''s known for its hardness and beauty. Maybe the user is looking
+            for that basic information. Since the instruction is to reply only with
+            the lookup result, I should provide the definition without any extra text.
+            Let me make sure I''m not adding anything else. Just the fact that Sapphire
+            is a blue gemstone, a type of corundum. That''s the main point. I''ll
+            format it as a simple statement.
 
             '
           type: reasoning_text
-        id: rs_982d339e9f98aca5
+        id: rs_b83365a2da6ae4ff
         summary: []
         type: reasoning
       - content:
         - annotations: []
+          logprobs: []
           text: '
 
 
-            SAPPHIRE'
+            Sapphire is a precious gemstone, a variety of corundum (aluminum oxide)
+            known for its deep blue color and high hardness, often used in jewelry
+            and as a symbol of clarity and truth.'
           type: output_text
-        id: msg_8082f76f0614422c
+        id: msg_9f904acad7d7c6f8
         role: assistant
         status: completed
         type: message
@@ -507,14 +543,14 @@ turns:
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 82
+        input_tokens: 47
         input_tokens_details:
-          cache_write_tokens: 0
+          cache_write_tokens: 32
           cached_tokens: 0
-        output_tokens: 34
+        output_tokens: 227
         output_tokens_details:
-          reasoning_tokens: 27
-        total_tokens: 116
+          reasoning_tokens: 181
+        total_tokens: 274
     headers:
       content-type: application/json
     status_code: 200
@@ -523,10 +559,9 @@ turns:
     body: {}
     headers:
       accept: '*/*'
-      authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_01a16820-4190-7cf3-aed2-e40d5f1b45da/input_items
+    path: /v1/responses/resp_01a1fc3b-7bf1-7fc0-8879-80bfa3c58aed/input_items
     query_params:
       order: asc
   response:
@@ -534,22 +569,25 @@ turns:
       data:
       - arguments: '{}'
         call_id: call_history_probe
-        id: fc_01a16820-44a1-7dd1-8914-80ffa744f5a0
+        id: fc_01a1fc3b-9be5-78d2-8971-582a029d2c87
         name: lookup
+        status: in_progress
         type: function_call
       - call_id: call_history_probe
+        id: fc_01a1fc3b-9be5-78d2-8971-584aff7261ca
         output: SAPPHIRE
+        status: completed
         type: function_call_output
       - content:
         - text: Reply with only the lookup result.
           type: input_text
-        id: msg_01a16820-44a1-7dd1-8914-8112e1445097
+        id: msg_01a1fc3b-9be5-78d2-8971-5860aa63fa03
         role: user
         status: completed
         type: message
-      first_id: fc_01a16820-44a1-7dd1-8914-80ffa744f5a0
+      first_id: fc_01a1fc3b-9be5-78d2-8971-582a029d2c87
       has_more: false
-      last_id: msg_01a16820-44a1-7dd1-8914-8112e1445097
+      last_id: msg_01a1fc3b-9be5-78d2-8971-5860aa63fa03
       object: list
     headers:
       content-type: application/json
@@ -559,10 +597,9 @@ turns:
     body: {}
     headers:
       accept: '*/*'
-      authorization: Bearer ***
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/responses/resp_01a16820-3b48-7372-bd98-214486197122/input_items
+    path: /v1/responses/resp_01a1fc3b-3867-7762-b336-bb48fe187617/input_items
     query_params:
       order: asc
   response:
@@ -571,14 +608,944 @@ turns:
       - content:
         - text: Reply with only SAPPHIRE.
           type: input_text
-        id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+        id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
         role: user
         status: completed
         type: message
-      first_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      first_id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
       has_more: false
-      last_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      last_id: msg_01a1fc3b-5e44-7490-9735-521fa4854040
       object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t15
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1795233127
+      id: conv_01a1fc3b-9d01-75a3-aa6d-29c7094f0432
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t16
+  request:
+    body:
+      conversation: conv_01a1fc3b-9d01-75a3-aa6d-29c7094f0432
+      input:
+      - content: What's the weather in Paris?
+        role: user
+      model: Qwen/Qwen3-4B
+      store: true
+      stream: false
+      tool_choice: required
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1795233133
+      conversation:
+        id: conv_01a1fc3b-9d01-75a3-aa6d-29c7094f0432
+      created_at: 1795233133
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1fc3b-9d6a-7760-a475-994058228d7b
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3-4B
+      object: response
+      output:
+      - content:
+        - text: '
+
+            Okay, the user is asking for the weather in Paris. I need to use the get_weather
+            function. Let me check the function parameters. The function requires
+            the city name as a string. The user mentioned Paris, so I should call
+            get_weather with city set to "Paris". I need to make sure there are no
+            typos. The function''s strict parameter is true, so I can''t add any extra
+            parameters. Just the city. Alright, that''s all.
+
+            '
+          type: reasoning_text
+        id: rs_bd59f43111478438
+        summary: []
+        type: reasoning
+      - arguments: '{"city": "Paris"}'
+        call_id: chatcmpl-tool-be3240d3c0fbcf57
+        id: fc_ba02cadb34436d86
+        name: get_weather
+        status: completed
+        type: function_call
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: required
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 164
+        input_tokens_details:
+          cache_write_tokens: 160
+          cached_tokens: 0
+        output_tokens: 122
+        output_tokens_details:
+          reasoning_tokens: 95
+        total_tokens: 286
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t17
+  request:
+    body:
+      conversation: conv_01a1fc3b-9d01-75a3-aa6d-29c7094f0432
+      input:
+      - content: What's the weather in Paris?
+        role: user
+      - arguments: '{"city": "Paris"}'
+        call_id: chatcmpl-tool-be3240d3c0fbcf57
+        id: fc_ba02cadb34436d86
+        name: get_weather
+        status: completed
+        type: function_call
+      - call_id: chatcmpl-tool-be3240d3c0fbcf57
+        output: sunny
+        type: function_call_output
+      model: Qwen/Qwen3-4B
+      store: true
+      stream: false
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Duplicate item found with id fc_ba02cadb34436d86. Remove duplicate
+          items from your input and try again.
+        param: input
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t18
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_01a1fc3b-9d01-75a3-aa6d-29c7094f0432/items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: What's the weather in Paris?
+          type: input_text
+        id: msg_01a1fc3b-b1f4-73b1-a071-04b3cee52c99
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: '
+
+            Okay, the user is asking for the weather in Paris. I need to use the get_weather
+            function. Let me check the function parameters. The function requires
+            the city name as a string. The user mentioned Paris, so I should call
+            get_weather with city set to "Paris". I need to make sure there are no
+            typos. The function''s strict parameter is true, so I can''t add any extra
+            parameters. Just the city. Alright, that''s all.
+
+            '
+          type: reasoning_text
+        id: rs_bd59f43111478438
+        summary: []
+        type: reasoning
+      - arguments: '{"city": "Paris"}'
+        call_id: chatcmpl-tool-be3240d3c0fbcf57
+        id: fc_ba02cadb34436d86
+        name: get_weather
+        status: completed
+        type: function_call
+      first_id: msg_01a1fc3b-b1f4-73b1-a071-04b3cee52c99
+      has_more: false
+      last_id: fc_ba02cadb34436d86
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t19
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1795233133
+      id: conv_01a1fc3b-b380-7840-b544-297165ed4c7e
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t20
+  request:
+    body:
+      conversation: conv_01a1fc3b-b380-7840-b544-297165ed4c7e
+      input:
+      - content: What's the weather in Paris?
+        role: user
+      model: Qwen/Qwen3-4B
+      store: true
+      stream: false
+      tool_choice: required
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1795233136
+      conversation:
+        id: conv_01a1fc3b-b380-7840-b544-297165ed4c7e
+      created_at: 1795233136
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1fc3b-b413-7b20-9d88-58a4fb8dcf9f
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3-4B
+      object: response
+      output:
+      - content:
+        - text: '
+
+            Okay, the user is asking for the weather in Paris. Let me check the tools
+            available. There''s a function called get_weather that takes a city parameter.
+            So I need to call that function with the city set to Paris. I''ll make
+            sure to format the tool call correctly within the XML tags.
+
+            '
+          type: reasoning_text
+        id: rs_ab2d39a5879e4350
+        summary: []
+        type: reasoning
+      - arguments: '{"city": "Paris"}'
+        call_id: chatcmpl-tool-8f501e56d979a9df
+        id: fc_9fa1c07c44f299b7
+        name: get_weather
+        status: completed
+        type: function_call
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: required
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 164
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 160
+        output_tokens: 89
+        output_tokens_details:
+          reasoning_tokens: 62
+        total_tokens: 253
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t21
+  request:
+    body:
+      conversation: conv_01a1fc3b-b380-7840-b544-297165ed4c7e
+      input:
+      - content: What's the weather in Paris?
+        role: user
+      - arguments: '{"city": "Paris"}'
+        call_id: chatcmpl-tool-8f501e56d979a9df
+        id: fc_9fa1c07c44f299b7
+        name: get_weather
+        status: completed
+        type: function_call
+      - call_id: chatcmpl-tool-8f501e56d979a9df
+        output: sunny
+        type: function_call_output
+      model: Qwen/Qwen3-4B
+      store: false
+      stream: false
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1795233141
+      conversation:
+        id: conv_01a1fc3b-b380-7840-b544-297165ed4c7e
+      created_at: 1795233141
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1fc3b-c16f-7d12-b7ba-8164353e9cfe
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3-4B
+      object: response
+      output:
+      - content:
+        - text: '
+
+            Okay, the user asked for the weather in Paris. I called the get_weather
+            function with Paris as the city parameter. The response from the tool
+            was "sunny". Now I need to convey that information back to the user in
+            a clear and friendly way. Let me check if there''s any additional information
+            needed, but since the tool only provided "sunny", I''ll stick to that.
+            Maybe add a sentence confirming the weather is sunny in Paris. Make sure
+            it''s concise and straightforward.
+
+            '
+          type: reasoning_text
+        id: rs_a600764e417b9349
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            The current weather in Paris is sunny. 🌞 Let me know if you need further
+            details!'
+          type: output_text
+        id: msg_b2d331b53b933109
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 235
+        input_tokens_details:
+          cache_write_tokens: 64
+          cached_tokens: 160
+        output_tokens: 124
+        output_tokens_details:
+          reasoning_tokens: 100
+        total_tokens: 359
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t22
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_01a1fc3b-b380-7840-b544-297165ed4c7e/items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: What's the weather in Paris?
+          type: input_text
+        id: msg_01a1fc3b-c0d8-7ea1-91e4-7e63f9e2cd38
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: '
+
+            Okay, the user is asking for the weather in Paris. Let me check the tools
+            available. There''s a function called get_weather that takes a city parameter.
+            So I need to call that function with the city set to Paris. I''ll make
+            sure to format the tool call correctly within the XML tags.
+
+            '
+          type: reasoning_text
+        id: rs_ab2d39a5879e4350
+        summary: []
+        type: reasoning
+      - arguments: '{"city": "Paris"}'
+        call_id: chatcmpl-tool-8f501e56d979a9df
+        id: fc_9fa1c07c44f299b7
+        name: get_weather
+        status: completed
+        type: function_call
+      first_id: msg_01a1fc3b-c0d8-7ea1-91e4-7e63f9e2cd38
+      has_more: false
+      last_id: fc_9fa1c07c44f299b7
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t23
+  request:
+    body:
+      input:
+      - content: What's the weather in Paris?
+        role: user
+      model: Qwen/Qwen3-4B
+      store: true
+      stream: false
+      tool_choice: required
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1795233146
+      created_at: 1795233146
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1fc3b-d4d6-7303-9605-db63c26922d6
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3-4B
+      object: response
+      output:
+      - content:
+        - text: '
+
+            Okay, the user is asking for the weather in Paris. I need to use the get_weather
+            function. Let me check the function parameters. The function requires
+            the city name as a string. The user mentioned Paris, so I should call
+            get_weather with city set to "Paris". I need to make sure there are no
+            typos. The function''s strict parameter is true, so I can''t add any extra
+            parameters. Just the city. Alright, that''s all.
+
+            '
+          type: reasoning_text
+        id: rs_b3fdec4fba52a53f
+        summary: []
+        type: reasoning
+      - arguments: '{"city": "Paris"}'
+        call_id: chatcmpl-tool-9c6b4678986fccea
+        id: fc_b7f155e6e4679fcf
+        name: get_weather
+        status: completed
+        type: function_call
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: required
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 164
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 160
+        output_tokens: 122
+        output_tokens_details:
+          reasoning_tokens: 95
+        total_tokens: 286
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t24
+  request:
+    body:
+      input:
+      - content: What's the weather in Paris?
+        role: user
+      - arguments: '{"city": "Paris"}'
+        call_id: chatcmpl-tool-9c6b4678986fccea
+        id: fc_b7f155e6e4679fcf
+        name: get_weather
+        status: completed
+        type: function_call
+      - call_id: chatcmpl-tool-9c6b4678986fccea
+        output: sunny
+        type: function_call_output
+      model: Qwen/Qwen3-4B
+      previous_response_id: resp_01a1fc3b-d4d6-7303-9605-db63c26922d6
+      store: true
+      stream: false
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Duplicate item found with id fc_b7f155e6e4679fcf. Remove duplicate
+          items from your input and try again.
+        param: input
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t25
+  request:
+    body:
+      input:
+      - content: What's the weather in Paris?
+        role: user
+      model: Qwen/Qwen3-4B
+      store: true
+      stream: false
+      tool_choice: required
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1795233151
+      created_at: 1795233151
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1fc3b-e807-7973-aafc-b1366c57d7d4
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3-4B
+      object: response
+      output:
+      - content:
+        - text: '
+
+            Okay, the user is asking for the weather in Paris. I need to use the get_weather
+            function. Let me check the function parameters. The function requires
+            the city name as a string. The user mentioned Paris, so I should call
+            get_weather with city set to "Paris". I need to make sure there are no
+            additional parameters. The function''s strict mode means only the city
+            is allowed. Alright, that''s all. Let me format the tool call correctly.
+
+            '
+          type: reasoning_text
+        id: rs_99b4f2d8b116456e
+        summary: []
+        type: reasoning
+      - arguments: '{"city": "Paris"}'
+        call_id: chatcmpl-tool-8352833fd42fc74f
+        id: fc_a2e5e7613af2d419
+        name: get_weather
+        status: completed
+        type: function_call
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: required
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 164
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 160
+        output_tokens: 121
+        output_tokens_details:
+          reasoning_tokens: 94
+        total_tokens: 285
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t26
+  request:
+    body:
+      input:
+      - content: What's the weather in Paris?
+        role: user
+      - arguments: '{"city": "Paris"}'
+        call_id: chatcmpl-tool-8352833fd42fc74f
+        id: fc_a2e5e7613af2d419
+        name: get_weather
+        status: completed
+        type: function_call
+      - call_id: chatcmpl-tool-8352833fd42fc74f
+        output: sunny
+        type: function_call_output
+      model: Qwen/Qwen3-4B
+      previous_response_id: resp_01a1fc3b-e807-7973-aafc-b1366c57d7d4
+      store: false
+      stream: false
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1795233155
+      created_at: 1795233155
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1fc3b-fa56-7431-bc56-0d896359562d
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3-4B
+      object: response
+      output:
+      - content:
+        - text: '
+
+            Okay, the user asked for the weather in Paris. I called the get_weather
+            function with Paris as the city parameter. The response came back as "sunny".
+            Now I need to convey that information clearly. Let me check if there''s
+            any additional info needed, but since the function only provided the temperature,
+            I''ll just state it''s sunny in Paris. Make sure the response is friendly
+            and straightforward.
+
+            '
+          type: reasoning_text
+        id: rs_adeaaf5fe4ea0bc7
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            The weather in Paris is sunny. 🌞 Let me know if you need further details!'
+          type: output_text
+        id: msg_a7081776a11d1d9a
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_01a1fc3b-e807-7973-aafc-b1366c57d7d4
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools:
+      - description: Get the current temperature for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 235
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 224
+        output_tokens: 105
+        output_tokens_details:
+          reasoning_tokens: 82
+        total_tokens: 340
     headers:
       content-type: application/json
     status_code: 200
