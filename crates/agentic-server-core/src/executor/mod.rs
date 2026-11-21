@@ -48,9 +48,9 @@ pub use messages_server_tools::sealing::{MESSAGES_RESULT_KEY_ENV, MessagesResult
 pub use messages_stream::run_messages_stream;
 pub use modes::{ConversationHandler, FileHandler, ResponseHandler};
 pub use persist::{commit, persist_turn};
-pub use rehydrate::{rehydrate_conversation, rehydrate_in_session};
+pub use rehydrate::rehydrate;
 pub use request::{DEFAULT_MAX_REQUEST_BODY_SIZE_BYTES, ExecutionContext, RequestContext};
-pub use session::{ResponseSession, ResponseSessionGroup};
+pub use session::{ResponseContinuation, ResponseSession, ResponseSessionGroup};
 pub use upstream::{UpstreamBody, decode_upstream, upstream_request};
 
 pub mod response_events;

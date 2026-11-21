@@ -9,7 +9,6 @@ mod delivery;
 mod guidance;
 mod history;
 mod rounds;
-use crate::executor::inference::UpstreamHeaders;
 pub(super) use context::prepare_without_inference;
 use context::{RestoredAgents, fork_history, mail_input, prepare_agent, restore_agents};
 
@@ -139,29 +138,11 @@ impl MultiAgentRun {
             let context = prepare_agent(stored, &mut pipeline.request, exec, &budget).await?;
             contexts.insert(context.stored.identity.clone(), context);
         }
-        let payload = ResponsePayload {
-            id: pipeline.request.response_id.clone(),
-            object: "response".into(),
-            created_at: utcnow_str(),
-            model: pipeline.request.enriched_request.model.clone(),
-            status: "completed".into(),
-            output: Vec::new(),
-            usage: None,
-            incomplete_details: None,
-            error: None,
-            previous_response_id: pipeline.request.original_request.previous_response_id.clone(),
-            conversation: pipeline.request.conversation_id.clone(),
-            instructions: pipeline.request.original_request.instructions.clone(),
-            max_tool_calls: None,
-            service_tier: None,
-            tools: pipeline.request.enriched_request.tools.clone(),
-            tool_choice: pipeline.request.enriched_request.tool_choice.clone(),
-            standard_fields: {
-                let mut fields = crate::types::request_response::StandardResponseFields::default();
-                fields.apply_request(&pipeline.request.original_request);
-                fields
-            },
-        };
+        let request = &pipeline.request;
+        let mut payload = request.response_shell(request.enriched_request.model.clone(), "completed");
+        payload.instructions.clone_from(&request.original_request.instructions);
+        payload.tools.clone_from(&request.enriched_request.tools);
+        payload.tool_choice.clone_from(&request.enriched_request.tool_choice);
         // One bounded event in flight, plus one size-limited awaited frame per
         // active worker. Client backpressure reaches upstream readers.
         let (frame_sender, frames) = mpsc::channel(1);
@@ -194,14 +175,13 @@ impl MultiAgentRun {
         mut self,
         pipeline: &mut AgentPipeline,
         exec: &ExecutionContext,
-        auth: Option<&UpstreamHeaders>,
     ) -> ExecutorResult<ResponsePayload> {
         // A retained (WebSocket) owner cancels through the pipeline token, and the
         // tasks are still cancelled and joined below. A dropped HTTP stream drops
         // this future instead, and `RunOwner`'s drop aborts the tasks unjoined.
         let cancellation = pipeline.cancellation_token();
         let result = tokio::select! {
-            result = tokio::time::timeout(Duration::from_secs(3600), self.drive(pipeline, exec, auth)) => {
+            result = tokio::time::timeout(Duration::from_secs(3600), self.drive(pipeline, exec)) => {
                 result.unwrap_or_else(|_| Err(ExecutorError::StreamError("multi-agent response exceeded its one-hour runtime limit".into())))
             }
             () = cancellation.cancelled() => Err(ExecutorError::StreamError("multi-agent response cancelled".into())),
@@ -240,12 +220,7 @@ impl MultiAgentRun {
         Ok(self.payload)
     }
 
-    async fn drive(
-        &mut self,
-        pipeline: &mut AgentPipeline,
-        exec: &ExecutionContext,
-        auth: Option<&UpstreamHeaders>,
-    ) -> ExecutorResult<()> {
+    async fn drive(&mut self, pipeline: &mut AgentPipeline, exec: &ExecutionContext) -> ExecutorResult<()> {
         emit_response_start_events(&self.payload, pipeline.relay_mut()).await?;
         let discovery = self
             .contexts
@@ -268,7 +243,7 @@ impl MultiAgentRun {
                 self.complete(completion, pipeline).await?;
             }
             self.wake_waiters(pipeline).await?;
-            self.schedule(exec, auth, pipeline)?;
+            self.schedule(exec, pipeline)?;
             if self.tasks.is_empty() {
                 let waiting = self
                     .contexts

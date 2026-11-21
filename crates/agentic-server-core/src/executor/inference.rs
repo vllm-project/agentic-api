@@ -20,15 +20,6 @@ pub(crate) enum UpstreamHeaders {
     Forwarded(http::HeaderMap),
 }
 
-impl UpstreamHeaders {
-    fn transport_parts(&self) -> (Option<&str>, Option<&http::HeaderMap>) {
-        match self {
-            Self::Bearer(token) => (Some(token), None),
-            Self::Forwarded(headers) => (None, Some(headers)),
-        }
-    }
-}
-
 /// SSE stream of raw lines sent to the client (`data: …\n\n` per event).
 pub type BoxStream = std::pin::Pin<Box<dyn Stream<Item = String> + Send>>;
 
@@ -155,14 +146,16 @@ async fn send_request_traced(
     upstream_headers: Option<&UpstreamHeaders>,
     chunk_timeout: Duration,
 ) -> ExecutorResult<reqwest::Response> {
-    let (auth, forwarded_headers) = upstream_headers.map_or((None, None), UpstreamHeaders::transport_parts);
-    let mut headers = forwarded_headers.cloned().unwrap_or_default();
+    let mut headers = match upstream_headers {
+        Some(UpstreamHeaders::Forwarded(forwarded)) => forwarded.clone(),
+        Some(UpstreamHeaders::Bearer(_)) | None => http::HeaderMap::new(),
+    };
     super::telemetry::stages::inject_context(&mut headers);
     headers
         .entry(reqwest::header::CONTENT_TYPE)
         .or_insert(reqwest::header::HeaderValue::from_static("application/json"));
     let mut req = client.post(url).headers(headers).body(body);
-    if let Some(key) = auth {
+    if let Some(UpstreamHeaders::Bearer(key)) = upstream_headers {
         req = req.bearer_auth(key);
     }
 

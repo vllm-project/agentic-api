@@ -21,6 +21,7 @@ pub use retained::PreparedRetainedResponse;
 use usage::accumulate_usage;
 
 use std::num::NonZeroUsize;
+use std::sync::Arc;
 
 #[cfg(test)]
 use either::Either;
@@ -41,11 +42,10 @@ use crate::executor::telemetry::stages::CompactionTrigger;
 use crate::tool::{ToolSearchMetadata, ToolSearchState};
 #[cfg(test)]
 use crate::types::io::ResponsesInput;
-use crate::types::io::{CompactionItem, OutputItem, ResponseUsage};
+use crate::types::io::{OutputItem, ResponseUsage};
 #[cfg(test)]
 use crate::types::request_response::RequestPayload;
 use crate::types::request_response::{IncompleteDetails, ResponsePayload};
-use crate::utils::common::utcnow_str;
 #[cfg(test)]
 use agent_turn::build_tool_registry;
 use agent_turn::{AgentTurn, RoundDecision, RoundResult};
@@ -58,23 +58,16 @@ const MAX_GATEWAY_TOOL_ROUNDS: NonZeroUsize = NonZeroUsize::new(10).unwrap();
 async fn run_until_gateway_tools_complete(
     agent: &mut AgentPipeline,
     exec_ctx: &ExecutionContext,
-    auth: Option<&UpstreamHeaders>,
-    stream_upstream: bool,
 ) -> ExecutorResult<(ResponsePayload, Option<ToolSearchMetadata>)> {
     if agent.request.original_request.input.has_compaction_trigger() {
         let tool_search_metadata = agent.take_tool_search_metadata();
-        let payload = run_compaction_trigger(&mut agent.request, exec_ctx, auth).await?;
+        let payload = run_compaction_trigger(agent, exec_ctx).await?;
         let relay = agent.relay_mut();
         emit_response_start_events(&payload, relay).await?;
         relay.present_compaction(&payload.output[0], 0).await?;
         return Ok((payload, tool_search_metadata));
     }
-    Box::pin(
-        EngineOrchestration::new(agent, exec_ctx)
-            .await?
-            .run(auth, stream_upstream),
-    )
-    .await
+    Box::pin(EngineOrchestration::new(agent, exec_ctx).await?.run()).await
 }
 
 /// Response-level orchestration. Owns the shared retained-byte budget and
@@ -92,13 +85,7 @@ enum EngineOrchestration<'a> {
 
 impl<'a> EngineOrchestration<'a> {
     async fn new(agent: &'a mut AgentPipeline, exec_ctx: &'a ExecutionContext) -> ExecutorResult<Self> {
-        if agent
-            .request
-            .enriched_request
-            .multi_agent
-            .as_ref()
-            .is_some_and(|config| config.enabled)
-        {
+        if agent.request.enriched_request.multi_agent_enabled() {
             let coordinator = Box::new(MultiAgentRun::new(agent, exec_ctx).await?);
             Ok(Self::Multi {
                 coordinator,
@@ -110,18 +97,14 @@ impl<'a> EngineOrchestration<'a> {
         }
     }
 
-    async fn run(
-        self,
-        auth: Option<&UpstreamHeaders>,
-        stream_upstream: bool,
-    ) -> ExecutorResult<(ResponsePayload, Option<ToolSearchMetadata>)> {
+    async fn run(self) -> ExecutorResult<(ResponsePayload, Option<ToolSearchMetadata>)> {
         match self {
-            Self::Single(run) => run.run(auth, stream_upstream).await,
+            Self::Single(run) => run.run().await,
             Self::Multi {
                 coordinator,
                 pipeline,
                 exec_ctx,
-            } => Box::pin(coordinator.run(pipeline, exec_ctx, auth))
+            } => Box::pin(coordinator.run(pipeline, exec_ctx))
                 .await
                 .map(|payload| (payload, None)),
         }
@@ -155,17 +138,11 @@ impl<'a> SingleAgentRun<'a> {
         })
     }
 
-    async fn run(
-        mut self,
-        auth: Option<&UpstreamHeaders>,
-        stream_upstream: bool,
-    ) -> ExecutorResult<(ResponsePayload, Option<ToolSearchMetadata>)> {
+    async fn run(mut self) -> ExecutorResult<(ResponsePayload, Option<ToolSearchMetadata>)> {
         loop {
             self.rounds.begin_round();
-            let RoundResult { mut payload, decision } = self
-                .root
-                .run_round(self.output.len(), auth, stream_upstream, &self.response_budget)
-                .await?;
+            let RoundResult { mut payload, decision } =
+                self.root.run_round(self.output.len(), &self.response_budget).await?;
             accumulate_usage(&mut self.usage, payload.usage.take());
             match decision {
                 RoundDecision::Continue => {
@@ -180,7 +157,7 @@ impl<'a> SingleAgentRun<'a> {
                 RoundDecision::Done if payload.status == "completed" => {
                     let final_output = std::mem::take(&mut payload.output);
                     let output_offset = self.output.len() + final_output.len();
-                    let compaction = self.root.compact_after_turn(&final_output, output_offset, auth).await?;
+                    let compaction = self.root.compact_after_turn(&final_output, output_offset).await?;
                     self.output.extend(final_output);
                     if let Some((item, usage)) = compaction {
                         self.output.push(item);
@@ -203,18 +180,14 @@ impl<'a> SingleAgentRun<'a> {
 /// The trigger never reaches the upstream model; the summary inference is a
 /// normal blocking call against the same backend as standalone compaction.
 async fn run_compaction_trigger(
-    ctx: &mut RequestContext,
+    agent: &mut AgentPipeline,
     exec_ctx: &ExecutionContext,
-    auth: Option<&UpstreamHeaders>,
 ) -> ExecutorResult<ResponsePayload> {
+    let auth = agent.upstream_headers().cloned();
+    let ctx = &mut agent.request;
     let model = ctx.enriched_request.model.clone();
     let instructions = ctx.enriched_request.instructions.clone();
-    let (compaction, usage, service_tier) = if ctx
-        .enriched_request
-        .multi_agent
-        .as_ref()
-        .is_some_and(|config| config.enabled)
-    {
+    let (compaction, usage, service_tier) = if ctx.enriched_request.multi_agent_enabled() {
         MultiAgentRun::compact_root(ctx, exec_ctx, auth).await?
     } else {
         // As with automatic compaction, the compaction item carries its window, and the turn keeps the items it was sent.
@@ -227,32 +200,13 @@ async fn run_compaction_trigger(
             CompactionTrigger::InputItem,
         )
         .await?;
-        let compaction = CompactionItem::carrying(
-            window.compaction.id,
-            window.compaction.encrypted_content,
-            window.retained,
-        )?;
-        (compaction, window.usage, window.service_tier)
+        window.into_carrying_item()?
     };
-    let mut payload = ResponsePayload {
-        id: ctx.response_id.clone(),
-        object: "response".to_owned(),
-        created_at: utcnow_str(),
-        model,
-        status: "completed".to_owned(),
-        output: vec![OutputItem::Compaction(compaction)],
-        usage: Some(usage),
-        incomplete_details: None,
-        error: None,
-        previous_response_id: ctx.original_request.previous_response_id.clone(),
-        conversation: ctx.conversation_id.clone(),
-        instructions,
-        max_tool_calls: None,
-        service_tier,
-        tools: None,
-        tool_choice: None,
-        standard_fields: crate::types::request_response::StandardResponseFields::default(),
-    };
+    let mut payload = ctx.response_shell(model, "completed");
+    payload.output = vec![OutputItem::Compaction(compaction)];
+    payload.usage = Some(usage);
+    payload.instructions = instructions;
+    payload.service_tier = service_tier;
     ctx.inject_ids(&mut payload);
     Ok(payload)
 }
@@ -275,11 +229,10 @@ async fn run_blocking(
     ctx: RequestContext,
     tool_search_state: Option<ToolSearchState>,
     exec_ctx: &ExecutionContext,
-    auth: Option<&UpstreamHeaders>,
+    auth: Option<Arc<UpstreamHeaders>>,
 ) -> ExecutorResult<ResponsePayload> {
-    let mut agent = AgentPipeline::new(ctx, tool_search_state, StreamRelay::detached());
-    let (payload, tool_search_metadata) =
-        Box::pin(run_until_gateway_tools_complete(&mut agent, exec_ctx, auth, false)).await?;
+    let mut agent = AgentPipeline::new(ctx, tool_search_state, StreamRelay::detached(), auth);
+    let (payload, tool_search_metadata) = Box::pin(run_until_gateway_tools_complete(&mut agent, exec_ctx)).await?;
     let (ctx, _) = agent.into_parts();
 
     Box::pin(persist(
@@ -484,7 +437,7 @@ mod tests {
             .consume(MAX_EXECUTOR_RESPONSE_BYTES - 512)
             .expect("reserve most of the response budget");
 
-        let mut request = AgentPipeline::new(request, None, StreamRelay::detached());
+        let mut request = AgentPipeline::new(request, None, StreamRelay::detached(), None);
         let error = build_tool_registry(&mut request, &exec_ctx, &response_budget, None)
             .await
             .expect_err("MCP discovery must share the request-wide response budget");
@@ -580,7 +533,7 @@ mod tests {
         }
 
         let plain_budget = ExecutorResponseBudget::new();
-        let mut plain_request = AgentPipeline::new(plain_request, None, StreamRelay::detached());
+        let mut plain_request = AgentPipeline::new(plain_request, None, StreamRelay::detached(), None);
         let mut plain_build = Box::pin(build_tool_registry(&mut plain_request, &exec_ctx, &plain_budget, None));
         assert!(matches!(
             futures::poll!(plain_build.as_mut()),
@@ -589,7 +542,7 @@ mod tests {
         drop(plain_build);
 
         let mcp_budget = ExecutorResponseBudget::new();
-        let mut mcp_request = AgentPipeline::new(mcp_request, None, StreamRelay::detached());
+        let mut mcp_request = AgentPipeline::new(mcp_request, None, StreamRelay::detached(), None);
         let mut mcp_build = Box::pin(build_tool_registry(&mut mcp_request, &exec_ctx, &mcp_budget, None));
         assert!(futures::poll!(mcp_build.as_mut()).is_pending());
 
@@ -647,7 +600,7 @@ mod tests {
             }],
         });
 
-        let mut agent = AgentPipeline::new(request, None, StreamRelay::detached());
+        let mut agent = AgentPipeline::new(request, None, StreamRelay::detached(), None);
         let registry = build_tool_registry(&mut agent, &exec_ctx, &ExecutorResponseBudget::new(), None)
             .await
             .expect("registry with a discovered MCP tool");

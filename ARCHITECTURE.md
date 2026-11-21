@@ -455,8 +455,8 @@ not attempt to write a response.
 `session/steering.rs` owns accepted input, successor reservations, and publication.
 The public types remain re-exported through `executor::session`.
 
-Core callers can use `ExecuteRequest::with_session(session, pin)` or `rehydrate_in_session` to
-retain response state without durable storage. The WebSocket multiplexer owns one
+Core callers can use `ExecuteRequest::with_session(session, pin)`, or pass `rehydrate` the continuation
+`ResponseSession::begin` returns, to retain response state without durable storage. The WebSocket multiplexer owns one
 `ResponseSessionGroup` per connection and keeps one session per lane, including idle
 lanes. No-session HTTP and split execution keep their existing behavior.
 
@@ -592,7 +592,7 @@ the retry hints. Executor errors keep going through `handler/common.rs`.
 **Nothing in `agentic-server`'s request-handling code (`handler/*`, `app.rs`,
 `server.rs`) imports `agentic_core::storage` directly.** All persistence goes through
 `AppState.exec_ctx: Arc<ExecutionContext>` — e.g. `ExecuteRequest::run()`,
-`ConversationHandler::create()`, `persist_turn()`, `rehydrate_conversation()`,
+`ConversationHandler::create()`, `persist_turn()`, `rehydrate()`,
 `ExecutionContext::storage_ready()`. `ExecutionContext::from_config` is the only place
 that constructs the storage handlers, and it does so precisely so callers don't need
 to depend on the storage layer:
@@ -858,7 +858,7 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   what `AppState` holds; it exposes `conv_handler`/`resp_handler` (the `modes/`
   handlers below), never the raw stores. See [original and enriched requests](#original-and-enriched-requests)
   for the two request copies' responsibilities.
-- **`rehydrate.rs`** — `rehydrate_conversation()` loads prior history from either the
+- **`rehydrate.rs`** — `rehydrate()` loads prior history from either the
   conversation store or the response store depending on which ID the request carries,
   and builds the enriched `RequestContext`. Every source (a stored response, a session parent, or a
   conversation turn) leaves its `ResponseCheckpoint` on the context (`checkpoint`): the continued turn's
@@ -1539,7 +1539,8 @@ still holds deferred frames. Every method reaches the client through one private
 sink: `StreamRelay::client` for the bounded SSE channel, `response` for a retained
 WebSocket response's `ResponseEventSink`, `agent` for a multi-agent round's
 `AgentFrameSink`, and `detached` for collect-only and JSON execution. `AgentPipeline::new`
-takes the configured relay, so the pipeline never handles a sender.
+takes the configured relay, so the pipeline never handles a sender, and the request's upstream headers, which every
+upstream call of the pipeline and of the round and compaction tasks it spawns sends.
 Sequence and response-start deduplication state is committed after the sink accepts
 the event, so a failed serialization, closed receiver, or cancelled send cannot consume
 it. Enqueueing is not client receipt or playback acknowledgement, and this does not

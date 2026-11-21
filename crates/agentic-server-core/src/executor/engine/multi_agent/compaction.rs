@@ -11,6 +11,7 @@ use crate::types::{
     agent_tree::StoredTreeSnapshot,
     io::{CompactionItem, InOutItem, InputItem, ResponseUsage},
 };
+use std::sync::Arc;
 
 impl MultiAgentRun {
     // No agent tasks are running during this operation: the restored snapshot is
@@ -18,7 +19,7 @@ impl MultiAgentRun {
     pub(crate) async fn compact_root(
         ctx: &mut RequestContext,
         exec: &ExecutionContext,
-        auth: Option<&UpstreamHeaders>,
+        auth: Option<Arc<UpstreamHeaders>>,
     ) -> ExecutorResult<(CompactionItem, ResponseUsage, Option<String>)> {
         let budget = ExecutorResponseBudget::with_limit(exec.responses_config.max_retained_bytes);
         let mut restored = restore_agents(ctx, exec, &budget)?;

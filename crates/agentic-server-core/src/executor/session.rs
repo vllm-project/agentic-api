@@ -265,7 +265,13 @@ impl ResponseSession {
         Ok(())
     }
 
-    pub(crate) fn begin(&self, previous_id: Option<&str>) -> ExecutorResult<ResponseContinuation> {
+    /// Begins one turn in this session. The lease continues the retained parent when `previous_id` names it, or a
+    /// fork of a group member's parent, and ends when the turn finishes or is dropped.
+    ///
+    /// # Errors
+    /// Returns an invalid-request error when the session or its group is closed or already executing a turn, and a
+    /// stream error if a session lock is poisoned.
+    pub fn begin(&self, previous_id: Option<&str>) -> ExecutorResult<ResponseContinuation> {
         let group = self.group.as_ref().map(|group| lock_group(group)).transpose()?;
         if group.as_ref().is_some_and(|group| group.closed) {
             return Err(ExecutorError::InvalidRequest(
