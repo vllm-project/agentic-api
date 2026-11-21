@@ -34,8 +34,8 @@ pub use pool::{
 pub use response::ResponseStore;
 pub use schema::{PoolWithSchema, SchemaManager};
 pub use types::{
-    ConversationData, ConversationSnapshot, ItemKind, ResponseCheckpoint, ResponseData, ResponseMetadata, StorageError,
-    StoreResult,
+    BackgroundStatus, ConversationData, ConversationSnapshot, FinishedTurn, ItemKind, QueuedTurn, ResponseCheckpoint,
+    ResponseData, ResponseMetadata, StorageError, StoreResult,
 };
 pub mod file_search;
 pub mod local_files;

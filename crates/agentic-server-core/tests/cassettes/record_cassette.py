@@ -1103,11 +1103,112 @@ def _record_overlapping_multi_agent(client: httpx.Client, proxy_url: str, model:
     request("GET", items_path, params=ascending)
 
 
+BACKGROUND_ACTIVE = ("queued", "in_progress")
+# Long enough that a background response is still running when the scenario cancels it.
+BACKGROUND_LONG_PROMPT = "Write a story of at least 2000 words about a lighthouse keeper. Do not stop early."
+
+
+def _background_create(
+    client: httpx.Client, proxy_url: str, model: str, prompt: str, *,
+    conversation: str | None = None, store: bool = True, max_output_tokens: int | None = None,
+    expected_status: int | None = 200,
+) -> dict:
+    body: dict[str, Any] = {
+        "model": model, "input": [{"role": "user", "content": prompt}], "store": store, "background": True,
+    }
+    if conversation:
+        body["conversation"] = conversation
+    if max_output_tokens:
+        body["max_output_tokens"] = max_output_tokens
+    return _item_request(client, proxy_url, "POST", "/v1/responses", body=body, expected_status=expected_status)
+
+
+def _background_wait(client: httpx.Client, upstream_url: str, response_id: str, timeout: float = 600) -> str:
+    """Poll the provider directly, outside the cassette, until a background response leaves queued/in_progress."""
+    deadline = time.monotonic() + timeout
+    while True:
+        response = client.get(f"{upstream_url}/v1/responses/{response_id}", timeout=_http_timeout())
+        _raise_recording_http_error(response)
+        status = response.json().get("status")
+        if status not in BACKGROUND_ACTIVE:
+            print(f"[{response_id} finished: {status}]")
+            return status
+        if time.monotonic() > deadline:
+            raise click.ClickException(f"{response_id} is still {status} after {timeout:.0f}s")
+        time.sleep(1)
+
+
+def _background_cancel_running(client: httpx.Client, proxy_url: str, response_id: str) -> None:
+    cancelled = _item_request(client, proxy_url, "POST", f"/v1/responses/{response_id}/cancel")
+    if cancelled.get("status") != "cancelled":
+        raise click.ClickException(
+            f"{response_id} was {cancelled.get('status')} when cancelled, not running; rerun the scenario."
+        )
+
+
+def _record_background(client: httpx.Client, proxy_url: str, upstream_url: str, model: str) -> None:
+    """Background mode: a completed response, a response cancelled while it runs, the same in a conversation,
+    and `store: false`. Status polls go straight to the provider, so the recorded turns are fixed: 25, or 24 when
+    continuing a cancelled response is refused.
+    """
+    # A completed background response: retrieval, input items, cancelling it, continuing it.
+    done = _background_create(client, proxy_url, model, "Reply with only SAPPHIRE.")
+    _background_wait(client, upstream_url, done["id"])
+    done_path = f"/v1/responses/{done['id']}"
+    _item_request(client, proxy_url, "GET", done_path)
+    _item_request(client, proxy_url, "GET", f"{done_path}/input_items")
+    _item_request(client, proxy_url, "POST", f"{done_path}/cancel", expected_status=None)
+    child = _item_response(client, proxy_url, model, "Reply with only ORCHID.", previous_response_id=done["id"])
+    _item_request(client, proxy_url, "POST", f"/v1/responses/{child['id']}/cancel", expected_status=None)
+
+    # A response cancelled while it runs: its input items and continuations, before and after the cancel.
+    running = _background_create(client, proxy_url, model, BACKGROUND_LONG_PROMPT, max_output_tokens=4000)
+    running_path = f"/v1/responses/{running['id']}"
+    _item_request(client, proxy_url, "GET", f"{running_path}/input_items", expected_status=None)
+    _item_request(client, proxy_url, "POST", "/v1/responses", expected_status=None, body={
+        "model": model, "previous_response_id": running["id"], "store": True,
+        "input": [{"role": "user", "content": "Reply with only TOPAZ."}],
+    })
+    _background_cancel_running(client, proxy_url, running["id"])
+    _item_request(client, proxy_url, "POST", f"{running_path}/cancel", expected_status=None)
+    _item_request(client, proxy_url, "GET", running_path)
+    _item_request(client, proxy_url, "GET", f"{running_path}/input_items", expected_status=None)
+    continued = _item_request(client, proxy_url, "POST", "/v1/responses", expected_status=None, body={
+        "model": model, "previous_response_id": running["id"], "store": True,
+        "input": [{"role": "user", "content": "What did I ask you to write? Reply in five words."}],
+    })
+    if continued.get("id"):
+        _item_request(client, proxy_url, "GET", f"/v1/responses/{continued['id']}/input_items")
+    _item_request(client, proxy_url, "POST", "/v1/responses/resp_missing/cancel", expected_status=None)
+
+    # In a conversation: its items while a turn runs, after it is cancelled, and after one completes.
+    conversation = _create_conversation(client, proxy_url)
+    items_path = f"/v1/conversations/{conversation}/items"
+    ascending = {"order": "asc"}
+    running = _background_create(
+        client, proxy_url, model, BACKGROUND_LONG_PROMPT, conversation=conversation, max_output_tokens=4000,
+    )
+    _item_request(client, proxy_url, "GET", items_path, params=ascending)
+    _background_cancel_running(client, proxy_url, running["id"])
+    _item_request(client, proxy_url, "GET", items_path, params=ascending)
+    done = _background_create(client, proxy_url, model, "Reply with only TOPAZ.", conversation=conversation)
+    _background_wait(client, upstream_url, done["id"])
+    _item_request(client, proxy_url, "GET", items_path, params=ascending)
+    _item_request(client, proxy_url, "GET", f"/v1/responses/{done['id']}/input_items")
+
+    _background_create(client, proxy_url, model, "Reply with only OK.", store=False, expected_status=None)
+
+
 def run_items(
     client: httpx.Client, proxy_url: str, model: str, scenario: str, stream: bool,
-    *, max_output_tokens: int | None = None,
+    *, max_output_tokens: int | None = None, upstream_url: str | None = None,
 ) -> None:
     """Record each fixed Conversation Items or Responses API request as a numbered step."""
+    if scenario == "response-background":
+        if stream or upstream_url is None:
+            raise click.UsageError("--items-scenario response-background records JSON only; use --no-stream.")
+        _record_background(client, proxy_url, upstream_url, model)
+        return
     if scenario == "multi-agent-store-false":
         run_multi_agent_store_false(
             client, proxy_url, model, stream,
@@ -3283,7 +3384,7 @@ def run_responses(
 )
 @click.option(
     "--items-scenario",
-    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "item-id-prefixes", "concurrent-writes", "stale-compaction", *COMPACTION_SCENARIOS, *MCP_SCENARIOS, "competing-tool-outputs", "overlapping-multi-agent", "store-false", "multi-agent-store-false", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items", "response-call-ids", "response-item-id-prefixes"]),
+    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "item-id-prefixes", "concurrent-writes", "stale-compaction", *COMPACTION_SCENARIOS, *MCP_SCENARIOS, "competing-tool-outputs", "overlapping-multi-agent", "store-false", "multi-agent-store-false", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items", "response-call-ids", "response-item-id-prefixes", "response-background"]),
     default="continuation",
     help="Fixed Conversation Items or Responses API scenario (for --mode items).",
 )
@@ -3568,6 +3669,7 @@ def main(
                           14 if items_scenario == "response-replayed-items" else
                           48 if items_scenario == "response-tool-items" else
                           17 if items_scenario == "response-call-ids" else
+                          25 if items_scenario == "response-background" else
                           10 if items_scenario == "pagination" else
                           6 if items_scenario == "branch" else
                           24 if items_scenario == "edge-cases" else
@@ -3828,7 +3930,7 @@ def main(
             with httpx.Client(headers=headers) as client:
                 if mode == "items":
                     run_items(client, proxy_url, model, items_scenario, stream,
-                              max_output_tokens=response_max_output_tokens)
+                              max_output_tokens=response_max_output_tokens, upstream_url=target)
                 elif mode == "conv":
                     run_conv(client, turns, model, stream, store, branches, proxy_url)
                 elif mode == "isolation":

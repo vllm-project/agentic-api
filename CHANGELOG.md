@@ -14,6 +14,21 @@ All notable changes to Agentic API are documented here.
   returns `OpenAI`'s `Files [<id>] were not found` 404, and resolved content counts toward the request body
   limit. A `file_id` in a structured function/custom tool call output is resolved the same way, while other
   tool-output parts pass through unchanged. Upload purpose `vision` is now accepted (#356).
+- Added background mode for HTTP `POST /v1/responses` (#357). `background: true` validates and prepares the request as
+  a foreground request would, stores it as `queued` with its input items, and returns at once; a supervised job runs
+  it on the same engine path and appends its output to the `completed` or `incomplete` result, or records `failed`.
+  `input_items` and `previous_response_id` see the input while it runs and after it is cancelled or fails; in a
+  conversation, the input and output join it when the response finishes, as OpenAI's do.
+  `GET /v1/responses/{response_id}` reports the current status, and the new `POST /v1/responses/{response_id}/cancel`
+  cancels a queued or running response (cancelling twice returns the same response; cancelling a finished one returns
+  `400`). Admission is bounded per instance by `[responses] background_max_concurrent` (default 16) and
+  `background_max_queued` (default 64), with `503 background_capacity_exceeded` beyond both, and each job by
+  `background_timeout_seconds` (default 1800); each has an `AGENTIC_BACKGROUND_*` environment override. Instances that
+  share a database own their jobs through a renewable lease, so cancellation and deletion work from any instance and a
+  stopped instance's rows become `failed`. Graceful shutdown records running and queued jobs `failed`. Migration
+  `0013_background_responses.sql` adds three nullable columns to `responses`. `background` with `store: false`,
+  `stream: true`, or `multi_agent`, and `GET` with `stream=true` or `starting_after`, return `400` for now; WebSocket
+  and split-execution hydration still reject `background: true`.
 - Added one tenant-scoped session id on `/v1/messages` and `/v1/messages/count_tokens` (#159).
   `x-claude-code-session-id` and `X-Session-ID` must agree or the request fails with HTTP 400 before any upstream
   call. The gateway forwards `X-Session-ID`, which vLLM reads as the request's `session_id`, set to a SHA-256 of the

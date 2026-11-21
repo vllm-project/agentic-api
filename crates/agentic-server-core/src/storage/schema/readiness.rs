@@ -106,6 +106,7 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                          ('items', 'INSERT'), \
                          ('responses', 'SELECT'), \
                          ('responses', 'INSERT'), \
+                         ('responses', 'UPDATE'), \
                          ('file_search_files', 'SELECT'), \
                          ('file_search_files', 'INSERT'), \
                          ('file_search_files', 'DELETE'), \
@@ -127,7 +128,7 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                          ('file_search_vec_map', 'DELETE') \
                  ) \
                  SELECT current_setting('transaction_read_only') = 'off' \
-                    AND COUNT(table_relation.oid) = 30 \
+                    AND COUNT(table_relation.oid) = 31 \
                     AND COALESCE(BOOL_AND( \
                         has_table_privilege(current_user, table_relation.oid, required.privilege) \
                     ), false) \
@@ -156,7 +157,7 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                 "SELECT message_id, owner_hash, checkpoint, state, lease_token, lease_until, expires_at FROM message_threads LIMIT 0",
                 "SELECT id FROM conversations LIMIT 0",
                 "SELECT id FROM items LIMIT 0",
-                "SELECT id FROM responses LIMIT 0",
+                "SELECT id, background_status, background_owner, background_lease_expires_at FROM responses LIMIT 0",
                 "SELECT id, created_at, data, content_type, content_base64 FROM file_search_files LIMIT 0",
                 "SELECT file_id, owner_token, intent, lease_expires_at FROM file_search_blob_cleanup LIMIT 0",
                 "SELECT id, created_at, data, embedding_identity, embedding_dimensions FROM file_search_stores LIMIT 0",

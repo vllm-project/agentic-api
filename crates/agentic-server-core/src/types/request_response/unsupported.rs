@@ -3,6 +3,8 @@
 //! Wire decoding validates field shapes. Admission rejects unsupported gateway features and
 //! explicitly configured model restrictions before history lookup or inference. Unconfigured
 //! model capabilities remain upstream-owned, independently of catalog display defaults.
+//! The HTTP background driver takes `background: true` before admission; every other entry
+//! point still rejects it.
 
 use std::fmt;
 
@@ -96,7 +98,7 @@ impl<'de> Visitor<'de> for BackgroundVisitor {
 /// that is not a boolean.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum UnsupportedParameterError {
-    #[error("background mode is not supported; omit `background` or set it to false")]
+    #[error("background mode is only supported by HTTP POST /v1/responses; omit `background` or set it to false")]
     BackgroundMode,
     #[error("Invalid type for 'background': expected a boolean, but got {0} instead.")]
     BackgroundType(JsonKind),
@@ -198,6 +200,16 @@ impl RequestPayload {
             return Err(UnsupportedParameterError::EnableResponseMessages);
         }
         Ok(())
+    }
+
+    /// Takes `background: true` for the driver that runs it. Any other value
+    /// stays for [`Self::ensure_supported_parameters`] to judge.
+    pub fn take_background(&mut self) -> bool {
+        let requested = matches!(self.background, Some(Background(WireBackground::Boolean(true))));
+        if requested {
+            self.background = None;
+        }
+        requested
     }
 
     /// Rejects request members typed execution recognizes but cannot honour.

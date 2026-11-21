@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Record flat Responses API cassettes with the existing Python recorder.
-# RESPONSES_RECORD_SET=all|openai|gateway; RESPONSES_SCENARIO=all|lifecycle|pagination|edge-cases|conversation|replayed-items|tool-items|call-ids|item-id-prefixes.
+# RESPONSES_RECORD_SET=all|openai|gateway; RESPONSES_SCENARIO=all|lifecycle|pagination|edge-cases|conversation|replayed-items|tool-items|call-ids|item-id-prefixes|background.
 # RESPONSES_STREAM_MODE=nonstreaming|streaming|both (default: nonstreaming).
 set -euo pipefail
 
@@ -24,8 +24,8 @@ case "$RECORD_SET" in
     *) echo "RESPONSES_RECORD_SET must be all, openai, or gateway" >&2; exit 2 ;;
 esac
 case "$SCENARIO" in
-    all|lifecycle|pagination|edge-cases|conversation|replayed-items|tool-items|call-ids|item-id-prefixes) ;;
-    *) echo "RESPONSES_SCENARIO must be all, lifecycle, pagination, edge-cases, conversation, replayed-items, tool-items, call-ids, or item-id-prefixes" >&2; exit 2 ;;
+    all|lifecycle|pagination|edge-cases|conversation|replayed-items|tool-items|call-ids|item-id-prefixes|background) ;;
+    *) echo "RESPONSES_SCENARIO must be all, lifecycle, pagination, edge-cases, conversation, replayed-items, tool-items, call-ids, item-id-prefixes, or background" >&2; exit 2 ;;
 esac
 case "$STREAM_MODE" in
     nonstreaming|streaming|both) ;;
@@ -54,6 +54,7 @@ record() {
         tool-items) turns=48; mode=response-tool-items; read_timeout="${HTTP_READ_TIMEOUT:-900}" ;;
         call-ids) turns=17; mode=response-call-ids ;;
         item-id-prefixes) turns=11; mode=response-item-id-prefixes ;;
+        background) turns=25; mode=response-background; read_timeout="${HTTP_READ_TIMEOUT:-600}" ;;
     esac
     local suffix="" stream_flag=--no-stream
     if [[ "$transport" == streaming ]]; then suffix="-stream"; stream_flag=--stream; fi
@@ -87,6 +88,8 @@ if scenario == "tool-items":
     assert len(turns) >= 5
 elif scenario == "call-ids":
     assert 12 <= len(turns) <= count, "conversation follow-ups run only after a successful creation"
+elif scenario == "background":
+    assert count - 1 <= len(turns) <= count, "a refused continuation of a cancelled response has no input page"
 else:
     assert len(turns) == count
 assert [turn["filename"] for turn in turns] == [f"t{i}" for i in range(1, len(turns) + 1)]
@@ -121,6 +124,11 @@ elif scenario == "conversation":
 elif scenario == "replayed-items":
     assert sum(turn["request"]["method"] == "POST" for turn in turns) == 5
     assert any(len(turn["request"]["body"].get("input", [])) == 3 for turn in turns)
+elif scenario == "background":
+    assert turns[0]["request"]["body"]["background"] is True
+    assert sum(turn["request"]["path"].endswith("/cancel") for turn in turns) == 6
+    assert [turn["request"]["path"] for turn in turns].count("/v1/conversations") == 1
+    assert turns[-1]["request"]["body"]["store"] is False
 elif scenario == "item-id-prefixes":
     posts = [(turn["request"]["method"], turn["request"]["path"]) for turn in turns]
     assert posts[:5] == [("POST", "/v1/responses")] * 5 and posts[5] == ("POST", "/v1/conversations")
@@ -162,11 +170,11 @@ CASSETTE_CHECK
 for provider in openai gateway; do
     if [[ "$RECORD_SET" != all && "$RECORD_SET" != "$provider" ]]; then continue; fi
     if [[ "$provider" == openai ]]; then model="$OPENAI_MODEL"; else model="$GATEWAY_MODEL"; fi
-    for scenario in lifecycle pagination edge-cases conversation replayed-items tool-items call-ids item-id-prefixes; do
+    for scenario in lifecycle pagination edge-cases conversation replayed-items tool-items call-ids item-id-prefixes background; do
         if [[ "$SCENARIO" != all && "$SCENARIO" != "$scenario" ]]; then continue; fi
-        # Source tool scenarios and ID admission probes use JSON. Capture
-        # them once even when both transports are selected.
-        if [[ "$scenario" == tool-items || "$scenario" == call-ids || "$scenario" == item-id-prefixes ]]; then
+        # Source tool scenarios, ID admission probes, and background mode use
+        # JSON. Capture them once even when both transports are selected.
+        if [[ "$scenario" == tool-items || "$scenario" == call-ids || "$scenario" == item-id-prefixes || "$scenario" == background ]]; then
             record "$provider" "$scenario" "$model" nonstreaming
             continue
         fi

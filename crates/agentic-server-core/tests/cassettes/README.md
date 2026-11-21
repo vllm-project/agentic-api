@@ -51,6 +51,7 @@ than assuming that OpenAI and the gateway accept the same requests.
 | `replayed-items` | 14 | Generated-ID reuse, two copies of an ID with different content, wrong-prefix IDs, function call/output history without public item IDs, seed immutability after probes. |
 | `call-ids` | Up to 17 | Function call history whose `call_id` repeats in one input (two calls and outputs, two calls and one output, one call and two outputs, a call repeated after its output) or is empty; `previous_response_id` continuations that repeat a stored turn's forced call or send its output twice, plus a normal control; conversations created with a repeated or empty `call_id`, or appended to with a reused one, then a turn. Each request names its case in `x-run-id`; a conversation's follow-ups run only after it is created. JSON only. |
 | `tool-items` | 48 plus additional pages | Replay existing parallel builtin/client/mixed tools, shell, code interpreter, tool search, and the multi-agent review task; inspect complete input pages after each response and a final continuation. |
+| `background` | 25 (24 when continuing a cancelled response is refused) | `background: true`: a completed response (retrieval, input items, cancel, continuation, cancelling a foreground response); a long response cancelled while it runs (input items and continuation before and after, a second cancel, an unknown ID); the same in a conversation, with its items while running, after the cancel, and after a turn completes; and `store: false`. Status polls go to the provider directly and are not recorded. JSON only. |
 
 From the worktree root, with an inference server already running:
 
@@ -157,6 +158,13 @@ Listed items get OpenAI's omitted statuses: a client function call is
 before that tolerate their absence while checking other values. Function, custom, and shell result types retain their IDs
 and statuses. Stored results use `fc_`, `ctco_`, and `sho_` IDs respectively.
 Explicit statuses are kept.
+
+The `background` replay mocks inference by prompt: each prompt gets its recorded
+completion, and the long prompt stays open until a cancel drops it. After a short
+background create, the replay polls the gateway until the response finishes, as
+the recorder polled the provider. Both recordings are replayed, and the gateway's
+status codes and errors are checked against OpenAI's turn at the same position. The
+final `store: false` turn is not replayed: OpenAI queues it, and the gateway returns `400`.
 Gateway-created function results receive their identity and completed status at
 creation. Input-item listings return stored items without classifying gateway call/result
 pairs by their projected IDs. The gateway tool capture predates removal of that

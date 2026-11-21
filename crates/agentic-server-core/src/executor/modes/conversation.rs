@@ -1,6 +1,9 @@
 //! Conversation storage handler — owns all conversation store operations.
 
-use crate::storage::{ConversationData, ConversationSnapshot, ConversationStore, ResponseMetadata, StorageError};
+use crate::storage::{
+    ConversationData, ConversationSnapshot, ConversationStore, QueuedTurn, ResponseCheckpoint, ResponseMetadata,
+    StorageError,
+};
 use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 use crate::types::io::{ItemPage, ListItemsResponse};
@@ -203,22 +206,43 @@ impl ConversationHandler {
         snapshot: Option<&ResponsePayload>,
         metadata: &ResponseMetadata,
     ) -> ExecutorResult<()> {
-        let conversation_id = ctx
-            .conversation_id
-            .as_deref()
-            .ok_or_else(|| ExecutorError::InvalidRequest("conversation is required for persist".into()))?;
-        let checkpoint = ctx
-            .checkpoint
-            .as_ref()
-            .ok_or_else(|| ExecutorError::InvalidRequest("conversation checkpoint is required for persist".into()))?;
-
+        let (conversation_id, checkpoint) = turn_target(ctx)?;
         self.store
             .persist(conversation_id, checkpoint, &ctx.response_id, items, snapshot, metadata)
             .await
-            .map_err(|error| match error {
-                source @ StorageError::ConversationConflict { .. } => ExecutorError::ConversationLocked { source },
-                other => ExecutorError::Storage(other),
-            })
+            .map_err(turn_error)
+    }
+
+    /// Stores a background turn as `queued`, as [`Self::persist`] stores a finished one; its job appends the output.
+    ///
+    /// # Errors
+    /// As [`Self::persist`].
+    pub(crate) async fn enqueue_background(&self, ctx: &RequestContext, turn: QueuedTurn<'_>) -> ExecutorResult<()> {
+        let (conversation_id, checkpoint) = turn_target(ctx)?;
+        self.store
+            .enqueue_background(conversation_id, checkpoint, turn)
+            .await
+            .map_err(turn_error)
+    }
+}
+
+/// The conversation a turn is stored in, and the checkpoint it continued.
+fn turn_target(ctx: &RequestContext) -> ExecutorResult<(&str, &ResponseCheckpoint)> {
+    let conversation_id = ctx
+        .conversation_id
+        .as_deref()
+        .ok_or_else(|| ExecutorError::InvalidRequest("conversation is required for persist".into()))?;
+    let checkpoint = ctx
+        .checkpoint
+        .as_ref()
+        .ok_or_else(|| ExecutorError::InvalidRequest("conversation checkpoint is required for persist".into()))?;
+    Ok((conversation_id, checkpoint))
+}
+
+fn turn_error(error: StorageError) -> ExecutorError {
+    match error {
+        source @ StorageError::ConversationConflict { .. } => ExecutorError::ConversationLocked { source },
+        other => ExecutorError::Storage(other),
     }
 }
 

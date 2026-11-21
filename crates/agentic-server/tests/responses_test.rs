@@ -1600,13 +1600,8 @@ async fn test_unsupported_parameters_are_rejected_for_both_store_values() {
     let (gateway_url, gateway) = spawn_gateway(fixture.state.clone()).await;
     let client = reqwest::Client::new();
     let post = |request: serde_json::Value| client.post(format!("{gateway_url}/v1/responses")).json(&request).send();
+    // `background: true` runs in background mode; background_responses_test covers its rejected combinations.
     let unsupported = [
-        (
-            "background",
-            serde_json::json!(true),
-            "unsupported_value",
-            "background mode is not supported; omit `background` or set it to false",
-        ),
         (
             "prompt",
             serde_json::json!({"id": "pmpt_1", "version": "2"}),
