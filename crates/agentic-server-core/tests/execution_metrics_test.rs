@@ -435,6 +435,25 @@ fn messages_sse_response() -> MockResponse {
     MockResponse::Sse(body)
 }
 
+/// A well-formed Messages stream that stops after a complete text block,
+/// without the terminal `message_delta`/`message_stop`.
+fn messages_sse_clean_eof() -> MockResponse {
+    let events = [
+        json!({"type": "message_start", "message": {
+            "id": "msg_upstream", "type": "message", "role": "assistant", "model": "test-model",
+            "content": [], "stop_reason": null, "stop_sequence": null,
+            "usage": {"input_tokens": 3, "output_tokens": 0}}}),
+        json!({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}),
+        json!({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "hi"}}),
+        json!({"type": "content_block_stop", "index": 0}),
+    ];
+    let mut body = String::new();
+    for event in events {
+        writeln!(body, "event: {}\ndata: {event}\n", event["type"].as_str().unwrap()).unwrap();
+    }
+    MockResponse::Sse(body)
+}
+
 fn assert_messages_finalized_once(points: &[harness::Point], stream: &str, outcome: &str, delivery: &str) {
     let filters = [
         ("agentic.api", "messages"),
@@ -567,6 +586,41 @@ async fn messages_stream_rejected_before_headers_is_never_delivered() {
             &[("agentic.stage", "inference"), ("error.type", "upstream_status")]
         ),
         1
+    );
+}
+
+#[tokio::test]
+async fn messages_stream_clean_eof_fails_both_execution_and_inference_stage() {
+    let metrics = Metrics::new();
+    let fixture = messages_fixture(&metrics, vec![messages_sse_clean_eof()]).await;
+
+    let response = run_messages_stream(
+        messages_request(true),
+        Arc::new(ToolRegistry::default()),
+        Arc::clone(&fixture.exec_ctx),
+        fixture.upstream.clone(),
+    )
+    .await
+    .unwrap();
+    let frames: Vec<String> = response.body.collect().await;
+    assert!(frames.iter().any(|frame| frame.contains("event: error")), "{frames:?}");
+
+    let points = metrics.wait_for("finalized execution", finalized).await;
+    assert_messages_finalized_once(&points, "true", "failed", "delivered");
+    // The same incomplete upstream response fails both the execution outcome
+    // and the inference stage that produced it.
+    assert_eq!(
+        total(
+            &points,
+            "agentic.stage.duration",
+            &[("agentic.stage", "inference"), ("error.type", "stream")]
+        ),
+        1
+    );
+    assert_eq!(
+        total(&points, "agentic.stage.duration", &[("agentic.stage", "inference")]),
+        1,
+        "the inference stage is recorded exactly once"
     );
 }
 
