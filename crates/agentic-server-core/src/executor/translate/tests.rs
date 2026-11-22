@@ -51,7 +51,10 @@ async fn bare_provider_message_ids_remain_replayable_across_json_and_sse() {
         let handler = ResponseHandler::new(ResponseStore::disabled());
         let mut invalid: Vec<InOutItem> = serde_json::from_value(payload["output"].clone()).unwrap();
         assert!(
-            handler.resolve_input_items(&mut invalid).await.is_err(),
+            handler
+                .resolve_input_items(&mut invalid, std::iter::empty())
+                .await
+                .is_err(),
             "client validation stays strict"
         );
         for stream in [false, true] {
@@ -106,7 +109,7 @@ async fn bare_provider_message_ids_remain_replayable_across_json_and_sse() {
             let mut history: Vec<InOutItem> =
                 serde_json::from_value(serde_json::to_value(response.output).unwrap()).unwrap();
             handler
-                .resolve_input_items(&mut history)
+                .resolve_input_items(&mut history, std::iter::empty())
                 .await
                 .expect("returned history is accepted unchanged");
         }
@@ -194,7 +197,7 @@ async fn bare_provider_function_ids_are_public_without_changing_call_identity() 
                 serde_json::from_value(serde_json::to_value(response.output).unwrap()).unwrap();
             InOutItem::admit_all(&history, "input").unwrap();
             ResponseHandler::new(ResponseStore::disabled())
-                .resolve_input_items(&mut history)
+                .resolve_input_items(&mut history, std::iter::empty())
                 .await
                 .unwrap();
         }

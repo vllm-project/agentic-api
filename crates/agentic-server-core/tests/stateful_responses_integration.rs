@@ -7,7 +7,7 @@ mod support;
 
 use agentic_core::executor::request::RequestContext;
 use agentic_core::executor::{ExecutionContext, ExecutorError, commit, execute, persist_turn, rehydrate_conversation};
-use agentic_core::storage::StorageError;
+use agentic_core::storage::{ResponseStore, StorageError};
 use agentic_core::types::conversations::ConversationMetadata;
 use agentic_core::types::io::InOutItem;
 use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
@@ -1496,8 +1496,15 @@ async fn stored_history(
         let snapshot = fixture.exec_ctx.conv_handler.rehydrate(&lookup).await;
         snapshot.expect("rehydrate conversation").items
     } else {
-        let response = fixture.exec_ctx.resp_handler.rehydrate(&lookup).await;
-        response.expect("rehydrate response").expect("previous response").1
+        let response_id = lookup
+            .original_request
+            .previous_response_id
+            .as_deref()
+            .expect("previous response");
+        let response = ResponseStore::new(Arc::clone(&fixture.pool))
+            .rehydrate(response_id)
+            .await;
+        response.expect("rehydrate response").1
     }
 }
 

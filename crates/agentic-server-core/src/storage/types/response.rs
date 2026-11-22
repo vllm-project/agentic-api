@@ -49,7 +49,8 @@ pub struct ResponseCheckpoint {
     /// another turn stored since had to answer the same call. Set by rehydration; storage refuses the turn then.
     #[serde(skip)]
     pub requires_latest: bool,
-    /// The history items a session keeps in memory; empty when only storage holds them.
+    /// The history items a session keeps in memory; empty when only storage holds them. Rehydration also passes the
+    /// loaded history here, and the turn's model input takes it.
     pub history: Vec<InputItem>,
 }
 

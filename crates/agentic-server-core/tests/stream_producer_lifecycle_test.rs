@@ -295,17 +295,17 @@ async fn terminal_event_still_follows_persistence_and_checkpoint_publication() {
     let id = terminal.expect("recorded response completed");
     // Do not poll DONE first. State must already be usable at terminal delivery.
     let followup = support::make_request("continue", false, false, Some(id.clone()), None);
-    let stored = rehydrate_conversation(followup.clone(), &fixture.context)
+    let mut stored = rehydrate_conversation(followup.clone(), &fixture.context)
         .await
         .unwrap();
     assert!(
         !fixture
             .context
             .resp_handler
-            .rehydrate(&stored)
+            .rehydrate(&mut stored, None)
             .await
             .unwrap()
-            .is_none_or(|(_, history)| history.is_empty())
+            .is_none_or(|checkpoint| checkpoint.history.is_empty())
     );
     let checkpoint = rehydrate_in_session(followup, &fixture.context, &session)
         .await

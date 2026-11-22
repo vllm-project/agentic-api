@@ -221,9 +221,9 @@ pub async fn commit(
         && ctx.original_request.previous_response_id.is_some()
     {
         // A split context omits the checkpoint. Load the parent with its history, so the turn's history starts where
-        // rehydration starts it: at the latest compaction a turn produced.
-        if let Some((mut checkpoint, history)) = exec_ctx.resp_handler.rehydrate(&ctx).await? {
-            checkpoint.continue_from_compaction(&history, &ctx.enriched_request);
+        // rehydration starts it: at the latest compaction a turn produced. Only storage keeps the history items.
+        if let Some(mut checkpoint) = exec_ctx.resp_handler.rehydrate(&mut ctx, None).await? {
+            checkpoint.history = Vec::new();
             ctx.checkpoint = Some(checkpoint);
         }
     }

@@ -822,6 +822,110 @@ async fn competing_outputs_for_one_pending_call_keep_the_conversation_usable() -
     Ok(())
 }
 
+/// A first turn in which the model called `get_weather`, as the turn stores it: the user message, then the call.
+fn weather_turn() -> Vec<InOutItem> {
+    let user: InputItem =
+        serde_json::from_value(serde_json::json!({"role":"user", "content":"What is the weather?"})).unwrap();
+    let call: OutputItem = serde_json::from_value(serde_json::json!({
+        "type":"function_call", "id":"fc_weather", "call_id":"call_weather", "name":"get_weather",
+        "arguments":"{}", "status":"completed"
+    }))
+    .unwrap();
+    vec![InOutItem::Input(user), InOutItem::Output(call)]
+}
+
+/// The function-calling guide's next request (`input_list += response.output`, then the tool output): the user
+/// message, the stored call verbatim, and its output.
+fn resend_weather_call(
+    conversation_id: Option<&str>,
+    previous_response_id: Option<&str>,
+    store: bool,
+) -> RequestPayload {
+    let mut request = request(conversation_id, previous_response_id);
+    request.store = store;
+    request.input = serde_json::from_value(serde_json::json!([
+        {"role":"user", "content":"What is the weather?"},
+        {"type":"function_call", "id":"fc_weather", "call_id":"call_weather", "name":"get_weather",
+            "arguments":"{}", "status":"completed"},
+        {"type":"function_call_output", "call_id":"call_weather", "output":"sunny"}
+    ]))
+    .unwrap();
+    request
+}
+
+/// The history the turn continues already holds the resent call. As on `OpenAI`, an unstored turn is accepted and a
+/// stored turn is refused with the duplicate-input error, before inference; the accepted turn's input holds the call
+/// twice.
+async fn assert_resent_call_is_refused_only_when_stored(
+    exec_ctx: &ExecutionContext,
+    conversation_id: Option<&str>,
+    previous_response_id: Option<&str>,
+) {
+    let unstored = resend_weather_call(conversation_id, previous_response_id, false);
+    let ctx = rehydrate_conversation(unstored, exec_ctx).await.unwrap();
+    let calls = ctx
+        .enriched_request
+        .input
+        .input_items()
+        .filter(|item| item.id() == Some("fc_weather"));
+    assert_eq!(calls.count(), 2, "the history's call, then the resent one");
+
+    let stored = resend_weather_call(conversation_id, previous_response_id, true);
+    let Err(error) = rehydrate_conversation(stored, exec_ctx).await else {
+        panic!("a stored turn may not resend an item the history it continues holds");
+    };
+    assert_eq!(error.http_status().as_u16(), 400);
+    assert_eq!(
+        error.response_error(),
+        serde_json::json!({
+            "message": "Duplicate item found with id fc_weather. Remove duplicate items from your input and try again.",
+            "type": "invalid_request_error",
+            "code": null,
+            "param": "input"
+        })
+    );
+}
+
+#[tokio::test]
+async fn conversation_turn_resending_a_stored_item_is_refused_only_when_stored()
+-> Result<(), Box<dyn std::error::Error>> {
+    let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
+    let conversation_store = ConversationStore::new(pool.clone());
+    let conversation = conversation_store
+        .create("default_tenant", &ConversationMetadata::new(), &[])
+        .await?;
+    conversation_store
+        .persist(
+            &conversation.conversation_id,
+            &ResponseCheckpoint::default(),
+            "resp_weather",
+            weather_turn(),
+            None,
+            &ResponseMetadata::default(),
+        )
+        .await?;
+    let exec_ctx = execution_context(conversation_store, ResponseStore::new(pool));
+
+    assert_resent_call_is_refused_only_when_stored(&exec_ctx, Some(&conversation.conversation_id), None).await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn previous_response_turn_resending_a_stored_item_is_refused_only_when_stored()
+-> Result<(), Box<dyn std::error::Error>> {
+    let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
+    let response_store = ResponseStore::new(pool);
+    response_store
+        .persist("resp_weather", None, weather_turn(), None, &ResponseMetadata::default())
+        .await?;
+    let exec_ctx = execution_context(ConversationStore::disabled(), response_store);
+
+    assert_resent_call_is_refused_only_when_stored(&exec_ctx, None, Some("resp_weather")).await;
+    // Without a history to continue, the stored call sent back is accepted (#385).
+    rehydrate_conversation(resend_weather_call(None, None, true), &exec_ctx).await?;
+    Ok(())
+}
+
 /// A root-only agent tree, waiting for the client's output to `pending_call` when there is one.
 fn agent_tree(pending_call: Option<&str>) -> ResponseMetadata {
     let turn = AgentTurnId::new();

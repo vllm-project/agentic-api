@@ -2,8 +2,11 @@
 
 use std::collections::HashSet;
 
-use crate::storage::{ResponseCheckpoint, ResponseData, ResponseMetadata, ResponseStore, StorageError};
-use crate::types::io::InOutItem;
+use crate::storage::{
+    ConversationSnapshot, ResponseCheckpoint, ResponseData, ResponseMetadata, ResponseStore, StorageError,
+};
+use crate::types::io::input::retain_window;
+use crate::types::io::{InOutItem, InputItem};
 use crate::types::io::{ItemOrder, ItemPage, ListItemsResponse};
 use crate::types::request_response::ResponsePayload;
 
@@ -45,21 +48,28 @@ impl ResponseHandler {
         self.store.delete(response_id).await.map_err(ExecutorError::Storage)
     }
 
-    /// Resolve client references without overwriting the stored item with supplied content.
-    pub(crate) async fn resolve_input_items(&self, items: &mut [InOutItem]) -> ExecutorResult<()> {
+    /// Resolve client references without overwriting the stored item with supplied content. An item ID may occur once
+    /// in the input and the `history` it continues together.
+    pub(crate) async fn resolve_input_items<'a>(
+        &self,
+        items: &mut [InOutItem],
+        history: impl Iterator<Item = &'a InputItem>,
+    ) -> ExecutorResult<()> {
         InOutItem::admit_all(items, "input")?;
         let mut seen = HashSet::new();
-        for item in items.iter() {
-            let Some(id) = item.id() else { continue };
-            if !seen.insert(id.to_owned()) {
-                return Err(ExecutorError::UnsupportedValue {
-                    param: Some("input".into()),
-                    code: None,
-                    message: format!(
-                        "Duplicate item found with id {id}. Remove duplicate items from your input and try again."
-                    ),
-                });
-            }
+        let repeated = items
+            .iter()
+            .filter_map(InOutItem::id)
+            .find(|id| !seen.insert((*id).to_owned()))
+            .or_else(|| history.filter_map(InputItem::id).find(|id| seen.contains(*id)));
+        if let Some(id) = repeated {
+            return Err(ExecutorError::UnsupportedValue {
+                param: Some("input".into()),
+                code: None,
+                message: format!(
+                    "Duplicate item found with id {id}. Remove duplicate items from your input and try again."
+                ),
+            });
         }
         let mut stored = self
             .store
@@ -128,28 +138,64 @@ impl ResponseHandler {
         })
     }
 
-    /// Loads the previous response and its full history in one storage query.
+    /// Takes the history the turn continues and resolves the turn's input against it.
     ///
-    /// Returns `None` when the request does not continue a previous response.
+    /// The history is the `conversation` snapshot's, else the session's retained parent's, else the stored
+    /// `previous_response_id` chain's, loaded from storage; a turn with neither continues none and gets `None`. The
+    /// checkpoint's rows start at the latest compaction a turn produced, and its `history` holds the items, kept from
+    /// that compaction on for a session. A stored turn may not resend an item that history holds.
     ///
     /// # Errors
-    /// Returns [`StorageError::PreviousResponseNotFound`] for an unknown `previous_response_id`, or
-    /// `ExecutorError` if the store is disabled or the history is invalid.
+    /// Returns [`StorageError::PreviousResponseNotFound`] for an unknown `previous_response_id` or, for an unstored
+    /// session turn, a parent the session does not retain; the duplicate-input error for a repeated item; or
+    /// `ExecutorError` if the store is disabled or the history or input is invalid.
     pub async fn rehydrate(
         &self,
-        ctx: &RequestContext,
-    ) -> ExecutorResult<Option<(ResponseCheckpoint, Vec<InOutItem>)>> {
-        let Some(prev_id) = ctx.original_request.previous_response_id.as_deref() else {
-            return Ok(None);
-        };
-        let (stored, history) = self.store.rehydrate(prev_id).await.map_err(|error| {
-            if error.is_not_found() {
-                StorageError::PreviousResponseNotFound { id: prev_id.to_owned() }.into()
-            } else {
-                ExecutorError::Storage(error)
+        ctx: &mut RequestContext,
+        conversation: Option<ConversationSnapshot>,
+    ) -> ExecutorResult<Option<ResponseCheckpoint>> {
+        // A session turn's parent: `Some(None)` when its session retains none yet.
+        let session = ctx.continuation.as_ref().map(|lease| lease.parent.as_deref());
+        let store = ctx.original_request.store;
+        let checkpoint = match (
+            conversation,
+            ctx.original_request.previous_response_id.as_deref(),
+            session,
+        ) {
+            (Some(ConversationSnapshot { items, mut checkpoint }), _, _) => {
+                checkpoint.continue_from_compaction(&items, &ctx.enriched_request);
+                checkpoint.history = InOutItem::into_input_items(items);
+                Some(checkpoint)
             }
-        })?;
-        Ok(Some((stored, history)))
+            (None, Some(_), Some(Some(parent))) => Some(ResponseCheckpoint::clone(parent)),
+            (None, Some(prev_id), Some(None)) if !store => {
+                return Err(StorageError::PreviousResponseNotFound { id: prev_id.to_owned() }.into());
+            }
+            (None, Some(prev_id), session) => {
+                let (mut checkpoint, history) = self.store.rehydrate(prev_id).await.map_err(|error| {
+                    if error.is_not_found() {
+                        StorageError::PreviousResponseNotFound { id: prev_id.to_owned() }.into()
+                    } else {
+                        ExecutorError::Storage(error)
+                    }
+                })?;
+                checkpoint.continue_from_compaction(&history, &ctx.enriched_request);
+                let history = InOutItem::into_input_items(history);
+                checkpoint.history = if session.is_some() {
+                    retain_window(history)
+                } else {
+                    history
+                };
+                Some(checkpoint)
+            }
+            (None, None, _) => None,
+        };
+        let history = checkpoint
+            .iter()
+            .filter(|_| store)
+            .flat_map(|checkpoint| &checkpoint.history);
+        self.resolve_input_items(&mut ctx.new_input_items, history).await?;
+        Ok(checkpoint)
     }
 
     /// Stores one response turn: its items, snapshot and metadata, extending the history rehydration captured in
@@ -228,13 +274,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_rehydrate_no_prev_id_returns_none() {
-        let result = disabled_handler().rehydrate(&make_ctx(None)).await;
+        let result = disabled_handler().rehydrate(&mut make_ctx(None), None).await;
         assert!(result.unwrap().is_none());
     }
 
     #[tokio::test]
     async fn test_rehydrate_disabled_store_returns_error() {
-        let result = disabled_handler().rehydrate(&make_ctx(Some("resp_prev"))).await;
+        let result = disabled_handler()
+            .rehydrate(&mut make_ctx(Some("resp_prev")), None)
+            .await;
         assert!(result.is_err());
     }
 
@@ -272,7 +320,7 @@ mod tests {
         ]))
         .unwrap();
         ResponseHandler::new(store)
-            .resolve_input_items(&mut references)
+            .resolve_input_items(&mut references, std::iter::empty())
             .await
             .unwrap();
         let resolved: Vec<_> = serde_json::to_value(&references)
