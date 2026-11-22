@@ -883,11 +883,62 @@ mod tests {
                 "action":{"commands":["printf hello"], "timeout_ms":1000}}),
             serde_json::json!({"type":"shell_call_output", "call_id":"call_1",
                 "output":[{"stdout":"hello", "stderr":"", "outcome":{"type":"exit", "exit_code":0}}]}),
+            serde_json::json!({"type":"computer_call", "call_id":"call_1",
+                "actions":[{"type":"click", "button":"left", "x":1, "y":2}]}),
+            serde_json::json!({"type":"computer_call_output", "call_id":"call_1",
+                "output":{"type":"computer_screenshot", "file_id":"file_1"}}),
         ] {
             let checkpoint: Vec<InputItem> = vec![serde_json::from_value(wire).unwrap()];
             let request = ResponsesInput::from(checkpoint.clone());
             assert_eq!(estimate_input_tokens(&request), estimate_history_tokens(&checkpoint));
         }
+    }
+
+    #[test]
+    fn computer_items_estimate_fixed_image_tokens_and_meaningful_context() {
+        let small = serde_json::json!([{
+            "type": "computer_call_output",
+            "call_id": "call_1",
+            "output": {"type": "computer_screenshot", "image_url": "data:image/png;base64,AAAA"}
+        }]);
+        let large = serde_json::json!([{
+            "type": "computer_call_output",
+            "call_id": "call_1",
+            "output": {"type": "computer_screenshot", "image_url": format!("data:image/png;base64,{}", "A".repeat(128 * 1024))}
+        }]);
+        assert_eq!(
+            estimate_input_tokens(&serde_json::from_value(small).unwrap()),
+            estimate_input_tokens(&serde_json::from_value(large).unwrap())
+        );
+
+        let with_actions: InputItem = serde_json::from_value(serde_json::json!({
+            "type": "computer_call", "call_id": "call_1", "actions": [{"type": "wait"}]
+        }))
+        .unwrap();
+        let empty_call: InputItem = serde_json::from_value(serde_json::json!({
+            "type": "computer_call", "call_id": "call_1", "actions": []
+        }))
+        .unwrap();
+        let with_file: InputItem = serde_json::from_value(serde_json::json!({
+            "type": "computer_call_output", "call_id": "call_1",
+            "output": {"type": "computer_screenshot", "file_id": "file_1"}
+        }))
+        .unwrap();
+        let whitespace_output: InputItem = serde_json::from_value(serde_json::json!({
+            "type": "computer_call_output", "call_id": "call_1",
+            "output": {"type": "computer_screenshot", "image_url": "   ", "file_id": ""}
+        }))
+        .unwrap();
+        let empty_output: InputItem = serde_json::from_value(serde_json::json!({
+            "type": "computer_call_output", "call_id": "call_1",
+            "output": {"type": "computer_screenshot"}
+        }))
+        .unwrap();
+        assert!(super::item_has_meaningful_context(&with_actions));
+        assert!(!super::item_has_meaningful_context(&empty_call));
+        assert!(super::item_has_meaningful_context(&with_file));
+        assert!(!super::item_has_meaningful_context(&whitespace_output));
+        assert!(!super::item_has_meaningful_context(&empty_output));
     }
 
     #[test]

@@ -5,7 +5,8 @@ use thiserror::Error;
 use crate::types::client_calls::ClientCallId;
 use crate::types::event::MessageStatus;
 use crate::types::io::{
-    FunctionToolCall, InOutItem, InputItem, OutputItem, OutputMessage, ReasoningOutput, ShellCallStatus,
+    ComputerCallStatus, FunctionToolCall, InOutItem, InputItem, OutputItem, OutputMessage, ReasoningOutput,
+    ShellCallStatus,
 };
 use crate::utils::common::uuid7_str;
 
@@ -93,6 +94,8 @@ impl InputItem {
             Self::CustomToolCall(item) => Some(item.id.as_str()).filter(|id| !id.is_empty()),
             Self::ShellCall(item) => item.id.as_deref(),
             Self::ShellCallOutput(item) => item.id.as_deref(),
+            Self::ComputerCall(item) => item.id.as_deref(),
+            Self::ComputerCallOutput(item) => item.id.as_deref(),
             Self::Reasoning(item) => Some(&item.id),
             Self::McpListTools(item) => Some(&item.id),
             Self::Compaction(item) => item.id.as_deref(),
@@ -166,7 +169,8 @@ impl InOutItem {
                 InputItem::McpCall(_) => Some(&["mcp_"]),
                 InputItem::ShellCallOutput(_) => Some(&["sho_"]),
                 InputItem::CustomToolCallOutput(_) => Some(&["ctco_"]),
-                InputItem::CompactionTrigger => None,
+                // No recorded `computer_call` or `computer_call_output` ID yet establishes an OpenAI prefix.
+                InputItem::ComputerCall(_) | InputItem::ComputerCallOutput(_) | InputItem::CompactionTrigger => None,
             },
             Self::Output(output) => match output {
                 OutputItem::MultiAgentCall(_) => Some(&["mac_"]),
@@ -197,14 +201,20 @@ impl InOutItem {
     /// # Errors
     /// [`ClientItemError`] for a wrong ID prefix or an empty `call_id`.
     fn admit(&self, item: &str) -> Result<(), ClientItemError> {
-        if let (Some(id), Some(prefixes @ [prefix, ..])) = (self.id(), self.id_prefixes())
-            && !prefixes.iter().any(|prefix| id.starts_with(prefix))
-        {
-            return Err(ClientItemError::InvalidId {
-                param: format!("{item}.id"),
-                id: id.to_owned(),
-                prefix: prefix.trim_end_matches('_'),
-            });
+        match (self.id(), self.id_prefixes()) {
+            (Some(id), Some(prefixes @ [prefix, ..])) if !prefixes.iter().any(|p| id.starts_with(p)) => {
+                return Err(ClientItemError::InvalidId {
+                    param: format!("{item}.id"),
+                    id: id.to_owned(),
+                    prefix: prefix.trim_end_matches('_'),
+                });
+            }
+            (Some(""), None) => {
+                return Err(ClientItemError::EmptyString {
+                    param: format!("{item}.id"),
+                });
+            }
+            _ => {}
         }
         if let Some(input) = self.as_input()
             && let Some(call_id) = input.call_id().or_else(|| input.output_call_id())
@@ -243,6 +253,9 @@ impl InOutItem {
             Self::Input(InputItem::ShellCallOutput(output)) => {
                 output.status.get_or_insert(ShellCallStatus::Completed);
             }
+            Self::Input(InputItem::ComputerCallOutput(output)) => {
+                output.status.get_or_insert(ComputerCallStatus::Completed);
+            }
             _ => {}
         }
     }
@@ -267,6 +280,8 @@ impl InOutItem {
                 InputItem::FunctionCall(item) => item.id = Some(id),
                 InputItem::ShellCall(item) => item.id = Some(id),
                 InputItem::ShellCallOutput(item) => item.id = Some(id),
+                InputItem::ComputerCall(item) => item.id = Some(id),
+                InputItem::ComputerCallOutput(item) => item.id = Some(id),
                 InputItem::Compaction(item) => item.id = Some(id),
                 InputItem::ToolSearchOutput(item) => item.id = Some(id),
                 InputItem::CustomToolCallOutput(item) => item.id = Some(id),
@@ -415,6 +430,41 @@ mod tests {
                  string instead."
             );
         }
+    }
+
+    #[test]
+    fn computer_items_follow_the_call_id_and_non_empty_id_rules() {
+        let call = json!({"type": "computer_call", "id": "cu_1", "call_id": "call_1", "actions": [{"type": "wait"}]});
+        let output = json!({
+            "type": "computer_call_output", "call_id": "call_1",
+            "output": {"type": "computer_screenshot", "image_url": "data:image/png;base64,AAAA"}
+        });
+        // No recording shows OpenAI's `computer_call` or `computer_call_output` ID prefix, so only empty IDs fail.
+        for template in [&call, &output] {
+            for id in [None, Some("cu_1"), Some("cuo_1"), Some("any_1")] {
+                let mut item = template.clone();
+                if let Some(id) = id {
+                    item["id"] = json!(id);
+                } else {
+                    item.as_object_mut().unwrap().remove("id");
+                }
+                stored(item).admit("input[0]").expect("no prefix restriction");
+            }
+            let mut empty_id = template.clone();
+            empty_id["id"] = json!("");
+            let error = stored(empty_id).admit("input[1]").unwrap_err();
+            assert_eq!((error.code(), error.param()), ("empty_string", "input[1].id"));
+        }
+
+        for (mut value, param) in [(call, "input[0].call_id"), (output.clone(), "input[0].call_id")] {
+            value["call_id"] = json!("");
+            let error = stored(value).admit("input[0]").unwrap_err();
+            assert_eq!((error.code(), error.param()), ("empty_string", param));
+        }
+
+        let mut item = stored(output);
+        item.complete_omitted_status();
+        assert_eq!(serde_json::to_value(&item).unwrap()["status"], "completed");
     }
 
     /// Recorded `OpenAI` behavior: a client function call stored without a status is in progress and an output is

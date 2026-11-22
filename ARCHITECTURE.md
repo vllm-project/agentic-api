@@ -807,7 +807,10 @@ public output item of each call is what history keeps. A turn's history is built
 persist: the request's own items, then its public output.
 
 `ResponsesInput::normalized_model_input` (`types/io/input/conversions.rs`) is the one place
-that lowers public items for the model: custom and shell calls become function calls, and
+that lowers public items for the model: custom and shell calls become function calls, a
+`computer_call` becomes a `computer` function call whose arguments hold its actions in order
+and its `computer_call_output` a function output holding the screenshot as `input_image`
+(`types/io/computer.rs`, for replayed computer history), and
 `web_search_call`, `mcp_call` and `code_interpreter_call` become a function call and its
 output, through the `From` conversions in `types/io/web_search.rs` and
 `types/io/code_interpreter.rs`. A lowered gateway call takes the public item's ID as its

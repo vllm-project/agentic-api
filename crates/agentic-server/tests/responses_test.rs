@@ -1199,7 +1199,7 @@ async fn test_unsupported_input_item_is_rejected_before_upstream() {
                     "stream": stream,
                     "input": [
                         {"role": "user", "content": "hi"},
-                        {"type": "computer_call", "id": "cu_1", "call_id": "call_1", "action": {"type": "click"}}
+                        {"type": "image_generation_call", "id": "ig_1", "status": "completed", "result": "AAAA"}
                     ]
                 }))
                 .send()
@@ -3258,4 +3258,271 @@ async fn recorded_mixed_tool_capture_stays_public_over_http_sse() {
     let requests = requests.lock().await;
     assert_eq!(requests.len(), 1, "the replayed turn runs one inference round");
     common::assert_lowered_mixed_upstream(&requests[0]);
+}
+
+#[tokio::test]
+async fn test_computer_history_store_false_and_streaming() {
+    let (json_url, json_requests, json_llm) = spawn_mock_vllm_json_capture().await;
+    let json_fixture = storage_backed_state(&json_url).await;
+    let (json_gw, json_handle) = spawn_gateway(json_fixture.state.clone()).await;
+
+    let (sse_url, sse_requests, sse_llm) = spawn_tool_search_sse_sequence(vec![final_message_sse(); 2]).await;
+    let sse_fixture = storage_backed_state(&sse_url).await;
+    let (sse_gw, sse_handle) = spawn_gateway(sse_fixture.state.clone()).await;
+
+    let client = reqwest::Client::new();
+    let computer_input = serde_json::json!([
+        {"type": "message", "role": "user", "content": "click"},
+        {"type": "computer_call", "id": "cu_1", "call_id": "call_1", "actions": [{"type": "screenshot"}]},
+        {
+            "type": "computer_call_output",
+            "call_id": "call_1",
+            "output": {"type": "computer_screenshot", "image_url": "data:image/png;base64,AAAA"}
+        }
+    ]);
+
+    // store: false, stream: false
+    let resp = client
+        .post(format!("{json_gw}/v1/responses"))
+        .json(&serde_json::json!({
+            "model": "test",
+            "store": false,
+            "stream": false,
+            "input": computer_input
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let json_reqs = json_requests.lock().await;
+    assert_eq!(json_reqs.len(), 1);
+    assert_eq!(json_reqs[0]["stream"], false);
+    assert_eq!(json_reqs[0]["input"][1]["type"], "function_call");
+    assert_eq!(json_reqs[0]["input"][1]["name"], "computer");
+    assert_eq!(json_reqs[0]["input"][2]["type"], "function_call_output");
+    assert_eq!(
+        json_reqs[0]["input"][2]["output"],
+        serde_json::json!([{"type": "input_image", "image_url": "data:image/png;base64,AAAA"}])
+    );
+
+    // store: false/true, stream: true
+    for store in [false, true] {
+        let resp = client
+            .post(format!("{sse_gw}/v1/responses"))
+            .json(&serde_json::json!({
+                "model": "test",
+                "store": store,
+                "stream": true,
+                "input": computer_input
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(
+            resp.headers()[header::CONTENT_TYPE]
+                .to_str()
+                .unwrap()
+                .starts_with("text/event-stream")
+        );
+        let events = sse_events(&resp.text().await.unwrap());
+        let terminal = events
+            .iter()
+            .find(|event| event["type"] == "response.completed")
+            .expect("completed event");
+        if store {
+            let response_id = terminal["response"]["id"].as_str().unwrap();
+            let listed: serde_json::Value = client
+                .get(format!("{sse_gw}/v1/responses/{response_id}/input_items?order=asc"))
+                .bearer_auth("test-key")
+                .send()
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            assert_eq!(listed["data"].as_array().unwrap().len(), 3);
+            assert_eq!(listed["data"][1]["type"], "computer_call");
+            assert_eq!(listed["data"][2]["type"], "computer_call_output");
+        }
+    }
+    let sse_reqs = sse_requests.lock().await;
+    assert_eq!(sse_reqs.len(), 2);
+    for req in sse_reqs.iter() {
+        assert_eq!(req["stream"], true);
+        assert_eq!(req["input"][1]["type"], "function_call");
+        assert_eq!(req["input"][1]["name"], "computer");
+        assert_eq!(req["input"][2]["type"], "function_call_output");
+        assert_eq!(
+            req["input"][2]["output"],
+            serde_json::json!([{"type": "input_image", "image_url": "data:image/png;base64,AAAA"}])
+        );
+    }
+
+    json_handle.abort();
+    json_llm.abort();
+    sse_handle.abort();
+    sse_llm.abort();
+}
+
+#[tokio::test]
+async fn test_computer_call_admission_rejections() {
+    let (llm_url, requests, llm) = spawn_mock_vllm_json_capture().await;
+    let fixture = storage_backed_state(&llm_url).await;
+    let (gateway_url, gateway) = spawn_gateway(fixture.state.clone()).await;
+    let client = reqwest::Client::new();
+
+    // Malformed computer_call, missing call_id, and multi_agent + computer items -> 400 before upstream.
+    for payload in [
+        serde_json::json!({
+            "model": "test", "store": false,
+            "input": [{"type": "computer_call", "call_id": "call_1", "actions": [{"type": "click", "x": 1, "y": 2}]}]
+        }),
+        serde_json::json!({
+            "model": "test", "store": false,
+            "input": [{"type": "computer_call", "actions": [{"type": "wait"}]}]
+        }),
+        serde_json::json!({
+            "model": "test", "store": false, "multi_agent": {"enabled": true},
+            "input": [
+                {"role": "user", "content": "hi"},
+                {"type": "computer_call", "call_id": "call_1", "actions": [{"type": "screenshot"}]}
+            ]
+        }),
+    ] {
+        let resp = client
+            .post(format!("{gateway_url}/v1/responses"))
+            .json(&payload)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            resp.json::<serde_json::Value>().await.unwrap()["error"]["type"],
+            "invalid_request_error"
+        );
+    }
+
+    // Empty call_id and empty id on computer_call / computer_call_output -> 400 empty_string with exact param.
+    for (item, expected_param) in [
+        (
+            serde_json::json!({"type": "computer_call", "call_id": "", "actions": [{"type": "wait"}]}),
+            "input[1].call_id",
+        ),
+        (
+            serde_json::json!({
+                "type": "computer_call_output", "call_id": "",
+                "output": {"type": "computer_screenshot", "image_url": "data:image/png;base64,AAAA"}
+            }),
+            "input[1].call_id",
+        ),
+        (
+            serde_json::json!({
+                "type": "computer_call_output", "id": "", "call_id": "call_1",
+                "output": {"type": "computer_screenshot", "image_url": "data:image/png;base64,AAAA"}
+            }),
+            "input[1].id",
+        ),
+        (
+            serde_json::json!({"type": "computer_call", "id": "", "call_id": "call_1", "actions": [{"type": "wait"}]}),
+            "input[1].id",
+        ),
+    ] {
+        let resp = client
+            .post(format!("{gateway_url}/v1/responses"))
+            .json(&serde_json::json!({
+                "model": "test", "store": false,
+                "input": [{"role": "user", "content": "hi"}, item]
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let body: serde_json::Value = resp.json().await.unwrap();
+        assert_eq!(body["error"]["code"], "empty_string");
+        assert_eq!(body["error"]["param"], expected_param);
+    }
+
+    assert!(
+        requests.lock().await.is_empty(),
+        "rejected requests must not reach upstream"
+    );
+
+    gateway.abort();
+    llm.abort();
+}
+
+#[tokio::test]
+async fn test_computer_call_continuation_pairing_rejections() {
+    let (llm_url, requests, llm) = spawn_mock_vllm_json_capture().await;
+    let fixture = storage_backed_state(&llm_url).await;
+    let (gateway_url, gateway) = spawn_gateway(fixture.state.clone()).await;
+    let client = reqwest::Client::new();
+
+    // Continuation pairing: orphan computer_call_output and function_call + computer_call_output mismatch -> 400.
+    let parent = client
+        .post(format!("{gateway_url}/v1/responses"))
+        .json(&serde_json::json!({
+            "model": "test",
+            "store": true,
+            "input": [{"role": "user", "content": "seed"}]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(parent.status(), StatusCode::OK);
+    let parent_id = parent.json::<serde_json::Value>().await.unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    let orphan = client
+        .post(format!("{gateway_url}/v1/responses"))
+        .json(&serde_json::json!({
+            "model": "test",
+            "store": true,
+            "previous_response_id": parent_id,
+            "input": [{
+                "type": "computer_call_output",
+                "call_id": "missing_call",
+                "output": {"type": "computer_screenshot", "image_url": "data:image/png;base64,AAAA"}
+            }]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(orphan.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        orphan.json::<serde_json::Value>().await.unwrap()["error"]["type"],
+        "invalid_request_error"
+    );
+
+    let mismatched = client
+        .post(format!("{gateway_url}/v1/responses"))
+        .json(&serde_json::json!({
+            "model": "test",
+            "store": true,
+            "previous_response_id": parent_id,
+            "input": [
+                {"type": "function_call", "call_id": "call_fn", "name": "f", "arguments": "{}"},
+                {
+                    "type": "computer_call_output",
+                    "call_id": "call_fn",
+                    "output": {"type": "computer_screenshot", "image_url": "data:image/png;base64,AAAA"}
+                }
+            ]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(mismatched.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        mismatched.json::<serde_json::Value>().await.unwrap()["error"]["type"],
+        "invalid_request_error"
+    );
+
+    assert_eq!(requests.lock().await.len(), 1, "only the seed turn reached upstream");
+
+    gateway.abort();
+    llm.abort();
 }

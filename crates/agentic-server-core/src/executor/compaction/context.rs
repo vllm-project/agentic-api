@@ -1,6 +1,13 @@
 //! Identify whether resolved input contains context worth compacting.
 
-use crate::types::io::{InputContent, InputItem, InputMessageContent};
+use crate::types::io::{ComputerCallOutputContent, InputContent, InputImageContent, InputItem, InputMessageContent};
+
+fn has_image_reference(image: &InputImageContent) -> bool {
+    [image.image_url.as_deref(), image.file_id.as_deref()]
+        .into_iter()
+        .flatten()
+        .any(|reference| !reference.trim().is_empty())
+}
 
 fn value_has_content(value: &serde_json::Value) -> bool {
     match value {
@@ -21,10 +28,7 @@ pub(super) fn item_has_meaningful_context(item: &InputItem) -> bool {
                     !text.text.trim().is_empty()
                 }
                 // An image is context whether it is inline or a file reference.
-                InputContent::InputImage(image) => [image.image_url.as_deref(), image.file_id.as_deref()]
-                    .into_iter()
-                    .flatten()
-                    .any(|reference| !reference.trim().is_empty()),
+                InputContent::InputImage(image) => has_image_reference(image),
                 InputContent::Refusal(refusal) => !refusal.refusal.trim().is_empty(),
                 // Validation accepts only inline text files, so the file data is the context.
                 InputContent::InputFile(file) => file.file_data.as_deref().is_some_and(|data| !data.trim().is_empty()),
@@ -43,6 +47,11 @@ pub(super) fn item_has_meaningful_context(item: &InputItem) -> bool {
         InputItem::CustomToolCallOutput(output) => output.output.has_content(),
         InputItem::ShellCall(call) => !call.action.commands.is_empty(),
         InputItem::ShellCallOutput(output) => !output.output.is_empty(),
+        InputItem::ComputerCall(call) => !call.ordered_actions().is_empty(),
+        InputItem::ComputerCallOutput(output) => {
+            let ComputerCallOutputContent::ComputerScreenshot(screenshot) = &output.output;
+            has_image_reference(screenshot)
+        }
         InputItem::Reasoning(reasoning) => {
             reasoning.content.iter().any(|content| !content.text.trim().is_empty())
                 // Preserve the previous JSON policy: even an empty summary part

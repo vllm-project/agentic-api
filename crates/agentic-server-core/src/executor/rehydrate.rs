@@ -182,6 +182,16 @@ fn validate_multi_agent_request(request: &RequestPayload) -> ExecutorResult<()> 
             "reasoning.summary is not supported with multi_agent".into(),
         ));
     }
+    if request.input.input_items().any(|item| {
+        matches!(
+            item.as_ref(),
+            InputItem::ComputerCall(_) | InputItem::ComputerCallOutput(_)
+        )
+    }) {
+        return Err(ExecutorError::InvalidRequest(
+            "computer_call and computer_call_output are not supported with multi_agent".into(),
+        ));
+    }
     Ok(())
 }
 

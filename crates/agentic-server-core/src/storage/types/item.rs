@@ -194,6 +194,50 @@ mod tests {
     }
 
     #[test]
+    fn computer_items_are_stored_and_rehydrated_in_their_public_shape() {
+        let call = json!({
+            "type": "computer_call", "call_id": "call_1",
+            "actions": [{"type": "click", "button": "left", "x": 1, "y": 2, "keys": null}, {"type": "zoom", "factor": 2}],
+            "pending_safety_checks": [{"id": "sc_1", "code": null, "message": "check"}],
+            "status": "completed"
+        });
+        let legacy_call = json!({
+            "type": "computer_call", "call_id": "call_2",
+            "action": {"type": "zoom", "factor": 2}
+        });
+        let output = json!({
+            "type": "computer_call_output", "call_id": "call_1",
+            "output": {"type": "computer_screenshot", "image_url": "data:image/png;base64,AAAA", "detail": "original"},
+            "acknowledged_safety_checks": [{"id": "sc_1"}],
+            "status": "completed"
+        });
+        let file_output = json!({
+            "type": "computer_call_output", "call_id": "call_2",
+            "output": {"type": "computer_screenshot", "file_id": "file_1"}
+        });
+        for (wire, prefix, default_completed) in [
+            (call, "item_", false),
+            (legacy_call, "item_", false),
+            (output, "item_", true),
+            (file_output, "item_", true),
+        ] {
+            let item = stored(wire.clone());
+            assert!(matches!(item, InOutItem::Input(_)));
+            let row = stored_row(&item);
+            assert!(row.public_id.starts_with(prefix), "{}", row.public_id);
+            assert_eq!(serde_json::from_str::<Value>(&row.data).unwrap(), wire);
+            assert_eq!(round_trip(&item), item);
+
+            let mut public = wire;
+            public["id"] = json!(row.public_id);
+            if default_completed && public.get("status").is_none() {
+                public["status"] = json!("completed");
+            }
+            assert_eq!(serde_json::to_value(decode_public(&row).unwrap()).unwrap(), public);
+        }
+    }
+
+    #[test]
     fn rows_with_malformed_metadata_or_data_are_invalid() {
         let mut row = stored_row(&stored(json!({"type":"message", "role":"user", "content":"x"})));
         row.metadata = r#"{"kind":"unknown"}"#.to_owned();

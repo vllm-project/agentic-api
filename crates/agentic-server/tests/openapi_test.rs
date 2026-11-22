@@ -283,7 +283,14 @@ async fn tagged_enum_discriminators_present() {
                 .or_else(|| variant["allOf"][0]["properties"]["type"]["enum"][0].as_str())
         })
         .collect();
-    for expected in ["compaction_trigger", "message", "web_search_call", "mcp_call"] {
+    for expected in [
+        "compaction_trigger",
+        "message",
+        "web_search_call",
+        "mcp_call",
+        "computer_call",
+        "computer_call_output",
+    ] {
         assert!(
             type_values.contains(&expected),
             "InputItem missing '{expected}', got: {type_values:?}"
@@ -370,5 +377,102 @@ async fn prompt_cache_retention_schema_matches_request_validation() {
                 .iter()
                 .any(|field| field == "prompt_cache_retention")
         );
+    }
+}
+
+#[tokio::test]
+async fn computer_wire_schemas_match_typed_decoding() {
+    let spec = fetch_spec().await;
+    let validator = jsonschema::validator_for(&spec).expect("valid OpenAPI schema");
+    let schemas = spec["components"]["schemas"].as_object().unwrap();
+    let request_schema = serde_json::json!({
+        "$ref": "#/components/schemas/RequestPayload",
+        "components": { "schemas": schemas }
+    });
+    let request_validator = jsonschema::validator_for(&request_schema).expect("RequestPayload schema");
+
+    let valid = serde_json::json!({
+        "model": "test-model",
+        "input": [
+            {
+                "type": "computer_call",
+                "id": "cu_1",
+                "call_id": "call_1",
+                "actions": [
+                    {"type": "click", "button": "left", "x": 1, "y": 2, "keys": null},
+                    {"type": "double_click", "x": 3, "y": 4},
+                    {"type": "drag", "path": [{"x": 1, "y": 2}]},
+                    {"type": "keypress", "keys": ["ctrl", "l"]},
+                    {"type": "move", "x": 5, "y": 6, "keys": ["shift"]},
+                    {"type": "scroll", "x": 0, "y": 0, "scroll_x": 0, "scroll_y": -100},
+                    {"type": "type", "text": "hi"},
+                    {"type": "wait"},
+                    {"type": "screenshot"},
+                    {"type": "zoom", "factor": 2}
+                ],
+                "pending_safety_checks": [{"id": "sc_1", "code": null, "message": null}],
+                "status": "completed"
+            },
+            {
+                "type": "computer_call_output",
+                "call_id": "call_1",
+                "output": {"type": "computer_screenshot", "file_id": "file_1"}
+            }
+        ]
+    });
+    if let Err(err) = request_validator.validate(&valid) {
+        panic!("valid computer history rejected: {err} at {}", err.instance_path);
+    }
+    drop(validator);
+
+    let invalid_screenshot = serde_json::json!({
+        "model": "test-model",
+        "input": [{
+            "type": "computer_call_output",
+            "call_id": "call_1",
+            "output": {"type": "input_image", "image_url": "data:image/png;base64,AAAA"}
+        }]
+    });
+    assert!(
+        !request_validator.is_valid(&invalid_screenshot),
+        "input_image is not a valid computer_call_output.output"
+    );
+
+    let missing_call_id = serde_json::json!({
+        "model": "test-model",
+        "input": [{"type": "computer_call", "actions": [{"type": "wait"}]}]
+    });
+    assert!(
+        !request_validator.is_valid(&missing_call_id),
+        "computer_call requires call_id"
+    );
+
+    for (label, action) in [
+        ("click without fields", serde_json::json!({"type": "click"})),
+        (
+            "click with an unknown button",
+            serde_json::json!({"type": "click", "button": "nope", "x": 1, "y": 2}),
+        ),
+    ] {
+        let malformed = serde_json::json!({
+            "model": "test-model",
+            "input": [{"type": "computer_call", "call_id": "call_1", "actions": [action]}]
+        });
+        assert!(
+            !request_validator.is_valid(&malformed),
+            "{label} must fail schema validation"
+        );
+    }
+
+    let zoom = serde_json::json!({
+        "model": "test-model",
+        "input": [{
+            "type": "computer_call",
+            "call_id": "call_1",
+            "actions": [{"type": "zoom", "factor": 2}]
+        }]
+    });
+    if let Err(err) = request_validator.validate(&zoom) {
+        panic!("unmodeled zoom action rejected: {err} at {}", err.instance_path);
     }
 }

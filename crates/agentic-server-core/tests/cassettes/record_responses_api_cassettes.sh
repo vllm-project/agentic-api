@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Record flat Responses API cassettes with the existing Python recorder.
-# RESPONSES_RECORD_SET=all|openai|gateway; RESPONSES_SCENARIO=all|lifecycle|pagination|edge-cases|conversation|replayed-items|tool-items|call-ids|item-id-prefixes.
+# RESPONSES_RECORD_SET=all|openai|gateway; RESPONSES_SCENARIO=all|lifecycle|pagination|edge-cases|conversation|replayed-items|tool-items|call-ids|item-id-prefixes|computer-history.
 # RESPONSES_STREAM_MODE=nonstreaming|streaming|both (default: nonstreaming).
 set -euo pipefail
 
@@ -24,8 +24,8 @@ case "$RECORD_SET" in
     *) echo "RESPONSES_RECORD_SET must be all, openai, or gateway" >&2; exit 2 ;;
 esac
 case "$SCENARIO" in
-    all|lifecycle|pagination|edge-cases|conversation|replayed-items|tool-items|call-ids|item-id-prefixes) ;;
-    *) echo "RESPONSES_SCENARIO must be all, lifecycle, pagination, edge-cases, conversation, replayed-items, tool-items, call-ids, or item-id-prefixes" >&2; exit 2 ;;
+    all|lifecycle|pagination|edge-cases|conversation|replayed-items|tool-items|call-ids|item-id-prefixes|computer-history) ;;
+    *) echo "RESPONSES_SCENARIO must be all, lifecycle, pagination, edge-cases, conversation, replayed-items, tool-items, call-ids, item-id-prefixes, or computer-history" >&2; exit 2 ;;
 esac
 case "$STREAM_MODE" in
     nonstreaming|streaming|both) ;;
@@ -54,6 +54,7 @@ record() {
         tool-items) turns=48; mode=response-tool-items; read_timeout="${HTTP_READ_TIMEOUT:-900}" ;;
         call-ids) turns=17; mode=response-call-ids ;;
         item-id-prefixes) turns=11; mode=response-item-id-prefixes ;;
+        computer-history) turns=6; mode=response-computer-history ;;
     esac
     local suffix="" stream_flag=--no-stream
     if [[ "$transport" == streaming ]]; then suffix="-stream"; stream_flag=--stream; fi
@@ -154,6 +155,9 @@ elif scenario == "tool-items":
             assert listing["method"] == "GET"
             assert listing["path"] == f"/v1/responses/{response_id}/input_items"
     assert first_tools == {"web_search_preview", "mcp", "function", "code_interpreter", "shell", "custom", "tool_search", "namespace"}
+elif scenario == "computer-history":
+    assert sum(turn["request"]["method"] == "POST" for turn in turns) == 4
+    assert sum(turn["request"]["path"].endswith("/input_items") for turn in turns) == 2
 print(f"Validated {path.name}: {len(turns)} flat HTTP turns")
 CASSETTE_CHECK
     mv "$temporary" "$destination"
@@ -162,7 +166,7 @@ CASSETTE_CHECK
 for provider in openai gateway; do
     if [[ "$RECORD_SET" != all && "$RECORD_SET" != "$provider" ]]; then continue; fi
     if [[ "$provider" == openai ]]; then model="$OPENAI_MODEL"; else model="$GATEWAY_MODEL"; fi
-    for scenario in lifecycle pagination edge-cases conversation replayed-items tool-items call-ids item-id-prefixes; do
+    for scenario in lifecycle pagination edge-cases conversation replayed-items tool-items call-ids item-id-prefixes computer-history; do
         if [[ "$SCENARIO" != all && "$SCENARIO" != "$scenario" ]]; then continue; fi
         # Source tool scenarios and ID admission probes use JSON. Capture
         # them once even when both transports are selected.

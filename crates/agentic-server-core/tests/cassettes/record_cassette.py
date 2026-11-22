@@ -1169,6 +1169,95 @@ def run_items(
     if scenario == "response-call-ids":
         _record_call_ids(client, proxy_url, model)
         return
+    if scenario == "response-computer-history":
+        image_url = (
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAb0lEQVR4nO3PAQkAAAyEwO9feoshgn"
+            "ABdLep8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ"
+            "3I8QUNyPEFDcjxBQ3IPanc8OLDQitxAAAAAElFTkSuQmCC"
+        )
+        first = _item_response(
+            client,
+            proxy_url,
+            model,
+            [
+                {"role": "user", "content": "Capture a screenshot and inspect it."},
+                {
+                    "type": "computer_call",
+                    "call_id": "call_computer_1",
+                    "actions": [{"type": "screenshot"}],
+                    "status": "completed",
+                },
+                {
+                    "type": "computer_call_output",
+                    "call_id": "call_computer_1",
+                    "output": {"type": "computer_screenshot", "image_url": image_url},
+                },
+            ],
+            stream=stream,
+        )
+        _item_request(client, proxy_url, "GET", f"/v1/responses/{first['id']}/input_items", params={"order": "asc"})
+        second = _item_response(
+            client,
+            proxy_url,
+            model,
+            "What color is the screenshot? Reply with one word.",
+            previous_response_id=first["id"],
+            stream=stream,
+        )
+        _item_request(client, proxy_url, "GET", f"/v1/responses/{second['id']}/input_items", params={"order": "asc"})
+        _item_request(
+            client,
+            proxy_url,
+            "POST",
+            "/v1/responses",
+            body={
+                "model": model,
+                "store": False,
+                "stream": False,
+                "input": [
+                    {"role": "user", "content": "Probe legacy action and client IDs."},
+                    {
+                        "type": "computer_call",
+                        "id": "cu_probe_1",
+                        "call_id": "call_computer_2",
+                        "action": {"type": "screenshot"},
+                    },
+                    {
+                        "type": "computer_call_output",
+                        "id": "cuo_probe_1",
+                        "call_id": "call_computer_2",
+                        "output": {"type": "computer_screenshot", "image_url": image_url},
+                    },
+                ],
+            },
+            expected_status=None,
+        )
+        _item_request(
+            client,
+            proxy_url,
+            "POST",
+            "/v1/responses",
+            body={
+                "model": model,
+                "store": False,
+                "stream": False,
+                "input": [
+                    {
+                        "type": "computer_call",
+                        "call_id": "call_computer_3",
+                        "actions": [{"type": "wait"}],
+                    },
+                    {
+                        "type": "computer_call_output",
+                        "id": "",
+                        "call_id": "call_computer_3",
+                        "output": {"type": "computer_screenshot", "image_url": image_url},
+                    },
+                ],
+            },
+            expected_status=None,
+        )
+        return
     if scenario == "response-tool-items":
         run_tool_items(client, proxy_url, model, send_request=_item_request,
                        extract_tool_calls=_extract_tool_calls,
@@ -3283,7 +3372,7 @@ def run_responses(
 )
 @click.option(
     "--items-scenario",
-    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "item-id-prefixes", "concurrent-writes", "stale-compaction", *COMPACTION_SCENARIOS, *MCP_SCENARIOS, "competing-tool-outputs", "overlapping-multi-agent", "store-false", "multi-agent-store-false", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items", "response-call-ids", "response-item-id-prefixes"]),
+    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "item-id-prefixes", "concurrent-writes", "stale-compaction", *COMPACTION_SCENARIOS, *MCP_SCENARIOS, "competing-tool-outputs", "overlapping-multi-agent", "store-false", "multi-agent-store-false", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items", "response-call-ids", "response-item-id-prefixes", "response-computer-history"]),
     default="continuation",
     help="Fixed Conversation Items or Responses API scenario (for --mode items).",
 )
@@ -3568,6 +3657,7 @@ def main(
                           14 if items_scenario == "response-replayed-items" else
                           48 if items_scenario == "response-tool-items" else
                           17 if items_scenario == "response-call-ids" else
+                          6 if items_scenario == "response-computer-history" else
                           10 if items_scenario == "pagination" else
                           6 if items_scenario == "branch" else
                           24 if items_scenario == "edge-cases" else

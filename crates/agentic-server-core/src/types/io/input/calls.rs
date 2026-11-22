@@ -12,6 +12,7 @@ impl InputItem {
             Self::ToolSearchCall(call) => call.call_id.as_deref(),
             Self::CustomToolCall(call) => Some(&call.call_id),
             Self::ShellCall(call) => Some(&call.call_id),
+            Self::ComputerCall(call) => Some(&call.call_id),
             Self::MultiAgentCall(_)
             | Self::MultiAgentCallOutput(_)
             | Self::AgentMessage(_)
@@ -23,6 +24,7 @@ impl InputItem {
             | Self::ToolSearchOutput(_)
             | Self::CustomToolCallOutput(_)
             | Self::ShellCallOutput(_)
+            | Self::ComputerCallOutput(_)
             | Self::Reasoning(_)
             | Self::McpListTools(_)
             | Self::Compaction(_)
@@ -39,6 +41,7 @@ impl InputItem {
             Self::ToolSearchOutput(output) => output.call_id.as_deref(),
             Self::CustomToolCallOutput(output) => Some(&output.call_id),
             Self::ShellCallOutput(output) => Some(&output.call_id),
+            Self::ComputerCallOutput(output) => Some(&output.call_id),
             // Multi-agent outputs belong to the coordinator, not to a client call.
             Self::WebSearchCall(_)
             | Self::McpCall(_)
@@ -51,6 +54,7 @@ impl InputItem {
             | Self::ToolSearchCall(_)
             | Self::CustomToolCall(_)
             | Self::ShellCall(_)
+            | Self::ComputerCall(_)
             | Self::Reasoning(_)
             | Self::McpListTools(_)
             | Self::Compaction(_)
@@ -75,6 +79,8 @@ impl InputItem {
             | Self::CustomToolCallOutput(_)
             | Self::ShellCall(_)
             | Self::ShellCallOutput(_)
+            | Self::ComputerCall(_)
+            | Self::ComputerCallOutput(_)
             | Self::Reasoning(_)
             | Self::McpListTools(_)
             | Self::Compaction(_)

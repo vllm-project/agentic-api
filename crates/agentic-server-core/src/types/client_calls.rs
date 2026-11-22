@@ -64,6 +64,7 @@ pub enum ClientCallKind {
     Shell,
     Custom,
     ToolSearch,
+    Computer,
 }
 
 impl ClientCallKind {
@@ -75,6 +76,7 @@ impl ClientCallKind {
             Self::Custom => "custom_tool_call",
             Self::Shell => "shell_call",
             Self::ToolSearch => "tool_search_call",
+            Self::Computer => "computer_call",
         }
     }
 
@@ -86,6 +88,7 @@ impl ClientCallKind {
             Self::Custom => "custom_tool_call_output",
             Self::Shell => "shell_call_output",
             Self::ToolSearch => "tool_search_output",
+            Self::Computer => "computer_call_output",
         }
     }
 }

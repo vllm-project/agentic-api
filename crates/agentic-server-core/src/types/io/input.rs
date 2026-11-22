@@ -37,6 +37,7 @@ use crate::types::event::MessageStatus;
 use super::{InOutItem, OutputItem};
 
 use super::code_interpreter::CodeInterpreterCall;
+use super::computer::{ComputerCall, ComputerCallOutputMessage};
 use super::multi_agent::{AgentAttribution, InputAgentMessage, InputMultiAgentCall, InputMultiAgentCallOutput};
 use super::output::{
     CustomToolCall, FunctionToolCall, McpCall, McpListTools, MessagePhase, ReasoningOutput, WebSearchCall,
@@ -301,6 +302,10 @@ pub enum InputItem {
     ShellCall(ShellCall),
     #[serde(rename = "shell_call_output")]
     ShellCallOutput(ShellCallOutputMessage),
+    #[serde(rename = "computer_call")]
+    ComputerCall(ComputerCall),
+    #[serde(rename = "computer_call_output")]
+    ComputerCallOutput(ComputerCallOutputMessage),
     #[serde(rename = "reasoning")]
     Reasoning(ReasoningOutput),
     /// A public web-search call supplied as request history.
@@ -464,6 +469,7 @@ fn function_call_item_id(item_id: &str) -> Option<String> {
     if let Some(suffix) = item_id
         .strip_prefix("ctc_")
         .or_else(|| item_id.strip_prefix("sh_"))
+        .or_else(|| item_id.strip_prefix("cu_"))
         .filter(|suffix| !suffix.is_empty())
     {
         return Some(format!("fc_{suffix}"));
@@ -772,7 +778,6 @@ mod tests {
     #[test]
     fn unmodeled_input_item_types_fail_deserialization() {
         for kind in [
-            "computer_call",
             "image_generation_call",
             "file_search_call",
             "local_shell_call",
@@ -811,8 +816,10 @@ mod tests {
 
     #[test]
     fn explicit_non_message_types_cannot_fall_back_to_shorthand() {
+        // A modeled tag never falls back to the untagged message: these are malformed known items.
         for kind in [
             serde_json::json!("computer_call"),
+            serde_json::json!("computer_call_output"),
             serde_json::json!("function_call"),
             serde_json::json!("web_search_call"),
             serde_json::json!("mcp_call"),
@@ -1187,6 +1194,144 @@ mod tests {
         assert_eq!(serialized[0]["type"], "shell_call");
         assert_eq!(serialized[1]["type"], "shell_call_output");
         assert_eq!(serialized[1]["output"][0]["outcome"]["exit_code"], 0);
+    }
+
+    #[test]
+    fn computer_call_and_output_parse_as_typed_input_and_lower_to_a_function_call() {
+        let wire = serde_json::json!([
+            {
+                "type": "computer_call",
+                "id": "cu_1",
+                "call_id": "call_1",
+                "actions": [
+                    {"type": "click", "button": "left", "x": 10, "y": 20, "future_action_field": true},
+                    {"type": "zoom", "factor": 2}
+                ],
+                "pending_safety_checks": [],
+                "status": "completed"
+            },
+            {
+                "type": "computer_call_output",
+                "call_id": "call_1",
+                "output": {"type": "computer_screenshot", "image_url": "data:image/png;base64,AAAA"},
+                "acknowledged_safety_checks": []
+            },
+            {
+                "type": "computer_call",
+                "id": "cu_2",
+                "call_id": "call_2",
+                "action": {"type": "screenshot"},
+                "status": "incomplete"
+            },
+            {
+                "type": "computer_call_output",
+                "call_id": "call_2",
+                "output": {"type": "computer_screenshot", "file_id": "file_1", "detail": "high"},
+                "status": "completed"
+            }
+        ]);
+        let input: ResponsesInput = serde_json::from_value(wire.clone()).expect("computer history");
+        let ResponsesInput::Items(items) = &input else {
+            panic!("expected item input");
+        };
+        assert!(matches!(items[0], InOutItem::Input(InputItem::ComputerCall(_))));
+        assert!(matches!(items[1], InOutItem::Input(InputItem::ComputerCallOutput(_))));
+        assert_eq!(
+            serde_json::to_value(&input).unwrap(),
+            wire,
+            "public history is kept as sent"
+        );
+
+        let refs = file_references(&input);
+        assert_eq!(refs.len(), 1);
+        assert_eq!(refs[0].file_id, "file_1");
+        assert_eq!(refs[0].part, "input_image");
+        assert_eq!(refs[0].location, "input[3].output");
+
+        let mut files = ResolvedFiles::new();
+        files.insert(
+            "file_1".to_owned(),
+            (
+                crate::types::file_search::FileObject {
+                    id: "file_1".to_owned(),
+                    object: "file".to_owned(),
+                    bytes: 3,
+                    created_at: 0,
+                    filename: "screen.png".to_owned(),
+                    purpose: "vision".to_owned(),
+                    status: "processed".to_owned(),
+                },
+                vec![0, 0, 0],
+            ),
+        );
+        let model = serde_json::to_value(input.normalized_model_input(&[], &files).unwrap()).unwrap();
+        assert_eq!(
+            model,
+            serde_json::json!([
+                {
+                    "type": "function_call",
+                    "id": "fc_1",
+                    "call_id": "call_1",
+                    "name": "computer",
+                    "arguments": "{\"actions\":[{\"type\":\"click\",\"button\":\"left\",\"x\":10,\"y\":20,\"future_action_field\":true},{\"type\":\"zoom\",\"factor\":2}]}",
+                    "status": "completed"
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_1",
+                    "output": [{"type": "input_image", "image_url": "data:image/png;base64,AAAA"}]
+                },
+                {
+                    "type": "function_call",
+                    "id": "fc_2",
+                    "call_id": "call_2",
+                    "name": "computer",
+                    "arguments": "{\"actions\":[{\"type\":\"screenshot\"}]}"
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_2",
+                    "status": "completed",
+                    "output": [{"type": "input_image", "image_url": "data:image/png;base64,AAAA", "detail": "high"}]
+                }
+            ])
+        );
+        // Canonical history completes an omitted output status, as for shell outputs.
+        let mut canonical = wire;
+        canonical[1]["status"] = serde_json::json!("completed");
+        assert_eq!(serde_json::to_value(input.into_canonical_items()).unwrap(), canonical);
+    }
+
+    #[test]
+    fn computer_call_ids_rewrite_only_an_exact_cu_prefix() {
+        // `cu_client_1` is a computer id. `custom_1` and `cuo_1` only share the letters, and shell
+        // or custom prefixes are not computer ids. The public item keeps the id that was sent.
+        for (id, model_id) in [
+            ("cu_client_1", "fc_client_1"),
+            ("custom_1", "custom_1"),
+            ("sh_1", "sh_1"),
+            ("cuo_1", "cuo_1"),
+            ("ctc_1", "ctc_1"),
+        ] {
+            let input: ResponsesInput = serde_json::from_value(serde_json::json!([{
+                "type": "computer_call",
+                "id": id,
+                "call_id": "call_1",
+                "actions": [{"type": "wait"}]
+            }]))
+            .unwrap();
+            let public = serde_json::to_value(&input).unwrap();
+            assert_eq!(public[0]["id"], id, "public id");
+            let model = serde_json::to_value(
+                input
+                    .normalized_model_input(&[], &std::collections::HashMap::default())
+                    .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(model[0]["id"], model_id, "{id}");
+            assert_eq!(model[0]["type"], "function_call");
+            assert_eq!(model[0]["name"], "computer");
+        }
     }
 }
 

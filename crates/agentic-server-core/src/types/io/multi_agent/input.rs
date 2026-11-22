@@ -98,6 +98,7 @@ impl InputItem {
             Self::ToolSearchOutput(item) => item.agent.as_ref(),
             Self::CustomToolCall(item) => item.agent.as_ref(),
             Self::ShellCall(item) => item.agent.as_ref(),
+            Self::ComputerCall(item) => item.agent.as_ref(),
             Self::WebSearchCall(item) => item.agent.as_ref(),
             Self::McpCall(item) => item.agent.as_ref(),
             Self::McpListTools(item) => item.agent.as_ref(),
@@ -106,6 +107,7 @@ impl InputItem {
             Self::FunctionCallOutput(_)
             | Self::CustomToolCallOutput(_)
             | Self::ShellCallOutput(_)
+            | Self::ComputerCallOutput(_)
             | Self::CompactionTrigger => None,
         }
     }
@@ -123,6 +125,7 @@ impl InputItem {
             Self::ToolSearchOutput(item) => item.agent.take(),
             Self::CustomToolCall(item) => item.agent.take(),
             Self::ShellCall(item) => item.agent.take(),
+            Self::ComputerCall(item) => item.agent.take(),
             Self::WebSearchCall(item) => item.agent.take(),
             Self::McpCall(item) => item.agent.take(),
             Self::McpListTools(item) => item.agent.take(),
@@ -131,6 +134,7 @@ impl InputItem {
             Self::FunctionCallOutput(_)
             | Self::CustomToolCallOutput(_)
             | Self::ShellCallOutput(_)
+            | Self::ComputerCallOutput(_)
             | Self::CompactionTrigger => None,
         }
     }

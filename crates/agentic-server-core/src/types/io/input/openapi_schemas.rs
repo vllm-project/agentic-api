@@ -145,6 +145,8 @@ impl utoipa::PartialSchema for InputItem {
             .item(tagged_ref("custom_tool_call_output", "CustomToolCallOutputMessage"))
             .item(tagged_ref("shell_call", "ShellCall"))
             .item(tagged_ref("shell_call_output", "ShellCallOutputMessage"))
+            .item(tagged_ref("computer_call", "ComputerCall"))
+            .item(tagged_ref("computer_call_output", "ComputerCallOutputMessage"))
             .item(tagged_ref("reasoning", "ReasoningOutput"))
             .item(tagged_ref("mcp_list_tools", "McpListTools"))
             .item(tagged_ref("compaction", "CompactionItem"))

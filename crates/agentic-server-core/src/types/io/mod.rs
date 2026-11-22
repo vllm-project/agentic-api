@@ -1,4 +1,5 @@
 pub mod code_interpreter;
+pub mod computer;
 pub mod input;
 mod item;
 pub use item::{
@@ -15,6 +16,10 @@ pub mod web_search;
 
 pub use code_interpreter::{
     CodeInterpreterCall, CodeInterpreterCallOutput, CodeInterpreterCallStatus, CodeInterpreterCallStreamEvent,
+};
+pub use computer::{
+    ComputerAction, ComputerCall, ComputerCallOutputContent, ComputerCallOutputMessage, ComputerCallStatus,
+    ComputerKeys, ComputerMouseButton, ComputerPoint, ComputerSafetyCheck, KnownComputerAction,
 };
 pub use input::{
     CompactionItem, CustomToolCallOutputMessage, FunctionToolResultMessage, InputContent, InputFileContent,

@@ -1,4 +1,7 @@
 use crate::types::event::MessageStatus;
+use crate::types::io::computer::{
+    COMPUTER_FUNCTION_NAME, ComputerCall, ComputerCallOutputContent, ComputerCallOutputMessage, ComputerCallStatus,
+};
 use crate::types::io::{
     InOutItem, McpCall, OutputItem, OutputMessage, OutputMessageContent, ReasoningTextContent, ShellCallOutputMessage,
     ShellCallStatus,
@@ -10,7 +13,7 @@ use serde_json::Value;
 use super::{
     CustomToolCallOutputMessage, FunctionToolResultMessage, InputContent, InputFunctionToolCall, InputItem,
     InputMessage, InputMessageContent, InputMessageType, InputTextContent, InputValidationError, ResolvedFiles,
-    ResponsesInput,
+    ResponsesInput, ToolCallOutput, ToolOutputContent,
 };
 use std::collections::HashMap;
 
@@ -68,6 +71,53 @@ impl From<ShellCallOutputMessage> for FunctionToolResultMessage {
             output: serde_json::to_string(&output.output)
                 .expect("shell outputs serialize to JSON")
                 .into(),
+        }
+    }
+}
+
+/// Model-facing id of a computer call.
+///
+/// Only a `cu_` prefix is rewritten (`cu_client_1` becomes `fc_client_1`). The underscore is the
+/// boundary, so `custom_1` and `cuo_1` stay put, and shell (`sh_`) or custom (`ctc_`) prefixes are
+/// not computer ids.
+fn computer_call_item_id(item_id: &str) -> Option<String> {
+    if item_id.is_empty() {
+        return None;
+    }
+    if let Some(suffix) = item_id.strip_prefix("cu_").filter(|suffix| !suffix.is_empty()) {
+        return Some(format!("fc_{suffix}"));
+    }
+    Some(item_id.to_owned())
+}
+
+/// A computer call reaches the model as a `computer` function call whose arguments hold the actions in execution
+/// order, so a single `computer_use_preview` action and an `actions` batch look the same to the model.
+impl From<ComputerCall> for InputFunctionToolCall {
+    fn from(call: ComputerCall) -> Self {
+        let arguments = serde_json::json!({ "actions": call.ordered_actions() });
+        Self {
+            agent: call.agent,
+            id: call.id.as_deref().and_then(computer_call_item_id),
+            call_id: call.call_id,
+            name: COMPUTER_FUNCTION_NAME.to_owned(),
+            namespace: None,
+            arguments: arguments.to_string(),
+            status: call.status.and_then(ComputerCallStatus::message_status),
+            // The computer tool does not accept `async`; its calls always need their screenshot.
+            async_execution: false,
+        }
+    }
+}
+
+/// A computer call output reaches the model as a function call output holding its screenshot as `input_image`.
+impl From<ComputerCallOutputMessage> for FunctionToolResultMessage {
+    fn from(output: ComputerCallOutputMessage) -> Self {
+        let ComputerCallOutputContent::ComputerScreenshot(screenshot) = output.output;
+        Self {
+            id: output.id,
+            status: output.status.and_then(ComputerCallStatus::message_status),
+            call_id: output.call_id,
+            output: ToolCallOutput::Content(vec![ToolOutputContent::InputImage(screenshot)]),
         }
     }
 }
@@ -259,6 +309,12 @@ impl ResponsesInput {
                 }
                 InputItem::ShellCall(call) => model.push(InputItem::FunctionCall(call.into())),
                 InputItem::ShellCallOutput(output) => model.push(InputItem::FunctionCallOutput(output.into())),
+                InputItem::ComputerCall(call) => model.push(InputItem::FunctionCall(call.into())),
+                InputItem::ComputerCallOutput(output) => {
+                    let mut lowered: FunctionToolResultMessage = output.into();
+                    lowered.output.inline_files(files, model.len())?;
+                    model.push(InputItem::FunctionCallOutput(lowered));
+                }
                 InputItem::Reasoning(mut reasoning) => {
                     if reasoning.content.iter().all(|content| content.text.is_empty()) {
                         if reasoning.encrypted_content.is_some() {

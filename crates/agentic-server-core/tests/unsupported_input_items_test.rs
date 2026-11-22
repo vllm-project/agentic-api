@@ -13,7 +13,6 @@ fn unsupported_input_item_is_rejected_during_request_deserialization() {
     for store in [false, true] {
         for stream in [false, true] {
             for kind in [
-                "computer_call",
                 "image_generation_call",
                 "file_search_call",
                 "local_shell_call",
@@ -122,5 +121,55 @@ fn gateway_call_input_preserves_typed_payloads_in_canonical_history() {
 
     for kind in ["web_search_call", "mcp_call"] {
         assert!(serde_json::from_value::<InOutItem>(json!({"type": kind, "id": "missing_payload"})).is_err());
+    }
+}
+
+#[test]
+fn computer_call_input_keeps_its_public_shape_and_reaches_the_model_as_a_function_call() {
+    let wire = json!([
+        {"type": "message", "role": "user", "content": "open the settings page"},
+        {"type": "computer_call", "id": "cu_1", "call_id": "call_1", "status": "completed",
+         "actions": [{"type": "click", "button": "left", "x": 10, "y": 20}, {"type": "type", "text": "wifi"}],
+         "pending_safety_checks": []},
+        {"type": "computer_call_output", "call_id": "call_1",
+         "output": {"type": "computer_screenshot", "image_url": "data:image/png;base64,AAAA", "detail": "high"}}
+    ]);
+    for store in [false, true] {
+        for stream in [false, true] {
+            let payload: RequestPayload = serde_json::from_value(json!({
+                "model": "synthetic", "store": store, "stream": stream, "input": wire
+            }))
+            .expect("computer items are typed request input");
+            assert_eq!(serde_json::to_value(&payload.input).unwrap(), wire);
+
+            let upstream = payload
+                .to_upstream_request(stream, &std::collections::HashMap::default())
+                .unwrap();
+            assert_eq!(
+                serde_json::to_value(&upstream.input).unwrap(),
+                json!([
+                    {"type": "message", "role": "user", "content": "open the settings page"},
+                    {"type": "function_call", "id": "fc_1", "call_id": "call_1", "name": "computer",
+                     "arguments": "{\"actions\":[{\"type\":\"click\",\"button\":\"left\",\"x\":10,\"y\":20},{\"type\":\"type\",\"text\":\"wifi\"}]}",
+                     "status": "completed"},
+                    {"type": "function_call_output", "call_id": "call_1",
+                     "output": [{"type": "input_image", "image_url": "data:image/png;base64,AAAA", "detail": "high"}]}
+                ])
+            );
+
+            let items = payload.input.into_canonical_items();
+            assert!(matches!(
+                items.as_slice(),
+                [
+                    InOutItem::Input(InputItem::Message(_)),
+                    InOutItem::Input(InputItem::ComputerCall(_)),
+                    InOutItem::Input(InputItem::ComputerCallOutput(_))
+                ]
+            ));
+            // Canonical history completes the omitted output status, as for shell outputs.
+            let mut canonical = wire.clone();
+            canonical[2]["status"] = json!("completed");
+            assert_eq!(serde_json::to_value(ResponsesInput::Items(items)).unwrap(), canonical);
+        }
     }
 }

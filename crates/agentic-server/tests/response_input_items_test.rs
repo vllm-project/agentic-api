@@ -43,6 +43,7 @@ struct Harness {
     client: reqwest::Client,
     exec: Arc<ExecutionContext>,
     tasks: Vec<tokio::task::JoinHandle<()>>,
+    _files: tempfile::TempDir,
 }
 
 impl Harness {
@@ -54,7 +55,9 @@ impl Harness {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let mut config = common::test_config(&format!("http://{}", listener.local_addr().unwrap()));
         let upstream = tokio::spawn(async move { axum::serve(listener, upstream).await.unwrap() });
+        let files = tempfile::tempdir().unwrap();
         config.db_url = Some("sqlite://?mode=memory".into());
+        config.tools.file_search.files_storage_dir = Some(files.path().to_owned());
         let exec = Arc::new(ExecutionContext::from_config(&config).await.unwrap());
         let mut state = common::test_state(&config);
         state.exec_ctx = Arc::clone(&exec);
@@ -64,6 +67,7 @@ impl Harness {
             client: reqwest::Client::new(),
             exec,
             tasks: vec![upstream, gateway],
+            _files: files,
         }
     }
 
@@ -462,5 +466,189 @@ async fn an_empty_input_turn_keeps_the_previous_answer_in_its_input_list() {
         texts(&harness.page(second["id"].as_str().unwrap(), "?order=asc").await),
         ["first", "answer 0"]
     );
+    harness.stop().await;
+}
+
+/// A replayed computer call and its screenshot are stored in their public shape and reach the model, on this turn
+/// and on a continuation, as a `computer` function call and a function output holding the screenshot.
+#[tokio::test]
+async fn computer_history_is_stored_public_and_lowered_for_every_turn() {
+    let requests = Arc::new(std::sync::Mutex::new(Vec::<Value>::new()));
+    let captured = Arc::clone(&requests);
+    let upstream = Router::new().route(
+        "/v1/responses",
+        post(move |Json(body): Json<Value>| {
+            captured.lock().unwrap().push(body);
+            async move {
+                Json(json!({"id":"resp_upstream", "object":"response", "created_at":123,
+                "model":"test-model", "status":"completed", "output":[{
+                    "type":"message", "id":"msg_answer", "role":"assistant", "status":"completed",
+                    "content":[{"type":"output_text", "text":"done"}]}],
+                "usage":{"input_tokens":3,"output_tokens":1,"total_tokens":4}}))
+            }
+        }),
+    );
+    let harness = Harness::start_with(upstream).await;
+    let call = json!({"type":"computer_call", "call_id":"call_1", "status":"completed",
+        "actions":[{"type":"keypress", "keys":["ctrl", "l"]}, {"type":"zoom", "factor":2}],
+        "pending_safety_checks":[]});
+    let output = json!({"type":"computer_call_output", "call_id":"call_1", "status":"completed",
+        "output":{"type":"computer_screenshot", "image_url":"data:image/png;base64,AAAA", "detail":"high"}});
+    let first = harness
+        .create(json!({"model":"test-model", "store":true, "input":[
+            {"type":"message", "role":"user", "content":"open the address bar"}, call, output]}))
+        .await;
+    let first_id = first["id"].as_str().unwrap();
+    harness
+        .create(json!({"model":"test-model", "store":true, "previous_response_id":first_id, "input":"next"}))
+        .await;
+
+    let page = harness.page(first_id, "?order=asc").await;
+    let stored = page["data"].as_array().unwrap();
+    assert_eq!(stored.len(), 3);
+    assert!(stored[1]["id"].as_str().unwrap().starts_with("item_"));
+    for (item, sent) in [(&stored[1], &call), (&stored[2], &output)] {
+        let mut item = item.clone();
+        item.as_object_mut().unwrap().remove("id");
+        assert_eq!(&item, sent, "the public item is listed as sent");
+    }
+
+    let requests = std::mem::take(&mut *requests.lock().unwrap());
+    assert_eq!(requests.len(), 2);
+    for request in &requests {
+        let input = request["input"].as_array().unwrap();
+        let lowered = &input[1..3];
+        assert_eq!(lowered[0]["type"], "function_call");
+        assert_eq!(lowered[0]["name"], "computer");
+        assert_eq!(lowered[0]["call_id"], "call_1");
+        let arguments: Value = serde_json::from_str(lowered[0]["arguments"].as_str().unwrap()).unwrap();
+        assert_eq!(arguments, json!({"actions": call["actions"]}));
+        assert_eq!(
+            lowered[1],
+            json!({"type":"function_call_output", "call_id":"call_1", "status":"completed", "output":[
+                {"type":"input_image", "image_url":"data:image/png;base64,AAAA", "detail":"high"}]})
+        );
+        assert!(
+            input
+                .iter()
+                .all(|item| !item["type"].as_str().unwrap_or_default().starts_with("computer")),
+            "no public computer item goes upstream"
+        );
+    }
+    harness.stop().await;
+}
+
+async fn upload_png(harness: &Harness) -> String {
+    let mut body = concat!(
+        "--upload\r\nContent-Disposition: form-data; name=\"purpose\"\r\n\r\nvision\r\n",
+        "--upload\r\nContent-Disposition: form-data; name=\"file\"; filename=\"screen.png\"\r\n",
+        "Content-Type: image/png\r\n\r\n"
+    )
+    .as_bytes()
+    .to_vec();
+    body.extend_from_slice(&[0u8, 0, 0]);
+    body.extend_from_slice(b"\r\n--upload--\r\n");
+    let uploaded = harness
+        .client
+        .post(format!("{}/v1/files", harness.url))
+        .bearer_auth("test-key")
+        .header("content-type", "multipart/form-data; boundary=upload")
+        .body(body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(uploaded.status(), StatusCode::OK);
+    uploaded.json::<Value>().await.unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
+
+/// Legacy single `action`, client-supplied IDs, omitted `status`, `file_id` screenshots, and inherited continuation
+/// items all preserve their public shape in both turns' `input_items` while lowering for the model.
+#[tokio::test]
+async fn computer_continuation_preserves_file_id_legacy_action_and_ids_in_input_items() {
+    let requests = Arc::new(std::sync::Mutex::new(Vec::<Value>::new()));
+    let captured = Arc::clone(&requests);
+    let upstream = Router::new().route(
+        "/v1/responses",
+        post(move |Json(body): Json<Value>| {
+            captured.lock().unwrap().push(body);
+            async move {
+                Json(json!({"id":"resp_upstream", "object":"response", "created_at":123,
+                "model":"test-model", "status":"completed", "output":[{
+                    "type":"message", "id":"msg_answer", "role":"assistant", "status":"completed",
+                    "content":[{"type":"output_text", "text":"done"}]}],
+                "usage":{"input_tokens":3,"output_tokens":1,"total_tokens":4}}))
+            }
+        }),
+    );
+    let harness = Harness::start_with(upstream).await;
+    let file_id = upload_png(&harness).await;
+    let call = json!({
+        "type": "computer_call",
+        "id": "cu_client_1",
+        "call_id": "call_1",
+        "action": {"type": "zoom", "factor": 2},
+        "pending_safety_checks": [{"id": "sc_1", "code": null, "message": null}]
+    });
+    let output = json!({
+        "type": "computer_call_output",
+        "call_id": "call_1",
+        "output": {"type": "computer_screenshot", "file_id": file_id}
+    });
+    let first = harness
+        .create(json!({"model": "test-model", "store": true, "input": [call.clone(), output.clone()]}))
+        .await;
+    let first_id = first["id"].as_str().unwrap();
+    let second = harness
+        .create(json!({
+            "model": "test-model",
+            "store": true,
+            "previous_response_id": first_id,
+            "input": "next"
+        }))
+        .await;
+    let second_id = second["id"].as_str().unwrap();
+
+    let first_page = harness.page(first_id, "?order=asc").await;
+    let first_items = first_page["data"].as_array().unwrap();
+    assert_eq!(first_items.len(), 2);
+    assert_eq!(first_items[0], call);
+    assert_eq!(first_items[0].get("status"), None);
+    assert!(first_items[1]["id"].as_str().unwrap().starts_with("item_"));
+    assert_eq!(first_items[1]["status"], "completed");
+    assert_eq!(first_items[1]["output"], output["output"]);
+
+    let second_page = harness.page(second_id, "?order=asc").await;
+    let second_items = second_page["data"].as_array().unwrap();
+    assert_eq!(second_items.len(), 4);
+    assert_eq!(&second_items[..2], first_items.as_slice());
+    assert_eq!(second_items[2]["id"], "msg_answer");
+    assert_eq!(
+        second_items[3]["content"],
+        json!([{"type": "input_text", "text": "next"}])
+    );
+
+    let requests = std::mem::take(&mut *requests.lock().unwrap());
+    assert_eq!(requests.len(), 2);
+    for request in &requests {
+        let input = request["input"].as_array().unwrap();
+        assert_eq!(input[0]["type"], "function_call");
+        assert_eq!(input[0]["id"], "fc_client_1");
+        assert_eq!(input[0]["name"], "computer");
+        assert_eq!(input[0]["call_id"], "call_1");
+        let arguments: Value = serde_json::from_str(input[0]["arguments"].as_str().unwrap()).unwrap();
+        assert_eq!(arguments, json!({"actions": [{"type": "zoom", "factor": 2}]}));
+        assert_eq!(
+            input[1],
+            json!({
+                "type": "function_call_output",
+                "call_id": "call_1",
+                "status": "completed",
+                "output": [{"type": "input_image", "image_url": "data:image/png;base64,AAAA"}]
+            })
+        );
+    }
     harness.stop().await;
 }

@@ -777,5 +777,228 @@ async fn test_create_items_rejects_item_already_in_conversation() {
     assert_eq!(listed["data"], original["data"]);
 }
 
+async fn upload_test_screenshot(client: &reqwest::Client, gw_url: &str, filename: &str) -> String {
+    let mut body = format!(
+        "--upload\r\nContent-Disposition: form-data; name=\"purpose\"\r\n\r\nvision\r\n--upload\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\nContent-Type: image/png\r\n\r\n"
+    )
+    .into_bytes();
+    body.extend_from_slice(&[0u8, 0, 0]);
+    body.extend_from_slice(b"\r\n--upload--\r\n");
+    let resp = client
+        .post(format!("{gw_url}/v1/files"))
+        .bearer_auth("test-key")
+        .header("content-type", "multipart/form-data; boundary=upload")
+        .body(body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    resp.json::<serde_json::Value>().await.unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
+
+async fn spawn_computer_conversation_gateway() -> (
+    String,
+    Arc<tokio::sync::Mutex<Vec<serde_json::Value>>>,
+    tokio::task::JoinHandle<()>,
+    tokio::task::JoinHandle<()>,
+    tempfile::TempDir,
+) {
+    let captured = Arc::new(tokio::sync::Mutex::new(Vec::<serde_json::Value>::new()));
+    let captured_ref = Arc::clone(&captured);
+    let upstream = axum::Router::new().route(
+        "/v1/responses",
+        axum::routing::post(move |axum::Json(body): axum::Json<serde_json::Value>| {
+            let captured = Arc::clone(&captured_ref);
+            async move {
+                captured.lock().await.push(body);
+                axum::Json(json!({
+                    "id": "resp_conv_computer",
+                    "object": "response",
+                    "created_at": 123,
+                    "model": "test-model",
+                    "status": "completed",
+                    "output": [{
+                        "type": "message",
+                        "id": "msg_answer",
+                        "role": "assistant",
+                        "status": "completed",
+                        "content": [{"type": "output_text", "text": "continued"}]
+                    }],
+                    "usage": {"input_tokens": 3, "output_tokens": 1, "total_tokens": 4}
+                }))
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let llm_url = format!("http://{}", listener.local_addr().unwrap());
+    let llm_handle = tokio::spawn(async move { axum::serve(listener, upstream).await.unwrap() });
+    let files = tempfile::tempdir().unwrap();
+    let mut config = test_config(&llm_url);
+    config.db_url = Some("sqlite://?mode=memory".into());
+    config.tools.file_search.files_storage_dir = Some(files.path().to_owned());
+    let exec_ctx = Arc::new(ExecutionContext::from_config(&config).await.unwrap());
+    let mut state = common::test_state(&config);
+    state.exec_ctx = exec_ctx;
+    let (gw_url, gw_handle) = spawn_gateway(state).await;
+    (gw_url, captured, gw_handle, llm_handle, files)
+}
+
+#[tokio::test]
+async fn test_computer_items_round_trip_and_continue_in_conversation() {
+    let (gw_url, captured, gw_handle, llm_handle, _files) = spawn_computer_conversation_gateway().await;
+    let client = reqwest::Client::new();
+    let file_id = upload_test_screenshot(&client, &gw_url, "screen.png").await;
+
+    let created = client
+        .post(format!("{gw_url}/v1/conversations"))
+        .json(&json!({
+            "items": [
+                {"type": "message", "role": "user", "content": "open tab"},
+                {"type": "computer_call", "call_id": "call_1", "actions": [{"type": "zoom", "factor": 2}]},
+                {
+                    "type": "computer_call_output",
+                    "call_id": "call_1",
+                    "output": {"type": "computer_screenshot", "file_id": file_id}
+                }
+            ]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::OK);
+    let conv_id = created.json::<serde_json::Value>().await.unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    let listed: serde_json::Value = client
+        .get(format!("{gw_url}/v1/conversations/{conv_id}/items?order=asc"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let data = listed["data"].as_array().unwrap();
+    assert_eq!(data.len(), 3);
+    assert!(data[1]["id"].as_str().unwrap().starts_with("item_"));
+    assert!(data[2]["id"].as_str().unwrap().starts_with("item_"));
+    assert_eq!(data[2]["status"], "completed");
+    assert_eq!(
+        data[2]["output"],
+        json!({"type": "computer_screenshot", "file_id": file_id})
+    );
+
+    for (item, expected_param) in [
+        (
+            json!({
+                "type": "computer_call_output", "id": "", "call_id": "call_2",
+                "output": {"type": "computer_screenshot", "image_url": "data:image/png;base64,AAAA"}
+            }),
+            "items[0].id",
+        ),
+        (
+            json!({"type": "computer_call", "call_id": "", "actions": [{"type": "wait"}]}),
+            "items[0].call_id",
+        ),
+    ] {
+        let rejected = client
+            .post(format!("{gw_url}/v1/conversations/{conv_id}/items"))
+            .json(&json!({"items": [item]}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(rejected.status(), StatusCode::BAD_REQUEST);
+        let err: serde_json::Value = rejected.json().await.unwrap();
+        assert_eq!(
+            (err["error"]["code"].as_str(), err["error"]["param"].as_str()),
+            (Some("empty_string"), Some(expected_param))
+        );
+    }
+
+    let turned = client
+        .post(format!("{gw_url}/v1/responses"))
+        .json(&json!({"model": "test-model", "conversation": conv_id, "store": true, "input": "continue"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(turned.status(), StatusCode::OK);
+
+    let requests = captured.lock().await;
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0]["input"][1]["type"], "function_call");
+    assert_eq!(requests[0]["input"][1]["name"], "computer");
+    assert_eq!(requests[0]["input"][2]["type"], "function_call_output");
+    assert_eq!(
+        requests[0]["input"][2]["output"],
+        json!([{"type": "input_image", "image_url": "data:image/png;base64,AAAA"}])
+    );
+
+    gw_handle.abort();
+    llm_handle.abort();
+}
+
+#[tokio::test]
+async fn test_conversation_unanswered_computer_call_blocks_until_output() {
+    let (gw_url, captured, gw_handle, llm_handle, _files) = spawn_computer_conversation_gateway().await;
+    let client = reqwest::Client::new();
+    let pending_file_id = upload_test_screenshot(&client, &gw_url, "pending.png").await;
+
+    let pending_conv = client
+        .post(format!("{gw_url}/v1/conversations"))
+        .json(&json!({
+            "items": [{"type": "computer_call", "call_id": "call_pending", "actions": [{"type": "screenshot"}]}]
+        }))
+        .send()
+        .await
+        .unwrap()
+        .json::<serde_json::Value>()
+        .await
+        .unwrap();
+    let pending_id = pending_conv["id"].as_str().unwrap();
+
+    let blocked = client
+        .post(format!("{gw_url}/v1/responses"))
+        .json(&json!({"model": "test-model", "conversation": pending_id, "store": true, "input": "next"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(blocked.status(), StatusCode::BAD_REQUEST);
+    let blocked_err: serde_json::Value = blocked.json().await.unwrap();
+    assert_eq!(blocked_err["error"]["type"], "invalid_request_error");
+
+    let resolved = client
+        .post(format!("{gw_url}/v1/responses"))
+        .json(&json!({
+            "model": "test-model",
+            "conversation": pending_id,
+            "store": true,
+            "input": [{
+                "type": "computer_call_output",
+                "call_id": "call_pending",
+                "output": {"type": "computer_screenshot", "file_id": pending_file_id}
+            }]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resolved.status(), StatusCode::OK);
+
+    let requests = captured.lock().await;
+    assert_eq!(requests.len(), 1, "blocked turn must not reach upstream");
+    assert_eq!(requests[0]["input"][0]["type"], "function_call");
+    assert_eq!(requests[0]["input"][1]["type"], "function_call_output");
+    assert_eq!(
+        requests[0]["input"][1]["output"],
+        json!([{"type": "input_image", "image_url": "data:image/png;base64,AAAA"}])
+    );
+
+    gw_handle.abort();
+    llm_handle.abort();
+}
+
 #[path = "conversations/regressions.rs"]
 mod regressions;

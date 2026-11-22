@@ -167,8 +167,12 @@ impl InputTokenEstimate {
                 self.add_optional_text(output.name.as_deref());
                 self.add_tool_call_output(&output.output);
             }
-            InputItem::ShellCall(_) | InputItem::ShellCallOutput(_) => {
-                // Shell items carry textual commands and outputs, without image payloads.
+            InputItem::ComputerCallOutput(output) => {
+                self.add_text(&output.call_id);
+                self.add_tokens(ESTIMATED_IMAGE_TOKENS);
+            }
+            InputItem::ShellCall(_) | InputItem::ShellCallOutput(_) | InputItem::ComputerCall(_) => {
+                // Shell items and computer actions are textual, without image payloads.
                 match serialize_to_value(item) {
                     Ok(value) => self.add_json_value(&value),
                     Err(_) => self.add_tokens(u64::MAX),

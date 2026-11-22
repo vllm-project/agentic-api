@@ -219,6 +219,35 @@ fn multi_agent_rejects_async_tools_only_with_explicit_parallel_tool_calls() {
     }
 }
 
+#[test]
+fn multi_agent_rejects_computer_history_items() {
+    for input in [
+        serde_json::json!([
+            {"type": "computer_call", "call_id": "call_1", "actions": [{"type": "screenshot"}]}
+        ]),
+        serde_json::json!([
+            {
+                "type": "computer_call_output",
+                "call_id": "call_1",
+                "output": {"type": "computer_screenshot", "image_url": "data:image/png;base64,AAAA"}
+            }
+        ]),
+    ] {
+        let request: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test",
+            "multi_agent": {"enabled": true},
+            "input": input,
+        }))
+        .unwrap();
+        let error = validate_multi_agent_request(&request).unwrap_err();
+        assert!(matches!(
+            error,
+            ExecutorError::InvalidRequest(ref message)
+                if message == "computer_call and computer_call_output are not supported with multi_agent"
+        ));
+    }
+}
+
 #[tokio::test]
 async fn inherited_multi_agent_preserves_checkpoint_and_validates_limits() {
     let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await.unwrap();

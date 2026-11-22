@@ -17,10 +17,12 @@ pub use conversations::{
 
 pub use io::{
     AllowedTool, AllowedToolsMode, CodeInterpreterCall, CodeInterpreterCallOutput, CodeInterpreterCallStatus,
-    CodeInterpreterCallStreamEvent, CompactionItem, CustomToolCall, CustomToolCallOutputMessage, FunctionTool,
-    FunctionToolCall, FunctionToolResultMessage, GatewayCallStatus, InOutItem, InputContent, InputFileContent,
-    InputFunctionToolCall, InputImageContent, InputItem, InputMessage, InputMessageContent, InputTextContent,
-    InputTokenDetails, InputToolSearchCall, McpCall, McpCallError, McpCallStatus, McpToolExecutionError,
+    CodeInterpreterCallStreamEvent, CompactionItem, ComputerAction, ComputerCall, ComputerCallOutputContent,
+    ComputerCallOutputMessage, ComputerCallStatus, ComputerKeys, ComputerMouseButton, ComputerPoint,
+    ComputerSafetyCheck, CustomToolCall, CustomToolCallOutputMessage, FunctionTool, FunctionToolCall,
+    FunctionToolResultMessage, GatewayCallStatus, InOutItem, InputContent, InputFileContent, InputFunctionToolCall,
+    InputImageContent, InputItem, InputMessage, InputMessageContent, InputTextContent, InputTokenDetails,
+    InputToolSearchCall, KnownComputerAction, McpCall, McpCallError, McpCallStatus, McpToolExecutionError,
     McpToolExecutionErrorContent, OpaqueReasoning, OpaqueReasoningError, OutputItem, OutputMessage, OutputTextContent,
     OutputTokenDetails, ReasoningOutput, ReasoningStatus, ReasoningSummaryContent, ReasoningSummaryKind,
     ReasoningTextContent, ReasoningTextKind, RefusalContent, ResponseUsage, ResponsesInput, ShellCall, ShellCallAction,

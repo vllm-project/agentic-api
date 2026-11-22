@@ -526,3 +526,27 @@ async fn replay_client_tool_input_items_gateway() {
     );
     replay("tool-items", "gateway", &turns).await;
 }
+
+#[tokio::test]
+async fn replay_computer_history_when_recorded() {
+    let mut replayed = false;
+    for scenario in ["computer-history", "computer-history-stream"] {
+        for provider in ["openai", "gateway"] {
+            let Some(turns) = cassette(scenario, provider) else {
+                assert!(
+                    std::env::var_os("REQUIRE_RESPONSES_CASSETTES").is_none(),
+                    "missing required cassette response-{scenario}-{provider}.yaml"
+                );
+                continue;
+            };
+            replay(scenario, provider, &turns).await;
+            replayed = true;
+        }
+    }
+    if !replayed {
+        eprintln!(
+            "computer-history recordings unavailable; run \
+             RESPONSES_SCENARIO=computer-history bash crates/agentic-server-core/tests/cassettes/record_responses_api_cassettes.sh"
+        );
+    }
+}

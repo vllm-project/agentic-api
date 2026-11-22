@@ -71,6 +71,8 @@ impl PendingCall {
                 call_id,
                 execution: ToolSearchExecution::Client,
             }),
+            // The steering contract has no computer output kind yet: the gateway does not emit computer calls.
+            ClientCallKind::Computer => Err(Self { call_id, ..self }),
         }
     }
 }
@@ -123,6 +125,12 @@ impl CallLedger {
                     ledger.add_call(&call.call_id, ClientCallKind::Shell, false, None, false)?;
                 }
                 InputItem::ShellCallOutput(output) => ledger.resolve_call(&output.call_id, ClientCallKind::Shell)?,
+                InputItem::ComputerCall(call) => {
+                    ledger.add_call(&call.call_id, ClientCallKind::Computer, false, None, false)?;
+                }
+                InputItem::ComputerCallOutput(output) => {
+                    ledger.resolve_call(&output.call_id, ClientCallKind::Computer)?;
+                }
                 // A hosted search (no call id) is resolved by the gateway, not the client.
                 InputItem::ToolSearchCall(call) => {
                     if let Some(call_id) = call.call_id.as_deref() {
@@ -704,6 +712,68 @@ mod tests {
             &[shell_call("call_1"), function_call_output("call_1")],
             "cannot resolve shell_call call_id 'call_1'",
         );
+    }
+
+    fn computer_item(value: serde_json::Value) -> InputItem {
+        crate::utils::common::deserialize_from_value(value).unwrap()
+    }
+
+    fn computer_call(call_id: &str) -> InputItem {
+        computer_item(serde_json::json!({"type":"computer_call", "call_id":call_id, "actions":[{"type":"screenshot"}]}))
+    }
+
+    fn computer_call_output(call_id: &str) -> InputItem {
+        computer_item(serde_json::json!({
+            "type":"computer_call_output", "call_id":call_id,
+            "output":{"type":"computer_screenshot", "image_url":"data:image/png;base64,AAAA"}
+        }))
+    }
+
+    #[test]
+    fn computer_call_is_pending_until_its_output_resolves_it() {
+        let pending = pending_calls(&[computer_call("call_1")]).unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].kind, ClientCallKind::Computer);
+        assert_eq!(pending[0].call_id.as_str(), "call_1");
+        let items = [computer_call("call_1"), computer_call_output("call_1")];
+        assert!(pending_calls(&items).unwrap().is_empty());
+    }
+
+    #[test]
+    fn computer_outputs_resolve_only_computer_calls() {
+        assert_invalid(
+            &[function_call("call_1"), computer_call_output("call_1")],
+            "computer_call_output cannot resolve function_call call_id 'call_1'",
+        );
+        assert_invalid(
+            &[computer_call("call_1"), function_call_output("call_1")],
+            "cannot resolve computer_call call_id 'call_1'",
+        );
+        assert_invalid(
+            &[shell_call("call_1"), computer_call_output("call_1")],
+            "computer_call_output cannot resolve shell_call call_id 'call_1'",
+        );
+        assert!(matches!(
+            pending_calls(&[computer_call_output("call_1")]).unwrap_err(),
+            ExecutorError::Tool(ToolError::UnknownCallOutput { ref call_id }) if call_id == "call_1"
+        ));
+        assert!(matches!(
+            pending_calls(&[computer_call_output("call_1"), computer_call("call_1")]).unwrap_err(),
+            ExecutorError::Tool(ToolError::UnknownCallOutput { ref call_id }) if call_id == "call_1"
+        ));
+        assert_invalid(&[computer_call("")], "computer_call call_id must not be empty");
+        assert_invalid(
+            &[computer_call_output("")],
+            "computer_call_output call_id must not be empty",
+        );
+    }
+
+    #[test]
+    fn pending_computer_call_is_not_a_steering_obligation() {
+        let pending = pending_calls(&[computer_call("call_1")]).unwrap().pop().unwrap();
+        let rejected = pending.into_steering_required_input(&[]).unwrap_err();
+        assert_eq!(rejected.kind, ClientCallKind::Computer);
+        assert_eq!(rejected.call_id.as_str(), "call_1");
     }
 
     fn async_function_call(call_id: &str) -> InputItem {

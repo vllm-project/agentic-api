@@ -73,6 +73,16 @@ pub(crate) fn file_references(input: &ResponsesInput) -> Vec<FileReference> {
             InputItem::CustomToolCallOutput(output) => {
                 collect_tool_output_references(&output.output, item_index, &mut references);
             }
+            InputItem::ComputerCallOutput(output) => {
+                let crate::types::io::ComputerCallOutputContent::ComputerScreenshot(image) = &output.output;
+                if let Some(file_id) = image.file_id.as_deref() {
+                    references.push(FileReference {
+                        file_id: file_id.to_owned(),
+                        part: "input_image",
+                        location: format!("input[{item_index}].output"),
+                    });
+                }
+            }
             _ => {}
         }
     }

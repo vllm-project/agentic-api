@@ -115,6 +115,16 @@ use utoipa::OpenApi;
         agentic_core::types::io::ShellCallOutputMessage,
         agentic_core::types::io::ShellCallOutputContent,
         agentic_core::types::io::ShellCallOutcome,
+        agentic_core::types::io::ComputerCall,
+        agentic_core::types::io::ComputerCallStatus,
+        agentic_core::types::io::ComputerAction,
+        agentic_core::types::io::KnownComputerAction,
+        agentic_core::types::io::ComputerMouseButton,
+        agentic_core::types::io::ComputerPoint,
+        agentic_core::types::io::ComputerKeys,
+        agentic_core::types::io::ComputerSafetyCheck,
+        agentic_core::types::io::ComputerCallOutputMessage,
+        agentic_core::types::io::ComputerCallOutputContent,
         agentic_core::types::io::WebSearchCall,
         agentic_core::types::io::WebSearchAction,
         agentic_core::types::io::WebSearchActionSearch,
@@ -1255,6 +1265,27 @@ mod tests {
             &serde_json::json!({
                 "id": "mcp_2", "server_label": "s", "name": "n", "arguments": "{}",
                 "status": "completed", "output": "ok", "approval_request_id": null, "error": null
+            }),
+        );
+
+        // -- ComputerCall, ComputerSafetyCheck, and ComputerCallOutputMessage --
+        check(
+            "ComputerSafetyCheck",
+            &serde_json::json!({"id": "sc_1", "code": null, "message": null}),
+        );
+        check(
+            "ComputerCall",
+            &serde_json::json!({
+                "id": null, "call_id": "call_1", "action": null, "actions": null,
+                "pending_safety_checks": null, "status": null, "agent": null
+            }),
+        );
+        check(
+            "ComputerCallOutputMessage",
+            &serde_json::json!({
+                "id": null, "call_id": "call_1",
+                "output": {"type": "computer_screenshot", "image_url": null, "file_id": null, "detail": null},
+                "acknowledged_safety_checks": null, "status": null
             }),
         );
 
