@@ -309,7 +309,7 @@ pub(super) mod tests {
         assert_eq!(context.tool_type("raw_echo"), ToolType::Custom);
         assert_eq!(context.tool_type("tool_search"), ToolType::ToolSearch);
         assert_eq!(context.tool_type("unknown"), ToolType::Function);
-        let mut pipeline = RoundIngestion::new("resp_1".to_owned(), None, Validation::Lenient, context, None);
+        let mut pipeline = RoundIngestion::new(Validation::Lenient, context, None);
         let line = format!(
             "data: {}",
             serde_json::json!({
@@ -346,7 +346,7 @@ pub(super) mod tests {
         let json_context = translation_context(&registry, &agent);
         drop(registry);
 
-        let mut ingestion = RoundIngestion::new("resp_1".to_owned(), None, Validation::Lenient, stream_context, None);
+        let mut ingestion = RoundIngestion::new(Validation::Lenient, stream_context, None);
         let created = serde_json::json!({"type":"response.created","response":{
             "id":"upstream","status":"in_progress","tools":[],
             "tool_choice":{"type":"function","name":"raw_echo"}
@@ -374,7 +374,7 @@ pub(super) mod tests {
         let translated = ingestion.push(SseLine::parse(&format!("data: {done}"))).unwrap();
         assert_eq!(translated.frames[0].wire.rest["item"]["namespace"], "travel");
         assert_eq!(translated.frames[0].wire.rest["item"]["name"], "timezone");
-        let stream_payload = ingestion.finish("test", None, None).unwrap();
+        let stream_payload = ingestion.finish("test", None).unwrap();
         let body = serde_json::json!({"id":"upstream","status":"completed","output":[item]}).to_string();
         let json_payload = agent
             .run_with_json_body(&body, Validation::Lenient, json_context, None)
@@ -425,7 +425,7 @@ pub(super) mod tests {
         let lowered = serde_json::json!([
             {"type":"function","name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string"}}}}
         ]);
-        let mut ingestion = RoundIngestion::new("resp_1".to_owned(), None, Validation::Lenient, stream_context, None);
+        let mut ingestion = RoundIngestion::new(Validation::Lenient, stream_context, None);
         for frame in [
             serde_json::json!({"type":"response.created","response":{
                 "id":"upstream","status":"in_progress","tools":lowered,"tool_choice":"auto"
@@ -547,7 +547,7 @@ pub(super) mod tests {
             {"type":"function","name":"code_interpreter","parameters":{"type":"object"}},
             {"type":"function","name":"mcp__weather__forecast","parameters":{"type":"object"}}
         ]);
-        let mut ingestion = RoundIngestion::new("resp_1".to_owned(), None, Validation::Lenient, stream_context, None);
+        let mut ingestion = RoundIngestion::new(Validation::Lenient, stream_context, None);
         for frame in [
             serde_json::json!({"type":"response.created","response":{
                 "id":"upstream","status":"in_progress","tools":lowered,"tool_choice":"auto"

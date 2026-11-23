@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use crate::events::{EventFrame, SSEEventType};
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::gateway_accumulator::synthetic_event;
+use crate::executor::gateway_accumulator::synthetic_event_at;
 use crate::tool::mcp::handler::started_list_tools_output_item;
 use crate::types::event::MessageStatus;
 use crate::types::io::output::{FunctionToolCall, McpListTools, OutputMessage, OutputTextContent};
@@ -22,7 +22,7 @@ use crate::utils::common::serialize_to_value;
 /// only when the iterator reaches it.
 pub(super) fn materialized_item_frames(
     item: &OutputItem,
-    output_index: usize,
+    output_index: u64,
 ) -> impl Iterator<Item = ExecutorResult<EventFrame>> + '_ {
     let lifecycle = Lifecycle::of(item);
     lifecycle
@@ -31,11 +31,48 @@ pub(super) fn materialized_item_frames(
 }
 
 /// `output_item.done` for `item` at `output_index`.
-pub(super) fn item_done_frame(item: &OutputItem, output_index: usize) -> ExecutorResult<EventFrame> {
-    synthetic_event(
+pub(super) fn item_done_frame(item: &OutputItem, output_index: u64) -> ExecutorResult<EventFrame> {
+    synthetic_event_at(
         SSEEventType::OutputItemDone,
-        [index_field(output_index), ("item".to_owned(), to_value(item)?)],
+        output_index,
+        [("item".to_owned(), to_value(item)?)],
     )
+}
+
+/// A status event in an MCP tool listing's public lifecycle.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ListToolsStatus {
+    InProgress,
+    Completed,
+    Failed,
+}
+
+impl ListToolsStatus {
+    /// The status that ends `list`'s lifecycle: failed when the listing carries an error.
+    pub(super) const fn finished(list: &McpListTools) -> Self {
+        if list.error.is_some() {
+            Self::Failed
+        } else {
+            Self::Completed
+        }
+    }
+
+    pub(super) const fn event_type(self) -> SSEEventType {
+        match self {
+            Self::InProgress => SSEEventType::McpListToolsInProgress,
+            Self::Completed => SSEEventType::McpListToolsCompleted,
+            Self::Failed => SSEEventType::McpListToolsFailed,
+        }
+    }
+}
+
+/// `mcp_list_tools.in_progress`, `.completed` or `.failed` for the listing `list_id` at `output_index`.
+pub(super) fn list_tools_status_frame(
+    list_id: &str,
+    output_index: u64,
+    status: ListToolsStatus,
+) -> ExecutorResult<EventFrame> {
+    synthetic_event_at(status.event_type(), output_index, [string("item_id", list_id)])
 }
 
 /// What streams between `output_item.added` and `output_item.done`.
@@ -159,47 +196,36 @@ fn message_steps(message: &OutputMessage) -> impl Iterator<Item = Step<'_>> {
 }
 
 impl Step<'_> {
-    fn frame(self, item: &OutputItem, lifecycle: Lifecycle<'_>, output_index: usize) -> ExecutorResult<EventFrame> {
-        let index = index_field(output_index);
+    fn frame(self, item: &OutputItem, lifecycle: Lifecycle<'_>, output_index: u64) -> ExecutorResult<EventFrame> {
+        let at_index = |event_type, fields| synthetic_event_at(event_type, output_index, fields);
         match self {
-            Self::Added => synthetic_event(
+            Self::Added => at_index(
                 SSEEventType::OutputItemAdded,
-                [index, ("item".to_owned(), lifecycle.started_item(item)?)],
+                vec![("item".to_owned(), lifecycle.started_item(item)?)],
             ),
-            Self::ListToolsInProgress(item_id) => synthetic_event(
-                SSEEventType::McpListToolsInProgress,
-                [index, string("item_id", item_id)],
-            ),
-            Self::ListToolsFinished(list) => synthetic_event(
-                if list.error.is_some() {
-                    SSEEventType::McpListToolsFailed
-                } else {
-                    SSEEventType::McpListToolsCompleted
-                },
-                [index, string("item_id", &list.id)],
-            ),
-            Self::PartAdded(at) => synthetic_event(
+            Self::ListToolsInProgress(item_id) => {
+                list_tools_status_frame(item_id, output_index, ListToolsStatus::InProgress)
+            }
+            Self::ListToolsFinished(list) => {
+                list_tools_status_frame(&list.id, output_index, ListToolsStatus::finished(list))
+            }
+            Self::PartAdded(at) => at_index(
                 SSEEventType::ContentPartAdded,
-                at.fields(index, ("part".to_owned(), to_value(&started_part(at.part))?)),
+                at.fields(("part".to_owned(), to_value(&started_part(at.part))?)),
             ),
-            Self::TextDelta(at, text) => {
-                synthetic_event(SSEEventType::OutputTextDelta, at.fields(index, string("delta", text)))
-            }
-            Self::TextDone(at, text) => {
-                synthetic_event(SSEEventType::OutputTextDone, at.fields(index, string("text", text)))
-            }
-            Self::PartDone(at) => synthetic_event(
+            Self::TextDelta(at, text) => at_index(SSEEventType::OutputTextDelta, at.fields(string("delta", text))),
+            Self::TextDone(at, text) => at_index(SSEEventType::OutputTextDone, at.fields(string("text", text))),
+            Self::PartDone(at) => at_index(
                 SSEEventType::ContentPartDone,
-                at.fields(index, ("part".to_owned(), to_value(at.part)?)),
+                at.fields(("part".to_owned(), to_value(at.part)?)),
             ),
-            Self::ArgumentsDelta(call) => synthetic_event(
+            Self::ArgumentsDelta(call) => at_index(
                 SSEEventType::FunctionCallArgumentsDelta,
-                [index, string("item_id", &call.id), string("delta", &call.arguments)],
+                vec![string("item_id", &call.id), string("delta", &call.arguments)],
             ),
-            Self::ArgumentsDone(call) => synthetic_event(
+            Self::ArgumentsDone(call) => at_index(
                 SSEEventType::FunctionCallArgumentsDone,
-                [
-                    index,
+                vec![
                     string("item_id", &call.id),
                     string("name", &call.name),
                     string("arguments", &call.arguments),
@@ -211,9 +237,8 @@ impl Step<'_> {
 }
 
 impl MessagePart<'_> {
-    fn fields(self, index: (String, Value), value: (String, Value)) -> [(String, Value); 4] {
-        [
-            index,
+    fn fields(self, value: (String, Value)) -> Vec<(String, Value)> {
+        vec![
             string("item_id", self.item_id),
             ("content_index".to_owned(), Value::from(self.content_index)),
             value,
@@ -234,10 +259,6 @@ fn started_part(part: &OutputMessageContent) -> OutputMessageContent {
             logprobs: text.logprobs.clone(),
         }),
     }
-}
-
-fn index_field(output_index: usize) -> (String, Value) {
-    ("output_index".to_owned(), Value::from(output_index))
 }
 
 fn string(name: &str, value: &str) -> (String, Value) {

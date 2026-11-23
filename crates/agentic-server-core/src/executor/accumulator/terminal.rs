@@ -202,14 +202,13 @@ impl ResponseAccumulator {
     pub(in crate::executor) fn finish(
         mut self,
         model: &str,
-        previous_response_id: Option<&str>,
         instructions: Option<&str>,
     ) -> ExecutorResult<ResponsePayload> {
         match self.validation {
             Validation::Strict => self.finish_strict_stream()?,
             Validation::Lenient => self.finish_stream()?,
         }
-        Ok(self.finalize(model, previous_response_id, instructions))
+        Ok(self.finalize(model, None, instructions))
     }
 
     /// Finalizes the accumulator into a `ResponsePayload`.

@@ -12,7 +12,8 @@ use tokio::sync::mpsc;
 use super::{GatewayCallResult, GatewayEventPlan, GatewayPublicOutputSource, GatewayScheduler};
 use crate::events::{EventFrame, EventPayload, SSEEventType};
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::gateway_accumulator::synthetic_event;
+use crate::executor::gateway_accumulator::{synthetic_event, synthetic_event_at};
+use crate::executor::item_lifecycle::{ListToolsStatus, item_done_frame, list_tools_status_frame};
 use crate::executor::relay::{Release, StreamRelay};
 use crate::executor::request::RequestContext;
 use crate::executor::response_budget::ExecutorResponseBudget;
@@ -24,6 +25,15 @@ use crate::utils::common::{deserialize_from_value, serialize_to_value};
 
 fn output_item_value(item: &OutputItem) -> ExecutorResult<serde_json::Value> {
     serde_json::to_value(item).map_err(ExecutorError::JsonError)
+}
+
+/// A status event that names the gateway item `item_id` at `output_index`.
+fn item_id_event(event_type: SSEEventType, output_index: u32, item_id: &str) -> ExecutorResult<EventFrame> {
+    synthetic_event_at(
+        event_type,
+        u64::from(output_index),
+        [("item_id".to_owned(), serde_json::json!(item_id))],
+    )
 }
 
 fn code_interpreter_event_frame(event: &CodeInterpreterCallStreamEvent) -> ExecutorResult<EventFrame> {
@@ -108,13 +118,7 @@ async fn emit_file_search_start_events(
         SSEEventType::FileSearchCallInProgress,
         SSEEventType::FileSearchCallSearching,
     ] {
-        let mut event = synthetic_event(
-            event_type,
-            [
-                ("item_id".to_owned(), serde_json::json!(call.id)),
-                ("output_index".to_owned(), serde_json::json!(output_index)),
-            ],
-        )?;
+        let mut event = item_id_event(event_type, output_index, &call.id)?;
         relay.emit_local(&mut event).await?;
     }
     Ok(())
@@ -154,12 +158,10 @@ async fn emit_gateway_added_event(
         }
         _ => output_item_value(output_item)?,
     };
-    let mut added_event = synthetic_event(
+    let mut added_event = synthetic_event_at(
         SSEEventType::OutputItemAdded,
-        [
-            ("output_index".to_owned(), serde_json::json!(output_index)),
-            ("item".to_owned(), item),
-        ],
+        u64::from(output_index),
+        [("item".to_owned(), item)],
     )?;
     relay.emit_local(&mut added_event).await?;
     Ok(())
@@ -180,59 +182,39 @@ pub(in crate::executor) async fn emit_gateway_start_events<'a>(
         match output_item {
             OutputItem::FileSearchCall(call) => emit_file_search_start_events(call, plan.output_index, relay).await?,
             OutputItem::WebSearchCall(web_search_call) => {
-                let mut in_progress_event = synthetic_event(
+                for event_type in [
                     SSEEventType::WebSearchCallInProgress,
-                    [
-                        ("item_id".to_owned(), serde_json::json!(web_search_call.id)),
-                        ("output_index".to_owned(), serde_json::json!(plan.output_index)),
-                    ],
-                )?;
-                relay.emit_local(&mut in_progress_event).await?;
-                let mut searching_event = synthetic_event(
                     SSEEventType::WebSearchCallSearching,
-                    [
-                        ("item_id".to_owned(), serde_json::json!(web_search_call.id)),
-                        ("output_index".to_owned(), serde_json::json!(plan.output_index)),
-                    ],
-                )?;
-                relay.emit_local(&mut searching_event).await?;
+                ] {
+                    let mut event = item_id_event(event_type, plan.output_index, &web_search_call.id)?;
+                    relay.emit_local(&mut event).await?;
+                }
             }
             OutputItem::McpCall(mcp_call) => {
-                let mut in_progress_event = synthetic_event(
-                    SSEEventType::McpCallInProgress,
-                    [
-                        ("item_id".to_owned(), serde_json::json!(mcp_call.id)),
-                        ("output_index".to_owned(), serde_json::json!(plan.output_index)),
-                    ],
-                )?;
+                let mut in_progress_event =
+                    item_id_event(SSEEventType::McpCallInProgress, plan.output_index, &mcp_call.id)?;
                 relay.emit_local(&mut in_progress_event).await?;
                 let arguments = plan.arguments.as_deref().unwrap_or_default();
-                let mut arguments_delta_event = synthetic_event(
-                    SSEEventType::McpCallArgumentsDelta,
-                    [
-                        ("delta".to_owned(), serde_json::json!(arguments)),
-                        ("item_id".to_owned(), serde_json::json!(mcp_call.id)),
-                        ("output_index".to_owned(), serde_json::json!(plan.output_index)),
-                    ],
-                )?;
-                relay.emit_local(&mut arguments_delta_event).await?;
-                let mut arguments_done_event = synthetic_event(
-                    SSEEventType::McpCallArgumentsDone,
-                    [
-                        ("arguments".to_owned(), serde_json::json!(arguments)),
-                        ("item_id".to_owned(), serde_json::json!(mcp_call.id)),
-                        ("output_index".to_owned(), serde_json::json!(plan.output_index)),
-                    ],
-                )?;
-                relay.emit_local(&mut arguments_done_event).await?;
+                for (event_type, field) in [
+                    (SSEEventType::McpCallArgumentsDelta, "delta"),
+                    (SSEEventType::McpCallArgumentsDone, "arguments"),
+                ] {
+                    let mut event = synthetic_event_at(
+                        event_type,
+                        u64::from(plan.output_index),
+                        [
+                            (field.to_owned(), serde_json::json!(arguments)),
+                            ("item_id".to_owned(), serde_json::json!(mcp_call.id)),
+                        ],
+                    )?;
+                    relay.emit_local(&mut event).await?;
+                }
             }
             OutputItem::McpListTools(list_tools) => {
-                let mut in_progress_event = synthetic_event(
-                    SSEEventType::McpListToolsInProgress,
-                    [
-                        ("item_id".to_owned(), serde_json::json!(list_tools.id)),
-                        ("output_index".to_owned(), serde_json::json!(plan.output_index)),
-                    ],
+                let mut in_progress_event = list_tools_status_frame(
+                    &list_tools.id,
+                    u64::from(plan.output_index),
+                    ListToolsStatus::InProgress,
                 )?;
                 relay.emit_local(&mut in_progress_event).await?;
             }
@@ -286,11 +268,7 @@ pub(in crate::executor) async fn emit_gateway_completed_events<'a, T: GatewayPub
                 mcp_call.id.as_str(),
             )),
             OutputItem::McpListTools(list_tools) => Some((
-                if list_tools.error.is_some() {
-                    SSEEventType::McpListToolsFailed
-                } else {
-                    SSEEventType::McpListToolsCompleted
-                },
+                ListToolsStatus::finished(list_tools).event_type(),
                 list_tools.id.as_str(),
             )),
             // A hosted search has only the generic added/done events.
@@ -308,7 +286,6 @@ pub(in crate::executor) async fn emit_gateway_completed_events<'a, T: GatewayPub
             | OutputItem::AgentMessage(_)
             | OutputItem::Unknown => continue,
         };
-        let item = output_item_value(public_output)?;
         if let OutputItem::CodeInterpreterCall(code_interpreter_call) = public_output
             && code_interpreter_call.status != CodeInterpreterCallStatus::Interpreting
         {
@@ -323,23 +300,14 @@ pub(in crate::executor) async fn emit_gateway_completed_events<'a, T: GatewayPub
             .await?;
         }
         if let Some((event_type, item_id)) = completed_event {
-            let mut completed_fields = serde_json::Map::from_iter([
-                ("item_id".to_owned(), serde_json::json!(item_id)),
-                ("output_index".to_owned(), serde_json::json!(output_index)),
-            ]);
+            let mut completed_fields = vec![("item_id".to_owned(), serde_json::json!(item_id))];
             if matches!(public_output, OutputItem::WebSearchCall(_)) {
-                completed_fields.insert("item".to_owned(), item.clone());
+                completed_fields.push(("item".to_owned(), output_item_value(public_output)?));
             }
-            let mut completed_event = synthetic_event(event_type, completed_fields)?;
+            let mut completed_event = synthetic_event_at(event_type, u64::from(output_index), completed_fields)?;
             relay.emit_local(&mut completed_event).await?;
         }
-        let mut done_event = synthetic_event(
-            SSEEventType::OutputItemDone,
-            [
-                ("output_index".to_owned(), serde_json::json!(output_index)),
-                ("item".to_owned(), item),
-            ],
-        )?;
+        let mut done_event = item_done_frame(public_output, u64::from(output_index))?;
         relay.emit_local(&mut done_event).await?;
         if let Some(follow_up) = &plan.follow_up_output {
             emit_follow_up_events(output_index.saturating_add(1), follow_up, relay).await?;
@@ -356,13 +324,7 @@ async fn emit_follow_up_events(output_index: u32, item: &OutputItem, relay: &mut
         output.status = ToolSearchStatus::InProgress;
     }
     emit_gateway_added_event(output_index, &added, relay).await?;
-    let mut done_event = synthetic_event(
-        SSEEventType::OutputItemDone,
-        [
-            ("output_index".to_owned(), serde_json::json!(output_index)),
-            ("item".to_owned(), output_item_value(item)?),
-        ],
-    )?;
+    let mut done_event = item_done_frame(item, u64::from(output_index))?;
     relay.emit_local(&mut done_event).await?;
     Ok(())
 }

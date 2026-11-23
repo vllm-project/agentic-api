@@ -1,11 +1,11 @@
 //! Public shell lifecycle translation for client-executed canonical function calls.
 
-use super::custom::{complete_json_string_prefix, custom_frame};
+use super::json_string::decode_string_prefix;
 use super::{ToolEvent, ToolTranslator, ensure_function_call_size};
 use crate::events::{EventFrame, SSEEventType};
 use crate::executor::accumulator::AccumulatedFunctionCall;
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::gateway_accumulator::synthetic_event;
+use crate::executor::gateway_accumulator::synthetic_event_at;
 use crate::tool::{ShellHandler, shell};
 use crate::types::io::{OutputItem, ShellCall, ShellCallAction, ShellCallLimit, ShellCallStatus};
 use serde_json::Value;
@@ -85,9 +85,9 @@ impl ToolTranslator for ShellTranslator {
 }
 
 fn shell_added_frame(call: &AccumulatedFunctionCall<'_>) -> ExecutorResult<EventFrame> {
-    custom_frame(
+    synthetic_event_at(
         SSEEventType::OutputItemAdded,
-        call.output_index,
+        u64::from(call.output_index),
         [(
             "item".to_owned(),
             serde_json::to_value(OutputItem::ShellCall(ShellCall {
@@ -126,9 +126,7 @@ fn shell_frame(
         ExecutorError::StreamError("shell function call contains invalid action arguments".to_owned())
     })?;
     let item = serde_json::to_value(item).map_err(ExecutorError::JsonError)?;
-    let mut frame = synthetic_event(event_type, [("item".to_owned(), item)])?;
-    frame.wire.output_index = Some(u64::from(output_index));
-    Ok(frame)
+    synthetic_event_at(event_type, u64::from(output_index), [("item".to_owned(), item)])
 }
 
 fn shell_command_frame(
@@ -142,9 +140,9 @@ fn shell_command_frame(
     } else {
         "command"
     };
-    custom_frame(
+    synthetic_event_at(
         event_type,
-        output_index,
+        u64::from(output_index),
         [
             ("command_index".to_owned(), Value::from(command_index)),
             (field.to_owned(), Value::String(value.to_owned())),
@@ -233,10 +231,9 @@ fn incremental_shell_commands(state: &mut ShellCallState, arguments: &str) -> Ex
         let encoded = arguments
             .get(cursor..)
             .ok_or_else(|| ExecutorError::StreamError("shell arguments changed while streaming".to_owned()))?;
-        let length = complete_json_string_prefix(encoded);
-        if length != 0 {
-            let delta: String = serde_json::from_str(&format!("\"{}\"", &encoded[..length]))
-                .map_err(|error| ExecutorError::StreamError(format!("invalid shell command string: {error}")))?;
+        if let Some((delta, length)) = decode_string_prefix(encoded)
+            .map_err(|error| ExecutorError::StreamError(format!("invalid shell command string: {error}")))?
+        {
             let index = state.commands.len() - 1;
             state.commands[index].push_str(&delta);
             frames.push(shell_command_frame(

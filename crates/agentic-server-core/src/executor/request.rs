@@ -21,8 +21,9 @@ use crate::tool::{GatewayExecutorRegistration, GatewayExecutors, file_search::Fi
 use crate::types::io::{InOutItem, ToolChoice};
 use crate::types::messages::{GatewayToolMap, UpstreamServerTools};
 use crate::types::model_capabilities::ModelCapabilities;
-use crate::types::request_response::{RequestPayload, ResponsePayload, StandardResponseFields};
-use crate::utils::common::utcnow_str;
+use crate::types::request_response::RequestPayload;
+
+mod identity;
 
 /// Env var configuring client-tool → gateway-executor aliases for `/v1/messages`
 /// (e.g. `WebSearch=web_search`). Empty/unset means no aliases — client
@@ -108,49 +109,6 @@ impl RequestContext {
     #[must_use]
     pub fn max_tool_calls(&self) -> Option<NonZeroU64> {
         self.original_request.max_tool_calls_limit().ok().flatten()
-    }
-
-    /// A gateway-built response with this request's identity and echoed settings and no output yet. It stamps no
-    /// `completed_at`, unlike [`Self::inject_ids`], since a shell can be presented before the response completes.
-    pub(super) fn response_shell(&self, model: String, status: &str) -> ResponsePayload {
-        let mut payload = ResponsePayload {
-            id: String::new(),
-            object: "response".to_owned(),
-            created_at: utcnow_str(),
-            model,
-            status: status.to_owned(),
-            output: Vec::new(),
-            usage: None,
-            incomplete_details: None,
-            error: None,
-            previous_response_id: None,
-            conversation: None,
-            instructions: None,
-            max_tool_calls: None,
-            service_tier: None,
-            tools: None,
-            tool_choice: None,
-            standard_fields: StandardResponseFields::default(),
-        };
-        self.inject_identity(&mut payload);
-        payload
-    }
-
-    /// Inject our `response_id` and `conversation` into a `ResponsePayload`
-    /// received from the LLM (which carries the upstream's own IDs).
-    pub(crate) fn inject_ids(&self, payload: &mut ResponsePayload) {
-        self.inject_identity(payload);
-        payload.standard_fields.completed_at = (payload.status == "completed").then(utcnow_str);
-    }
-
-    fn inject_identity(&self, payload: &mut ResponsePayload) {
-        payload.id.clone_from(&self.response_id);
-        payload.conversation.clone_from(&self.conversation_id);
-        payload
-            .previous_response_id
-            .clone_from(&self.original_request.previous_response_id);
-        payload.max_tool_calls = self.max_tool_calls().map(NonZeroU64::get);
-        payload.standard_fields.apply_request(&self.original_request);
     }
 }
 

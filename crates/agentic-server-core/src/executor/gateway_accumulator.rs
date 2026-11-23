@@ -5,8 +5,8 @@ use crate::types::request_response::ResponsePayload;
 use crate::utils::common::{serialize_to_string, serialize_to_value};
 use serde_json::Value;
 
-/// Cross-round presentation state: sequence numbers, output-index rebasing, and
-/// response-start deduplication. `StreamRelay` owns the instance for a response.
+/// Cross-round presentation state: sequence numbers and response-start
+/// deduplication. `StreamRelay` owns the instance for a response.
 #[derive(Clone)]
 pub struct GatewayStreamAccumulator {
     next_sequence_number: u64,
@@ -62,24 +62,49 @@ impl GatewayStreamAccumulator {
 
     /// Sequence number that the next successfully enqueued event will receive.
     ///
-    /// Typed gateway event construction may use this value, but
-    /// [`Self::process_event`] remains the authority that stamps and advances it.
+    /// Typed gateway event construction may use this value; presenting a frame
+    /// stamps it, and the sink's commit of [`Self::present`]'s state advances it.
     pub(crate) const fn upcoming_sequence_number(&self) -> u64 {
         self.next_sequence_number
     }
 
+    /// Stamps `frame` and commits the state at once, skipping a response start
+    /// event already presented. Executor sinks use [`Self::present`] instead,
+    /// which checks the event size and commits only after delivery.
     #[must_use]
-    pub fn process_event(&mut self, frame: &mut EventFrame, output_offset: usize) -> bool {
+    pub fn process_event(&mut self, frame: &mut EventFrame) -> bool {
         if !self.should_emit_lifecycle(frame.event_type) {
             return false;
         }
-        self.stamp_event(frame, output_offset);
+        self.stamp_event(frame);
         true
     }
 
-    fn stamp_event(&mut self, frame: &mut EventFrame, output_offset: usize) {
+    fn stamp_event(&mut self, frame: &mut EventFrame) {
         frame.wire.sequence_number = Some(self.take_sequence_number());
-        rebase_output_index(&mut frame.wire, output_offset);
+    }
+
+    /// The client frame for `frame`, stamped and serialized within the event size
+    /// limit, with the presentation state that follows it. `None` is a response
+    /// start event this stream already presented. The state is a copy: a sink
+    /// commits it only after accepting the frame, so a frame that is never
+    /// delivered consumes no sequence number or response start.
+    pub(super) fn present(&self, frame: &mut EventFrame) -> ExecutorResult<Option<(StreamFrame, Self)>> {
+        let mut next = self.clone();
+        if !next.should_emit_lifecycle(frame.event_type) {
+            return Ok(None);
+        }
+        let sequence_number = next.take_sequence_number();
+        frame.wire.sequence_number = Some(sequence_number);
+        let content = checked_stream_event(frame, self.max_stream_event_bytes)?;
+        Ok(Some((
+            StreamFrame {
+                content,
+                sequence_number,
+                text: frame.event_type == SSEEventType::OutputTextDelta,
+            },
+            next,
+        )))
     }
 
     /// Stamps and serializes gateway-built frames in order. Response lifecycle
@@ -87,8 +112,9 @@ impl GatewayStreamAccumulator {
     pub(crate) fn frames_chunk(&mut self, frames: Vec<EventFrame>) -> ExecutorResult<String> {
         let mut chunk = String::new();
         for mut frame in frames {
-            if self.process_event(&mut frame, 0) {
-                chunk.push_str(&checked_stream_event(&frame, self.max_stream_event_bytes)?);
+            if let Some((presented, next)) = self.present(&mut frame)? {
+                chunk.push_str(&presented.content);
+                *self = next;
             }
         }
         Ok(chunk)
@@ -96,7 +122,7 @@ impl GatewayStreamAccumulator {
 
     pub(crate) fn terminal_response_chunk(&mut self, payload: &ResponsePayload) -> ExecutorResult<String> {
         let mut frame = terminal_response_frame(payload)?;
-        self.stamp_event(&mut frame, 0);
+        self.stamp_event(&mut frame);
         checked_stream_event(&frame, self.max_stream_event_bytes)
     }
 
@@ -135,15 +161,6 @@ fn take_once(already_taken: &mut bool) -> bool {
     } else {
         *already_taken = true;
         true
-    }
-}
-
-fn rebase_output_index(wire: &mut WireEvent, output_offset: usize) {
-    let Some(offset) = u64::try_from(output_offset).ok().filter(|offset| *offset > 0) else {
-        return;
-    };
-    if let Some(index) = wire.output_index {
-        wire.output_index = Some(index.saturating_add(offset));
     }
 }
 
@@ -206,31 +223,15 @@ pub(super) fn synthetic_event(
         .ok_or_else(|| ExecutorError::StreamError("synthetic event has no wire representation".to_owned()))
 }
 
-#[cfg(test)]
-pub(super) async fn emit_sse_frame(
-    sender: &tokio::sync::mpsc::Sender<StreamEvent>,
-    frame: &EventFrame,
-) -> ExecutorResult<()> {
-    emit_sse_frame_limited(sender, frame, DEFAULT_MAX_STREAM_EVENT_BYTES).await
-}
-
-pub(super) async fn emit_sse_frame_limited(
-    sender: &tokio::sync::mpsc::Sender<StreamEvent>,
-    frame: &EventFrame,
-    max_bytes: usize,
-) -> ExecutorResult<()> {
-    let sequence_number = frame
-        .sequence_number()
-        .ok_or_else(|| ExecutorError::StreamError("stream event has no sequence number".to_owned()))?;
-    let content = checked_stream_event(frame, max_bytes)?;
-    sender
-        .send(StreamEvent::Frame(StreamFrame {
-            content,
-            sequence_number,
-            text: frame.event_type == SSEEventType::OutputTextDelta,
-        }))
-        .await
-        .map_err(|_| ExecutorError::StreamError("stream receiver closed while emitting gateway event".to_owned()))
+/// A gateway-built event for the item at `output_index`.
+pub(super) fn synthetic_event_at(
+    event_type: SSEEventType,
+    output_index: u64,
+    rest: impl IntoIterator<Item = (String, Value)>,
+) -> ExecutorResult<EventFrame> {
+    let mut frame = synthetic_event(event_type, rest)?;
+    frame.wire.output_index = Some(output_index);
+    Ok(frame)
 }
 
 pub(super) fn checked_stream_event(frame: &EventFrame, max_bytes: usize) -> ExecutorResult<String> {
@@ -280,16 +281,17 @@ mod tests {
     }
 
     #[test]
-    fn process_event_numbers_and_rebases_output_index() {
+    fn process_event_numbers_without_rebasing() {
         let mut accumulator = GatewayStreamAccumulator::new();
         let mut frame =
             normalize_sse_line(r#"data: {"type":"response.output_text.delta","output_index":2,"delta":"hi"}"#)
                 .expect("line should normalize");
-        assert!(accumulator.process_event(&mut frame, 3));
+        assert!(accumulator.process_event(&mut frame));
 
         assert_eq!(frame.sequence_number(), Some(0));
         assert_eq!(frame.wire.sequence_number, Some(0));
-        assert_eq!(frame.wire.output_index, Some(5));
+        // The relay rebases upstream frames onto their round (`emit_upstream`); presentation keeps the index.
+        assert_eq!(frame.wire.output_index, Some(2));
         assert_eq!(frame.wire.rest["delta"], "hi");
     }
 
@@ -312,76 +314,6 @@ mod tests {
 
         assert_eq!(event_name, "error");
         assert_eq!(event["sequence_number"], 4);
-    }
-
-    fn test_stream_event(sequence_number: u64) -> EventFrame {
-        let mut wire = WireEvent::new("test.event");
-        wire.sequence_number = Some(sequence_number);
-        EventFrame {
-            event_type: SSEEventType::Other,
-            payload: EventPayload::None,
-            wire,
-        }
-    }
-
-    #[tokio::test]
-    async fn stream_event_sender_waits_for_bounded_capacity() {
-        let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
-        emit_sse_frame(&sender, &test_stream_event(0))
-            .await
-            .expect("first event should fill the channel");
-
-        let blocked_sender = sender.clone();
-        let blocked = tokio::spawn(async move { emit_sse_frame(&blocked_sender, &test_stream_event(1)).await });
-        tokio::task::yield_now().await;
-        assert!(
-            !blocked.is_finished(),
-            "second event should wait for downstream capacity"
-        );
-
-        receiver.recv().await.expect("first buffered event");
-        blocked
-            .await
-            .expect("event task should not panic")
-            .expect("event should send after capacity is released");
-    }
-
-    #[tokio::test]
-    async fn bounded_stream_event_sender_handles_large_healthy_bursts() {
-        let (sender, mut receiver) = tokio::sync::mpsc::channel(STREAM_EVENT_BUFFER);
-        let producer = tokio::spawn(async move {
-            for sequence_number in 0..300 {
-                emit_sse_frame(&sender, &test_stream_event(sequence_number))
-                    .await
-                    .expect("drained event channel should remain writable");
-            }
-        });
-
-        for expected_sequence_number in 0..300 {
-            let event = receiver
-                .recv()
-                .await
-                .expect("all burst events should arrive")
-                .into_frame();
-            assert_eq!(event.sequence_number, expected_sequence_number);
-        }
-        producer.await.expect("producer should not panic");
-    }
-
-    #[tokio::test]
-    async fn oversized_stream_event_fails_before_enqueue() {
-        let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
-        let mut frame = test_stream_event(0);
-        frame
-            .wire
-            .rest
-            .insert("delta".to_owned(), Value::String("x".repeat(MAX_STREAM_EVENT_BYTES)));
-
-        let error = emit_sse_frame(&sender, &frame)
-            .await
-            .expect_err("oversized event must be rejected");
-        assert!(error.to_string().contains("stream event exceeded"));
-        assert!(receiver.try_recv().is_err());
     }
 
     #[test]
@@ -434,7 +366,7 @@ mod tests {
         let mut accumulator = GatewayStreamAccumulator::new();
         let mut frame = normalize_sse_line(r#"data: {"type":"response.in_progress"}"#).expect("line should normalize");
         assert!(
-            accumulator.process_event(&mut frame, 0),
+            accumulator.process_event(&mut frame),
             "first lifecycle event should be emitted"
         );
 

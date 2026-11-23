@@ -22,13 +22,13 @@ pub(super) use deferred::Release;
 pub(super) use projection::AgentRoundId;
 
 use crate::config::DEFAULT_MAX_STREAM_EVENT_BYTES;
-use crate::events::{EventFrame, SSEEventType, WireEvent};
-use crate::executor::error::ExecutorResult;
+use crate::events::{EventFrame, SSEEventType};
+use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway::{
     compaction_event_plans, emit_gateway_completed_events, emit_gateway_start_events, mcp_list_tools_event_plans,
     public_output_items,
 };
-use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, StreamEvent, emit_sse_frame_limited};
+use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, StreamEvent};
 use crate::executor::request::RequestContext;
 use crate::executor::response_events::ResponseEventSink;
 use crate::executor::translate::Translation;
@@ -164,14 +164,18 @@ impl StreamRelay {
     /// Present a gateway-synthesized frame. It already carries public IDs and an
     /// absolute output index, so neither upstream transform applies.
     pub(super) async fn emit_local(&mut self, frame: &mut EventFrame) -> ExecutorResult<bool> {
-        self.send(frame, 0).await
+        self.send(frame).await
     }
 
     /// Present a translated provider frame: restore the public response IDs and
-    /// rebase its output index onto the current round.
+    /// rebase its output index onto the current round. This is the only place an
+    /// output offset is applied.
     pub(super) async fn emit_upstream(&mut self, frame: &mut EventFrame, ctx: &RequestContext) -> ExecutorResult<bool> {
-        apply_context_response_ids(&mut frame.wire, ctx);
-        self.send(frame, self.output_offset).await
+        ctx.inject_wire_identity(&mut frame.wire);
+        if let Some(index) = &mut frame.wire.output_index {
+            *index = index.saturating_add(self.output_offset as u64);
+        }
+        self.send(frame).await
     }
 
     /// One translation from ingestion: present or defer each frame, then release
@@ -216,7 +220,7 @@ impl StreamRelay {
     /// the sink accepts it, so a failed or cancelled release keeps the remainder.
     pub(super) async fn release_deferred(&mut self, release: Release, ctx: &RequestContext) -> ExecutorResult<()> {
         while let Some(frame) = self.deferred.next(release) {
-            // Sending rebases the frame in place; keep the queued copy untouched.
+            // Presenting stamps the frame in place; keep the queued copy untouched.
             let mut frame = frame.clone();
             frame.wire.output_index = release.position(frame.wire.output_index);
             self.emit_upstream(&mut frame, ctx).await?;
@@ -225,31 +229,28 @@ impl StreamRelay {
         Ok(())
     }
 
-    /// The one place a frame leaves the relay, and the only place an output offset
-    /// is applied. Presentation state is committed only after the sink accepts the
-    /// frame, so a failed serialization, closed receiver, or cancelled wait
-    /// consumes no sequence number or response-start event.
-    async fn send(&mut self, frame: &mut EventFrame, offset: usize) -> ExecutorResult<bool> {
+    /// The one place a frame leaves the relay. Presentation state is committed
+    /// only after the sink accepts the frame, so a failed serialization, closed
+    /// receiver, or cancelled wait consumes no sequence number or response-start
+    /// event.
+    async fn send(&mut self, frame: &mut EventFrame) -> ExecutorResult<bool> {
         let sent = match &self.sink {
             RelaySink::Detached => false,
             RelaySink::Agent(sink) => {
-                let mut frame = frame.clone();
-                if let Some(index) = &mut frame.wire.output_index {
-                    *index += offset as u64;
-                }
-                sink.send(&frame, self.limits.event_bytes).await?;
+                sink.send(frame, self.limits.event_bytes).await?;
                 true
             }
-            RelaySink::Response(sink) => sink.emit_frame(frame, offset).await?,
-            RelaySink::Client(sender) => {
-                let mut published = self.presentation.clone();
-                let presented = published.process_event(frame, offset);
-                if presented {
-                    emit_sse_frame_limited(sender, frame, self.limits.event_bytes).await?;
-                    self.presentation = published;
+            RelaySink::Response(sink) => sink.emit_frame(frame).await?,
+            RelaySink::Client(sender) => match self.presentation.present(frame)? {
+                None => false,
+                Some((presented, next)) => {
+                    sender.send(StreamEvent::Frame(presented)).await.map_err(|_| {
+                        ExecutorError::StreamError("stream receiver closed while emitting gateway event".to_owned())
+                    })?;
+                    self.presentation = next;
+                    true
                 }
-                presented
-            }
+            },
         };
         self.in_progress |= sent && frame.event_type == SSEEventType::ResponseInProgress;
         Ok(sent)
@@ -323,24 +324,4 @@ fn is_terminal_response_event(event_type: SSEEventType) -> bool {
         event_type,
         SSEEventType::ResponseCompleted | SSEEventType::ResponseFailed | SSEEventType::ResponseIncomplete
     )
-}
-
-fn apply_context_response_ids(wire: &mut WireEvent, ctx: &RequestContext) {
-    let Some(response) = wire.rest.get_mut("response").and_then(Value::as_object_mut) else {
-        return;
-    };
-    response.insert("id".to_owned(), Value::String(ctx.response_id.clone()));
-    if let Some(previous_response_id) = &ctx.original_request.previous_response_id {
-        response.insert(
-            "previous_response_id".to_owned(),
-            Value::String(previous_response_id.clone()),
-        );
-    }
-    if let Some(conversation_id) = &ctx.conversation_id {
-        response.insert("conversation".to_owned(), serde_json::json!({"id": conversation_id}));
-    }
-    let max_tool_calls = ctx
-        .max_tool_calls()
-        .map_or(Value::Null, |limit| Value::from(limit.get()));
-    response.insert("max_tool_calls".to_owned(), max_tool_calls);
 }

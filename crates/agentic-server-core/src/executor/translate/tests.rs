@@ -62,7 +62,7 @@ async fn bare_provider_message_ids_remain_replayable_across_json_and_sse() {
                 store: false,
                 ..RequestPayload::default()
             });
-            let mut round = RoundIngestion::new("resp_test".into(), None, Validation::Strict, context, None);
+            let mut round = RoundIngestion::new(Validation::Strict, context, None);
             let mut frames = Vec::new();
             if stream {
                 let mut events = Vec::<Value>::new();
@@ -98,7 +98,7 @@ async fn bare_provider_message_ids_remain_replayable_across_json_and_sse() {
             } else {
                 round.load_json_body(&payload.to_string()).unwrap();
             }
-            let response = round.finish("test", None, None).unwrap();
+            let response = round.finish("test", None).unwrap();
             assert_eq!(response.output[0].id(), Some(public.as_str()));
             assert_eq!(response.output[1].id(), Some("msg_existing"));
             assert_eq!(response.output[2].id(), Some("fc_existing"));
@@ -142,7 +142,7 @@ async fn bare_provider_function_ids_are_public_without_changing_call_identity() 
                 } else {
                     HashSet::new()
                 });
-            let mut round = RoundIngestion::new("resp_test".into(), None, Validation::Strict, context, None);
+            let mut round = RoundIngestion::new(Validation::Strict, context, None);
             let mut deltas = 0;
             if stream {
                 let mut events: Vec<Value> = upstream_events(&payload)
@@ -184,7 +184,7 @@ async fn bare_provider_function_ids_are_public_without_changing_call_identity() 
             } else {
                 round.load_json_body(&payload.to_string()).unwrap();
             }
-            let response = round.finish("test", None, None).unwrap();
+            let response = round.finish("test", None).unwrap();
             assert_eq!(response.output[0].id(), Some(public.as_str()));
             assert_eq!(response.output[1].id(), Some("fc_existing"));
             let OutputItem::FunctionCall(call) = &response.output[0] else {

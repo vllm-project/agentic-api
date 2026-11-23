@@ -13,8 +13,7 @@ use crate::executor::response_budget::{ExecutorResponseBudget, RETAINED_CONTAINE
 
 fn budgeted(limit: usize, validation: Validation) -> (ResponseAccumulator, ExecutorResponseBudget) {
     let budget = ExecutorResponseBudget::with_limit(limit);
-    let acc =
-        ResponseAccumulator::with_validation_and_budget("resp_1".to_owned(), None, validation, Some(budget.clone()));
+    let acc = ResponseAccumulator::with_validation_and_budget(validation, Some(budget.clone()));
     (acc, budget)
 }
 
@@ -112,7 +111,7 @@ fn output_item_done(item: &Value) -> Value {
 }
 
 fn finished_output(acc: ResponseAccumulator) -> Vec<OutputItem> {
-    acc.finish("test", None, None).expect("stream finishes").output
+    acc.finish("test", None).expect("stream finishes").output
 }
 
 #[test]

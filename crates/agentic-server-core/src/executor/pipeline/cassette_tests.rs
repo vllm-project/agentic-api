@@ -161,7 +161,7 @@ fn process_codex_streaming_turn(cassette: &TurnCassette, turn_idx: usize, model:
         "Codex cassette turn {} must have SSE data lines",
         turn_idx + 1
     );
-    let payload = ingest_lenient(data_lines, None, model).expect("valid cassette SSE stream");
+    let payload = ingest_lenient(data_lines, model).expect("valid cassette SSE stream");
     assert_eq!(payload.status, "completed");
     payload.output
 }
@@ -219,7 +219,7 @@ fn process_streaming_turn(cassette: &TurnCassette, turn_idx: usize, model: &str)
         "streaming turn {} must have SSE data lines",
         turn_idx + 1
     );
-    let payload = ingest_lenient(data_lines, None, model).expect("valid cassette SSE stream");
+    let payload = ingest_lenient(data_lines, model).expect("valid cassette SSE stream");
     assert_eq!(payload.status, "completed");
     payload.output
 }

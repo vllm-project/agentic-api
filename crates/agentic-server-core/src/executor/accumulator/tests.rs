@@ -139,7 +139,7 @@ fn forked_message_parts_preserve_role_metadata_and_public_order() {
             }
         }
         assert_eq!(
-            serde_json::to_value(acc.finish("model", None, None).unwrap().output).unwrap(),
+            serde_json::to_value(acc.finish("model", None).unwrap().output).unwrap(),
             json!(items)
         );
     }
@@ -166,7 +166,7 @@ fn message_completed_parts_survive_lenient_finalization_without_item_done() {
     item["status"] = json!("completed");
     item["content"] = json!([part]);
     assert_eq!(
-        serde_json::to_value(acc.finish("model", None, None).unwrap().output).unwrap(),
+        serde_json::to_value(acc.finish("model", None).unwrap().output).unwrap(),
         json!([item])
     );
 }
@@ -350,7 +350,7 @@ fn collaboration_snapshots_and_encrypted_parts_use_the_shared_ingestion_path() {
                 assert_eq!(wire, event);
             }
         }
-        let response = acc.finish("model", None, None).unwrap();
+        let response = acc.finish("model", None).unwrap();
         assert_eq!(serde_json::to_value(&response.output).unwrap(), json!(items));
         assert_eq!(items[0]["call_id"], items[1]["call_id"]);
         assert!(
@@ -407,7 +407,7 @@ fn collaboration_identity_and_completion_order_are_validated() {
             wrong_kind["item"]["type"] = json!("message");
             assert!(feed_collaboration_event(&mut acc, &wrong_kind).is_err());
             // Opening metadata alone cannot become a completed hosted operation at EOF.
-            assert!(acc.finish("model", None, None).is_err());
+            assert!(acc.finish("model", None).is_err());
             let mut acc = collaboration_accumulator(validation);
             let orphan_done = feed_collaboration_event(&mut acc, &done);
             match validation {
@@ -415,7 +415,7 @@ fn collaboration_identity_and_completion_order_are_validated() {
                 Validation::Lenient => {
                     orphan_done.unwrap();
                     assert_eq!(
-                        serde_json::to_value(acc.finish("model", None, None).unwrap().output).unwrap(),
+                        serde_json::to_value(acc.finish("model", None).unwrap().output).unwrap(),
                         json!([item])
                     );
                 }
@@ -528,7 +528,7 @@ fn agent_message_parts_are_routed_by_owner_and_validate_completion() {
             )
             .unwrap();
             assert_eq!(
-                serde_json::to_value(acc.finish("model", None, None).unwrap().output).unwrap(),
+                serde_json::to_value(acc.finish("model", None).unwrap().output).unwrap(),
                 json!([item])
             );
         }
@@ -761,7 +761,6 @@ fn done_only_code_interpreter_call_accumulates_in_lenient_stream() {
         ]
         .into_iter()
         .map(|event| format!("data: {event}")),
-        None,
         "test",
     )
     .expect("valid SSE stream");
@@ -1006,7 +1005,7 @@ fn steering_waits_for_every_started_item_and_preserves_completed_order() {
         )
         .unwrap();
         assert!(acc.finish_for_steering().unwrap());
-        let payload = acc.finish("model", Some("parent"), None).unwrap();
+        let payload = acc.finish("model", None).unwrap();
         assert_eq!(payload.status, "incomplete");
         assert_eq!(payload.incomplete_details.unwrap().reason.as_deref(), Some("steered"));
         assert_eq!(serde_json::to_value(payload.output).unwrap(), json!([item(0), item(1)]));
@@ -1030,7 +1029,7 @@ fn steering_does_not_replace_an_upstream_terminal_or_accept_changed_call_ids() {
     )
     .unwrap();
     assert!(!completed.finish_for_steering().unwrap());
-    assert_eq!(completed.finish("model", None, None).unwrap().status, "completed");
+    assert_eq!(completed.finish("model", None).unwrap().status, "completed");
 
     let mut invalid = lifecycle_accumulator(true);
     for (event_type, call_id) in [
@@ -1137,7 +1136,7 @@ fn steering_waits_for_natural_terminal_after_done_only_recovery() {
     )
     .unwrap();
     acc.ensure_steering_settled().unwrap();
-    let payload = acc.finish("model", None, None).unwrap();
+    let payload = acc.finish("model", None).unwrap();
     assert_eq!(payload.status, "completed");
     assert_eq!(payload.output.len(), 1);
 }
@@ -1145,7 +1144,6 @@ fn steering_waits_for_natural_terminal_after_done_only_recovery() {
 #[test]
 fn test_accumulator_preserves_streamed_failure_details() {
     let payload = ingest_lenient([r#"data: {"type":"response.failed","response":{"id":"resp_failed","status":"failed","error":{"code":"tool_catalog_too_large","message":"Too many tools"},"incomplete_details":{"reason":"upstream_error"}}}"#.to_owned()],
-        None,
         "test-model",
     )
     .expect("valid SSE stream");
@@ -1172,7 +1170,7 @@ fn test_accumulator_finalize() {
 
 #[test]
 fn test_accumulator_lenient_round_empty() {
-    let acc = ingest_lenient_to_eof(Vec::<String>::new(), None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient_to_eof(Vec::<String>::new(), "test").expect("valid SSE stream");
     assert_eq!(acc.status, ResponseStatus::Completed.as_str());
     assert!(acc.output.is_empty());
 }
@@ -1188,7 +1186,7 @@ fn test_accumulator_text_delta_assigned_to_message() {
             .to_string(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     assert_eq!(acc.status, ResponseStatus::Completed.as_str());
     assert_eq!(acc.output.len(), 1);
 
@@ -1347,7 +1345,7 @@ fn test_process_event_mcp_call_done_accumulates_output() {
         r#"data: {"type":"response.done","response":{"id":"resp_1","status":"completed","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}"#.to_string(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     assert_eq!(acc.status, ResponseStatus::Completed.as_str());
     assert_eq!(acc.output.len(), 1);
     assert!(matches!(acc.output[0], OutputItem::McpCall(_)));
@@ -1401,10 +1399,10 @@ fn compaction_added_and_done_accumulate_typed_output() {
         r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}"#.to_owned(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     assert_compaction_output(&acc.output);
 
-    let done_only = ingest_lenient_to_eof([done.to_owned()], None, "test").expect("valid SSE stream");
+    let done_only = ingest_lenient_to_eof([done.to_owned()], "test").expect("valid SSE stream");
     assert_compaction_output(&done_only.output);
 }
 
@@ -1429,7 +1427,7 @@ fn test_accumulator_reasoning_before_mcp_call_preserves_order() {
         r#"data: {"type":"response.done","response":{"id":"resp_abc","status":"completed","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}"#.to_string(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 2);
     assert!(matches!(acc.output[0], OutputItem::Reasoning(_)));
     assert!(matches!(acc.output[1], OutputItem::McpCall(_)));
@@ -1445,7 +1443,7 @@ fn test_accumulator_reasoning_before_done_only_mcp_call_preserves_order() {
         r#"data: {"type":"response.done","response":{"id":"resp_abc","status":"completed","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}"#.to_string(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 2);
     assert!(matches!(acc.output[0], OutputItem::Reasoning(_)));
     assert!(matches!(acc.output[1], OutputItem::McpCall(_)));
@@ -1463,7 +1461,7 @@ fn test_accumulator_reasoning_before_web_search_call_preserves_order() {
         r#"data: {"type":"response.done","response":{"id":"resp_abc","status":"completed","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}"#.to_string(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 2);
     assert!(matches!(acc.output[0], OutputItem::Reasoning(_)));
     let OutputItem::WebSearchCall(call) = &acc.output[1] else {
@@ -1481,7 +1479,7 @@ fn test_accumulator_preserves_open_page_web_search_action() {
         r#"data: {"type":"response.done","response":{"id":"resp_1","status":"completed"}}"#.to_string(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 1);
     let action = match &acc.output[0] {
         OutputItem::WebSearchCall(call) => serde_json::to_value(&call.action).unwrap(),
@@ -1499,7 +1497,7 @@ fn test_accumulator_preserves_find_in_page_web_search_action() {
         r#"data: {"type":"response.done","response":{"id":"resp_1","status":"completed"}}"#.to_string(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 1);
     let action = match &acc.output[0] {
         OutputItem::WebSearchCall(call) => serde_json::to_value(&call.action).unwrap(),
@@ -1517,7 +1515,7 @@ fn test_accumulator_drops_unfinished_web_search_placeholder() {
         r#"data: {"type":"response.done","response":{"id":"resp_1","status":"completed"}}"#.to_string(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     assert!(acc.output.is_empty());
 }
 
@@ -1529,7 +1527,7 @@ fn test_accumulator_empty_added_id_then_stable_done_does_not_duplicate() {
         r#"data: {"type":"response.done","response":{"id":"resp_1","status":"completed"}}"#.to_string(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 1);
     let OutputItem::WebSearchCall(call) = &acc.output[0] else {
         panic!("expected web_search_call");
@@ -1545,7 +1543,7 @@ fn test_accumulator_stable_added_id_survives_empty_done_id() {
         r#"data: {"type":"response.done","response":{"id":"resp_1","status":"completed"}}"#.to_string(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 1);
     let OutputItem::WebSearchCall(call) = &acc.output[0] else {
         panic!("expected web_search_call");
@@ -1562,7 +1560,7 @@ fn test_accumulator_uses_authoritative_done_item_with_item_id_fallback() {
         r#"data: {"type":"response.done","response":{"id":"resp_1","status":"completed"}}"#.to_string(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 1);
     let OutputItem::Message(message) = &acc.output[0] else {
         panic!("expected message");
@@ -1578,7 +1576,7 @@ fn repeated_function_call_done_does_not_duplicate_lenient_output() {
     let done = r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":"{}","status":"completed"}}"#;
     let terminal = r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}"#;
 
-    let acc = ingest_lenient([added, done, done, terminal].map(str::to_owned), None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient([added, done, done, terminal].map(str::to_owned), "test").expect("valid SSE stream");
 
     assert_eq!(acc.output.len(), 1);
     let OutputItem::FunctionCall(call) = &acc.output[0] else {
@@ -1628,7 +1626,7 @@ fn lenient_round_propagates_conflicting_lenient_authoritative_content() {
     let first = r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":"{}","status":"completed"}}"#;
     let conflicting = r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":"{\"query\":\"rust\"}","status":"completed"}}"#;
 
-    let error = ingest_lenient([added, first, conflicting], None, "test")
+    let error = ingest_lenient([added, first, conflicting], "test")
         .expect_err("conflicting authoritative content must propagate from the lenient round");
 
     assert!(error.to_string().contains("conflicting repeated output item.done"));
@@ -1702,7 +1700,7 @@ fn test_unknown_mcp_call_error_shape_is_not_dropped() {
         r#"data: {"type":"response.done","response":{"id":"resp_abc","status":"completed","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}"#.to_string(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 1);
     let OutputItem::McpCall(call) = &acc.output[0] else {
         panic!("expected mcp_call");
@@ -1724,7 +1722,7 @@ fn test_streaming_preserves_all_documented_mcp_call_statuses() {
         r#"data: {"type":"response.done","response":{"id":"resp_1","status":"completed","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}"#.to_string(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     let statuses = acc
         .output
         .iter()
@@ -1749,7 +1747,7 @@ fn test_process_event_web_search_done_accumulates_output() {
         r#"data: {"type":"response.done","response":{"id":"resp_1","status":"completed","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}"#.to_string(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     assert_eq!(acc.status, ResponseStatus::Completed.as_str());
     assert_eq!(acc.output.len(), 1);
     assert!(matches!(acc.output[0], OutputItem::WebSearchCall(_)));
@@ -1786,7 +1784,7 @@ fn terminal_service_tier_replaces_created_service_tier() {
         r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","service_tier":"default","usage":null}}"#.to_owned(),
     ];
 
-    let payload = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let payload = ingest_lenient(lines, "test").expect("valid SSE stream");
     assert_eq!(payload.service_tier.as_deref(), Some("default"));
 
     let lines = vec![
@@ -1795,7 +1793,7 @@ fn terminal_service_tier_replaces_created_service_tier() {
         r#"data: {"type":"response.completed","response":{"id":"resp_2","status":"completed","usage":null}}"#
             .to_owned(),
     ];
-    let payload = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let payload = ingest_lenient(lines, "test").expect("valid SSE stream");
     assert!(payload.service_tier.is_none());
 }
 
@@ -1873,7 +1871,7 @@ fn test_accumulator_reasoning_and_message_from_sse() {
         r#"data: {"type":"response.done","response":{"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}"#.to_string(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     assert_eq!(acc.status, ResponseStatus::Completed.as_str());
     assert_eq!(acc.output.len(), 2);
 
@@ -1903,7 +1901,7 @@ fn completed_reasoning_replaces_partial_deltas_without_duplication() {
         r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}"#.to_owned(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
 
     assert_eq!(acc.output.len(), 1);
     assert_eq!(
@@ -1933,7 +1931,7 @@ fn reasoning_done_events_keep_part_index_order() {
         r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}"#.to_owned(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     let OutputItem::Reasoning(reasoning) = &acc.output[0] else {
         panic!("expected reasoning output");
     };
@@ -1965,7 +1963,7 @@ fn completed_reasoning_preserves_done_fields_when_omitted() {
         r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}"#.to_owned(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     let OutputItem::Reasoning(reasoning) = &acc.output[0] else {
         panic!("expected reasoning output");
     };
@@ -2000,14 +1998,14 @@ fn completed_reasoning_null_and_empty_fields_are_authoritative_independently() {
         r#"data: {"type":"response.output_item.done","output_index":0,"item":{"id":"rs_summary_empty","type":"reasoning","summary":[]}}"#.to_owned(),
     ];
 
-    let content_null = ingest_lenient_to_eof(content_null, None, "test").expect("valid SSE stream");
+    let content_null = ingest_lenient_to_eof(content_null, "test").expect("valid SSE stream");
     let OutputItem::Reasoning(content_null) = &content_null.output[0] else {
         panic!("expected reasoning output");
     };
     assert!(content_null.content.is_empty());
     assert_eq!(content_null.summary[0].text, "kept summary");
 
-    let summary_empty = ingest_lenient_to_eof(summary_empty, None, "test").expect("valid SSE stream");
+    let summary_empty = ingest_lenient_to_eof(summary_empty, "test").expect("valid SSE stream");
     let OutputItem::Reasoning(summary_empty) = &summary_empty.output[0] else {
         panic!("expected reasoning output");
     };
@@ -2018,7 +2016,6 @@ fn completed_reasoning_null_and_empty_fields_are_authoritative_independently() {
 #[test]
 fn streaming_and_nonstreaming_nullable_reasoning_fields_are_equivalent() {
     let streaming = ingest_lenient_to_eof([r#"data: {"type":"response.output_item.done","output_index":0,"item":{"id":"rs_1","type":"reasoning","content":null,"summary":null,"encrypted_content":null,"status":"completed"}}"#.to_owned()],
-        None,
         "test",
     )
     .expect("valid SSE stream");
@@ -2101,7 +2098,7 @@ fn ingestion_rejects_reasoning_outside_the_typed_schema() {
         assert!(json(&item, Validation::Lenient).unwrap().is_empty(), "{fields}");
         let error = json(&item, Validation::Strict).unwrap_err();
         assert!(!error.to_string().contains("sensitive-state"), "{fields}");
-        let streamed = ingest_lenient(stream(&item), None, "test").expect("valid SSE stream");
+        let streamed = ingest_lenient(stream(&item), "test").expect("valid SSE stream");
         assert_eq!(
             serde_json::to_value(&streamed.output).unwrap(),
             serde_json::json!([{
@@ -2121,7 +2118,7 @@ fn done_only_reasoning_uses_output_index_order() {
         r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}"#.to_owned(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
 
     assert_eq!(acc.output.len(), 2);
     assert!(matches!(acc.output[0], OutputItem::Reasoning(_)));
@@ -2138,7 +2135,7 @@ fn malformed_completed_reasoning_retains_done_fields() {
         r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}"#.to_owned(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     let OutputItem::Reasoning(reasoning) = &acc.output[0] else {
         panic!("expected reasoning output");
     };
@@ -2159,7 +2156,7 @@ fn test_accumulator_message_then_reasoning_preserves_order() {
         r#"data: {"type":"response.done","response":{"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}"#.to_string(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 2);
     assert!(matches!(acc.output[0], OutputItem::Message(_)));
     assert!(matches!(acc.output[1], OutputItem::Reasoning(_)));
@@ -2175,7 +2172,7 @@ fn test_accumulator_reasoning_done_without_delta_uses_text() {
             .to_string(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     if let OutputItem::Reasoning(reasoning) = &acc.output[0] {
         assert_eq!(reasoning.content.len(), 1);
         assert_eq!(reasoning.content[0].text, "done only");
@@ -2567,7 +2564,7 @@ fn test_output_item_done_restores_initially_unnamed_function_call() {
         r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","usage":null}}"#.to_string(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 1);
     let OutputItem::FunctionCall(call) = &acc.output[0] else {
         panic!("expected function_call");
@@ -2587,7 +2584,7 @@ fn test_function_call_done_matches_empty_added_id_by_output_index() {
         r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","usage":null}}"#.to_string(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 1);
     let OutputItem::FunctionCall(call) = &acc.output[0] else {
         panic!("expected function_call");
@@ -2604,7 +2601,7 @@ fn test_done_only_function_call_is_completed() {
         r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","usage":null}}"#.to_string(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 1);
     let OutputItem::FunctionCall(call) = &acc.output[0] else {
         panic!("expected function_call");
@@ -2732,7 +2729,7 @@ fn test_function_call_lenient_round() {
         r#"data: {"type":"response.done","response":{"id":"resp_fc","usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}"#.to_string(),
     ];
 
-    let acc = ingest_lenient(lines, Some("conv_1"), "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     assert_eq!(acc.status, ResponseStatus::Completed.as_str());
     assert_eq!(acc.output.len(), 1);
 
@@ -2759,7 +2756,7 @@ fn test_custom_tool_call_accumulates_freeform_input() {
         r#"data: {"type":"response.completed","response":{"id":"resp_custom","status":"completed","usage":null}}"#.to_string(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 1);
     let OutputItem::CustomToolCall(call) = &acc.output[0] else {
         panic!("expected CustomToolCall");
@@ -2780,7 +2777,7 @@ fn test_reasoning_before_done_only_custom_tool_call_preserves_order() {
         r#"data: {"type":"response.completed","response":{"id":"resp_custom","status":"completed","usage":null}}"#.to_string(),
     ];
 
-    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    let acc = ingest_lenient(lines, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 2);
     assert!(matches!(acc.output[0], OutputItem::Reasoning(_)));
     let OutputItem::CustomToolCall(call) = &acc.output[1] else {
@@ -2841,7 +2838,7 @@ fn file_search_done_only_is_preserved_leniently_and_rejected_strictly() {
         serde_json::json!({"type":"response.completed","response":{"id":"resp_1","status":"completed"}}),
     ]
     .map(|event| format!("data: {event}"));
-    let payload = ingest_lenient(lines.clone(), None, "test").expect("valid SSE stream");
+    let payload = ingest_lenient(lines.clone(), "test").expect("valid SSE stream");
     assert_eq!(serde_json::to_value(payload.output).unwrap(), serde_json::json!([call]));
 
     let mut strict = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Strict);

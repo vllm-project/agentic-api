@@ -139,13 +139,10 @@ impl ResponseAccumulator {
         }
     }
 
-    pub(super) fn with_validation_and_budget(
-        response_id: String,
-        conversation_id: Option<String>,
-        validation: Validation,
-        budget: Option<ExecutorResponseBudget>,
-    ) -> Self {
-        let mut acc = Self::with_validation(response_id, conversation_id, validation);
+    /// An executor round's accumulator. It starts with no identity: the upstream response
+    /// supplies its ID, and the request context stamps the public identity afterwards.
+    pub(super) fn with_validation_and_budget(validation: Validation, budget: Option<ExecutorResponseBudget>) -> Self {
+        let mut acc = Self::with_validation(String::new(), None, validation);
         acc.budget = budget;
         acc
     }

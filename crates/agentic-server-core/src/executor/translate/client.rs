@@ -2,7 +2,6 @@
 
 use super::custom::CustomTranslator;
 use super::function::FunctionTranslator;
-use super::namespace::CodexNamespaceTranslator;
 use super::shell::ShellTranslator;
 use super::tool_search::ToolSearchTranslator;
 use super::{CallExecution, HasTranslator};
@@ -40,10 +39,12 @@ impl HasTranslator for ToolSearchHandler {
     }
 }
 
+/// A namespace member's call streams as a function call; its public name is restored with the
+/// other output-item rewrites.
 impl HasTranslator for CodexNamespaceHandler {
-    type Translator = CodexNamespaceTranslator;
+    type Translator = FunctionTranslator;
 
     fn new_translator(execution: CallExecution) -> Self::Translator {
-        CodexNamespaceTranslator::new(execution)
+        FunctionTranslator::new(execution)
     }
 }

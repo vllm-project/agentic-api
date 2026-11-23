@@ -1,4 +1,4 @@
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use super::types::{EventFrame, EventPayload, SSEEventType, SSEItemType, ShellCommandUpdate, WireEvent};
 use super::{ClassifiedSseLine, SseLine};
@@ -133,13 +133,14 @@ fn json_str_opt(json: &Value, key: &str) -> Option<String> {
     json[key].as_str().map(ToString::to_string)
 }
 
-fn output_item_id(item: &Value) -> String {
-    item["id"]
-        .as_str()
-        .filter(|id| !id.is_empty())
-        .or_else(|| item["item_id"].as_str().filter(|id| !id.is_empty()))
-        .unwrap_or_default()
-        .to_owned()
+/// An upstream output item's identifier: its non-empty `id`, else its non-empty `item_id`.
+pub(crate) fn output_item_id(item: &Map<String, Value>) -> Option<&str> {
+    let non_empty = |field| item.get(field).and_then(Value::as_str).filter(|id| !id.is_empty());
+    non_empty("id").or_else(|| non_empty("item_id"))
+}
+
+fn item_id_or_empty(item: &Value) -> String {
+    item.as_object().and_then(output_item_id).unwrap_or_default().to_owned()
 }
 
 fn json_output_index(json: &Value) -> Option<u32> {
@@ -168,7 +169,7 @@ fn extract_response_payload(json: &Value) -> EventPayload {
 fn extract_output_item_added(json: &Value) -> EventPayload {
     let item = &json["item"];
     EventPayload::OutputItemAdded {
-        item_id: output_item_id(item),
+        item_id: item_id_or_empty(item),
         item_type: SSEItemType::from(json_str(item, "type")),
         output_index: json_output_index(json),
         name: json_str_opt(item, "name"),
@@ -194,7 +195,7 @@ fn extract_output_item_added(json: &Value) -> EventPayload {
 
 fn extract_output_item_done(json: &Value) -> EventPayload {
     let mut item = json["item"].clone();
-    let item_id = output_item_id(&item);
+    let item_id = item_id_or_empty(&item);
     if !item_id.is_empty()
         && item["id"].as_str().is_none_or(str::is_empty)
         && let Some(item) = item.as_object_mut()
@@ -262,7 +263,7 @@ fn extract_shell_call_command_done(json: &Value) -> EventPayload {
 fn extract_shell_command(json: &Value, update: ShellCommandUpdate) -> EventPayload {
     EventPayload::ShellCallCommand {
         item_id: json_str(json, "item_id"),
-        output_index: json_u32(json, "output_index"),
+        output_index: json_output_index(json).unwrap_or_default(),
         command_index: json_u32(json, "command_index"),
         update,
     }

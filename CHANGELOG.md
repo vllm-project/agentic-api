@@ -57,6 +57,10 @@ All notable changes to Agentic API are documented here.
   upstream body with `executor::decode_upstream(ctx, UpstreamBody::Sse(..))` (or `UpstreamBody::Json`), which validates
   the stream strictly where the removed helpers skipped malformed frames. To stamp a relayed line, normalize it with
   `events::normalize_sse_line` and pass the frame to `GatewayStreamAccumulator::process_event`.
+- `agentic_core`: `GatewayStreamAccumulator::process_event` no longer takes an `output_offset`: the accumulator
+  only numbers events and deduplicates response start events, and the stream relay rebases an upstream frame's
+  `output_index` onto its round before presenting it. Embedders that rebased through it add the offset to
+  `wire.output_index` themselves (#549).
 
 ### Fixed
 

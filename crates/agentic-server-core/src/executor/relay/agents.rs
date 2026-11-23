@@ -58,7 +58,7 @@ impl StreamRelay {
             .and_then(|(agent, id)| self.projection.take_item(&agent.agent_name, id));
         if let Some(index) = presented {
             if self.is_live() {
-                let mut frame = item_done_frame(item, index)?;
+                let mut frame = item_done_frame(item, index as u64)?;
                 frame.wire.agent = item.agent().cloned();
                 self.emit_local(&mut frame).await?;
             }
@@ -66,7 +66,7 @@ impl StreamRelay {
         }
         let index = self.projection.reserve()?;
         if self.is_live() {
-            for frame in materialized_item_frames(item, index) {
+            for frame in materialized_item_frames(item, index as u64) {
                 let mut frame = frame?;
                 frame.wire.agent = item.agent().cloned();
                 self.emit_local(&mut frame).await?;

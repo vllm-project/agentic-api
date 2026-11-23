@@ -2,6 +2,7 @@ use serde::Deserialize;
 use serde_json::{Map, Value};
 use thiserror::Error;
 
+use super::normalize::output_item_id;
 use super::{EventFrame, EventPayload, SSEEventType, SSEItemType};
 use crate::types::io::OutputItem;
 
@@ -142,12 +143,7 @@ pub(crate) fn output_item_identity<'a>(
     item: &'a Map<String, Value>,
     owner: &str,
 ) -> Result<(&'a str, SSEItemType), EventError> {
-    let item_id = item
-        .get("id")
-        .and_then(Value::as_str)
-        .filter(|id| !id.is_empty())
-        .or_else(|| item.get("item_id").and_then(Value::as_str).filter(|id| !id.is_empty()))
-        .ok_or_else(|| missing_field(owner, "id"))?;
+    let item_id = output_item_id(item).ok_or_else(|| missing_field(owner, "id"))?;
     let item_type_name = required_str(item, "type", owner)?;
     let item_type = item_type_name
         .parse()
@@ -242,7 +238,7 @@ fn validate_output_item<'a>(
 
     let mut canonical = Value::Object(item.clone());
     if canonical.get("id").and_then(Value::as_str).is_none_or(str::is_empty) {
-        canonical["id"] = Value::String(required_str(item, "item_id", "output item")?.to_owned());
+        canonical["id"] = Value::String(item_id.to_owned());
     }
     let output = OutputItem::deserialize(canonical)
         .map_err(|error| invalid(format!("upstream stream output item is invalid: {error}")))?;
@@ -358,11 +354,7 @@ fn validate_event_fields(
 }
 
 fn required_output_index(frame: &EventFrame, owner: &str) -> Result<u32, EventError> {
-    frame
-        .wire
-        .output_index
-        .and_then(|value| u32::try_from(value).ok())
-        .ok_or_else(|| missing_field(owner, "output_index"))
+    frame.output_index().ok_or_else(|| missing_field(owner, "output_index"))
 }
 
 fn required_str<'a>(value: &'a Map<String, Value>, field: &str, owner: &str) -> Result<&'a str, EventError> {

@@ -32,6 +32,36 @@ pub(in crate::executor) struct TranslationContext {
     response_fields: StandardResponseFields,
 }
 
+/// Who executes a model call, from the round's tool classification.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum CallOwner {
+    Client(ClientTool),
+    Gateway,
+}
+
+/// The tool types a client executes; every other type is gateway-owned
+/// (see [`ToolType::is_gateway_owned`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ClientTool {
+    Function,
+    CodexNamespace,
+    Custom,
+    Shell,
+    ToolSearch,
+}
+
+/// The changes that turn a model function call into its public form.
+struct FunctionCallRewrite<'a> {
+    /// A client function call gets the public `fc_` id.
+    public_id: bool,
+    /// A call to an async tool carries `async: true`.
+    async_call: bool,
+    /// A shortened namespace member's public namespace and name.
+    member: Option<(&'a str, &'a str)>,
+    /// A deferred top-level function behind hosted search names itself as its namespace.
+    self_namespace: bool,
+}
+
 impl std::fmt::Debug for TranslationContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TranslationContext")
@@ -132,34 +162,19 @@ impl TranslationContext {
             response.insert("tool_choice".to_owned(), serde_json::to_value(choice)?);
         }
         super::custom::CustomTranslator::restore_response_wire(wire, self.custom_tool_map.as_ref());
-        // As in the typed output, a call's public id and async marker follow its model-visible name,
-        // so they are decided before the namespace is restored.
-        if let Some(output) = wire
-            .rest
-            .get_mut("response")
-            .and_then(|response| response.get_mut("output"))
-            .and_then(Value::as_array_mut)
-        {
-            for item in output {
-                self.mark_public_function_call(item);
-            }
-        }
-        if let Some(item) = wire.rest.get_mut("item") {
-            self.mark_public_function_call(item);
-        }
-        let _ = super::namespace::CodexNamespaceTranslator::restore_response_wire(wire, self.namespace_map.as_ref());
         if let Some(response) = wire.rest.get_mut("response").and_then(Value::as_object_mut) {
+            if let Some((map, choice)) = self.namespace_map.as_ref().zip(response.get_mut("tool_choice")) {
+                super::namespace::restore_tool_choice(choice, map);
+            }
             complete_response_fields(response, &self.response_fields)?;
             if let Some(output) = response.get_mut("output").and_then(Value::as_array_mut) {
                 for item in output {
-                    normalize_output_item(item);
-                    self.restore_self_namespace(item);
+                    self.normalize_wire_item(item);
                 }
             }
         }
         if let Some(item) = wire.rest.get_mut("item") {
-            normalize_output_item(item);
-            self.restore_self_namespace(item);
+            self.normalize_wire_item(item);
         }
         if let Some(part) = wire.rest.get_mut("part") {
             normalize_content_part(part);
@@ -167,41 +182,92 @@ impl TranslationContext {
         Ok(())
     }
 
-    fn mark_public_function_call(&self, item: &mut Value) {
-        let Some(item) = item
-            .as_object_mut()
-            .filter(|item| item.get("type").and_then(Value::as_str) == Some("function_call"))
-        else {
-            return;
-        };
-        let Some(name) = item.get("name").and_then(Value::as_str) else {
-            return;
-        };
-        let (public_id, async_call) = (self.is_client_function(name), self.is_async_tool(name));
-        if public_id && let Some(Value::String(id)) = item.get_mut("id") {
-            FunctionToolCall::normalize_public_id(id);
-        }
-        if async_call {
-            item.insert("async".to_owned(), Value::Bool(true));
-        }
-    }
-
-    fn restore_self_namespace(&self, item: &mut Value) {
+    /// The wire counterpart of [`Self::normalize_output_item`]: the same public call rewrite, plus the
+    /// shape fixes only upstream JSON needs. Provider fields the typed item does not model are kept.
+    pub(super) fn normalize_wire_item(&self, item: &mut Value) {
         let Some(item) = item.as_object_mut() else {
             return;
         };
-        if item.get("type").and_then(Value::as_str) != Some("function_call")
-            || item.get("namespace").is_some_and(|namespace| !namespace.is_null())
-        {
+        normalize_item_shape(item);
+        if item.get("type").and_then(Value::as_str) != Some("function_call") {
             return;
         }
-        if let Some(name) = item
-            .get("name")
-            .and_then(Value::as_str)
-            .filter(|name| self.self_namespaced_functions.contains(*name))
+        let Some(model_name) = item.get("name").and_then(Value::as_str) else {
+            return;
+        };
+        let has_namespace = item.get("namespace").is_some_and(|namespace| !namespace.is_null());
+        let rewrite = self.function_call_rewrite(model_name, has_namespace);
+        let self_namespace = rewrite.self_namespace.then(|| Value::String(model_name.to_owned()));
+        if rewrite.public_id
+            && let Some(Value::String(id)) = item.get_mut("id")
         {
-            let name = name.to_owned();
-            item.insert("namespace".to_owned(), Value::String(name));
+            FunctionToolCall::normalize_public_id(id);
+        }
+        if rewrite.async_call {
+            item.insert("async".to_owned(), Value::Bool(true));
+        }
+        if let Some((namespace, member)) = rewrite.member {
+            log_namespace_restore(
+                item.get("name").and_then(Value::as_str).unwrap_or_default(),
+                namespace,
+                member,
+            );
+            item.insert("namespace".to_owned(), Value::String(namespace.to_owned()));
+            item.insert("name".to_owned(), Value::String(member.to_owned()));
+        } else if let Some(namespace) = self_namespace {
+            item.insert("namespace".to_owned(), namespace);
+        }
+    }
+
+    /// The public form of one output item: message and reasoning ids, and the call rewrite.
+    pub(super) fn normalize_output_item(&self, item: &mut OutputItem) {
+        match item {
+            OutputItem::Message(message) => OutputMessage::normalize_public_id(&mut message.id),
+            OutputItem::Reasoning(reasoning) => ReasoningOutput::normalize_public_id(&mut reasoning.id),
+            OutputItem::FunctionCall(call) => {
+                let rewrite = self.function_call_rewrite(&call.name, call.namespace.is_some());
+                if rewrite.public_id {
+                    FunctionToolCall::normalize_public_id(&mut call.id);
+                }
+                call.async_execution |= rewrite.async_call;
+                if let Some((namespace, member)) = rewrite.member {
+                    log_namespace_restore(&call.name, namespace, member);
+                    call.namespace = Some(namespace.to_owned());
+                    member.clone_into(&mut call.name);
+                } else if rewrite.self_namespace {
+                    call.namespace = Some(call.name.clone());
+                }
+            }
+            OutputItem::MultiAgentCall(_)
+            | OutputItem::MultiAgentCallOutput(_)
+            | OutputItem::AgentMessage(_)
+            | OutputItem::CodeInterpreterCall(_)
+            | OutputItem::FileSearchCall(_)
+            | OutputItem::ToolSearchCall(_)
+            | OutputItem::ToolSearchOutput(_)
+            | OutputItem::CustomToolCall(_)
+            | OutputItem::ShellCall(_)
+            | OutputItem::WebSearchCall(_)
+            | OutputItem::McpCall(_)
+            | OutputItem::McpListTools(_)
+            | OutputItem::Compaction(_)
+            | OutputItem::Unknown => {}
+        }
+    }
+
+    /// How a function call's public form differs from the model's, decided once on its
+    /// model-visible name for both the typed output and the wire.
+    fn function_call_rewrite(&self, model_name: &str, has_namespace: bool) -> FunctionCallRewrite<'_> {
+        let member = self
+            .namespace_map
+            .as_ref()
+            .filter(|_| !has_namespace)
+            .and_then(|map| map.public_member(model_name));
+        FunctionCallRewrite {
+            public_id: self.is_client_function(model_name),
+            async_call: self.is_async_tool(model_name),
+            member,
+            self_namespace: !has_namespace && member.is_none() && self.self_namespaced_functions.contains(model_name),
         }
     }
 
@@ -223,7 +289,7 @@ impl TranslationContext {
     /// Whether `name` is the client-executed search the client must resolve,
     /// as opposed to a hosted search the gateway runs.
     pub(super) fn is_client_tool_search(&self, name: &str) -> bool {
-        self.tool_type(name) == ToolType::ToolSearch && !self.is_gateway_owned(name)
+        matches!(self.call_owner(name), CallOwner::Client(ClientTool::ToolSearch))
     }
 
     pub(super) fn is_withheld_function(&self, name: &str) -> bool {
@@ -231,22 +297,40 @@ impl TranslationContext {
     }
 
     fn is_client_function(&self, name: &str) -> bool {
-        matches!(self.tool_type(name), ToolType::Function | ToolType::CodexNamespace)
-            && !self.is_gateway_owned(name)
-            && !self.is_collaboration(name)
+        matches!(
+            self.call_owner(name),
+            CallOwner::Client(ClientTool::Function | ClientTool::CodexNamespace)
+        )
+    }
+
+    /// Who executes a call to `name`: the gateway for collaboration actions, gateway tool types and
+    /// tools this request runs itself; otherwise the client, with the call's tool type.
+    pub(super) fn call_owner(&self, name: &str) -> CallOwner {
+        if self.is_collaboration(name) || self.is_gateway_owned(name) {
+            return CallOwner::Gateway;
+        }
+        CallOwner::Client(match self.tool_type(name) {
+            ToolType::Function => ClientTool::Function,
+            ToolType::CodexNamespace => ClientTool::CodexNamespace,
+            ToolType::Custom => ClientTool::Custom,
+            ToolType::Shell => ClientTool::Shell,
+            ToolType::ToolSearch => ClientTool::ToolSearch,
+            ToolType::Mcp
+            | ToolType::WebSearch
+            | ToolType::WebFetch
+            | ToolType::FileSearch
+            | ToolType::CodeInterpreter => {
+                return CallOwner::Gateway;
+            }
+        })
     }
 
     pub(super) fn tool_search_is_active(&self) -> bool {
         self.tool_search_active
     }
 
-    pub(super) fn validate_json_body(&self, body: &str) -> ExecutorResult<()> {
-        crate::tool::tool_search::validate_blocking_response(
-            body,
-            self.tool_search_active,
-            &self.withheld_function_names,
-        )?;
-        Ok(())
+    pub(super) fn withheld_function_names(&self) -> &HashSet<String> {
+        &self.withheld_function_names
     }
 
     pub(in crate::executor) fn normalize_response_output(
@@ -261,40 +345,16 @@ impl TranslationContext {
                 citations.restore_output(item);
             }
         }
-        // Mark before namespace restoration, while calls still carry their model-visible names.
         for item in output.iter_mut() {
-            if let OutputItem::Message(message) = item {
-                OutputMessage::normalize_public_id(&mut message.id);
-            }
-            if let OutputItem::Reasoning(reasoning) = item {
-                ReasoningOutput::normalize_public_id(&mut reasoning.id);
-            }
-            if let OutputItem::FunctionCall(call) = item
-                && self.is_client_function(&call.name)
-            {
-                FunctionToolCall::normalize_public_id(&mut call.id);
-            }
-            if let OutputItem::FunctionCall(call) = item
-                && self.is_async_tool(&call.name)
-            {
-                mark_async_call(item)?;
-            }
-        }
-        super::namespace::CodexNamespaceTranslator::restore_output_items(output, self.namespace_map.as_ref());
-        for item in output {
-            if let OutputItem::FunctionCall(call) = item
-                && call.namespace.is_none()
-                && self.self_namespaced_functions.contains(&call.name)
-            {
-                call.namespace = Some(call.name.clone());
-            }
+            self.normalize_output_item(item);
         }
         Ok(())
     }
 }
 
-/// Sets the public `async` flag on a call to an async tool. Streamed item events and the final
-/// output are both marked here; only function and custom calls are client calls that can be async.
+/// Sets the public `async` flag on a call to an async tool, for the function and custom
+/// translators' item events; final output and snapshots take it from the call rewrite. Only
+/// function and custom calls are client calls that can be async.
 pub(super) fn mark_async_call(item: &mut OutputItem) -> ExecutorResult<()> {
     match item {
         OutputItem::FunctionCall(call) => call.async_execution = true,
@@ -352,10 +412,9 @@ fn complete_response_fields(response: &mut Map<String, Value>, fields: &Standard
     Ok(())
 }
 
-fn normalize_output_item(item: &mut Value) {
-    let Some(item) = item.as_object_mut() else {
-        return;
-    };
+/// Shape fixes upstream items need on the wire: empty reasoning lists, no null optional fields,
+/// public message and reasoning ids, and output-text `logprobs`.
+fn normalize_item_shape(item: &mut Map<String, Value>) {
     if item.get("type").and_then(Value::as_str) == Some("reasoning") {
         if let Some(Value::String(id)) = item.get_mut("id") {
             ReasoningOutput::normalize_public_id(id);
@@ -382,6 +441,15 @@ fn normalize_output_item(item: &mut Value) {
             normalize_content_part(part);
         }
     }
+}
+
+fn log_namespace_restore(model_name: &str, namespace: &str, member: &str) {
+    tracing::debug!(
+        upstream_name = %model_name,
+        namespace = %namespace,
+        member = %member,
+        "restored upstream namespace function call"
+    );
 }
 
 fn normalize_content_part(part: &mut Value) {
@@ -473,7 +541,10 @@ mod tests {
         let typed = serde_json::to_value(&typed[0]).unwrap();
         let snapshot = &wire.rest["response"]["output"][0];
         for field in ["id", "namespace", "name", "async"] {
-            assert_eq!(snapshot[field], typed[field], "{field} differs between the snapshot and the output");
+            assert_eq!(
+                snapshot[field], typed[field],
+                "{field} differs between the snapshot and the output"
+            );
         }
         assert_eq!(snapshot["async"], true);
     }

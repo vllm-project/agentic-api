@@ -163,13 +163,7 @@ impl AgentPipeline {
                 "previous pipeline body did not finish".to_owned(),
             ));
         }
-        self.round = Some(RoundIngestion::new(
-            self.request.response_id.clone(),
-            self.request.conversation_id.clone(),
-            validation,
-            context,
-            budget,
-        ));
+        self.round = Some(RoundIngestion::new(validation, context, budget));
         Ok(())
     }
 
@@ -190,7 +184,6 @@ impl AgentPipeline {
         }
         let mut payload = round.finish(
             &self.request.enriched_request.model,
-            self.request.original_request.previous_response_id.as_deref(),
             self.request.original_request.instructions.as_deref(),
         )?;
         self.request.inject_ids(&mut payload);

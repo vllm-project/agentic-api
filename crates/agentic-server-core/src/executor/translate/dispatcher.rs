@@ -1,3 +1,4 @@
+use super::context::{CallOwner, ClientTool};
 use super::tool_search::ToolSearchStreamState;
 use super::{
     CallExecution, HasTranslator, MAX_PENDING_FUNCTION_BYTES, ToolEvent, ToolTranslator, Translation,
@@ -6,7 +7,7 @@ use super::{
 use crate::events::{EventFrame, EventPayload, SSEEventType, SSEItemType};
 use crate::executor::accumulator::AccumulatedFunctionCall;
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::tool::{CodexNamespaceHandler, CustomHandler, FunctionHandler, ToolSearchHandler, ToolType, tool_search};
+use crate::tool::{CodexNamespaceHandler, CustomHandler, FunctionHandler, ToolSearchHandler, tool_search};
 use crate::types::io::{OutputMessage, ReasoningOutput};
 use crate::utils::common::serialize_to_string;
 use serde_json::Value;
@@ -146,8 +147,14 @@ impl TranslationDispatcher {
         Ok(translated)
     }
 
+    /// Tool-search and withheld-function rules for a complete JSON body, before it is folded.
     pub(in crate::executor) fn validate_json_body(&self, body: &str) -> ExecutorResult<()> {
-        self.context.validate_json_body(body)
+        tool_search::validate_blocking_response(
+            body,
+            self.context.tool_search_is_active(),
+            self.context.withheld_function_names(),
+        )?;
+        Ok(())
     }
 
     pub(in crate::executor) fn finish(self) -> ExecutorResult<TranslationOutcome> {
@@ -192,42 +199,34 @@ impl TranslationDispatcher {
         original: Option<EventFrame>,
         call: Option<AccumulatedFunctionCall<'_>>,
     ) -> ExecutorResult<Translation> {
-        let tool_type = self.context.tool_type(name);
-        if self.context.is_collaboration(name) {
-            // The coordinator produces encrypted public collaboration items;
-            // plaintext model-side calls never enter client delivery.
-            self.active.insert(output_index, ActiveCall::Gateway);
-            return Ok(Translation::default());
-        }
-        // Exhaustive routing is the extension point for supported tool types.
-        let execution = if self.context.is_async_tool(name) {
-            CallExecution::Async
-        } else {
-            CallExecution::Sync
-        };
-        let mut translator: Box<dyn ToolTranslator> = match tool_type {
-            ToolType::Function => Box::new(FunctionHandler::new_translator(execution)),
-            ToolType::CodexNamespace => Box::new(CodexNamespaceHandler::new_translator(execution)),
-            ToolType::Custom => Box::new(CustomHandler::new_translator(execution)),
-            ToolType::Shell if !self.context.is_gateway_owned(name) => {
-                Box::new(crate::tool::ShellHandler::new_translator(execution))
+        let client_tool = match self.context.call_owner(name) {
+            CallOwner::Client(client_tool) => client_tool,
+            CallOwner::Gateway if self.context.is_collaboration(name) => {
+                // The coordinator produces encrypted public collaboration items;
+                // plaintext model-side calls never enter client delivery.
+                self.active.insert(output_index, ActiveCall::Gateway);
+                return Ok(Translation::default());
             }
-            ToolType::ToolSearch if !self.context.is_gateway_owned(name) => {
-                Box::new(ToolSearchHandler::new_translator(execution))
-            }
-            ToolType::ToolSearch
-            | ToolType::Shell
-            | ToolType::Mcp
-            | ToolType::WebSearch
-            | ToolType::WebFetch
-            | ToolType::FileSearch
-            | ToolType::CodeInterpreter => {
+            CallOwner::Gateway => {
                 self.active.insert(output_index, ActiveCall::Gateway);
                 if self.first_gateway_output_index.is_none_or(|first| output_index < first) {
                     self.first_gateway_output_index = Some(output_index);
                 }
                 return Ok(Translation::default());
             }
+        };
+        let execution = if self.context.is_async_tool(name) {
+            CallExecution::Async
+        } else {
+            CallExecution::Sync
+        };
+        // Exhaustive routing is the extension point for supported client tool types.
+        let mut translator: Box<dyn ToolTranslator> = match client_tool {
+            ClientTool::Function => Box::new(FunctionHandler::new_translator(execution)),
+            ClientTool::CodexNamespace => Box::new(CodexNamespaceHandler::new_translator(execution)),
+            ClientTool::Custom => Box::new(CustomHandler::new_translator(execution)),
+            ClientTool::Shell => Box::new(crate::tool::ShellHandler::new_translator(execution)),
+            ClientTool::ToolSearch => Box::new(ToolSearchHandler::new_translator(execution)),
         };
         let frames = Self::translate_tool_event(
             translator.as_mut(),
@@ -239,7 +238,7 @@ impl TranslationDispatcher {
             },
             call,
         )?;
-        if tool_type == ToolType::ToolSearch {
+        if client_tool == ClientTool::ToolSearch {
             let call = call.ok_or_else(|| ExecutorError::Tool(tool_search::invalid_upstream_search_call()))?;
             self.tool_search.start_synthetic(output_index, &call.item.call_id)?;
         }

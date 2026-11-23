@@ -8,8 +8,6 @@ use serde_json::{Value, json};
 
 fn pipeline(validation: Validation, tools: &[(&str, ToolType)]) -> RoundIngestion {
     RoundIngestion::new(
-        "resp_1".to_owned(),
-        Some("conv_1".to_owned()),
         validation,
         TranslationContext::new(
             tools
@@ -21,6 +19,15 @@ fn pipeline(validation: Validation, tools: &[(&str, ToolType)]) -> RoundIngestio
         ),
         None,
     )
+}
+
+/// The request whose identity `inject_ids` stamps on these rounds' payloads.
+fn request_identity() -> crate::executor::request::RequestContext {
+    let mut request = crate::executor::upstream::tests::request_context();
+    "resp_1".clone_into(&mut request.response_id);
+    request.conversation_id = Some("conv_1".to_owned());
+    request.original_request.previous_response_id = Some("resp_previous".to_owned());
+    request
 }
 
 fn push(pipeline: &mut RoundIngestion, event: &Value) -> Translation {
@@ -66,7 +73,7 @@ fn ignored_lines_keep_pending_and_gateway_deferral_boundaries() {
             assert_eq!(result.defer_from_output_index, Some(2));
         }
     }
-    assert_eq!(pipeline.finish("model", None, None).unwrap().output.len(), 1);
+    assert_eq!(pipeline.finish("model", None).unwrap().output.len(), 1);
 }
 
 #[test]
@@ -85,11 +92,12 @@ fn finish_applies_strict_and_lenient_eof_policy_and_folds_unfinished_items() {
             "item_id":"fc_1","delta":"{\"value\":1}"}),
         );
         pipeline.push(ClassifiedSseLine::Done).unwrap();
-        let result = pipeline.finish("model", Some("resp_previous"), Some("instructions"));
+        let result = pipeline.finish("model", Some("instructions"));
         match validation {
             Validation::Strict => assert!(result.unwrap_err().to_string().contains("without a terminal event")),
             Validation::Lenient => {
-                let payload = result.unwrap();
+                let mut payload = result.unwrap();
+                request_identity().inject_ids(&mut payload);
                 assert_eq!(payload.status, "completed");
                 assert_eq!(payload.model, "model");
                 assert_eq!(payload.previous_response_id.as_deref(), Some("resp_previous"));
@@ -122,7 +130,8 @@ fn finish_preserves_terminal_metadata_under_both_policies() {
                     "usage":{"input_tokens":3,"output_tokens":2,"total_tokens":5}
                 }}),
             );
-            let payload = pipeline.finish("model", None, None).unwrap();
+            let mut payload = pipeline.finish("model", None).unwrap();
+            request_identity().inject_ids(&mut payload);
             assert_eq!(payload.status, if status == "failed" { "error" } else { status });
             assert_eq!(payload.id, "resp_1");
             assert_eq!(payload.conversation.as_deref(), Some("conv_1"));
@@ -182,7 +191,7 @@ fn native_code_interpreter_stream_passes_through_and_assembles() {
             "response": {"id": "resp_1", "status": "completed", "output": [completed_item.clone()]}
         }),
     );
-    let payload = pipeline.finish("model", None, None).expect("valid native stream");
+    let payload = pipeline.finish("model", None).expect("valid native stream");
     assert_eq!(
         serde_json::to_value(payload.output).expect("serialize output"),
         json!([completed_item])
@@ -215,7 +224,7 @@ fn unfinished_native_and_synthetic_search_require_an_aborted_response() {
                     &json!({"type":terminal,"response":{"id":"resp_1","status":status,"output":[]}}),
                 );
             }
-            let result = pipeline.finish("model", None, None);
+            let result = pipeline.finish("model", None);
             match terminal {
                 None => assert!(result.unwrap_err().to_string().contains("invalid tool-search call")),
                 Some("response.failed") => assert!(result.unwrap().output.is_empty()),
@@ -257,7 +266,7 @@ fn sentinel_sequence_stream_preserves_terminal_usage_and_text() {
         event["sequence_number"] = (-1).into();
         format!("data: {event}")
     });
-    let payload = crate::executor::pipeline::test_support::ingest_lenient(lines, None, "test-model")
+    let payload = crate::executor::pipeline::test_support::ingest_lenient(lines, "test-model")
         .expect("sentinel frames remain valid");
     assert_eq!(payload.status, "completed");
     assert_eq!(payload.output.len(), 1);
