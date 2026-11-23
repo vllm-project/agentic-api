@@ -132,24 +132,58 @@ impl TranslationContext {
             response.insert("tool_choice".to_owned(), serde_json::to_value(choice)?);
         }
         super::custom::CustomTranslator::restore_response_wire(wire, self.custom_tool_map.as_ref());
+        // As in the typed output, a call's public id and async marker follow its model-visible name,
+        // so they are decided before the namespace is restored.
+        if let Some(output) = wire
+            .rest
+            .get_mut("response")
+            .and_then(|response| response.get_mut("output"))
+            .and_then(Value::as_array_mut)
+        {
+            for item in output {
+                self.mark_public_function_call(item);
+            }
+        }
+        if let Some(item) = wire.rest.get_mut("item") {
+            self.mark_public_function_call(item);
+        }
         let _ = super::namespace::CodexNamespaceTranslator::restore_response_wire(wire, self.namespace_map.as_ref());
         if let Some(response) = wire.rest.get_mut("response").and_then(Value::as_object_mut) {
             complete_response_fields(response, &self.response_fields)?;
             if let Some(output) = response.get_mut("output").and_then(Value::as_array_mut) {
                 for item in output {
-                    normalize_output_item(item, self);
+                    normalize_output_item(item);
                     self.restore_self_namespace(item);
                 }
             }
         }
         if let Some(item) = wire.rest.get_mut("item") {
-            normalize_output_item(item, self);
+            normalize_output_item(item);
             self.restore_self_namespace(item);
         }
         if let Some(part) = wire.rest.get_mut("part") {
             normalize_content_part(part);
         }
         Ok(())
+    }
+
+    fn mark_public_function_call(&self, item: &mut Value) {
+        let Some(item) = item
+            .as_object_mut()
+            .filter(|item| item.get("type").and_then(Value::as_str) == Some("function_call"))
+        else {
+            return;
+        };
+        let Some(name) = item.get("name").and_then(Value::as_str) else {
+            return;
+        };
+        let (public_id, async_call) = (self.is_client_function(name), self.is_async_tool(name));
+        if public_id && let Some(Value::String(id)) = item.get_mut("id") {
+            FunctionToolCall::normalize_public_id(id);
+        }
+        if async_call {
+            item.insert("async".to_owned(), Value::Bool(true));
+        }
     }
 
     fn restore_self_namespace(&self, item: &mut Value) {
@@ -318,7 +352,7 @@ fn complete_response_fields(response: &mut Map<String, Value>, fields: &Standard
     Ok(())
 }
 
-fn normalize_output_item(item: &mut Value, context: &TranslationContext) {
+fn normalize_output_item(item: &mut Value) {
     let Some(item) = item.as_object_mut() else {
         return;
     };
@@ -342,15 +376,6 @@ fn normalize_output_item(item: &mut Value, context: &TranslationContext) {
         if item.get("phase").is_some_and(Value::is_null) {
             item.remove("phase");
         }
-    }
-    if item.get("type").and_then(Value::as_str) == Some("function_call")
-        && item
-            .get("name")
-            .and_then(Value::as_str)
-            .is_some_and(|name| context.is_client_function(name))
-        && let Some(Value::String(id)) = item.get_mut("id")
-    {
-        FunctionToolCall::normalize_public_id(id);
     }
     if let Some(content) = item.get_mut("content").and_then(Value::as_array_mut) {
         for part in content {
@@ -401,6 +426,56 @@ mod tests {
         assert_eq!(response["temperature"], 1.0);
         assert_eq!(response["completed_at"], Value::Null);
         assert_eq!(response["tools"], json!([]));
+    }
+
+    #[test]
+    fn snapshot_output_follows_the_typed_public_call_rules() {
+        use crate::tool::codex::model_visible_namespace_member_name;
+        use crate::tool::{CodexNamespaceHandler, responses_declarations};
+
+        // A namespace member whose public name is also a gateway tool, declared async.
+        let tools = responses_declarations(
+            &serde_json::from_value::<Vec<ResponsesTool>>(json!([{
+                "type": "namespace", "name": "travel",
+                "tools": [{"type": "function", "name": "web_search"}]
+            }]))
+            .unwrap(),
+        );
+        let map = CodexNamespaceHandler.build_namespace_map(Some(&tools)).unwrap();
+        let model_name = model_visible_namespace_member_name("travel", "web_search");
+        let context = TranslationContext::new(
+            HashMap::from([
+                (model_name.clone(), ToolType::CodexNamespace),
+                ("web_search".to_owned(), ToolType::WebSearch),
+            ]),
+            HashSet::new(),
+            false,
+        )
+        .with_gateway_owned_names(HashSet::from(["web_search".to_owned()]))
+        .with_async_tool_names(HashSet::from([model_name.clone()]))
+        .with_response_metadata(map, None, None, None);
+        let call = json!({
+            "type": "function_call", "id": "call_upstream", "call_id": "call_1",
+            "name": model_name, "arguments": "{}", "status": "completed"
+        });
+
+        let mut typed = vec![serde_json::from_value::<OutputItem>(call.clone()).unwrap()];
+        context
+            .normalize_response_output(&mut typed, ResponseStatus::Completed, &HashSet::new())
+            .unwrap();
+        let mut wire = WireEvent::new("response.in_progress");
+        wire.rest.insert(
+            "response".to_owned(),
+            json!({"id": "resp_1", "status": "in_progress", "output": [call]}),
+        );
+        context.restore_stream_event_wire(&mut wire).unwrap();
+
+        let typed = serde_json::to_value(&typed[0]).unwrap();
+        let snapshot = &wire.rest["response"]["output"][0];
+        for field in ["id", "namespace", "name", "async"] {
+            assert_eq!(snapshot[field], typed[field], "{field} differs between the snapshot and the output");
+        }
+        assert_eq!(snapshot["async"], true);
     }
 
     #[test]

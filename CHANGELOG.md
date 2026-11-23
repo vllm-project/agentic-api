@@ -66,6 +66,8 @@ All notable changes to Agentic API are documented here.
   single-agent compaction does, so an agent that continues a compacted history compacts at the same threshold (#549).
 - A multi-agent response whose MCP server failed to list its tools streams `response.mcp_list_tools.failed` for that
   listing, as a single-agent response does, instead of `response.mcp_list_tools.completed` (#549).
+- Function calls in the `output` of an upstream `response.*` snapshot event take their public id and `async` marker
+  from the same rules as the final output, decided on the model-visible name before the namespace is restored (#549).
 
 ### Testing
 
