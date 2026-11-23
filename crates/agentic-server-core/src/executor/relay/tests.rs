@@ -196,6 +196,34 @@ async fn agent_items_complete_streamed_items_and_materialize_new_ones() {
 }
 
 #[tokio::test]
+async fn an_agent_mcp_listing_that_failed_streams_its_failure() {
+    let (sender, mut receiver) = mpsc::channel(16);
+    let mut relay = StreamRelay::client(sender, RelayLimits::default());
+    let listing: OutputItem = serde_json::from_value(json!({
+        "type": "mcp_list_tools", "id": "mcpl_1", "server_label": "docs", "tools": [],
+        "error": "Error retrieving tool list from MCP server: 'docs'. Http status code: 424 (Failed Dependency)",
+        "agent": {"agent_name": "/root"}
+    }))
+    .unwrap();
+
+    assert_eq!(relay.emit_agent_item(&listing).await.unwrap(), 0);
+
+    let frames = delivered(&mut receiver);
+    assert_eq!(
+        frames.iter().map(|frame| frame.event_type).collect::<Vec<_>>(),
+        [
+            SSEEventType::OutputItemAdded,
+            SSEEventType::McpListToolsInProgress,
+            SSEEventType::McpListToolsFailed,
+            SSEEventType::OutputItemDone,
+        ],
+        "a failed listing ends as single-agent streaming ends it"
+    );
+    assert_eq!(frames[2].wire.rest["item_id"], "mcpl_1");
+    assert_eq!(frames[2].wire.output_index, Some(0));
+}
+
+#[tokio::test]
 async fn a_detached_relay_reserves_agent_item_indexes_without_presenting() {
     let mut relay = StreamRelay::detached();
     let item = OutputItem::Compaction(crate::types::io::CompactionItem {

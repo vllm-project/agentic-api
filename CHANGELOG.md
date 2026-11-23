@@ -64,6 +64,8 @@ All notable changes to Agentic API are documented here.
   `completed_at` time; it is `null` until the response completes, as on every other response (#549).
 - Multi-agent automatic compaction counts a compaction item that carries its window as that window, as
   single-agent compaction does, so an agent that continues a compacted history compacts at the same threshold (#549).
+- A multi-agent response whose MCP server failed to list its tools streams `response.mcp_list_tools.failed` for that
+  listing, as a single-agent response does, instead of `response.mcp_list_tools.completed` (#549).
 
 ### Testing
 

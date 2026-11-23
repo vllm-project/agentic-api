@@ -77,7 +77,7 @@ impl<'a> Lifecycle<'a> {
             Self::Message(message) => (None, Some(message)),
             Self::FunctionCall(call) => (Some([Step::ArgumentsDelta(call), Step::ArgumentsDone(call)]), None),
             Self::ListTools(list) => (
-                Some([Step::ListToolsInProgress(&list.id), Step::ListToolsCompleted(&list.id)]),
+                Some([Step::ListToolsInProgress(&list.id), Step::ListToolsFinished(list)]),
                 None,
             ),
         };
@@ -120,7 +120,8 @@ impl<'a> Lifecycle<'a> {
 enum Step<'a> {
     Added,
     ListToolsInProgress(&'a str),
-    ListToolsCompleted(&'a str),
+    /// Completed, or failed for a listing that carries an error.
+    ListToolsFinished(&'a McpListTools),
     PartAdded(MessagePart<'a>),
     TextDelta(MessagePart<'a>, &'a str),
     TextDone(MessagePart<'a>, &'a str),
@@ -169,9 +170,14 @@ impl Step<'_> {
                 SSEEventType::McpListToolsInProgress,
                 [index, string("item_id", item_id)],
             ),
-            Self::ListToolsCompleted(item_id) => {
-                synthetic_event(SSEEventType::McpListToolsCompleted, [index, string("item_id", item_id)])
-            }
+            Self::ListToolsFinished(list) => synthetic_event(
+                if list.error.is_some() {
+                    SSEEventType::McpListToolsFailed
+                } else {
+                    SSEEventType::McpListToolsCompleted
+                },
+                [index, string("item_id", &list.id)],
+            ),
             Self::PartAdded(at) => synthetic_event(
                 SSEEventType::ContentPartAdded,
                 at.fields(index, ("part".to_owned(), to_value(&started_part(at.part))?)),
