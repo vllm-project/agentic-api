@@ -298,6 +298,9 @@ pub(crate) async fn list_vector_stores(
         Ok(params) => params,
         Err(error) => return *error,
     };
+    if params.purpose.is_some() {
+        return invalid("'purpose' is not supported when listing vector stores");
+    }
     result(search.list_vector_stores(&params).await)
 }
 
@@ -371,6 +374,9 @@ pub(crate) async fn list_vector_store_files(
         Ok(params) => params,
         Err(error) => return *error,
     };
+    if params.purpose.is_some() {
+        return invalid("'purpose' is not supported when listing vector store files");
+    }
     result(search.list_vector_store_files(&id, &params).await)
 }
 

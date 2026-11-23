@@ -428,6 +428,26 @@ async fn file_search_http_rejects_invalid_upload_search_and_pagination() {
             .status(),
         StatusCode::BAD_REQUEST
     );
+    // `purpose` belongs to GET /v1/files only; the shared ListParams must not
+    // let it pass unnoticed on the two vector-store list routes.
+    for url in [
+        format!("{}/v1/vector_stores?purpose=vision", server.url),
+        format!("{}/v1/vector_stores/vs_missing/files?purpose=vision", server.url),
+    ] {
+        let response = client.get(url).send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body: Value = response.json().await.unwrap();
+        assert_eq!(body["error"]["type"], "invalid_request_error");
+    }
+    assert_eq!(
+        client
+            .get(format!("{}/v1/files?purpose=vision", server.url))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
 }
 
 #[tokio::test]
