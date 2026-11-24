@@ -61,6 +61,40 @@ fn programmatic_extension_cannot_bypass_admission_or_duplicate_a_typed_upstream_
 }
 
 #[test]
+fn programmatic_tool_calling_is_rejected_before_inference_for_every_transport() {
+    // A declared PTC request carries the capability in the wire body, which lands in `extra`.
+    // The gateway must reject it rather than forwarding it to an upstream whose PTC contract
+    // has not been established. `null` is the surrounding Option and stays allowed.
+    let parse = |value: Value| -> RequestPayload {
+        serde_json::from_value(json!({
+            "model": "test", "input": "hello", "programmatic_tool_calling": value
+        }))
+        .unwrap()
+    };
+    for value in [json!(true), json!({}), json!([]), json!("auto")] {
+        let request = parse(value);
+        assert_eq!(
+            request.ensure_supported_parameters(None, true),
+            Err(UnsupportedParameterError::ProgrammaticToolCalling)
+        );
+        for stream in [false, true] {
+            assert!(matches!(
+                request.to_upstream_request(stream, &ResolvedFiles::default()),
+                Err(UpstreamRequestError::Parameter(
+                    UnsupportedParameterError::ProgrammaticToolCalling
+                ))
+            ));
+        }
+        let error = request.ensure_supported_parameters(None, true).unwrap_err();
+        assert_eq!(
+            (error.param(), error.code()),
+            ("programmatic_tool_calling", "unsupported_parameter")
+        );
+    }
+    assert_eq!(parse(Value::Null).ensure_supported_parameters(None, true), Ok(()));
+}
+
+#[test]
 fn display_defaults_do_not_restrict_requests_but_explicit_reasoning_levels_do() {
     let caps = ModelCapabilities::new(BTreeMap::from([(
         "configured".to_owned(),
