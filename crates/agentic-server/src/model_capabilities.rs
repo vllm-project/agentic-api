@@ -79,6 +79,9 @@ pub struct CodexModelCapabilities {
     pub slug: String,
     /// The modalities the gateway resolved for this model.
     pub input_modalities: InputModalities,
+    /// Whether Codex may request reasoning summaries and encrypted reasoning.
+    #[serde(default)]
+    pub supports_reasoning_summaries: bool,
     /// The reasoning levels the gateway advertised, in catalog order.
     #[serde(default)]
     pub supported_reasoning_levels: Vec<CodexReasoningLevel>,

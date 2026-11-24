@@ -74,7 +74,12 @@ pub enum ExecutorError {
 
     /// A direct model runtime failed; retain the source without exposing its internals.
     #[error("direct inference failed")]
-    DirectInference(#[source] Box<dyn std::error::Error + Send + Sync>),
+    DirectInference {
+        status: StatusCode,
+        param: Option<&'static str>,
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
 
     /// A network error occurred reading from the LLM response stream.
     ///
@@ -248,14 +253,15 @@ impl ExecutorError {
             Self::Storage(e) if e.is_not_found() => StatusCode::NOT_FOUND,
             Self::FileReferencesNotFound { .. } => StatusCode::NOT_FOUND,
             Self::Storage(e) if e.is_validation() => StatusCode::BAD_REQUEST,
-            Self::LLMRequest { status, .. } | Self::LLMTransport { status, .. } => *status,
+            Self::LLMRequest { status, .. }
+            | Self::LLMTransport { status, .. }
+            | Self::DirectInference { status, .. } => *status,
             Self::Tool(
                 ToolError::Execution(_)
                 | ToolError::InvalidUpstreamToolSearch
                 | ToolError::UpstreamWithheldFunctionCall,
             )
-            | Self::CompactionFailed { .. }
-            | Self::DirectInference(_) => StatusCode::BAD_GATEWAY,
+            | Self::CompactionFailed { .. } => StatusCode::BAD_GATEWAY,
             Self::Conflict(_) | Self::Storage(StorageError::ItemConflict) => StatusCode::CONFLICT,
             Self::McpListToolsFailed(_) => StatusCode::FAILED_DEPENDENCY,
             Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
@@ -310,10 +316,11 @@ impl ExecutorError {
             Self::Storage(e) if e.is_validation() => "invalid_request_error",
             Self::Conflict(_) => "conflict_error",
             Self::McpListToolsFailed(_) => "external_connector_error",
+            Self::DirectInference { status, .. } if status.is_client_error() => "invalid_request_error",
             Self::LLMRequest { .. }
             | Self::LLMTransport { .. }
             | Self::CompactionFailed { .. }
-            | Self::DirectInference(_) => "upstream_error",
+            | Self::DirectInference { .. } => "upstream_error",
             Self::ResourceLimitExceeded { limit, .. } => match limit {
                 ResourceLimit::UpstreamSseLine | ResourceLimit::UpstreamJsonBody => "upstream_error",
                 ResourceLimit::ResponseBudget | ResourceLimit::StreamEvent => "server_error",
@@ -353,6 +360,7 @@ impl ExecutorError {
     #[must_use]
     pub fn error_param(&self) -> Option<&str> {
         match self.client_visible_error() {
+            Self::DirectInference { param, .. } => *param,
             Self::ClientItem(error) => Some(error.param()),
             Self::FileSearch(error) | Self::Tool(ToolError::FileSearch(error)) => match error {
                 FileSearchError::FileNotFound { param, .. } => Some(*param),
@@ -379,6 +387,7 @@ impl ExecutorError {
     #[must_use]
     pub fn error_message(&self) -> String {
         match self.client_visible_error() {
+            Self::DirectInference { status, source, .. } if status.is_client_error() => source.to_string(),
             Self::FileSearch(error) | Self::Tool(ToolError::FileSearch(error)) => error.public_message(),
             Self::Storage(
                 error @ (StorageError::ItemAlreadyInConversation

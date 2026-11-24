@@ -1,5 +1,7 @@
 //! Composition root: the published server stays independent of native engine dependencies.
 
+mod engine;
+
 use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -11,10 +13,10 @@ use agentic_server::model_capabilities::ServedModel;
 use agentic_server::server::{DirectInferenceStatus, GatewayOptions, ServerError, run_direct, shutdown_signal};
 use agentic_server::startup;
 use agentic_vllm::{VllmBackend, model_config::ModelConfig};
+use engine::Engine;
 use futures::future::LocalBoxFuture;
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
-use vllm_managed_engine::ManagedEngineHandle;
 
 const ENGINE_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -39,14 +41,12 @@ fn launch(
         // Register before spawning and retain the same listener across every startup phase.
         let signal = shutdown_signal()?;
         tokio::pin!(signal);
-        let engine = ManagedEngineHandle::spawn(engine_config)
-            .await
-            .map_err(|error| ServerError::Native(error.into_boxed_dyn_error()))?;
+        let mut engine = Engine::spawn(&engine_config)?;
         let result = async {
             let backend = tokio::select! {
                 biased;
                 () = &mut signal => return Ok(()),
-                status = engine.wait_for_exit() => return Err(Error::LlmProcessExited { status: status.to_string() }.into()),
+                status = engine.wait_for_exit() => return Err(Error::LlmProcessExited { status: status?.to_string() }.into()),
                 result = tokio::time::timeout(timeout, Box::pin(VllmBackend::connect_recipe(client_config, &recipe))) => {
                     result.map_err(|_| Error::Config("native model startup timed out".to_owned()))?
                         .map_err(|error| ServerError::Native(error))?
@@ -63,7 +63,7 @@ fn launch(
                 let interruption = tokio::select! {
                     result = &mut gateway => return result,
                     () = &mut signal => Ok(()),
-                    status = engine.wait_for_exit() => Err(Error::LlmProcessExited { status: status.to_string() }.into()),
+                    status = engine.wait_for_exit() => Err(Error::LlmProcessExited { status: status?.to_string() }.into()),
                     _ = health.wait_for(|healthy| !*healthy) => Err(ServerError::Native(Box::new(
                         io::Error::other("native engine connection became unhealthy"),
                     ))),
@@ -90,7 +90,7 @@ fn launch(
         let stopped = engine
             .shutdown(ENGINE_SHUTDOWN_TIMEOUT)
             .await
-            .map_err(|error| ServerError::Native(error.into_boxed_dyn_error()));
+            .map_err(ServerError::from);
         if let Err(error) = &stopped {
             warn!(%error, "native engine shutdown failed");
         }

@@ -13,6 +13,7 @@ agentic-core.workspace = true
 agentic-server = { path = "../agentic-server" }
 agentic-vllm = { path = "../agentic-vllm" }
 futures.workspace = true
+nix = { version = "0.31.3", default-features = false, features = ["signal"] }
 tokio.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true

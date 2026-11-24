@@ -48,7 +48,7 @@ pub(crate) fn prepare_codex_home(
             "input_modalities": capabilities.input_modalities,
             "default_reasoning_level": capabilities.default_reasoning_level(),
             "supported_reasoning_levels": capabilities.reasoning_levels(),
-            "supports_reasoning_summaries": true,
+            "supports_reasoning_summaries": capabilities.supports_reasoning_summaries,
             "supports_parallel_tool_calls": true,
             // apply_patch_tool_type is intentionally omitted: Codex only supports
             // "freeform", which the gateway cannot normalize while preserving
@@ -230,6 +230,7 @@ mod tests {
         CodexModelCapabilities {
             slug: slug.to_owned(),
             input_modalities,
+            supports_reasoning_summaries: false,
             supported_reasoning_levels: Vec::new(),
         }
     }
@@ -502,11 +503,32 @@ mod tests {
     }
 
     #[test]
+    fn codex_catalog_preserves_summary_support_from_gateway_discovery() {
+        for advertised in [Some(false), Some(true), None] {
+            let mut entry = serde_json::json!({"slug":"model", "input_modalities":["text"]});
+            if let Some(supported) = advertised {
+                entry["supports_reasoning_summaries"] = supported.into();
+            }
+            let capabilities = serde_json::from_value(entry).unwrap();
+            let root = tempfile::tempdir().unwrap();
+            prepare_codex_home(root.path(), "http://localhost:9000", "model", &capabilities, None).unwrap();
+            let catalog: serde_json::Value =
+                serde_json::from_slice(&fs::read(root.path().join("model_catalog.json")).unwrap()).unwrap();
+            assert_eq!(
+                catalog["models"][0]["supports_reasoning_summaries"],
+                advertised.unwrap_or(false),
+                "Codex requests summaries and encrypted reasoning whenever this flag is enabled"
+            );
+        }
+    }
+
+    #[test]
     fn codex_catalog_advertises_the_gateway_reasoning_levels() {
         let root = unique_temp_dir("codex-reasoning-levels");
         let configured = CodexModelCapabilities {
             slug: "Qwen/test".to_owned(),
             input_modalities: InputModalities::Text,
+            supports_reasoning_summaries: true,
             supported_reasoning_levels: vec![
                 CodexReasoningLevel {
                     effort: agentic_core::types::messages::ReasoningEffortLevel::Low,

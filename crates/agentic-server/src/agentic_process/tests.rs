@@ -611,6 +611,7 @@ fn attached_codex_uses_an_isolated_responses_provider() {
             capabilities: CodexModelCapabilities {
                 slug: "vision-model".to_owned(),
                 input_modalities: InputModalities::TextAndImage,
+                supports_reasoning_summaries: false,
                 supported_reasoning_levels: Vec::new(),
             },
         }),

@@ -104,6 +104,37 @@ async fn early_engine_exit_interrupts_model_startup() {
 }
 
 #[tokio::test]
+async fn launcher_exit_still_stops_surviving_engine_workers() {
+    let home = fixture("sleep 30 >/dev/null 2>&1 &\nprintf '%s' \"$!\" > \"$AGENTIC_API_HOME/worker.pid\"\nexit 23");
+    let output = tokio::time::timeout(Duration::from_secs(10), gateway(&home, "60").output())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!output.status.success());
+    let pid = fs::read_to_string(home.path().join("worker.pid")).unwrap();
+    let stopped = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            // An orphan may remain a zombie until the host's init process reaps it.
+            let state = Command::new("ps")
+                .args(["-o", "stat=", "-p", &pid])
+                .output()
+                .await
+                .unwrap();
+            if !state.status.success() || String::from_utf8_lossy(&state.stdout).trim().starts_with('Z') {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    if stopped.is_err() {
+        let _ = Command::new("kill").args(["-KILL", &pid]).status().await;
+    }
+    assert!(stopped.is_ok(), "worker {pid} survived the engine launcher's exit");
+    assert_engine_stopped(&home);
+}
+
+#[tokio::test]
 async fn termination_during_startup_reaps_the_owned_engine() {
     let home = fixture("exec sleep 3");
     let child = gateway(&home, "60").spawn().unwrap();

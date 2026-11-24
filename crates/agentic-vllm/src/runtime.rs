@@ -7,6 +7,7 @@ use agentic_core::executor::error::{ExecutorError, ExecutorResult};
 use agentic_core::executor::inference::direct::{DirectInferenceBackend, EventStream, GenerationControl};
 use agentic_core::types::request_response::UpstreamRequest;
 use futures::future::BoxFuture;
+use http::StatusCode;
 use tokio::sync::watch;
 use vllm_chat::{ChatLlm, LoadModelBackendsOptions, load_model_backends};
 use vllm_engine_core_client::{EngineCoreClient, EngineCoreClientConfig};
@@ -121,7 +122,7 @@ impl DirectInferenceBackend for VllmBackend {
                 () = control.cancellation.cancelled() => {
                     return Err(ExecutorError::StreamError("direct inference cancelled".to_owned()));
                 }
-                result = self.chat.chat(request) => result.map_err(backend_error)?,
+                result = self.chat.chat(request) => result.map_err(request_error)?,
             };
             Ok(events::convert(stream, control, Arc::clone(&self.chat)))
         })
@@ -129,5 +130,68 @@ impl DirectInferenceBackend for VllmBackend {
 }
 
 pub(crate) fn backend_error(error: impl std::error::Error + Send + Sync + 'static) -> ExecutorError {
-    ExecutorError::DirectInference(Box::new(error))
+    ExecutorError::DirectInference {
+        status: StatusCode::BAD_GATEWAY,
+        param: None,
+        source: Box::new(error),
+    }
+}
+
+fn request_error(error: vllm_chat::Error) -> ExecutorError {
+    let (status, param) = if error.is_request_validation_error() {
+        (StatusCode::BAD_REQUEST, error.param())
+    } else if error.is_unavailable() {
+        (StatusCode::SERVICE_UNAVAILABLE, None)
+    } else {
+        return backend_error(error);
+    };
+    ExecutorError::DirectInference {
+        status,
+        param,
+        source: Box::new(error),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::error::Error;
+
+    use super::*;
+
+    #[test]
+    fn native_admission_errors_preserve_client_status_and_hide_backend_details() {
+        let invalid = request_error(
+            vllm_text::Error::PromptTooLong {
+                max_model_len: 128,
+                prompt_len: 256,
+            }
+            .into(),
+        );
+        assert_eq!(invalid.http_status(), StatusCode::BAD_REQUEST);
+        assert!(invalid.source().is_some());
+        let body: serde_json::Value = serde_json::from_slice(&invalid.into_response_body()).unwrap();
+        assert_eq!(body["error"]["type"], "invalid_request_error");
+        assert_eq!(body["error"]["param"], "input_tokens");
+        assert!(body["error"]["message"].as_str().unwrap().contains("256"));
+
+        for (error, expected) in [
+            (
+                vllm_text::Error::Llm(vllm_llm::Error::Unavailable {
+                    message: "engine paused".into(),
+                }),
+                StatusCode::SERVICE_UNAVAILABLE,
+            ),
+            (
+                vllm_text::Error::Tokenizer("private backend details".into()),
+                StatusCode::BAD_GATEWAY,
+            ),
+        ] {
+            let error = request_error(error.into());
+            assert_eq!(error.http_status(), expected);
+            assert!(error.source().is_some());
+            let body: serde_json::Value = serde_json::from_slice(&error.into_response_body()).unwrap();
+            assert_eq!(body["error"]["type"], "upstream_error");
+            assert_eq!(body["error"]["message"], "direct inference failed");
+        }
+    }
 }

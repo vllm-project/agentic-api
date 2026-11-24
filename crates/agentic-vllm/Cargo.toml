@@ -11,6 +11,7 @@ publish = false
 agentic-core.workspace = true
 async-stream.workspace = true
 futures.workspace = true
+http.workspace = true
 num-traits.workspace = true
 serde_json.workspace = true
 serde.workspace = true

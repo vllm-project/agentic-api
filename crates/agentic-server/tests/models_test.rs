@@ -73,6 +73,8 @@ async fn direct_gateway_uses_native_catalog_readiness_authentication_and_admissi
         if path.contains('?') {
             assert_eq!(body["models"][0]["slug"], "org/assistant");
             assert_eq!(body["models"][0]["context_window"], 8192);
+            let catalog: CodexCatalogCapabilities = serde_json::from_value(body).unwrap();
+            assert!(!catalog.models[0].supports_reasoning_summaries);
         } else if path.ends_with("assistant") {
             assert_eq!(body["id"], "org/assistant");
         } else {

@@ -20,7 +20,8 @@ arguments are forwarded to vLLM. Parser names are checked through vLLM's existin
 The runtime uses the physical model for assets and the optional served name for requests and catalog identity.
 
 The composition binary registers signals before spawning, monitors engine exit during loading and serving, and
-bounds startup and gateway drain. It closes the frontend and reaps the owned engine on startup failure, timeout,
+bounds startup and gateway drain. It retains the process group after launcher exit so surviving engine workers are
+also stopped. It closes the frontend and reaps the owned engine on startup failure, timeout,
 signal, frontend health failure, or gateway failure. The shared gateway exposes the local model catalog, observes vLLM readiness (including paused engines), and rejects HTTP-only
 inference endpoints. Storage, request preparation, tool routing, the loop, and response assembly remain shared.
 
@@ -78,6 +79,10 @@ non-disabled truncation, prompt-cache controls, non-default service tiers, upstr
 extension fields, and additional reasoning/text controls. Parser and tool
 support also depend on the loaded frontend/model. This profile does not establish
 Anthropic Messages parity, a gRPC adapter, or distributed cache routing.
+
+The Codex launcher preserves the gateway's reasoning-summary capability; direct mode does not advertise summaries
+or encrypted reasoning. Native request-validation failures retain their client error status and parameter, while
+engine failures keep their internal diagnostics out of API responses.
 
 ## Version and validation limits
 
