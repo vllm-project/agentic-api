@@ -24,6 +24,22 @@ pub(super) struct StreamPayload {
     pub(super) deferred_events: Vec<EventFrame>,
 }
 
+trait InferenceInput {
+    fn ingest(self, round: &mut RoundIngestion) -> ExecutorResult<Translation>;
+}
+
+impl InferenceInput for ClassifiedSseLine {
+    fn ingest(self, round: &mut RoundIngestion) -> ExecutorResult<Translation> {
+        round.push(self)
+    }
+}
+
+impl InferenceInput for EventFrame {
+    fn ingest(self, round: &mut RoundIngestion) -> ExecutorResult<Translation> {
+        round.push_frame(self)
+    }
+}
+
 /// Lives for the response, preserving gateway event numbering across inference rounds.
 pub(super) struct AgentPipeline {
     pub(super) request: RequestContext,
@@ -119,11 +135,12 @@ impl AgentPipeline {
         Ok(())
     }
 
-    fn push(&mut self, line: ClassifiedSseLine) -> ExecutorResult<Translation> {
-        self.round
+    fn push(&mut self, input: impl InferenceInput) -> ExecutorResult<Translation> {
+        let round = self
+            .round
             .as_mut()
-            .expect("body runner starts a round before pushing input")
-            .push(line)
+            .expect("body runner starts a round before pushing input");
+        input.ingest(round)
     }
 
     fn finish(&mut self) -> ExecutorResult<ResponsePayload> {
@@ -150,10 +167,37 @@ impl AgentPipeline {
         output_offset: usize,
         budget: Option<ExecutorResponseBudget>,
     ) -> ExecutorResult<StreamPayload> {
+        let body = body.map(|line| line.map(|line| SseLine::parse(&line)));
+        self.run_body(body, validation, context, registry, output_offset, budget)
+            .await
+    }
+
+    /// Direct runtime output enters the same ingestion and awaited delivery loop.
+    pub(super) async fn run_with_event_body(
+        &mut self,
+        body: impl Stream<Item = ExecutorResult<EventFrame>>,
+        context: TranslationContext,
+        registry: &ToolRegistry,
+        output_offset: usize,
+        budget: Option<ExecutorResponseBudget>,
+    ) -> ExecutorResult<StreamPayload> {
+        self.run_body(body, Validation::Strict, context, registry, output_offset, budget)
+            .await
+    }
+
+    async fn run_body<I: InferenceInput>(
+        &mut self,
+        body: impl Stream<Item = ExecutorResult<I>>,
+        validation: Validation,
+        context: TranslationContext,
+        registry: &ToolRegistry,
+        output_offset: usize,
+        budget: Option<ExecutorResponseBudget>,
+    ) -> ExecutorResult<StreamPayload> {
         self.begin_round(validation, context, budget)?;
         futures::pin_mut!(body);
-        while let Some(line) = body.next().await {
-            let translation = self.push(SseLine::parse(&line?))?;
+        while let Some(input) = body.next().await {
+            let translation = self.push(input?)?;
             self.delivery
                 .accept(translation, &self.request, registry, output_offset)
                 .await?;

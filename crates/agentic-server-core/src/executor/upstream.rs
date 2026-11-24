@@ -1,6 +1,8 @@
 use crate::executor::accumulator::Validation;
-use crate::executor::error::{ExecutorError, ExecutorResult};
+use crate::executor::error::ExecutorResult;
 use crate::executor::gateway_accumulator::StreamEvent;
+use crate::executor::inference::direct::{self, DirectInferenceBackend};
+use crate::executor::inference::http::encode_request;
 use crate::executor::inference::{call_inference_limited, fetch_response_json_limited};
 use crate::executor::pipeline::{AgentPipeline, StreamPayload};
 use crate::executor::rehydrate::validate_message_content;
@@ -8,8 +10,7 @@ use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::translate::TranslationContext;
 use crate::tool::{ToolRegistry, ToolSearchState};
-use crate::types::request_response::ResponsePayload;
-use crate::utils::common::serialize_to_string;
+use crate::types::request_response::{ResponsePayload, UpstreamRequest};
 use std::sync::Arc;
 
 /// Snapshot tool facts at the orchestration boundary, excluding all execution bindings.
@@ -61,10 +62,13 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
 /// # Errors
 /// Unsupported message content, a tool-configuration error, or a serialization failure.
 pub fn upstream_request(ctx: &RequestContext, stream: bool) -> ExecutorResult<String> {
+    encode_request(&model_request(ctx, stream)?)
+}
+
+fn model_request(ctx: &RequestContext, stream: bool) -> ExecutorResult<UpstreamRequest<'_>> {
     // Composable callers may supply RequestContext without the rehydration step.
     validate_message_content(&ctx.enriched_request.input)?;
-    let request = ctx.enriched_request.to_upstream_request(stream)?;
-    serialize_to_string(&request).map_err(ExecutorError::JsonError)
+    Ok(ctx.enriched_request.to_upstream_request(stream)?)
 }
 
 /// One pipeline per response sender; collect-only and JSON requests have no sender.
@@ -93,6 +97,11 @@ pub(super) async fn fetch_blocking_payload(
     response_budget: Option<&ExecutorResponseBudget>,
 ) -> ExecutorResult<ResponsePayload> {
     agent.ensure_request_prepared()?;
+    if let Some(backend) = &exec_ctx.direct_inference {
+        return fetch_direct_payload(agent, exec_ctx, backend, registry, 0, response_budget)
+            .await
+            .map(|result| result.payload);
+    }
     let upstream_json = upstream_request(&agent.request, false)?;
     let body = fetch_response_json_limited(
         upstream_json,
@@ -159,6 +168,9 @@ pub(super) async fn fetch_stream_payload(
     response_budget: &ExecutorResponseBudget,
 ) -> ExecutorResult<StreamPayload> {
     agent.ensure_request_prepared()?;
+    if let Some(backend) = &exec_ctx.direct_inference {
+        return fetch_direct_payload(agent, exec_ctx, backend, registry, output_offset, Some(response_budget)).await;
+    }
     let upstream_json = upstream_request(&agent.request, true)?;
     let lines = call_inference_limited(
         upstream_json,
@@ -180,11 +192,38 @@ pub(super) async fn fetch_stream_payload(
         .await
 }
 
+async fn fetch_direct_payload(
+    agent: &mut AgentPipeline,
+    exec_ctx: &ExecutionContext,
+    backend: &Arc<dyn DirectInferenceBackend>,
+    registry: &ToolRegistry,
+    output_offset: usize,
+    response_budget: Option<&ExecutorResponseBudget>,
+) -> ExecutorResult<StreamPayload> {
+    let events = direct::call(
+        backend,
+        model_request(&agent.request, true)?,
+        agent.request.response_id.clone(),
+        exec_ctx.streaming_timeout,
+        exec_ctx.responses_config.max_stream_event_bytes,
+    )
+    .await?;
+    agent
+        .run_with_event_body(
+            events,
+            translation_context(registry, agent),
+            registry,
+            output_offset,
+            response_budget.cloned(),
+        )
+        .await
+}
+
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
     use crate::events::SseLine;
-    use crate::executor::error::ResourceLimit;
+    use crate::executor::error::{ExecutorError, ResourceLimit};
     use crate::executor::modes::{ConversationHandler, ResponseHandler};
     use crate::executor::pipeline::RoundIngestion;
     use crate::storage::{ConversationStore, ResponseStore};

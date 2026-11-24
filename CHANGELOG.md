@@ -6,8 +6,11 @@ All notable changes to Agentic API are documented here.
 
 ### Added
 
-- Added the published `vllm-responses` crate: a transport-independent typed
-  inference-event contract for vLLM and Agentic API integrations (#359).
+- Added normalized `EventFrame` ingestion through the existing response accumulator
+  and tool translation path, and an inference/session contract proposal (#359, #360).
+- Split executor inference into HTTP and injected direct backends. Added unpublished
+  `agentic-vllm` integration using shared vLLM model preparation, parsing, and EngineCore
+  communication, while reusing request preparation, tool orchestration, sessions, and compaction.
 
 ## [0.8.0] - 2026-09-19
 

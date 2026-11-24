@@ -14,21 +14,26 @@ use tracing::Instrument as _;
 use crate::config::DEFAULT_MAX_UPSTREAM_JSON_BYTES;
 use crate::config::DEFAULT_MAX_UPSTREAM_SSE_LINE_BYTES;
 use crate::executor::error::{ExecutorError, ExecutorResult, ResourceLimit};
+use crate::executor::telemetry::stages;
 use crate::proxy::processed_response_headers;
+use crate::types::request_response::UpstreamRequest;
+use crate::utils::common::serialize_to_string;
 
-/// SSE stream of raw lines sent to the client (`data: …\n\n` per event).
-pub type BoxStream = std::pin::Pin<Box<dyn Stream<Item = String> + Send>>;
+pub(in crate::executor) fn encode_request(request: &UpstreamRequest<'_>) -> ExecutorResult<String> {
+    Ok(serialize_to_string(request)?)
+}
 
-/// Wire-format marker signalling end-of-stream to the client.
-pub(super) const DONE_MARKER: &str = "data: [DONE]\n\n";
 #[cfg(test)]
-pub(super) const MAX_SSE_LINE_BYTES: usize = DEFAULT_MAX_UPSTREAM_SSE_LINE_BYTES;
+pub(in crate::executor) const MAX_SSE_LINE_BYTES: usize = DEFAULT_MAX_UPSTREAM_SSE_LINE_BYTES;
 
 /// Fetch the next raw bytes chunk from a streaming response.
 ///
 /// Returns `Ok(Some(bytes))` on data, `Ok(None)` when the stream ends cleanly,
 /// and `Err` on a network failure or chunk timeout.
-pub(super) async fn next_chunk<S>(stream: &mut S, timeout: Duration) -> ExecutorResult<Option<bytes::Bytes>>
+pub(in crate::executor) async fn next_chunk<S>(
+    stream: &mut S,
+    timeout: Duration,
+) -> ExecutorResult<Option<bytes::Bytes>>
 where
     S: futures::Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Unpin,
 {
@@ -104,7 +109,7 @@ async fn response_text_limited(
 }
 
 /// Maximum size of an upstream error response body retained in [`ExecutorError::LLMRequest`].
-pub(super) const MAX_ERROR_RESPONSE_BYTES: usize = 1024 * 1024;
+pub(in crate::executor) const MAX_ERROR_RESPONSE_BYTES: usize = 1024 * 1024;
 
 /// Build, send, and validate an HTTP POST to the LLM backend.
 ///
@@ -113,7 +118,7 @@ pub(super) const MAX_ERROR_RESPONSE_BYTES: usize = 1024 * 1024;
 /// non-2xx status codes to [`ExecutorError::LLMRequest`] and connection
 /// failures to [`ExecutorError::LLMTransport`]. The chunk timeout also bounds error-body
 /// reads after headers arrive; unreadable bodies are discarded while retaining status and headers.
-pub(super) async fn send_request(
+pub(in crate::executor) async fn send_request(
     client: &reqwest::Client,
     url: &str,
     body: String,
@@ -122,7 +127,7 @@ pub(super) async fn send_request(
     chunk_timeout: Duration,
 ) -> ExecutorResult<reqwest::Response> {
     send_request_traced(client, url, body, auth, forwarded_headers, chunk_timeout)
-        .instrument(super::telemetry::stages::http_client(url))
+        .instrument(stages::http_client(url))
         .await
 }
 
@@ -135,7 +140,7 @@ async fn send_request_traced(
     chunk_timeout: Duration,
 ) -> ExecutorResult<reqwest::Response> {
     let mut headers = forwarded_headers.cloned().unwrap_or_default();
-    super::telemetry::stages::inject_context(&mut headers);
+    stages::inject_context(&mut headers);
     headers
         .entry(reqwest::header::CONTENT_TYPE)
         .or_insert(reqwest::header::HeaderValue::from_static("application/json"));
@@ -190,7 +195,7 @@ async fn send_request_traced(
 ///
 /// Used by `run_blocking` so it can pass the result to [`ResponseAccumulator::from_json`](crate::executor::accumulator::ResponseAccumulator::from_json).
 #[cfg(test)]
-pub(super) async fn fetch_response_json(
+pub(in crate::executor) async fn fetch_response_json(
     upstream_json: String,
     url: &str,
     client: &reqwest::Client,
@@ -199,7 +204,7 @@ pub(super) async fn fetch_response_json(
     fetch_response_json_limited(upstream_json, url, client, auth, DEFAULT_MAX_UPSTREAM_JSON_BYTES).await
 }
 
-pub(super) async fn fetch_response_json_limited(
+pub(in crate::executor) async fn fetch_response_json_limited(
     upstream_json: String,
     url: &str,
     client: &reqwest::Client,
@@ -212,7 +217,7 @@ pub(super) async fn fetch_response_json_limited(
 }
 
 /// Makes a non-streaming HTTP POST with caller-supplied upstream headers.
-pub(super) async fn fetch_response_json_with_headers(
+pub(in crate::executor) async fn fetch_response_json_with_headers(
     upstream_json: String,
     url: &str,
     client: &reqwest::Client,
@@ -281,7 +286,7 @@ pub fn call_inference_limited(
 
 /// Convert a successful upstream response body into SSE data lines with a `data: ` prefix.
 /// The single space after the field colon is optional on the wire.
-pub(super) fn response_lines(
+pub(in crate::executor) fn response_lines(
     resp: reqwest::Response,
     chunk_timeout: Duration,
     max_sse_line_bytes: usize,

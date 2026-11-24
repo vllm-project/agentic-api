@@ -45,6 +45,14 @@ The dependency direction is one-way: `agentic-server` and `agentic-llm-d` depend
 client-facing HTTP/WS transport belongs to the adapter crates, while upstream HTTP/SSE
 I/O lives in core inference transport.
 
+Core reuses `events::EventFrame` for HTTP and direct inference. The injected
+`executor::inference::direct::DirectInferenceBackend` consumes the existing
+`UpstreamRequest` projection and returns normalized events. `agentic-vllm` implements
+that boundary using shared vLLM model preparation and EngineCore communication;
+core and the existing server do not depend on this unpublished integration crate.
+Distributed contracts and the native server composition remain proposed in the
+[shared inference and session contracts](docs/design/shared-responses-library.md).
+
 ## Request flow at a glance
 
 ```
@@ -493,9 +501,14 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
 - **`upstream.rs`** — the narrow adapter between inference transport and the pipeline.
   It builds `UpstreamRequest`s, snapshots registry classification facts into an owned
   `TranslationContext`, passes the shared retained-data budget into ingestion, and
-  passes each live JSON or SSE body to `AgentPipeline`. It does not charge SSE wire bytes.
-- **`inference.rs`** — `call_inference()`: the raw HTTP/SSE transport to vLLM. No
-  parsing beyond splitting `data: ...` lines and stopping at `[DONE]`.
+  chooses HTTP or the injected direct backend, and passes JSON, SSE, or normalized
+  events to `AgentPipeline`. Request preparation remains shared in `prepare.rs`.
+- **`inference/http/`** — HTTP request encoding, transport, and SSE framing. Existing
+  `inference::call_inference` imports remain available through re-exports.
+- **`inference/direct/`** — the injected runtime boundary, attempt identity,
+  cancellation, idle/admission timeouts, and event-size enforcement. `agentic-vllm`
+  loads tokenizer/template/parser resources once; its shared frontend renders and
+  tokenizes each prepared request before direct EngineCore submission.
 - **`pipeline.rs`, `pipeline/`** — `AgentPipeline`, the request-owned entry point for
   both response body formats. `RoundIngestion` owns the synchronous per-round semantic
   core; `StreamDelivery` owns awaited, ordered client delivery across rounds.
@@ -532,12 +545,12 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
 
 RFC [#241](https://github.com/vllm-project/agentic-api/issues/241) and issue
 [#243](https://github.com/vllm-project/agentic-api/issues/243) established one path for
-JSON and live SSE response bodies:
+JSON, live SSE response bodies, and normalized direct events:
 
 ```text
-inference.rs
-  ├─complete JSON───────────────────────┐
-  └─framed SSE lines─▶ SseLine::parse───┤
+inference/http/ ─complete JSON───────────┐
+               └framed SSE─▶ SseLine────┤
+inference/direct/ ─EventFrame───────────┤
                                         ▼
                                   AgentPipeline
                          │
@@ -567,16 +580,17 @@ inference rounds → gateway execution → terminal policy → persistence
 
 | Stage | Responsibility |
 | --- | --- |
-| Inference transport (`inference.rs`) | HTTP I/O, byte chunks, SSE framing, timeouts, and `[DONE]` detection. |
+| HTTP inference (`inference/http/`) | HTTP I/O, request encoding, byte chunks, SSE framing, timeouts, and `[DONE]` detection. |
+| Direct inference (`inference/direct/`, `agentic-vllm`) | Model/runtime preparation, per-round rendering/tokenization, engine submission, and conversion to existing events. |
 | Event parsing (`events/`) | Classify one SSE line and normalize one data payload into an `EventFrame`. |
-| Request pipeline (`pipeline.rs`) | Hold one request context, tool-search state, cross-round delivery state, and the JSON/SSE body entry points. |
+| Request pipeline (`pipeline.rs`) | Hold one request context, tool-search state, cross-round delivery state, and JSON/SSE/normalized-event entry points. |
 | Round ingestion (`pipeline/ingest.rs`) | Process one body with one `ResponseAccumulator`, one `TranslationDispatcher`, and final response normalization. |
 | Stream delivery (`pipeline/delivery.rs`) | Provide awaited sender delivery, gateway-event deferral and release, response IDs, and cross-round stream accumulation. |
 | Orchestration (`engine.rs`) | Own the request-scoped registry and response budget, round decisions, gateway execution, terminal policy, and persistence. |
 
 `AgentPipeline` lives for the complete public response. `EngineOrchestration` creates
 one registry and one response budget around it, then asks `upstream.rs` to run each
-inference body through `run_with_json_body` or live `run_with_stream_body`. A new
+inference body through `run_with_json_body`, `run_with_stream_body`, or `run_with_event_body`. A new
 `RoundIngestion` is created for every body and consumed by finalization, while
 `StreamDelivery` and `GatewayStreamAccumulator` survive across inference rounds.
 
@@ -616,10 +630,16 @@ merge the concrete item with its retained fields and buffers. `slot.rs` dispatch
 to those implementations after validating identity and lifecycle. Finalization
 promotes each completed typed item once and preserves validated output-index order.
 
-The pipeline's HTTP/SSE streaming entry is `process_line(ClassifiedSseLine)` in
-`source.rs`; native adapters enter through `process_inference_event(InferenceEvent)`
-in `native.rs`. Both paths materialize the same internal frame and apply the same
-strict lifecycle validation before translation. For function events,
+The pipeline's HTTP/SSE streaming entry is `RoundIngestion::push(ClassifiedSseLine)`.
+It normalizes the data using the accumulator's fixed validation policy, then calls
+`RoundIngestion::push_frame(EventFrame)`. Already normalized events enter at that
+same method. Both paths use `ResponseAccumulator::process_event_frame` for validation
+and assembly, followed by the existing tool translator. `GatewayStreamAccumulator`
+continues to own client sequence numbers and output offsets. Native adapters should
+produce the existing `EventFrame`/`EventPayload`/`SSEEventType` representations; a second
+inference-event enum or output-item assembler is unnecessary. `ExecutionContext::with_direct_inference`
+selects the native backend for inference rounds and compaction. `source.rs` retains the buffered SSE convenience API.
+For function events,
 `accumulated_function_call(output_index)` exposes a borrowed typed call and its folded
 arguments. `finish` applies SSE end-of-stream policy; `finalize` preserves the status
 loaded from a complete JSON body.

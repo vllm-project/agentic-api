@@ -60,6 +60,10 @@ pub enum ExecutorError {
     #[error("{message}")]
     LLMTransport { status: StatusCode, message: &'static str },
 
+    /// A direct model runtime failed; retain the source without exposing its internals.
+    #[error("direct inference failed")]
+    DirectInference(#[source] Box<dyn std::error::Error + Send + Sync>),
+
     /// A network error occurred reading from the LLM response stream.
     ///
     /// The original `reqwest::Error` is preserved as the error source so
@@ -163,7 +167,8 @@ impl ExecutorError {
                 | ToolError::InvalidUpstreamToolSearch
                 | ToolError::UpstreamWithheldFunctionCall,
             )
-            | Self::CompactionFailed { .. } => StatusCode::BAD_GATEWAY,
+            | Self::CompactionFailed { .. }
+            | Self::DirectInference(_) => StatusCode::BAD_GATEWAY,
             Self::Conflict(_) => StatusCode::CONFLICT,
             Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
             Self::ParseError(_) => StatusCode::UNPROCESSABLE_ENTITY,
@@ -190,7 +195,10 @@ impl ExecutorError {
             Self::Storage(e) if e.is_not_found() => "not_found",
             Self::Storage(e) if e.is_validation() => "invalid_request_error",
             Self::Conflict(_) => "conflict_error",
-            Self::LLMRequest { .. } | Self::LLMTransport { .. } | Self::CompactionFailed { .. } => "upstream_error",
+            Self::LLMRequest { .. }
+            | Self::LLMTransport { .. }
+            | Self::CompactionFailed { .. }
+            | Self::DirectInference(_) => "upstream_error",
             Self::ResourceLimitExceeded { limit, .. } => match limit {
                 ResourceLimit::UpstreamSseLine | ResourceLimit::UpstreamJsonBody => "upstream_error",
                 ResourceLimit::ResponseBudget | ResourceLimit::StreamEvent => "server_error",

@@ -36,9 +36,6 @@ use identity::{invalid_lifecycle, invalid_lifecycle_or_id, invalid_stream, item_
 mod completion;
 mod details;
 mod json;
-mod native;
-#[cfg(test)]
-mod native_tests;
 mod slot;
 mod source;
 
@@ -309,6 +306,13 @@ impl ResponseAccumulator {
 
     /// Normalize classified data once, then validate and fold under the fixed policy.
     pub(super) fn process_line(&mut self, line: ClassifiedSseLine) -> ExecutorResult<Option<EventFrame>> {
+        let Some(frame) = self.normalize_line(line)? else {
+            return Ok(None);
+        };
+        self.process_event_frame(frame)
+    }
+
+    pub(super) fn normalize_line(&self, line: ClassifiedSseLine) -> ExecutorResult<Option<EventFrame>> {
         let ClassifiedSseLine::Data(data) = line else {
             return Ok(None);
         };
@@ -318,7 +322,13 @@ impl ResponseAccumulator {
             }
             return Ok(None);
         };
-        self.process_event_frame(frame)
+        Ok(Some(frame))
+    }
+
+    /// Shares validation and assembly between normalized frames and HTTP/SSE input.
+    pub(super) fn process_event_frame(&mut self, frame: EventFrame) -> ExecutorResult<Option<EventFrame>> {
+        let disposition = self.process_normalized_event(&frame)?;
+        Ok(disposition.into_frame(frame))
     }
 
     fn process_normalized_event(&mut self, frame: &EventFrame) -> ExecutorResult<EventDisposition> {

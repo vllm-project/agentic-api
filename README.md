@@ -523,6 +523,12 @@ docs/                     # MkDocs documentation, ADRs, and design notes
 
 ## 🛠️ Developing
 
+The [inference and session contract proposal](docs/design/shared-responses-library.md)
+describes the shared event/accumulator path, HTTP/direct backend split, and distributed
+contracts. The unpublished [`agentic-vllm`](crates/agentic-vllm/README.md) library connects
+the executor to a headless vLLM engine. Native server/launcher composition and gRPC
+remain follow-up work; see the documented supported profile and limitations.
+
 ```bash
 cargo build                                  # build
 cargo test                                   # test
