@@ -107,7 +107,8 @@ Initial and expected tool areas include:
 - Function tools owned by the gateway.
 
 Status: web search runs on selectable providers, including Serply
-([#420](https://github.com/vllm-project/agentic-api/pull/420)) and Keenable ([#507](https://github.com/vllm-project/agentic-api/pull/507)); hosted tool search
+([#420](https://github.com/vllm-project/agentic-api/pull/420)), Keenable
+([#507](https://github.com/vllm-project/agentic-api/pull/507)) and Sofya; hosted tool search
 executes over deferred functions, namespaces, and MCP servers
 ([#472](https://github.com/vllm-project/agentic-api/pull/472)); and file search ships with the Files and vector-store
 APIs (see below).

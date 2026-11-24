@@ -54,7 +54,7 @@ flowchart LR
 ## ✨ Key Features
 
 - 🔄 **Stateful conversations**: the server manages history through `previous_response_id` or the Conversations API, so clients stop replaying full transcripts.
-- 🛠️ **Server-side tools**: an explicit [ownership model](#-tool-ownership) decides what runs where. Web search (You.com, Brave, Tavily, Serply, Keenable, or SearXNG), web fetch, MCP, file search, and an opt-in embedded code interpreter run on the gateway.
+- 🛠️ **Server-side tools**: an explicit [ownership model](#-tool-ownership) decides what runs where. Web search (You.com, Brave, Tavily, Serply, Keenable, Sofya, or SearXNG), web fetch, MCP, file search, and an opt-in embedded code interpreter run on the gateway.
 - 🤝 **Multi-agent orchestration**: one Responses request can spawn and coordinate subagents server-side ([details](#-multi-agent-responses)).
 - 📡 **Every transport**: non-streaming HTTP, SSE streaming, and WebSocket with `stream_id` multiplexing.
 - 🧰 **Codex and Claude Code ready**: Codex-shaped Responses traffic and Anthropic Messages traffic keep the tool declarations and item shapes each client depends on.

@@ -4,7 +4,7 @@
 //! mapping to public `web_search_call` output items. [`provider`] defines the
 //! private provider contract, normalized result types, and the response helpers every provider shares. [`args`]
 //! parses the model's arguments; provider modules ([`you`], [`brave`], [`tavily`], [`searxng`],
-//! [`serply`], [`keenable`]) shape requests and map responses.
+//! [`serply`], [`keenable`], [`sofya`]) shape requests and map responses.
 
 pub(crate) mod args;
 pub(crate) mod brave;
@@ -13,6 +13,7 @@ pub(crate) mod output;
 pub(crate) mod provider;
 pub(crate) mod searxng;
 pub(crate) mod serply;
+pub(crate) mod sofya;
 pub(crate) mod tavily;
 pub(crate) mod you;
 
@@ -38,6 +39,7 @@ use self::provider::{
 };
 use self::searxng::SearxngSearchProvider;
 use self::serply::SerplySearchProvider;
+use self::sofya::SofyaSearchProvider;
 use self::tavily::TavilySearchProvider;
 use self::you::{YOU_API_BASE_URL, YOU_API_KEY, YouSearchProvider};
 use super::handler::MAX_GATEWAY_TOOL_OUTPUT_BYTES;
@@ -225,6 +227,12 @@ impl WebSearchHandler {
             .map_or(max_concurrent_gateway_calls, |ceiling| {
                 ceiling.min(max_concurrent_gateway_calls)
             });
+        // What a provider with its own request ceiling is built with: the
+        // operator's override, else the provider default, else the gateway limit.
+        let provider_ceiling = config
+            .max_concurrent_queries
+            .or(config.provider.default_max_concurrent_queries())
+            .unwrap_or(max_concurrent_gateway_calls);
         let provider: Arc<dyn WebSearchProvider> = match config.provider {
             WebSearchProviderKind::You => Arc::new(YouSearchProvider::from_values(
                 client,
@@ -235,47 +243,38 @@ impl WebSearchHandler {
                 client,
                 config.api_key.clone(),
                 config.base_url.clone(),
-                config
-                    .max_concurrent_queries
-                    .or(WebSearchProviderKind::Brave.default_max_concurrent_queries())
-                    .unwrap_or(max_concurrent_gateway_calls),
+                provider_ceiling,
             )),
             WebSearchProviderKind::Tavily => Arc::new(TavilySearchProvider::from_values(
                 client,
                 config.api_key.clone(),
                 config.base_url.clone(),
-                config
-                    .max_concurrent_queries
-                    .or(WebSearchProviderKind::Tavily.default_max_concurrent_queries())
-                    .unwrap_or(max_concurrent_gateway_calls),
+                provider_ceiling,
             )),
             // SearXNG deliberately does not take `client`: it builds its own
             // client with redirects disabled (see `redirect_free_client`).
             WebSearchProviderKind::Searxng => Arc::new(SearxngSearchProvider::from_values(
                 config.api_key.clone(),
                 config.base_url.clone(),
-                config
-                    .max_concurrent_queries
-                    .or(WebSearchProviderKind::Searxng.default_max_concurrent_queries())
-                    .unwrap_or(max_concurrent_gateway_calls),
+                provider_ceiling,
             )),
             WebSearchProviderKind::Serply => Arc::new(SerplySearchProvider::from_values(
                 client,
                 config.api_key.clone(),
                 config.base_url.clone(),
-                config
-                    .max_concurrent_queries
-                    .or(WebSearchProviderKind::Serply.default_max_concurrent_queries())
-                    .unwrap_or(max_concurrent_gateway_calls),
+                provider_ceiling,
             )),
             WebSearchProviderKind::Keenable => Arc::new(KeenableSearchProvider::from_values(
                 client,
                 config.api_key.clone(),
                 config.base_url.clone(),
-                config
-                    .max_concurrent_queries
-                    .or(WebSearchProviderKind::Keenable.default_max_concurrent_queries())
-                    .unwrap_or(max_concurrent_gateway_calls),
+                provider_ceiling,
+            )),
+            WebSearchProviderKind::Sofya => Arc::new(SofyaSearchProvider::from_values(
+                client,
+                config.api_key.clone(),
+                config.base_url.clone(),
+                provider_ceiling,
             )),
         };
         let effective = effective_query_concurrency(provider.as_ref(), requested);

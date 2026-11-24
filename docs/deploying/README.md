@@ -462,6 +462,9 @@ Keenable works with `value: keenable` and needs no Secret: without `KEENABLE_API
 public endpoint (default host `https://api.keenable.ai`). Add a `KEENABLE_API_KEY` variable from a secret to use the
 keyed endpoint.
 
+Sofya works like Tavily and Serply with `value: sofya`, a `SOFYA_API_KEY` variable read from a `sofya-api-key` secret
+key, and the default endpoint `https://sofya.co`.
+
 To avoid a search vendor account altogether, point the gateway at a self-hosted
 [SearXNG](https://docs.searxng.org/) Service instead. The gateway only talks to that
 instance; SearXNG forwards queries to the engines enabled in its `settings.yml`, so an
