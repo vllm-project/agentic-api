@@ -1,11 +1,11 @@
 turns:
 - filename: t1
   request:
-    body_base64: LS04NjBiZGQyM2ZhZGYwNjRiM2M4YjY2YmRhMzY2NzY3Zg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQphc3Npc3RhbnRzDQotLTg2MGJkZDIzZmFkZjA2NGIzYzhiNjZiZGEzNjY3NjdmDQpDb250ZW50LURpc3Bvc2l0aW9uOiBmb3JtLWRhdGE7IG5hbWU9ImZpbGUiOyBmaWxlbmFtZT0ibm90ZXMudHh0Ig0KQ29udGVudC1UeXBlOiB0ZXh0L3BsYWluDQoNCkRlcGxveW1lbnQgY2hlY2tsaXN0Ci0gUmVnaW9uOiBldS13ZXN0Ci0gUmVsZWFzZSBjb2Rld29yZDogUEFQQVlBLTcKLSBPd25lcjogcGxhdGZvcm0gdGVhbQoNCi0tODYwYmRkMjNmYWRmMDY0YjNjOGI2NmJkYTM2Njc2N2YtLQ0K
+    body_base64: LS03MjNhNmE1ZGY5YzA1YTRhMzM1MmZhMTUwZDA3OGMyZA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQphc3Npc3RhbnRzDQotLTcyM2E2YTVkZjljMDVhNGEzMzUyZmExNTBkMDc4YzJkDQpDb250ZW50LURpc3Bvc2l0aW9uOiBmb3JtLWRhdGE7IG5hbWU9ImZpbGUiOyBmaWxlbmFtZT0ibm90ZXMudHh0Ig0KQ29udGVudC1UeXBlOiB0ZXh0L3BsYWluDQoNCkRlcGxveW1lbnQgY2hlY2tsaXN0Ci0gUmVnaW9uOiBldS13ZXN0Ci0gUmVsZWFzZSBjb2Rld29yZDogUEFQQVlBLTcKLSBPd25lcjogcGxhdGZvcm0gdGVhbQoNCi0tNzIzYTZhNWRmOWMwNWE0YTMzNTJmYTE1MGQwNzhjMmQtLQ0K
     body_encoding: base64
     headers:
       accept: '*/*'
-      content-type: multipart/form-data; boundary=860bdd23fadf064b3c8b66bda366767f
+      content-type: multipart/form-data; boundary=723a6a5df9c05a4a3352fa150d078c2d
       user-agent: python-httpx/0.28.1
     method: POST
     path: /v1/files
@@ -13,9 +13,9 @@ turns:
   response:
     body:
       bytes: 91
-      created_at: 1794835994
+      created_at: 1795189644
       filename: notes.txt
-      id: file-01a1e48f-d6e0-7d23-89b9-ca23c65b143e
+      id: file-01a1f9a4-1cac-7482-b2a8-2734ed970b13
       object: file
       purpose: assistants
       status: processed
@@ -24,11 +24,11 @@ turns:
     status_code: 200
 - filename: t2
   request:
-    body_base64: LS0yZmRhNTIwMjkzODlmMTg0MDU2MDRkYmY2M2I5NzljZA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tMmZkYTUyMDI5Mzg5ZjE4NDA1NjA0ZGJmNjNiOTc5Y2QNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJub3Rlcy50eHQiDQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW4NCg0KRGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg0KLS0yZmRhNTIwMjkzODlmMTg0MDU2MDRkYmY2M2I5NzljZC0tDQo=
+    body_base64: LS0zYWFmOTQxOWI3N2VhN2U4MGNiZTA5NTQwYzRkOTgyNg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tM2FhZjk0MTliNzdlYTdlODBjYmUwOTU0MGM0ZDk4MjYNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJub3Rlcy50eHQiDQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW4NCg0KRGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg0KLS0zYWFmOTQxOWI3N2VhN2U4MGNiZTA5NTQwYzRkOTgyNi0tDQo=
     body_encoding: base64
     headers:
       accept: '*/*'
-      content-type: multipart/form-data; boundary=2fda52029389f18405604dbf63b979cd
+      content-type: multipart/form-data; boundary=3aaf9419b77ea7e80cbe09540c4d9826
       user-agent: python-httpx/0.28.1
     method: POST
     path: /v1/files
@@ -36,9 +36,9 @@ turns:
   response:
     body:
       bytes: 91
-      created_at: 1794835994
+      created_at: 1795189644
       filename: notes.txt
-      id: file-01a1e48f-d6e7-7de3-8d4b-56b7ad408066
+      id: file-01a1f9a4-1cca-7661-9fab-8236349b607f
       object: file
       purpose: user_data
       status: processed
@@ -47,11 +47,11 @@ turns:
     status_code: 200
 - filename: t3
   request:
-    body_base64: LS0yMDdiZmRlNWQ0NmE4ZTUxMjMwMTc1NjZjMWViZGYzOQ0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp2aXNpb24NCi0tMjA3YmZkZTVkNDZhOGU1MTIzMDE3NTY2YzFlYmRmMzkNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJjb2xvcnMucG5nIg0KQ29udGVudC1UeXBlOiBpbWFnZS9wbmcNCg0KiVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PsQkAAAzDsPz/dHpCp2wCzwalybTxvgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+Dq47PDiz8p6GQAAAABJRU5ErkJggg0KLS0yMDdiZmRlNWQ0NmE4ZTUxMjMwMTc1NjZjMWViZGYzOS0tDQo=
+    body_base64: LS03NmU4MjI2OTM5NzEzYjRiZDQzZjg0YzM4ZTY5M2MxNg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp2aXNpb24NCi0tNzZlODIyNjkzOTcxM2I0YmQ0M2Y4NGMzOGU2OTNjMTYNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJjb2xvcnMucG5nIg0KQ29udGVudC1UeXBlOiBpbWFnZS9wbmcNCg0KiVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PsQkAAAzDsPz/dHpCp2wCzwalybTxvgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+Dq47PDiz8p6GQAAAABJRU5ErkJggg0KLS03NmU4MjI2OTM5NzEzYjRiZDQzZjg0YzM4ZTY5M2MxNi0tDQo=
     body_encoding: base64
     headers:
       accept: '*/*'
-      content-type: multipart/form-data; boundary=207bfde5d46a8e5123017566c1ebdf39
+      content-type: multipart/form-data; boundary=76e8226939713b4bd43f84c38e693c16
       user-agent: python-httpx/0.28.1
     method: POST
     path: /v1/files
@@ -59,9 +59,9 @@ turns:
   response:
     body:
       bytes: 136
-      created_at: 1794835994
+      created_at: 1795189644
       filename: colors.png
-      id: file-01a1e48f-d6ef-7a23-94f2-9876490d5b44
+      id: file-01a1f9a4-1ce5-76e2-9495-134aca927995
       object: file
       purpose: vision
       status: processed
@@ -70,11 +70,11 @@ turns:
     status_code: 200
 - filename: t4
   request:
-    body_base64: LS1kYWY5ZTM1Mjg3NmZhNzJkZmI4NGZlNTVjODUyNzMzOA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tZGFmOWUzNTI4NzZmYTcyZGZiODRmZTU1Yzg1MjczMzgNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJjb2xvcnMucG5nIg0KQ29udGVudC1UeXBlOiBpbWFnZS9wbmcNCg0KiVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PsQkAAAzDsPz/dHpCp2wCzwalybTxvgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+Dq47PDiz8p6GQAAAABJRU5ErkJggg0KLS1kYWY5ZTM1Mjg3NmZhNzJkZmI4NGZlNTVjODUyNzMzOC0tDQo=
+    body_base64: LS0yNWU0NjI2NzQ0YzJiOGI5ZWU2NzUzZTc4MmRjNzI3YQ0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tMjVlNDYyNjc0NGMyYjhiOWVlNjc1M2U3ODJkYzcyN2ENCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJjb2xvcnMucG5nIg0KQ29udGVudC1UeXBlOiBpbWFnZS9wbmcNCg0KiVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PsQkAAAzDsPz/dHpCp2wCzwalybTxvgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+Dq47PDiz8p6GQAAAABJRU5ErkJggg0KLS0yNWU0NjI2NzQ0YzJiOGI5ZWU2NzUzZTc4MmRjNzI3YS0tDQo=
     body_encoding: base64
     headers:
       accept: '*/*'
-      content-type: multipart/form-data; boundary=daf9e352876fa72dfb84fe55c8527338
+      content-type: multipart/form-data; boundary=25e4626744c2b8b9ee6753e782dc727a
       user-agent: python-httpx/0.28.1
     method: POST
     path: /v1/files
@@ -82,9 +82,9 @@ turns:
   response:
     body:
       bytes: 136
-      created_at: 1794835994
+      created_at: 1795189644
       filename: colors.png
-      id: file-01a1e48f-d6f9-7ba2-bb22-59d2ece4091d
+      id: file-01a1f9a4-1cfa-77d2-a4e7-4ae113ce4b0f
       object: file
       purpose: user_data
       status: processed
@@ -93,11 +93,11 @@ turns:
     status_code: 200
 - filename: t5
   request:
-    body_base64: LS0wYmY0OGFiZDk1YzU3NzlkYzhiYmM0NTVjNGQ2YjQ4MQ0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp2aXNpb24NCi0tMGJmNDhhYmQ5NWM1Nzc5ZGM4YmJjNDU1YzRkNmI0ODENCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJub3Rlcy50eHQiDQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW4NCg0KRGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg0KLS0wYmY0OGFiZDk1YzU3NzlkYzhiYmM0NTVjNGQ2YjQ4MS0tDQo=
+    body_base64: LS1iOThmMmNjODY5Njg3ZDkyN2NiNTQ4MzZiODFkZTBiZQ0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp2aXNpb24NCi0tYjk4ZjJjYzg2OTY4N2Q5MjdjYjU0ODM2YjgxZGUwYmUNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJub3Rlcy50eHQiDQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW4NCg0KRGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg0KLS1iOThmMmNjODY5Njg3ZDkyN2NiNTQ4MzZiODFkZTBiZS0tDQo=
     body_encoding: base64
     headers:
       accept: '*/*'
-      content-type: multipart/form-data; boundary=0bf48abd95c5779dc8bbc455c4d6b481
+      content-type: multipart/form-data; boundary=b98f2cc869687d927cb54836b81de0be
       user-agent: python-httpx/0.28.1
     method: POST
     path: /v1/files
@@ -115,11 +115,11 @@ turns:
     status_code: 400
 - filename: t6
   request:
-    body_base64: LS00NmU4NWQyNWFjOWQ2MDQzYTcwOTEwNmNhOWU5MGMyNA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tNDZlODVkMjVhYzlkNjA0M2E3MDkxMDZjYTllOTBjMjQNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJub3Rlcy5wZGYiDQpDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL3BkZg0KDQolUERGLTEuNAoxIDAgb2JqCjw8IC9UeXBlIC9DYXRhbG9nIC9QYWdlcyAyIDAgUiA+PgplbmRvYmoKMiAwIG9iago8PCAvVHlwZSAvUGFnZXMgL0tpZHMgWzMgMCBSXSAvQ291bnQgMSA+PgplbmRvYmoKMyAwIG9iago8PCAvVHlwZSAvUGFnZSAvUGFyZW50IDIgMCBSIC9NZWRpYUJveCBbMCAwIDYxMiA3OTJdIC9SZXNvdXJjZXMgPDwgL0ZvbnQgPDwgL0YxIDUgMCBSID4+ID4+IC9Db250ZW50cyA0IDAgUiA+PgplbmRvYmoKNCAwIG9iago8PCAvTGVuZ3RoIDEzOCA+PgpzdHJlYW0KQlQKL0YxIDE0IFRmCjcyIDcyMCBUZAoxOCBUTAooRGVwbG95bWVudCBjaGVja2xpc3QpICcKKC0gUmVnaW9uOiBldS13ZXN0KSAnCigtIFJlbGVhc2UgY29kZXdvcmQ6IFBBUEFZQS03KSAnCigtIE93bmVyOiBwbGF0Zm9ybSB0ZWFtKSAnCkVUCmVuZHN0cmVhbQplbmRvYmoKNSAwIG9iago8PCAvVHlwZSAvRm9udCAvU3VidHlwZSAvVHlwZTEgL0Jhc2VGb250IC9IZWx2ZXRpY2EgPj4KZW5kb2JqCnhyZWYKMCA2CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAwMDU4IDAwMDAwIG4gCjAwMDAwMDAxMTUgMDAwMDAgbiAKMDAwMDAwMDI0MSAwMDAwMCBuIAowMDAwMDAwNDMwIDAwMDAwIG4gCnRyYWlsZXIKPDwgL1NpemUgNiAvUm9vdCAxIDAgUiA+PgpzdGFydHhyZWYKNTAwCiUlRU9GCg0KLS00NmU4NWQyNWFjOWQ2MDQzYTcwOTEwNmNhOWU5MGMyNC0tDQo=
+    body_base64: LS1lYmE2NzgzYTBlZDM5OTllNzU5MGUzZjBlMTE2NGE5Zg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tZWJhNjc4M2EwZWQzOTk5ZTc1OTBlM2YwZTExNjRhOWYNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJub3Rlcy5wZGYiDQpDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL3BkZg0KDQolUERGLTEuNAoxIDAgb2JqCjw8IC9UeXBlIC9DYXRhbG9nIC9QYWdlcyAyIDAgUiA+PgplbmRvYmoKMiAwIG9iago8PCAvVHlwZSAvUGFnZXMgL0tpZHMgWzMgMCBSXSAvQ291bnQgMSA+PgplbmRvYmoKMyAwIG9iago8PCAvVHlwZSAvUGFnZSAvUGFyZW50IDIgMCBSIC9NZWRpYUJveCBbMCAwIDYxMiA3OTJdIC9SZXNvdXJjZXMgPDwgL0ZvbnQgPDwgL0YxIDUgMCBSID4+ID4+IC9Db250ZW50cyA0IDAgUiA+PgplbmRvYmoKNCAwIG9iago8PCAvTGVuZ3RoIDEzOCA+PgpzdHJlYW0KQlQKL0YxIDE0IFRmCjcyIDcyMCBUZAoxOCBUTAooRGVwbG95bWVudCBjaGVja2xpc3QpICcKKC0gUmVnaW9uOiBldS13ZXN0KSAnCigtIFJlbGVhc2UgY29kZXdvcmQ6IFBBUEFZQS03KSAnCigtIE93bmVyOiBwbGF0Zm9ybSB0ZWFtKSAnCkVUCmVuZHN0cmVhbQplbmRvYmoKNSAwIG9iago8PCAvVHlwZSAvRm9udCAvU3VidHlwZSAvVHlwZTEgL0Jhc2VGb250IC9IZWx2ZXRpY2EgPj4KZW5kb2JqCnhyZWYKMCA2CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAwMDU4IDAwMDAwIG4gCjAwMDAwMDAxMTUgMDAwMDAgbiAKMDAwMDAwMDI0MSAwMDAwMCBuIAowMDAwMDAwNDMwIDAwMDAwIG4gCnRyYWlsZXIKPDwgL1NpemUgNiAvUm9vdCAxIDAgUiA+PgpzdGFydHhyZWYKNTAwCiUlRU9GCg0KLS1lYmE2NzgzYTBlZDM5OTllNzU5MGUzZjBlMTE2NGE5Zi0tDQo=
     body_encoding: base64
     headers:
       accept: '*/*'
-      content-type: multipart/form-data; boundary=46e85d25ac9d6043a709106ca9e90c24
+      content-type: multipart/form-data; boundary=eba6783a0ed3999e7590e3f0e1164a9f
       user-agent: python-httpx/0.28.1
     method: POST
     path: /v1/files
@@ -127,9 +127,9 @@ turns:
   response:
     body:
       bytes: 683
-      created_at: 1794835994
+      created_at: 1795189644
       filename: notes.pdf
-      id: file-01a1e48f-d714-7330-8a55-faa79a2dc988
+      id: file-01a1f9a4-1d21-7bf2-a2ce-577cc3b8771a
       object: file
       purpose: user_data
       status: processed
@@ -138,11 +138,11 @@ turns:
     status_code: 200
 - filename: t7
   request:
-    body_base64: LS05YTgwMWM1MTVhZTM4Nzk0ZTE3MWQ2YjhlNmM3Zjg1OQ0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tOWE4MDFjNTE1YWUzODc5NGUxNzFkNmI4ZTZjN2Y4NTkNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJlbXB0eS50eHQiDQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW4NCg0KDQotLTlhODAxYzUxNWFlMzg3OTRlMTcxZDZiOGU2YzdmODU5LS0NCg==
+    body_base64: LS03OGRmNWUwNjQ3OTA2NDI4N2UzZGRkZDgyMmYzNzEwNA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tNzhkZjVlMDY0NzkwNjQyODdlM2RkZGQ4MjJmMzcxMDQNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJlbXB0eS50eHQiDQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW4NCg0KDQotLTc4ZGY1ZTA2NDc5MDY0Mjg3ZTNkZGRkODIyZjM3MTA0LS0NCg==
     body_encoding: base64
     headers:
       accept: '*/*'
-      content-type: multipart/form-data; boundary=9a801c515ae38794e171d6b8e6c7f859
+      content-type: multipart/form-data; boundary=78df5e06479064287e3dddd822f37104
       user-agent: python-httpx/0.28.1
     method: POST
     path: /v1/files
@@ -159,11 +159,11 @@ turns:
     status_code: 400
 - filename: t8
   request:
-    body_base64: LS05NjNhODhiYWRiZTBkYWZhYWQzYWI5MTY1MzkzMjM2MA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tOTYzYTg4YmFkYmUwZGFmYWFkM2FiOTE2NTM5MzIzNjANCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJkYXRhLmJpbiINCkNvbnRlbnQtVHlwZTogYXBwbGljYXRpb24vb2N0ZXQtc3RyZWFtDQoNCgABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj9AQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpbXF1eX2BhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ent8fX5/gIGCg4SFhoeIiYqLjI2Oj5CRkpOUlZaXmJmam5ydnp+goaKjpKWmp6ipqqusra6vsLGys7S1tre4ubq7vL2+v8DBwsPExcbHyMnKy8zNzs/Q0dLT1NXW19jZ2tvc3d7f4OHi4+Tl5ufo6err7O3u7/Dx8vP09fb3+Pn6+/z9/v8NCi0tOTYzYTg4YmFkYmUwZGFmYWFkM2FiOTE2NTM5MzIzNjAtLQ0K
+    body_base64: LS00ZTZlODNjOGQxZTMyNmMwMDVkYzk0YTQyNWYwZTkyNA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tNGU2ZTgzYzhkMWUzMjZjMDA1ZGM5NGE0MjVmMGU5MjQNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJkYXRhLmJpbiINCkNvbnRlbnQtVHlwZTogYXBwbGljYXRpb24vb2N0ZXQtc3RyZWFtDQoNCgABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj9AQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpbXF1eX2BhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ent8fX5/gIGCg4SFhoeIiYqLjI2Oj5CRkpOUlZaXmJmam5ydnp+goaKjpKWmp6ipqqusra6vsLGys7S1tre4ubq7vL2+v8DBwsPExcbHyMnKy8zNzs/Q0dLT1NXW19jZ2tvc3d7f4OHi4+Tl5ufo6err7O3u7/Dx8vP09fb3+Pn6+/z9/v8NCi0tNGU2ZTgzYzhkMWUzMjZjMDA1ZGM5NGE0MjVmMGU5MjQtLQ0K
     body_encoding: base64
     headers:
       accept: '*/*'
-      content-type: multipart/form-data; boundary=963a88badbe0dafaad3ab91653932360
+      content-type: multipart/form-data; boundary=4e6e83c8d1e326c005dc94a425f0e924
       user-agent: python-httpx/0.28.1
     method: POST
     path: /v1/files
@@ -171,9 +171,9 @@ turns:
   response:
     body:
       bytes: 256
-      created_at: 1794835994
+      created_at: 1795189644
       filename: data.bin
-      id: file-01a1e48f-d73b-7751-868e-03e26fece94e
+      id: file-01a1f9a4-1d52-75a2-9ceb-d17043dd8de7
       object: file
       purpose: user_data
       status: processed
@@ -194,22 +194,22 @@ turns:
     body:
       data:
       - bytes: 256
-        created_at: 1794835994
+        created_at: 1795189644
         filename: data.bin
-        id: file-01a1e48f-d73b-7751-868e-03e26fece94e
+        id: file-01a1f9a4-1d52-75a2-9ceb-d17043dd8de7
         object: file
         purpose: user_data
         status: processed
       - bytes: 683
-        created_at: 1794835994
+        created_at: 1795189644
         filename: notes.pdf
-        id: file-01a1e48f-d714-7330-8a55-faa79a2dc988
+        id: file-01a1f9a4-1d21-7bf2-a2ce-577cc3b8771a
         object: file
         purpose: user_data
         status: processed
-      first_id: file-01a1e48f-d73b-7751-868e-03e26fece94e
+      first_id: file-01a1f9a4-1d52-75a2-9ceb-d17043dd8de7
       has_more: true
-      last_id: file-01a1e48f-d714-7330-8a55-faa79a2dc988
+      last_id: file-01a1f9a4-1d21-7bf2-a2ce-577cc3b8771a
       object: list
     headers:
       content-type: application/json
@@ -223,21 +223,21 @@ turns:
     method: GET
     path: /v1/files
     query_params:
-      after: file-01a1e48f-d714-7330-8a55-faa79a2dc988
+      after: file-01a1f9a4-1d21-7bf2-a2ce-577cc3b8771a
       limit: '1'
   response:
     body:
       data:
       - bytes: 136
-        created_at: 1794835994
+        created_at: 1795189644
         filename: colors.png
-        id: file-01a1e48f-d6f9-7ba2-bb22-59d2ece4091d
+        id: file-01a1f9a4-1cfa-77d2-a4e7-4ae113ce4b0f
         object: file
         purpose: user_data
         status: processed
-      first_id: file-01a1e48f-d6f9-7ba2-bb22-59d2ece4091d
+      first_id: file-01a1f9a4-1cfa-77d2-a4e7-4ae113ce4b0f
       has_more: true
-      last_id: file-01a1e48f-d6f9-7ba2-bb22-59d2ece4091d
+      last_id: file-01a1f9a4-1cfa-77d2-a4e7-4ae113ce4b0f
       object: list
     headers:
       content-type: application/json
@@ -255,14 +255,21 @@ turns:
       purpose: vision
   response:
     body:
-      error:
-        code: invalid_request_error
-        message: 'Failed to deserialize query string: purpose: unknown field `purpose`,
-          expected one of `limit`, `after`, `before`, `order`'
-        type: invalid_request_error
+      data:
+      - bytes: 136
+        created_at: 1795189644
+        filename: colors.png
+        id: file-01a1f9a4-1ce5-76e2-9495-134aca927995
+        object: file
+        purpose: vision
+        status: processed
+      first_id: file-01a1f9a4-1ce5-76e2-9495-134aca927995
+      has_more: false
+      last_id: file-01a1f9a4-1ce5-76e2-9495-134aca927995
+      object: list
     headers:
       content-type: application/json
-    status_code: 400
+    status_code: 200
 - filename: t12
   request:
     body: {}
@@ -330,14 +337,14 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/files/file-01a1e48f-d6e0-7d23-89b9-ca23c65b143e
+    path: /v1/files/file-01a1f9a4-1cac-7482-b2a8-2734ed970b13
     query_params: {}
   response:
     body:
       bytes: 91
-      created_at: 1794835994
+      created_at: 1795189644
       filename: notes.txt
-      id: file-01a1e48f-d6e0-7d23-89b9-ca23c65b143e
+      id: file-01a1f9a4-1cac-7482-b2a8-2734ed970b13
       object: file
       purpose: assistants
       status: processed
@@ -351,7 +358,7 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/files/file-01a1e48f-d6e0-7d23-89b9-ca23c65b143e/content
+    path: /v1/files/file-01a1f9a4-1cac-7482-b2a8-2734ed970b13/content
     query_params: {}
   response:
     body:
@@ -370,12 +377,12 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: DELETE
-    path: /v1/files/file-01a1e48f-d6e0-7d23-89b9-ca23c65b143e
+    path: /v1/files/file-01a1f9a4-1cac-7482-b2a8-2734ed970b13
     query_params: {}
   response:
     body:
       deleted: true
-      id: file-01a1e48f-d6e0-7d23-89b9-ca23c65b143e
+      id: file-01a1f9a4-1cac-7482-b2a8-2734ed970b13
       object: file
     headers:
       content-type: application/json
@@ -387,13 +394,13 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: DELETE
-    path: /v1/files/file-01a1e48f-d6e0-7d23-89b9-ca23c65b143e
+    path: /v1/files/file-01a1f9a4-1cac-7482-b2a8-2734ed970b13
     query_params: {}
   response:
     body:
       error:
         code: null
-        message: 'No such File object: file-01a1e48f-d6e0-7d23-89b9-ca23c65b143e'
+        message: 'No such File object: file-01a1f9a4-1cac-7482-b2a8-2734ed970b13'
         param: id
         type: invalid_request_error
     headers:
@@ -406,13 +413,13 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/files/file-01a1e48f-d6e0-7d23-89b9-ca23c65b143e
+    path: /v1/files/file-01a1f9a4-1cac-7482-b2a8-2734ed970b13
     query_params: {}
   response:
     body:
       error:
         code: null
-        message: 'No such File object: file-01a1e48f-d6e0-7d23-89b9-ca23c65b143e'
+        message: 'No such File object: file-01a1f9a4-1cac-7482-b2a8-2734ed970b13'
         param: id
         type: invalid_request_error
     headers:
@@ -425,13 +432,13 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/files/file-01a1e48f-d6e0-7d23-89b9-ca23c65b143e/content
+    path: /v1/files/file-01a1f9a4-1cac-7482-b2a8-2734ed970b13/content
     query_params: {}
   response:
     body:
       error:
         code: null
-        message: 'No such File object: file-01a1e48f-d6e0-7d23-89b9-ca23c65b143e'
+        message: 'No such File object: file-01a1f9a4-1cac-7482-b2a8-2734ed970b13'
         param: id
         type: invalid_request_error
     headers:
@@ -444,12 +451,12 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: DELETE
-    path: /v1/files/file-01a1e48f-d6e7-7de3-8d4b-56b7ad408066
+    path: /v1/files/file-01a1f9a4-1cca-7661-9fab-8236349b607f
     query_params: {}
   response:
     body:
       deleted: true
-      id: file-01a1e48f-d6e7-7de3-8d4b-56b7ad408066
+      id: file-01a1f9a4-1cca-7661-9fab-8236349b607f
       object: file
     headers:
       content-type: application/json
@@ -461,12 +468,12 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: DELETE
-    path: /v1/files/file-01a1e48f-d6ef-7a23-94f2-9876490d5b44
+    path: /v1/files/file-01a1f9a4-1ce5-76e2-9495-134aca927995
     query_params: {}
   response:
     body:
       deleted: true
-      id: file-01a1e48f-d6ef-7a23-94f2-9876490d5b44
+      id: file-01a1f9a4-1ce5-76e2-9495-134aca927995
       object: file
     headers:
       content-type: application/json
@@ -478,12 +485,12 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: DELETE
-    path: /v1/files/file-01a1e48f-d6f9-7ba2-bb22-59d2ece4091d
+    path: /v1/files/file-01a1f9a4-1cfa-77d2-a4e7-4ae113ce4b0f
     query_params: {}
   response:
     body:
       deleted: true
-      id: file-01a1e48f-d6f9-7ba2-bb22-59d2ece4091d
+      id: file-01a1f9a4-1cfa-77d2-a4e7-4ae113ce4b0f
       object: file
     headers:
       content-type: application/json
@@ -495,12 +502,12 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: DELETE
-    path: /v1/files/file-01a1e48f-d714-7330-8a55-faa79a2dc988
+    path: /v1/files/file-01a1f9a4-1d21-7bf2-a2ce-577cc3b8771a
     query_params: {}
   response:
     body:
       deleted: true
-      id: file-01a1e48f-d714-7330-8a55-faa79a2dc988
+      id: file-01a1f9a4-1d21-7bf2-a2ce-577cc3b8771a
       object: file
     headers:
       content-type: application/json
@@ -512,12 +519,12 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: DELETE
-    path: /v1/files/file-01a1e48f-d73b-7751-868e-03e26fece94e
+    path: /v1/files/file-01a1f9a4-1d52-75a2-9ceb-d17043dd8de7
     query_params: {}
   response:
     body:
       deleted: true
-      id: file-01a1e48f-d73b-7751-868e-03e26fece94e
+      id: file-01a1f9a4-1d52-75a2-9ceb-d17043dd8de7
       object: file
     headers:
       content-type: application/json

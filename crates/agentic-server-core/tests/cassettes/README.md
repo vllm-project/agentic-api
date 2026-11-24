@@ -1182,9 +1182,9 @@ The script validates each recording before promoting it: every successful refere
 (text) or `red` and `blue` (image), the text and image gateway recordings must contain both the reference answer and
 its continuation, every `files-errors` turn must be an error, and `files-input`, `files-search`, and `files-compact`
 must each contain at least one answer with `PAPAYA-7`. `file_id_reference_replay_test.rs` replays the gateway Files
-rows and compares them with the `OpenAI` reference rows: upload rules, download-by-purpose, unknown IDs, and the
-deleted object must match; list-parameter validation messages stay gateway-specific because the gateway does not
-implement the `purpose` list filter. Vector store ingestion is polled directly against the provider, outside the cassette, so the recorded turns stay fixed. Error status, code, and message are recorded verbatim as the evidence;
+rows and compares them with the `OpenAI` reference rows: upload rules, download-by-purpose, `purpose`-filtered
+listing, unknown IDs, and the deleted object must match. Other list-parameter validation messages stay
+gateway-specific. Vector store ingestion is polled directly against the provider, outside the cassette, so the recorded turns stay fixed. Error status, code, and message are recorded verbatim as the evidence;
 only successful answers are checked against the fixture content.
 
 ### Custom tool (gateway and OpenAI)

@@ -623,12 +623,6 @@ fn recorded_gateway_files_rows_match_the_openai_reference() {
             let row = format!("{gateway_name} {} {}", method(gateway), path(gateway));
             assert_eq!(method(gateway), method(openai), "{row}");
             assert_eq!(normalized_path(gateway), normalized_path(openai), "{row}");
-            let list_excludes_purpose =
-                path(gateway) == "/v1/files" && gateway["request"]["query_params"].get("purpose").is_some();
-            if list_excludes_purpose {
-                // The gateway does not implement purpose-filtered listing.
-                continue;
-            }
             assert_eq!(expected_status(gateway), expected_status(openai), "{row}");
             if path(gateway) == "/v1/files" && expected_status(gateway) != StatusCode::OK {
                 // List-parameter validation messages are gateway-specific.

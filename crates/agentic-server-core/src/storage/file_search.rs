@@ -146,15 +146,16 @@ impl FileSearchStorage {
             }
         }
         let query = sqlx::query(
-            "INSERT INTO file_search_files (id, created_at, data, content_type, content_base64) \
-            SELECT $1, $2, $3, $4, '' WHERE EXISTS (SELECT 1 FROM file_search_blob_cleanup \
+            "INSERT INTO file_search_files (id, created_at, data, content_type, content_base64, purpose) \
+            SELECT $1, $2, $3, $4, '', $6 WHERE EXISTS (SELECT 1 FROM file_search_blob_cleanup \
             WHERE file_id = $1 AND owner_token = $5 AND intent = 'upload')",
         )
         .bind(&file.id)
         .bind(file.created_at)
         .bind(data)
         .bind(content_type)
-        .bind(owner_token);
+        .bind(owner_token)
+        .bind(&file.purpose);
         let inserted = tokio::select! {
             biased;
             () = cancelled.cancelled() => Err(cancelled_upload_error()),
@@ -318,17 +319,26 @@ impl FileSearchStorage {
     ) -> Result<Vec<T>, FileSearchError> {
         let ascending = matches!(params.order.unwrap_or_default(), ListOrder::Asc);
         let cursor = params.after.as_deref().or(params.before.as_deref()).unwrap_or("");
+        // Stores are scoped by `store_id` and files by `purpose`; a listing never
+        // carries both, so they share one bind slot and one column name.
+        let scope = if let Some(store_id) = store_id {
+            Some(("store_id", store_id))
+        } else if matches!(collection, Collection::Files) {
+            params.purpose.as_deref().map(|purpose| ("purpose", purpose))
+        } else {
+            None
+        };
         let mut created = 0i64;
         if !cursor.is_empty() {
-            let filter = if store_id.is_some() { " AND store_id = $2" } else { "" };
+            let filter = scope.map_or_else(String::new, |(column, _)| format!(" AND {column} = $2"));
             let sql = format!(
                 "SELECT created_at FROM {} WHERE {} = $1{filter}",
                 collection.table(),
                 collection.id()
             );
             let mut query = sqlx::query_scalar(&sql).bind(cursor);
-            if let Some(store_id) = store_id {
-                query = query.bind(store_id);
+            if let Some((_, value)) = scope {
+                query = query.bind(value);
             }
             created = query.fetch_optional(self.pool.as_ref()).await?.ok_or_else(|| {
                 FileSearchError::InvalidRequest("Pagination cursor does not exist in this collection".into())
@@ -340,7 +350,7 @@ impl FileSearchStorage {
         } else {
             "DESC"
         };
-        let filter = if store_id.is_some() { " AND store_id = $4" } else { "" };
+        let filter = scope.map_or_else(String::new, |(column, _)| format!(" AND {column} = $4"));
         let sql = format!(
             "SELECT data FROM {table} WHERE ($1 = '' OR created_at {operator} $2 OR (created_at = $2 AND {id} {operator} $1)){filter} ORDER BY created_at {order}, {id} {order} LIMIT $3",
             table = collection.table(),
@@ -349,8 +359,8 @@ impl FileSearchStorage {
         let limit = i64::try_from(params.limit.unwrap_or(20) + 1)
             .map_err(|_| FileSearchError::InvalidRequest("Invalid page size".into()))?;
         let mut query = sqlx::query_scalar(&sql).bind(cursor).bind(created).bind(limit);
-        if let Some(store_id) = store_id {
-            query = query.bind(store_id);
+        if let Some((_, value)) = scope {
+            query = query.bind(value);
         }
         let rows: Vec<String> = query.fetch_all(self.pool.as_ref()).await?;
         rows.iter()

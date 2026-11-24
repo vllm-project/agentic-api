@@ -935,6 +935,7 @@ async fn before_pagination_returns_adjacent_files_stores_and_attachments() {
             before: Some(id.clone()),
             order: Some(order),
             after: None,
+            purpose: None,
         };
         let page = service.list_files(&before(&file_ids[5])).await.unwrap();
         assert!(page.has_more);
@@ -958,6 +959,76 @@ async fn before_pagination_returns_adjacent_files_stores_and_attachments() {
             attachment_ids[3..5]
         );
     }
+}
+
+#[tokio::test]
+async fn listing_files_by_purpose_keeps_keyset_pagination_within_the_filter() {
+    let service = service().await;
+    let mut vision_ids = Vec::new();
+    for index in 0..3 {
+        vision_ids.push(
+            service
+                .upload_file(
+                    &format!("chart-{index}.png"),
+                    "image/png",
+                    "vision",
+                    format!("png-{index}").into_bytes(),
+                )
+                .await
+                .unwrap()
+                .id,
+        );
+        service
+            .upload_file(
+                &format!("notes-{index}.txt"),
+                "text/plain",
+                "user_data",
+                format!("text-{index}").into_bytes(),
+            )
+            .await
+            .unwrap();
+    }
+
+    let first = service
+        .list_files(&ListParams {
+            purpose: Some("vision".into()),
+            limit: Some(2),
+            order: Some(ListOrder::Asc),
+            ..ListParams::default()
+        })
+        .await
+        .unwrap();
+    assert!(first.has_more);
+    assert_eq!(
+        first.data.iter().map(|file| file.id.as_str()).collect::<Vec<_>>(),
+        vision_ids[..2]
+    );
+    assert!(first.data.iter().all(|file| file.purpose == "vision"));
+
+    let second = service
+        .list_files(&ListParams {
+            purpose: Some("vision".into()),
+            limit: Some(2),
+            order: Some(ListOrder::Asc),
+            after: first.last_id.clone(),
+            ..ListParams::default()
+        })
+        .await
+        .unwrap();
+    assert!(!second.has_more);
+    assert_eq!(
+        second.data.iter().map(|file| file.id.as_str()).collect::<Vec<_>>(),
+        vision_ids[2..]
+    );
+
+    let none = service
+        .list_files(&ListParams {
+            purpose: Some("evals".into()),
+            ..ListParams::default()
+        })
+        .await
+        .unwrap();
+    assert!(none.data.is_empty());
 }
 
 #[tokio::test]
