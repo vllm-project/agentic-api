@@ -4,19 +4,130 @@ mod common;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
+use agentic_core::executor::inference::direct::{DirectInferenceBackend, EventStream, GenerationControl};
+use agentic_core::executor::{ExecutorError, ExecutorResult};
 use agentic_core::types::messages::ReasoningEffortLevel;
+use agentic_core::types::request_response::UpstreamRequest;
 use agentic_server::app::AppState;
 use agentic_server::model_capabilities::{
-    CodexCatalogCapabilities, InputModalities, ModelCapabilities, ModelOverride, SupportedReasoningLevels,
+    CodexCatalogCapabilities, InputModalities, ModelCapabilities, ModelOverride, ServedModel, SupportedReasoningLevels,
 };
+use agentic_server::server::DirectInferenceStatus;
 use axum::Router;
 use axum::response::IntoResponse;
 use axum::routing::get;
 use common::{spawn_gateway, test_config, test_state};
+use futures::future::BoxFuture;
 use http::StatusCode;
 use serde_json::Value;
 use tokio::net::TcpListener;
+
+#[derive(Debug, Default)]
+struct NativeAdmission(AtomicBool);
+
+impl DirectInferenceBackend for NativeAdmission {
+    fn generate<'a>(
+        &'a self,
+        _request: UpstreamRequest<'a>,
+        _control: GenerationControl,
+    ) -> BoxFuture<'a, ExecutorResult<EventStream>> {
+        self.0.store(true, Ordering::SeqCst);
+        Box::pin(async { Err(ExecutorError::InvalidRequest("native admission reached".to_owned())) })
+    }
+}
+
+#[tokio::test]
+async fn direct_gateway_uses_native_catalog_readiness_authentication_and_admission() {
+    // An invalid URL makes any accidental HTTP upstream access fail.
+    let mut state = test_state(&test_config("invalid-http-url"));
+    let native = Arc::new(NativeAdmission::default());
+    let executor = Arc::try_unwrap(state.exec_ctx).expect("unique fixture context");
+    state.exec_ctx = Arc::new(executor.with_direct_inference(native.clone()));
+    let (readiness, receiver) = tokio::sync::watch::channel(true);
+    state.direct_status = Some(Arc::new(DirectInferenceStatus::new(
+        ServedModel::new("org/assistant".to_owned(), 8192),
+        receiver,
+    )));
+    let shutdown = state.shutdown_token.clone();
+    let (url, gateway) = spawn_gateway(state).await;
+    let client = reqwest::Client::new();
+    assert_eq!(
+        client.get(format!("{url}/ready")).send().await.unwrap().status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        client.get(format!("{url}/v1/models")).send().await.unwrap().status(),
+        StatusCode::UNAUTHORIZED
+    );
+    for path in ["/v1/models", "/v1/models?client_version=1", "/v1/models/org/assistant"] {
+        let response = client
+            .get(format!("{url}{path}"))
+            .bearer_auth("test-key")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body: Value = response.json().await.unwrap();
+        if path.contains('?') {
+            assert_eq!(body["models"][0]["slug"], "org/assistant");
+            assert_eq!(body["models"][0]["context_window"], 8192);
+        } else if path.ends_with("assistant") {
+            assert_eq!(body["id"], "org/assistant");
+        } else {
+            assert_eq!(body["data"][0]["id"], "org/assistant");
+        }
+    }
+    assert_eq!(
+        client
+            .get(format!("{url}/v1/models/missing"))
+            .bearer_auth("test-key")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    let response = client
+        .post(format!("{url}/v1/responses"))
+        .bearer_auth("test-key")
+        .json(&serde_json::json!({"model":"org/assistant","input":"hello","store":false}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(response.text().await.unwrap().contains("native admission reached"));
+    assert!(native.0.load(Ordering::SeqCst));
+    for path in ["/v1/chat/completions", "/v1/messages", "/v1/embeddings"] {
+        let response = client
+            .post(format!("{url}{path}"))
+            .bearer_auth("test-key")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+    }
+    for (ready, expected) in [(false, StatusCode::SERVICE_UNAVAILABLE), (true, StatusCode::OK)] {
+        readiness.send(ready).unwrap();
+        assert_eq!(
+            client.get(format!("{url}/ready")).send().await.unwrap().status(),
+            expected
+        );
+    }
+    drop(readiness);
+    assert_eq!(
+        client.get(format!("{url}/ready")).send().await.unwrap().status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    shutdown.cancel();
+    assert_eq!(
+        client.get(format!("{url}/ready")).send().await.unwrap().status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    gateway.abort();
+    let _ = gateway.await;
+}
 
 /// Deliberately irregular whitespace and an unknown field, so a pass-through response can be
 /// compared byte for byte against what the upstream actually sent.

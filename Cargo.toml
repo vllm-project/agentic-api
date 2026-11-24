@@ -23,6 +23,7 @@ agentic-core = { package = "agentic-server-core", path = "crates/agentic-server-
 vllm-chat = { git = "https://github.com/vllm-project/vllm", rev = "f2f9edcac30d128bc090a3c032e4ba125716a641" }
 vllm-engine-core-client = { git = "https://github.com/vllm-project/vllm", rev = "f2f9edcac30d128bc090a3c032e4ba125716a641" }
 vllm-llm = { git = "https://github.com/vllm-project/vllm", rev = "f2f9edcac30d128bc090a3c032e4ba125716a641" }
+vllm-managed-engine = { git = "https://github.com/vllm-project/vllm", rev = "f2f9edcac30d128bc090a3c032e4ba125716a641" }
 vllm-text = { git = "https://github.com/vllm-project/vllm", rev = "f2f9edcac30d128bc090a3c032e4ba125716a641" }
 async-stream = "0.3"
 async-trait = "0.1"

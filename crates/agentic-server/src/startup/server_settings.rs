@@ -8,12 +8,12 @@
 use std::env::VarError;
 use std::num::{NonZeroU32, NonZeroUsize};
 
+use crate::app::DEFAULT_MAX_REQUEST_BODY_SIZE;
+use crate::rate_limit::RateLimitConfig;
 use agentic_core::error::Error;
-use agentic_server::app::DEFAULT_MAX_REQUEST_BODY_SIZE;
-use agentic_server::rate_limit::RateLimitConfig;
 use clap::Args;
 
-use crate::config_file::ServerFileConfig;
+use crate::startup::config_file::ServerFileConfig;
 
 /// Environment override for the serialized request-size ceiling.
 pub(crate) const MAX_REQUEST_BODY_SIZE_ENV: &str = "AGENTIC_MAX_REQUEST_BODY_SIZE_BYTES";
@@ -52,7 +52,7 @@ pub(crate) fn resolve_max_request_body_size_value(
     if let Some(cli) = cli {
         return Ok(cli);
     }
-    crate::parse_env_nonzero_usize_value(
+    crate::startup::parse_env_nonzero_usize_value(
         MAX_REQUEST_BODY_SIZE_ENV,
         value,
         file.unwrap_or(DEFAULT_MAX_REQUEST_BODY_SIZE),

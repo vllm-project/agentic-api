@@ -27,6 +27,8 @@ use crate::handler::{
     retrieve_response, transcriptions, translations, update_conversation,
 };
 use crate::rate_limit::{RateLimitConfig, RateLimiter, enforce_rate_limit};
+use crate::server::DirectInferenceStatus;
+use crate::server::direct::unsupported_endpoint;
 use crate::telemetry::http::{HttpMetrics, track_request};
 use crate::telemetry::websocket::WebSocketMetrics;
 
@@ -285,6 +287,8 @@ pub struct AppState {
     pub llm_readiness_client: reqwest::Client,
     /// Prevents public probes from multiplying dependency work and tracks transitions.
     pub readiness_tracker: ReadinessTracker,
+    /// Catalog metadata and readiness for the supervised native runtime; absent in HTTP mode.
+    pub direct_status: Option<Arc<DirectInferenceStatus>>,
     /// Shared cancellation signal used to drain long-lived handlers.
     pub shutdown_token: CancellationToken,
     /// Tracks upgraded WebSocket tasks, which Axum does not await during HTTP drain.
@@ -363,7 +367,21 @@ pub fn build_router_with_auth(
         file_search_routes =
             file_search_routes.route_layer(middleware::from_fn_with_state(key.clone(), require_api_key));
     }
+    let upstream_routes = Router::new()
+        .route("/v1/chat/completions", post(chat_completions))
+        .route("/v1/completions", post(completions))
+        .route("/v1/embeddings", post(embeddings))
+        .route("/v1/audio/transcriptions", post(transcriptions))
+        .route("/v1/audio/translations", post(translations))
+        .route(ANTHROPIC_MESSAGES_PATH, post(messages))
+        .route(ANTHROPIC_COUNT_TOKENS_PATH, post(count_tokens));
+    let upstream_routes = if state.direct_status.is_some() {
+        upstream_routes.route_layer(middleware::from_fn(unsupported_endpoint))
+    } else {
+        upstream_routes
+    };
     let protected_routes = Router::new()
+        .merge(upstream_routes)
         .merge(file_search_routes)
         .route("/v1/conversations", post(create_conversation))
         .route(
@@ -380,16 +398,9 @@ pub fn build_router_with_auth(
             "/v1/conversations/{conversation_id}/items/{item_id}",
             get(retrieve_item).delete(delete_item),
         )
-        .route("/v1/chat/completions", post(chat_completions))
-        .route("/v1/completions", post(completions))
-        .route("/v1/embeddings", post(embeddings))
-        .route("/v1/audio/transcriptions", post(transcriptions))
-        .route("/v1/audio/translations", post(translations))
         .route("/v1/models", get(models))
         // A wildcard, because model IDs such as `org/name` contain slashes.
         .route("/v1/models/{*model}", get(retrieve_model))
-        .route(ANTHROPIC_MESSAGES_PATH, post(messages))
-        .route(ANTHROPIC_COUNT_TOKENS_PATH, post(count_tokens))
         .route("/v1/responses", post(responses).get(responses_ws_with_auth))
         .route("/v1/responses/compact", post(compact_response))
         .route("/v1/responses/{response_id}", retrieval_route)
@@ -406,7 +417,15 @@ pub fn build_router_with_auth(
         Some(authenticator) => {
             protected_routes.route_layer(middleware::from_fn_with_state(authenticator, require_oidc))
         }
-        None => protected_routes,
+        None => match (
+            state.direct_status.as_ref(),
+            state.openai_api_key.as_ref().filter(|key| !key.is_empty()),
+        ) {
+            (Some(_), Some(key)) => {
+                protected_routes.route_layer(middleware::from_fn_with_state(key.clone(), require_api_key))
+            }
+            _ => protected_routes,
+        },
     };
 
     public_routes

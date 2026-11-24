@@ -8,9 +8,9 @@ use std::path::Path;
 use agentic_core::tool::code_interpreter::prepare_embedded_runtime;
 use agentic_core::tool::code_interpreter::run_embedded_worker;
 
-use crate::config_file::FileConfig;
 use crate::server::ServerError;
-use crate::{CodeInterpreterEnvironmentValues, code_interpreter_config_from_operator_values};
+use crate::startup::config_file::FileConfig;
+use crate::startup::{CodeInterpreterEnvironmentValues, code_interpreter_config_from_operator_values};
 
 pub(super) fn run_worker() -> Option<io::Result<()>> {
     let mut args = std::env::args_os().skip(1);

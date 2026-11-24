@@ -472,3 +472,26 @@ mod tests {
         assert!(catalog.select(Some("any-model")).is_none());
     }
 }
+
+/// Model metadata obtained from the connected native engine.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct ServedModel {
+    pub id: String,
+    pub max_model_len: u32,
+    object: &'static str,
+    created: u64,
+    owned_by: &'static str,
+}
+
+impl ServedModel {
+    #[must_use]
+    pub fn new(id: String, max_model_len: u32) -> Self {
+        Self {
+            id,
+            max_model_len,
+            object: "model",
+            created: 0,
+            owned_by: "vllm",
+        }
+    }
+}

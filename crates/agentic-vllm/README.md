@@ -6,8 +6,23 @@ request conversion, and native event conversion. Core owns request preparation,
 history, tools, sessions, compaction, usage aggregation, and persistence.
 
 The dependency points from this crate to core. The published core/server packages
-do not depend on vLLM. HTTP remains the default until an application injects this
-backend; the packaged server and launcher do not yet select it.
+do not depend on vLLM. The unpublished `agentic-server-native`
+composition binary owns a headless engine using `vllm-managed-engine` and injects this backend into the shared gateway.
+`agentic serve` and `agentic run codex` select it when `--upstream` is omitted. The source Python CLI's
+`agentic-api run` delegates to `agentic serve`. Existing release wheels do not bundle the native binary.
+See [configuration](../../docs/guides/configuration.md#direct-inference-in-source-builds) for `model.config` and setup.
+
+## Model recipe and managed startup
+
+`ModelConfig::load` reads TOML from the Agentic API home's `model.config`. The explicit model argument overrides
+only the model field. Shared fields configure both engine startup and native frontend preparation; engine-only
+arguments are forwarded to vLLM. Parser names are checked through vLLM's existing registry before spawning.
+The runtime uses the physical model for assets and the optional served name for requests and catalog identity.
+
+The composition binary registers signals before spawning, monitors engine exit during loading and serving, and
+bounds startup and gateway drain. It closes the frontend and reaps the owned engine on startup failure, timeout,
+signal, frontend health failure, or gateway failure. The shared gateway exposes the local model catalog, observes vLLM readiness (including paused engines), and rejects HTTP-only
+inference endpoints. Storage, request preparation, tool routing, the loop, and response assembly remain shared.
 
 ## Composition
 
@@ -62,8 +77,7 @@ opaque or summarized reasoning replay, structured output, requested logprobs,
 non-disabled truncation, prompt-cache controls, non-default service tiers, upstream
 extension fields, and additional reasoning/text controls. Parser and tool
 support also depend on the loaded frontend/model. This profile does not establish
-Anthropic Messages parity, a gRPC adapter, distributed cache routing, or a native
-server/launcher command.
+Anthropic Messages parity, a gRPC adapter, or distributed cache routing.
 
 ## Version and validation limits
 

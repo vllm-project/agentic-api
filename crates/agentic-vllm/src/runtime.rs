@@ -7,11 +7,13 @@ use agentic_core::executor::error::{ExecutorError, ExecutorResult};
 use agentic_core::executor::inference::direct::{DirectInferenceBackend, EventStream, GenerationControl};
 use agentic_core::types::request_response::UpstreamRequest;
 use futures::future::BoxFuture;
+use tokio::sync::watch;
 use vllm_chat::{ChatLlm, LoadModelBackendsOptions, load_model_backends};
 use vllm_engine_core_client::{EngineCoreClient, EngineCoreClientConfig};
 use vllm_llm::EngineCoreLlm;
 use vllm_text::TextLlm;
 
+use crate::model_config::ModelConfig;
 use crate::{Result, events, prepare};
 
 /// Shared tokenizer, renderer, output parsers, and engine client for one model.
@@ -33,15 +35,43 @@ impl VllmBackend {
     /// # Errors
     /// Returns the underlying frontend-loading or engine-handshake failure.
     pub async fn connect(engine: EngineCoreClientConfig, model: LoadModelBackendsOptions) -> Result<Self> {
-        let loaded = load_model_backends(&engine.model_name, model)
-            .await
-            .map_err(backend_error)?;
-        let client = EngineCoreClient::connect(engine).await.map_err(backend_error)?;
-        let chat = ChatLlm::new(
-            TextLlm::new(EngineCoreLlm::new(client), loaded.text_backend),
-            loaded.chat_backend,
-        );
+        let model_id = engine.model_name.clone();
+        Ok(Self::from_chat(connect_model(&model_id, engine, model).await?))
+    }
+
+    /// Prepare one model recipe and connect its frontend to the owned engine.
+    ///
+    /// # Errors
+    /// Returns tokenizer, renderer, or engine-handshake failures.
+    pub async fn connect_recipe(engine: EngineCoreClientConfig, recipe: &ModelConfig) -> Result<Self> {
+        recipe.validate().map_err(backend_error)?;
+        let chat = connect_model(&recipe.model, engine, recipe.frontend_options())
+            .await?
+            .with_tool_call_parser(recipe.tool_call_parser.clone())
+            .with_reasoning_parser(recipe.reasoning_parser.clone());
         Ok(Self::from_chat(chat))
+    }
+
+    #[must_use]
+    pub fn model_name(&self) -> &str {
+        self.chat.served_model_name()
+    }
+
+    #[must_use]
+    pub fn max_model_len(&self) -> u32 {
+        self.chat.text().llm().info().max_model_len
+    }
+
+    /// Observe permanent frontend/engine failure through the shared vLLM lifecycle signal.
+    #[must_use]
+    pub fn subscribe_health(&self) -> watch::Receiver<bool> {
+        self.chat.text().llm().subscribe_health()
+    }
+
+    /// Observe whether the engine currently accepts work, including pause/resume transitions.
+    #[must_use]
+    pub fn subscribe_readiness(&self) -> watch::Receiver<bool> {
+        self.chat.text().llm().subscribe_readiness()
     }
 
     /// Use an application-configured frontend, including its parser selections.
@@ -60,6 +90,21 @@ impl VllmBackend {
         })?;
         Ok(chat.shutdown().await.map_err(backend_error)?)
     }
+}
+
+async fn connect_model(
+    model_id: &str,
+    engine: EngineCoreClientConfig,
+    model: LoadModelBackendsOptions,
+) -> Result<ChatLlm> {
+    let loaded = load_model_backends(model_id, model).await.map_err(backend_error)?;
+    let served_model_name = engine.model_name.clone();
+    let client = EngineCoreClient::connect(engine).await.map_err(backend_error)?;
+    let chat = ChatLlm::new(
+        TextLlm::new(EngineCoreLlm::new(client), loaded.text_backend).with_served_model_name(served_model_name),
+        loaded.chat_backend,
+    );
+    Ok(chat)
 }
 
 impl DirectInferenceBackend for VllmBackend {

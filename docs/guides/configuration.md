@@ -4,6 +4,67 @@ The default database is `~/.agentic-api/agentic_api.db`, so running an installed
 current directory. Set `AGENTIC_API_HOME` to an absolute directory to move both the default database and user
 configuration, or set `DATABASE_URL`/`--db-url` to select a different database.
 
+## Direct inference in source builds
+
+`agentic serve` and `agentic run codex` select HTTP when `--upstream URL` is supplied. Without it, they start
+`agentic-server-native`, which loads `$AGENTIC_API_HOME/model.config` (default `~/.agentic-api/model.config`) and
+owns a headless vLLM engine. An inherited `LLM_API_BASE` or a saved `config.toml` upstream URL does not change that
+selection. `--model` overrides the recipe's model; other recipe settings remain in effect. With neither a model
+argument nor a recipe model, startup reports a configuration error.
+
+Build both gateway binaries together:
+
+```bash
+cargo build --locked -p agentic-server -p agentic-server-native --bins
+```
+
+Create `model.config` as TOML, using a model and engine settings suitable for the host:
+
+```toml
+model = "Qwen/Qwen3-4B"
+# served_model_name = "assistant"
+# revision = "a-model-revision"
+# tokenizer = "a-tokenizer-repository-or-directory"
+# tokenizer_revision = "a-tokenizer-revision"
+# chat_template = "/absolute/path/to/template.jinja"
+tool_call_parser = "auto"
+reasoning_parser = "auto"
+generation_config = "auto"
+max_model_len = 32768
+python = "python3"
+engine_args = ["--tensor-parallel-size", "1", "--dtype", "bfloat16"]
+```
+
+The Python executable must have the vLLM engine matching the Rust dependency pinned in `Cargo.toml`, currently
+`f2f9edcac30d128bc090a3c032e4ba125716a641`. The release wheel's `[local]` extra is for the existing managed HTTP
+launcher and does not supply this native engine version. Use `HF_TOKEN` for private model downloads.
+
+Model, tokenizer, template, parser, revision, and generation defaults are prepared once at startup. `engine_args`
+forwards engine settings to `vllm serve`, such as tensor parallelism, dtype, GPU memory utilization, and
+quantization. Frontend and transport options cannot be overridden there; use the supported recipe fields.
+This launcher owns one engine replica and its handshake. Data-parallel deployment is not supported yet.
+`max_model_len` is a positive integer; the catalog reports the length negotiated with the running engine.
+
+```bash
+target/debug/agentic serve                     # direct mode, using model.config
+target/debug/agentic serve --model org/model   # direct mode with a model override
+target/debug/agentic run codex                 # direct mode with the Codex harness
+target/debug/agentic serve --upstream http://127.0.0.1:8000
+```
+
+The source Python CLI also exposes `agentic-api run` with the same gateway options, delegating to `agentic serve`.
+It requires `agentic`, `agentic-server`, and `agentic-server-native` installed beside each other in the active
+environment. The native binary is an unpublished source-build component; existing release wheels do not bundle it.
+The older `agentic-api serve --model ...` command retains its managed HTTP behavior.
+
+Direct mode currently supports the Responses API, its continuation and compaction paths, and the shared storage
+and tool services. `/v1/models` uses local runtime metadata; `/ready` follows vLLM readiness and storage health.
+A permanent engine/frontend health failure drains the gateway and stops the owned engine. HTTP-only inference endpoints, including
+Messages, return 501; use `--upstream` for Claude Code. If `OPENAI_API_KEY` is configured without OIDC, direct
+mode validates it locally on protected routes. A live GPU/model test remains required before serving qualification.
+
+## Gateway settings
+
 On startup, Agentic API creates `~/.agentic-api` and loads `~/.agentic-api/config.toml` when that file exists. On the
 first invocation with a resolved LLM base URL, a missing config file is generated from the effective
 `--llm-api-base`/`LLM_API_BASE` and non-secret tool settings. It records the name of the web-search API-key environment

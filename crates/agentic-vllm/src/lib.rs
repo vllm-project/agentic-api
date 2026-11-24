@@ -1,6 +1,7 @@
 //! Direct vLLM frontend integration for the shared Agentic API executor.
 
 mod events;
+pub mod model_config;
 mod prepare;
 mod runtime;
 

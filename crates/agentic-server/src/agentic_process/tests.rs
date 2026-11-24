@@ -1,6 +1,9 @@
 use std::ffi::OsString;
+use std::path::Path;
 
-use super::{CodexModelSelection, DEFAULT_CLAUDE_EFFORT, HarnessModel, harness_launch_args, server_args};
+use super::{
+    CodexModelSelection, DEFAULT_CLAUDE_EFFORT, HarnessModel, harness_launch_args, server_args, server_binary_path,
+};
 use crate::agentic_cli::{CommonOptions, Harness, SourceOptions};
 use agentic_core::types::messages::ReasoningEffortLevel;
 
@@ -359,13 +362,12 @@ fn integrated_mode_builds_server_arguments() {
         &SourceOptions {
             upstream: None,
             model: Some("Qwen/test".to_owned()),
-            llm_port: 8000,
         },
         &CommonOptions::default(),
     );
     let args: Vec<_> = args.iter().map(OsString::as_os_str).collect();
 
-    assert_eq!(args[0], "serve");
+    assert_eq!(args[0], "--model");
     assert_eq!(args[1], "Qwen/test");
     assert!(
         args.windows(2)
@@ -374,11 +376,34 @@ fn integrated_mode_builds_server_arguments() {
 }
 
 #[test]
+fn omitted_upstream_selects_native_even_without_a_command_line_model() {
+    let executable = Path::new("/bin/agentic");
+    let direct = SourceOptions {
+        upstream: None,
+        model: None,
+    };
+    assert_eq!(
+        server_binary_path(executable, &direct),
+        Path::new("/bin/agentic-server-native")
+    );
+    let args = server_args(&direct, &CommonOptions::default());
+    assert!(
+        !args
+            .iter()
+            .any(|arg| arg == "--llm-api-base" || arg == "--model" || arg == "serve")
+    );
+    let http = SourceOptions {
+        upstream: Some("http://upstream:8000".to_owned()),
+        model: Some("model".to_owned()),
+    };
+    assert_eq!(server_binary_path(executable, &http), Path::new("/bin/agentic-server"));
+}
+
+#[test]
 fn request_size_limit_is_forwarded_only_when_configured() {
     let source = SourceOptions {
         upstream: Some("http://127.0.0.1:8000".to_owned()),
         model: None,
-        llm_port: 8000,
     };
 
     let defaults = server_args(&source, &CommonOptions::default());
@@ -409,7 +434,6 @@ fn standalone_mode_builds_upstream_arguments() {
         &SourceOptions {
             upstream: Some("http://127.0.0.1:8000".to_owned()),
             model: None,
-            llm_port: 8000,
         },
         &CommonOptions::default(),
     );
@@ -425,7 +449,6 @@ fn explicit_upstream_wins_when_model_names_the_harness_model() {
         &SourceOptions {
             upstream: Some("http://127.0.0.1:8000".to_owned()),
             model: Some("Qwen/test".to_owned()),
-            llm_port: 8000,
         },
         &CommonOptions::default(),
     );
@@ -490,7 +513,6 @@ fn claude_environment_pins_effort_without_yolo() {
         source: SourceOptions {
             upstream: Some("http://127.0.0.1:8000".to_owned()),
             model: None,
-            llm_port: 8000,
         },
         common: CommonOptions::default(),
         harness_args: Vec::new(),
@@ -529,7 +551,6 @@ fn integrated_claude_preserves_inherited_auth_token() {
             source: SourceOptions {
                 upstream: Some("http://127.0.0.1:8000".to_owned()),
                 model: None,
-                llm_port: 8000,
             },
             common: CommonOptions::default(),
             harness_args: Vec::new(),
@@ -769,7 +790,6 @@ async fn resolve_model_does_not_double_the_v1_suffix() {
     let source = SourceOptions {
         upstream: Some(format!("http://{address}/v1")),
         model: None,
-        llm_port: 8000,
     };
     assert_eq!(
         super::resolve_model(&client, &source, None).await.unwrap(),
@@ -783,7 +803,6 @@ async fn resolve_model_prefers_explicit_model() {
     let source = SourceOptions {
         upstream: Some("http://127.0.0.1:9".to_owned()),
         model: Some("Qwen/test".to_owned()),
-        llm_port: 8000,
     };
     assert_eq!(super::resolve_model(&client, &source, None).await.unwrap(), "Qwen/test");
 }
@@ -982,7 +1001,6 @@ async fn empty_model_listing_error_redacts_upstream_userinfo() {
     let source = SourceOptions {
         upstream: Some(format!("http://secret-token@{address}")),
         model: None,
-        llm_port: 8000,
     };
 
     let error = super::resolve_model(&reqwest::Client::new(), &source, None)
@@ -1054,7 +1072,6 @@ async fn resolve_model_discovers_first_upstream_model() {
     let source = SourceOptions {
         upstream: Some(format!("http://{address}")),
         model: None,
-        llm_port: 8000,
     };
     assert_eq!(
         super::resolve_model(&client, &source, None).await.unwrap(),
@@ -1068,7 +1085,6 @@ fn yolo_claude_environment_overrides_inherited_effort() {
         source: SourceOptions {
             upstream: Some("http://127.0.0.1:8000".to_owned()),
             model: Some("served-test".to_owned()),
-            llm_port: 8000,
         },
         common: CommonOptions {
             yolo: true,

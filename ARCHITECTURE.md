@@ -50,7 +50,9 @@ Core reuses `events::EventFrame` for HTTP and direct inference. The injected
 `UpstreamRequest` projection and returns normalized events. `agentic-vllm` implements
 that boundary using shared vLLM model preparation and EngineCore communication;
 core and the existing server do not depend on this unpublished integration crate.
-Distributed contracts and the native server composition remain proposed in the
+The unpublished `agentic-server-native` composes both libraries and owns a managed headless engine.
+The CLI selects it without `--upstream`, loading startup model settings from `model.config`.
+Distributed contracts remain proposed in the
 [shared inference and session contracts](docs/design/shared-responses-library.md).
 
 ## Request flow at a glance
@@ -130,7 +132,7 @@ The crate produces a library plus two independent binaries. `src/lib.rs` exports
 
 | Binary | Entry point | Uses |
 |---|---|---|
-| `agentic-server` (the gateway) | `src/main.rs` | `app`, `auth`, `handler`, `model_capabilities`, `rate_limit`, plus binary-private `server.rs`, `config_file.rs`, and `server_settings.rs` |
+| `agentic-server` (the gateway) | `src/main.rs` | `app`, `auth`, `handler`, `model_capabilities`, `rate_limit`, plus shared `server.rs` and `startup/` configuration |
 | `agentic` (the CLI launcher) | `src/bin/agentic.rs` | `agentic_cli`, `agentic_harness`, `agentic_output`, `agentic_process`, `model_capabilities` |
 
 These are two unrelated concerns bundled in one crate. If you're working on request
@@ -155,22 +157,23 @@ Catalog display defaults do not become admission limits.
   route and layers [request admission](#request-admission-authentication-then-rate-limits)
   onto the protected ones: optional OIDC auth (`auth::require_oidc`), then optional rate
   limiting (`rate_limit::enforce_rate_limit`).
-- **`server.rs`** (binary-private) owns process lifecycle: `build_state` (constructs
+- **`server.rs`** (library) owns process lifecycle: `build_state` (constructs
   `ExecutionContext::from_config`, i.e. where the DB pool actually gets created),
   `serve_gateway`/`serve_gateway_until_signal` (bind, serve, graceful shutdown with a
   bounded drain), and `run`/`run_with_llm` (standalone mode, optionally spawning a vLLM
   subprocess). It serves with `into_make_service_with_connect_info::<SocketAddr>()`, so
   middleware can read each connection's peer address.
-- **`main.rs`** (binary-private) is the `clap` CLI front end: parses config from
-  flags/env/`config.toml`, then calls `server::run` or `server::run_with_llm`.
-- **`server_settings.rs`** (binary-private) resolves the gateway admission settings from
+- **`main.rs`** calls the shared `startup::main` entry point. `startup/` owns the `clap` CLI and
+  flags/env/`config.toml` resolution. The native composition binary supplies its startup runner;
+  the published server does not depend on the native integration crate.
+- **`startup/server_settings.rs`** resolves the gateway admission settings from
   the `[server]` table: the request body size ceiling (`resolve_max_request_body_size`)
   and the per-caller rate limit (`resolve_rate_limit`, which returns `None` when no rate
   is set and rejects a burst without a rate). Each setting resolves as CLI argument >
   environment variable > configuration file > default, and an explicit CLI argument
   skips the lower sources, so a malformed inherited environment value cannot block
   startup. `generated_server_file_config` records the same environment variables when
-  `main.rs` generates a configuration file.
+  `startup/` generates a configuration file.
 
 ### HTTP handlers (`handler/http/`)
 
@@ -2405,7 +2408,7 @@ router, reusing the same core logic in-process.
 | Task | Where |
 |---|---|
 | Add a new HTTP or WebSocket route | `agentic-server/src/handler/{http,websocket}/`, wire it in `app.rs`'s `build_router_with_auth` |
-| Change request admission (authentication, rate limits, or gateway-raised errors) | The layer order in `app.rs`'s `build_router_with_auth`, then `auth.rs`, `rate_limit.rs`, or `error_response.rs`; startup settings in `server_settings.rs` |
+| Change request admission (authentication, rate limits, or gateway-raised errors) | The layer order in `app.rs`'s `build_router_with_auth`, then `auth.rs`, `rate_limit.rs`, or `error_response.rs`; startup settings in `startup/server_settings.rs` |
 | Support a new upstream SSE event | `events/types.rs` → `events/normalize.rs` → `executor/accumulator/` → `executor/translate/` when the event needs public tool-shape translation |
 | Add a new tool type | `tool/handler.rs` impl(s) → `tool/declaration.rs` (a `ToolDeclaration` kind and its view) → `tool/normalize.rs` → `tool/registry.rs` → `executor/translate/client.rs` for client-executed function shapes → `tool/executors.rs` for lazy gateway setup |
 | Change gateway-round concurrency or lifecycle ordering | `executor/gateway.rs` (`GatewayScheduler`/event plans) + `executor/engine.rs` (round decision/ordered streaming) + `tool/ownership.rs` (typed binding and same-tool safety) |

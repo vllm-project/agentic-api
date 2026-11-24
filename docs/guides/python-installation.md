@@ -64,6 +64,15 @@ To test a wheel before publication, download the artifact for your platform from
 python -m pip install /absolute/path/to/agentic_api-PLATFORM.whl
 ```
 
+## Source builds: direct inference
+
+The source CLI adds `agentic-api run`: an explicit `--upstream` uses HTTP, and omitting it selects direct inference
+from `model.config`. This requires the unpublished `agentic-server-native` binary beside the installed Rust launcher
+and a matching vLLM engine. Existing 0.10.0 wheels do not include this path. See
+[direct inference setup](configuration.md#direct-inference-in-source-builds).
+
+`agentic-api serve` retains the local/remote HTTP workflows documented above.
+
 ## Check the install
 
 `doctor` reports whether the packaged Rust executable is present, whether the tested local vLLM wheel is installed, and

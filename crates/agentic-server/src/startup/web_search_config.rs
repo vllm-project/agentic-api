@@ -6,7 +6,7 @@ use agentic_core::config::{WebSearchProviderConfig, WebSearchProviderKind};
 use agentic_core::error::Error;
 use agentic_core::tool::validate_searxng_base_url;
 
-use crate::config_file::WebSearchFileConfig;
+use crate::startup::config_file::WebSearchFileConfig;
 
 /// Environment override for the `web_search` backend (`you`, `brave`, `tavily`, `searxng`, `serply`, or
 /// `keenable`).

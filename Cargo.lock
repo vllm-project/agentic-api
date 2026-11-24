@@ -79,6 +79,7 @@ dependencies = [
  "http-body",
  "jsonschema",
  "jsonwebtoken",
+ "nix",
  "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry-proto",
@@ -162,6 +163,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "agentic-server-native"
+version = "0.10.0"
+dependencies = [
+ "agentic-server",
+ "agentic-server-core",
+ "agentic-vllm",
+ "futures",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "vllm-managed-engine",
+]
+
+[[package]]
 name = "agentic-vllm"
 version = "0.10.0"
 dependencies = [
@@ -170,11 +186,16 @@ dependencies = [
  "futures",
  "num-traits",
  "reqwest 0.12.28",
+ "serde",
  "serde_json",
+ "tempfile",
+ "thiserror 2.0.20",
  "tokio",
+ "toml 0.8.23",
  "vllm-chat",
  "vllm-engine-core-client",
  "vllm-llm",
+ "vllm-managed-engine",
  "vllm-text",
 ]
 
@@ -7159,6 +7180,19 @@ dependencies = [
  "uuid",
  "vllm-engine-core-client",
  "vllm-metrics",
+]
+
+[[package]]
+name = "vllm-managed-engine"
+version = "0.1.0"
+source = "git+https://github.com/vllm-project/vllm?rev=f2f9edcac30d128bc090a3c032e4ba125716a641#f2f9edcac30d128bc090a3c032e4ba125716a641"
+dependencies = [
+ "anyhow",
+ "clap",
+ "libc",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

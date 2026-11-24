@@ -466,9 +466,9 @@ mod tests {
     use std::fs;
     use std::num::{NonZeroU64, NonZeroUsize};
 
+    use crate::model_capabilities::{DEFAULT_REASONING_LEVELS, InputModalities, UpstreamCapabilities};
     use agentic_core::McpServerEntry;
     use agentic_core::types::messages::ReasoningEffortLevel;
-    use agentic_server::model_capabilities::{DEFAULT_REASONING_LEVELS, InputModalities, UpstreamCapabilities};
     use tempfile::tempdir;
 
     use super::{

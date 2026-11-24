@@ -225,6 +225,7 @@ async fn storage_backed_state(llm_url: &str) -> StorageBackedState {
         proxy_state,
         exec_ctx,
         llm_readiness_client: agentic_core::readiness::llm_readiness_client().expect("readiness client"),
+        direct_status: None,
         readiness_tracker: agentic_server::app::ReadinessTracker::default(),
         shutdown_token: CancellationToken::new(),
         websocket_tracker: WebSocketTracker::default(),

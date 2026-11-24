@@ -1,3 +1,6 @@
+mod source;
+
+use source::model_list;
 use std::future::Future;
 
 use axum::extract::{Path, Query, State};
@@ -9,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 use tracing::{debug, info, warn};
 
-use agentic_core::proxy::{ProxyBody, ProxyResponse, error_response, processed_response_headers, proxy_get};
+use agentic_core::proxy::{ProxyBody, ProxyResponse, error_response, processed_response_headers};
 use agentic_core::readiness::{LLM_READINESS_PROBE_TIMEOUT, LlmReadiness, probe_llm_readiness};
 use agentic_core::types::messages::ReasoningEffortLevel;
 
@@ -270,7 +273,11 @@ async fn upstream_is_ready(state: &AppState) -> bool {
 }
 
 async fn configured_upstream_is_ready(state: &AppState) -> bool {
-    state.skip_llm_ready_check || upstream_is_ready(state).await
+    if let Some(status) = &state.direct_status {
+        status.is_ready()
+    } else {
+        state.skip_llm_ready_check || upstream_is_ready(state).await
+    }
 }
 
 async fn dependencies_are_ready(
@@ -312,6 +319,9 @@ async fn dependencies_are_ready(
     tag = "health",
 ))]
 pub async fn ready(State(state): State<AppState>) -> impl IntoResponse {
+    if state.shutdown_token.is_cancelled() || state.direct_status.as_ref().is_some_and(|status| !status.is_ready()) {
+        return StatusCode::SERVICE_UNAVAILABLE;
+    }
     let Some(probe) = state.readiness_tracker.try_start_probe() else {
         let cached_ready = state.readiness_tracker.last_result().unwrap_or(false);
         debug!(
@@ -357,9 +367,9 @@ pub struct ModelsParams {
 /// GET /v1/models — Codex-aware model list.
 ///
 /// When `?client_version` is present (Codex CLI), fetches vLLM's model list via
-/// [`proxy_get`] and transforms it into the Codex `ModelsResponse` shape
+/// [`agentic_core::proxy::proxy_get`] and transforms it into the Codex `ModelsResponse` shape
 /// (`{ "models": [...] }` with rich metadata). Without `client_version`, the
-/// upstream response is returned unchanged via [`proxy_get`].
+/// upstream response is returned unchanged via [`agentic_core::proxy::proxy_get`].
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/v1/models",
@@ -377,7 +387,7 @@ pub struct ModelsParams {
     tag = "models",
 ))]
 pub async fn models(State(state): State<AppState>, headers: HeaderMap, Query(params): Query<ModelsParams>) -> Response {
-    let upstream = proxy_get("/v1/models", &headers, &state.proxy_state).await;
+    let upstream = model_list(&state, &headers).await;
 
     if params.client_version.is_none() {
         return convert_response(upstream);
@@ -415,7 +425,7 @@ pub async fn models(State(state): State<AppState>, headers: HeaderMap, Query(par
     tag = "models",
 ))]
 pub async fn retrieve_model(State(state): State<AppState>, headers: HeaderMap, Path(model): Path<String>) -> Response {
-    let upstream = proxy_get("/v1/models", &headers, &state.proxy_state).await;
+    let upstream = model_list(&state, &headers).await;
     let mut response_headers = processed_response_headers(&upstream.headers);
     let upstream_bytes = match model_list_body(upstream) {
         Ok(bytes) => bytes,

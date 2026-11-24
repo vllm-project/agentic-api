@@ -40,6 +40,7 @@ async fn test_state_with_storage(llm_url: &str) -> AppState {
         proxy_state,
         exec_ctx: Arc::new(exec_ctx),
         llm_readiness_client: agentic_core::readiness::llm_readiness_client().expect("readiness client"),
+        direct_status: None,
         readiness_tracker: ReadinessTracker::default(),
         shutdown_token: tokio_util::sync::CancellationToken::new(),
         websocket_tracker: WebSocketTracker::default(),

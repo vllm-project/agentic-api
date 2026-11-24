@@ -2,11 +2,21 @@ from __future__ import annotations
 
 import builtins
 from dataclasses import asdict
+from pathlib import Path
 
 import pytest
 
 from agentic_api import __version__
 from agentic_api.cli import ServeOptions, build_parser, main
+
+
+@pytest.mark.parametrize("arguments", [[], ["--model", "org/model"], ["--upstream", "http://localhost:8000"], ["--help"]])
+def test_run_delegates_options_to_the_rust_launcher(arguments: list[str], monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    monkeypatch.setattr("agentic_api.cli.find_packaged_binary", lambda name: Path("/venv/bin") / name)
+    monkeypatch.setattr("agentic_api.cli.os.execv", lambda binary, args: calls.append((binary, args)))
+    assert main(["run", *arguments]) == 0
+    assert calls == [("/venv/bin/agentic", ["/venv/bin/agentic", "serve", *arguments])]
 
 
 def parse_serve_args(*args: str) -> ServeOptions:

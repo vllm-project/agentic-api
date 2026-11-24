@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,6 +10,7 @@ from typing import Sequence
 from urllib.parse import urlparse
 
 from agentic_api import __version__
+from agentic_api.binary import find_packaged_binary
 from agentic_api.diagnostics import doctor
 from agentic_api.version import version_report
 
@@ -59,6 +61,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    subparsers.add_parser(
+        "run", help="Run the gateway: direct inference by default, HTTP with --upstream",
+        description="Uses the Rust launcher; run agentic-api run --help for its options.",
+        add_help=False,
+    )
 
     serve_parser = subparsers.add_parser(
         "serve",
@@ -117,6 +125,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments and arguments[0] == "run":
+        # Replace this process so the Rust launcher remains the lifecycle and CLI owner.
+        try:
+            binary = str(find_packaged_binary("agentic"))
+            os.execv(binary, [binary, "serve", *arguments[1:]])
+        except OSError as error:
+            print(str(error), file=sys.stderr)
+            return 1
+        return 0
     parser = build_parser()
     try:
         namespace = parser.parse_args(argv)

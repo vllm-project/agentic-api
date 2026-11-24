@@ -13,14 +13,19 @@ async-stream.workspace = true
 futures.workspace = true
 num-traits.workspace = true
 serde_json.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+toml.workspace = true
 tokio.workspace = true
 vllm-chat.workspace = true
 vllm-engine-core-client.workspace = true
 vllm-llm.workspace = true
+vllm-managed-engine.workspace = true
 vllm-text.workspace = true
 
 [dev-dependencies]
 reqwest.workspace = true
+tempfile = "3"
 
 [lints]
 workspace = true

@@ -1,0 +1,25 @@
+[package]
+name = "agentic-server-native"
+description = "Agentic API gateway with a managed direct vLLM engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+agentic-core.workspace = true
+agentic-server = { path = "../agentic-server" }
+agentic-vllm = { path = "../agentic-vllm" }
+futures.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+vllm-managed-engine.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

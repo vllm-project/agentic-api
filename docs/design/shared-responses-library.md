@@ -19,8 +19,7 @@ resources, prepares each model request, and converts native output into existing
 work from #361/#362 alongside the #360 design. Its integration guide is in `crates/agentic-vllm/README.md`.
 
 **Proposed below:** capability discovery, richer deadlines/cleanup contracts, session/lifecycle metadata, exact input
-identity, and distributed compatibility. gRPC, session-aware routing, and native server/launcher composition are not
-implemented. A live engine smoke test and model-profile qualification remain required before claiming serving parity.
+identity, and distributed compatibility. gRPC and session-aware routing are not implemented. A live engine smoke test and model-profile qualification remain required before claiming serving parity.
 
 ## Owners and existing extension points
 
@@ -38,17 +37,21 @@ implemented. A live engine smoke test and model-profile qualification remain req
 | llm-d | Endpoint selection, canonical cache-key mapping, residency indexing, and session policy. |
 | vLLM EngineCore | Inference, KV-cache mechanisms, cache events, and supported cache-control actions. |
 
-The proposed dependency direction is:
+`agentic-server-native` now composes the shared gateway with a supervised headless engine. The CLI selects HTTP
+with `--upstream` and direct inference without it. `model.config` provides startup model preparation; `config.toml`
+continues to configure shared gateway services. See the [configuration guide](../guides/configuration.md#direct-inference-in-source-builds).
+
+The implemented dependency direction is:
 
 ```text
-agentic-server-native                 (new composition binary, #365/#366)
+agentic-server-native                 (unpublished composition binary)
     +-- agentic-server --> agentic-server-core
     +-- agentic-vllm   --> agentic-server-core
             +-- shared vLLM frontend libraries
 ```
 
-`agentic-vllm` owns the native runtime builder, preparation/event adapters, and shutdown. Readiness and gRPC can
-initially live in a feature-gated module there when it can share conversions. Core's interface must not expose
+`agentic-vllm` owns model recipes, the native runtime builder, preparation/event adapters, and frontend shutdown.
+The composition binary supervises the engine; the shared gateway serves its catalog and readiness without HTTP probes. Core's interface must not expose
 `ChatLlm`, engine endpoints, protobuf messages, or HTTP clients. The application constructs and injects the backend;
 published core and the existing server do not depend on the native integration package.
 
@@ -426,7 +429,7 @@ implemented. A unit test of a proposed capability is not evidence that a backend
 
 | Decision to review | Requested owners | Status |
 | --- | --- | --- |
-| Core-owned contract, backend injection, two native integration crates | Agentic API; design input linked above | Core boundary and native library implemented; composition binary and cross-project agreement pending. |
+| Core-owned contract, backend injection, two native integration crates | Agentic API; design input linked above | Core boundary, native library, and composition binary implemented; cross-project agreement pending. |
 | Shared preparation/parsing composition and remote-render profile | Agentic API + vLLM frontend | Pending agreement and supported model profiles. |
 | Session/continuation minting, canonicalization, trust, durable/transient bindings | Agentic API + llm-d | Pending agreement; preserve exact identity separately. |
 | Canonical keys, extra keys, event incarnation/gap recovery | llm-d router/KV-cache + vLLM engine | Pending agreement and conformance evidence. |
@@ -435,7 +438,7 @@ implemented. A unit test of a proposed capability is not evidence that a backend
 | Usage availability, numeric ranges, error/cleanup and retry policy | Agentic API + adapter owners | Proposed; implement and test under #361–#363. |
 
 Issue #360 remains open until the participating projects review these decisions and the agreement is linked here.
-The local serving sequence remains contract/HTTP boundary (#360/#361), native inference (#362), then route/runtime
+The branch implements the contract/HTTP boundary (#360/#361), native inference (#362), and initial route/runtime
 composition and unified launch (#365/#366). Distributed policy work can proceed independently; no launch command or
 migration recommendation is established by this document.
 
