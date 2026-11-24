@@ -46,3 +46,7 @@ next-env.d.ts
 # Generated Python CLI Markdown export
 /public/docs/latest/python-cli.md
 /public/docs/latest/rust-cli.md
+/public/docs/latest/api/
+/public/docs/latest/deploying/
+/public/docs/latest/developing/
+/public/docs/latest/guides/

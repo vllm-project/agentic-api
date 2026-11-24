@@ -47,21 +47,12 @@ turns:
     - 'event: response.created
 
       '
-    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a08eb4-4288-7760-b2b7-665d55f8d5c7","created_at":1789100573,"incomplete_details":null,"instructions":null,"metadata":null,"model":"Qwen/Qwen3.5-35B-A3B-FP8","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"The
-      natural language web search query."},"queries":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":5,"description":"Multiple
-      independent search queries to run in parallel, instead of a single query."},"count":{"type":"integer","description":"Maximum
-      results per section, from 1 to 100."},"freshness":{"type":"string","description":"Optional
-      recency filter: day, week, month, year, or YYYY-MM-DDtoYYYY-MM-DD."},"country":{"type":"string","description":"Optional
-      ISO 3166-1 alpha-2 country code."},"language":{"type":"string","description":"Optional
-      BCP 47 language code."},"include_domains":{"type":"array","items":{"type":"string"},"description":"Optional
-      strict allowlist of domains."},"exclude_domains":{"type":"array","items":{"type":"string"},"description":"Optional
-      domain blocklist."}},"anyOf":[{"required":["query"]},{"required":["queries"]}]},"strict":false,"type":"function","allowed_callers":null,"defer_loading":null,"description":"Search
-      the public web for current information and return structured web and news results.","output_schema":null},{"name":"get_weather","parameters":{"type":"object","properties":{"city":{"type":"string","description":"City
-      name, e.g. Tokyo"}},"required":["city"],"additionalProperties":false},"strict":true,"type":"function","allowed_callers":null,"defer_loading":null,"description":"Get
-      the current weather for a given city.","output_schema":null},{"name":"set_temperature_unit","description":"Set
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a1524a-37e9-7fa3-9944-81f2b71d0cd4","created_at":1792381958,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.5-35B-A3B-FP8","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"type":"web_search_preview","search_context_size":null,"filters":null,"user_location":null},{"type":"function","name":"get_weather","description":"Get
+      the current weather for a given city.","parameters":{"type":"object","properties":{"city":{"type":"string","description":"City
+      name, e.g. Tokyo"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"custom","name":"set_temperature_unit","description":"Set
       the user''s preferred temperature unit. This changes how temperatures should
       be reported for the rest of this conversation. Call with the raw unit as plain
-      text input, e.g. fahrenheit -- not JSON.","type":"custom"}],"top_p":0.95,"background":false,"max_output_tokens":2048,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null}}
+      text input, e.g. fahrenheit -- not JSON."}],"top_p":1.0,"background":false,"max_output_tokens":2048,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":true,"safety_identifier":null,"prompt_cache_key":null,"error":null}}
 
       '
     - '
@@ -70,21 +61,12 @@ turns:
     - 'event: response.in_progress
 
       '
-    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a08eb4-4288-7760-b2b7-665d55f8d5c7","created_at":1789100573,"incomplete_details":null,"instructions":null,"metadata":null,"model":"Qwen/Qwen3.5-35B-A3B-FP8","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"The
-      natural language web search query."},"queries":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":5,"description":"Multiple
-      independent search queries to run in parallel, instead of a single query."},"count":{"type":"integer","description":"Maximum
-      results per section, from 1 to 100."},"freshness":{"type":"string","description":"Optional
-      recency filter: day, week, month, year, or YYYY-MM-DDtoYYYY-MM-DD."},"country":{"type":"string","description":"Optional
-      ISO 3166-1 alpha-2 country code."},"language":{"type":"string","description":"Optional
-      BCP 47 language code."},"include_domains":{"type":"array","items":{"type":"string"},"description":"Optional
-      strict allowlist of domains."},"exclude_domains":{"type":"array","items":{"type":"string"},"description":"Optional
-      domain blocklist."}},"anyOf":[{"required":["query"]},{"required":["queries"]}]},"strict":false,"type":"function","allowed_callers":null,"defer_loading":null,"description":"Search
-      the public web for current information and return structured web and news results.","output_schema":null},{"name":"get_weather","parameters":{"type":"object","properties":{"city":{"type":"string","description":"City
-      name, e.g. Tokyo"}},"required":["city"],"additionalProperties":false},"strict":true,"type":"function","allowed_callers":null,"defer_loading":null,"description":"Get
-      the current weather for a given city.","output_schema":null},{"name":"set_temperature_unit","description":"Set
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a1524a-37e9-7fa3-9944-81f2b71d0cd4","created_at":1792381958,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.5-35B-A3B-FP8","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"type":"web_search_preview","search_context_size":null,"filters":null,"user_location":null},{"type":"function","name":"get_weather","description":"Get
+      the current weather for a given city.","parameters":{"type":"object","properties":{"city":{"type":"string","description":"City
+      name, e.g. Tokyo"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"custom","name":"set_temperature_unit","description":"Set
       the user''s preferred temperature unit. This changes how temperatures should
       be reported for the rest of this conversation. Call with the raw unit as plain
-      text input, e.g. fahrenheit -- not JSON.","type":"custom"}],"top_p":0.95,"background":false,"max_output_tokens":2048,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null}}
+      text input, e.g. fahrenheit -- not JSON."}],"top_p":1.0,"background":false,"max_output_tokens":2048,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":true,"safety_identifier":null,"prompt_cache_key":null,"error":null}}
 
       '
     - '
@@ -93,7 +75,7 @@ turns:
     - 'event: response.output_item.added
 
       '
-    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"85017ac6a9a16281","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress"}}
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"a995036e5a13b5c6","summary":[],"type":"reasoning","content":[],"status":"in_progress"}}
 
       '
     - '
@@ -102,7 +84,7 @@ turns:
     - 'event: response.reasoning_part.added
 
       '
-    - 'data: {"type":"response.reasoning_part.added","sequence_number":3,"output_index":0,"content_index":0,"item_id":"85017ac6a9a16281","part":{"text":"","type":"reasoning_text"}}
+    - 'data: {"type":"response.reasoning_part.added","sequence_number":3,"output_index":0,"content_index":0,"item_id":"a995036e5a13b5c6","part":{"text":"","type":"reasoning_text"}}
 
       '
     - '
@@ -111,7 +93,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":4,"output_index":0,"content_index":0,"delta":"The","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":4,"output_index":0,"content_index":0,"delta":"The","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -121,7 +103,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":5,"output_index":0,"content_index":0,"delta":"
-      user","item_id":"85017ac6a9a16281"}
+      user","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -131,7 +113,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":6,"output_index":0,"content_index":0,"delta":"
-      is","item_id":"85017ac6a9a16281"}
+      wants","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -141,7 +123,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":7,"output_index":0,"content_index":0,"delta":"
-      asking","item_id":"85017ac6a9a16281"}
+      me","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -151,7 +133,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":8,"output_index":0,"content_index":0,"delta":"
-      me","item_id":"85017ac6a9a16281"}
+      to","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -161,7 +143,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":9,"output_index":0,"content_index":0,"delta":"
-      to","item_id":"85017ac6a9a16281"}
+      call","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -171,7 +153,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":10,"output_index":0,"content_index":0,"delta":"
-      perform","item_id":"85017ac6a9a16281"}
+      three","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -181,7 +163,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":11,"output_index":0,"content_index":0,"delta":"
-      three","item_id":"85017ac6a9a16281"}
+      different","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -191,7 +173,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":12,"output_index":0,"content_index":0,"delta":"
-      actions","item_id":"85017ac6a9a16281"}
+      tools","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -201,7 +183,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":13,"output_index":0,"content_index":0,"delta":"
-      in","item_id":"85017ac6a9a16281"}
+      in","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -211,7 +193,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":14,"output_index":0,"content_index":0,"delta":"
-      parallel","item_id":"85017ac6a9a16281"}
+      parallel","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -220,8 +202,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":15,"output_index":0,"content_index":0,"delta":"
-      within","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":15,"output_index":0,"content_index":0,"delta":":","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -230,8 +211,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":16,"output_index":0,"content_index":0,"delta":"
-      a","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":16,"output_index":0,"content_index":0,"delta":"\n","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -240,8 +220,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":17,"output_index":0,"content_index":0,"delta":"
-      single","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":17,"output_index":0,"content_index":0,"delta":"1","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -250,8 +229,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":18,"output_index":0,"content_index":0,"delta":"
-      turn","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":18,"output_index":0,"content_index":0,"delta":".","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -260,7 +238,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":19,"output_index":0,"content_index":0,"delta":":","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":19,"output_index":0,"content_index":0,"delta":"
+      get","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -269,7 +248,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":20,"output_index":0,"content_index":0,"delta":"\n","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":20,"output_index":0,"content_index":0,"delta":"_weather","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -278,7 +257,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":21,"output_index":0,"content_index":0,"delta":"1","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":21,"output_index":0,"content_index":0,"delta":"
+      for","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -287,7 +267,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":22,"output_index":0,"content_index":0,"delta":".","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":22,"output_index":0,"content_index":0,"delta":"
+      \"","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -296,8 +277,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":23,"output_index":0,"content_index":0,"delta":"
-      Call","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":23,"output_index":0,"content_index":0,"delta":"Tok","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -306,8 +286,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":24,"output_index":0,"content_index":0,"delta":"
-      get","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":24,"output_index":0,"content_index":0,"delta":"yo","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -316,7 +295,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":25,"output_index":0,"content_index":0,"delta":"_weather","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":25,"output_index":0,"content_index":0,"delta":"\"","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -325,8 +304,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":26,"output_index":0,"content_index":0,"delta":"
-      for","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":26,"output_index":0,"content_index":0,"delta":"\n","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -335,8 +313,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":27,"output_index":0,"content_index":0,"delta":"
-      \"","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":27,"output_index":0,"content_index":0,"delta":"2","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -345,7 +322,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":28,"output_index":0,"content_index":0,"delta":"Tok","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":28,"output_index":0,"content_index":0,"delta":".","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -354,7 +331,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":29,"output_index":0,"content_index":0,"delta":"yo","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":29,"output_index":0,"content_index":0,"delta":"
+      set","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -363,7 +341,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":30,"output_index":0,"content_index":0,"delta":"\"","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":30,"output_index":0,"content_index":0,"delta":"_temperature","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -372,7 +350,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":31,"output_index":0,"content_index":0,"delta":"\n","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":31,"output_index":0,"content_index":0,"delta":"_unit","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -381,7 +359,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":32,"output_index":0,"content_index":0,"delta":"2","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":32,"output_index":0,"content_index":0,"delta":"
+      to","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -390,7 +369,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":33,"output_index":0,"content_index":0,"delta":".","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":33,"output_index":0,"content_index":0,"delta":"
+      set","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -400,7 +380,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":34,"output_index":0,"content_index":0,"delta":"
-      Call","item_id":"85017ac6a9a16281"}
+      the","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -410,7 +390,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":35,"output_index":0,"content_index":0,"delta":"
-      set","item_id":"85017ac6a9a16281"}
+      unit","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -419,7 +399,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":36,"output_index":0,"content_index":0,"delta":"_temperature","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":36,"output_index":0,"content_index":0,"delta":"
+      to","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -428,7 +409,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":37,"output_index":0,"content_index":0,"delta":"_unit","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":37,"output_index":0,"content_index":0,"delta":"
+      \"","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -437,8 +419,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":38,"output_index":0,"content_index":0,"delta":"
-      to","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":38,"output_index":0,"content_index":0,"delta":"f","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -447,8 +428,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":39,"output_index":0,"content_index":0,"delta":"
-      set","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":39,"output_index":0,"content_index":0,"delta":"ahrenheit","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -457,8 +437,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":40,"output_index":0,"content_index":0,"delta":"
-      preferred","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":40,"output_index":0,"content_index":0,"delta":"\"","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -467,8 +446,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":41,"output_index":0,"content_index":0,"delta":"
-      unit","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":41,"output_index":0,"content_index":0,"delta":"\n","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -477,8 +455,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":42,"output_index":0,"content_index":0,"delta":"
-      to","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":42,"output_index":0,"content_index":0,"delta":"3","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -487,8 +464,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":43,"output_index":0,"content_index":0,"delta":"
-      \"","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":43,"output_index":0,"content_index":0,"delta":".","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -497,7 +473,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":44,"output_index":0,"content_index":0,"delta":"f","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":44,"output_index":0,"content_index":0,"delta":"
+      web","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -506,7 +483,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":45,"output_index":0,"content_index":0,"delta":"ahrenheit","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":45,"output_index":0,"content_index":0,"delta":"_search","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -515,7 +492,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":46,"output_index":0,"content_index":0,"delta":"\"","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":46,"output_index":0,"content_index":0,"delta":"
+      for","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -524,7 +502,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":47,"output_index":0,"content_index":0,"delta":"\n","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":47,"output_index":0,"content_index":0,"delta":"
+      the","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -533,7 +512,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":48,"output_index":0,"content_index":0,"delta":"3","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":48,"output_index":0,"content_index":0,"delta":"
+      exact","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -542,7 +522,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":49,"output_index":0,"content_index":0,"delta":".","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":49,"output_index":0,"content_index":0,"delta":"
+      query","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -552,7 +533,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":50,"output_index":0,"content_index":0,"delta":"
-      Call","item_id":"85017ac6a9a16281"}
+      \"","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -561,8 +542,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":51,"output_index":0,"content_index":0,"delta":"
-      web","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":51,"output_index":0,"content_index":0,"delta":"Tok","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -571,7 +551,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":52,"output_index":0,"content_index":0,"delta":"_search","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":52,"output_index":0,"content_index":0,"delta":"yo","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -581,7 +561,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":53,"output_index":0,"content_index":0,"delta":"
-      for","item_id":"85017ac6a9a16281"}
+      weather","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -591,7 +571,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":54,"output_index":0,"content_index":0,"delta":"
-      the","item_id":"85017ac6a9a16281"}
+      today","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -600,8 +580,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":55,"output_index":0,"content_index":0,"delta":"
-      query","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":55,"output_index":0,"content_index":0,"delta":"\"","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -610,8 +589,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":56,"output_index":0,"content_index":0,"delta":"
-      \"","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":56,"output_index":0,"content_index":0,"delta":"\n\n","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -620,7 +598,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":57,"output_index":0,"content_index":0,"delta":"Tok","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":57,"output_index":0,"content_index":0,"delta":"I","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -629,7 +607,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":58,"output_index":0,"content_index":0,"delta":"yo","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":58,"output_index":0,"content_index":0,"delta":"
+      need","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -639,7 +618,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":59,"output_index":0,"content_index":0,"delta":"
-      weather","item_id":"85017ac6a9a16281"}
+      to","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -649,7 +628,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":60,"output_index":0,"content_index":0,"delta":"
-      today","item_id":"85017ac6a9a16281"}
+      make","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -658,7 +637,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":61,"output_index":0,"content_index":0,"delta":"\"","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":61,"output_index":0,"content_index":0,"delta":"
+      all","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -667,7 +647,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":62,"output_index":0,"content_index":0,"delta":"\n\n","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":62,"output_index":0,"content_index":0,"delta":"
+      three","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -676,7 +657,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":63,"output_index":0,"content_index":0,"delta":"All","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":63,"output_index":0,"content_index":0,"delta":"
+      calls","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -686,7 +668,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":64,"output_index":0,"content_index":0,"delta":"
-      three","item_id":"85017ac6a9a16281"}
+      in","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -696,7 +678,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":65,"output_index":0,"content_index":0,"delta":"
-      functions","item_id":"85017ac6a9a16281"}
+      this","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -706,7 +688,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":66,"output_index":0,"content_index":0,"delta":"
-      have","item_id":"85017ac6a9a16281"}
+      single","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -716,7 +698,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":67,"output_index":0,"content_index":0,"delta":"
-      the","item_id":"85017ac6a9a16281"}
+      turn","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -725,8 +707,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":68,"output_index":0,"content_index":0,"delta":"
-      required","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":68,"output_index":0,"content_index":0,"delta":",","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -736,7 +717,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":69,"output_index":0,"content_index":0,"delta":"
-      parameters","item_id":"85017ac6a9a16281"}
+      without","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -746,7 +727,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":70,"output_index":0,"content_index":0,"delta":"
-      provided","item_id":"85017ac6a9a16281"}
+      waiting","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -756,7 +737,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":71,"output_index":0,"content_index":0,"delta":"
-      by","item_id":"85017ac6a9a16281"}
+      for","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -766,7 +747,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":72,"output_index":0,"content_index":0,"delta":"
-      the","item_id":"85017ac6a9a16281"}
+      any","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -776,7 +757,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":73,"output_index":0,"content_index":0,"delta":"
-      user","item_id":"85017ac6a9a16281"}
+      to","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -785,7 +766,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":74,"output_index":0,"content_index":0,"delta":":","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":74,"output_index":0,"content_index":0,"delta":"
+      complete","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -794,7 +776,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":75,"output_index":0,"content_index":0,"delta":"\n","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":75,"output_index":0,"content_index":0,"delta":"
+      before","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -803,7 +786,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":76,"output_index":0,"content_index":0,"delta":"1","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":76,"output_index":0,"content_index":0,"delta":"
+      starting","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -812,7 +796,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":77,"output_index":0,"content_index":0,"delta":".","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":77,"output_index":0,"content_index":0,"delta":"
+      the","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -822,7 +807,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":78,"output_index":0,"content_index":0,"delta":"
-      get","item_id":"85017ac6a9a16281"}
+      others","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -831,7 +816,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":79,"output_index":0,"content_index":0,"delta":"_weather","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":79,"output_index":0,"content_index":0,"delta":".","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -841,7 +826,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":80,"output_index":0,"content_index":0,"delta":"
-      requires","item_id":"85017ac6a9a16281"}
+      Let","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -851,7 +836,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":81,"output_index":0,"content_index":0,"delta":"
-      \"","item_id":"85017ac6a9a16281"}
+      me","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -860,7 +845,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":82,"output_index":0,"content_index":0,"delta":"city","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":82,"output_index":0,"content_index":0,"delta":"
+      check","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -869,7 +855,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":83,"output_index":0,"content_index":0,"delta":"\"","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":83,"output_index":0,"content_index":0,"delta":"
+      the","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -879,7 +866,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":84,"output_index":0,"content_index":0,"delta":"
-      -","item_id":"85017ac6a9a16281"}
+      parameters","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -889,7 +876,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":85,"output_index":0,"content_index":0,"delta":"
-      provided","item_id":"85017ac6a9a16281"}
+      for","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -899,7 +886,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":86,"output_index":0,"content_index":0,"delta":"
-      as","item_id":"85017ac6a9a16281"}
+      each","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -908,8 +895,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":87,"output_index":0,"content_index":0,"delta":"
-      \"","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":87,"output_index":0,"content_index":0,"delta":":","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -918,7 +904,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":88,"output_index":0,"content_index":0,"delta":"Tok","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":88,"output_index":0,"content_index":0,"delta":"\n\n","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -927,7 +913,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":89,"output_index":0,"content_index":0,"delta":"yo","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":89,"output_index":0,"content_index":0,"delta":"1","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -936,7 +922,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":90,"output_index":0,"content_index":0,"delta":"\"","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":90,"output_index":0,"content_index":0,"delta":".","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -945,7 +931,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":91,"output_index":0,"content_index":0,"delta":"\n","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":91,"output_index":0,"content_index":0,"delta":"
+      get","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -954,7 +941,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":92,"output_index":0,"content_index":0,"delta":"2","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":92,"output_index":0,"content_index":0,"delta":"_weather","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -963,7 +950,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":93,"output_index":0,"content_index":0,"delta":".","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":93,"output_index":0,"content_index":0,"delta":":","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -973,7 +960,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":94,"output_index":0,"content_index":0,"delta":"
-      set","item_id":"85017ac6a9a16281"}
+      requires","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -982,7 +969,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":95,"output_index":0,"content_index":0,"delta":"_temperature","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":95,"output_index":0,"content_index":0,"delta":"
+      \"","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -991,7 +979,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":96,"output_index":0,"content_index":0,"delta":"_unit","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":96,"output_index":0,"content_index":0,"delta":"city","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1000,8 +988,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":97,"output_index":0,"content_index":0,"delta":"
-      requires","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":97,"output_index":0,"content_index":0,"delta":"\"","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1011,7 +998,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":98,"output_index":0,"content_index":0,"delta":"
-      \"","item_id":"85017ac6a9a16281"}
+      parameter","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1020,7 +1007,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":99,"output_index":0,"content_index":0,"delta":"input","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":99,"output_index":0,"content_index":0,"delta":"
+      =","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1029,7 +1017,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":100,"output_index":0,"content_index":0,"delta":"\"","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":100,"output_index":0,"content_index":0,"delta":"
+      \"","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1038,8 +1027,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":101,"output_index":0,"content_index":0,"delta":"
-      -","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":101,"output_index":0,"content_index":0,"delta":"Tok","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1048,8 +1036,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":102,"output_index":0,"content_index":0,"delta":"
-      provided","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":102,"output_index":0,"content_index":0,"delta":"yo","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1058,8 +1045,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":103,"output_index":0,"content_index":0,"delta":"
-      as","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":103,"output_index":0,"content_index":0,"delta":"\"","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1068,8 +1054,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":104,"output_index":0,"content_index":0,"delta":"
-      \"","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":104,"output_index":0,"content_index":0,"delta":"\n","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1078,7 +1063,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":105,"output_index":0,"content_index":0,"delta":"f","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":105,"output_index":0,"content_index":0,"delta":"2","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1087,7 +1072,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":106,"output_index":0,"content_index":0,"delta":"ahrenheit","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":106,"output_index":0,"content_index":0,"delta":".","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1096,7 +1081,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":107,"output_index":0,"content_index":0,"delta":"\"","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":107,"output_index":0,"content_index":0,"delta":"
+      set","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1105,7 +1091,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":108,"output_index":0,"content_index":0,"delta":"\n","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":108,"output_index":0,"content_index":0,"delta":"_temperature","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1114,7 +1100,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":109,"output_index":0,"content_index":0,"delta":"3","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":109,"output_index":0,"content_index":0,"delta":"_unit","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1123,7 +1109,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":110,"output_index":0,"content_index":0,"delta":".","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":110,"output_index":0,"content_index":0,"delta":":","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1133,7 +1119,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":111,"output_index":0,"content_index":0,"delta":"
-      web","item_id":"85017ac6a9a16281"}
+      requires","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1142,7 +1128,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":112,"output_index":0,"content_index":0,"delta":"_search","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":112,"output_index":0,"content_index":0,"delta":"
+      \"","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1151,8 +1138,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":113,"output_index":0,"content_index":0,"delta":"
-      requires","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":113,"output_index":0,"content_index":0,"delta":"input","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1161,8 +1147,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":114,"output_index":0,"content_index":0,"delta":"
-      \"","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":114,"output_index":0,"content_index":0,"delta":"\"","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1171,7 +1156,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":115,"output_index":0,"content_index":0,"delta":"query","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":115,"output_index":0,"content_index":0,"delta":"
+      parameter","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1180,7 +1166,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":116,"output_index":0,"content_index":0,"delta":"\"","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":116,"output_index":0,"content_index":0,"delta":"
+      =","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1190,7 +1177,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":117,"output_index":0,"content_index":0,"delta":"
-      -","item_id":"85017ac6a9a16281"}
+      \"","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1199,8 +1186,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":118,"output_index":0,"content_index":0,"delta":"
-      provided","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":118,"output_index":0,"content_index":0,"delta":"f","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1209,8 +1195,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":119,"output_index":0,"content_index":0,"delta":"
-      as","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":119,"output_index":0,"content_index":0,"delta":"ahrenheit","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1219,8 +1204,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":120,"output_index":0,"content_index":0,"delta":"
-      \"","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":120,"output_index":0,"content_index":0,"delta":"\"","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1229,7 +1213,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":121,"output_index":0,"content_index":0,"delta":"Tok","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":121,"output_index":0,"content_index":0,"delta":"
+      (","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1238,7 +1223,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":122,"output_index":0,"content_index":0,"delta":"yo","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":122,"output_index":0,"content_index":0,"delta":"the","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1248,7 +1233,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":123,"output_index":0,"content_index":0,"delta":"
-      weather","item_id":"85017ac6a9a16281"}
+      raw","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1258,7 +1243,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":124,"output_index":0,"content_index":0,"delta":"
-      today","item_id":"85017ac6a9a16281"}
+      unit","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1267,7 +1252,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":125,"output_index":0,"content_index":0,"delta":"\"","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":125,"output_index":0,"content_index":0,"delta":"
+      as","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1276,7 +1262,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":126,"output_index":0,"content_index":0,"delta":"\n\n","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":126,"output_index":0,"content_index":0,"delta":"
+      plain","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1285,7 +1272,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":127,"output_index":0,"content_index":0,"delta":"I","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":127,"output_index":0,"content_index":0,"delta":"
+      text","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1294,8 +1282,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":128,"output_index":0,"content_index":0,"delta":"
-      can","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":128,"output_index":0,"content_index":0,"delta":")","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1304,8 +1291,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":129,"output_index":0,"content_index":0,"delta":"
-      make","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":129,"output_index":0,"content_index":0,"delta":"\n","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1314,8 +1300,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":130,"output_index":0,"content_index":0,"delta":"
-      all","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":130,"output_index":0,"content_index":0,"delta":"3","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1324,8 +1309,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":131,"output_index":0,"content_index":0,"delta":"
-      three","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":131,"output_index":0,"content_index":0,"delta":".","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1335,7 +1319,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":132,"output_index":0,"content_index":0,"delta":"
-      calls","item_id":"85017ac6a9a16281"}
+      web","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1344,8 +1328,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":133,"output_index":0,"content_index":0,"delta":"
-      in","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":133,"output_index":0,"content_index":0,"delta":"_search","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1354,8 +1337,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":134,"output_index":0,"content_index":0,"delta":"
-      parallel","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":134,"output_index":0,"content_index":0,"delta":":","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1365,7 +1347,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":135,"output_index":0,"content_index":0,"delta":"
-      as","item_id":"85017ac6a9a16281"}
+      requires","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1375,7 +1357,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":136,"output_index":0,"content_index":0,"delta":"
-      the","item_id":"85017ac6a9a16281"}
+      \"","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1384,8 +1366,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":137,"output_index":0,"content_index":0,"delta":"
-      user","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":137,"output_index":0,"content_index":0,"delta":"query","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1394,8 +1375,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":138,"output_index":0,"content_index":0,"delta":"
-      requested","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":138,"output_index":0,"content_index":0,"delta":"\"","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1404,7 +1384,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":139,"output_index":0,"content_index":0,"delta":".","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":139,"output_index":0,"content_index":0,"delta":"
+      parameter","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1413,7 +1394,161 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":140,"output_index":0,"content_index":0,"delta":"\n","item_id":"85017ac6a9a16281"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":140,"output_index":0,"content_index":0,"delta":"
+      =","item_id":"a995036e5a13b5c6"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":141,"output_index":0,"content_index":0,"delta":"
+      \"","item_id":"a995036e5a13b5c6"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":142,"output_index":0,"content_index":0,"delta":"Tok","item_id":"a995036e5a13b5c6"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":143,"output_index":0,"content_index":0,"delta":"yo","item_id":"a995036e5a13b5c6"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":144,"output_index":0,"content_index":0,"delta":"
+      weather","item_id":"a995036e5a13b5c6"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":145,"output_index":0,"content_index":0,"delta":"
+      today","item_id":"a995036e5a13b5c6"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":146,"output_index":0,"content_index":0,"delta":"\"","item_id":"a995036e5a13b5c6"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":147,"output_index":0,"content_index":0,"delta":"\n\n","item_id":"a995036e5a13b5c6"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":148,"output_index":0,"content_index":0,"delta":"I","item_id":"a995036e5a13b5c6"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":149,"output_index":0,"content_index":0,"delta":"
+      can","item_id":"a995036e5a13b5c6"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":150,"output_index":0,"content_index":0,"delta":"
+      make","item_id":"a995036e5a13b5c6"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":151,"output_index":0,"content_index":0,"delta":"
+      all","item_id":"a995036e5a13b5c6"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":152,"output_index":0,"content_index":0,"delta":"
+      three","item_id":"a995036e5a13b5c6"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":153,"output_index":0,"content_index":0,"delta":"
+      calls","item_id":"a995036e5a13b5c6"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":154,"output_index":0,"content_index":0,"delta":"
+      now","item_id":"a995036e5a13b5c6"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":155,"output_index":0,"content_index":0,"delta":".","item_id":"a995036e5a13b5c6"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":156,"output_index":0,"content_index":0,"delta":"\n","item_id":"a995036e5a13b5c6"}
 
       '
     - '
@@ -1422,15 +1557,15 @@ turns:
     - 'event: response.reasoning_text.done
 
       '
-    - 'data: {"type":"response.reasoning_text.done","sequence_number":141,"output_index":0,"content_index":0,"item_id":"85017ac6a9a16281","text":"The
-      user is asking me to perform three actions in parallel within a single turn:\n1.
-      Call get_weather for \"Tokyo\"\n2. Call set_temperature_unit to set preferred
-      unit to \"fahrenheit\"\n3. Call web_search for the query \"Tokyo weather today\"\n\nAll
-      three functions have the required parameters provided by the user:\n1. get_weather
-      requires \"city\" - provided as \"Tokyo\"\n2. set_temperature_unit requires
-      \"input\" - provided as \"fahrenheit\"\n3. web_search requires \"query\" - provided
-      as \"Tokyo weather today\"\n\nI can make all three calls in parallel as the
-      user requested.\n"}
+    - 'data: {"type":"response.reasoning_text.done","sequence_number":157,"output_index":0,"content_index":0,"item_id":"a995036e5a13b5c6","text":"The
+      user wants me to call three different tools in parallel:\n1. get_weather for
+      \"Tokyo\"\n2. set_temperature_unit to set the unit to \"fahrenheit\"\n3. web_search
+      for the exact query \"Tokyo weather today\"\n\nI need to make all three calls
+      in this single turn, without waiting for any to complete before starting the
+      others. Let me check the parameters for each:\n\n1. get_weather: requires \"city\"
+      parameter = \"Tokyo\"\n2. set_temperature_unit: requires \"input\" parameter
+      = \"fahrenheit\" (the raw unit as plain text)\n3. web_search: requires \"query\"
+      parameter = \"Tokyo weather today\"\n\nI can make all three calls now.\n"}
 
       '
     - '
@@ -1439,15 +1574,15 @@ turns:
     - 'event: response.reasoning_part.done
 
       '
-    - 'data: {"type":"response.reasoning_part.done","sequence_number":142,"output_index":0,"content_index":0,"item_id":"85017ac6a9a16281","part":{"text":"The
-      user is asking me to perform three actions in parallel within a single turn:\n1.
-      Call get_weather for \"Tokyo\"\n2. Call set_temperature_unit to set preferred
-      unit to \"fahrenheit\"\n3. Call web_search for the query \"Tokyo weather today\"\n\nAll
-      three functions have the required parameters provided by the user:\n1. get_weather
-      requires \"city\" - provided as \"Tokyo\"\n2. set_temperature_unit requires
-      \"input\" - provided as \"fahrenheit\"\n3. web_search requires \"query\" - provided
-      as \"Tokyo weather today\"\n\nI can make all three calls in parallel as the
-      user requested.\n","type":"reasoning_text"}}
+    - 'data: {"type":"response.reasoning_part.done","sequence_number":158,"output_index":0,"content_index":0,"item_id":"a995036e5a13b5c6","part":{"text":"The
+      user wants me to call three different tools in parallel:\n1. get_weather for
+      \"Tokyo\"\n2. set_temperature_unit to set the unit to \"fahrenheit\"\n3. web_search
+      for the exact query \"Tokyo weather today\"\n\nI need to make all three calls
+      in this single turn, without waiting for any to complete before starting the
+      others. Let me check the parameters for each:\n\n1. get_weather: requires \"city\"
+      parameter = \"Tokyo\"\n2. set_temperature_unit: requires \"input\" parameter
+      = \"fahrenheit\" (the raw unit as plain text)\n3. web_search: requires \"query\"
+      parameter = \"Tokyo weather today\"\n\nI can make all three calls now.\n","type":"reasoning_text"}}
 
       '
     - '
@@ -1456,15 +1591,15 @@ turns:
     - 'event: response.output_item.done
 
       '
-    - 'data: {"type":"response.output_item.done","sequence_number":143,"output_index":0,"item":{"id":"85017ac6a9a16281","summary":[],"type":"reasoning","content":[{"text":"The
-      user is asking me to perform three actions in parallel within a single turn:\n1.
-      Call get_weather for \"Tokyo\"\n2. Call set_temperature_unit to set preferred
-      unit to \"fahrenheit\"\n3. Call web_search for the query \"Tokyo weather today\"\n\nAll
-      three functions have the required parameters provided by the user:\n1. get_weather
-      requires \"city\" - provided as \"Tokyo\"\n2. set_temperature_unit requires
-      \"input\" - provided as \"fahrenheit\"\n3. web_search requires \"query\" - provided
-      as \"Tokyo weather today\"\n\nI can make all three calls in parallel as the
-      user requested.\n","type":"reasoning_text"}],"encrypted_content":null,"status":"completed"}}
+    - 'data: {"type":"response.output_item.done","sequence_number":159,"output_index":0,"item":{"id":"a995036e5a13b5c6","summary":[],"type":"reasoning","content":[{"text":"The
+      user wants me to call three different tools in parallel:\n1. get_weather for
+      \"Tokyo\"\n2. set_temperature_unit to set the unit to \"fahrenheit\"\n3. web_search
+      for the exact query \"Tokyo weather today\"\n\nI need to make all three calls
+      in this single turn, without waiting for any to complete before starting the
+      others. Let me check the parameters for each:\n\n1. get_weather: requires \"city\"
+      parameter = \"Tokyo\"\n2. set_temperature_unit: requires \"input\" parameter
+      = \"fahrenheit\" (the raw unit as plain text)\n3. web_search: requires \"query\"
+      parameter = \"Tokyo weather today\"\n\nI can make all three calls now.\n","type":"reasoning_text"}],"status":"completed"}}
 
       '
     - '
@@ -1473,7 +1608,7 @@ turns:
     - 'event: response.output_item.added
 
       '
-    - 'data: {"type":"response.output_item.added","sequence_number":144,"output_index":1,"item":{"arguments":"","call_id":"call_9175497cd477a5e0","name":"get_weather","type":"function_call","id":"b8620203308cdea5","caller":null,"namespace":null,"status":"in_progress"}}
+    - 'data: {"type":"response.output_item.added","sequence_number":160,"output_index":1,"item":{"arguments":"","call_id":"call_8fec00fd12fac72b","name":"get_weather","type":"function_call","id":"9c2f5caccb95c53e","caller":null,"namespace":null,"status":"in_progress"}}
 
       '
     - '
@@ -1482,8 +1617,8 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":145,"output_index":1,"delta":"{\"city\":
-      \"","item_id":"b8620203308cdea5"}
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":161,"output_index":1,"delta":"{\"city\":
+      \"","item_id":"9c2f5caccb95c53e"}
 
       '
     - '
@@ -1492,7 +1627,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":146,"output_index":1,"delta":"Tok","item_id":"b8620203308cdea5"}
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":162,"output_index":1,"delta":"Tok","item_id":"9c2f5caccb95c53e"}
 
       '
     - '
@@ -1501,7 +1636,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":147,"output_index":1,"delta":"yo","item_id":"b8620203308cdea5"}
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":163,"output_index":1,"delta":"yo","item_id":"9c2f5caccb95c53e"}
 
       '
     - '
@@ -1510,7 +1645,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":148,"output_index":1,"delta":"\"}","item_id":"b8620203308cdea5"}
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":164,"output_index":1,"delta":"\"}","item_id":"9c2f5caccb95c53e"}
 
       '
     - '
@@ -1519,8 +1654,8 @@ turns:
     - 'event: response.function_call_arguments.done
 
       '
-    - 'data: {"type":"response.function_call_arguments.done","sequence_number":149,"output_index":1,"arguments":"{\"city\":
-      \"Tokyo\"}","item_id":"b8620203308cdea5","name":"get_weather"}
+    - 'data: {"type":"response.function_call_arguments.done","sequence_number":165,"output_index":1,"arguments":"{\"city\":
+      \"Tokyo\"}","item_id":"9c2f5caccb95c53e","name":"get_weather"}
 
       '
     - '
@@ -1529,8 +1664,8 @@ turns:
     - 'event: response.output_item.done
 
       '
-    - 'data: {"type":"response.output_item.done","sequence_number":150,"output_index":1,"item":{"arguments":"{\"city\":
-      \"Tokyo\"}","call_id":"call_9175497cd477a5e0","name":"get_weather","type":"function_call","id":"b8620203308cdea5","caller":null,"namespace":null,"status":"completed"}}
+    - 'data: {"type":"response.output_item.done","sequence_number":166,"output_index":1,"item":{"arguments":"{\"city\":
+      \"Tokyo\"}","call_id":"call_8fec00fd12fac72b","name":"get_weather","type":"function_call","id":"9c2f5caccb95c53e","caller":null,"namespace":null,"status":"completed"}}
 
       '
     - '
@@ -1539,7 +1674,7 @@ turns:
     - 'event: response.output_item.added
 
       '
-    - 'data: {"type":"response.output_item.added","sequence_number":151,"output_index":2,"item":{"id":"ctc_bb9932ae7e68bd35","type":"custom_tool_call","status":"in_progress","call_id":"call_999789974c560e31","input":"","name":"set_temperature_unit"}}
+    - 'data: {"type":"response.output_item.added","sequence_number":167,"output_index":2,"item":{"type":"custom_tool_call","id":"ctc_43d321b4cb20679c","status":"in_progress","call_id":"call_90a0f2d5b94b96bd","name":"set_temperature_unit","input":""}}
 
       '
     - '
@@ -1548,7 +1683,7 @@ turns:
     - 'event: response.custom_tool_call_input.delta
 
       '
-    - 'data: {"type":"response.custom_tool_call_input.delta","sequence_number":152,"output_index":2,"delta":"f","item_id":"ctc_bb9932ae7e68bd35"}
+    - 'data: {"type":"response.custom_tool_call_input.delta","sequence_number":168,"output_index":2,"delta":"f","item_id":"ctc_43d321b4cb20679c"}
 
       '
     - '
@@ -1557,7 +1692,7 @@ turns:
     - 'event: response.custom_tool_call_input.delta
 
       '
-    - 'data: {"type":"response.custom_tool_call_input.delta","sequence_number":153,"output_index":2,"delta":"ahrenheit","item_id":"ctc_bb9932ae7e68bd35"}
+    - 'data: {"type":"response.custom_tool_call_input.delta","sequence_number":169,"output_index":2,"delta":"ahrenheit","item_id":"ctc_43d321b4cb20679c"}
 
       '
     - '
@@ -1566,7 +1701,7 @@ turns:
     - 'event: response.custom_tool_call_input.done
 
       '
-    - 'data: {"type":"response.custom_tool_call_input.done","sequence_number":154,"output_index":2,"input":"fahrenheit","item_id":"ctc_bb9932ae7e68bd35"}
+    - 'data: {"type":"response.custom_tool_call_input.done","sequence_number":170,"output_index":2,"input":"fahrenheit","item_id":"ctc_43d321b4cb20679c"}
 
       '
     - '
@@ -1575,7 +1710,7 @@ turns:
     - 'event: response.output_item.done
 
       '
-    - 'data: {"type":"response.output_item.done","sequence_number":155,"output_index":2,"item":{"id":"ctc_bb9932ae7e68bd35","type":"custom_tool_call","status":"completed","call_id":"call_999789974c560e31","input":"fahrenheit","name":"set_temperature_unit"}}
+    - 'data: {"type":"response.output_item.done","sequence_number":171,"output_index":2,"item":{"type":"custom_tool_call","id":"ctc_43d321b4cb20679c","status":"completed","call_id":"call_90a0f2d5b94b96bd","name":"set_temperature_unit","input":"fahrenheit"}}
 
       '
     - '
@@ -1584,7 +1719,7 @@ turns:
     - 'event: response.output_item.added
 
       '
-    - 'data: {"type":"response.output_item.added","sequence_number":156,"output_index":3,"item":{"type":"web_search_call","id":"ws_a1d5188d7bdb9b41","status":"in_progress","action":{"type":"search","query":"Tokyo
+    - 'data: {"type":"response.output_item.added","sequence_number":172,"output_index":3,"item":{"type":"web_search_call","id":"ws_b599cbd9c6339c0e","status":"in_progress","action":{"type":"search","query":"Tokyo
       weather today","queries":["Tokyo weather today"]}}}
 
       '
@@ -1594,7 +1729,7 @@ turns:
     - 'event: response.web_search_call.in_progress
 
       '
-    - 'data: {"type":"response.web_search_call.in_progress","sequence_number":157,"item_id":"ws_a1d5188d7bdb9b41","output_index":3}
+    - 'data: {"type":"response.web_search_call.in_progress","sequence_number":173,"output_index":3,"item_id":"ws_b599cbd9c6339c0e"}
 
       '
     - '
@@ -1603,7 +1738,7 @@ turns:
     - 'event: response.web_search_call.searching
 
       '
-    - 'data: {"type":"response.web_search_call.searching","sequence_number":158,"item_id":"ws_a1d5188d7bdb9b41","output_index":3}
+    - 'data: {"type":"response.web_search_call.searching","sequence_number":174,"output_index":3,"item_id":"ws_b599cbd9c6339c0e"}
 
       '
     - '
@@ -1612,18 +1747,18 @@ turns:
     - 'event: response.web_search_call.completed
 
       '
-    - 'data: {"type":"response.web_search_call.completed","sequence_number":159,"item_id":"ws_a1d5188d7bdb9b41","output_index":3,"item":{"type":"web_search_call","id":"ws_a1d5188d7bdb9b41","status":"completed","action":{"type":"search","query":"Tokyo
+    - 'data: {"type":"response.web_search_call.completed","sequence_number":175,"output_index":3,"item_id":"ws_b599cbd9c6339c0e","item":{"type":"web_search_call","id":"ws_b599cbd9c6339c0e","status":"completed","action":{"type":"search","query":"Tokyo
       weather today","queries":["Tokyo weather today"],"sources":[{"url":"https://www.accuweather.com/en/jp/tokyo/226396/weather-forecast/226396","title":"Tokyo,
       Tokyo, Japan Weather Forecast | AccuWeather"},{"url":"https://weather.com/jp/tokyo-prefecture/city/tokyo/tenday","title":"10-Day
-      Weather Forecast for Tokyo, Tokyo Prefecture, Japan - The ..."},{"url":"https://www.japan.travel/en/weather/","title":"Weather
-      & Geography | Japan''s Weather | Travel Japan | JNTO"},{"url":"https://www.wunderground.com/hourly/jp/tokyo","title":"Tokyo,
-      JP Hourly Weather Forecast | Weather Underground"},{"url":"https://www.data.jma.go.jp/multi/yoho/yoho_detail.html?code=130010&lang=en","title":"Japan
+      Weather Forecast for Tokyo, Tokyo Prefecture, Japan - The ..."},{"url":"https://www.wunderground.com/hourly/jp/tokyo","title":"Tokyo,
+      JP Hourly Weather Forecast | Weather Underground"},{"url":"https://www.japan.travel/en/weather/","title":"Weather
+      & Geography | Japan''s Weather | Travel Japan | JNTO"},{"url":"https://www.data.jma.go.jp/multi/yoho/yoho_detail.html?code=130010&lang=en","title":"Japan
       Meteorological Agency | Weather forecast"},{"url":"https://www.bbc.com/weather/1850147","title":"Tokyo
-      - BBC Weather"},{"url":"https://weather.yahoo.com/jp/tokyo-prefecture/tokyo/","title":"Tokyo,
-      JP Weather Forecast, Conditions, and Maps – Yahoo Weather"},{"url":"https://www.wunderground.com/weather/jp/tokyo","title":"Tokyo,
-      Japan Weather Conditions | Weather Underground"},{"url":"https://www.timeanddate.com/weather/japan/tokyo/ext","title":"Tokyo,
-      Japan 14 day weather forecast"},{"url":"https://www.yr.no/en/details/table/2-1850147/Japan/Tokyo/Tokyo","title":"Yr
-      - Tokyo - Detailed weather forecast as a table"}]}}}
+      - BBC Weather"},{"url":"https://www.wunderground.com/weather/jp/tokyo","title":"Tokyo,
+      Japan Weather Conditions | Weather Underground"},{"url":"https://weather.yahoo.com/jp/tokyo-prefecture/tokyo/","title":"Tokyo,
+      JP Weather Forecast, Conditions, and Maps – Yahoo Weather"},{"url":"https://www.theweathernetwork.com/en/city/jp/tokyo/tokyo/current","title":"Tokyo,
+      13, JP Current Weather - The Weather Network"},{"url":"https://www.timeanddate.com/weather/japan/tokyo/ext","title":"Tokyo,
+      Japan 14 day weather forecast"}]}}}
 
       '
     - '
@@ -1632,18 +1767,18 @@ turns:
     - 'event: response.output_item.done
 
       '
-    - 'data: {"type":"response.output_item.done","sequence_number":160,"output_index":3,"item":{"type":"web_search_call","id":"ws_a1d5188d7bdb9b41","status":"completed","action":{"type":"search","query":"Tokyo
+    - 'data: {"type":"response.output_item.done","sequence_number":176,"output_index":3,"item":{"type":"web_search_call","id":"ws_b599cbd9c6339c0e","status":"completed","action":{"type":"search","query":"Tokyo
       weather today","queries":["Tokyo weather today"],"sources":[{"url":"https://www.accuweather.com/en/jp/tokyo/226396/weather-forecast/226396","title":"Tokyo,
       Tokyo, Japan Weather Forecast | AccuWeather"},{"url":"https://weather.com/jp/tokyo-prefecture/city/tokyo/tenday","title":"10-Day
-      Weather Forecast for Tokyo, Tokyo Prefecture, Japan - The ..."},{"url":"https://www.japan.travel/en/weather/","title":"Weather
-      & Geography | Japan''s Weather | Travel Japan | JNTO"},{"url":"https://www.wunderground.com/hourly/jp/tokyo","title":"Tokyo,
-      JP Hourly Weather Forecast | Weather Underground"},{"url":"https://www.data.jma.go.jp/multi/yoho/yoho_detail.html?code=130010&lang=en","title":"Japan
+      Weather Forecast for Tokyo, Tokyo Prefecture, Japan - The ..."},{"url":"https://www.wunderground.com/hourly/jp/tokyo","title":"Tokyo,
+      JP Hourly Weather Forecast | Weather Underground"},{"url":"https://www.japan.travel/en/weather/","title":"Weather
+      & Geography | Japan''s Weather | Travel Japan | JNTO"},{"url":"https://www.data.jma.go.jp/multi/yoho/yoho_detail.html?code=130010&lang=en","title":"Japan
       Meteorological Agency | Weather forecast"},{"url":"https://www.bbc.com/weather/1850147","title":"Tokyo
-      - BBC Weather"},{"url":"https://weather.yahoo.com/jp/tokyo-prefecture/tokyo/","title":"Tokyo,
-      JP Weather Forecast, Conditions, and Maps – Yahoo Weather"},{"url":"https://www.wunderground.com/weather/jp/tokyo","title":"Tokyo,
-      Japan Weather Conditions | Weather Underground"},{"url":"https://www.timeanddate.com/weather/japan/tokyo/ext","title":"Tokyo,
-      Japan 14 day weather forecast"},{"url":"https://www.yr.no/en/details/table/2-1850147/Japan/Tokyo/Tokyo","title":"Yr
-      - Tokyo - Detailed weather forecast as a table"}]}}}
+      - BBC Weather"},{"url":"https://www.wunderground.com/weather/jp/tokyo","title":"Tokyo,
+      Japan Weather Conditions | Weather Underground"},{"url":"https://weather.yahoo.com/jp/tokyo-prefecture/tokyo/","title":"Tokyo,
+      JP Weather Forecast, Conditions, and Maps – Yahoo Weather"},{"url":"https://www.theweathernetwork.com/en/city/jp/tokyo/tokyo/current","title":"Tokyo,
+      13, JP Current Weather - The Weather Network"},{"url":"https://www.timeanddate.com/weather/japan/tokyo/ext","title":"Tokyo,
+      Japan 14 day weather forecast"}]}}}
 
       '
     - '
@@ -1652,27 +1787,32 @@ turns:
     - 'event: response.completed
 
       '
-    - 'data: {"type":"response.completed","sequence_number":161,"response":{"id":"resp_01a08eb4-4288-7760-b2b7-665d55f8d5c7","object":"response","created_at":1789100575,"model":"Qwen/Qwen3.5-35B-A3B-FP8","status":"completed","output":[{"type":"reasoning","id":"85017ac6a9a16281","content":[{"type":"reasoning_text","text":"The
-      user is asking me to perform three actions in parallel within a single turn:\n1.
-      Call get_weather for \"Tokyo\"\n2. Call set_temperature_unit to set preferred
-      unit to \"fahrenheit\"\n3. Call web_search for the query \"Tokyo weather today\"\n\nAll
-      three functions have the required parameters provided by the user:\n1. get_weather
-      requires \"city\" - provided as \"Tokyo\"\n2. set_temperature_unit requires
-      \"input\" - provided as \"fahrenheit\"\n3. web_search requires \"query\" - provided
-      as \"Tokyo weather today\"\n\nI can make all three calls in parallel as the
-      user requested.\n"}],"summary":[],"encrypted_content":null,"status":"completed"},{"type":"function_call","id":"b8620203308cdea5","call_id":"call_9175497cd477a5e0","name":"get_weather","arguments":"{\"city\":
-      \"Tokyo\"}","status":"completed"},{"type":"custom_tool_call","id":"ctc_bb9932ae7e68bd35","status":"completed","call_id":"call_999789974c560e31","name":"set_temperature_unit","input":"fahrenheit"},{"type":"web_search_call","id":"ws_a1d5188d7bdb9b41","status":"completed","action":{"type":"search","query":"Tokyo
+    - 'data: {"type":"response.completed","sequence_number":177,"response":{"id":"resp_01a1524a-37e9-7fa3-9944-81f2b71d0cd4","object":"response","created_at":1792381960,"model":"Qwen/Qwen3.5-35B-A3B-FP8","status":"completed","output":[{"type":"reasoning","id":"a995036e5a13b5c6","content":[{"type":"reasoning_text","text":"The
+      user wants me to call three different tools in parallel:\n1. get_weather for
+      \"Tokyo\"\n2. set_temperature_unit to set the unit to \"fahrenheit\"\n3. web_search
+      for the exact query \"Tokyo weather today\"\n\nI need to make all three calls
+      in this single turn, without waiting for any to complete before starting the
+      others. Let me check the parameters for each:\n\n1. get_weather: requires \"city\"
+      parameter = \"Tokyo\"\n2. set_temperature_unit: requires \"input\" parameter
+      = \"fahrenheit\" (the raw unit as plain text)\n3. web_search: requires \"query\"
+      parameter = \"Tokyo weather today\"\n\nI can make all three calls now.\n"}],"summary":[],"status":"completed"},{"type":"function_call","id":"9c2f5caccb95c53e","call_id":"call_8fec00fd12fac72b","name":"get_weather","arguments":"{\"city\":
+      \"Tokyo\"}","status":"completed"},{"type":"custom_tool_call","id":"ctc_43d321b4cb20679c","status":"completed","call_id":"call_90a0f2d5b94b96bd","name":"set_temperature_unit","input":"fahrenheit"},{"type":"web_search_call","id":"ws_b599cbd9c6339c0e","status":"completed","action":{"type":"search","query":"Tokyo
       weather today","queries":["Tokyo weather today"],"sources":[{"url":"https://www.accuweather.com/en/jp/tokyo/226396/weather-forecast/226396","title":"Tokyo,
       Tokyo, Japan Weather Forecast | AccuWeather"},{"url":"https://weather.com/jp/tokyo-prefecture/city/tokyo/tenday","title":"10-Day
-      Weather Forecast for Tokyo, Tokyo Prefecture, Japan - The ..."},{"url":"https://www.japan.travel/en/weather/","title":"Weather
-      & Geography | Japan''s Weather | Travel Japan | JNTO"},{"url":"https://www.wunderground.com/hourly/jp/tokyo","title":"Tokyo,
-      JP Hourly Weather Forecast | Weather Underground"},{"url":"https://www.data.jma.go.jp/multi/yoho/yoho_detail.html?code=130010&lang=en","title":"Japan
+      Weather Forecast for Tokyo, Tokyo Prefecture, Japan - The ..."},{"url":"https://www.wunderground.com/hourly/jp/tokyo","title":"Tokyo,
+      JP Hourly Weather Forecast | Weather Underground"},{"url":"https://www.japan.travel/en/weather/","title":"Weather
+      & Geography | Japan''s Weather | Travel Japan | JNTO"},{"url":"https://www.data.jma.go.jp/multi/yoho/yoho_detail.html?code=130010&lang=en","title":"Japan
       Meteorological Agency | Weather forecast"},{"url":"https://www.bbc.com/weather/1850147","title":"Tokyo
-      - BBC Weather"},{"url":"https://weather.yahoo.com/jp/tokyo-prefecture/tokyo/","title":"Tokyo,
-      JP Weather Forecast, Conditions, and Maps – Yahoo Weather"},{"url":"https://www.wunderground.com/weather/jp/tokyo","title":"Tokyo,
-      Japan Weather Conditions | Weather Underground"},{"url":"https://www.timeanddate.com/weather/japan/tokyo/ext","title":"Tokyo,
-      Japan 14 day weather forecast"},{"url":"https://www.yr.no/en/details/table/2-1850147/Japan/Tokyo/Tokyo","title":"Yr
-      - Tokyo - Detailed weather forecast as a table"}]}}],"usage":{"input_tokens":901,"output_tokens":222,"total_tokens":1123,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null}}
+      - BBC Weather"},{"url":"https://www.wunderground.com/weather/jp/tokyo","title":"Tokyo,
+      Japan Weather Conditions | Weather Underground"},{"url":"https://weather.yahoo.com/jp/tokyo-prefecture/tokyo/","title":"Tokyo,
+      JP Weather Forecast, Conditions, and Maps – Yahoo Weather"},{"url":"https://www.theweathernetwork.com/en/city/jp/tokyo/tokyo/current","title":"Tokyo,
+      13, JP Current Weather - The Weather Network"},{"url":"https://www.timeanddate.com/weather/japan/tokyo/ext","title":"Tokyo,
+      Japan 14 day weather forecast"}]}}],"usage":{"input_tokens":901,"output_tokens":238,"total_tokens":1139,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":null,"instructions":null,"max_tool_calls":null,"service_tier":"auto","tools":[{"type":"web_search_preview","search_context_size":null,"filters":null,"user_location":null},{"type":"function","name":"get_weather","description":"Get
+      the current weather for a given city.","parameters":{"type":"object","properties":{"city":{"type":"string","description":"City
+      name, e.g. Tokyo"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"custom","name":"set_temperature_unit","description":"Set
+      the user''s preferred temperature unit. This changes how temperatures should
+      be reported for the rest of this conversation. Call with the raw unit as plain
+      text input, e.g. fahrenheit -- not JSON."}],"tool_choice":"auto","completed_at":1792381961,"truncation":"disabled","parallel_tool_calls":true,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":1.0,"reasoning":null,"max_output_tokens":2048,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null}}
 
       '
     - '
@@ -1689,10 +1829,10 @@ turns:
   request:
     body:
       input:
-      - call_id: call_9175497cd477a5e0
+      - call_id: call_8fec00fd12fac72b
         output: '{"city": "Tokyo", "temperature_c": 22, "condition": "Clear"}'
         type: function_call_output
-      - call_id: call_999789974c560e31
+      - call_id: call_90a0f2d5b94b96bd
         output: '{"status": "ok", "unit": "fahrenheit"}'
         type: custom_tool_call_output
       - content: Now report Tokyo's current temperature using the unit I just told
@@ -1702,7 +1842,7 @@ turns:
       max_output_tokens: 2048
       model: Qwen/Qwen3.5-35B-A3B-FP8
       parallel_tool_calls: true
-      previous_response_id: resp_01a08eb4-4288-7760-b2b7-665d55f8d5c7
+      previous_response_id: resp_01a1524a-37e9-7fa3-9944-81f2b71d0cd4
       store: true
       stream: true
       tool_choice: auto
@@ -1740,21 +1880,12 @@ turns:
     - 'event: response.created
 
       '
-    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a08eb4-4ea9-7e30-b6f1-f8a88472a638","created_at":1789100576,"incomplete_details":null,"instructions":null,"metadata":null,"model":"Qwen/Qwen3.5-35B-A3B-FP8","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"The
-      natural language web search query."},"queries":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":5,"description":"Multiple
-      independent search queries to run in parallel, instead of a single query."},"count":{"type":"integer","description":"Maximum
-      results per section, from 1 to 100."},"freshness":{"type":"string","description":"Optional
-      recency filter: day, week, month, year, or YYYY-MM-DDtoYYYY-MM-DD."},"country":{"type":"string","description":"Optional
-      ISO 3166-1 alpha-2 country code."},"language":{"type":"string","description":"Optional
-      BCP 47 language code."},"include_domains":{"type":"array","items":{"type":"string"},"description":"Optional
-      strict allowlist of domains."},"exclude_domains":{"type":"array","items":{"type":"string"},"description":"Optional
-      domain blocklist."}},"anyOf":[{"required":["query"]},{"required":["queries"]}]},"strict":false,"type":"function","allowed_callers":null,"defer_loading":null,"description":"Search
-      the public web for current information and return structured web and news results.","output_schema":null},{"name":"get_weather","parameters":{"type":"object","properties":{"city":{"type":"string","description":"City
-      name, e.g. Tokyo"}},"required":["city"],"additionalProperties":false},"strict":true,"type":"function","allowed_callers":null,"defer_loading":null,"description":"Get
-      the current weather for a given city.","output_schema":null},{"name":"set_temperature_unit","description":"Set
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a1524a-44f2-73b1-9990-dd6a8e054e7c","created_at":1792381961,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.5-35B-A3B-FP8","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"type":"web_search_preview","search_context_size":null,"filters":null,"user_location":null},{"type":"function","name":"get_weather","description":"Get
+      the current weather for a given city.","parameters":{"type":"object","properties":{"city":{"type":"string","description":"City
+      name, e.g. Tokyo"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"custom","name":"set_temperature_unit","description":"Set
       the user''s preferred temperature unit. This changes how temperatures should
       be reported for the rest of this conversation. Call with the raw unit as plain
-      text input, e.g. fahrenheit -- not JSON.","type":"custom"}],"top_p":0.95,"background":false,"max_output_tokens":2048,"max_tool_calls":null,"previous_response_id":"resp_01a08eb4-4288-7760-b2b7-665d55f8d5c7","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null}}
+      text input, e.g. fahrenheit -- not JSON."}],"top_p":1.0,"background":false,"max_output_tokens":2048,"max_tool_calls":null,"previous_response_id":"resp_01a1524a-37e9-7fa3-9944-81f2b71d0cd4","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":true,"safety_identifier":null,"prompt_cache_key":null,"error":null}}
 
       '
     - '
@@ -1763,21 +1894,12 @@ turns:
     - 'event: response.in_progress
 
       '
-    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a08eb4-4ea9-7e30-b6f1-f8a88472a638","created_at":1789100576,"incomplete_details":null,"instructions":null,"metadata":null,"model":"Qwen/Qwen3.5-35B-A3B-FP8","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"The
-      natural language web search query."},"queries":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":5,"description":"Multiple
-      independent search queries to run in parallel, instead of a single query."},"count":{"type":"integer","description":"Maximum
-      results per section, from 1 to 100."},"freshness":{"type":"string","description":"Optional
-      recency filter: day, week, month, year, or YYYY-MM-DDtoYYYY-MM-DD."},"country":{"type":"string","description":"Optional
-      ISO 3166-1 alpha-2 country code."},"language":{"type":"string","description":"Optional
-      BCP 47 language code."},"include_domains":{"type":"array","items":{"type":"string"},"description":"Optional
-      strict allowlist of domains."},"exclude_domains":{"type":"array","items":{"type":"string"},"description":"Optional
-      domain blocklist."}},"anyOf":[{"required":["query"]},{"required":["queries"]}]},"strict":false,"type":"function","allowed_callers":null,"defer_loading":null,"description":"Search
-      the public web for current information and return structured web and news results.","output_schema":null},{"name":"get_weather","parameters":{"type":"object","properties":{"city":{"type":"string","description":"City
-      name, e.g. Tokyo"}},"required":["city"],"additionalProperties":false},"strict":true,"type":"function","allowed_callers":null,"defer_loading":null,"description":"Get
-      the current weather for a given city.","output_schema":null},{"name":"set_temperature_unit","description":"Set
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a1524a-44f2-73b1-9990-dd6a8e054e7c","created_at":1792381961,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.5-35B-A3B-FP8","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"type":"web_search_preview","search_context_size":null,"filters":null,"user_location":null},{"type":"function","name":"get_weather","description":"Get
+      the current weather for a given city.","parameters":{"type":"object","properties":{"city":{"type":"string","description":"City
+      name, e.g. Tokyo"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"custom","name":"set_temperature_unit","description":"Set
       the user''s preferred temperature unit. This changes how temperatures should
       be reported for the rest of this conversation. Call with the raw unit as plain
-      text input, e.g. fahrenheit -- not JSON.","type":"custom"}],"top_p":0.95,"background":false,"max_output_tokens":2048,"max_tool_calls":null,"previous_response_id":"resp_01a08eb4-4288-7760-b2b7-665d55f8d5c7","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null}}
+      text input, e.g. fahrenheit -- not JSON."}],"top_p":1.0,"background":false,"max_output_tokens":2048,"max_tool_calls":null,"previous_response_id":"resp_01a1524a-37e9-7fa3-9944-81f2b71d0cd4","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":true,"safety_identifier":null,"prompt_cache_key":null,"error":null}}
 
       '
     - '
@@ -1786,7 +1908,7 @@ turns:
     - 'event: response.output_item.added
 
       '
-    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"aaf7e584401f11c4","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress"}}
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"bb914b67f32255b4","summary":[],"type":"reasoning","content":[],"status":"in_progress"}}
 
       '
     - '
@@ -1795,7 +1917,7 @@ turns:
     - 'event: response.reasoning_part.added
 
       '
-    - 'data: {"type":"response.reasoning_part.added","sequence_number":3,"output_index":0,"content_index":0,"item_id":"aaf7e584401f11c4","part":{"text":"","type":"reasoning_text"}}
+    - 'data: {"type":"response.reasoning_part.added","sequence_number":3,"output_index":0,"content_index":0,"item_id":"bb914b67f32255b4","part":{"text":"","type":"reasoning_text"}}
 
       '
     - '
@@ -1804,7 +1926,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":4,"output_index":0,"content_index":0,"delta":"The","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":4,"output_index":0,"content_index":0,"delta":"The","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -1814,7 +1936,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":5,"output_index":0,"content_index":0,"delta":"
-      user","item_id":"aaf7e584401f11c4"}
+      user","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -1824,7 +1946,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":6,"output_index":0,"content_index":0,"delta":"
-      is","item_id":"aaf7e584401f11c4"}
+      wants","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -1834,7 +1956,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":7,"output_index":0,"content_index":0,"delta":"
-      asking","item_id":"aaf7e584401f11c4"}
+      me","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -1844,7 +1966,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":8,"output_index":0,"content_index":0,"delta":"
-      me","item_id":"aaf7e584401f11c4"}
+      to","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -1854,7 +1976,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":9,"output_index":0,"content_index":0,"delta":"
-      to","item_id":"aaf7e584401f11c4"}
+      report","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -1864,7 +1986,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":10,"output_index":0,"content_index":0,"delta":"
-      report","item_id":"aaf7e584401f11c4"}
+      Tokyo","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -1873,8 +1995,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":11,"output_index":0,"content_index":0,"delta":"
-      Tokyo","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":11,"output_index":0,"content_index":0,"delta":"''s","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -1883,7 +2004,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":12,"output_index":0,"content_index":0,"delta":"''s","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":12,"output_index":0,"content_index":0,"delta":"
+      current","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -1893,7 +2015,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":13,"output_index":0,"content_index":0,"delta":"
-      current","item_id":"aaf7e584401f11c4"}
+      temperature","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -1903,7 +2025,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":14,"output_index":0,"content_index":0,"delta":"
-      temperature","item_id":"aaf7e584401f11c4"}
+      in","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -1913,7 +2035,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":15,"output_index":0,"content_index":0,"delta":"
-      using","item_id":"aaf7e584401f11c4"}
+      Fahrenheit","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -1922,8 +2044,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":16,"output_index":0,"content_index":0,"delta":"
-      the","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":16,"output_index":0,"content_index":0,"delta":",","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -1933,7 +2054,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":17,"output_index":0,"content_index":0,"delta":"
-      unit","item_id":"aaf7e584401f11c4"}
+      since","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -1943,7 +2064,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":18,"output_index":0,"content_index":0,"delta":"
-      they","item_id":"aaf7e584401f11c4"}
+      they","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -1953,7 +2074,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":19,"output_index":0,"content_index":0,"delta":"
-      just","item_id":"aaf7e584401f11c4"}
+      just","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -1963,7 +2084,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":20,"output_index":0,"content_index":0,"delta":"
-      set","item_id":"aaf7e584401f11c4"}
+      set","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -1973,7 +2094,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":21,"output_index":0,"content_index":0,"delta":"
-      -","item_id":"aaf7e584401f11c4"}
+      their","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -1983,7 +2104,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":22,"output_index":0,"content_index":0,"delta":"
-      which","item_id":"aaf7e584401f11c4"}
+      preferred","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -1993,7 +2114,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":23,"output_index":0,"content_index":0,"delta":"
-      is","item_id":"aaf7e584401f11c4"}
+      unit","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2003,7 +2124,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":24,"output_index":0,"content_index":0,"delta":"
-      f","item_id":"aaf7e584401f11c4"}
+      to","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2012,7 +2133,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":25,"output_index":0,"content_index":0,"delta":"ahrenheit","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":25,"output_index":0,"content_index":0,"delta":"
+      f","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2021,7 +2143,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":26,"output_index":0,"content_index":0,"delta":".","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":26,"output_index":0,"content_index":0,"delta":"ahrenheit","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2031,7 +2153,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":27,"output_index":0,"content_index":0,"delta":"
-      \n\n","item_id":"aaf7e584401f11c4"}
+      in","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2040,7 +2162,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":28,"output_index":0,"content_index":0,"delta":"I","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":28,"output_index":0,"content_index":0,"delta":"
+      the","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2050,7 +2173,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":29,"output_index":0,"content_index":0,"delta":"
-      already","item_id":"aaf7e584401f11c4"}
+      parallel","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2060,7 +2183,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":30,"output_index":0,"content_index":0,"delta":"
-      have","item_id":"aaf7e584401f11c4"}
+      call","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2070,7 +2193,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":31,"output_index":0,"content_index":0,"delta":"
-      the","item_id":"aaf7e584401f11c4"}
+      I","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2080,7 +2203,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":32,"output_index":0,"content_index":0,"delta":"
-      weather","item_id":"aaf7e584401f11c4"}
+      made","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2089,8 +2212,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":33,"output_index":0,"content_index":0,"delta":"
-      data","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":33,"output_index":0,"content_index":0,"delta":".","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2100,7 +2222,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":34,"output_index":0,"content_index":0,"delta":"
-      from","item_id":"aaf7e584401f11c4"}
+      From","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2110,7 +2232,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":35,"output_index":0,"content_index":0,"delta":"
-      the","item_id":"aaf7e584401f11c4"}
+      the","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2120,7 +2242,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":36,"output_index":0,"content_index":0,"delta":"
-      get","item_id":"aaf7e584401f11c4"}
+      get","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2129,7 +2251,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":37,"output_index":0,"content_index":0,"delta":"_weather","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":37,"output_index":0,"content_index":0,"delta":"_weather","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2139,7 +2261,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":38,"output_index":0,"content_index":0,"delta":"
-      call","item_id":"aaf7e584401f11c4"}
+      call","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2148,7 +2270,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":39,"output_index":0,"content_index":0,"delta":":","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":39,"output_index":0,"content_index":0,"delta":",","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2158,7 +2280,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":40,"output_index":0,"content_index":0,"delta":"
-      temperature","item_id":"aaf7e584401f11c4"}
+      I","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2167,7 +2289,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":41,"output_index":0,"content_index":0,"delta":"_c","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":41,"output_index":0,"content_index":0,"delta":"
+      got","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2176,7 +2299,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":42,"output_index":0,"content_index":0,"delta":":","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":42,"output_index":0,"content_index":0,"delta":"
+      that","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2186,7 +2310,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":43,"output_index":0,"content_index":0,"delta":"
-      ","item_id":"aaf7e584401f11c4"}
+      Tokyo","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2195,7 +2319,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":44,"output_index":0,"content_index":0,"delta":"2","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":44,"output_index":0,"content_index":0,"delta":"''s","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2204,7 +2328,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":45,"output_index":0,"content_index":0,"delta":"2","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":45,"output_index":0,"content_index":0,"delta":"
+      temperature","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2213,7 +2338,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":46,"output_index":0,"content_index":0,"delta":",","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":46,"output_index":0,"content_index":0,"delta":"
+      is","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2223,7 +2349,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":47,"output_index":0,"content_index":0,"delta":"
-      condition","item_id":"aaf7e584401f11c4"}
+      ","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2232,7 +2358,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":48,"output_index":0,"content_index":0,"delta":":","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":48,"output_index":0,"content_index":0,"delta":"2","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2241,8 +2367,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":49,"output_index":0,"content_index":0,"delta":"
-      \"","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":49,"output_index":0,"content_index":0,"delta":"2","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2251,7 +2376,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":50,"output_index":0,"content_index":0,"delta":"Clear","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":50,"output_index":0,"content_index":0,"delta":"°C","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2260,7 +2385,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":51,"output_index":0,"content_index":0,"delta":"\"","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":51,"output_index":0,"content_index":0,"delta":".","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2269,7 +2394,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":52,"output_index":0,"content_index":0,"delta":"\n\n","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":52,"output_index":0,"content_index":0,"delta":"
+      I","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2278,7 +2404,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":53,"output_index":0,"content_index":0,"delta":"Since","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":53,"output_index":0,"content_index":0,"delta":"
+      need","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2288,7 +2415,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":54,"output_index":0,"content_index":0,"delta":"
-      they","item_id":"aaf7e584401f11c4"}
+      to","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2298,7 +2425,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":55,"output_index":0,"content_index":0,"delta":"
-      want","item_id":"aaf7e584401f11c4"}
+      convert","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2308,7 +2435,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":56,"output_index":0,"content_index":0,"delta":"
-      f","item_id":"aaf7e584401f11c4"}
+      this","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2317,7 +2444,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":57,"output_index":0,"content_index":0,"delta":"ahrenheit","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":57,"output_index":0,"content_index":0,"delta":"
+      to","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2326,7 +2454,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":58,"output_index":0,"content_index":0,"delta":",","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":58,"output_index":0,"content_index":0,"delta":"
+      Fahrenheit","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2335,8 +2464,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":59,"output_index":0,"content_index":0,"delta":"
-      I","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":59,"output_index":0,"content_index":0,"delta":".","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2345,8 +2473,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":60,"output_index":0,"content_index":0,"delta":"
-      need","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":60,"output_index":0,"content_index":0,"delta":"\n\n","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2355,8 +2482,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":61,"output_index":0,"content_index":0,"delta":"
-      to","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":61,"output_index":0,"content_index":0,"delta":"Formula","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2365,8 +2491,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":62,"output_index":0,"content_index":0,"delta":"
-      convert","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":62,"output_index":0,"content_index":0,"delta":":","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2376,7 +2501,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":63,"output_index":0,"content_index":0,"delta":"
-      ","item_id":"aaf7e584401f11c4"}
+      F","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2385,7 +2510,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":64,"output_index":0,"content_index":0,"delta":"2","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":64,"output_index":0,"content_index":0,"delta":"
+      =","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2394,7 +2520,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":65,"output_index":0,"content_index":0,"delta":"2","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":65,"output_index":0,"content_index":0,"delta":"
+      (","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2403,7 +2530,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":66,"output_index":0,"content_index":0,"delta":"°C","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":66,"output_index":0,"content_index":0,"delta":"C","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2413,7 +2540,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":67,"output_index":0,"content_index":0,"delta":"
-      to","item_id":"aaf7e584401f11c4"}
+      ×","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2423,7 +2550,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":68,"output_index":0,"content_index":0,"delta":"
-      f","item_id":"aaf7e584401f11c4"}
+      ","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2432,7 +2559,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":69,"output_index":0,"content_index":0,"delta":"ahrenheit","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":69,"output_index":0,"content_index":0,"delta":"9","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2441,7 +2568,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":70,"output_index":0,"content_index":0,"delta":".","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":70,"output_index":0,"content_index":0,"delta":"/","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2450,8 +2577,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":71,"output_index":0,"content_index":0,"delta":"
-      The","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":71,"output_index":0,"content_index":0,"delta":"5","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2460,8 +2586,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":72,"output_index":0,"content_index":0,"delta":"
-      formula","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":72,"output_index":0,"content_index":0,"delta":")","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2471,7 +2596,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":73,"output_index":0,"content_index":0,"delta":"
-      is","item_id":"aaf7e584401f11c4"}
+      +","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2480,7 +2605,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":74,"output_index":0,"content_index":0,"delta":":","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":74,"output_index":0,"content_index":0,"delta":"
+      ","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2489,8 +2615,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":75,"output_index":0,"content_index":0,"delta":"
-      F","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":75,"output_index":0,"content_index":0,"delta":"3","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2499,8 +2624,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":76,"output_index":0,"content_index":0,"delta":"
-      =","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":76,"output_index":0,"content_index":0,"delta":"2","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2509,8 +2633,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":77,"output_index":0,"content_index":0,"delta":"
-      (","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":77,"output_index":0,"content_index":0,"delta":"\n","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2519,7 +2642,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":78,"output_index":0,"content_index":0,"delta":"C","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":78,"output_index":0,"content_index":0,"delta":"F","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2529,7 +2652,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":79,"output_index":0,"content_index":0,"delta":"
-      ×","item_id":"aaf7e584401f11c4"}
+      =","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2539,7 +2662,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":80,"output_index":0,"content_index":0,"delta":"
-      ","item_id":"aaf7e584401f11c4"}
+      (","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2548,7 +2671,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":81,"output_index":0,"content_index":0,"delta":"9","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":81,"output_index":0,"content_index":0,"delta":"2","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2557,7 +2680,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":82,"output_index":0,"content_index":0,"delta":"/","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":82,"output_index":0,"content_index":0,"delta":"2","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2566,7 +2689,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":83,"output_index":0,"content_index":0,"delta":"5","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":83,"output_index":0,"content_index":0,"delta":"
+      ×","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2575,7 +2699,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":84,"output_index":0,"content_index":0,"delta":")","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":84,"output_index":0,"content_index":0,"delta":"
+      ","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2584,8 +2709,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":85,"output_index":0,"content_index":0,"delta":"
-      +","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":85,"output_index":0,"content_index":0,"delta":"9","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2594,8 +2718,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":86,"output_index":0,"content_index":0,"delta":"
-      ","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":86,"output_index":0,"content_index":0,"delta":"/","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2604,7 +2727,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":87,"output_index":0,"content_index":0,"delta":"3","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":87,"output_index":0,"content_index":0,"delta":"5","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2613,7 +2736,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":88,"output_index":0,"content_index":0,"delta":"2","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":88,"output_index":0,"content_index":0,"delta":")","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2622,7 +2745,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":89,"output_index":0,"content_index":0,"delta":"\n\n","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":89,"output_index":0,"content_index":0,"delta":"
+      +","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2631,7 +2755,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":90,"output_index":0,"content_index":0,"delta":"F","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":90,"output_index":0,"content_index":0,"delta":"
+      ","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2640,8 +2765,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":91,"output_index":0,"content_index":0,"delta":"
-      =","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":91,"output_index":0,"content_index":0,"delta":"3","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2650,8 +2774,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":92,"output_index":0,"content_index":0,"delta":"
-      (","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":92,"output_index":0,"content_index":0,"delta":"2","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2660,7 +2783,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":93,"output_index":0,"content_index":0,"delta":"2","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":93,"output_index":0,"content_index":0,"delta":"\n","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2669,7 +2792,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":94,"output_index":0,"content_index":0,"delta":"2","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":94,"output_index":0,"content_index":0,"delta":"F","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2679,7 +2802,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":95,"output_index":0,"content_index":0,"delta":"
-      ×","item_id":"aaf7e584401f11c4"}
+      =","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2689,7 +2812,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":96,"output_index":0,"content_index":0,"delta":"
-      ","item_id":"aaf7e584401f11c4"}
+      (","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2698,7 +2821,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":97,"output_index":0,"content_index":0,"delta":"9","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":97,"output_index":0,"content_index":0,"delta":"1","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2707,7 +2830,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":98,"output_index":0,"content_index":0,"delta":"/","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":98,"output_index":0,"content_index":0,"delta":"9","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2716,7 +2839,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":99,"output_index":0,"content_index":0,"delta":"5","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":99,"output_index":0,"content_index":0,"delta":"8","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2725,7 +2848,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":100,"output_index":0,"content_index":0,"delta":")","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":100,"output_index":0,"content_index":0,"delta":"/","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2734,8 +2857,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":101,"output_index":0,"content_index":0,"delta":"
-      +","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":101,"output_index":0,"content_index":0,"delta":"5","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2744,8 +2866,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":102,"output_index":0,"content_index":0,"delta":"
-      ","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":102,"output_index":0,"content_index":0,"delta":")","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2754,7 +2875,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":103,"output_index":0,"content_index":0,"delta":"3","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":103,"output_index":0,"content_index":0,"delta":"
+      +","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2763,7 +2885,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":104,"output_index":0,"content_index":0,"delta":"2","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":104,"output_index":0,"content_index":0,"delta":"
+      ","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2772,7 +2895,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":105,"output_index":0,"content_index":0,"delta":"\n","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":105,"output_index":0,"content_index":0,"delta":"3","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2781,7 +2904,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":106,"output_index":0,"content_index":0,"delta":"F","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":106,"output_index":0,"content_index":0,"delta":"2","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2790,8 +2913,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":107,"output_index":0,"content_index":0,"delta":"
-      =","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":107,"output_index":0,"content_index":0,"delta":"\n","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2800,8 +2922,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":108,"output_index":0,"content_index":0,"delta":"
-      (","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":108,"output_index":0,"content_index":0,"delta":"F","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2810,7 +2931,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":109,"output_index":0,"content_index":0,"delta":"1","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":109,"output_index":0,"content_index":0,"delta":"
+      =","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2819,7 +2941,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":110,"output_index":0,"content_index":0,"delta":"9","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":110,"output_index":0,"content_index":0,"delta":"
+      ","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2828,7 +2951,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":111,"output_index":0,"content_index":0,"delta":"8","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":111,"output_index":0,"content_index":0,"delta":"3","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2837,7 +2960,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":112,"output_index":0,"content_index":0,"delta":"/","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":112,"output_index":0,"content_index":0,"delta":"9","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2846,7 +2969,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":113,"output_index":0,"content_index":0,"delta":"5","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":113,"output_index":0,"content_index":0,"delta":".","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2855,7 +2978,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":114,"output_index":0,"content_index":0,"delta":")","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":114,"output_index":0,"content_index":0,"delta":"6","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2865,7 +2988,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":115,"output_index":0,"content_index":0,"delta":"
-      +","item_id":"aaf7e584401f11c4"}
+      +","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2875,7 +2998,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":116,"output_index":0,"content_index":0,"delta":"
-      ","item_id":"aaf7e584401f11c4"}
+      ","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2884,7 +3007,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":117,"output_index":0,"content_index":0,"delta":"3","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":117,"output_index":0,"content_index":0,"delta":"3","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2893,7 +3016,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":118,"output_index":0,"content_index":0,"delta":"2","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":118,"output_index":0,"content_index":0,"delta":"2","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2902,7 +3025,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":119,"output_index":0,"content_index":0,"delta":"\n","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":119,"output_index":0,"content_index":0,"delta":"\n","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2911,7 +3034,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":120,"output_index":0,"content_index":0,"delta":"F","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":120,"output_index":0,"content_index":0,"delta":"F","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2921,7 +3044,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":121,"output_index":0,"content_index":0,"delta":"
-      =","item_id":"aaf7e584401f11c4"}
+      =","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2931,7 +3054,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":122,"output_index":0,"content_index":0,"delta":"
-      ","item_id":"aaf7e584401f11c4"}
+      ","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2940,7 +3063,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":123,"output_index":0,"content_index":0,"delta":"3","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":123,"output_index":0,"content_index":0,"delta":"7","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2949,7 +3072,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":124,"output_index":0,"content_index":0,"delta":"9","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":124,"output_index":0,"content_index":0,"delta":"1","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2958,7 +3081,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":125,"output_index":0,"content_index":0,"delta":".","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":125,"output_index":0,"content_index":0,"delta":".","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2967,7 +3090,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":126,"output_index":0,"content_index":0,"delta":"6","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":126,"output_index":0,"content_index":0,"delta":"6","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2976,8 +3099,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":127,"output_index":0,"content_index":0,"delta":"
-      +","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":127,"output_index":0,"content_index":0,"delta":"°F","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2986,8 +3108,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":128,"output_index":0,"content_index":0,"delta":"
-      ","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":128,"output_index":0,"content_index":0,"delta":"\n\n","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -2996,7 +3117,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":129,"output_index":0,"content_index":0,"delta":"3","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":129,"output_index":0,"content_index":0,"delta":"So","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3005,7 +3126,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":130,"output_index":0,"content_index":0,"delta":"2","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":130,"output_index":0,"content_index":0,"delta":"
+      approximately","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3014,7 +3136,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":131,"output_index":0,"content_index":0,"delta":"\n","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":131,"output_index":0,"content_index":0,"delta":"
+      ","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3023,7 +3146,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":132,"output_index":0,"content_index":0,"delta":"F","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":132,"output_index":0,"content_index":0,"delta":"7","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3032,8 +3155,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":133,"output_index":0,"content_index":0,"delta":"
-      =","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":133,"output_index":0,"content_index":0,"delta":"2","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3042,8 +3164,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":134,"output_index":0,"content_index":0,"delta":"
-      ","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":134,"output_index":0,"content_index":0,"delta":"°F","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3052,7 +3173,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":135,"output_index":0,"content_index":0,"delta":"7","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":135,"output_index":0,"content_index":0,"delta":"
+      or","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3061,7 +3183,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":136,"output_index":0,"content_index":0,"delta":"1","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":136,"output_index":0,"content_index":0,"delta":"
+      I","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3070,7 +3193,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":137,"output_index":0,"content_index":0,"delta":".","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":137,"output_index":0,"content_index":0,"delta":"
+      could","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3079,7 +3203,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":138,"output_index":0,"content_index":0,"delta":"6","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":138,"output_index":0,"content_index":0,"delta":"
+      say","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3088,7 +3213,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":139,"output_index":0,"content_index":0,"delta":"°F","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":139,"output_index":0,"content_index":0,"delta":"
+      ","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3097,7 +3223,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":140,"output_index":0,"content_index":0,"delta":"\n\n","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":140,"output_index":0,"content_index":0,"delta":"7","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3106,7 +3232,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":141,"output_index":0,"content_index":0,"delta":"So","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":141,"output_index":0,"content_index":0,"delta":"1","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3115,8 +3241,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":142,"output_index":0,"content_index":0,"delta":"
-      the","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":142,"output_index":0,"content_index":0,"delta":".","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3125,8 +3250,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":143,"output_index":0,"content_index":0,"delta":"
-      temperature","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":143,"output_index":0,"content_index":0,"delta":"6","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3135,8 +3259,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":144,"output_index":0,"content_index":0,"delta":"
-      is","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":144,"output_index":0,"content_index":0,"delta":"°F","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3145,8 +3268,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":145,"output_index":0,"content_index":0,"delta":"
-      approximately","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":145,"output_index":0,"content_index":0,"delta":".","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3155,8 +3277,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":146,"output_index":0,"content_index":0,"delta":"
-      ","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":146,"output_index":0,"content_index":0,"delta":"\n\n","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3165,7 +3286,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":147,"output_index":0,"content_index":0,"delta":"7","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":147,"output_index":0,"content_index":0,"delta":"I","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3174,7 +3295,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":148,"output_index":0,"content_index":0,"delta":"1","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":148,"output_index":0,"content_index":0,"delta":"
+      should","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3183,7 +3305,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":149,"output_index":0,"content_index":0,"delta":".","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":149,"output_index":0,"content_index":0,"delta":"
+      report","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3192,7 +3315,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":150,"output_index":0,"content_index":0,"delta":"6","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":150,"output_index":0,"content_index":0,"delta":"
+      this","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3201,7 +3325,8 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":151,"output_index":0,"content_index":0,"delta":"°F","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":151,"output_index":0,"content_index":0,"delta":"
+      in","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3211,7 +3336,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":152,"output_index":0,"content_index":0,"delta":"
-      or","item_id":"aaf7e584401f11c4"}
+      f","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3220,8 +3345,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":153,"output_index":0,"content_index":0,"delta":"
-      I","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":153,"output_index":0,"content_index":0,"delta":"ahrenheit","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3231,7 +3355,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":154,"output_index":0,"content_index":0,"delta":"
-      could","item_id":"aaf7e584401f11c4"}
+      as","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3241,7 +3365,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":155,"output_index":0,"content_index":0,"delta":"
-      round","item_id":"aaf7e584401f11c4"}
+      they","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3251,7 +3375,7 @@ turns:
 
       '
     - 'data: {"type":"response.reasoning_text.delta","sequence_number":156,"output_index":0,"content_index":0,"delta":"
-      to","item_id":"aaf7e584401f11c4"}
+      requested","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3260,8 +3384,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":157,"output_index":0,"content_index":0,"delta":"
-      ","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":157,"output_index":0,"content_index":0,"delta":".","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3270,289 +3393,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":158,"output_index":0,"content_index":0,"delta":"7","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":159,"output_index":0,"content_index":0,"delta":"2","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":160,"output_index":0,"content_index":0,"delta":"°F","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":161,"output_index":0,"content_index":0,"delta":".","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":162,"output_index":0,"content_index":0,"delta":"\n\n","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":163,"output_index":0,"content_index":0,"delta":"I","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":164,"output_index":0,"content_index":0,"delta":"
-      don","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":165,"output_index":0,"content_index":0,"delta":"''t","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":166,"output_index":0,"content_index":0,"delta":"
-      need","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":167,"output_index":0,"content_index":0,"delta":"
-      to","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":168,"output_index":0,"content_index":0,"delta":"
-      make","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":169,"output_index":0,"content_index":0,"delta":"
-      any","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":170,"output_index":0,"content_index":0,"delta":"
-      tool","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":171,"output_index":0,"content_index":0,"delta":"
-      calls","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":172,"output_index":0,"content_index":0,"delta":"
-      for","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":173,"output_index":0,"content_index":0,"delta":"
-      this","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":174,"output_index":0,"content_index":0,"delta":"
-      -","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":175,"output_index":0,"content_index":0,"delta":"
-      I","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":176,"output_index":0,"content_index":0,"delta":"
-      already","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":177,"output_index":0,"content_index":0,"delta":"
-      have","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":178,"output_index":0,"content_index":0,"delta":"
-      the","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":179,"output_index":0,"content_index":0,"delta":"
-      data","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":180,"output_index":0,"content_index":0,"delta":"
-      and","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":181,"output_index":0,"content_index":0,"delta":"
-      just","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":182,"output_index":0,"content_index":0,"delta":"
-      need","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":183,"output_index":0,"content_index":0,"delta":"
-      to","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":184,"output_index":0,"content_index":0,"delta":"
-      convert","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":185,"output_index":0,"content_index":0,"delta":"
-      it","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":186,"output_index":0,"content_index":0,"delta":".","item_id":"aaf7e584401f11c4"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"type":"response.reasoning_text.delta","sequence_number":187,"output_index":0,"content_index":0,"delta":"\n","item_id":"aaf7e584401f11c4"}
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":158,"output_index":0,"content_index":0,"delta":"\n","item_id":"bb914b67f32255b4"}
 
       '
     - '
@@ -3561,15 +3402,13 @@ turns:
     - 'event: response.reasoning_text.done
 
       '
-    - 'data: {"type":"response.reasoning_text.done","sequence_number":188,"output_index":0,"content_index":0,"item_id":"aaf7e584401f11c4","text":"The
-      user is asking me to report Tokyo''s current temperature using the unit they
-      just set - which is fahrenheit. \n\nI already have the weather data from the
-      get_weather call: temperature_c: 22, condition: \"Clear\"\n\nSince they want
-      fahrenheit, I need to convert 22°C to fahrenheit. The formula is: F = (C × 9/5)
-      + 32\n\nF = (22 × 9/5) + 32\nF = (198/5) + 32\nF = 39.6 + 32\nF = 71.6°F\n\nSo
-      the temperature is approximately 71.6°F or I could round to 72°F.\n\nI don''t
-      need to make any tool calls for this - I already have the data and just need
-      to convert it.\n"}
+    - 'data: {"type":"response.reasoning_text.done","sequence_number":159,"output_index":0,"content_index":0,"item_id":"bb914b67f32255b4","text":"The
+      user wants me to report Tokyo''s current temperature in Fahrenheit, since they
+      just set their preferred unit to fahrenheit in the parallel call I made. From
+      the get_weather call, I got that Tokyo''s temperature is 22°C. I need to convert
+      this to Fahrenheit.\n\nFormula: F = (C × 9/5) + 32\nF = (22 × 9/5) + 32\nF =
+      (198/5) + 32\nF = 39.6 + 32\nF = 71.6°F\n\nSo approximately 72°F or I could
+      say 71.6°F.\n\nI should report this in fahrenheit as they requested.\n"}
 
       '
     - '
@@ -3578,15 +3417,13 @@ turns:
     - 'event: response.reasoning_part.done
 
       '
-    - 'data: {"type":"response.reasoning_part.done","sequence_number":189,"output_index":0,"content_index":0,"item_id":"aaf7e584401f11c4","part":{"text":"The
-      user is asking me to report Tokyo''s current temperature using the unit they
-      just set - which is fahrenheit. \n\nI already have the weather data from the
-      get_weather call: temperature_c: 22, condition: \"Clear\"\n\nSince they want
-      fahrenheit, I need to convert 22°C to fahrenheit. The formula is: F = (C × 9/5)
-      + 32\n\nF = (22 × 9/5) + 32\nF = (198/5) + 32\nF = 39.6 + 32\nF = 71.6°F\n\nSo
-      the temperature is approximately 71.6°F or I could round to 72°F.\n\nI don''t
-      need to make any tool calls for this - I already have the data and just need
-      to convert it.\n","type":"reasoning_text"}}
+    - 'data: {"type":"response.reasoning_part.done","sequence_number":160,"output_index":0,"content_index":0,"item_id":"bb914b67f32255b4","part":{"text":"The
+      user wants me to report Tokyo''s current temperature in Fahrenheit, since they
+      just set their preferred unit to fahrenheit in the parallel call I made. From
+      the get_weather call, I got that Tokyo''s temperature is 22°C. I need to convert
+      this to Fahrenheit.\n\nFormula: F = (C × 9/5) + 32\nF = (22 × 9/5) + 32\nF =
+      (198/5) + 32\nF = 39.6 + 32\nF = 71.6°F\n\nSo approximately 72°F or I could
+      say 71.6°F.\n\nI should report this in fahrenheit as they requested.\n","type":"reasoning_text"}}
 
       '
     - '
@@ -3595,15 +3432,13 @@ turns:
     - 'event: response.output_item.done
 
       '
-    - 'data: {"type":"response.output_item.done","sequence_number":190,"output_index":0,"item":{"id":"aaf7e584401f11c4","summary":[],"type":"reasoning","content":[{"text":"The
-      user is asking me to report Tokyo''s current temperature using the unit they
-      just set - which is fahrenheit. \n\nI already have the weather data from the
-      get_weather call: temperature_c: 22, condition: \"Clear\"\n\nSince they want
-      fahrenheit, I need to convert 22°C to fahrenheit. The formula is: F = (C × 9/5)
-      + 32\n\nF = (22 × 9/5) + 32\nF = (198/5) + 32\nF = 39.6 + 32\nF = 71.6°F\n\nSo
-      the temperature is approximately 71.6°F or I could round to 72°F.\n\nI don''t
-      need to make any tool calls for this - I already have the data and just need
-      to convert it.\n","type":"reasoning_text"}],"encrypted_content":null,"status":"completed"}}
+    - 'data: {"type":"response.output_item.done","sequence_number":161,"output_index":0,"item":{"id":"bb914b67f32255b4","summary":[],"type":"reasoning","content":[{"text":"The
+      user wants me to report Tokyo''s current temperature in Fahrenheit, since they
+      just set their preferred unit to fahrenheit in the parallel call I made. From
+      the get_weather call, I got that Tokyo''s temperature is 22°C. I need to convert
+      this to Fahrenheit.\n\nFormula: F = (C × 9/5) + 32\nF = (22 × 9/5) + 32\nF =
+      (198/5) + 32\nF = 39.6 + 32\nF = 71.6°F\n\nSo approximately 72°F or I could
+      say 71.6°F.\n\nI should report this in fahrenheit as they requested.\n","type":"reasoning_text"}],"status":"completed"}}
 
       '
     - '
@@ -3612,7 +3447,7 @@ turns:
     - 'event: response.output_item.added
 
       '
-    - 'data: {"type":"response.output_item.added","sequence_number":191,"output_index":1,"item":{"id":"aa8d911c7494944e","content":[],"role":"assistant","status":"in_progress","type":"message","phase":null}}
+    - 'data: {"type":"response.output_item.added","sequence_number":162,"output_index":1,"item":{"id":"90e362a97f7818b2","content":[],"role":"assistant","status":"in_progress","type":"message"}}
 
       '
     - '
@@ -3621,7 +3456,7 @@ turns:
     - 'event: response.content_part.added
 
       '
-    - 'data: {"type":"response.content_part.added","sequence_number":192,"output_index":1,"content_index":0,"item_id":"aa8d911c7494944e","part":{"annotations":[],"text":"","type":"output_text","logprobs":[]}}
+    - 'data: {"type":"response.content_part.added","sequence_number":163,"output_index":1,"content_index":0,"item_id":"90e362a97f7818b2","part":{"annotations":[],"text":"","type":"output_text","logprobs":[]}}
 
       '
     - '
@@ -3630,7 +3465,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":193,"output_index":1,"content_index":0,"delta":"\n\nBased","item_id":"aa8d911c7494944e","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":164,"output_index":1,"content_index":0,"delta":"\n\nTok","item_id":"90e362a97f7818b2","logprobs":[]}
 
       '
     - '
@@ -3639,8 +3474,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":194,"output_index":1,"content_index":0,"delta":"
-      on","item_id":"aa8d911c7494944e","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":165,"output_index":1,"content_index":0,"delta":"yo","item_id":"90e362a97f7818b2","logprobs":[]}
 
       '
     - '
@@ -3649,8 +3483,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":195,"output_index":1,"content_index":0,"delta":"
-      the","item_id":"aa8d911c7494944e","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":166,"output_index":1,"content_index":0,"delta":"''s","item_id":"90e362a97f7818b2","logprobs":[]}
 
       '
     - '
@@ -3659,8 +3492,8 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":196,"output_index":1,"content_index":0,"delta":"
-      weather","item_id":"aa8d911c7494944e","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":167,"output_index":1,"content_index":0,"delta":"
+      current","item_id":"90e362a97f7818b2","logprobs":[]}
 
       '
     - '
@@ -3669,8 +3502,8 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":197,"output_index":1,"content_index":0,"delta":"
-      data","item_id":"aa8d911c7494944e","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":168,"output_index":1,"content_index":0,"delta":"
+      temperature","item_id":"90e362a97f7818b2","logprobs":[]}
 
       '
     - '
@@ -3679,8 +3512,8 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":198,"output_index":1,"content_index":0,"delta":"
-      I","item_id":"aa8d911c7494944e","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":169,"output_index":1,"content_index":0,"delta":"
+      is","item_id":"90e362a97f7818b2","logprobs":[]}
 
       '
     - '
@@ -3689,8 +3522,8 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":199,"output_index":1,"content_index":0,"delta":"
-      retrieved","item_id":"aa8d911c7494944e","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":170,"output_index":1,"content_index":0,"delta":"
+      ","item_id":"90e362a97f7818b2","logprobs":[]}
 
       '
     - '
@@ -3699,7 +3532,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":200,"output_index":1,"content_index":0,"delta":",","item_id":"aa8d911c7494944e","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":171,"output_index":1,"content_index":0,"delta":"7","item_id":"90e362a97f7818b2","logprobs":[]}
 
       '
     - '
@@ -3708,8 +3541,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":201,"output_index":1,"content_index":0,"delta":"
-      Tokyo","item_id":"aa8d911c7494944e","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":172,"output_index":1,"content_index":0,"delta":"2","item_id":"90e362a97f7818b2","logprobs":[]}
 
       '
     - '
@@ -3718,7 +3550,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":202,"output_index":1,"content_index":0,"delta":"''s","item_id":"aa8d911c7494944e","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":173,"output_index":1,"content_index":0,"delta":"°F","item_id":"90e362a97f7818b2","logprobs":[]}
 
       '
     - '
@@ -3727,8 +3559,8 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":203,"output_index":1,"content_index":0,"delta":"
-      current","item_id":"aa8d911c7494944e","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":174,"output_index":1,"content_index":0,"delta":"
+      (","item_id":"90e362a97f7818b2","logprobs":[]}
 
       '
     - '
@@ -3737,8 +3569,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":204,"output_index":1,"content_index":0,"delta":"
-      temperature","item_id":"aa8d911c7494944e","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":175,"output_index":1,"content_index":0,"delta":"2","item_id":"90e362a97f7818b2","logprobs":[]}
 
       '
     - '
@@ -3747,8 +3578,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":205,"output_index":1,"content_index":0,"delta":"
-      is","item_id":"aa8d911c7494944e","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":176,"output_index":1,"content_index":0,"delta":"2","item_id":"90e362a97f7818b2","logprobs":[]}
 
       '
     - '
@@ -3757,8 +3587,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":206,"output_index":1,"content_index":0,"delta":"
-      **","item_id":"aa8d911c7494944e","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":177,"output_index":1,"content_index":0,"delta":"°C","item_id":"90e362a97f7818b2","logprobs":[]}
 
       '
     - '
@@ -3767,7 +3596,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":207,"output_index":1,"content_index":0,"delta":"7","item_id":"aa8d911c7494944e","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":178,"output_index":1,"content_index":0,"delta":")","item_id":"90e362a97f7818b2","logprobs":[]}
 
       '
     - '
@@ -3776,7 +3605,8 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":208,"output_index":1,"content_index":0,"delta":"2","item_id":"aa8d911c7494944e","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":179,"output_index":1,"content_index":0,"delta":"
+      with","item_id":"90e362a97f7818b2","logprobs":[]}
 
       '
     - '
@@ -3785,7 +3615,8 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":209,"output_index":1,"content_index":0,"delta":"°F","item_id":"aa8d911c7494944e","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":180,"output_index":1,"content_index":0,"delta":"
+      clear","item_id":"90e362a97f7818b2","logprobs":[]}
 
       '
     - '
@@ -3794,7 +3625,8 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":210,"output_index":1,"content_index":0,"delta":"**","item_id":"aa8d911c7494944e","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":181,"output_index":1,"content_index":0,"delta":"
+      conditions","item_id":"90e362a97f7818b2","logprobs":[]}
 
       '
     - '
@@ -3803,83 +3635,7 @@ turns:
     - 'event: response.output_text.delta
 
       '
-    - 'data: {"type":"response.output_text.delta","sequence_number":211,"output_index":1,"content_index":0,"delta":"
-      (","item_id":"aa8d911c7494944e","logprobs":[]}
-
-      '
-    - '
-
-      '
-    - 'event: response.output_text.delta
-
-      '
-    - 'data: {"type":"response.output_text.delta","sequence_number":212,"output_index":1,"content_index":0,"delta":"2","item_id":"aa8d911c7494944e","logprobs":[]}
-
-      '
-    - '
-
-      '
-    - 'event: response.output_text.delta
-
-      '
-    - 'data: {"type":"response.output_text.delta","sequence_number":213,"output_index":1,"content_index":0,"delta":"2","item_id":"aa8d911c7494944e","logprobs":[]}
-
-      '
-    - '
-
-      '
-    - 'event: response.output_text.delta
-
-      '
-    - 'data: {"type":"response.output_text.delta","sequence_number":214,"output_index":1,"content_index":0,"delta":"°C","item_id":"aa8d911c7494944e","logprobs":[]}
-
-      '
-    - '
-
-      '
-    - 'event: response.output_text.delta
-
-      '
-    - 'data: {"type":"response.output_text.delta","sequence_number":215,"output_index":1,"content_index":0,"delta":"),","item_id":"aa8d911c7494944e","logprobs":[]}
-
-      '
-    - '
-
-      '
-    - 'event: response.output_text.delta
-
-      '
-    - 'data: {"type":"response.output_text.delta","sequence_number":216,"output_index":1,"content_index":0,"delta":"
-      with","item_id":"aa8d911c7494944e","logprobs":[]}
-
-      '
-    - '
-
-      '
-    - 'event: response.output_text.delta
-
-      '
-    - 'data: {"type":"response.output_text.delta","sequence_number":217,"output_index":1,"content_index":0,"delta":"
-      clear","item_id":"aa8d911c7494944e","logprobs":[]}
-
-      '
-    - '
-
-      '
-    - 'event: response.output_text.delta
-
-      '
-    - 'data: {"type":"response.output_text.delta","sequence_number":218,"output_index":1,"content_index":0,"delta":"
-      conditions","item_id":"aa8d911c7494944e","logprobs":[]}
-
-      '
-    - '
-
-      '
-    - 'event: response.output_text.delta
-
-      '
-    - 'data: {"type":"response.output_text.delta","sequence_number":219,"output_index":1,"content_index":0,"delta":".","item_id":"aa8d911c7494944e","logprobs":[]}
+    - 'data: {"type":"response.output_text.delta","sequence_number":182,"output_index":1,"content_index":0,"delta":".","item_id":"90e362a97f7818b2","logprobs":[]}
 
       '
     - '
@@ -3888,9 +3644,8 @@ turns:
     - 'event: response.output_text.done
 
       '
-    - 'data: {"type":"response.output_text.done","sequence_number":220,"output_index":1,"content_index":0,"item_id":"aa8d911c7494944e","logprobs":[],"text":"\n\nBased
-      on the weather data I retrieved, Tokyo''s current temperature is **72°F** (22°C),
-      with clear conditions."}
+    - 'data: {"type":"response.output_text.done","sequence_number":183,"output_index":1,"content_index":0,"item_id":"90e362a97f7818b2","logprobs":[],"text":"\n\nTokyo''s
+      current temperature is 72°F (22°C) with clear conditions."}
 
       '
     - '
@@ -3899,9 +3654,8 @@ turns:
     - 'event: response.content_part.done
 
       '
-    - 'data: {"type":"response.content_part.done","sequence_number":221,"output_index":1,"content_index":0,"item_id":"aa8d911c7494944e","part":{"annotations":[],"text":"\n\nBased
-      on the weather data I retrieved, Tokyo''s current temperature is **72°F** (22°C),
-      with clear conditions.","type":"output_text","logprobs":null}}
+    - 'data: {"type":"response.content_part.done","sequence_number":184,"output_index":1,"content_index":0,"item_id":"90e362a97f7818b2","part":{"annotations":[],"text":"\n\nTokyo''s
+      current temperature is 72°F (22°C) with clear conditions.","type":"output_text","logprobs":[]}}
 
       '
     - '
@@ -3910,9 +3664,8 @@ turns:
     - 'event: response.output_item.done
 
       '
-    - 'data: {"type":"response.output_item.done","sequence_number":222,"output_index":1,"item":{"id":"aa8d911c7494944e","content":[{"annotations":[],"text":"\n\nBased
-      on the weather data I retrieved, Tokyo''s current temperature is **72°F** (22°C),
-      with clear conditions.","type":"output_text","logprobs":null}],"role":"assistant","status":"completed","type":"message","phase":null,"summary":[]}}
+    - 'data: {"type":"response.output_item.done","sequence_number":185,"output_index":1,"item":{"id":"90e362a97f7818b2","content":[{"annotations":[],"text":"\n\nTokyo''s
+      current temperature is 72°F (22°C) with clear conditions.","type":"output_text","logprobs":[]}],"role":"assistant","status":"completed","type":"message","summary":[]}}
 
       '
     - '
@@ -3921,17 +3674,19 @@ turns:
     - 'event: response.completed
 
       '
-    - 'data: {"type":"response.completed","sequence_number":223,"response":{"id":"resp_01a08eb4-4ea9-7e30-b6f1-f8a88472a638","object":"response","created_at":1789100578,"model":"Qwen/Qwen3.5-35B-A3B-FP8","status":"completed","output":[{"type":"reasoning","id":"aaf7e584401f11c4","content":[{"type":"reasoning_text","text":"The
-      user is asking me to report Tokyo''s current temperature using the unit they
-      just set - which is fahrenheit. \n\nI already have the weather data from the
-      get_weather call: temperature_c: 22, condition: \"Clear\"\n\nSince they want
-      fahrenheit, I need to convert 22°C to fahrenheit. The formula is: F = (C × 9/5)
-      + 32\n\nF = (22 × 9/5) + 32\nF = (198/5) + 32\nF = 39.6 + 32\nF = 71.6°F\n\nSo
-      the temperature is approximately 71.6°F or I could round to 72°F.\n\nI don''t
-      need to make any tool calls for this - I already have the data and just need
-      to convert it.\n"}],"summary":[],"encrypted_content":null,"status":"completed"},{"type":"message","id":"aa8d911c7494944e","role":"assistant","status":"completed","content":[{"type":"output_text","text":"\n\nBased
-      on the weather data I retrieved, Tokyo''s current temperature is **72°F** (22°C),
-      with clear conditions.","annotations":[]}]}],"usage":{"input_tokens":3445,"output_tokens":214,"total_tokens":3659,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":"resp_01a08eb4-4288-7760-b2b7-665d55f8d5c7","conversation_id":null,"instructions":null}}
+    - 'data: {"type":"response.completed","sequence_number":186,"response":{"id":"resp_01a1524a-44f2-73b1-9990-dd6a8e054e7c","object":"response","created_at":1792381962,"model":"Qwen/Qwen3.5-35B-A3B-FP8","status":"completed","output":[{"type":"reasoning","id":"bb914b67f32255b4","content":[{"type":"reasoning_text","text":"The
+      user wants me to report Tokyo''s current temperature in Fahrenheit, since they
+      just set their preferred unit to fahrenheit in the parallel call I made. From
+      the get_weather call, I got that Tokyo''s temperature is 22°C. I need to convert
+      this to Fahrenheit.\n\nFormula: F = (C × 9/5) + 32\nF = (22 × 9/5) + 32\nF =
+      (198/5) + 32\nF = 39.6 + 32\nF = 71.6°F\n\nSo approximately 72°F or I could
+      say 71.6°F.\n\nI should report this in fahrenheit as they requested.\n"}],"summary":[],"status":"completed"},{"type":"message","id":"90e362a97f7818b2","role":"assistant","status":"completed","content":[{"type":"output_text","text":"\n\nTokyo''s
+      current temperature is 72°F (22°C) with clear conditions.","annotations":[]}]}],"usage":{"input_tokens":2760,"output_tokens":177,"total_tokens":2937,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":"resp_01a1524a-37e9-7fa3-9944-81f2b71d0cd4","instructions":null,"max_tool_calls":null,"service_tier":"auto","tools":[{"type":"web_search_preview","search_context_size":null,"filters":null,"user_location":null},{"type":"function","name":"get_weather","description":"Get
+      the current weather for a given city.","parameters":{"type":"object","properties":{"city":{"type":"string","description":"City
+      name, e.g. Tokyo"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"custom","name":"set_temperature_unit","description":"Set
+      the user''s preferred temperature unit. This changes how temperatures should
+      be reported for the rest of this conversation. Call with the raw unit as plain
+      text input, e.g. fahrenheit -- not JSON."}],"tool_choice":"auto","completed_at":1792381962,"truncation":"disabled","parallel_tool_calls":true,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":1.0,"reasoning":null,"max_output_tokens":2048,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null}}
 
       '
     - '

@@ -1,11 +1,17 @@
+#[path = "support/multi_agent_contract.rs"]
+pub mod multi_agent_contract;
+mod support;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use agentic_core::events::{EventPayload, SSEItemType, normalize_sse_line};
 use agentic_core::executor::accumulator::ResponseAccumulator;
 use agentic_core::executor::request::RequestContext;
 use agentic_core::executor::{UpstreamBody, decode_upstream};
-use agentic_core::types::io::OutputItem;
+use agentic_core::types::io::{OutputAnnotation, OutputItem, OutputMessageContent};
 use agentic_core::types::request_response::RequestPayload;
+use multi_agent_contract::RecordedSession;
 use serde_json::json;
 
 fn request_context() -> RequestContext {
@@ -17,13 +23,53 @@ fn request_context() -> RequestContext {
     }))
     .expect("valid request");
     RequestContext {
+        multi_agent_tree: None,
         original_request: request.clone(),
         enriched_request: request,
         new_input_items: Vec::new(),
         response_id: "resp_reserved".to_owned(),
         conversation_id: None,
-        conversation_version: None,
+        checkpoint: None,
         continuation: None,
+    }
+}
+
+#[tokio::test]
+async fn strict_relay_decoder_preserves_public_file_citations_in_json_and_sse() {
+    let annotations = json!([{"type":"file_citation","file_id":"file_public","filename":"policy.txt","index":0}]);
+    let item = json!({
+        "type":"message", "id":"msg_public", "role":"assistant", "status":"completed",
+        "content":[{"type":"output_text","text":"The policy applies.","annotations":annotations}]
+    });
+    let response = json!({"id":"resp_upstream","status":"completed","output":[item]});
+    let json_body = response.to_string();
+    let stream = [
+        json!({"type":"response.created","response":{"id":"resp_upstream","status":"in_progress"}}),
+        json!({"type":"response.in_progress","response":{"id":"resp_upstream","status":"in_progress"}}),
+        json!({"type":"response.output_item.added","output_index":0,
+            "item":{"type":"message","id":"msg_public","role":"assistant","status":"in_progress","content":[]}}),
+        json!({"type":"response.output_item.done","output_index":0,"item":item}),
+        json!({"type":"response.completed","response":response}),
+    ]
+    .map(|event| format!("data: {event}"))
+    .join("\n");
+
+    for body in [UpstreamBody::Json(&json_body), UpstreamBody::Sse(&stream)] {
+        let (payload, _) = decode_upstream(request_context(), body)
+            .await
+            .expect("valid public response");
+        let OutputItem::Message(message) = &payload.output[0] else {
+            panic!("expected assistant message");
+        };
+        let OutputMessageContent::OutputText(text) = &message.content[0] else {
+            panic!("expected output text");
+        };
+        assert!(matches!(
+            text.annotations.as_deref(),
+            Some([OutputAnnotation::FileCitation(_)])
+        ));
+        let output = serde_json::to_value(payload.output).expect("typed output");
+        assert_eq!(output[0]["content"][0]["annotations"], annotations);
     }
 }
 
@@ -300,39 +346,138 @@ async fn strict_relay_decoder_preserves_web_search_item_id_fallback() {
     }
 }
 
+const RECORDED_UPSTREAM_INCOMPATIBILITIES: [(&str, &str, usize, usize); 5] = [
+    (
+        "store_false/multi-agent-store-false-model-dependencies-streaming.yaml",
+        "invalid request: upstream stream event does not match its active output item: inconsistent item ID, output_index, or kind",
+        17,
+        0,
+    ),
+    (
+        "store_false/multi-agent-store-false-openai-reference-code-interpreter-gpt-5.6-sol-streaming.yaml",
+        "invalid request: upstream stream event does not match its active output item: inconsistent item ID, output_index, or kind",
+        1,
+        0,
+    ),
+    // OpenAI refused the streamed turn B with a `conversation_locked` error event after its output, so the stream has
+    // no terminal response event.
+    (
+        "conversations/conversations-competing-tool-outputs-openai.yaml",
+        "invalid request: upstream stream ended without a terminal event",
+        1,
+        0,
+    ),
+    // OpenAI, and the gateway, refuse the streamed multi-agent turn B the same way after turn C committed.
+    (
+        "conversations/conversations-overlapping-multi-agent-openai.yaml",
+        "invalid request: upstream stream ended without a terminal event",
+        1,
+        0,
+    ),
+    (
+        "conversations/conversations-overlapping-multi-agent-gateway.yaml",
+        "invalid request: upstream stream ended without a terminal event",
+        1,
+        0,
+    ),
+];
+
 #[tokio::test]
 async fn strict_relay_decoder_accepts_compatible_recorded_responses_streams() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cassettes");
     let mut decoded = 0;
     let mut rejected = Vec::new();
+    // Preserve raw recordings, including their incompatibilities. Pin each
+    // rejection to its capture, exact error, and number of streamed turns.
+    // Live gateway output is validated separately by multi_agent_stateless.
+    let mut recorded_incompatibilities = RECORDED_UPSTREAM_INCOMPATIBILITIES;
+    let mut public_hosted_sessions = 0;
 
-    for path in yaml_files(&root) {
-        for (turn_index, chunks) in response_streams(&path).into_iter().enumerate() {
+    // Hosted searches execute in the gateway; their public search items are not upstream model events.
+    let gateway_executed = root.join("hosted_tool_search");
+    for path in yaml_files(&root)
+        .into_iter()
+        .filter(|path| !path.starts_with(&gateway_executed))
+    {
+        let relative = path.strip_prefix(&root).expect("cassette below root");
+        let streams = response_streams(&path);
+        if streams.iter().any(|chunks| {
+            chunks
+                .iter()
+                .flat_map(|chunk| chunk.lines())
+                .filter_map(normalize_sse_line)
+                .any(|frame| {
+                    matches!(
+                        frame.payload,
+                        EventPayload::OutputItemAdded {
+                            item_type: SSEItemType::ToolSearchOutput,
+                            ..
+                        }
+                    )
+                })
+        }) {
+            // A hosted tool_search_output is a public gateway projection, never a model output item.
+            // Validate the whole session's strict public lifecycle and callback ownership instead.
+            let session = RecordedSession::load(&path).unwrap();
+            session.assert_stateless().unwrap();
+            session.assert_client_owned_tools().unwrap();
+            session.assert_hosted_tool_search_continuation().unwrap();
+            public_hosted_sessions += 1;
+            continue;
+        }
+        for (turn_index, chunks) in streams.into_iter().enumerate() {
             let stream = chunks.join("\n");
             if !is_responses_event_stream(&stream) {
                 continue;
             }
-            match decode_upstream(request_context(), UpstreamBody::Sse(&stream))
+            let result = decode_upstream(request_context(), UpstreamBody::Sse(&stream))
                 .await
-                .map(|(payload, _)| payload)
+                .map(|(payload, _)| payload);
+            if let Some((_, expected_error, _, observed)) = recorded_incompatibilities
+                .iter_mut()
+                .find(|(capture, _, _, _)| relative == Path::new(capture))
             {
-                Ok(_) => decoded += 1,
-                Err(error) => rejected.push(format!(
-                    "{} turn {}: {error}",
-                    path.strip_prefix(&root).expect("cassette below root").display(),
+                let error = result.expect_err("recorded strict-relay incompatibility changed");
+                assert_eq!(
+                    error.to_string(),
+                    *expected_error,
+                    "{} stream {}",
+                    relative.display(),
                     turn_index + 1
-                )),
+                );
+                *observed += 1;
+                continue;
+            }
+            match result {
+                Ok(_) => decoded += 1,
+                Err(error) => rejected.push(format!("{} turn {}: {error}", relative.display(), turn_index + 1)),
             }
         }
     }
 
+    assert_eq!(
+        public_hosted_sessions, 2,
+        "both hosted multi-agent provider sessions must validate"
+    );
+    for (capture, _, expected, observed) in recorded_incompatibilities {
+        assert_eq!(observed, expected, "recorded incompatibility count: {capture}");
+    }
+    // This stateless gateway capture is raw upstream pass-through. vLLM emits
+    // message content-part events for a reasoning item; strict ingestion must
+    // reject it. Keep this exact observed failure distinct from valid streams.
+    let invalid_passthrough = concat!(
+        "responses/response-edge-cases-stream-gateway.yaml turn 1: ",
+        "invalid request: upstream stream event does not match its active output item: ",
+        "inconsistent item ID, output_index, or kind"
+    );
+    assert!(rejected.iter().any(|failure| failure == invalid_passthrough));
     let unexpected: Vec<_> = rejected
         .iter()
-        .filter(|failure| !failure.contains("changes 'call_id'"))
+        .filter(|failure| !failure.contains("changes 'call_id'") && failure.as_str() != invalid_passthrough)
         .collect();
     assert!(
         unexpected.is_empty(),
-        "recorded streams failed for reasons other than the call-ID stability rule:\n{}",
+        "recorded streams failed beyond the characterized upstream incompatibilities:\n{}",
         unexpected
             .iter()
             .map(|failure| failure.as_str())
@@ -341,8 +486,8 @@ async fn strict_relay_decoder_accepts_compatible_recorded_responses_streams() {
     );
     assert_eq!(
         rejected.len(),
-        10,
-        "the recorded call-ID incompatibility baseline changed:\n{}",
+        11,
+        "the recorded upstream incompatibility baseline changed:\n{}",
         rejected.join("\n")
     );
     assert!(decoded >= 50, "decoded only {decoded} recorded Responses SSE streams");

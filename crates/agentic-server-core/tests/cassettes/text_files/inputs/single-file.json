@@ -1,0 +1,17 @@
+[
+  {
+    "type": "message",
+    "role": "user",
+    "content": [
+      {
+        "type": "input_text",
+        "text": "What is the release codeword in the attached file? Reply with only the codeword."
+      },
+      {
+        "type": "input_file",
+        "filename": "notes.txt",
+        "file_data": "data:text/plain;base64,RGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg=="
+      }
+    ]
+  }
+]

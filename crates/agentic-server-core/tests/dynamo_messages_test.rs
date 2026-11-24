@@ -12,11 +12,15 @@ use agentic_core::executor::{
     run_messages_loop, run_messages_stream,
 };
 use agentic_core::storage::{ConversationStore, ResponseStore};
+use agentic_core::tool::registry_tools;
+use agentic_core::tool::web_search;
 use agentic_core::tool::{
     GatewayExecutor, ToolError, ToolHandler, ToolOutput, ToolRegistry, ToolType, WebSearchHandler,
 };
 use agentic_core::types::io::FunctionTool;
-use agentic_core::types::messages::{ToolParam, registry_tools};
+use agentic_core::types::io::OutputItem;
+use agentic_core::types::io::output::{FunctionToolCall, GatewayCallStatus};
+use agentic_core::types::messages::ToolParam;
 use agentic_core::types::tools::WebSearchToolParam;
 use axum::{Router, routing::post};
 use futures::{FutureExt, StreamExt};
@@ -46,6 +50,20 @@ impl ToolHandler for RecordedTool {
 
 impl GatewayExecutor for RecordedTool {
     type ExecutionParams = WebSearchToolParam;
+
+    fn started_output(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> Option<OutputItem> {
+        web_search::started_output_item(call)
+    }
+
+    fn public_output(
+        &self,
+        call: &FunctionToolCall,
+        output: &ToolOutput,
+        status: GatewayCallStatus,
+        _params: &WebSearchToolParam,
+    ) -> Option<OutputItem> {
+        web_search::output_item(call, output, status.into())
+    }
     fn execute(
         &self,
         call_id: &str,
@@ -56,15 +74,25 @@ impl GatewayExecutor for RecordedTool {
         assert_eq!(name, "web_search");
         assert_eq!(serde_json::from_str::<Value>(arguments).unwrap(), self.expected_input);
         *self.calls.lock().unwrap() += 1;
-        let output = ToolOutput {
-            call_id: call_id.to_owned(),
-            output: self.output.clone(),
-        };
+        let output = ToolOutput::success(call_id, self.output.clone());
         Box::pin(async move { Ok(output) })
     }
 }
 
 /// `expected_usage` is the sum of both recorded rounds (part of #315).
+async fn registry_for(expected: &Value, ctx: &ExecutionContext) -> ToolRegistry {
+    let params: Vec<ToolParam> = serde_json::from_value(expected["tools"].clone()).unwrap();
+    let mut tools = registry_tools(
+        Some(&params),
+        &ctx.messages_gateway_tools,
+        &ctx.messages_upstream_server_tools,
+    );
+    let mut executors = ctx.gateway_executors.clone();
+    ToolRegistry::build_with_handlers(&mut tools, &mut executors)
+        .await
+        .unwrap()
+}
+
 async fn replay(path: &str, streaming: bool, expected_usage: Value) {
     let raw =
         std::fs::read_to_string(path).unwrap_or_else(|error| panic!("real recording required at {path}: {error}"));
@@ -122,11 +150,7 @@ async fn replay(path: &str, streaming: bool, expected_usage: Value) {
                 )
                 .with_gateway_executor(Arc::clone(&tool)),
             );
-            let params: Vec<ToolParam> = serde_json::from_value(expected[0]["tools"].clone()).unwrap();
-            let mut tools = registry_tools(Some(&params), &ctx.messages_gateway_tools);
-            let registry = ToolRegistry::build_with_handlers(&mut tools, &mut ctx.gateway_executors.clone())
-                .await
-                .unwrap();
+            let registry = registry_for(&expected[0], &ctx).await;
             let upstream = MessagesUpstream::new(&ctx.llm_base_url, None, http::HeaderMap::new());
             if streaming {
                 let request = MessagesRequestContext::from_value(expected[0].clone()).unwrap();
@@ -139,7 +163,7 @@ async fn replay(path: &str, streaming: bool, expected_usage: Value) {
                 let request = MessagesRequestContext::from_value(expected[0].clone()).unwrap();
                 let response = run_messages_loop(request, &registry, &ctx, &upstream).await.unwrap();
                 assert_eq!(response.body["stop_reason"], "end_turn");
-                assert_eq!(response.body["content"], turns[1]["response"]["body"]["content"]);
+                assert_eq!(response.body["content"], shown_content(turns));
                 assert_eq!(
                     response.body["usage"], expected_usage,
                     "the public message sums every round"
@@ -226,13 +250,12 @@ fn expected_requests(turns: &[Value], legacy_streaming: bool) -> Vec<Value> {
             .iter()
             .flat_map(|s| s.as_str().unwrap().lines())
         {
-            if let Some(data) = line.strip_prefix("data:") {
-                if let Ok(event) = serde_json::from_str::<Value>(data.trim()) {
-                    if event["delta"]["type"] == "signature_delta" {
-                        let index = usize::try_from(event["index"].as_u64().unwrap()).unwrap();
-                        expected[1]["messages"][1]["content"][index]["signature"] = event["delta"]["signature"].clone();
-                    }
-                }
+            if let Some(data) = line.strip_prefix("data:")
+                && let Ok(event) = serde_json::from_str::<Value>(data.trim())
+                && event["delta"]["type"] == "signature_delta"
+            {
+                let index = usize::try_from(event["index"].as_u64().unwrap()).unwrap();
+                expected[1]["messages"][1]["content"][index]["signature"] = event["delta"]["signature"].clone();
             }
         }
     }
@@ -243,6 +266,16 @@ fn events(raw: &str) -> Vec<Value> {
     raw.lines()
         .filter_map(|line| line.strip_prefix("data:"))
         .filter_map(|s| serde_json::from_str(s.trim()).ok())
+        .collect()
+}
+
+/// Every recorded round's content, as the stream shows it: the gateway's own
+/// call stays hidden.
+fn shown_content(turns: &[Value]) -> Value {
+    turns
+        .iter()
+        .flat_map(|turn| turn["response"]["body"]["content"].as_array().unwrap().clone())
+        .filter(|block| block["type"] != "tool_use")
         .collect()
 }
 

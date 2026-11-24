@@ -5,7 +5,9 @@ use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use axum::Router;
 use axum::middleware;
 use axum::routing::{get, post};
+use axum::serve::{ListenerExt as _, TapIo};
 use http::HeaderValue;
+use tokio::net::{TcpListener, TcpStream};
 #[cfg(debug_assertions)]
 use tokio::sync::oneshot;
 use tokio::sync::{Notify, Semaphore, SemaphorePermit};
@@ -15,29 +17,33 @@ use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use agentic_core::executor::ExecutionContext;
 use agentic_core::proxy::ProxyState;
 
+use crate::auth::api_key::require_api_key;
 use crate::auth::{ANTHROPIC_COUNT_TOKENS_PATH, ANTHROPIC_MESSAGES_PATH, OidcAuthenticator, require_oidc};
+use crate::handler::http::file_search;
 use crate::handler::{
-    compact_response, count_tokens, create_conversation, create_item, delete_conversation, delete_item, health,
-    list_items, messages, models, ready, responses, responses_ws_with_auth, retrieve_conversation, retrieve_item,
-    update_conversation,
+    chat_completions, compact_response, completions, count_tokens, create_conversation, create_item,
+    delete_conversation, delete_item, delete_response, embeddings, health, list_input_items, list_items, messages,
+    models, ready, responses, responses_ws_with_auth, retrieve_conversation, retrieve_item, retrieve_model,
+    retrieve_response, transcriptions, translations, update_conversation,
 };
-use crate::model_capabilities::ModelCapabilities;
+use crate::rate_limit::{RateLimitConfig, RateLimiter, enforce_rate_limit};
 use crate::telemetry::http::{HttpMetrics, track_request};
+use crate::telemetry::websocket::WebSocketMetrics;
 
 /// Default ceiling on serialized inbound request bytes for HTTP bodies and
 /// WebSocket messages.
 pub const DEFAULT_MAX_REQUEST_BODY_SIZE: NonZeroUsize =
-    NonZeroUsize::new(10 * 1024 * 1024).expect("default is nonzero");
+    NonZeroUsize::new(agentic_core::executor::DEFAULT_MAX_REQUEST_BODY_SIZE_BYTES).expect("default is nonzero");
 
 #[derive(Clone, Default)]
 pub struct WebSocketTracker {
     inner: Arc<WebSocketTrackerInner>,
 }
 
-#[derive(Default)]
 struct WebSocketTrackerInner {
     active: AtomicUsize,
     idle: Notify,
+    metrics: WebSocketMetrics,
     #[cfg(debug_assertions)]
     local_completion_barrier: std::sync::Mutex<Option<LocalCompletionBarrier>>,
 }
@@ -111,13 +117,45 @@ struct LocalCompletionBarrier {
     release: oneshot::Receiver<()>,
 }
 
+impl Default for WebSocketTrackerInner {
+    fn default() -> Self {
+        Self::with_metrics(WebSocketMetrics::from_global())
+    }
+}
+
+impl WebSocketTrackerInner {
+    fn with_metrics(metrics: WebSocketMetrics) -> Self {
+        Self {
+            active: AtomicUsize::new(0),
+            idle: Notify::new(),
+            metrics,
+            #[cfg(debug_assertions)]
+            local_completion_barrier: std::sync::Mutex::new(None),
+        }
+    }
+}
+
 pub(crate) struct WebSocketGuard {
     inner: Arc<WebSocketTrackerInner>,
 }
 
 impl WebSocketTracker {
+    /// A tracker recording its connection and queue metrics with `metrics`
+    /// instead of the global meter provider's.
+    #[must_use]
+    pub fn with_metrics(metrics: WebSocketMetrics) -> Self {
+        Self {
+            inner: Arc::new(WebSocketTrackerInner::with_metrics(metrics)),
+        }
+    }
+
+    pub(crate) fn metrics(&self) -> &WebSocketMetrics {
+        &self.inner.metrics
+    }
+
     pub(crate) fn track(&self) -> WebSocketGuard {
         self.inner.active.fetch_add(1, Ordering::AcqRel);
+        self.inner.metrics.connection_opened();
         WebSocketGuard {
             inner: Arc::clone(&self.inner),
         }
@@ -163,16 +201,17 @@ impl WebSocketTracker {
             .lock()
             .expect("local completion test barrier mutex poisoned")
             .take();
-        if let Some(barrier) = barrier {
-            if barrier.rehydrated.send(()).is_ok() {
-                let _ = barrier.release.await;
-            }
+        if let Some(barrier) = barrier
+            && barrier.rehydrated.send(()).is_ok()
+        {
+            let _ = barrier.release.await;
         }
     }
 }
 
 impl Drop for WebSocketGuard {
     fn drop(&mut self) {
+        self.inner.metrics.connection_closed();
         if self.inner.active.fetch_sub(1, Ordering::AcqRel) == 1 {
             self.inner.idle.notify_waiters();
         }
@@ -186,6 +225,8 @@ pub struct ServerConfig {
     /// Controlled by `ENABLE_OPENAPI_DOCS=true`; disabled by default.
     #[cfg(feature = "openapi")]
     pub enable_openapi_docs: bool,
+    /// Per-caller request rate on protected routes; `None` disables it.
+    pub rate_limit: Option<RateLimitConfig>,
 }
 
 impl ServerConfig {
@@ -208,6 +249,7 @@ impl ServerConfig {
             cors_allowed_origins,
             #[cfg(feature = "openapi")]
             enable_openapi_docs,
+            rate_limit: None,
         }
     }
 
@@ -233,8 +275,8 @@ impl ServerConfig {
 /// Shared application state injected into every handler.
 ///
 /// Both states are always present:
-/// - `proxy_state` handles `store=false` requests (direct passthrough to vLLM)
-/// - `exec_ctx` handles `store=true` requests (stateful executor with DB)
+/// - `proxy_state` handles endpoints that pass requests through to the upstream.
+/// - `exec_ctx` handles Responses and gateway tool execution, with optional persistence.
 #[derive(Clone)]
 pub struct AppState {
     pub proxy_state: ProxyState,
@@ -252,10 +294,9 @@ pub struct AppState {
     /// Whether `/ready` should omit the upstream health check.
     pub skip_llm_ready_check: bool,
     /// Server-configured API key; used as fallback when the request carries no
-    /// `Authorization` header on the executor path.
+    /// `Authorization` header on the executor path. Also authenticates local response
+    /// retrieval when OIDC is disabled.
     pub openai_api_key: Option<String>,
-    /// Configured per-model input-modality overrides applied to the Codex model catalog.
-    pub model_capabilities: Arc<ModelCapabilities>,
     /// Ceiling on serialized inbound request bytes, applied uniformly to every
     /// request-bearing endpoint and to WebSocket messages and frames.
     ///
@@ -266,6 +307,28 @@ pub struct AppState {
     /// it; `/v1/conversations` bodies are small enough that a raised ceiling has
     /// no effect on them.
     pub max_request_body_size: NonZeroUsize,
+}
+
+/// The gateway's listener: `listener` with Nagle's algorithm disabled on
+/// every accepted connection.
+///
+/// Streamed responses and WebSocket turns are written as several small
+/// frames. With Nagle's algorithm on, each frame after the first waits until
+/// the client acknowledges the previous one, and clients delay that
+/// acknowledgement (about 40 ms on Linux), which stalled every streamed
+/// response and WebSocket turn. A connection whose option cannot be set is
+/// still served.
+///
+/// The concrete type lets the server record each connection's peer address,
+/// which rate limiting uses to tell callers apart.
+pub fn gateway_listener(listener: TcpListener) -> TapIo<TcpListener, fn(&mut TcpStream)> {
+    listener.tap_io(disable_nagle as fn(&mut TcpStream))
+}
+
+fn disable_nagle(stream: &mut TcpStream) {
+    if let Err(error) = stream.set_nodelay(true) {
+        tracing::warn!(%error, "failed to disable Nagle's algorithm on an accepted connection");
+    }
 }
 
 pub fn build_router(state: AppState, server_config: &ServerConfig) -> Router {
@@ -284,7 +347,24 @@ pub fn build_router_with_auth(
     } else {
         public_routes
     };
+    // Retrieval and deletion act on local storage, so they cannot rely on upstream credential validation.
+    let mut retrieval_route = get(retrieve_response).delete(delete_response);
+    let mut input_items_route = get(list_input_items);
+    if authenticator.is_none()
+        && let Some(key) = state.openai_api_key.as_ref().filter(|key| !key.is_empty())
+    {
+        retrieval_route = retrieval_route.route_layer(middleware::from_fn_with_state(key.clone(), require_api_key));
+        input_items_route = input_items_route.route_layer(middleware::from_fn_with_state(key.clone(), require_api_key));
+    }
+    let mut file_search_routes = file_search::router(state.max_request_body_size.get());
+    if authenticator.is_none()
+        && let Some(key) = state.openai_api_key.as_ref().filter(|key| !key.is_empty())
+    {
+        file_search_routes =
+            file_search_routes.route_layer(middleware::from_fn_with_state(key.clone(), require_api_key));
+    }
     let protected_routes = Router::new()
+        .merge(file_search_routes)
         .route("/v1/conversations", post(create_conversation))
         .route(
             "/v1/conversations/{conversation_id}",
@@ -300,11 +380,28 @@ pub fn build_router_with_auth(
             "/v1/conversations/{conversation_id}/items/{item_id}",
             get(retrieve_item).delete(delete_item),
         )
+        .route("/v1/chat/completions", post(chat_completions))
+        .route("/v1/completions", post(completions))
+        .route("/v1/embeddings", post(embeddings))
+        .route("/v1/audio/transcriptions", post(transcriptions))
+        .route("/v1/audio/translations", post(translations))
         .route("/v1/models", get(models))
+        // A wildcard, because model IDs such as `org/name` contain slashes.
+        .route("/v1/models/{*model}", get(retrieve_model))
         .route(ANTHROPIC_MESSAGES_PATH, post(messages))
         .route(ANTHROPIC_COUNT_TOKENS_PATH, post(count_tokens))
         .route("/v1/responses", post(responses).get(responses_ws_with_auth))
-        .route("/v1/responses/compact", post(compact_response));
+        .route("/v1/responses/compact", post(compact_response))
+        .route("/v1/responses/{response_id}", retrieval_route)
+        .route("/v1/responses/{response_id}/input_items", input_items_route);
+    // Layered before authentication, so it runs after it and sees the principal.
+    let protected_routes = match server_config.rate_limit {
+        Some(config) => protected_routes.route_layer(middleware::from_fn_with_state(
+            Arc::new(RateLimiter::new(config)),
+            enforce_rate_limit,
+        )),
+        None => protected_routes,
+    };
     let protected_routes = match authenticator {
         Some(authenticator) => {
             protected_routes.route_layer(middleware::from_fn_with_state(authenticator, require_oidc))

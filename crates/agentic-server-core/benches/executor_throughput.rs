@@ -130,28 +130,13 @@ fn start_mock_server(rt: &tokio::runtime::Runtime) -> String {
 
 fn make_request(input: &str, stream: bool, prev_id: Option<String>) -> RequestPayload {
     RequestPayload {
-        model: "test-model".to_string(),
+        model: "test-model".into(),
         input: ResponsesInput::Text(input.to_string()),
-        instructions: None,
+        store: true,
         previous_response_id: prev_id,
-        conversation_id: None,
-        tools: None,
         tool_choice: Some(ToolChoice::Auto),
         stream,
-        store: true,
-        include: None,
-        reasoning: None,
-        text: None,
-        temperature: None,
-        top_p: None,
-        max_output_tokens: None,
-        ignore_eos: None,
-        truncation: None,
-        metadata: None,
-        parallel_tool_calls: None,
-        prompt_cache_key: None,
-        cache_salt: None,
-        context_management: None,
+        ..Default::default()
     }
 }
 

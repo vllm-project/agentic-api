@@ -1,18 +1,23 @@
 use std::future::Future;
 
-use axum::extract::{Query, State};
+use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
+use bytes::Bytes;
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
+use serde_json::value::RawValue;
 use tracing::{debug, info, warn};
 
-use agentic_core::proxy::{ProxyBody, ProxyResponse, error_response, proxy_get};
+use agentic_core::proxy::{ProxyBody, ProxyResponse, error_response, processed_response_headers, proxy_get};
 use agentic_core::readiness::{LLM_READINESS_PROBE_TIMEOUT, LlmReadiness, probe_llm_readiness};
+use agentic_core::types::messages::ReasoningEffortLevel;
 
 use super::super::common::convert_response;
 use crate::app::AppState;
-use crate::model_capabilities::{InputModalities, ModelCapabilities, UpstreamCapabilities};
+use crate::model_capabilities::{
+    CodexReasoningLevel, DEFAULT_REASONING_LEVELS, InputModalities, ModelCapabilities, UpstreamCapabilities,
+};
 
 /// One model entry of an upstream OpenAI-compatible `/v1/models` payload.
 ///
@@ -39,20 +44,22 @@ struct UpstreamModelList {
     data: Vec<UpstreamModel>,
 }
 
-/// Reasoning effort levels Codex offers for a model.
-#[derive(Clone, Copy, Debug, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum ReasoningEffort {
-    Low,
-    Medium,
-    High,
+/// An upstream `/v1/models` payload whose entries stay raw, so a matched entry is returned unchanged.
+#[derive(Debug, Deserialize)]
+struct RawUpstreamModelList<'a> {
+    #[serde(borrow, default)]
+    data: Vec<&'a RawValue>,
 }
 
-/// One selectable reasoning level with its Codex-facing description.
-#[derive(Debug, Serialize)]
-struct SupportedReasoningLevel {
-    effort: ReasoningEffort,
-    description: &'static str,
+/// The identifier of one upstream model entry; its other fields are not decoded.
+#[derive(Debug, Deserialize)]
+struct UpstreamModelId {
+    id: Option<String>,
+}
+
+/// Describe `levels` in the order the catalog lists them.
+fn supported_reasoning_levels(levels: &[ReasoningEffortLevel]) -> Vec<CodexReasoningLevel> {
+    levels.iter().copied().map(CodexReasoningLevel::from_effort).collect()
 }
 
 /// How Codex truncates oversized tool output for a model.
@@ -85,7 +92,7 @@ struct CodexModelInfo {
     shell_type: &'static str,
     visibility: &'static str,
     base_instructions: &'static str,
-    supported_reasoning_levels: Vec<SupportedReasoningLevel>,
+    supported_reasoning_levels: Vec<CodexReasoningLevel>,
     supports_reasoning_summaries: bool,
     default_reasoning_summary: &'static str,
     support_verbosity: bool,
@@ -123,20 +130,7 @@ impl Default for CodexModelInfo {
             shell_type: "shell_command",
             visibility: "list",
             base_instructions: "",
-            supported_reasoning_levels: vec![
-                SupportedReasoningLevel {
-                    effort: ReasoningEffort::Low,
-                    description: "Fast responses with lighter reasoning",
-                },
-                SupportedReasoningLevel {
-                    effort: ReasoningEffort::Medium,
-                    description: "Balances speed and reasoning depth",
-                },
-                SupportedReasoningLevel {
-                    effort: ReasoningEffort::High,
-                    description: "Greater reasoning depth for complex problems",
-                },
-            ],
+            supported_reasoning_levels: supported_reasoning_levels(DEFAULT_REASONING_LEVELS),
             supports_reasoning_summaries: false,
             default_reasoning_summary: "auto",
             support_verbosity: false,
@@ -182,6 +176,7 @@ fn upstream_model_to_codex(model: &UpstreamModel, capabilities: &ModelCapabiliti
         auto_review_model_override: id.to_owned(),
         supports_reasoning_summaries: upstream.reasoning,
         input_modalities: capabilities.resolve(id, upstream),
+        supported_reasoning_levels: supported_reasoning_levels(capabilities.resolve_reasoning_levels(id)),
         context_window,
         max_context_window: context_window,
         ..CodexModelInfo::default()
@@ -208,6 +203,25 @@ fn build_codex_models_response(
             .filter_map(|model| upstream_model_to_codex(model, capabilities))
             .collect(),
     })
+}
+
+/// Find the upstream model entry whose `id` is exactly `model`.
+///
+/// The entry is returned as the upstream wrote it, so fields the gateway does not model, such
+/// as vLLM's `max_model_len` and `root`, reach the client unchanged.
+///
+/// # Errors
+///
+/// Returns the deserialization error when the upstream payload is not a model list.
+fn find_upstream_model<'a>(upstream_bytes: &'a [u8], model: &str) -> Result<Option<&'a RawValue>, serde_json::Error> {
+    let list: RawUpstreamModelList<'a> = serde_json::from_slice(upstream_bytes)?;
+    for entry in list.data {
+        let UpstreamModelId { id } = serde_json::from_str(entry.get())?;
+        if id.as_deref() == Some(model) {
+            return Ok(Some(entry));
+        }
+    }
+    Ok(None)
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(
@@ -369,32 +383,92 @@ pub async fn models(State(state): State<AppState>, headers: HeaderMap, Query(par
         return convert_response(upstream);
     }
 
+    let upstream_bytes = match model_list_body(upstream) {
+        Ok(bytes) => bytes,
+        Err(response) => return response,
+    };
+
+    match build_codex_models_response(&upstream_bytes, &state.exec_ctx.model_capabilities) {
+        Ok(response) => axum::Json(response).into_response(),
+        Err(error) => invalid_model_list(&error),
+    }
+}
+
+/// GET /v1/models/{model} — one entry of the upstream model list.
+///
+/// vLLM serves no per-model route, so the gateway answers from the upstream `/v1/models`
+/// list instead of forwarding the request: the matching entry is returned unchanged, a model
+/// the upstream does not list is a 404, and an upstream error is forwarded as is. The entry
+/// keeps the upstream's metadata headers, such as request IDs, but not those describing the list.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/v1/models/{model}",
+    params(
+        ("model" = String, Path, description = "Model ID; may contain `/`, encoded or not"),
+    ),
+    responses(
+        (status = 200, description = "The upstream's entry, unchanged", body = crate::openapi::ModelObject),
+        (status = 404, description = "The upstream does not list this model", body = crate::openapi::ApiErrorResponse),
+        (status = 502, description = "Upstream unavailable", body = crate::openapi::ApiErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+    tag = "models",
+))]
+pub async fn retrieve_model(State(state): State<AppState>, headers: HeaderMap, Path(model): Path<String>) -> Response {
+    let upstream = proxy_get("/v1/models", &headers, &state.proxy_state).await;
+    let mut response_headers = processed_response_headers(&upstream.headers);
+    let upstream_bytes = match model_list_body(upstream) {
+        Ok(bytes) => bytes,
+        Err(response) => return response,
+    };
+
+    match find_upstream_model(&upstream_bytes, &model) {
+        Ok(Some(entry)) => {
+            response_headers.insert(
+                http::header::CONTENT_TYPE,
+                http::HeaderValue::from_static("application/json"),
+            );
+            (response_headers, entry.get().to_owned()).into_response()
+        }
+        Ok(None) => convert_response(error_response(
+            StatusCode::NOT_FOUND,
+            "model_not_found",
+            &format!("The model `{model}` does not exist"),
+        )),
+        Err(error) => invalid_model_list(&error),
+    }
+}
+
+/// Take the body of a successful upstream `/v1/models` response, or the response to return instead.
+///
+/// An upstream error is forwarded unchanged; a streamed body cannot be a model list.
+#[allow(clippy::result_large_err)]
+fn model_list_body(upstream: ProxyResponse) -> Result<Bytes, Response> {
     let ProxyBody::Full(upstream_bytes) = upstream.body else {
-        return convert_response(error_response(
+        return Err(convert_response(error_response(
             StatusCode::BAD_GATEWAY,
             "upstream_unavailable",
             "unexpected streaming response from /v1/models",
-        ));
+        )));
     };
 
     if !upstream.status.is_success() {
-        return convert_response(ProxyResponse {
+        return Err(convert_response(ProxyResponse {
             body: ProxyBody::Full(upstream_bytes),
             ..upstream
-        });
+        }));
     }
 
-    match build_codex_models_response(&upstream_bytes, &state.model_capabilities) {
-        Ok(response) => axum::Json(response).into_response(),
-        Err(error) => {
-            warn!(error = %error, "upstream /v1/models payload could not be decoded");
-            convert_response(error_response(
-                StatusCode::BAD_GATEWAY,
-                "upstream_unavailable",
-                "invalid model list from /v1/models",
-            ))
-        }
-    }
+    Ok(upstream_bytes)
+}
+
+fn invalid_model_list(error: &serde_json::Error) -> Response {
+    warn!(error = %error, "upstream /v1/models payload could not be decoded");
+    convert_response(error_response(
+        StatusCode::BAD_GATEWAY,
+        "upstream_unavailable",
+        "invalid model list from /v1/models",
+    ))
 }
 
 #[cfg(test)]
@@ -405,9 +479,11 @@ mod tests {
 
     use serde_json::{Value, json};
 
-    use super::{build_codex_models_response, dependencies_are_ready};
+    use agentic_core::types::{ReasoningEffortLevel, ServiceTier};
+
+    use super::{build_codex_models_response, dependencies_are_ready, find_upstream_model};
     use crate::app::ReadinessTracker;
-    use crate::model_capabilities::{InputModalities, ModelCapabilities};
+    use crate::model_capabilities::{InputModalities, ModelCapabilities, ModelOverride, SupportedReasoningLevels};
 
     const UPSTREAM_MODELS: &str = r#"{
         "object": "list",
@@ -419,10 +495,45 @@ mod tests {
         ]
     }"#;
 
+    /// An override carrying only the listed input modalities.
+    fn modalities(modalities: InputModalities) -> ModelOverride {
+        ModelOverride {
+            input_modalities: Some(modalities),
+            ..ModelOverride::default()
+        }
+    }
+
+    /// An override carrying only the listed reasoning levels.
+    fn levels(levels: &[ReasoningEffortLevel]) -> ModelOverride {
+        ModelOverride {
+            supported_reasoning_levels: Some(
+                SupportedReasoningLevels::try_new(levels).expect("valid reasoning levels"),
+            ),
+            ..ModelOverride::default()
+        }
+    }
+
     fn configured_capabilities() -> ModelCapabilities {
         ModelCapabilities::new(BTreeMap::from([
-            ("vision-model".to_owned(), InputModalities::TextAndImage),
-            ("pinned-text-model".to_owned(), InputModalities::Text),
+            (
+                "vision-model".to_owned(),
+                ModelOverride {
+                    sampling_supported: Some(false),
+                    logprobs_supported: Some(false),
+                    service_tiers: Some(vec![ServiceTier::Default]),
+                    prompt_cache_options_supported: Some(true),
+                    prompt_cache_retention_supported: Some(false),
+                    ..modalities(InputModalities::TextAndImage)
+                },
+            ),
+            (
+                "unlisted-model".to_owned(),
+                ModelOverride {
+                    sampling_supported: Some(false),
+                    ..ModelOverride::default()
+                },
+            ),
+            ("pinned-text-model".to_owned(), modalities(InputModalities::Text)),
         ]))
     }
 
@@ -463,6 +574,44 @@ mod tests {
             entry(&models, "plain-model")["input_modalities"],
             json!(["text"]),
             "an unknown model without metadata must stay text-only"
+        );
+    }
+
+    #[test]
+    fn catalog_lists_configured_reasoning_levels_in_order() {
+        let capabilities = ModelCapabilities::new(BTreeMap::from([(
+            "plain-model".to_owned(),
+            levels(&[
+                ReasoningEffortLevel::Low,
+                ReasoningEffortLevel::High,
+                ReasoningEffortLevel::Max,
+            ]),
+        )]));
+        let models = catalog(UPSTREAM_MODELS, &capabilities);
+
+        assert_eq!(
+            entry(&models, "plain-model")["supported_reasoning_levels"],
+            json!([
+                {"effort": "low", "description": "Fast responses with lighter reasoning"},
+                {"effort": "high", "description": "Greater reasoning depth for complex problems"},
+                {"effort": "max", "description": "Maximum reasoning depth for the hardest problems"}
+            ]),
+            "a configured model must advertise its levels in the configured order"
+        );
+    }
+
+    #[test]
+    fn catalog_keeps_the_default_reasoning_levels_without_configuration() {
+        let models = catalog(UPSTREAM_MODELS, &ModelCapabilities::default());
+
+        assert_eq!(
+            entry(&models, "plain-model")["supported_reasoning_levels"],
+            json!([
+                {"effort": "low", "description": "Fast responses with lighter reasoning"},
+                {"effort": "medium", "description": "Balances speed and reasoning depth"},
+                {"effort": "high", "description": "Greater reasoning depth for complex problems"}
+            ]),
+            "an unconfigured model must keep the default levels"
         );
     }
 
@@ -517,6 +666,11 @@ mod tests {
     #[test]
     fn catalog_entries_keep_the_codex_key_set() {
         let models = catalog(UPSTREAM_MODELS, &configured_capabilities());
+        assert_eq!(
+            models.len(),
+            4,
+            "configured capabilities do not advertise unlisted upstream models"
+        );
         let model = entry(&models, "vision-model");
         let mut keys: Vec<&str> = model
             .as_object()
@@ -635,6 +789,41 @@ mod tests {
     }
 
     #[test]
+    fn model_lookup_returns_the_exact_upstream_entry() {
+        let payload = r#"{"data": [{"object": "model"}, {"id": "org/model-2"}, {"id": "org/model",  "root": "r"}]}"#;
+
+        let entry = find_upstream_model(payload.as_bytes(), "org/model")
+            .expect("decodable payload")
+            .expect("listed model");
+        assert_eq!(entry.get(), r#"{"id": "org/model",  "root": "r"}"#);
+        assert!(
+            find_upstream_model(payload.as_bytes(), "org")
+                .expect("decodable payload")
+                .is_none(),
+            "IDs must match exactly, not by prefix"
+        );
+        assert!(
+            find_upstream_model(b"{}", "org/model")
+                .expect("decodable payload")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn model_lookup_reports_undecodable_payloads() {
+        for payload in [
+            "not json",
+            r#"{"data": "not-a-list"}"#,
+            r#"{"data": ["not-an-object"]}"#,
+        ] {
+            assert!(
+                find_upstream_model(payload.as_bytes(), "a-model").is_err(),
+                "{payload} must not be served as an unlisted model"
+            );
+        }
+    }
+
+    #[test]
     fn readiness_tracker_reports_only_state_transitions() {
         let tracker = ReadinessTracker::default();
 
@@ -669,6 +858,18 @@ mod tests {
         )
         .await
         .expect("upstream failure must win before the pending storage check");
+
+        assert!(!result);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn dependency_check_fails_fast_when_storage_is_unready() {
+        let result = tokio::time::timeout(
+            Duration::from_secs(1),
+            dependencies_are_ready(future::ready(false), future::pending()),
+        )
+        .await
+        .expect("storage failure must win before the pending upstream check");
 
         assert!(!result);
     }

@@ -53,6 +53,15 @@ pub struct ProxyRequest {
     pub query: Option<String>,
 }
 
+/// Raw request whose body is streamed to the upstream as it arrives instead of being buffered.
+pub struct ProxyStreamRequest<S> {
+    pub headers: HeaderMap,
+    pub body: S,
+    /// The client's declared body length, so the upstream receives the same framing.
+    pub content_length: Option<u64>,
+    pub query: Option<String>,
+}
+
 impl ProxyRequest {
     /// Read only the transport preference while preserving the original request bytes.
     #[must_use]
@@ -96,7 +105,7 @@ impl ProxyState {
     pub fn new(config: Config) -> Result<Self, Error> {
         let stream_client = Client::builder()
             .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(900))
+            .timeout(Duration::from_mins(15))
             .pool_max_idle_per_host(0)
             .redirect(reqwest::redirect::Policy::none())
             .build()
@@ -131,29 +140,30 @@ pub fn upstream_request_headers(headers: &HeaderMap, config: &Config, auth: Prox
         if is_request_drop(name.as_str()) || connection_options.contains(name) {
             continue;
         }
-        if let Ok(n) = reqwest::header::HeaderName::from_bytes(name.as_str().as_bytes()) {
-            if let Ok(v) = reqwest::header::HeaderValue::from_bytes(value.as_bytes()) {
-                out.append(n, v);
-            }
+        if let Ok(n) = reqwest::header::HeaderName::from_bytes(name.as_str().as_bytes())
+            && let Ok(v) = reqwest::header::HeaderValue::from_bytes(value.as_bytes())
+        {
+            out.append(n, v);
         }
     }
 
     let has_auth = out.contains_key(reqwest::header::AUTHORIZATION);
     let has_api_key = out.contains_key("x-api-key");
-    if !has_auth && !has_api_key {
-        if let Some(key) = config.openai_api_key.as_deref() {
-            let trimmed = key.trim();
-            if !trimmed.is_empty() {
-                let (name, value) = match auth {
-                    ProxyAuth::OpenAiBearer => (reqwest::header::AUTHORIZATION, format!("Bearer {trimmed}")),
-                    ProxyAuth::Anthropic => (
-                        reqwest::header::HeaderName::from_static("x-api-key"),
-                        trimmed.to_owned(),
-                    ),
-                };
-                if let Ok(v) = reqwest::header::HeaderValue::from_str(&value) {
-                    out.insert(name, v);
-                }
+    if !has_auth
+        && !has_api_key
+        && let Some(key) = config.openai_api_key.as_deref()
+    {
+        let trimmed = key.trim();
+        if !trimmed.is_empty() {
+            let (name, value) = match auth {
+                ProxyAuth::OpenAiBearer => (reqwest::header::AUTHORIZATION, format!("Bearer {trimmed}")),
+                ProxyAuth::Anthropic => (
+                    reqwest::header::HeaderName::from_static("x-api-key"),
+                    trimmed.to_owned(),
+                ),
+            };
+            if let Ok(v) = reqwest::header::HeaderValue::from_str(&value) {
+                out.insert(name, v);
             }
         }
     }
@@ -169,10 +179,10 @@ fn filter_response_headers(headers: &reqwest::header::HeaderMap) -> HeaderMap {
         if is_hop_by_hop(name.as_str()) || connection_options.contains(name) {
             continue;
         }
-        if let Ok(n) = HeaderName::from_bytes(name.as_str().as_bytes()) {
-            if let Ok(v) = HeaderValue::from_bytes(value.as_bytes()) {
-                out.append(n, v);
-            }
+        if let Ok(n) = HeaderName::from_bytes(name.as_str().as_bytes())
+            && let Ok(v) = HeaderValue::from_bytes(value.as_bytes())
+        {
+            out.append(n, v);
         }
     }
     out
@@ -289,13 +299,7 @@ pub async fn proxy_request_with_path(
     let is_streaming = request.is_streaming();
 
     let llm_headers = upstream_request_headers(&request.headers, &state.config, auth);
-
-    let base = state.config.llm_api_base.trim_end_matches('/');
-    let mut url = format!("{base}/{}", path.trim_start_matches('/'));
-    if let Some(q) = &request.query {
-        url.push('?');
-        url.push_str(q);
-    }
+    let url = upstream_url(&state.config, path, request.query.as_deref());
 
     let client = if is_streaming {
         &state.stream_client
@@ -303,7 +307,53 @@ pub async fn proxy_request_with_path(
         &state.non_stream_client
     };
 
-    let llm_resp = match client.post(&url).headers(llm_headers).body(request.body).send().await {
+    let sent = client.post(&url).headers(llm_headers).body(request.body).send().await;
+    relay_upstream_response(sent, auth).await
+}
+
+/// Proxy a request with a streamed body, such as a multipart upload, to a selected upstream path.
+///
+/// Uses the streaming client: the body offers no `stream` field to inspect without reading it,
+/// and an upload's response may itself be an event stream.
+pub async fn proxy_stream_with_path<S>(
+    request: ProxyStreamRequest<S>,
+    path: &str,
+    auth: ProxyAuth,
+    state: &ProxyState,
+) -> ProxyResponse
+where
+    S: Stream<Item = Result<Bytes, std::io::Error>> + Send + 'static,
+{
+    let mut llm_headers = upstream_request_headers(&request.headers, &state.config, auth);
+    if let Some(length) = request.content_length {
+        llm_headers.insert(reqwest::header::CONTENT_LENGTH, HeaderValue::from(length));
+    }
+    let url = upstream_url(&state.config, path, request.query.as_deref());
+
+    let sent = state
+        .stream_client
+        .post(&url)
+        .headers(llm_headers)
+        .body(reqwest::Body::wrap_stream(request.body))
+        .send()
+        .await;
+    relay_upstream_response(sent, auth).await
+}
+
+fn upstream_url(config: &Config, path: &str, query: Option<&str>) -> String {
+    let base = config.llm_api_base.trim_end_matches('/');
+    let mut url = format!("{base}/{}", path.trim_start_matches('/'));
+    if let Some(query) = query {
+        url.push('?');
+        url.push_str(query);
+    }
+    url
+}
+
+/// Relay the upstream's answer to a forwarded request: event streams as they arrive, other
+/// bodies in full, and transport failures as gateway errors.
+async fn relay_upstream_response(sent: Result<reqwest::Response, reqwest::Error>, auth: ProxyAuth) -> ProxyResponse {
+    let llm_resp = match sent {
         Ok(r) => r,
         Err(e) if e.is_timeout() => {
             warn!("LLM request timed out: {e}");
@@ -354,6 +404,7 @@ pub async fn proxy_request_with_path(
 mod tests {
     use super::*;
     use crate::config::Config;
+    use crate::types::model_capabilities::ModelCapabilities;
 
     fn test_config() -> Config {
         Config {
@@ -365,8 +416,10 @@ mod tests {
             db_url: None,
             postgres: crate::config::PostgresConfig::default(),
             sqlite: crate::config::SqliteConfig::default(),
+            max_request_body_size: crate::executor::DEFAULT_MAX_REQUEST_BODY_SIZE_BYTES,
             tools: crate::config::ToolRuntimeConfig::default(),
             responses: crate::config::ResponsesConfig::default(),
+            model_capabilities: ModelCapabilities::default(),
         }
     }
 

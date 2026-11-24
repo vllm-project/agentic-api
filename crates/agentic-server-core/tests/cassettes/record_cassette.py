@@ -20,7 +20,8 @@ Modes:
   responses   No conversation created. Chains turns purely via
               previous_response_id. Supports --openai, --vllm, and --gateway backends.
   items       Records flat conversation/item API steps. Select --items-scenario
-              continuation, deletion, branch, pagination, or edge-cases.
+              continuation, deletion, branch, pagination, edge-cases, item-id-prefixes, concurrent-writes,
+              stale-compaction, competing-tool-outputs, or overlapping-multi-agent.
 
 Usage:
     python tests/cassettes/record_cassette.py --turns 2 --no-stream --output path/to/cassette.yaml
@@ -44,6 +45,7 @@ import os
 import secrets
 import socket
 import ssl
+import itertools
 import struct
 import sys
 import threading
@@ -51,17 +53,19 @@ import time
 import types
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Callable
 from urllib.parse import urlparse
 
 import click
 import httpx
 import uvicorn
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from httpx import AsyncClient
 from yaml import dump as yaml_dump
 from yaml import safe_load as yaml_load
+
+from replay_old_cassettes import run_multi_agent_store_false, run_tool_items
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger("cassette_proxy")
@@ -69,13 +73,17 @@ logger = logging.getLogger("cassette_proxy")
 MODEL = "gpt-4o"
 PROXY_HOST = "127.0.0.1"
 PROXY_PORT = 7070
+# A driver that overlaps requests numbers each one in send order; the proxy strips this header.
+RECORDING_TURN_HEADER = "x-recording-turn"
 TIMEOUT = 60 * 5
+HTTP_READ_TIMEOUT = TIMEOUT
 
 EXCLUDED_RESPONSE_HEADERS = {
     "content-encoding",
     "content-length",
     "transfer-encoding",
     "connection",
+    "set-cookie",
 }
 
 RECORDED_HEADERS = {
@@ -84,6 +92,7 @@ RECORDED_HEADERS = {
     "user-agent",
     "accept",
     "x-run-id",
+    "openai-beta",
 }
 
 
@@ -110,6 +119,43 @@ def _filter_response_headers(headers) -> dict:
     }
 
 
+def _media_type(content_type: str) -> str:
+    """Return the lowercased media type without parameters."""
+    return content_type.split(";", 1)[0].strip().lower()
+
+
+def _is_json_media_type(media_type: str) -> bool:
+    return media_type == "application/json" or media_type.endswith("+json")
+
+
+def _is_text_media_type(media_type: str) -> bool:
+    return media_type.startswith("text/") or media_type in {
+        "application/xml",
+        "application/x-www-form-urlencoded",
+    }
+
+
+def _record_request_body(raw_body: bytes, content_type: str) -> dict[str, Any]:
+    """Record JSON bodies as parsed data and everything else as raw base64.
+
+    Multipart uploads are not UTF-8 JSON, so a cassette must keep their exact
+    bytes, including the boundary, for replay.
+    """
+    if not raw_body:
+        return {"body": {}}
+    media_type = _media_type(content_type)
+    if _is_json_media_type(media_type) or not media_type:
+        try:
+            return {"body": json.loads(raw_body.decode("utf-8"))}
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            if media_type:
+                raise
+    return {
+        "body_base64": base64.b64encode(raw_body).decode("ascii"),
+        "body_encoding": "base64",
+    }
+
+
 def _turn_number(output_file: Path) -> int:
     if not output_file.exists():
         return 1
@@ -122,7 +168,7 @@ def _turn_number(output_file: Path) -> int:
     return len(data["turns"]) + 1
 
 
-def _append_turn(output_file: Path, turn: dict[str, Any]) -> None:
+def _append_turn(output_file: Path, turn: dict[str, Any], *, ordered: bool = False) -> None:
     output_file.parent.mkdir(parents=True, exist_ok=True)
     if output_file.exists() and output_file.stat().st_size > 0:
         data = yaml_load(output_file.read_text(encoding="utf-8")) or {}
@@ -130,6 +176,9 @@ def _append_turn(output_file: Path, turn: dict[str, Any]) -> None:
         data = {}
     turns: list = data.get("turns", [])
     turns.append(turn)
+    if ordered:
+        # Driver-numbered requests can complete out of order; keep the file in send order.
+        turns.sort(key=lambda recorded: int(recorded["filename"][1:]))
     data["turns"] = turns
     with open(output_file, "w", encoding="utf-8") as f:
         yaml_dump(data, f, allow_unicode=True, default_flow_style=False)
@@ -137,12 +186,39 @@ def _append_turn(output_file: Path, turn: dict[str, Any]) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.http_client = AsyncClient(timeout=TIMEOUT)
+    app.state.http_client = AsyncClient(timeout=_http_timeout())
     yield
     await app.state.http_client.aclose()
 
 
 proxy_app = FastAPI(lifespan=lifespan)
+
+
+def _http_timeout(*, proxy_client: bool = False) -> httpx.Timeout:
+    # Give the proxy time to capture and report an upstream read timeout
+    # before the client waiting on the proxy reaches its own read timeout.
+    return httpx.Timeout(TIMEOUT, read=HTTP_READ_TIMEOUT + (10 if proxy_client else 0))
+
+
+def _record_transport_error(
+    output_file: Path, turn: dict[str, Any], error: httpx.RequestError
+) -> Response:
+    """Capture a failed upstream exchange without inventing an upstream response."""
+    detail = {"type": type(error).__name__, "message": str(error)}
+    turn["response"]["transport_error"] = detail
+    _append_turn(output_file, turn)
+    message = (
+        f"Recorder proxy could not obtain a complete upstream response: {type(error).__name__}. "
+        f"Transport failure recorded in {output_file}; no upstream HTTP status or body was captured."
+    )
+    print(f"  [{message}]")
+    # This status belongs only to the local proxy. The cassette contains the
+    # transport failure above, not a fabricated OpenAI 502/504 response.
+    return Response(
+        content=json.dumps({"error": {"type": "cassette_proxy_transport_error", "message": message}}),
+        status_code=504 if isinstance(error, httpx.TimeoutException) else 502,
+        media_type="application/json",
+    )
 
 
 @proxy_app.api_route(
@@ -154,7 +230,10 @@ async def proxy_request(request: Request, path: str) -> Response:
     target_host: str = request.app.state.target_host
     output_file: Path = request.app.state.output_file
 
-    turn_num = _turn_number(output_file)
+    sent_turn = request.headers.get(RECORDING_TURN_HEADER)
+    turn_num = getattr(request.state, "recording_turn", None) or (int(sent_turn) if sent_turn else None)
+    if turn_num is None:
+        turn_num = _turn_number(output_file)
     filename = f"t{turn_num}"
 
     target_url = f"{target_host}/{path}"
@@ -162,23 +241,30 @@ async def proxy_request(request: Request, path: str) -> Response:
         target_url += f"?{request.query_params}"
 
     raw_body = await request.body()
-    parsed_body = json.loads(raw_body.decode("utf-8")) if raw_body else {}
+    request_body = _record_request_body(raw_body, request.headers.get("content-type", ""))
+    parsed_body = request_body.get("body", {})
 
+    query_params = {}
+    for key in request.query_params:
+        values = request.query_params.getlist(key)
+        query_params[key] = values[0] if len(values) == 1 else values
     turn: dict[str, Any] = {
         "filename": filename,
         "request": {
             "method": request.method,
             "path": f"/{path}",
-            "query_params": dict(request.query_params),
-            "body": parsed_body,
+            "query_params": query_params,
+            **request_body,
             "headers": _filter_request_headers(request.headers),
         },
         "response": {},
     }
 
-    forward_headers = {k: v for k, v in request.headers.items() if k.lower() != "host"}
+    forward_headers = {
+        k: v for k, v in request.headers.items() if k.lower() not in {"host", RECORDING_TURN_HEADER}
+    }
 
-    if parsed_body.get("stream", False):
+    if isinstance(parsed_body, dict) and parsed_body.get("stream", False):
 
         async def _stream() -> AsyncGenerator[str, None]:
             async with http_client.stream(
@@ -186,7 +272,7 @@ async def proxy_request(request: Request, path: str) -> Response:
                 url=target_url,
                 headers=forward_headers,
                 content=raw_body,
-                timeout=TIMEOUT,
+                timeout=_http_timeout(),
             ) as response:
                 yield response  # type: ignore[misc]
                 if response.status_code != 200:
@@ -215,11 +301,14 @@ async def proxy_request(request: Request, path: str) -> Response:
                         "content-type", "text/event-stream"
                     )
                 }
-                _append_turn(output_file, turn)
+                _append_turn(output_file, turn, ordered=sent_turn is not None)
                 print(f"  [recorded turn {turn_num} -> {output_file.name}]")
 
         agen = _stream()
-        upstream = await anext(agen)
+        try:
+            upstream = await anext(agen)
+        except httpx.RequestError as error:
+            return _record_transport_error(output_file, turn, error)
         return StreamingResponse(
             agen,
             status_code=upstream.status_code,
@@ -228,27 +317,34 @@ async def proxy_request(request: Request, path: str) -> Response:
         )
 
     else:
-        response = await http_client.request(
-            method=request.method,
-            url=target_url,
-            headers=forward_headers,
-            content=raw_body,
-            timeout=TIMEOUT,
-        )
-        media_type = response.headers.get("content-type", "application/json")
-        body: Any = response.json() if response.status_code == 200 else response.text
-        if response.status_code != 200 and "application/json" in media_type:
-            try:
-                body = json.loads(body)
-            except Exception:
-                pass
-        turn["response"]["body"] = body
+        try:
+            response = await http_client.request(
+                method=request.method,
+                url=target_url,
+                headers=forward_headers,
+                content=raw_body,
+                timeout=_http_timeout(),
+            )
+        except httpx.RequestError as error:
+            return _record_transport_error(output_file, turn, error)
+        content_type = response.headers.get("content-type", "application/json")
+        media_type = _media_type(content_type)
         turn["response"]["status_code"] = response.status_code
-        turn["response"]["headers"] = {"content-type": media_type}
-        _append_turn(output_file, turn)
+        turn["response"]["headers"] = {"content-type": content_type}
+        if _is_json_media_type(media_type):
+            try:
+                turn["response"]["body"] = response.json()
+            except ValueError:
+                turn["response"]["body"] = response.text
+        elif _is_text_media_type(media_type):
+            turn["response"]["body"] = response.text
+        else:
+            turn["response"]["body_base64"] = base64.b64encode(response.content).decode("ascii")
+            turn["response"]["body_encoding"] = "base64"
+        _append_turn(output_file, turn, ordered=sent_turn is not None)
         print(f"  [recorded turn {turn_num} -> {output_file.name}]")
-        return JSONResponse(
-            content=body,
+        return Response(
+            content=response.content,
             status_code=response.status_code,
             headers=_filter_response_headers(response.headers),
             media_type=media_type,
@@ -295,6 +391,16 @@ def _create_conversation(client: httpx.Client, proxy_url: str) -> str:
     return conv_id
 
 
+def _raise_recording_http_error(response: httpx.Response) -> None:
+    """Show the received error body instead of an opaque localhost traceback."""
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as error:
+        detail = response.text[:2000]
+        raise click.ClickException(
+            f"Recording request returned HTTP {response.status_code}.\n{detail}"
+        ) from error
+
 
 def _item_request(
     client: httpx.Client,
@@ -303,12 +409,14 @@ def _item_request(
     path: str,
     *,
     body: dict | None = None,
-    params: dict | None = None,
+    params: dict | list[tuple[str, str]] | None = None,
+    headers: dict[str, str] | None = None,
     expected_status: int | None = 200,
 ) -> dict:
     """Send management requests through the shared recording proxy."""
     response = client.request(
-        method, f"{proxy_url}{path}", json=body, params=params, timeout=TIMEOUT
+        method, f"{proxy_url}{path}", json=body, params=params, headers=headers,
+        timeout=_http_timeout(proxy_client=True),
     )
     if expected_status is not None and response.status_code != expected_status:
         raise RuntimeError(
@@ -327,13 +435,15 @@ def _item_response(
     conversation: str | None = None,
     previous_response_id: str | None = None,
     stream: bool = False,
+    store: bool = True,
+    during: Callable[[], None] | None = None,
 ) -> dict:
     if conversation and previous_response_id:
         raise ValueError("conversation and previous_response_id are mutually exclusive")
     body: dict[str, Any] = {
         "model": model,
         "input": [{"role": "user", "content": prompt}],
-        "store": True,
+        "store": store,
         "stream": stream,
     }
     if conversation:
@@ -341,13 +451,52 @@ def _item_response(
     if previous_response_id:
         body["previous_response_id"] = previous_response_id
     result = (
-        _send_streaming(client, body, proxy_url)
+        _send_streaming(client, body, proxy_url, during)
         if stream
         else _send_nonstreaming(client, body, proxy_url)
     )
     if not result or not result.get("id"):
         raise RuntimeError("Responses call returned no response ID")
     return result
+
+
+_SHELL_OUTPUT = [{"stdout": "ok\n", "stderr": "", "outcome": {"type": "exit", "exit_code": 0}}]
+_TOOL_PAIRS = {
+    "function": ({"type": "function_call", "name": "test_fn", "arguments": "{}"},
+                 {"type": "function_call_output", "output": "done"}),
+    "custom": ({"type": "custom_tool_call", "name": "test_tool", "input": "x"},
+               {"type": "custom_tool_call_output", "output": "done"}),
+    "shell": ({"type": "shell_call", "action": {"commands": ["pwd"]}, "status": "completed"},
+              {"type": "shell_call_output", "output": _SHELL_OUTPUT}),
+}
+
+
+def _id_prefix_items() -> list[dict]:
+    """Items whose supplied ID uses another admitted prefix (seven) or the call's prefix on an output (three).
+
+    A call accepts its output's prefix and a function output accepts `fco_`, while an output refuses its call's prefix.
+    """
+    (function_call, function_output), (custom_call, custom_output), (shell_call, shell_output) = _TOOL_PAIRS.values()
+    cases = (("fco_", function_call), ("fco_", function_output), ("fc_", function_output), ("ctco_", custom_call),
+             ("ctco_", custom_output), ("sho_", shell_call), ("sho_", shell_output), ("xyz_", function_output),
+             ("ctc_", custom_output), ("sh_", shell_output))
+    return [{**item, "id": f"{prefix}{secrets.token_hex(12)}", "call_id": f"call_prefix_{index}"}
+            for index, (prefix, item) in enumerate(cases)]
+
+
+def _kind_seed_items() -> list[dict]:
+    """One stored call and output for each tool family whose call and output IDs can share a prefix."""
+    return [{**item, "call_id": f"call_seed_{kind}"} for kind, pair in _TOOL_PAIRS.items() for item in pair]
+
+
+def _kind_mismatch_items(stored: list[dict]) -> list[dict]:
+    """Items that name one kind but reuse the public ID of a stored item of the other kind in the same family."""
+    by_type = {item["type"]: item["id"] for item in stored}
+    (function_call, function_output), (custom_call, _), (shell_call, _) = _TOOL_PAIRS.values()
+    return [{**item, "id": by_type[stored_type], "call_id": f"call_kind_{index}"}
+            for index, (item, stored_type) in enumerate((
+                (function_call, "function_call_output"), (function_output, "function_call"),
+                (custom_call, "custom_tool_call_output"), (shell_call, "shell_call_output")))]
 
 
 def _record_duplicate_items(
@@ -368,12 +517,877 @@ def _record_duplicate_items(
     _item_request(client, proxy_url, "POST", source_items_path,
                   body={"items": [first]}, expected_status=None)
     _item_request(client, proxy_url, "GET", source_items_path, params={"order": "asc"})
+    # A new ID repeated in one request reuses nothing, so each copy is stored as its own item: deleting the first
+    # leaves the second listed.
+    unseen = f"msg_{secrets.token_hex(24)}"
+    conversation = _create_conversation(client, proxy_url)
+    items_path = f"/v1/conversations/{conversation}/items"
+    copies = _item_request(client, proxy_url, "POST", items_path, expected_status=None,
+                           body={"items": [{**first, "id": unseen}, {**second, "id": unseen}]})
+    _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
+    _item_request(client, proxy_url, "DELETE", f"{items_path}/{copies['data'][0]['id']}")
+    _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
+
+
+def _record_concurrent_writes(client: httpx.Client, proxy_url: str, model: str) -> None:
+    """Change a conversation while its streamed turn B runs, once per case on a fresh conversation.
+
+    Each side request runs after B's first output text delta. Requests are numbered in send order, so B
+    precedes its side request in every recording even though the side request completes first.
+    """
+    _number_requests_in_send_order(client)
+
+    def request(method: str, path: str, **kwargs: Any) -> dict:
+        return _item_request(client, proxy_url, method, path, **kwargs)
+
+    def turn(conversation: str, prompt: str, during: Callable[[], None] | None = None) -> dict:
+        return _item_response(client, proxy_url, model, prompt, conversation=conversation,
+                              stream=during is not None, during=during)
+
+    ascending = {"order": "asc"}
+    for case in ("add-item", "delete-item", "delete-response"):
+        conversation = _create_conversation(client, proxy_url)
+        items_path = f"/v1/conversations/{conversation}/items"
+        first = turn(conversation, "Remember the word APRICOT. Reply with only OK.")
+        if case == "add-item":
+            side_item = {"type": "message", "role": "user", "content": "Side note: the marker is VIOLET."}
+            during = lambda: request("POST", items_path, body={"items": [side_item]})
+        elif case == "delete-item":
+            first_item = request("GET", items_path, params={"order": "asc", "limit": 1})["data"][0]["id"]
+            during = lambda: request("DELETE", f"{items_path}/{first_item}")
+        else:
+            during = lambda: request("DELETE", f"/v1/responses/{first['id']}")
+        streamed = turn(conversation, "Count from 1 to 120, one number per line, digits only.", during)
+        request("GET", f"/v1/responses/{streamed['id']}/input_items", params=ascending)
+        request("GET", items_path, params=ascending)
+        if case == "delete-response":
+            follow_up = turn(conversation, "What word did I ask you to remember? Reply with only that word.")
+            request("GET", f"/v1/responses/{follow_up['id']}/input_items", params=ascending)
+            request("GET", f"/v1/responses/{first['id']}", expected_status=None)
+
+
+def _number_requests_in_send_order(client: httpx.Client) -> None:
+    """Number turns in send order, so a streamed turn precedes the side request sent while it streams."""
+    sequence = itertools.count(1)
+    client.event_hooks["request"].append(
+        lambda sent: sent.headers.__setitem__(RECORDING_TURN_HEADER, str(next(sequence)))
+    )
+
+
+def _observed_turn(
+    client: httpx.Client, proxy_url: str, body: dict, during: Callable[[], None] | None = None
+) -> dict:
+    """Send a Responses call and return its terminal response or error body, so a rejected turn is recorded.
+
+    A streamed call runs `during` once, after its first output text delta; its result keeps the ID from
+    `response.created` even when the stream ends in an error event.
+    """
+    timeout = _http_timeout(proxy_client=True)
+    if not body.get("stream"):
+        result = client.post(f"{proxy_url}/v1/responses", json=body, timeout=timeout).json()
+        print(f"\n[Response]\n{json.dumps(result, indent=2)}\n")
+        return result
+    result: dict = {}
+    created_id = None
+    with client.stream("POST", f"{proxy_url}/v1/responses", json=body, timeout=timeout) as resp:
+        if resp.status_code != 200:
+            return json.loads(resp.read())
+        for line in resp.iter_lines():
+            if not line.startswith("data:") or line == "data: [DONE]":
+                continue
+            print(line)
+            event = json.loads(line[5:].strip())
+            kind = event.get("type")
+            if kind == "response.created":
+                created_id = event["response"]["id"]
+            elif kind in ("response.completed", "response.failed", "response.incomplete"):
+                result = event["response"]
+            elif kind == "error":
+                result = event
+            if during and kind == "response.output_text.delta":
+                during, run = None, during
+                run()
+    if during:
+        raise RuntimeError("stream ended before the first output text delta")
+    if created_id:
+        result.setdefault("id", created_id)
+    return result
+
+
+def _input_items_or_conversation(request: Callable[..., dict], response: dict, items_path: str) -> dict:
+    """List a turn's input items, or the conversation's items when the turn was rejected without an ID."""
+    path = f"/v1/responses/{response['id']}/input_items" if response.get("id") else items_path
+    return request("GET", path, params={"order": "asc"})
+
+
+WEATHER_TOOL = {
+    "type": "function",
+    "name": "get_weather",
+    "description": "Get the current temperature for a city.",
+    "parameters": {
+        "type": "object",
+        "properties": {"city": {"type": "string"}},
+        "required": ["city"],
+        "additionalProperties": False,
+    },
+    "strict": True,
+}
+
+
+def _record_stale_compaction(client: httpx.Client, proxy_url: str, model: str) -> None:
+    """Commit a plain turn C while streamed turn B compacts the history it rehydrated before C.
+
+    B's summary cannot include C's reply (VIOLET). D then asks for that reply, showing whether it survives in
+    the history a later turn sees. t10 probes whether explicit compaction accepts a conversation.
+    """
+    _number_requests_in_send_order(client)
+    conversation = _create_conversation(client, proxy_url)
+    items_path = f"/v1/conversations/{conversation}/items"
+    ascending = {"order": "asc"}
+
+    def turn(prompt: str, during: Callable[[], None] | None = None, **extra: Any) -> dict:
+        body = {"model": model, "conversation": conversation, "store": True, "stream": during is not None,
+                "input": [{"role": "user", "content": prompt}], **extra}
+        return _observed_turn(client, proxy_url, body, during)
+
+    def request(method: str, path: str, **kwargs: Any) -> dict:
+        return _item_request(client, proxy_url, method, path, expected_status=None, **kwargs)
+
+    # Enough history for a 1,000-token threshold under both OpenAI's tokenizer and the gateway's estimate.
+    turn("Background notes for later. " * 450 + "Remember the word APRICOT. Reply with only OK.")
+    side: dict = {}
+    streamed = turn(
+        "Count from 1 to 120, one number per line, digits only.",
+        lambda: side.update(turn("Reply with only the word VIOLET.")),
+        context_management=[{"type": "compaction", "compact_threshold": 1000}],
+    )
+    request("GET", items_path, params=ascending)
+    inputs = lambda response: _input_items_or_conversation(request, response, items_path)
+    inputs(streamed)
+    inputs(side)
+    inputs(turn("Earlier in this conversation you replied with a single color word. "
+                "Reply with only that word, or NONE if you cannot see it."))
+    request("POST", "/v1/responses/compact", body={"model": model, "conversation": conversation})
+
+
+
+# Enough history for a 1,000-token threshold under both OpenAI's tokenizer and the gateway's estimate.
+COMPACTION_NOTES = "Background notes for later. " * 450 + "Remember the word APRICOT. Reply with only OK."
+COMPACTION_THRESHOLD = [{"type": "compaction", "compact_threshold": 1000}]
+RECALL_PROMPT = "What word did I ask you to remember? Reply with only that word, or NONE if you cannot see it."
+
+
+def _record_checkpoint_replay(client: httpx.Client, proxy_url: str, model: str, checkpoint: dict) -> None:
+    """A client sends a compaction checkpoint back as input: a stored turn sends `checkpoint`'s output back, then its
+    input items, a `previous_response_id` continuation asking for the remembered word, and that turn's input items."""
+    def input_items(response: dict) -> None:
+        _item_request(client, proxy_url, "GET", f"/v1/responses/{response['id']}/input_items",
+                      params={"order": "asc"}, expected_status=None)
+
+    replayed = _observed_turn(client, proxy_url, {
+        "model": model, "store": True, "stream": False,
+        "input": checkpoint["output"] + [{"role": "user", "content": "Reply only OK."}],
+    })
+    input_items(replayed)
+    continued = _observed_turn(client, proxy_url, {
+        "model": model, "store": True, "stream": False, "previous_response_id": replayed["id"],
+        "input": RECALL_PROMPT,
+    })
+    input_items(continued)
+
+
+def _record_compaction_in_turn_chain(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
+    """A `previous_response_id` chain whose turn B passes the compaction threshold.
+
+    B (t2, streamed when recording with --stream) shows where the compaction items sit in its output; its input items
+    (t3) show what it stored; C (t4) continues B, and its input items (t5) show where a later turn's history starts.
+    t6–t9 send B's stored compaction back as input ([`_record_checkpoint_replay`]).
+    """
+    def turn(prompt: str, previous: str | None = None, **extra: Any) -> dict:
+        body = {"model": model, "store": True, "stream": False, "input": prompt, **extra}
+        if previous:
+            body["previous_response_id"] = previous
+        return _observed_turn(client, proxy_url, body)
+
+    def input_items(response: dict) -> dict:
+        return _item_request(client, proxy_url, "GET", f"/v1/responses/{response['id']}/input_items",
+                             params={"order": "asc"}, expected_status=None)
+
+    first = turn(COMPACTION_NOTES)
+    compacting = turn("Count from 1 to 60, one number per line, digits only.", first["id"],
+                      stream=stream, context_management=COMPACTION_THRESHOLD)
+    input_items(compacting)
+    follow_up = turn(RECALL_PROMPT, compacting["id"], context_management=COMPACTION_THRESHOLD)
+    input_items(follow_up)
+    _record_checkpoint_replay(client, proxy_url, model, compacting)
+
+
+def _record_compaction_tool_loop(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
+    """Compaction around a client function call: B (t2) calls get_weather after compacting, and C (t3) answers the
+    call while the history still passes the threshold. C's input items (t4) show the call and output kept.
+    An async call (t5) remains pending across compaction (t6) and another turn (t7). Inspect that turn's input (t8),
+    then submit the result late (t9) and on a separate branch immediately after compaction (t10)."""
+    def turn(input_value: Any, previous: str, **extra: Any) -> dict:
+        body = {"model": model, "store": True, "stream": stream, "input": input_value, "previous_response_id": previous,
+                "tools": [WEATHER_TOOL], "parallel_tool_calls": False, "context_management": COMPACTION_THRESHOLD,
+                **extra}
+        return _observed_turn(client, proxy_url, body)
+
+    first = _observed_turn(client, proxy_url, {"model": model, "store": True, "input": COMPACTION_NOTES})
+    calling = turn("What is the weather in Paris? Use the get_weather tool.", first["id"], tool_choice="required")
+    call = next((item for item in calling.get("output", []) if item.get("type") == "function_call"), None)
+    if call is None:
+        raise RuntimeError(f"turn B made no get_weather call: {calling}")
+    answered = turn([{"type": "function_call_output", "call_id": call["call_id"], "output": "18 degrees and sunny"}],
+                    calling["id"], tool_choice="none")
+    _item_request(client, proxy_url, "GET", f"/v1/responses/{answered['id']}/input_items",
+                  params={"order": "asc"}, expected_status=None)
+
+    fixtures = Path(__file__).parent / "async_tools"
+    prompts = json.loads((fixtures / "prompts.json").read_text())
+    async_request = {
+        "model": model, "store": True, "stream": False, "max_output_tokens": 8192,
+        "tools": json.loads((fixtures / "tools.json").read_text())["weather_async"],
+    }
+    pending = _observed_turn(client, proxy_url, {
+        **async_request, "input": prompts["weather_start"], "instructions": prompts["instructions"]["weather"],
+    })
+    async_calls = [item for item in pending.get("output", []) if item.get("type") == "function_call"
+                   and item.get("name") == "get_weather" and item.get("async") is True]
+    if pending.get("status") != "completed" or len(async_calls) != 1:
+        raise RuntimeError("async compaction requires one completed response with an async weather call")
+    compacting = _observed_turn(client, proxy_url, {
+        **async_request, "previous_response_id": pending["id"], "context_management": COMPACTION_THRESHOLD,
+        "input": COMPACTION_NOTES + " Do not call any tools. The weather lookup is still running; reply only OK.",
+    })
+    if compacting.get("status") != "completed" or not any(
+        item.get("type") == "compaction" for item in compacting.get("output", [])
+    ):
+        raise RuntimeError("the pending async call's follow-up did not complete compaction")
+    continued = _observed_turn(client, proxy_url, {
+        **async_request, "previous_response_id": compacting["id"],
+        "input": "The weather result is still pending. Do not call any tools. Reply only WAITING.",
+    })
+    if continued.get("status") != "completed":
+        raise RuntimeError("continuation after compaction did not complete")
+    _item_request(client, proxy_url, "GET", f"/v1/responses/{continued['id']}/input_items",
+                  params={"order": "asc"})
+    result = [
+        {"type": "function_call_output", "call_id": async_calls[0]["call_id"], "output": prompts["weather_output"]},
+        {"type": "message", "role": "user", "content": prompts["weather_ask"]},
+    ]
+    for previous in [continued["id"], compacting["id"]]:
+        # Record rejection as evidence too; do not turn the current gateway behavior into an expectation.
+        _observed_turn(client, proxy_url, {**async_request, "previous_response_id": previous, "input": result})
+
+
+def _record_compaction_standalone(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
+    """`/v1/responses/compact` with input (t1), a turn continuing its window (t2), with `previous_response_id` (t4,
+    after the stored turn t3), and with neither (t5). t6–t12 follow a retained image through three stored turns."""
+    def compact(body: dict) -> dict:
+        return _item_request(client, proxy_url, "POST", "/v1/responses/compact", body={"model": model, **body},
+                             expected_status=None)
+
+    window = compact({"input": [{"role": "user", "content": COMPACTION_NOTES}]})
+    _observed_turn(client, proxy_url, {
+        "model": model, "store": False, "stream": stream,
+        "input": window.get("output", []) + [{"role": "user", "content": RECALL_PROMPT}],
+    })
+    stored = _observed_turn(client, proxy_url, {"model": model, "store": True, "input": COMPACTION_NOTES})
+    compact({"previous_response_id": stored["id"]})
+    compact({})
+
+    # A generated 64x64 red PNG makes loss of retained media observable without inspecting opaque compaction data.
+    image_url = (
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAb0lEQVR4nO3PAQkAAAyEwO9feoshgn"
+        "ABdLep8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ"
+        "3I8QUNyPEFDcjxBQ3IPanc8OLDQitxAAAAAElFTkSuQmCC"
+    )
+    window = compact({"input": [{"role": "user", "content": [
+        {"type": "input_text", "text": COMPACTION_NOTES + " Remember this image for later."},
+        {"type": "input_image", "image_url": image_url, "detail": "low"},
+    ]}]})
+    previous = None
+    for _ in range(3):
+        request = {"model": model, "store": True, "stream": stream,
+                   "input": [{"role": "user", "content": "Reply only OK."}]}
+        if previous:
+            request["previous_response_id"] = previous
+        else:
+            request["input"] = window["output"] + request["input"]
+        continued = _observed_turn(client, proxy_url, request)
+        previous = continued["id"]
+        _item_request(client, proxy_url, "GET", f"/v1/responses/{previous}/input_items",
+                      params={"order": "asc", "limit": 100})
+
+
+def _record_compaction_multi_agent(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
+    """The in-turn chain with `multi_agent` enabled: B (t2) passes the threshold; its input items (t3), C (t4) and
+    C's input items (t5) show what a multi-agent compaction outputs and stores."""
+    # Only the Responses API accepts the multi-agent beta.
+    client.event_hooks["request"].append(
+        lambda sent: sent.headers.__setitem__("OpenAI-Beta", "responses_multi_agent=v1")
+        if sent.url.path == "/v1/responses" else None
+    )
+
+    def turn(prompt: str, previous: str | None = None, **extra: Any) -> dict:
+        body = {"model": model, "store": True, "stream": False, "input": prompt, "multi_agent": {"enabled": True},
+                **extra}
+        if previous:
+            body["previous_response_id"] = previous
+        return _observed_turn(client, proxy_url, body)
+
+    def input_items(response: dict) -> dict:
+        return _item_request(client, proxy_url, "GET", f"/v1/responses/{response['id']}/input_items",
+                             params={"order": "asc"}, expected_status=None)
+
+    first = turn(COMPACTION_NOTES)
+    compacting = turn("Count from 1 to 60, one number per line, digits only.", first["id"],
+                      stream=stream, context_management=COMPACTION_THRESHOLD)
+    input_items(compacting)
+    follow_up = turn(RECALL_PROMPT, compacting["id"], context_management=COMPACTION_THRESHOLD)
+    input_items(follow_up)
+
+
+def _record_compaction_store_false(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
+    """An unstored turn that passes the threshold (t1): its output still carries the compaction, and nothing is
+    stored, so retrieving it (t2) fails. t3–t6 send its compaction back as input ([`_record_checkpoint_replay`])."""
+    response = _observed_turn(client, proxy_url, {
+        "model": model, "store": False, "stream": stream,
+        "input": COMPACTION_NOTES + " Then count from 1 to 30, one number per line.",
+        "context_management": COMPACTION_THRESHOLD,
+    })
+    _item_request(client, proxy_url, "GET", f"/v1/responses/{response.get('id', 'resp_missing')}",
+                  expected_status=None)
+    _record_checkpoint_replay(client, proxy_url, model, response)
+
+
+def _record_compaction_mcp(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
+    """Compare MCP discovery before compaction, after standalone compaction, and after automatic compaction."""
+    tools = [{"type": "mcp", "server_label": "microsoft_learn", "server_url": "https://learn.microsoft.com/api/mcp",
+              "allowed_tools": ["microsoft_docs_search"], "require_approval": "never"}]
+
+    def turn(input_value: Any, **extra: Any) -> dict:
+        response = _observed_turn(client, proxy_url, {
+            "model": model, "store": True, "stream": stream, "input": input_value, "tools": tools,
+            "max_output_tokens": 4096, **extra,
+        })
+        if response.get("status") != "completed":
+            raise RuntimeError(f"MCP compaction probe did not complete: {response.get('incomplete_details')}")
+        return response
+
+    prompt = "Remember the word APRICOT. Do not call any tools. Reply only READY."
+    first = turn(prompt)
+    history = [{"role": "user", "content": prompt}, *first["output"]]
+    compacted = _item_request(client, proxy_url, "POST", "/v1/responses/compact",
+                              body={"model": model, "input": history})
+    followup = [{"role": "user", "content": RECALL_PROMPT + " Do not call any tools."}]
+    turn([*history, *followup])
+    turn([*compacted["output"], *followup])
+    automatic = turn(COMPACTION_NOTES + " Do not call any tools.", previous_response_id=first["id"],
+                     context_management=COMPACTION_THRESHOLD)
+    continued = turn(followup, previous_response_id=automatic["id"])
+    _item_request(client, proxy_url, "GET", f"/v1/responses/{continued['id']}/input_items",
+                  params={"order": "asc"})
+    expanded = dict(tools[0], allowed_tools=["microsoft_docs_search", "microsoft_docs_fetch"])
+    unrestricted = {key: value for key, value in tools[0].items() if key != "allowed_tools"}
+    probe = ("Use microsoft_docs_fetch to read https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/responses "
+             "then say DONE. If that tool is unavailable, say UNAVAILABLE. Do not use microsoft_docs_search.")
+    for declaration in [expanded, unrestricted]:
+        turn(probe, previous_response_id=first["id"], tools=[declaration])
+    empty = [dict(tools[0], allowed_tools=["no_such_tool"])]
+    empty_response = turn(prompt, tools=empty)
+    turn(prompt, previous_response_id=empty_response["id"], tools=empty)
+
+
+COMPACTION_SCENARIOS: dict[str, tuple[Callable[..., None], int]] = {
+    "compaction-mcp": (_record_compaction_mcp, 11),
+    "compaction-in-turn-chain": (_record_compaction_in_turn_chain, 9),
+    "compaction-tool-loop": (_record_compaction_tool_loop, 10),
+    "compaction-standalone": (_record_compaction_standalone, 12),
+    "compaction-multi-agent": (_record_compaction_multi_agent, 5),
+    "compaction-store-false": (_record_compaction_store_false, 6),
+}
+
+
+MCP_APPROVAL_SERVER = {"type": "mcp", "server_label": "microsoft_learn", "server_url": "https://learn.microsoft.com/api/mcp"}
+MCP_APPROVAL_SEARCH = "microsoft_docs_search"
+MCP_APPROVAL_FETCH = "microsoft_docs_fetch"
+MCP_APPROVAL_PROMPTS = {
+    MCP_APPROVAL_SEARCH: f"Call {MCP_APPROVAL_SEARCH} exactly once with the query 'Azure Functions timer trigger'. "
+                         "Do not call any other tool. Then reply DONE.",
+    MCP_APPROVAL_FETCH: f"Call {MCP_APPROVAL_FETCH} exactly once with the URL "
+                        "https://learn.microsoft.com/en-us/azure/azure-functions/functions-bindings-timer. "
+                        "Do not call any other tool. Then reply DONE.",
+}
+# (require_approval, allowed_tools or None for every tool, the tool the prompt asks for), one turn each.
+MCP_APPROVAL_CASES: list[tuple[Any, list[str] | None, str]] = [
+    ("never", [MCP_APPROVAL_SEARCH], MCP_APPROVAL_SEARCH),
+    ("always", [MCP_APPROVAL_SEARCH], MCP_APPROVAL_SEARCH),
+    ({"never": {"tool_names": [MCP_APPROVAL_SEARCH]}}, [MCP_APPROVAL_SEARCH], MCP_APPROVAL_SEARCH),
+    ({"never": {"tool_names": [MCP_APPROVAL_SEARCH]}}, [MCP_APPROVAL_SEARCH, MCP_APPROVAL_FETCH], MCP_APPROVAL_FETCH),
+    ({"never": {"tool_names": [MCP_APPROVAL_SEARCH]}}, None, MCP_APPROVAL_SEARCH),
+    ({"always": {"tool_names": [MCP_APPROVAL_FETCH]}}, [MCP_APPROVAL_SEARCH, MCP_APPROVAL_FETCH], MCP_APPROVAL_SEARCH),
+    ({"never": {"read_only": True}}, [MCP_APPROVAL_SEARCH], MCP_APPROVAL_SEARCH),
+    ({"always": {"tool_names": [MCP_APPROVAL_SEARCH]}, "never": {"tool_names": [MCP_APPROVAL_SEARCH]}},
+     [MCP_APPROVAL_SEARCH], MCP_APPROVAL_SEARCH),
+]
+
+
+def _record_mcp_approval(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
+    """Record one turn per MCP `require_approval` form, each asking for one Microsoft Learn MCP tool.
+
+    t1 "never" and t2 "always"; t3 a never.tool_names filter calling its listed tool, the only allowed one; t4 the
+    same filter calling an allowed tool it does not list; t5 the same filter calling its listed tool with every tool
+    allowed; t6 always.tool_names calling a tool neither side lists; t7 a read_only filter; t8 a tool listed under
+    both always and never. Each response shows whether the call ran, waits for approval or is rejected, and how the
+    declaration is echoed; a rejected turn is kept as evidence.
+    """
+    for require_approval, allowed_tools, tool in MCP_APPROVAL_CASES:
+        declaration = {**MCP_APPROVAL_SERVER, "require_approval": require_approval}
+        if allowed_tools is not None:
+            declaration["allowed_tools"] = allowed_tools
+        _observed_turn(client, proxy_url, {
+            "model": model, "store": True, "stream": stream, "input": MCP_APPROVAL_PROMPTS[tool],
+            "tools": [declaration], "max_output_tokens": 4096,
+        })
+
+
+MCP_SCENARIOS: dict[str, tuple[Callable[..., None], int]] = {
+    "mcp-approval": (_record_mcp_approval, len(MCP_APPROVAL_CASES)),
+}
+
+
+def _record_competing_tool_outputs(client: httpx.Client, proxy_url: str, model: str) -> None:
+    """Resolve one pending function call twice: streamed turn B (21) and, while B streams, turn C (5).
+
+    Both turns rehydrate the same pending call before either commits. D then continues the conversation,
+    showing whether both outputs are kept and whether the conversation stays usable.
+    """
+    _number_requests_in_send_order(client)
+    conversation = _create_conversation(client, proxy_url)
+    items_path = f"/v1/conversations/{conversation}/items"
+    ascending = {"order": "asc"}
+
+    def turn(input_items: list[dict], during: Callable[[], None] | None = None, tool_choice: str = "none") -> dict:
+        body = {"model": model, "conversation": conversation, "store": True, "stream": during is not None,
+                "input": input_items, "tools": [WEATHER_TOOL], "tool_choice": tool_choice,
+                "parallel_tool_calls": False}
+        return _observed_turn(client, proxy_url, body, during)
+
+    def output(temperature: int) -> list[dict]:
+        return [{"type": "function_call_output", "call_id": call_id,
+                 "output": json.dumps({"temperature_c": temperature})}]
+
+    def request(method: str, path: str, **kwargs: Any) -> dict:
+        return _item_request(client, proxy_url, method, path, expected_status=None, **kwargs)
+
+    calling = turn([{"role": "user", "content": (
+        "Call get_weather for Paris. After you get the result, count from 1 to 120, one number per line, "
+        "digits only, then state the temperature.")}], tool_choice="required")
+    calls = [item for item in calling.get("output", []) if item.get("type") == "function_call"]
+    if len(calls) != 1:
+        raise RuntimeError(f"expected one get_weather call, got {calling.get('output')}")
+    call_id = calls[0]["call_id"]
+    side: dict = {}
+    streamed = turn(output(21), lambda: side.update(turn(output(5))))
+    request("GET", items_path, params=ascending)
+    inputs = lambda response: _input_items_or_conversation(request, response, items_path)
+    inputs(streamed)
+    inputs(side)
+    inputs(turn([{"role": "user", "content": "What temperature did get_weather report? Reply with only the number."}]))
+
+
+
+def _record_call_ids(client: httpx.Client, proxy_url: str, model: str) -> None:
+    """Send function calls whose call_id is repeated, reused from a stored turn, or empty.
+
+    Each request carries its case name in `x-run-id`; its status is recorded, not asserted. A conversation's
+    follow-ups run only when its creation succeeded.
+    """
+    user = {"role": "user", "content": "What's the weather in Paris?"}
+
+    def call(call_id: str) -> dict:
+        return {"type": "function_call", "call_id": call_id, "name": "get_weather",
+                "arguments": json.dumps({"city": "Paris"})}
+
+    def output(call_id: str, text: str = "sunny") -> dict:
+        return {"type": "function_call_output", "call_id": call_id, "output": text}
+
+    def request(case: str, method: str, path: str, **kwargs: Any) -> dict:
+        return _item_request(client, proxy_url, method, path, headers={"x-run-id": case},
+                             expected_status=None, **kwargs)
+
+    def respond(case: str, input_items: list[dict], store: bool = False, **fields: Any) -> dict:
+        return request(case, "POST", "/v1/responses", body={
+            "model": model, "input": input_items, "tools": [WEATHER_TOOL], "store": store, "stream": False,
+            **fields})
+
+    for case, items in (
+        ("A", [user, call("call_a"), output("call_a"), call("call_a"), output("call_a", "rainy")]),
+        ("A2", [user, call("call_a2"), call("call_a2"), output("call_a2")]),
+        ("B", [user, call(""), output("")]),
+        ("D", [user, call("call_d"), output("call_d"), output("call_d", "rainy")]),
+        ("H", [user, call("call_h"), output("call_h"), call("call_h")]),
+    ):
+        respond(case, items)
+    first = respond("C0", [user], store=True, tool_choice="required")
+    calls = [item for item in first.get("output", []) if item.get("type") == "function_call"]
+    if not calls:
+        raise RuntimeError(f"C0: expected a get_weather call, got {first}")
+    call_id = calls[0]["call_id"]
+    for case, items in (
+        ("C1", [output(call_id), call(call_id), output(call_id, "rainy")]),
+        ("C2", [output(call_id), output(call_id, "rainy")]),
+        ("C3", [output(call_id)]),
+    ):
+        respond(case, items, previous_response_id=first["id"])
+
+    def turn(case: str, conversation: str) -> None:
+        respond(case, [{"role": "user", "content": "And tomorrow?"}], store=True, conversation=conversation)
+
+    def create(case: str, items: list[dict]) -> str | None:
+        return request(case, "POST", "/v1/conversations", body={"items": items}).get("id")
+
+    if conversation := create("E0", [user, call("call_e"), output("call_e"), call("call_e"),
+                                     output("call_e", "rainy")]):
+        request("E1", "GET", f"/v1/conversations/{conversation}/items", params={"order": "asc"})
+        turn("E2", conversation)
+    if conversation := create("F0", [user, call("call_f"), output("call_f")]):
+        request("F1", "POST", f"/v1/conversations/{conversation}/items",
+                body={"items": [call("call_f"), output("call_f", "rainy")]})
+        turn("F2", conversation)
+    if conversation := create("G0", [user, call(""), output("")]):
+        turn("G1", conversation)
+
+
+def _record_overlapping_multi_agent(client: httpx.Client, proxy_url: str, model: str) -> None:
+    """Overlap two multi-agent turns that continue the same tree: streamed turn B (t3) and, while B streams, turn C
+    (t4), which leaves a get_weather call pending. Both rehydrate the tree before either commits.
+
+    D (t6) answers C's call, showing whether the turn that committed first keeps its pending call when B finishes
+    after it.
+    """
+    _number_requests_in_send_order(client)
+    # Only the Responses API accepts the multi-agent beta; the Conversations API rejects it as unknown.
+    client.event_hooks["request"].append(
+        lambda sent: sent.headers.__setitem__("OpenAI-Beta", "responses_multi_agent=v1")
+        if sent.url.path == "/v1/responses" else None
+    )
+    conversation = _create_conversation(client, proxy_url)
+    items_path = f"/v1/conversations/{conversation}/items"
+    ascending = {"order": "asc"}
+
+    def turn(input_items: list[dict], during: Callable[[], None] | None = None, tool_choice: str = "none") -> dict:
+        body = {"model": model, "conversation": conversation, "store": True, "stream": during is not None,
+                "input": input_items, "tools": [WEATHER_TOOL], "tool_choice": tool_choice,
+                "parallel_tool_calls": False, "multi_agent": {"enabled": True}}
+        return _observed_turn(client, proxy_url, body, during)
+
+    def user(text: str) -> list[dict]:
+        return [{"role": "user", "content": text}]
+
+    def request(method: str, path: str, **kwargs: Any) -> dict:
+        return _item_request(client, proxy_url, method, path, expected_status=None, **kwargs)
+
+    turn(user("Remember the word APRICOT. Reply with only OK."))
+    side: dict = {}
+    turn(user("Count from 1 to 120, one number per line, digits only."),
+         lambda: side.update(turn(user("Call get_weather for Paris."), tool_choice="required")))
+    request("GET", items_path, params=ascending)
+    calls = [item for item in side.get("output", []) if item.get("type") == "function_call"]
+    if len(calls) != 1:
+        raise RuntimeError(f"expected one get_weather call from turn C, got {side}")
+    turn([{"type": "function_call_output", "call_id": calls[0]["call_id"],
+           "output": json.dumps({"temperature_c": 7})}])
+    request("GET", items_path, params=ascending)
 
 
 def run_items(
-    client: httpx.Client, proxy_url: str, model: str, scenario: str, stream: bool
+    client: httpx.Client, proxy_url: str, model: str, scenario: str, stream: bool,
+    *, max_output_tokens: int | None = None,
 ) -> None:
-    """Record each conversation or item API request as its own numbered step."""
+    """Record each fixed Conversation Items or Responses API request as a numbered step."""
+    if scenario == "multi-agent-store-false":
+        run_multi_agent_store_false(
+            client, proxy_url, model, stream,
+            run_responses=run_responses, load_tool_outputs=_load_tool_outputs_file,
+            max_output_tokens=max_output_tokens,
+        )
+        return
+    if scenario == "concurrent-writes":
+        if not stream:
+            raise click.UsageError("--items-scenario concurrent-writes streams turn B; use --stream.")
+        _record_concurrent_writes(client, proxy_url, model)
+        return
+    if scenario in COMPACTION_SCENARIOS:
+        COMPACTION_SCENARIOS[scenario][0](client, proxy_url, model, stream)
+        return
+    if scenario in MCP_SCENARIOS:
+        MCP_SCENARIOS[scenario][0](client, proxy_url, model, stream)
+        return
+    if scenario in ("stale-compaction", "competing-tool-outputs", "overlapping-multi-agent"):
+        if not stream:
+            raise click.UsageError(f"--items-scenario {scenario} streams turn B; use --stream.")
+        record = {
+            "stale-compaction": _record_stale_compaction,
+            "competing-tool-outputs": _record_competing_tool_outputs,
+            "overlapping-multi-agent": _record_overlapping_multi_agent,
+        }[scenario]
+        record(client, proxy_url, model)
+        return
+    if scenario == "store-false":
+        conv_id = _create_conversation(client, proxy_url)
+        items_path = f"/v1/conversations/{conv_id}/items"
+        first = _item_response(
+            client, proxy_url, model,
+            "Remember the secret word ORCHID. Reply with only OK.",
+            conversation=conv_id, stream=stream, store=False,
+        )
+        _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
+        _item_request(client, proxy_url, "GET", f"/v1/responses/{first['id']}", expected_status=None)
+        _item_response(
+            client, proxy_url, model,
+            "Remember the secret word SAPPHIRE. Reply with only OK.",
+            conversation=conv_id, stream=stream,
+        )
+        _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
+        child = _item_response(
+            client, proxy_url, model,
+            "What secret word did I ask you to remember? Reply with that word only. After replying, remember RUBY instead.",
+            conversation=conv_id, stream=stream, store=False,
+        )
+        _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
+        _item_request(client, proxy_url, "GET", f"/v1/responses/{child['id']}", expected_status=None)
+        _item_response(
+            client, proxy_url, model,
+            "What secret word did I ask you to remember? Reply with that word only.",
+            conversation=conv_id, stream=stream,
+        )
+        _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
+        return
+    if scenario == "response-call-ids":
+        _record_call_ids(client, proxy_url, model)
+        return
+    if scenario == "response-tool-items":
+        run_tool_items(client, proxy_url, model, send_request=_item_request,
+                       extract_tool_calls=_extract_tool_calls,
+                       load_tool_outputs=_load_tool_outputs_file,
+                       build_tool_output_input=_build_tool_output_input)
+        return
+    if scenario == "response-lifecycle":
+        first = _item_response(client, proxy_url, model, "Reply with only SAPPHIRE.", stream=stream)
+        first_path = f"/v1/responses/{first['id']}"
+        _item_request(client, proxy_url, "GET", f"{first_path}/input_items")
+        child = _item_response(
+            client, proxy_url, model, "Reply with only ORCHID.",
+            previous_response_id=first["id"], stream=stream,
+        )
+        child_path = f"/v1/responses/{child['id']}"
+        child_items_path = f"{child_path}/input_items"
+        _item_request(client, proxy_url, "GET", child_items_path, params={"order": "asc"})
+        page = _item_request(
+            client, proxy_url, "GET", child_items_path,
+            params={"order": "asc", "limit": 1},
+        )
+        if not page.get("last_id") or not page.get("has_more"):
+            raise RuntimeError(f"expected a non-final one-item input page: {page}")
+        _item_request(
+            client, proxy_url, "GET", child_items_path,
+            params={"order": "asc", "limit": 1, "after": page["last_id"]},
+        )
+        _item_request(client, proxy_url, "GET", child_path)
+        _item_request(client, proxy_url, "DELETE", first_path)
+        _item_request(client, proxy_url, "GET", first_path, expected_status=None)
+        _item_request(client, proxy_url, "GET", f"{first_path}/input_items", expected_status=None)
+        _item_request(client, proxy_url, "GET", child_items_path, params={"order": "asc"})
+        _item_request(client, proxy_url, "GET", child_path)
+        _item_request(client, proxy_url, "DELETE", first_path, expected_status=None)
+        # A listing's deletion visibility does not establish what inference sees.
+        # Continue the surviving child before deleting it and capture both the
+        # model's answer and the new response's input window.
+        continuation = _item_response(
+            client, proxy_url, model,
+            "What exact word did the first user message ask you to reply with? Reply with only that word.",
+            previous_response_id=child["id"], stream=stream,
+        )
+        continuation_path = f"/v1/responses/{continuation['id']}"
+        _item_request(client, proxy_url, "GET", f"{continuation_path}/input_items", params={"order": "asc"})
+        _item_request(client, proxy_url, "DELETE", continuation_path)
+        _item_request(client, proxy_url, "DELETE", child_path)
+        _item_request(client, proxy_url, "GET", child_items_path, expected_status=None)
+        _item_request(client, proxy_url, "GET", child_path, expected_status=None)
+        return
+    if scenario == "response-pagination":
+        first = _item_response(client, proxy_url, model, "Reply with only SAPPHIRE.", stream=stream)
+        child = _item_response(
+            client, proxy_url, model, "Reply with only ORCHID.",
+            previous_response_id=first["id"], stream=stream,
+        )
+        path = f"/v1/responses/{child['id']}/input_items"
+        _item_request(client, proxy_url, "GET", path, params={"order": "asc"})
+        _item_request(client, proxy_url, "GET", path, params={"order": "desc"})
+        for order in ("asc", "desc"):
+            page = _item_request(client, proxy_url, "GET", path, params={"order": order, "limit": 1})
+            if not page.get("last_id") or not page.get("has_more"):
+                raise RuntimeError(f"expected a non-final {order} page: {page}")
+            _item_request(
+                client, proxy_url, "GET", path,
+                params={"order": order, "limit": 1, "after": page["last_id"]},
+            )
+        _item_request(client, proxy_url, "GET", path)
+        for order in ("asc", "desc"):
+            page = _item_request(client, proxy_url, "GET", path, params={"order": order, "limit": 100})
+            if not page.get("last_id"):
+                raise RuntimeError(f"expected an input cursor: {page}")
+            _item_request(client, proxy_url, "GET", path,
+                          params={"order": order, "after": page["last_id"]}, expected_status=None)
+        foreign = _item_response(client, proxy_url, model, "Reply with only VIOLET.", stream=stream)
+        foreign_page = _item_request(client, proxy_url, "GET", f"/v1/responses/{foreign['id']}/input_items")
+        _item_request(client, proxy_url, "GET", path,
+                      params={"after": foreign_page["data"][0]["id"]}, expected_status=None)
+        return
+    if scenario == "response-edge-cases":
+        transient = _item_response(client, proxy_url, model, "Reply with only SAPPHIRE.", stream=stream, store=False)
+        transient_path = f"/v1/responses/{transient['id']}"
+        for method, path in (
+            ("GET", transient_path), ("GET", f"{transient_path}/input_items"),
+            ("DELETE", transient_path), ("GET", "/v1/responses/resp_missing"),
+            ("GET", "/v1/responses/resp_missing/input_items"),
+            ("DELETE", "/v1/responses/resp_missing"),
+        ):
+            _item_request(client, proxy_url, method, path, expected_status=None)
+        _item_request(
+            client, proxy_url, "POST", "/v1/responses",
+            body={"model": model, "input": [{"role": "user", "content": "Reply with only ORCHID."}],
+                  "previous_response_id": "resp_missing", "store": True, "stream": False},
+            expected_status=None,
+        )
+        stored = _item_response(client, proxy_url, model, "Reply with only ORCHID.", stream=stream)
+        path = f"/v1/responses/{stored['id']}/input_items"
+        for params in (
+            {"limit": "0"}, {"limit": "101"}, {"order": "sideways"},
+            {"after": "msg_missing"}, {"include[]": "web_search_call.results"},
+            {"include[]": "message.output_text.logprobs"},
+            {"limit": "-1"}, {"limit": "ten"}, {"after": ""},
+            {"include[]": "not.a.valid.include"},
+            [("limit", "1"), ("limit", "2")],
+            [("include[]", "message.output_text.logprobs"),
+             ("include[]", "reasoning.encrypted_content")],
+        ):
+            _item_request(client, proxy_url, "GET", path, params=params, expected_status=None)
+        _item_request(client, proxy_url, "DELETE", f"/v1/responses/{stored['id']}")
+        _item_request(client, proxy_url, "DELETE", f"/v1/responses/{stored['id']}", expected_status=None)
+        return
+    if scenario == "response-conversation":
+        conversation = _create_conversation(client, proxy_url)
+        items_path = f"/v1/conversations/{conversation}/items"
+        _item_request(client, proxy_url, "POST", items_path,
+                      body={"items": [{"role": "user", "content": "Remember SAPPHIRE."}]})
+        first = _item_response(client, proxy_url, model, "Reply with only SAPPHIRE.",
+                               conversation=conversation, stream=stream)
+        first_path = f"/v1/responses/{first['id']}"
+        _item_request(client, proxy_url, "GET", f"{first_path}/input_items", params={"order": "asc"})
+        added = _item_request(client, proxy_url, "POST", items_path,
+                              body={"items": [{"role": "user", "content": "Now remember ORCHID."}]})
+        _item_request(client, proxy_url, "GET", f"{first_path}/input_items", params={"order": "asc"})
+        child = _item_response(client, proxy_url, model, "Reply with only ORCHID.",
+                               conversation=conversation, stream=stream)
+        child_path = f"/v1/responses/{child['id']}"
+        _item_request(client, proxy_url, "GET", f"{child_path}/input_items", params={"order": "asc"})
+        _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
+        _item_request(client, proxy_url, "DELETE", f"{items_path}/{added['data'][0]['id']}")
+        for path in (child_path, first_path):
+            _item_request(client, proxy_url, "GET", f"{path}/input_items",
+                          params={"order": "asc"}, expected_status=None)
+        _item_request(client, proxy_url, "DELETE", first_path)
+        _item_request(client, proxy_url, "GET", f"{child_path}/input_items",
+                      params={"order": "asc"}, expected_status=None)
+        _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
+        _item_request(client, proxy_url, "GET", child_path, expected_status=None)
+        _item_request(client, proxy_url, "DELETE", f"/v1/conversations/{conversation}")
+        _item_request(client, proxy_url, "GET", f"{child_path}/input_items", expected_status=None)
+        _item_request(client, proxy_url, "GET", child_path, expected_status=None)
+        # A turn naming a deleted or never-created conversation, stored or not, and in the object form.
+        unknown = f"conv_{secrets.token_hex(24)}"
+        for reference, store in ((conversation, True), (unknown, True), (unknown, False), ({"id": unknown}, True)):
+            _item_request(client, proxy_url, "POST", "/v1/responses",
+                          body={"model": model, "input": "Reply with only SAPPHIRE.", "conversation": reference,
+                                "store": store, "stream": stream},
+                          expected_status=None)
+        return
+    if scenario == "response-replayed-items":
+        seed = _item_response(client, proxy_url, model, "Reply with only SAPPHIRE.", stream=stream)
+        seed_items = f"/v1/responses/{seed['id']}/input_items"
+        page = _item_request(client, proxy_url, "GET", seed_items, params={"order": "asc"})
+        reused = {"type": "message", "id": page["data"][0]["id"],
+                  "role": "user", "content": "Reply with only ORCHID."}
+        for items in (
+            [reused],
+            [reused, {**reused, "content": "Reply with only VIOLET."}],
+            [{**reused, "id": f"item_wrongprefix_{secrets.token_hex(8)}"}],
+            [{"type": "function_call", "call_id": "call_history_probe", "name": "lookup",
+              "arguments": "{}"},
+             {"type": "function_call_output", "call_id": "call_history_probe", "output": "SAPPHIRE"},
+             {"role": "user", "content": "Reply with only the lookup result."}],
+        ):
+            # Probe status is evidence. On rejection, still inspect the seed to
+            # establish that rejected input did not mutate its stored context.
+            result = _item_request(client, proxy_url, "POST", "/v1/responses",
+                                   body={"model": model, "input": items, "store": True,
+                                         "stream": False}, expected_status=None)
+            response_id = result.get("id", seed["id"])
+            _item_request(client, proxy_url, "GET", f"/v1/responses/{response_id}/input_items",
+                          params={"order": "asc"}, expected_status=None)
+            _item_request(client, proxy_url, "GET", seed_items, params={"order": "asc"})
+        # The function-calling guide's loop (`input_list += response.output`, then the tool output) resends the
+        # call the continued history already holds: once per history source, stored and not. A conversation's
+        # items are listed after the resend.
+        user = {"role": "user", "content": "What's the weather in Paris?"}
+        for source, store in (("conversation", True), ("conversation", False),
+                              ("previous_response_id", True), ("previous_response_id", False)):
+            reference = {"conversation": _create_conversation(client, proxy_url)} if source == "conversation" else {}
+            first = _item_request(client, proxy_url, "POST", "/v1/responses", body={
+                "model": model, "input": [user], "tools": [WEATHER_TOOL], "tool_choice": "required",
+                "store": True, "stream": False, **reference})
+            calls = [item for item in first.get("output", []) if item.get("type") == "function_call"]
+            if not calls:
+                raise RuntimeError(f"{source}: expected a get_weather call, got {first}")
+            if source == "previous_response_id":
+                reference = {"previous_response_id": first["id"]}
+            output = {"type": "function_call_output", "call_id": calls[0]["call_id"], "output": "sunny"}
+            _item_request(client, proxy_url, "POST", "/v1/responses", expected_status=None, body={
+                "model": model, "input": [user, calls[0], output], "tools": [WEATHER_TOOL],
+                "store": store, "stream": False, **reference})
+            if source == "conversation":
+                _item_request(client, proxy_url, "GET", f"/v1/conversations/{reference['conversation']}/items",
+                              params={"order": "asc"})
+        return
+    if scenario == "item-id-prefixes":
+        conversation = _create_conversation(client, proxy_url)
+        items_path = f"/v1/conversations/{conversation}/items"
+        for item in _id_prefix_items():
+            _item_request(client, proxy_url, "POST", items_path, body={"items": [item]}, expected_status=None)
+        _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
+        stored = _item_request(client, proxy_url, "POST", items_path, body={"items": _kind_seed_items()})["data"]
+        target_path = f"/v1/conversations/{_create_conversation(client, proxy_url)}/items"
+        for item in _kind_mismatch_items(stored):
+            _item_request(client, proxy_url, "POST", target_path, body={"items": [item]})
+        return
+    if scenario == "response-item-id-prefixes":
+        user = {"role": "user", "content": "Reply with only OK."}
+        items = _id_prefix_items()
+        # Each call is paired with an output: two admitted pairs, then three whose output uses the call's prefix.
+        for index, (call, output) in enumerate(((0, 1), (5, 6), (0, 7), (3, 8), (5, 9))):
+            pair = [{**items[position], "call_id": f"call_pair_{index}"} for position in (call, output)]
+            _item_request(client, proxy_url, "POST", "/v1/responses", expected_status=None,
+                          body={"model": model, "input": [*pair, user], "store": False, "stream": False})
+        items_path = f"/v1/conversations/{_create_conversation(client, proxy_url)}/items"
+        stored = _item_request(client, proxy_url, "POST", items_path, body={"items": _kind_seed_items()})["data"]
+        for item in _kind_mismatch_items(stored):
+            _item_request(client, proxy_url, "POST", "/v1/responses", expected_status=None,
+                          body={"model": model, "input": [item, user], "store": False, "stream": False})
+        return
     if scenario == "edge-cases":
         for item in (
             {
@@ -509,18 +1523,42 @@ def run_items(
 
 
 def _send_nonstreaming(client: httpx.Client, body: dict, proxy_url: str) -> dict | None:
-    resp = client.post(f"{proxy_url}/v1/responses", json=body, timeout=300)
-    resp.raise_for_status()
+    finished = threading.Event()
+    started = time.monotonic()
+
+    def report_wait() -> None:
+        while not finished.wait(15):
+            click.echo(f"  [waiting for non-streaming response: {time.monotonic() - started:.0f}s elapsed]")
+
+    click.echo(f"  [sending HTTP Responses request; waiting for response (upstream read timeout: {HTTP_READ_TIMEOUT}s)]")
+    reporter = threading.Thread(target=report_wait, daemon=True)
+    reporter.start()
+    try:
+        # Let the proxy record and report an upstream timeout before this
+        # client times out waiting for the proxy itself.
+        resp = client.post(f"{proxy_url}/v1/responses", json=body, timeout=_http_timeout(proxy_client=True))
+    except httpx.TimeoutException as error:
+        raise click.ClickException(
+            "Timed out waiting for the non-streaming HTTP response. "
+            "No complete response was received; inspect the cassette before retrying."
+        ) from error
+    finally:
+        finished.set()
+        reporter.join()
+    _raise_recording_http_error(resp)
     data = resp.json()
     print(f"\n[Response]\n{json.dumps(data, indent=2)}\n")
     return data
 
 
-def _send_streaming(client: httpx.Client, body: dict, proxy_url: str) -> dict | None:
+def _send_streaming(
+    client: httpx.Client, body: dict, proxy_url: str, on_first_delta: Callable[[], None] | None = None
+) -> dict | None:
+    """Stream a Responses call; `on_first_delta` runs once, mid-stream, after the first output text delta."""
     response_data = None
     print("\n[Streaming response]")
     with client.stream(
-        "POST", f"{proxy_url}/v1/responses", json=body, timeout=300
+        "POST", f"{proxy_url}/v1/responses", json=body, timeout=_http_timeout(proxy_client=True)
     ) as resp:
         if resp.status_code != 200:
             # Drain the body fully before raising: the recording proxy is an
@@ -530,7 +1568,7 @@ def _send_streaming(client: httpx.Client, body: dict, proxy_url: str) -> dict | 
             # before it appends the turn, silently losing this turn's error
             # response from the cassette entirely.
             resp.read()
-        resp.raise_for_status()
+        _raise_recording_http_error(resp)
         for line in resp.iter_lines():
             if not line:
                 continue
@@ -543,8 +1581,13 @@ def _send_streaming(client: httpx.Client, body: dict, proxy_url: str) -> dict | 
                     elif payload.get("object") == "response" and payload.get("status") == "completed":
                         response_data = payload
                 except Exception:
-                    pass
+                    continue
+                if on_first_delta and payload.get("type") == "response.output_text.delta":
+                    on_first_delta, during = None, on_first_delta
+                    during()
     print()
+    if on_first_delta:
+        raise RuntimeError("stream ended before the first output text delta")
     return response_data
 
 
@@ -619,6 +1662,8 @@ class WebSocketClient:
         self.headers = headers
         self.sock: socket.socket | ssl.SSLSocket | None = None
         self._receive_buffer = bytearray()
+        self.on_frame = None
+        self.handshake_response = None
 
     def __enter__(self) -> "WebSocketClient":
         parsed = urlparse(self.url)
@@ -655,8 +1700,12 @@ class WebSocketClient:
 
         response = self._read_http_response()
         status_line, _, header_text = response.partition("\r\n")
+        self.handshake_response = {
+            "status_code": int(status_line.split()[1]),
+            "headers": _filter_response_headers(_headers_from_text(header_text)),
+        }
         if " 101 " not in status_line:
-            raise RuntimeError(f"websocket upgrade failed: {status_line}\n{header_text}")
+            raise RuntimeError(f"websocket upgrade failed: {status_line}")
         accept = _headers_from_text(header_text).get("sec-websocket-accept")
         expected = base64.b64encode(
             hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")).digest()
@@ -724,6 +1773,8 @@ class WebSocketClient:
         header.extend(mask)
         masked = bytes(byte ^ mask[i % 4] for i, byte in enumerate(payload))
         self.sock.sendall(bytes(header) + masked)
+        if self.on_frame is not None:
+            self.on_frame("client", opcode, payload, True)
 
     def receive_text(self) -> str | None:
         message = bytearray()
@@ -737,11 +1788,15 @@ class WebSocketClient:
                 length = struct.unpack("!H", self._read_exact(2))[0]
             elif length == 127:
                 length = struct.unpack("!Q", self._read_exact(8))[0]
+            if length > 16 * 1024 * 1024:
+                raise RuntimeError("WebSocket frame exceeded the 16 MiB capture limit")
             mask = self._read_exact(4) if masked else b""
             payload = self._read_exact(length)
             if masked:
                 payload = bytes(byte ^ mask[i % 4] for i, byte in enumerate(payload))
 
+            if self.on_frame is not None:
+                self.on_frame("server", opcode, payload, fin)
             if opcode == 0x8:
                 return None
             if opcode == 0x9:
@@ -750,6 +1805,8 @@ class WebSocketClient:
             if opcode == 0xA:
                 continue
             if opcode in {0x1, 0x0}:
+                if len(message) + len(payload) > 16 * 1024 * 1024:
+                    raise RuntimeError("WebSocket message exceeded the 16 MiB capture limit")
                 message.extend(payload)
                 if fin:
                     return message.decode("utf-8")
@@ -766,16 +1823,9 @@ def _headers_from_text(header_text: str) -> dict[str, str]:
 
 
 def _websocket_url(base_url: str) -> str:
-    parsed = urlparse(base_url.rstrip("/"))
-    if parsed.scheme in {"ws", "wss"}:
-        root = base_url.rstrip("/")
-    elif parsed.scheme == "http":
-        root = "ws://" + base_url.rstrip("/")[len("http://"):]
-    elif parsed.scheme == "https":
-        root = "wss://" + base_url.rstrip("/")[len("https://"):]
-    else:
-        raise ValueError(f"unsupported websocket base URL: {base_url}")
-    return f"{root}/v1/responses"
+    from websocket_recorder import RecordedSession
+
+    return RecordedSession.responses_url(base_url)
 
 
 def _send_websocket(
@@ -866,7 +1916,606 @@ def _send(
     )
 
 
+FILES_TEXT_FIXTURE = Path(__file__).resolve().parent / "text_files" / "inputs" / "notes.txt"
+FILES_IMAGE_FIXTURE = Path(__file__).resolve().parent / "images" / "inputs" / "red-blue-64.png"
+FILES_TEXT_PROMPT = "What is the release codeword in the attached file? Reply with only the codeword."
+FILES_IMAGE_PROMPT = "Which two colors are in the image? Reply with only the two color names."
+FILES_TEXT_FOLLOW_UP = "What was the release codeword in the file I attached earlier? Reply with only the codeword."
+FILES_IMAGE_FOLLOW_UP = "Which two colors were in the image? Reply with only the two color names."
+FILES_MISSING_ID = "file-00000000-0000-7000-8000-000000000000"
+FILES_MISSING_STORE_ID = "vs_00000000000000000000000000"
+FILES_PDF_FIXTURE = Path(__file__).resolve().parent / "text_files" / "inputs" / "notes.pdf"
+FILES_TEXT_URL = (
+    "https://raw.githubusercontent.com/vllm-project/agentic-api/main/"
+    "crates/agentic-server-core/tests/cassettes/text_files/inputs/notes.txt"
+)
+FILES_SEARCH_PROMPT = "What is the release codeword in the deployment notes? Reply with only the codeword."
+FILES_SEARCH_FOLLOW_UP = "Which codeword did you find in the notes? Reply with only the codeword."
+
+
+def _files_upload(
+    client: httpx.Client,
+    proxy_url: str,
+    filename: str,
+    content: bytes,
+    content_type: str,
+    purpose: str,
+) -> dict[str, Any]:
+    response = client.post(
+        f"{proxy_url}/v1/files",
+        files={"file": (filename, content, content_type)},
+        data={"purpose": purpose},
+        timeout=_http_timeout(proxy_client=True),
+    )
+    click.echo(
+        f"  [POST /v1/files ({filename}, {content_type}, purpose={purpose}) "
+        f"-> HTTP {response.status_code}]"
+    )
+    try:
+        payload = response.json()
+    except ValueError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _files_request(
+    client: httpx.Client,
+    proxy_url: str,
+    method: str,
+    path: str,
+    **kwargs: Any,
+) -> httpx.Response:
+    response = client.request(
+        method,
+        f"{proxy_url}{path}",
+        timeout=_http_timeout(proxy_client=True),
+        **kwargs,
+    )
+    click.echo(f"  [{method} {path} -> HTTP {response.status_code}]")
+    return response
+
+
+def _responses_text_from_payload(payload: Any) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    return "".join(
+        part.get("text", "")
+        for item in payload.get("output") or []
+        if isinstance(item, dict) and item.get("type") == "message"
+        for part in item.get("content") or []
+        if isinstance(part, dict) and part.get("type") == "output_text"
+    )
+
+
+def _files_response(
+    client: httpx.Client,
+    proxy_url: str,
+    body: dict[str, Any],
+) -> tuple[httpx.Response, Any]:
+    response = client.post(
+        f"{proxy_url}/v1/responses",
+        json=body,
+        timeout=_http_timeout(proxy_client=True),
+    )
+    click.echo(f"  [POST /v1/responses -> HTTP {response.status_code}]")
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+    text = _responses_text_from_payload(payload)
+    if text:
+        click.echo(f"    answer: {text.strip()!r}")
+    return response, payload
+
+
+def _files_response_body(
+    model: str,
+    input_value: Any,
+    max_output_tokens: int | None,
+    previous_response_id: str | None = None,
+    **fields: Any,
+) -> dict[str, Any]:
+    """A stored, non-streaming Responses body; `fields` adds or overrides request fields."""
+    body: dict[str, Any] = {
+        "model": model,
+        "store": True,
+        "stream": False,
+        "input": input_value,
+    }
+    if previous_response_id is not None:
+        body["previous_response_id"] = previous_response_id
+    if max_output_tokens:
+        body["max_output_tokens"] = max_output_tokens
+    body.update(fields)
+    return body
+
+
+def _files_message(parts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [{"type": "message", "role": "user", "content": parts}]
+
+
+def _record_files_text(
+    client: httpx.Client,
+    proxy_url: str,
+    model: str,
+    max_output_tokens: int | None,
+) -> None:
+    notes = FILES_TEXT_FIXTURE.read_bytes()
+    uploaded = _files_upload(client, proxy_url, "notes.txt", notes, "text/plain", "user_data")
+    file_id = uploaded.get("id")
+    if not isinstance(file_id, str):
+        click.echo("  [text upload did not return a file id; skipping text references]", err=True)
+        return
+    _files_request(client, proxy_url, "GET", f"/v1/files/{file_id}")
+    _files_request(client, proxy_url, "GET", f"/v1/files/{file_id}/content")
+
+    body = _files_response_body(
+        model,
+        _files_message(
+            [
+                {"type": "input_text", "text": FILES_TEXT_PROMPT},
+                {"type": "input_file", "file_id": file_id},
+            ]
+        ),
+        max_output_tokens,
+    )
+    _, payload = _files_response(client, proxy_url, body)
+    response_id = payload.get("id") if isinstance(payload, dict) else None
+    if isinstance(response_id, str):
+        _files_response(
+            client,
+            proxy_url,
+            _files_response_body(model, FILES_TEXT_FOLLOW_UP, max_output_tokens, response_id),
+        )
+
+    _files_request(client, proxy_url, "DELETE", f"/v1/files/{file_id}")
+    if isinstance(response_id, str):
+        _files_response(
+            client,
+            proxy_url,
+            _files_response_body(model, FILES_TEXT_FOLLOW_UP, max_output_tokens, response_id),
+        )
+    _files_response(
+        client,
+        proxy_url,
+        _files_response_body(
+            model,
+            _files_message(
+                [
+                    {"type": "input_text", "text": FILES_TEXT_PROMPT},
+                    {"type": "input_file", "file_id": file_id},
+                ]
+            ),
+            max_output_tokens,
+        ),
+    )
+
+    wrong = _files_upload(client, proxy_url, "notes.txt", notes, "text/plain", "user_data")
+    wrong_id = wrong.get("id")
+    if isinstance(wrong_id, str):
+        _files_response(
+            client,
+            proxy_url,
+            _files_response_body(
+                model,
+                _files_message(
+                    [
+                        {"type": "input_text", "text": FILES_IMAGE_PROMPT},
+                        {"type": "input_image", "file_id": wrong_id},
+                    ]
+                ),
+                max_output_tokens,
+            ),
+        )
+        _files_request(client, proxy_url, "DELETE", f"/v1/files/{wrong_id}")
+
+
+def _record_files_image(
+    client: httpx.Client,
+    proxy_url: str,
+    model: str,
+    max_output_tokens: int | None,
+) -> None:
+    image = FILES_IMAGE_FIXTURE.read_bytes()
+    uploaded = _files_upload(client, proxy_url, "colors.png", image, "image/png", "vision")
+    file_id = uploaded.get("id")
+    if not isinstance(file_id, str):
+        click.echo("  [image upload did not return a file id; skipping image references]", err=True)
+        return
+    _files_request(client, proxy_url, "GET", f"/v1/files/{file_id}")
+    _files_request(client, proxy_url, "GET", f"/v1/files/{file_id}/content")
+
+    body = _files_response_body(
+        model,
+        _files_message(
+            [
+                {"type": "input_text", "text": FILES_IMAGE_PROMPT},
+                {"type": "input_image", "file_id": file_id},
+            ]
+        ),
+        max_output_tokens,
+    )
+    _, payload = _files_response(client, proxy_url, body)
+    response_id = payload.get("id") if isinstance(payload, dict) else None
+    if isinstance(response_id, str):
+        _files_response(
+            client,
+            proxy_url,
+            _files_response_body(model, FILES_IMAGE_FOLLOW_UP, max_output_tokens, response_id),
+        )
+
+    _files_request(client, proxy_url, "DELETE", f"/v1/files/{file_id}")
+    if isinstance(response_id, str):
+        _files_response(
+            client,
+            proxy_url,
+            _files_response_body(model, FILES_IMAGE_FOLLOW_UP, max_output_tokens, response_id),
+        )
+
+    notes = FILES_TEXT_FIXTURE.read_bytes()
+    wrong = _files_upload(client, proxy_url, "notes.txt", notes, "text/plain", "user_data")
+    wrong_id = wrong.get("id")
+    if isinstance(wrong_id, str):
+        _files_response(
+            client,
+            proxy_url,
+            _files_response_body(
+                model,
+                _files_message(
+                    [
+                        {"type": "input_text", "text": FILES_IMAGE_PROMPT},
+                        {"type": "input_image", "file_id": wrong_id},
+                    ]
+                ),
+                max_output_tokens,
+            ),
+        )
+        _files_request(client, proxy_url, "DELETE", f"/v1/files/{wrong_id}")
+
+
+def _record_files_errors(client: httpx.Client, proxy_url: str) -> None:
+    notes = FILES_TEXT_FIXTURE.read_bytes()
+    _files_upload(client, proxy_url, "notes.txt", notes, "text/plain", "bogus")
+    client.post(
+        f"{proxy_url}/v1/files",
+        files={"file": ("notes.txt", notes, "text/plain")},
+        timeout=_http_timeout(proxy_client=True),
+    )
+    click.echo("  [POST /v1/files without purpose -> recorded]")
+    client.post(
+        f"{proxy_url}/v1/files",
+        data={"purpose": "user_data"},
+        timeout=_http_timeout(proxy_client=True),
+    )
+    click.echo("  [POST /v1/files without file -> recorded]")
+    _files_request(client, proxy_url, "GET", f"/v1/files/{FILES_MISSING_ID}")
+    _files_request(client, proxy_url, "GET", f"/v1/files/{FILES_MISSING_ID}/content")
+    _files_request(client, proxy_url, "DELETE", f"/v1/files/{FILES_MISSING_ID}")
+
+
+def _payload_id(payload: Any) -> str | None:
+    value = payload.get("id") if isinstance(payload, dict) else None
+    return value if isinstance(value, str) else None
+
+
+def _files_json(client: httpx.Client, proxy_url: str, method: str, path: str, **kwargs: Any) -> Any:
+    response = _files_request(client, proxy_url, method, path, **kwargs)
+    try:
+        return response.json()
+    except ValueError:
+        return None
+
+
+def _data_url(content: bytes, media_type: str) -> str:
+    return f"data:{media_type};base64,{base64.b64encode(content).decode('ascii')}"
+
+
+def _record_files_api(client: httpx.Client, proxy_url: str) -> None:
+    """Every upload purpose and content kind, listing, retrieval, and deletion."""
+    notes = FILES_TEXT_FIXTURE.read_bytes()
+    image = FILES_IMAGE_FIXTURE.read_bytes()
+    ids: list[str | None] = []
+    for filename, content, content_type, purpose in (
+        ("notes.txt", notes, "text/plain", "assistants"),
+        ("notes.txt", notes, "text/plain", "user_data"),
+        ("colors.png", image, "image/png", "vision"),
+        ("colors.png", image, "image/png", "user_data"),
+        ("notes.txt", notes, "text/plain", "vision"),
+        ("notes.pdf", FILES_PDF_FIXTURE.read_bytes(), "application/pdf", "user_data"),
+        ("empty.txt", b"", "text/plain", "user_data"),
+        ("data.bin", bytes(range(256)), "application/octet-stream", "user_data"),
+    ):
+        ids.append(_payload_id(_files_upload(client, proxy_url, filename, content, content_type, purpose)))
+    uploaded = [file_id for file_id in ids if file_id]
+    # Listing is account-wide and newest first, so only the newest entries (this run's uploads) are listed.
+    _files_request(client, proxy_url, "GET", "/v1/files", params={"limit": 2})
+    if len(uploaded) >= 2:
+        _files_request(client, proxy_url, "GET", "/v1/files", params={"limit": 1, "after": uploaded[-2]})
+    _files_request(client, proxy_url, "GET", "/v1/files", params={"purpose": "vision", "limit": 1})
+    _files_request(client, proxy_url, "GET", "/v1/files", params={"limit": 0})
+    _files_request(client, proxy_url, "GET", "/v1/files", params={"order": "sideways"})
+    _files_request(client, proxy_url, "GET", "/v1/files", params={"limit": 1, "after": FILES_MISSING_ID})
+    if not uploaded:
+        return
+    first = uploaded[0]
+    _files_request(client, proxy_url, "GET", f"/v1/files/{first}")
+    _files_request(client, proxy_url, "GET", f"/v1/files/{first}/content")
+    _files_request(client, proxy_url, "DELETE", f"/v1/files/{first}")
+    _files_request(client, proxy_url, "DELETE", f"/v1/files/{first}")
+    _files_request(client, proxy_url, "GET", f"/v1/files/{first}")
+    _files_request(client, proxy_url, "GET", f"/v1/files/{first}/content")
+    for file_id in uploaded[1:]:
+        _files_request(client, proxy_url, "DELETE", f"/v1/files/{file_id}")
+
+
+def _record_files_input(
+    client: httpx.Client,
+    proxy_url: str,
+    model: str,
+    max_output_tokens: int | None,
+) -> None:
+    """Every way a file reaches Responses input, and what deleting the response, the file, or the conversation does."""
+    notes = FILES_TEXT_FIXTURE.read_bytes()
+    pdf = FILES_PDF_FIXTURE.read_bytes()
+    image = FILES_IMAGE_FIXTURE.read_bytes()
+    text_id = _payload_id(_files_upload(client, proxy_url, "notes.txt", notes, "text/plain", "user_data"))
+    pdf_id = _payload_id(_files_upload(client, proxy_url, "notes.pdf", pdf, "application/pdf", "user_data"))
+    image_id = _payload_id(_files_upload(client, proxy_url, "colors.png", image, "image/png", "vision"))
+    if not (text_id and pdf_id and image_id):
+        click.echo("  [an upload did not return a file id; skipping file references]", err=True)
+        return
+
+    def ask(parts: list[dict[str, Any]], prompt: str = FILES_TEXT_PROMPT, **fields: Any) -> Any:
+        message = _files_message([{"type": "input_text", "text": prompt}, *parts])
+        return _files_response(client, proxy_url, _files_response_body(model, message, max_output_tokens, **fields))[1]
+
+    def follow_up(response_id: str, **fields: Any) -> None:
+        _files_response(client, proxy_url,
+                        _files_response_body(model, FILES_TEXT_FOLLOW_UP, max_output_tokens, response_id, **fields))
+
+    ask([{"type": "input_file", "file_id": pdf_id}])
+    ask([{"type": "input_file", "filename": "notes.pdf", "file_data": _data_url(pdf, "application/pdf")}])
+    ask([{"type": "input_file", "file_url": FILES_TEXT_URL}])
+    ask([{"type": "input_file", "file_id": text_id, "filename": "renamed.txt"}])
+    ask([{"type": "input_file", "file_id": text_id, "filename": "notes.txt",
+          "file_data": _data_url(notes, "text/plain")}])
+    ask([{"type": "input_file", "file_id": image_id}], FILES_IMAGE_PROMPT)
+    ask([{"type": "input_image", "file_id": pdf_id}], FILES_IMAGE_PROMPT)
+    ask([{"type": "input_image", "file_id": image_id, "image_url": _data_url(image, "image/png")}],
+        FILES_IMAGE_PROMPT)
+    ask([{"type": "input_image", "file_id": image_id, "detail": "low"}], FILES_IMAGE_PROMPT)
+    ask([{"type": "input_file", "file_id": FILES_MISSING_ID}])
+    ask([{"type": "input_file", "file_id": text_id}], store=False)
+    ask([{"type": "input_file", "file_id": text_id}], stream=True)
+    ask([{"type": "input_file", "file_id": FILES_MISSING_ID}], stream=True)
+
+    # A file as the whole input: a file-only message, an easy message, and a bare input item.
+    def send(input_value: Any, **fields: Any) -> None:
+        _files_response(client, proxy_url, _files_response_body(model, input_value, max_output_tokens, **fields))
+
+    send(_files_message([{"type": "input_file", "file_id": text_id}]))
+    send([{"role": "user", "content": [{"type": "input_file", "file_id": pdf_id}]}])
+    send([{"type": "input_file", "file_id": text_id}])
+    send([{"type": "input_image", "file_id": image_id}])
+    # A file returned as a function call's output content.
+    read_notes = {"type": "function", "name": "read_notes", "description": "Return the deployment notes.",
+                  "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}
+    for output in ([{"type": "input_file", "file_id": text_id}],
+                   [{"type": "input_file", "file_id": pdf_id}],
+                   [{"type": "input_image", "file_id": image_id}],
+                   [{"type": "input_file", "file_id": FILES_MISSING_ID}]):
+        send([*_files_message([{"type": "input_text", "text": FILES_TEXT_PROMPT}]),
+              {"type": "function_call", "call_id": "call_read_notes", "name": "read_notes", "arguments": "{}"},
+              {"type": "function_call_output", "call_id": "call_read_notes", "output": output}],
+             tools=[read_notes])
+
+    # Deleting the response that holds the reference.
+    response_id = _payload_id(ask([{"type": "input_file", "file_id": text_id}]))
+    if response_id:
+        _files_request(client, proxy_url, "GET", f"/v1/responses/{response_id}/input_items")
+        _files_request(client, proxy_url, "DELETE", f"/v1/responses/{response_id}")
+        follow_up(response_id)
+        _files_request(client, proxy_url, "GET", f"/v1/responses/{response_id}/input_items")
+
+    # Deleting the referenced file while stored history still names it.
+    response_id = _payload_id(ask([{"type": "input_file", "file_id": pdf_id}]))
+    _files_request(client, proxy_url, "DELETE", f"/v1/files/{pdf_id}")
+    if response_id:
+        _files_request(client, proxy_url, "GET", f"/v1/responses/{response_id}/input_items")
+        _files_request(client, proxy_url, "GET", f"/v1/responses/{response_id}")
+        follow_up(response_id)
+        follow_up(response_id, stream=True)
+
+    # A conversation item that references a file, before and after the file is deleted.
+    conversation = _payload_id(_files_json(client, proxy_url, "POST", "/v1/conversations", json={"items": _files_message([
+        {"type": "input_text", "text": "Here are the deployment notes."},
+        {"type": "input_file", "file_id": text_id},
+    ])}))
+    if conversation:
+        turn = _files_response_body(model, FILES_TEXT_FOLLOW_UP, max_output_tokens, conversation=conversation)
+        _files_response(client, proxy_url, turn)
+        _files_request(client, proxy_url, "DELETE", f"/v1/files/{text_id}")
+        _files_request(client, proxy_url, "GET", f"/v1/conversations/{conversation}/items")
+        _files_response(client, proxy_url, turn)
+        _files_request(client, proxy_url, "DELETE", f"/v1/conversations/{conversation}")
+    else:
+        _files_request(client, proxy_url, "DELETE", f"/v1/files/{text_id}")
+    _files_request(client, proxy_url, "DELETE", f"/v1/files/{image_id}")
+
+
+def _record_files_compact(
+    client: httpx.Client,
+    proxy_url: str,
+    model: str,
+    max_output_tokens: int | None,
+) -> None:
+    """Client-facing `/v1/responses/compact` over file inputs, continuing from each window, before and after deletion."""
+    notes = FILES_TEXT_FIXTURE.read_bytes()
+    text_id = _payload_id(_files_upload(client, proxy_url, "notes.txt", notes, "text/plain", "user_data"))
+    pdf_id = _payload_id(_files_upload(client, proxy_url, "notes.pdf", FILES_PDF_FIXTURE.read_bytes(),
+                                       "application/pdf", "user_data"))
+    if not (text_id and pdf_id):
+        click.echo("  [an upload did not return a file id; skipping compaction]", err=True)
+        return
+    remember = {"type": "input_text", "text": "Remember these deployment notes for later."}
+
+    def compact(**body: Any) -> list[Any]:
+        window = _files_json(client, proxy_url, "POST", "/v1/responses/compact", json={"model": model, **body})
+        return window.get("output", []) if isinstance(window, dict) else []
+
+    def recall(window: list[Any]) -> None:
+        if not window:
+            return
+        _files_response(client, proxy_url, _files_response_body(
+            model, [*window, {"role": "user", "content": FILES_TEXT_FOLLOW_UP}], max_output_tokens, store=False))
+
+    by_id = compact(input=_files_message([remember, {"type": "input_file", "file_id": text_id}]))
+    recall(by_id)
+    recall(compact(input=_files_message([remember, {"type": "input_file", "filename": "notes.txt",
+                                                    "file_data": _data_url(notes, "text/plain")}])))
+    stored = _payload_id(_files_response(client, proxy_url, _files_response_body(
+        model, _files_message([remember, {"type": "input_file", "file_id": text_id}]), max_output_tokens))[1])
+    if stored:
+        recall(compact(previous_response_id=stored))
+    conversation = _payload_id(_files_json(client, proxy_url, "POST", "/v1/conversations", json={
+        "items": _files_message([remember, {"type": "input_file", "file_id": pdf_id}])}))
+    if conversation:
+        recall(compact(conversation=conversation))
+
+    # The windows compacted above, and compacting again, once the files are gone.
+    _files_request(client, proxy_url, "DELETE", f"/v1/files/{text_id}")
+    _files_request(client, proxy_url, "DELETE", f"/v1/files/{pdf_id}")
+    recall(by_id)
+    if stored:
+        compact(previous_response_id=stored)
+    if conversation:
+        compact(conversation=conversation)
+        _files_request(client, proxy_url, "DELETE", f"/v1/conversations/{conversation}")
+
+
+def _wait_for_store_file(client: httpx.Client, target: str, store_id: str, file_id: str) -> None:
+    """Poll ingestion directly against the provider so polls stay out of the cassette."""
+    deadline = time.monotonic() + 180
+    while time.monotonic() < deadline:
+        response = client.get(f"{target}/v1/vector_stores/{store_id}/files/{file_id}", timeout=_http_timeout())
+        status = response.json().get("status") if response.status_code == 200 else None
+        # A file attached at store creation can briefly be unlisted (404) before ingestion starts.
+        if status in {"completed", "failed", "cancelled"} or response.status_code not in {200, 404}:
+            click.echo(f"  [ingestion of {file_id}: HTTP {response.status_code}, status {status}]")
+            return
+        time.sleep(2)
+    raise click.ClickException(f"vector store file {file_id} was not ingested within 180 seconds")
+
+
+def _record_files_search(
+    client: httpx.Client,
+    proxy_url: str,
+    target: str,
+    model: str,
+    max_output_tokens: int | None,
+) -> None:
+    """Vector stores, their files and search, and the Responses `file_search` tool."""
+    notes = FILES_TEXT_FIXTURE.read_bytes()
+    file_id = _payload_id(_files_upload(client, proxy_url, "notes.txt", notes, "text/plain", "assistants"))
+    tagged_id = _payload_id(_files_upload(client, proxy_url, "team-notes.txt", notes, "text/plain", "assistants"))
+    if not (file_id and tagged_id):
+        click.echo("  [an upload did not return a file id; skipping vector stores]", err=True)
+        return
+    store_id = _payload_id(_files_json(client, proxy_url, "POST", "/v1/vector_stores",
+                                       json={"name": "agentic-api-recorder", "file_ids": [file_id]}))
+    if not store_id:
+        click.echo("  [vector store creation failed; skipping search]", err=True)
+        return
+    store = f"/v1/vector_stores/{store_id}"
+    _wait_for_store_file(client, target, store_id, file_id)
+    _files_request(client, proxy_url, "GET", store)
+    _files_request(client, proxy_url, "GET", "/v1/vector_stores", params={"limit": 1})
+    _files_request(client, proxy_url, "GET", f"{store}/files")
+    _files_request(client, proxy_url, "GET", f"{store}/files/{file_id}")
+    _files_request(client, proxy_url, "POST", f"{store}/files",
+                   json={"file_id": tagged_id, "attributes": {"department": "engineering"}})
+    _wait_for_store_file(client, target, store_id, tagged_id)
+    _files_request(client, proxy_url, "POST", f"{store}/files", json={"file_id": FILES_MISSING_ID})
+
+    engineering = {"type": "eq", "key": "department", "value": "engineering"}
+    for search in (
+        {"query": "release codeword"},
+        {"query": "release codeword", "max_num_results": 1, "filters": engineering,
+         "ranking_options": {"score_threshold": 0.0}},
+        {"query": ["release codeword", "deployment owner"]},
+        {"query": "release codeword", "filters": {"type": "between", "key": "department", "value": "x"}},
+        {"query": "release codeword", "max_num_results": 0},
+    ):
+        _files_request(client, proxy_url, "POST", f"{store}/search", json=search)
+    _files_request(client, proxy_url, "POST", f"/v1/vector_stores/{FILES_MISSING_STORE_ID}/search",
+                   json={"query": "release codeword"})
+
+    tool = {"type": "file_search", "vector_store_ids": [store_id]}
+
+    def ask(tools: list[dict[str, Any]], **fields: Any) -> Any:
+        body = _files_response_body(model, FILES_SEARCH_PROMPT, max_output_tokens, tools=tools, **fields)
+        return _files_response(client, proxy_url, body)[1]
+
+    first = _payload_id(ask([tool], include=["file_search_call.results"]))
+    ask([tool], stream=True, include=["file_search_call.results"])
+    ask([{**tool, "max_num_results": 1, "filters": engineering}], tool_choice={"type": "file_search"})
+    if first:
+        _files_response(client, proxy_url,
+                        _files_response_body(model, FILES_SEARCH_FOLLOW_UP, max_output_tokens, first))
+        _files_response(client, proxy_url,
+                        _files_response_body(model, FILES_SEARCH_FOLLOW_UP, max_output_tokens, first, tools=[tool]))
+    ask([{"type": "file_search", "vector_store_ids": [FILES_MISSING_STORE_ID]}])
+    ask([{"type": "file_search", "vector_store_ids": []}])
+    ask([{"type": "file_search"}])
+
+    # Detaching keeps the upload; deleting the upload removes it from the store.
+    _files_request(client, proxy_url, "DELETE", f"{store}/files/{tagged_id}")
+    _files_request(client, proxy_url, "GET", f"/v1/files/{tagged_id}")
+    _files_request(client, proxy_url, "GET", f"{store}/files")
+    _files_request(client, proxy_url, "DELETE", f"/v1/files/{file_id}")
+    _files_request(client, proxy_url, "GET", f"{store}/files/{file_id}")
+    _files_request(client, proxy_url, "POST", f"{store}/search", json={"query": "release codeword"})
+    if first:
+        _files_response(client, proxy_url,
+                        _files_response_body(model, FILES_SEARCH_FOLLOW_UP, max_output_tokens, first, tools=[tool]))
+    _files_request(client, proxy_url, "DELETE", store)
+    _files_request(client, proxy_url, "GET", store)
+    _files_request(client, proxy_url, "POST", f"{store}/search", json={"query": "release codeword"})
+    ask([tool])
+    _files_request(client, proxy_url, "DELETE", f"/v1/files/{tagged_id}")
+
+
+def run_files(
+    client: httpx.Client,
+    proxy_url: str,
+    target: str,
+    model: str,
+    scenario: str,
+    max_output_tokens: int | None,
+) -> None:
+    if scenario in {"text", "all"}:
+        _record_files_text(client, proxy_url, model, max_output_tokens)
+    if scenario in {"image", "all"}:
+        _record_files_image(client, proxy_url, model, max_output_tokens)
+    if scenario in {"errors", "all"}:
+        _record_files_errors(client, proxy_url)
+    if scenario in {"api", "all"}:
+        _record_files_api(client, proxy_url)
+    if scenario in {"input", "all"}:
+        _record_files_input(client, proxy_url, model, max_output_tokens)
+    if scenario in {"search", "all"}:
+        _record_files_search(client, proxy_url, target, model, max_output_tokens)
+    if scenario in {"compact", "all"}:
+        _record_files_compact(client, proxy_url, model, max_output_tokens)
+
+
 def _prompt(label: str) -> str:
+    if not sys.stdin.isatty():
+        line = sys.stdin.readline()
+        if line == "":
+            raise click.ClickException(f"Missing scripted prompt for {label.rstrip()}")
+        click.echo(f"{label.rstrip()} [read from stdin]")
+        return line.strip()
     try:
         return input(label).strip()
     except (EOFError, KeyboardInterrupt):
@@ -886,6 +2535,29 @@ def _load_response_input(path: str | None) -> str | list | None:
     return value
 
 
+def _load_tools_file(path: str | Path) -> list:
+    with open(path, encoding="utf-8") as source:
+        tools = json.load(source)
+    if not isinstance(tools, list):
+        raise click.UsageError("--tools file must contain a JSON array.")
+    return tools
+
+
+def _load_tool_outputs_file(path: str | Path) -> "dict[str, Any] | types.ModuleType":
+    if str(path).endswith(".py"):
+        spec = importlib.util.spec_from_file_location("cassette_tool_outputs", path)
+        if spec is None or spec.loader is None:
+            raise click.UsageError(f"--tool-outputs could not load Python module: {path}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    with open(path, encoding="utf-8") as source:
+        outputs = json.load(source)
+    if not isinstance(outputs, dict):
+        raise click.UsageError("--tool-outputs JSON file must contain an object (name -> output string).")
+    return outputs
+
+
 def _parse_reasoning(raw: str | None) -> dict | None:
     if raw is None:
         return None
@@ -896,6 +2568,42 @@ def _parse_reasoning(raw: str | None) -> dict | None:
     if not isinstance(value, dict):
         raise click.UsageError("--reasoning must contain a JSON object.")
     return value
+
+
+def _parse_multi_agent(raw: str | None) -> dict | None:
+    """Preserve supplied settings so the API, not the recorder, validates them."""
+    if raw is None:
+        return None
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise click.UsageError(f"--multi-agent is not valid JSON: {error}") from error
+    if not isinstance(value, dict):
+        raise click.UsageError("--multi-agent must contain a JSON object.")
+    return value
+
+
+def _parse_max_tool_calls(raw: str | None) -> list[int | None] | int | None:
+    """Return one limit for every turn, or one entry per turn where null omits the field."""
+    if raw is None:
+        return None
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise click.UsageError(f"--max-tool-calls is not valid JSON: {error}") from error
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, list) and all(
+        entry is None or (isinstance(entry, int) and not isinstance(entry, bool)) for entry in value
+    ):
+        return value
+    raise click.UsageError("--max-tool-calls must be an integer or a JSON array of integers and nulls.")
+
+
+def _max_tool_calls_for_turn(max_tool_calls: list[int | None] | int | None, turn: int) -> int | None:
+    if isinstance(max_tool_calls, list):
+        return max_tool_calls[turn - 1] if turn <= len(max_tool_calls) else None
+    return max_tool_calls
 
 
 def _inject_tools(
@@ -910,14 +2618,19 @@ def _inject_tools(
 
 
 def _extract_tool_calls(response_data: dict | None) -> list[dict]:
-    """Extract client-executed function, custom, shell, and tool-search calls from a response."""
+    """Extract client-executed function, custom, shell, and tool-search calls from a response.
+
+    A hosted tool search (`execution: "server"`) is already resolved in the same
+    response, so it is not pending client work.
+    """
     if not response_data:
         return []
     output = response_data.get("output", [])
     return [
         item
         for item in output
-        if item.get("type") in {"function_call", "custom_tool_call", "shell_call", "tool_search_call"}
+        if item.get("type") in {"function_call", "custom_tool_call", "shell_call"}
+        or (item.get("type") == "tool_search_call" and item.get("execution") != "server")
     ]
 
 
@@ -1082,6 +2795,24 @@ def _build_tool_output_input(
             {"type": "message", "role": "user", "content": user_prompt}
         )
     return input_items
+
+
+def _report_tool_output_injection(tool_calls: list[dict], input_items: list[dict]) -> None:
+    submitted_ids = {
+        item["call_id"]
+        for item in input_items
+        if isinstance(item, dict) and isinstance(item.get("call_id"), str)
+    }
+    click.echo(
+        f"  [injecting {len(submitted_ids)}/{len(tool_calls)} client-tool output(s) before user message]"
+    )
+    for call in tool_calls:
+        if call.get("call_id") not in submitted_ids:
+            click.echo(
+                f"  [no scripted output for {call.get('type')} {call.get('name', '')!r} "
+                f"(call_id={call.get('call_id')})]",
+                err=True,
+            )
 
 
 def run_conv(
@@ -1257,7 +2988,9 @@ def run_messages(
             results = []
             for call in pending_tool_use:
                 out = tool_outputs.get(call.get("name"), "{}")
-                results.append({"type": "tool_result", "tool_use_id": call.get("id"), "content": out})
+                results.append(
+                    {"type": "tool_result", "tool_use_id": call.get("id"), "content": out, "is_error": False}
+                )
             history.append({"role": "user", "content": results})
             click.echo(f"  [fed back {len(results)} tool_result(s) for {[c.get('name') for c in pending_tool_use]}]")
         else:
@@ -1310,7 +3043,47 @@ def run_responses(
     preset_input: str | list | None = None,
     manual_item_replay: bool = False,
     parallel_tool_calls: bool | None = None,
-) -> None:
+    multi_agent: dict | None = None,
+    request_overrides: dict | None = None,
+    auto_tool_continuations: int = 0,
+    max_tool_calls: list[int | None] | int | None = None,
+) -> list[dict] | None:
+    if transport == "websocket" and multi_agent is not None:
+        from websocket_recorder import RecordedSession, exchange
+
+        if branches or manual_item_replay or tool_choice_sequence or request_overrides:
+            raise click.UsageError("multi-agent WebSocket capture does not support branching or request overrides")
+        if output_file is None:
+            raise ValueError("WebSocket recording needs an output file")
+        url = _websocket_url(target_base_url)
+        ws = WebSocketClient(url, headers or {})
+        handshake = {"request": {"method": "GET", "url": url, "headers": _filter_request_headers(headers or {})}}
+        output_builder = lambda calls: _build_tool_output_input(calls, tool_outputs or {}, None, tool_search_output_tools)
+        with RecordedSession(ws, output_file, handshake, HTTP_READ_TIMEOUT) as session:
+            previous_id = None
+            for prompt_turn in range(turns):
+                value = preset_input if prompt_turn == 0 and preset_input is not None else _prompt(
+                    f"Turn {prompt_turn + 1}/{turns} — enter prompt: "
+                )
+                body = {"model": model, "input": value, "store": store, "multi_agent": multi_agent}
+                if previous_id is not None:
+                    body["previous_response_id"] = previous_id
+                if max_output_tokens is not None:
+                    body["max_output_tokens"] = max_output_tokens
+                if reasoning is not None:
+                    body["reasoning"] = reasoning
+                _inject_tools(body, tools, tool_choice, parallel_tool_calls)
+                for continuation in range(auto_tool_continuations + 1):
+                    response, returned = exchange(session, body, output_builder, inject=True)
+                    previous_id = response["id"]
+                    if not returned:
+                        break
+                    if continuation == auto_tool_continuations:
+                        raise click.ClickException("completed-response fallback exceeded continuation budget")
+                    body = dict(body, previous_response_id=previous_id, input=returned)
+                click.echo(f"  [WebSocket response {previous_id}; all injection outcomes received]")
+        return
+
     response_ids: dict[int, str] = {}
     responses: dict[int, dict] = {}
     branch_map: dict[int, int] = {}
@@ -1325,7 +3098,19 @@ def run_responses(
     last_response: dict | None = None
     search_tools_loaded = False
     manual_history: list[dict] = []
-    for turn in range(1, turns + 1):
+    prompt_turn = 0
+    automatic_turns = 0
+    for turn in range(1, turns + auto_tool_continuations + 1):
+        # Finish pending client work before reading the next scripted user prompt.
+        automatic = bool(auto_tool_continuations and _extract_tool_calls(last_response))
+        if automatic:
+            if automatic_turns >= auto_tool_continuations:
+                break
+            automatic_turns += 1
+        else:
+            if prompt_turn >= turns:
+                break
+            prompt_turn += 1
         if turn in branch_map:
             branch_from = branch_map[turn]
             if branch_from not in response_ids:
@@ -1344,7 +3129,9 @@ def run_responses(
             # input_image item array) can still be continued by previous_response_id.
             input_value: Any = preset_input
         else:
-            prompt = _prompt(f"Turn {turn}/{turns} — enter prompt: ")
+            prompt = "" if automatic else _prompt(f"Turn {prompt_turn}/{turns} — enter prompt: ")
+            if automatic:
+                click.echo(f"  [automatic client-tool continuation {automatic_turns}/{auto_tool_continuations}]")
 
             # Inject matching client-tool outputs before the user message.
             has_output_fixtures = (
@@ -1368,9 +3155,7 @@ def run_responses(
                     prompt if prompt else None,
                     tool_search_output_tools,
                 )
-                click.echo(
-                    f"  [injecting {len(pending_calls)} tool output(s) before user message]"
-                )
+                _report_tool_output_injection(pending_calls, input_value)
             else:
                 input_value = prompt
 
@@ -1391,6 +3176,8 @@ def run_responses(
             input_value = copy.deepcopy(manual_history)
 
         body: dict = {"model": model, "input": input_value, "stream": stream, "store": store}
+        if multi_agent is not None:
+            body["multi_agent"] = multi_agent
         if max_output_tokens is not None:
             body["max_output_tokens"] = max_output_tokens
         if reasoning is not None:
@@ -1398,9 +3185,20 @@ def run_responses(
         if previous_response_id and store:
             body["previous_response_id"] = previous_response_id
         effective_tools = tools_after_search if search_tools_loaded else tools
+        if auto_tool_continuations and tools_after_search is None:
+            effective_tools = tools
         turn_tool_choice = tool_choice_sequence[turn - 1] if tool_choice_sequence is not None else tool_choice
-        effective_parallel_tool_calls = False if tool_search_output_tools is not None else parallel_tool_calls
+        effective_parallel_tool_calls = (
+            False if tool_search_output_tools is not None and not auto_tool_continuations
+            else parallel_tool_calls
+        )
         _inject_tools(body, effective_tools, turn_tool_choice, effective_parallel_tool_calls)
+        turn_max_tool_calls = _max_tool_calls_for_turn(max_tool_calls, turn)
+        if turn_max_tool_calls is not None:
+            body["max_tool_calls"] = turn_max_tool_calls
+        if request_overrides is not None:
+            # Characterization must send invalid/null values without repairing them.
+            body.update(request_overrides)
         response_data = _send(
             client,
             body,
@@ -1425,6 +3223,12 @@ def run_responses(
             response_ids[turn] = response_id
             responses[turn] = response_data
 
+    if auto_tool_continuations and _extract_tool_calls(last_response):
+        raise click.ClickException(
+            f"Client-tool continuation limit ({auto_tool_continuations}) reached; "
+            "pending calls remain. Captured responses are retained; the task is unfinished."
+        )
+
     for b_idx, branch_from in enumerate(extra_branches, start=1):
         if branch_from not in response_ids:
             raise click.UsageError(
@@ -1443,7 +3247,7 @@ def run_responses(
         pending_calls = _extract_tool_calls(branch_response) if tool_outputs else []
         if pending_calls and tool_outputs:
             input_value = _build_tool_output_input(pending_calls, tool_outputs, prompt if prompt else None)
-            click.echo(f"  [injecting {len(pending_calls)} tool output(s) before user message]")
+            _report_tool_output_injection(pending_calls, input_value)
         else:
             input_value = prompt
 
@@ -1454,6 +3258,8 @@ def run_responses(
             "store": store,
             "previous_response_id": branch_resp_id,
         }
+        if multi_agent is not None:
+            body["multi_agent"] = multi_agent
         if max_output_tokens is not None:
             body["max_output_tokens"] = max_output_tokens
         if reasoning is not None:
@@ -1470,11 +3276,16 @@ def run_responses(
             output_file,
         )
 
+    # Let a scenario continue the same stateless conversation with different declarations.
+    return manual_history if manual_item_replay else None
+
 
 # ── main ──────────────────────────────────────────────────────────────────────
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
+@click.option("--auto-tool-continuations", type=click.IntRange(0, 100), default=0,
+              help="Maximum additional tool-output-only Responses requests after scripted turns.")
 @click.option(
     "--turns", "-n", required=True, type=int, help="Number of turns to record."
 )
@@ -1487,16 +3298,23 @@ def run_responses(
 )
 @click.option(
     "--mode",
-    type=click.Choice(["conv", "isolation", "mixed", "responses", "messages", "store_true_then_store_false", "items"]),
+    type=click.Choice(["conv", "isolation", "mixed", "responses", "messages", "store_true_then_store_false", "items", "files"]),
     default="conv",
     show_default=True,
     help="Recording mode.",
 )
 @click.option(
     "--items-scenario",
-    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases"]),
+    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "item-id-prefixes", "concurrent-writes", "stale-compaction", *COMPACTION_SCENARIOS, *MCP_SCENARIOS, "competing-tool-outputs", "overlapping-multi-agent", "store-false", "multi-agent-store-false", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items", "response-call-ids", "response-item-id-prefixes"]),
     default="continuation",
-    help="Conversation item recording scenario (for --mode items).",
+    help="Fixed Conversation Items or Responses API scenario (for --mode items).",
+)
+@click.option(
+    "--files-scenario",
+    type=click.Choice(["text", "image", "errors", "api", "input", "search", "compact", "all"]),
+    default="all",
+    show_default=True,
+    help="Fixed Files API scenario (for --mode files).",
 )
 @click.option(
     "--branch-from",
@@ -1622,7 +3440,7 @@ def run_responses(
     "--manual-item-replay",
     is_flag=True,
     default=False,
-    help="Replay full accumulated item history with store=false (direct-vLLM or gateway tool-search).",
+    help="Replay full accumulated item history with store=false over HTTP Responses.",
 )
 @click.option(
     "--input-file",
@@ -1640,11 +3458,49 @@ def run_responses(
     help='Responses reasoning settings as a JSON object, e.g. \'{"effort":"high","summary":"detailed"}\'.',
 )
 @click.option(
+    "--multi-agent",
+    "multi_agent_raw",
+    metavar="JSON",
+    default=None,
+    help='Multi-agent settings as a JSON object, e.g. \'{"enabled":true,"max_concurrent_subagents":3}\'. '
+    "HTTP Responses only. Does not add the beta header; use --openai-beta responses_multi_agent=v1.",
+)
+@click.option(
+    "--openai-beta",
+    multiple=True,
+    metavar="VALUE",
+    help="OpenAI-Beta header value (repeatable, comma-separated on the wire). HTTP Responses only. "
+    "Independent of --multi-agent so missing or incorrect beta headers can be characterized.",
+)
+@click.option(
+    "--request-overrides",
+    "request_overrides_raw",
+    metavar="JSON",
+    default=None,
+    help="Override request body fields verbatim for HTTP Responses characterization. "
+    "Requires --turns 1 without branches; accepts invalid API values for negative recordings.",
+)
+@click.option(
+    "--http-read-timeout",
+    type=click.IntRange(min=1),
+    default=TIMEOUT,
+    show_default=True,
+    help="Upstream read inactivity timeout in seconds for HTTP Responses recording; not a total duration limit.",
+)
+@click.option(
     "--max-output-tokens",
     type=int,
     default=1024,
     show_default=True,
     help="max_output_tokens for Responses requests. Use 0 to omit the field.",
+)
+@click.option(
+    "--max-tool-calls",
+    "max_tool_calls_raw",
+    metavar="JSON",
+    default=None,
+    help="max_tool_calls for linear Responses turns: an integer sent on every turn, or a JSON array with one "
+    "entry per turn where null omits the field (e.g. '[1, null]'). The value is sent unvalidated.",
 )
 @click.option(
     "--append",
@@ -1656,10 +3512,12 @@ def run_responses(
 )
 def main(
     turns: int,
+    auto_tool_continuations: int,
     output: str,
     mode: str,
     branch_from: tuple[int, ...],
     items_scenario: str,
+    files_scenario: str,
     branch_turn_number: tuple[int, ...],
     stream: bool,
     transport: str,
@@ -1679,14 +3537,70 @@ def main(
     manual_item_replay: bool,
     input_file: str | None,
     reasoning_raw: str | None,
+    multi_agent_raw: str | None,
+    openai_beta: tuple[str, ...],
+    request_overrides_raw: str | None,
+    http_read_timeout: int,
     max_output_tokens: int,
+    max_tool_calls_raw: str | None,
     append: bool,
 ) -> None:
     """Interactive multi-turn cassette recorder (proxy embedded)."""
+    global HTTP_READ_TIMEOUT
+    if auto_tool_continuations and (
+        mode != "responses" or (no_store and not manual_item_replay) or not tool_outputs_file
+        or branch_from or branch_turn_number or tool_choice_sequence_file or request_overrides_raw
+    ):
+        raise click.UsageError(
+            "--auto-tool-continuations requires Responses with --tool-outputs and either storage or --manual-item-replay, "
+            "without branches, tool-choice sequences, or request overrides."
+        )
+    if http_read_timeout != TIMEOUT and mode not in {"responses", "items"}:
+        raise click.UsageError("--http-read-timeout requires --mode responses or items.")
+    HTTP_READ_TIMEOUT = http_read_timeout
+    if (multi_agent_raw is not None or openai_beta) and mode != "responses":
+        raise click.UsageError("--multi-agent and --openai-beta require --mode responses.")
+    for beta in openai_beta:
+        if not beta.strip() or any(ord(char) < 32 or ord(char) >= 127 for char in beta):
+            raise click.UsageError("--openai-beta must be a nonempty printable ASCII header value.")
+    multi_agent = _parse_multi_agent(multi_agent_raw)
+    request_overrides = None
+    if request_overrides_raw is not None:
+        if mode != "responses" or transport != "http" or turns != 1 or branch_from or branch_turn_number:
+            raise click.UsageError("--request-overrides requires HTTP --mode responses --turns 1 without branches.")
+        try:
+            request_overrides = json.loads(request_overrides_raw)
+        except json.JSONDecodeError as error:
+            raise click.UsageError(f"--request-overrides is not valid JSON: {error}") from error
+        if not isinstance(request_overrides, dict):
+            raise click.UsageError("--request-overrides must contain a JSON object.")
+        if "stream" in request_overrides:
+            raise click.UsageError("Use --stream/--no-stream instead of overriding stream.")
+    max_tool_calls = _parse_max_tool_calls(max_tool_calls_raw)
+    if max_tool_calls is not None and (mode != "responses" or branch_from or branch_turn_number):
+        raise click.UsageError("--max-tool-calls requires linear --mode responses without branches.")
+
     if mode == "items":
-        expected_turns = (10 if items_scenario == "pagination" else
+        expected_turns = (1 if items_scenario == "multi-agent-store-false" else
+                          11 if items_scenario == "store-false" else
+                          19 if items_scenario == "response-lifecycle" else
+                          16 if items_scenario == "response-pagination" else
+                          23 if items_scenario == "response-edge-cases" else
+                          23 if items_scenario == "response-conversation" else
+                          26 if items_scenario == "response-replayed-items" else
+                          48 if items_scenario == "response-tool-items" else
+                          17 if items_scenario == "response-call-ids" else
+                          10 if items_scenario == "pagination" else
                           6 if items_scenario == "branch" else
-                          19 if items_scenario == "edge-cases" else 5)
+                          24 if items_scenario == "edge-cases" else
+                          18 if items_scenario == "item-id-prefixes" else
+                          11 if items_scenario == "response-item-id-prefixes" else
+                          22 if items_scenario == "concurrent-writes" else
+                          10 if items_scenario == "stale-compaction" else
+                          COMPACTION_SCENARIOS[items_scenario][1] if items_scenario in COMPACTION_SCENARIOS else
+                          MCP_SCENARIOS[items_scenario][1] if items_scenario in MCP_SCENARIOS else
+                          9 if items_scenario == "competing-tool-outputs" else
+                          7 if items_scenario == "overlapping-multi-agent" else 5)
         if turns != expected_turns:
             raise click.UsageError(
                 f"--mode items --items-scenario {items_scenario} requires --turns {expected_turns}."
@@ -1695,6 +3609,17 @@ def main(
             raise click.UsageError("--mode items does not support --append.")
     if mode == "items" and branch_from:
         raise click.UsageError("--mode items has scripted branches; omit --branch-from.")
+    if mode == "files":
+        if turns != 1:
+            raise click.UsageError("--mode files requires --turns 1.")
+        if no_store:
+            raise click.UsageError("--mode files records stored responses; omit --no-store.")
+        if input_file:
+            raise click.UsageError("--mode files does not support --input-file.")
+        if transport != "http":
+            raise click.UsageError("--mode files requires HTTP transport.")
+        if vllm_url:
+            raise click.UsageError("--mode files requires --gateway or --openai, not --vllm.")
     if branch_turn_number and not branch_from:
         raise click.UsageError("--branch-turn-number requires --branch-from.")
     if len(branch_turn_number) > len(branch_from):
@@ -1714,16 +3639,16 @@ def main(
         raise click.UsageError(
             "--tools-after-search requires --tool-search-output-tools."
         )
-    if manual_item_replay and not tool_search_recording:
+    if manual_item_replay and (mode != "responses" or transport != "http" or not no_store or branches):
         raise click.UsageError(
-            "--manual-item-replay requires --tool-search-output-tools."
+            "--manual-item-replay requires HTTP --mode responses with --no-store and no branches."
         )
     if tool_search_recording:
         if mode != "responses":
             raise click.UsageError(
                 "tool-search recorder fixtures require --mode responses."
             )
-        if turns != 4:
+        if not auto_tool_continuations and turns != 4:
             raise click.UsageError(
                 "tool-search recorder fixtures require exactly --turns 4."
             )
@@ -1735,10 +3660,6 @@ def main(
             raise click.UsageError(
                 "store=false tool-search characterization requires --manual-item-replay."
             )
-        if manual_item_replay and not no_store:
-            raise click.UsageError(
-                "--manual-item-replay requires --no-store."
-            )
         if input_file:
             raise click.UsageError(
                 "tool-search recorder fixtures do not support --input-file."
@@ -1747,7 +3668,7 @@ def main(
             raise click.UsageError(
                 "tool-search recording requires --tools and --tool-outputs."
             )
-        if not tool_choice_sequence_file:
+        if not auto_tool_continuations and not tool_choice_sequence_file:
             raise click.UsageError(
                 "tool-search recording requires --tool-choice-sequence."
             )
@@ -1783,10 +3704,7 @@ def main(
 
     tools: list | None = None
     if tools_file:
-        with open(tools_file, encoding="utf-8") as f:
-            tools = json.load(f)
-        if not isinstance(tools, list):
-            raise click.UsageError("--tools file must contain a JSON array.")
+        tools = _load_tools_file(tools_file)
 
     tool_choice: Any = None
     if tool_choice_raw:
@@ -1811,19 +3729,10 @@ def main(
 
     tool_outputs: "dict[str, Any] | types.ModuleType | None" = None
     if tool_outputs_file:
-        if tool_outputs_file.endswith(".py"):
-            spec = importlib.util.spec_from_file_location("cassette_tool_outputs", tool_outputs_file)
-            if spec is None or spec.loader is None:
-                raise click.UsageError(f"--tool-outputs could not load Python module: {tool_outputs_file}")
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            tool_outputs = module
+        tool_outputs = _load_tool_outputs_file(tool_outputs_file)
+        if isinstance(tool_outputs, types.ModuleType):
             click.echo(f"Tool outputs: python functions from {tool_outputs_file}")
         else:
-            with open(tool_outputs_file, encoding="utf-8") as f:
-                tool_outputs = json.load(f)
-            if not isinstance(tool_outputs, dict):
-                raise click.UsageError("--tool-outputs JSON file must contain an object (name -> output string).")
             click.echo(f"Tool outputs: {list(tool_outputs.keys())}")
 
     tool_search_output_tools: list[dict] | None = None
@@ -1865,7 +3774,8 @@ def main(
 
     if gateway_url:
         target = gateway_url.rstrip("/")
-        headers = {}
+        gateway_api_key = os.environ.get("GATEWAY_API_KEY", "")
+        headers = {"Authorization": f"Bearer {gateway_api_key}"} if gateway_api_key else {}
         backend_label = f"Gateway: {target}"
     elif vllm_url:
         target = vllm_url.rstrip("/")
@@ -1880,6 +3790,9 @@ def main(
             )
         headers = {"Authorization": f"Bearer {api_key}"}
         backend_label = f"OpenAI: {target}"
+
+    if openai_beta:
+        headers["OpenAI-Beta"] = ", ".join(openai_beta)
 
     output_file = Path(output).resolve()
     proxy_url = f"http://{PROXY_HOST}:{proxy_port}"
@@ -1923,6 +3836,10 @@ def main(
                 preset_input=preset_input,
                 manual_item_replay=manual_item_replay,
                 parallel_tool_calls=parallel_tool_calls,
+                multi_agent=multi_agent,
+                auto_tool_continuations=auto_tool_continuations,
+                request_overrides=request_overrides,
+                max_tool_calls=max_tool_calls,
             )
     else:
         click.echo(f"Proxy:   {proxy_url}  (requests go through here for recording)")
@@ -1932,7 +3849,8 @@ def main(
         try:
             with httpx.Client(headers=headers) as client:
                 if mode == "items":
-                    run_items(client, proxy_url, model, items_scenario, stream)
+                    run_items(client, proxy_url, model, items_scenario, stream,
+                              max_output_tokens=response_max_output_tokens)
                 elif mode == "conv":
                     run_conv(client, turns, model, stream, store, branches, proxy_url)
                 elif mode == "isolation":
@@ -1963,6 +3881,19 @@ def main(
                         preset_input=preset_input,
                         manual_item_replay=manual_item_replay,
                         parallel_tool_calls=parallel_tool_calls,
+                        multi_agent=multi_agent,
+                        request_overrides=request_overrides,
+                        auto_tool_continuations=auto_tool_continuations,
+                        max_tool_calls=max_tool_calls,
+                    )
+                elif mode == "files":
+                    run_files(
+                        client,
+                        proxy_url,
+                        target,
+                        model,
+                        files_scenario,
+                        response_max_output_tokens,
                     )
                 elif mode == "messages":
                     run_messages(

@@ -6,8 +6,13 @@
 
 mod support;
 
-use agentic_core::executor::{create_conversation, execute};
-use serde_json::json;
+use agentic_core::executor::{ExecutionContext, execute};
+use agentic_core::storage::ConversationStore;
+use agentic_core::types::conversations::ConversationMetadata;
+use agentic_core::types::io::InOutItem;
+use agentic_core::types::request_response::RequestPayload;
+use serde_json::{Value, json};
+use std::collections::HashSet;
 use std::sync::Arc;
 use support::{
     TestFixture, collect_stream, expected_text, function_call_response, load_cassette, make_request, output_text,
@@ -15,7 +20,131 @@ use support::{
     tool_search_request, unwrap_blocking,
 };
 
+/// Create an empty conversation owned by the default tenant, as `POST /v1/conversations` does,
+/// and return its ID.
+async fn create_conversation(exec_ctx: &ExecutionContext) -> String {
+    exec_ctx
+        .conv_handler
+        .create("default_tenant", &ConversationMetadata::new(), &[])
+        .await
+        .expect("create conversation")
+        .conversation_id
+}
+
 const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/cassettes/text_only/conversation");
+
+fn item_ids(items: &Value) -> Vec<String> {
+    items
+        .as_array()
+        .expect("item array")
+        .iter()
+        .filter_map(|item| item["id"].as_str().map(str::to_owned))
+        .collect()
+}
+
+fn item_texts(items: &Value) -> Vec<String> {
+    items
+        .as_array()
+        .expect("item array")
+        .iter()
+        .map(|item| match &item["content"] {
+            Value::String(content) => content.clone(),
+            Value::Array(parts) => parts.iter().filter_map(|part| part["text"].as_str()).collect(),
+            _ => String::new(),
+        })
+        .collect()
+}
+
+fn item_roles(items: &Value) -> Vec<String> {
+    items
+        .as_array()
+        .expect("item array")
+        .iter()
+        .map(|item| item["role"].as_str().unwrap_or_default().to_owned())
+        .collect()
+}
+
+fn recorded_output(turn: &support::Turn) -> Value {
+    if let Some(body) = &turn.response.body {
+        return body["output"].clone();
+    }
+    support::recorded_named_sse_events(turn)
+        .into_iter()
+        .rev()
+        .find(|event| event["type"] == "response.completed")
+        .map(|event| event["response"]["output"].clone())
+        .expect("recorded turn has a completed event")
+}
+
+/// A recorded two-turn conversation keeps the history clients and the model server see.
+async fn assert_recorded_conversation_history(
+    fixture: &TestFixture,
+    conversation_id: &str,
+    first: &support::Turn,
+    second: &support::Turn,
+) {
+    let store = ConversationStore::new(Arc::clone(&fixture.pool));
+    let items = store.rehydrate(conversation_id).await.expect("rehydrate conversation");
+    let history = Value::Array(
+        items
+            .items
+            .iter()
+            .map(|item| match item {
+                InOutItem::Input(input) => serde_json::to_value(input).expect("serialize input item"),
+                InOutItem::Output(output) => serde_json::to_value(output).expect("serialize output item"),
+            })
+            .collect(),
+    );
+    let first_output = recorded_output(first);
+    let second_output = recorded_output(second);
+    let first_prompt = first.request.body.input.as_str().unwrap_or_default();
+    let second_prompt = second.request.body.input.as_str().unwrap_or_default();
+
+    assert_eq!(
+        item_ids(&history),
+        item_ids(&first_output)
+            .into_iter()
+            .chain(item_ids(&second_output))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(item_roles(&history), ["user", "assistant", "user", "assistant"]);
+    assert_eq!(
+        item_texts(&history),
+        [
+            first_prompt.to_owned(),
+            expected_text(first),
+            second_prompt.to_owned(),
+            expected_text(second)
+        ]
+    );
+
+    // Each row keeps the recorded public identity and its own primary key.
+    let rows: Vec<(String, Option<String>)> =
+        sqlx::query_as("SELECT id, public_id FROM items WHERE conversation_id = $1 ORDER BY seq")
+            .bind(conversation_id)
+            .fetch_all(fixture.pool.as_ref())
+            .await
+            .expect("list conversation rows");
+    assert_eq!(rows.len(), 4);
+    assert_eq!(rows[1].0, item_ids(&first_output)[0]);
+    assert_eq!(rows[3].0, item_ids(&second_output)[0]);
+    assert_eq!(rows[1].1.as_deref(), Some(item_ids(&first_output)[0].as_str()));
+    assert_eq!(rows[3].1.as_deref(), Some(item_ids(&second_output)[0].as_str()));
+    assert_eq!(
+        rows.iter().map(|row| &row.0).collect::<HashSet<_>>().len(),
+        4,
+        "conversation rows must not share a primary key"
+    );
+
+    // The second turn forwards the recorded history and the new input upstream.
+    let bodies = fixture.request_bodies().await;
+    assert_eq!(bodies.len(), 2);
+    assert_eq!(item_ids(&bodies[1]["input"]), item_ids(&first_output));
+    assert_eq!(
+        item_texts(&bodies[1]["input"]),
+        [first_prompt.to_owned(), expected_text(first), second_prompt.to_owned()]
+    );
+}
 
 /// Case 6 — two turns, non-streaming, via `conversation_id`.
 #[tokio::test]
@@ -29,7 +158,7 @@ async fn test_two_turn_nonstreaming_conversation() {
     let (t1, t2) = (resp[0], resp[1]);
 
     // Mirrors /v1/conversations creation turn
-    let conv_id = create_conversation(ctx).await.expect("create conv").conversation_id;
+    let conv_id = create_conversation(ctx).await;
 
     // Act
     let p1 = unwrap_blocking(
@@ -42,7 +171,7 @@ async fn test_two_turn_nonstreaming_conversation() {
     );
     let p2 = unwrap_blocking(
         execute(
-            make_request(&t2.request.body.input, true, false, None, Some(conv_id)),
+            make_request(&t2.request.body.input, true, false, None, Some(conv_id.clone())),
             Arc::clone(ctx),
         )
         .await
@@ -56,6 +185,7 @@ async fn test_two_turn_nonstreaming_conversation() {
     assert_ne!(p2.id, p1.id);
     assert_eq!(p2.status, "completed");
     assert_eq!(output_text(&p2), expected_text(t2));
+    assert_recorded_conversation_history(&fixture, &conv_id, t1, t2).await;
 }
 
 #[tokio::test]
@@ -66,10 +196,7 @@ async fn tool_search_conversation_continuation_rebuilds_loaded_tools_from_histor
         text_response("conversation weather complete"),
     ])
     .await;
-    let conversation_id = create_conversation(&fixture.exec_ctx)
-        .await
-        .expect("create conversation")
-        .conversation_id;
+    let conversation_id = create_conversation(&fixture.exec_ctx).await;
     let declarations = tool_search_function_declarations("get_weather", "Get weather");
 
     let first = unwrap_blocking(
@@ -160,10 +287,7 @@ async fn tool_search_previous_response_branch_cannot_replace_conversation_histor
         text_response("conversation resumed"),
     ])
     .await;
-    let conversation_id = create_conversation(&fixture.exec_ctx)
-        .await
-        .expect("create conversation")
-        .conversation_id;
+    let conversation_id = create_conversation(&fixture.exec_ctx).await;
 
     let winner_search = unwrap_blocking(
         execute(
@@ -267,7 +391,7 @@ async fn test_two_turn_streaming_conversation() {
     let resp = responses_turns(&cassette);
     let (t1, t2) = (resp[0], resp[1]);
 
-    let conv_id = create_conversation(ctx).await.expect("create conv").conversation_id;
+    let conv_id = create_conversation(ctx).await;
 
     // Act
     let p1 = collect_stream(
@@ -281,7 +405,7 @@ async fn test_two_turn_streaming_conversation() {
     .await;
     let p2 = collect_stream(
         execute(
-            make_request(&t2.request.body.input, true, true, None, Some(conv_id)),
+            make_request(&t2.request.body.input, true, true, None, Some(conv_id.clone())),
             Arc::clone(ctx),
         )
         .await
@@ -296,6 +420,7 @@ async fn test_two_turn_streaming_conversation() {
     assert_ne!(p2.id, p1.id);
     assert_eq!(p2.status, "completed");
     assert_eq!(output_text(&p2), expected_text(t2));
+    assert_recorded_conversation_history(&fixture, &conv_id, t1, t2).await;
 }
 
 /// Case 8 — two independent conversations must not share context.
@@ -310,7 +435,7 @@ async fn test_conversation_isolation() {
     let (ta1, ta2, ta3, tb1, tb2, tb3) = (resp[0], resp[1], resp[2], resp[3], resp[4], resp[5]);
 
     // Conv A
-    let conv_a = create_conversation(ctx).await.expect("create conv A").conversation_id;
+    let conv_a = create_conversation(ctx).await;
     let pa1 = unwrap_blocking(
         execute(
             make_request(&ta1.request.body.input, true, false, None, Some(conv_a.clone())),
@@ -340,7 +465,7 @@ async fn test_conversation_isolation() {
     assert_eq!(output_text(&pa3), expected_text(ta3));
 
     // Conv B
-    let conv_b = create_conversation(ctx).await.expect("create conv B").conversation_id;
+    let conv_b = create_conversation(ctx).await;
     let pb1 = unwrap_blocking(
         execute(
             make_request(&tb1.request.body.input, true, false, None, Some(conv_b.clone())),
@@ -384,7 +509,7 @@ async fn test_branch_off_turn_1() {
     let resp = responses_turns(&cassette);
     let (t1, t2, t3, t4) = (resp[0], resp[1], resp[2], resp[3]);
 
-    let conv_id = create_conversation(ctx).await.expect("create conv").conversation_id;
+    let conv_id = create_conversation(ctx).await;
 
     // Main chain
     let p1 = unwrap_blocking(
@@ -442,7 +567,7 @@ async fn test_multi_branch() {
     let resp = responses_turns(&cassette);
     let (t1, t2, t3, t4, t5) = (resp[0], resp[1], resp[2], resp[3], resp[4]);
 
-    let conv_id = create_conversation(ctx).await.expect("create conv").conversation_id;
+    let conv_id = create_conversation(ctx).await;
 
     // Turn 1
     let p1 = unwrap_blocking(
@@ -479,6 +604,7 @@ async fn test_multi_branch() {
     );
     assert_eq!(p3.status, "completed");
     assert_eq!(output_text(&p3), expected_text(t3));
+    assert!(p3.conversation.is_none());
 
     let p4 = unwrap_blocking(
         execute(
@@ -490,7 +616,7 @@ async fn test_multi_branch() {
     );
     assert_eq!(p4.status, "completed");
     assert_eq!(output_text(&p4), expected_text(t4));
-    assert_eq!(p4.conversation_id.as_deref(), Some(conv_id.as_str()));
+    assert!(p4.conversation.is_none());
 
     // Branch 2 — off turn 2
     let p5 = unwrap_blocking(
@@ -503,10 +629,11 @@ async fn test_multi_branch() {
     );
     assert_eq!(p5.status, "completed");
     assert_eq!(output_text(&p5), expected_text(t5));
+    assert!(p5.conversation.is_none());
 }
 
 #[tokio::test]
-async fn test_store_false_with_conversation_id_hydrates_and_persists() {
+async fn test_store_false_with_conversation_id_hydrates_without_persisting() {
     let cassette = load_cassette(&format!("{DIR}/conv-store-false-followup-gpt-4o-nonstreaming.yaml"));
     let all: Vec<_> = cassette.turns.iter().collect();
     let fixture = TestFixture::new(&all).await;
@@ -514,7 +641,7 @@ async fn test_store_false_with_conversation_id_hydrates_and_persists() {
     let resp = responses_turns(&cassette);
     let (t1, t2) = (resp[0], resp[1]);
 
-    let conv_id = create_conversation(ctx).await.expect("create conv").conversation_id;
+    let conv_id = create_conversation(ctx).await;
 
     // Turn 1: store=true
     let p1 = unwrap_blocking(
@@ -534,7 +661,9 @@ async fn test_store_false_with_conversation_id_hydrates_and_persists() {
     assert_eq!(p1.status, "completed");
     assert_eq!(output_text(&p1), expected_text(t1));
 
-    // Turn 2: store=false but conversation_id passed — must rehydrate and persist locally
+    // Turn 2 reads the stored history but must not append to it.
+    let store = ConversationStore::new(Arc::clone(&fixture.pool));
+    let before = store.rehydrate(&conv_id).await.unwrap().items;
     let p2 = unwrap_blocking(
         execute(
             make_request(
@@ -551,6 +680,7 @@ async fn test_store_false_with_conversation_id_hydrates_and_persists() {
     );
     assert_eq!(p2.status, "completed");
     assert_eq!(output_text(&p2), expected_text(t2));
+    assert_eq!(store.rehydrate(&conv_id).await.unwrap().items, before);
 
     // Turn 2 was sent the full history from turn 1 (rehydrated correctly)
     let requests = fixture.request_bodies().await;
@@ -563,4 +693,159 @@ async fn test_store_false_with_conversation_id_hydrates_and_persists() {
             t2.request.body.input.as_str().expect("text cassette input")
         ]
     );
+}
+
+fn weather_tools() -> Value {
+    json!([{"type": "function", "name": "get_weather", "parameters": {"type": "object", "properties": {}}}])
+}
+
+fn weather_output() -> Value {
+    json!({"type": "function_call_output", "call_id": "call_weather", "output": "sunny"})
+}
+
+/// Sends `request` with the `get_weather` tool. Returns what the client receives and how many inference requests the
+/// turn made.
+async fn weather_turn(fixture: &TestFixture, mut request: RequestPayload) -> (Value, usize) {
+    request.tools = Some(serde_json::from_value(weather_tools()).expect("function tool"));
+    let before = fixture.request_bodies().await.len();
+    let outcome = match execute(request, Arc::clone(&fixture.exec_ctx)).await {
+        Err(error) => {
+            let status = error.http_status().as_u16();
+            let body: Value = serde_json::from_slice(&error.into_response_body()).expect("error body");
+            json!({"status": status, "body": body})
+        }
+        Ok(either::Either::Left(payload)) => json!({"status": 200, "id": payload.id, "output": payload.output}),
+        Ok(either::Either::Right(mut events)) => {
+            let mut types = Vec::new();
+            while let Some(chunk) = futures::StreamExt::next(&mut events).await {
+                types.extend(support::streamed_sse_event(&chunk).map(|event| event["type"].clone()));
+            }
+            json!({"status": 200, "events": types})
+        }
+    };
+    (outcome, fixture.request_bodies().await.len() - before)
+}
+
+/// Runs a stored first turn, in the conversation when one is given, in which the model calls `get_weather`. Returns
+/// the response's ID and the client's own history after the turn, as the function-calling guide keeps it: the user
+/// message, then the output.
+async fn awaiting_weather(fixture: &TestFixture, conversation_id: Option<&str>) -> (String, Vec<Value>) {
+    let user = json!({"role": "user", "content": "What is the weather?"});
+    let request = make_request(
+        vec![user.clone()],
+        true,
+        false,
+        None,
+        conversation_id.map(str::to_owned),
+    );
+    let (outcome, _) = weather_turn(fixture, request).await;
+    assert_eq!(outcome["output"][0]["id"], "fc_weather", "{outcome}");
+    let mut history = vec![user];
+    history.extend(outcome["output"].as_array().expect("output array").iter().cloned());
+    (outcome["id"].as_str().expect("response id").to_owned(), history)
+}
+
+/// A model that calls `get_weather`, then answers with its result.
+async fn weather_fixture() -> TestFixture {
+    TestFixture::new_with_responses(vec![
+        function_call_response("fc_weather", "call_weather", "get_weather", "{}"),
+        text_response("sunny"),
+    ])
+    .await
+}
+
+/// `OpenAI`'s refusal of an input that holds the item `fc_weather` twice.
+fn duplicate_weather_call() -> Value {
+    json!({"status": 400, "body": {"error": {
+        "message": "Duplicate item found with id fc_weather. Remove duplicate items from your input and try again.",
+        "type": "invalid_request_error",
+        "code": null,
+        "param": "input"
+    }}})
+}
+
+/// The function-calling guide's loop (`input_list += response.output`, then the tool output) used with `conversation`
+/// resends the function call the conversation already holds. `OpenAI` prepends the conversation's items to the input,
+/// so a stored turn holds the call twice and is refused before inference. The conversation stays usable.
+#[tokio::test]
+async fn stored_conversation_turn_resending_a_stored_item_is_refused_before_inference() {
+    for stream in [false, true] {
+        let fixture = weather_fixture().await;
+        let conversation_id = create_conversation(&fixture.exec_ctx).await;
+        let (_, mut input) = awaiting_weather(&fixture, Some(&conversation_id)).await;
+        let store_view = ConversationStore::new(Arc::clone(&fixture.pool));
+        let stored = store_view.rehydrate(&conversation_id).await.expect("rehydrate").items;
+        input.push(weather_output());
+
+        let request = make_request(input, true, stream, None, Some(conversation_id.clone()));
+        let (outcome, inference_requests) = weather_turn(&fixture, request).await;
+        assert_eq!(outcome, duplicate_weather_call(), "stream={stream}");
+        assert_eq!(inference_requests, 0, "stream={stream}");
+        assert_eq!(
+            store_view.rehydrate(&conversation_id).await.expect("rehydrate").items,
+            stored,
+            "stream={stream}"
+        );
+
+        // Sending only the new item, as the conversation-state guide does, completes the turn.
+        let request = make_request(vec![weather_output()], true, false, None, Some(conversation_id));
+        let (outcome, _) = weather_turn(&fixture, request).await;
+        assert_eq!(
+            outcome["output"][0]["content"][0]["text"], "sunny",
+            "stream={stream}: {outcome}"
+        );
+    }
+}
+
+/// `OpenAI` accepts the same resend with `store: false`: the turn runs, and the conversation is unchanged.
+#[tokio::test]
+async fn unstored_conversation_turn_resending_a_stored_item_is_accepted() {
+    let fixture = weather_fixture().await;
+    let conversation_id = create_conversation(&fixture.exec_ctx).await;
+    let (_, mut input) = awaiting_weather(&fixture, Some(&conversation_id)).await;
+    let store_view = ConversationStore::new(Arc::clone(&fixture.pool));
+    let stored = store_view.rehydrate(&conversation_id).await.expect("rehydrate").items;
+    input.push(weather_output());
+
+    let request = make_request(input, false, false, None, Some(conversation_id.clone()));
+    let (outcome, inference_requests) = weather_turn(&fixture, request).await;
+    assert_eq!(outcome["output"][0]["content"][0]["text"], "sunny", "{outcome}");
+    assert_eq!(inference_requests, 1);
+    assert_eq!(
+        store_view.rehydrate(&conversation_id).await.expect("rehydrate").items,
+        stored
+    );
+}
+
+/// The same loop with `previous_response_id`: the parent's history holds the call, so a stored turn is refused before
+/// inference, as on `OpenAI`, instead of storing the call twice. The response stays continuable.
+#[tokio::test]
+async fn stored_response_turn_resending_a_stored_item_is_refused_before_inference() {
+    let fixture = weather_fixture().await;
+    let (response_id, mut input) = awaiting_weather(&fixture, None).await;
+    input.push(weather_output());
+
+    let request = make_request(input, true, false, Some(response_id.clone()), None);
+    let (outcome, inference_requests) = weather_turn(&fixture, request).await;
+    assert_eq!(outcome, duplicate_weather_call());
+    assert_eq!(inference_requests, 0);
+
+    let request = make_request(vec![weather_output()], true, false, Some(response_id), None);
+    let (outcome, _) = weather_turn(&fixture, request).await;
+    assert_eq!(outcome["output"][0]["content"][0]["text"], "sunny", "{outcome}");
+}
+
+/// Only the conversation's own items repeat in its input: items stored in another conversation are accepted.
+#[tokio::test]
+async fn conversation_turn_accepts_items_stored_in_another_conversation() {
+    let fixture = weather_fixture().await;
+    let first = create_conversation(&fixture.exec_ctx).await;
+    let (_, mut input) = awaiting_weather(&fixture, Some(&first)).await;
+    input.push(weather_output());
+    let other = create_conversation(&fixture.exec_ctx).await;
+
+    let (outcome, inference_requests) =
+        weather_turn(&fixture, make_request(input, true, false, None, Some(other))).await;
+    assert_eq!(outcome["output"][0]["content"][0]["text"], "sunny", "{outcome}");
+    assert_eq!(inference_requests, 1);
 }

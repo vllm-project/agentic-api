@@ -3,12 +3,13 @@ use crate::events::{EventFrame, EventPayload, SSEEventType, SSEItemType};
 use crate::executor::accumulator::AccumulatedFunctionCall;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway_accumulator::synthetic_event;
-use crate::tool::{ToolType, tool_search};
+use crate::tool::tool_search;
 use crate::types::event::ResponseStatus;
 use crate::types::io::OutputItem;
+use crate::types::tools::{ToolSearchExecution, ToolSearchStatus};
 use crate::utils::common::{serialize_to_string, serialize_to_value};
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ToolSearchCallSource {
@@ -19,7 +20,6 @@ enum ToolSearchCallSource {
 #[derive(Debug)]
 struct ToolSearchIdentity {
     source: ToolSearchCallSource,
-    output_index: u32,
     call_id: String,
 }
 
@@ -105,7 +105,7 @@ impl ToolTranslator for ToolSearchTranslator {
 #[derive(Debug, Default)]
 pub(super) struct ToolSearchStreamState {
     active_native_tool_search: HashSet<u32>,
-    tool_search_identity: Option<ToolSearchIdentity>,
+    identities: HashMap<u32, ToolSearchIdentity>,
 }
 
 impl ToolSearchStreamState {
@@ -144,7 +144,7 @@ impl ToolSearchStreamState {
             } if item
                 .get("name")
                 .and_then(Value::as_str)
-                .is_some_and(|name| context.tool_type(name) == ToolType::ToolSearch) =>
+                .is_some_and(|name| context.is_client_tool_search(name)) =>
             {
                 tool_search::strict_function_call(item)?;
             }
@@ -172,18 +172,17 @@ impl ToolSearchStreamState {
             return Ok(());
         };
         let completed = frame.event_type == SSEEventType::ResponseCompleted;
-        let mut saw_tool_search_call = false;
+        let mut call_ids = HashSet::new();
         for item in output {
             match item.get("type").and_then(Value::as_str) {
                 Some("function_call") => {
                     let name = item.get("name").and_then(Value::as_str).unwrap_or_default();
                     tool_search::ensure_function_is_available(context.is_withheld_function(name))?;
-                    if context.tool_type(name) == ToolType::ToolSearch {
-                        if saw_tool_search_call {
+                    if context.is_client_tool_search(name) {
+                        let call = tool_search::strict_function_call(item)?;
+                        if !call_ids.insert(call.call_id.clone()) {
                             return Err(tool_search::invalid_upstream_search_call().into());
                         }
-                        saw_tool_search_call = true;
-                        let call = tool_search::strict_function_call(item)?;
                         ensure_function_call_size(&call.arguments)?;
                         if completed && call.status != crate::types::event::MessageStatus::Completed {
                             return Err(tool_search::invalid_upstream_search_call().into());
@@ -191,11 +190,10 @@ impl ToolSearchStreamState {
                     }
                 }
                 Some("tool_search_call") => {
-                    if saw_tool_search_call {
+                    let call = tool_search::strict_native_call(item.clone())?;
+                    if !call_ids.insert(tool_search::native_call_id(&call)?.to_owned()) {
                         return Err(tool_search::invalid_upstream_search_call().into());
                     }
-                    saw_tool_search_call = true;
-                    let call = tool_search::strict_native_call(item.clone())?;
                     let arguments = serialize_to_string(&call.arguments).map_err(ExecutorError::JsonError)?;
                     ensure_function_call_size(&arguments)?;
                     if completed && call.status != crate::types::tools::ToolSearchStatus::Completed {
@@ -219,7 +217,7 @@ impl ToolSearchStreamState {
                 self.start_tool_search_call(
                     ToolSearchCallSource::Native,
                     resolved_output_index(*output_index)?,
-                    &call.call_id,
+                    tool_search::native_call_id(&call)?,
                 )?;
                 self.active_native_tool_search
                     .insert(resolved_output_index(*output_index)?);
@@ -233,7 +231,7 @@ impl ToolSearchStreamState {
                 self.observe_tool_search_call(
                     ToolSearchCallSource::Native,
                     resolved_output_index(*output_index)?,
-                    &call.call_id,
+                    tool_search::native_call_id(&call)?,
                 )?;
                 if call.status == crate::types::tools::ToolSearchStatus::Completed {
                     self.active_native_tool_search
@@ -254,14 +252,18 @@ impl ToolSearchStreamState {
         output_index: u32,
         call_id: &str,
     ) -> ExecutorResult<()> {
-        if self.tool_search_identity.is_some() {
+        if self.identities.contains_key(&output_index)
+            || self.identities.values().any(|identity| identity.call_id == call_id)
+        {
             return Err(tool_search::invalid_upstream_search_call().into());
         }
-        self.tool_search_identity = Some(ToolSearchIdentity {
-            source,
+        self.identities.insert(
             output_index,
-            call_id: call_id.to_owned(),
-        });
+            ToolSearchIdentity {
+                source,
+                call_id: call_id.to_owned(),
+            },
+        );
         Ok(())
     }
 
@@ -271,23 +273,12 @@ impl ToolSearchStreamState {
         output_index: u32,
         call_id: &str,
     ) -> ExecutorResult<()> {
-        match self.tool_search_identity.as_ref() {
-            Some(identity)
-                if identity.source != source
-                    || identity.output_index != output_index
-                    || identity.call_id != call_id =>
-            {
+        match self.identities.get(&output_index) {
+            Some(identity) if identity.source != source || identity.call_id != call_id => {
                 Err(tool_search::invalid_upstream_search_call().into())
             }
             Some(_) => Ok(()),
-            None => {
-                self.tool_search_identity = Some(ToolSearchIdentity {
-                    source,
-                    output_index,
-                    call_id: call_id.to_owned(),
-                });
-                Ok(())
-            }
+            None => self.start_tool_search_call(source, output_index, call_id),
         }
     }
 }
@@ -320,8 +311,9 @@ fn validate_native_tool_search_frame(frame: &EventFrame) -> ExecutorResult<crate
     let call = tool_search::strict_native_call(item)?;
     let arguments = serialize_to_string(&call.arguments).map_err(ExecutorError::JsonError)?;
     ensure_function_call_size(&arguments)?;
+    // Native OpenAI calls can be marked completed on added; item.done still supplies arguments.
     if frame.event_type == SSEEventType::OutputItemAdded
-        && (call.status != crate::types::tools::ToolSearchStatus::InProgress
+        && (!matches!(call.status, ToolSearchStatus::InProgress | ToolSearchStatus::Completed)
             || !matches!(&call.arguments, Value::Object(arguments) if arguments.is_empty()))
     {
         return Err(tool_search::invalid_upstream_search_call().into());
@@ -350,16 +342,15 @@ pub(super) fn normalize_response_output(
 ) -> ExecutorResult<()> {
     let discard_unidentified_unfinished = matches!(status, ResponseStatus::Error | ResponseStatus::Incomplete);
     let mut normalized = Vec::with_capacity(output.len());
-    let mut saw_tool_search_call = false;
+    let mut call_ids = HashSet::new();
     for item in std::mem::take(output) {
         match item {
             OutputItem::FunctionCall(call) => {
                 tool_search::ensure_function_is_available(context.is_withheld_function(&call.name))?;
-                if context.tool_type(&call.name) == ToolType::ToolSearch {
-                    if saw_tool_search_call {
+                if context.is_client_tool_search(&call.name) {
+                    if !call_ids.insert(call.call_id.clone()) {
                         return Err(tool_search::invalid_upstream_search_call().into());
                     }
-                    saw_tool_search_call = true;
                     if let Some(public) = tool_search::project_synthetic_call(
                         &call,
                         status,
@@ -371,11 +362,14 @@ pub(super) fn normalize_response_output(
                     normalized.push(OutputItem::FunctionCall(call));
                 }
             }
+            // Hosted search items are produced by the gateway, not upstream.
+            OutputItem::ToolSearchCall(call) if call.execution == ToolSearchExecution::Server => {
+                normalized.push(OutputItem::ToolSearchCall(call));
+            }
             OutputItem::ToolSearchCall(call) => {
-                if saw_tool_search_call {
+                if !call_ids.insert(tool_search::native_call_id(&call)?.to_owned()) {
                     return Err(tool_search::invalid_upstream_search_call().into());
                 }
-                saw_tool_search_call = true;
                 if let Some(public) = tool_search::project_native_call(&call, status)? {
                     normalized.push(OutputItem::ToolSearchCall(public));
                 }
@@ -406,9 +400,9 @@ pub(super) fn restore_response_tools(
     let Some(response) = wire.rest.get_mut("response").and_then(Value::as_object_mut) else {
         return Ok(());
     };
-    if !response.contains_key("tools") {
-        return Ok(());
-    }
+    // The model server echoes its own declarations, and built-in tools reach it as lowered
+    // function schemas. Replace that internal form with the public declarations, and insert
+    // them on lifecycle snapshots that omit `tools` so every public frame stays complete.
     if let Some(tools) = tools {
         response.insert(
             "tools".to_owned(),

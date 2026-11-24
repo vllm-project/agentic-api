@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::sync::Mutex;
 
@@ -6,8 +7,14 @@ use serde_json::{Value, json};
 
 use super::*;
 use crate::events::WireEvent;
+use crate::executor::pipeline::AgentPipeline;
+use crate::executor::relay::StreamRelay;
+use crate::executor::response_budget::ExecutorResponseBudget;
+use crate::executor::response_events::ResponseEventSink;
+use crate::executor::upstream::{fetch_stream_payload, tests::request_context};
 use crate::executor::{ConversationHandler, ExecuteRequest, ExecutionContext, ResponseHandler, ResponseSession};
 use crate::storage::{ConversationStore, ResponseStore};
+use crate::tool::ToolRegistry;
 use crate::types::request_response::RequestPayload;
 
 #[derive(Debug)]
@@ -67,7 +74,7 @@ async fn dropping_admission_or_an_unpolled_generation_cancels_engine_work() {
         let injected: Arc<dyn DirectInferenceBackend> = backend.clone();
         let mut admission = Box::pin(call(
             &injected,
-            request.to_upstream_request(true).unwrap(),
+            request.to_upstream_request(true, &HashMap::default()).unwrap(),
             "resp_test".to_owned(),
             Duration::ZERO,
             1024,
@@ -97,7 +104,7 @@ async fn admission_and_idle_timeouts_cancel_the_attempt() {
         let injected: Arc<dyn DirectInferenceBackend> = backend.clone();
         let result = call(
             &injected,
-            request.to_upstream_request(true).unwrap(),
+            request.to_upstream_request(true, &HashMap::default()).unwrap(),
             "resp_test".to_owned(),
             Duration::from_millis(10),
             1024,
@@ -135,7 +142,7 @@ async fn oversized_native_events_fail_before_ingestion() {
     let request = request();
     let mut events = call(
         &injected,
-        request.to_upstream_request(true).unwrap(),
+        request.to_upstream_request(true, &HashMap::default()).unwrap(),
         "resp_test".to_owned(),
         Duration::ZERO,
         100,
@@ -219,7 +226,7 @@ async fn direct_inference_reuses_custom_tool_translation_and_session_continuatio
     }))
     .unwrap();
     let first = ExecuteRequest::new(first, Arc::clone(&context))
-        .with_session(&session)
+        .with_session(&session, None)
         .unwrap()
         .run()
         .await
@@ -237,7 +244,7 @@ async fn direct_inference_reuses_custom_tool_translation_and_session_continuatio
     }))
     .unwrap();
     let frames: Vec<String> = ExecuteRequest::new(second, context)
-        .with_session(&session)
+        .with_session(&session, None)
         .unwrap()
         .run()
         .await
@@ -252,7 +259,7 @@ async fn direct_inference_reuses_custom_tool_translation_and_session_continuatio
     assert!(
         requests
             .iter()
-            .all(|request| request.get("previous_response_id").is_none() && request.get("store").is_none())
+            .all(|request| request.get("previous_response_id").is_none() && request["store"] == false)
     );
     let history = requests[1]["input"].as_array().unwrap();
     assert!(
@@ -298,4 +305,39 @@ async fn compaction_uses_the_injected_backend_and_existing_summary_processing() 
     );
     assert_eq!(response.usage.total_tokens, 5);
     assert_eq!(backend.requests.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn native_steering_waits_for_a_completed_item_and_cancels_the_generation() {
+    let backend = Arc::new(ConversationBackend::default());
+    let context = ExecutionContext::new(
+        ConversationHandler::new(ConversationStore::disabled()),
+        ResponseHandler::new(ResponseStore::disabled()),
+        Arc::new(reqwest::Client::new()),
+        "invalid-http-url".to_owned(),
+    )
+    .with_direct_inference(backend.clone());
+    let (steering, _stream) = ResponseEventSink::channel(4096);
+    steering.request_steering_boundary();
+    let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
+    agent.steering = Some(steering);
+    let payload = fetch_stream_payload(
+        &mut agent,
+        &context,
+        None,
+        &ToolRegistry::default(),
+        0,
+        &ExecutorResponseBudget::new(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(payload.status, "incomplete");
+    assert_eq!(payload.incomplete_details.unwrap().reason.as_deref(), Some("steered"));
+    assert_eq!(payload.output.len(), 1);
+    assert_eq!(serde_json::to_value(&payload.output[0]).unwrap()["status"], "completed");
+    assert!(
+        payload.usage.is_none(),
+        "unreceived terminal usage must not be fabricated"
+    );
+    assert!(backend.controls.lock().unwrap()[0].cancellation.is_cancelled());
 }

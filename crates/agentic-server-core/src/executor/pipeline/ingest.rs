@@ -71,6 +71,20 @@ impl RoundIngestion {
         )
     }
 
+    /// Request an intentional terminal boundary using the accumulator's item
+    /// lifecycle. The normal consuming finish still owns output projection.
+    pub(in crate::executor) fn finish_for_steering(&mut self) -> ExecutorResult<bool> {
+        self.accumulator.finish_for_steering()
+    }
+
+    pub(in crate::executor) fn at_steering_boundary(&self) -> bool {
+        self.accumulator.at_steering_boundary()
+    }
+
+    pub(in crate::executor) fn ensure_steering_settled(&self) -> ExecutorResult<()> {
+        self.accumulator.ensure_steering_settled()
+    }
+
     pub(in crate::executor) fn translate_frame(
         accumulator: &mut ResponseAccumulator,
         frame: EventFrame,
@@ -80,7 +94,12 @@ impl RoundIngestion {
             return Ok(None);
         };
         let call = function_event_index(&frame.payload).and_then(|index| accumulator.accumulated_function_call(index));
-        translator.translate(frame, call).map(Some)
+        let item_type = frame
+            .wire
+            .output_index
+            .and_then(|index| u32::try_from(index).ok())
+            .and_then(|index| accumulator.accumulated_item_type(index));
+        translator.translate(frame, call, item_type).map(Some)
     }
 
     #[cfg(test)]

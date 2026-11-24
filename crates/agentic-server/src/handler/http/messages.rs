@@ -1,3 +1,4 @@
+use std::error::Error as _;
 use std::sync::Arc;
 
 use axum::extract::{Request, State};
@@ -8,17 +9,20 @@ use tracing::debug;
 
 use agentic_core::executor::telemetry::Api;
 use agentic_core::executor::{
-    ExecutorError, MessagesRequestContext, MessagesUpstream, ParsedMessagesRequest,
-    normalize_native_web_search_for_upstream, run_messages_loop, run_messages_stream,
+    ExecutorError, MessagesRequestContext, MessagesUpstream, ParsedMessagesRequest, declares_gateway_native_web_fetch,
+    may_carry_gateway_server_tool_blocks, normalize_native_server_tools_for_upstream, replay_server_tool_blocks,
+    run_messages_loop, run_messages_stream,
 };
 use agentic_core::proxy::{ProxyAuth, ProxyRequest, error_response_for_auth, upstream_request_headers};
-use agentic_core::tool::ToolRegistry;
-use agentic_core::types::messages::registry_tools;
+use agentic_core::tool::{ToolRegistry, registry_tools};
+use agentic_core::types::messages::thread::MESSAGE_THREADS_BETA;
 
 use super::super::common::{
     convert_response, read_bytes_with_auth, sse_response_with_headers, upstream_error_response,
 };
+use super::session_identity::scope_session_id;
 use crate::app::AppState;
+use crate::auth::AuthenticatedPrincipal;
 
 async fn proxy_messages(
     state: &AppState,
@@ -35,7 +39,7 @@ async fn proxy_messages(
                 query: parts.uri.query().map(str::to_owned),
             },
             path,
-            &state.proxy_state,
+            state,
         )
         .await,
     )
@@ -61,18 +65,14 @@ async fn execute_messages(
     state: &AppState,
     headers: &HeaderMap,
     query: Option<&str>,
-    parsed: ParsedMessagesRequest<'_>,
+    ctx: MessagesRequestContext,
 ) -> Response {
-    let ctx = match MessagesRequestContext::new(parsed) {
-        Ok(ctx) => ctx,
-        Err(e) => return messages_error_response(e),
-    };
-
     // Build the request-scoped registry from the declared tools (M6). Gateway
     // ownership (incl. configured aliases like Claude Code's `WebSearch`) is
     // resolved against the operator-configured map.
     let gateway_map = &state.exec_ctx.messages_gateway_tools;
-    let mut tools = registry_tools(ctx.tools(), gateway_map);
+    let upstream_tools = &state.exec_ctx.messages_upstream_server_tools;
+    let mut tools = registry_tools(ctx.tools(), gateway_map, upstream_tools);
     let mut executors = state.exec_ctx.gateway_executors.clone();
     let registry = match ToolRegistry::build_with_handlers(&mut tools, &mut executors).await {
         Ok(r) => r,
@@ -122,29 +122,132 @@ async fn execute_messages(
     tag = "messages",
 ))]
 pub async fn messages(State(state): State<AppState>, request: Request) -> Response {
-    let (parts, body) = request.into_parts();
+    let (mut parts, body) = request.into_parts();
     let bytes: Bytes = match read_bytes_with_auth(body, ProxyAuth::Anthropic, state.max_request_body_size).await {
         Ok(bytes) => bytes,
         Err(response) => return response,
     };
+    if let Err(error) = scope_session_id(&mut parts, &bytes) {
+        return error.into();
+    }
 
-    // Route to the loop only when a gateway-owned tool is declared; everything
-    // else keeps the transparent proxy path.
-    match ParsedMessagesRequest::parse_for_gateway(&bytes, &state.exec_ctx.messages_gateway_tools) {
+    match ParsedMessagesRequest::parse_for_gateway(
+        &bytes,
+        &state.exec_ctx.messages_gateway_tools,
+        &state.exec_ctx.messages_upstream_server_tools,
+    ) {
+        Ok(Some(parsed)) if parsed.is_thread() => {
+            let forwarded = upstream_request_headers(&parts.headers, &state.proxy_state.config, ProxyAuth::Anthropic);
+            let principal = parts.extensions.get::<AuthenticatedPrincipal>();
+            let owner = state.exec_ctx.messages_threads.owner(&[
+                principal.map_or(&[], |principal| principal.issuer().as_bytes()),
+                principal.map_or(&[], |principal| principal.subject().as_bytes()),
+                forwarded.get("authorization").map_or(&[], http::HeaderValue::as_bytes),
+                forwarded.get("x-api-key").map_or(&[], http::HeaderValue::as_bytes),
+                forwarded
+                    .get("anthropic-workspace-id")
+                    .map_or(&[], http::HeaderValue::as_bytes),
+                forwarded
+                    .get("anthropic-user-profile-id")
+                    .map_or(&[], http::HeaderValue::as_bytes),
+            ]);
+            let betas = parts
+                .headers
+                .get_all("anthropic-beta")
+                .iter()
+                .filter_map(|value| value.to_str().ok())
+                .flat_map(|value| value.split(','))
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_owned)
+                .collect();
+            let prepared = match state.exec_ctx.messages_threads.prepare(parsed, owner, betas).await {
+                Ok(prepared) => prepared,
+                Err(error) => {
+                    let status = error.http_status();
+                    if status.is_server_error() {
+                        tracing::error!(%error, source = ?error.source(), "Messages thread failure");
+                    }
+                    return (status, axum::Json(error.into_body())).into_response();
+                }
+            };
+            let ctx = match prepared.into_context(&state.exec_ctx.messages_upstream_server_tools) {
+                Ok(ctx) => ctx,
+                Err(error) => return messages_error_response(error),
+            };
+            // This beta is implemented locally; keep every other beta open-ended.
+            let mut headers = parts.headers;
+            let betas = headers
+                .get_all("anthropic-beta")
+                .iter()
+                .filter_map(|value| value.to_str().ok())
+                .flat_map(|value| value.split(','))
+                .map(str::trim)
+                .filter(|beta| *beta != MESSAGE_THREADS_BETA)
+                .collect::<Vec<_>>()
+                .join(",");
+            headers.remove("anthropic-beta");
+            if let Ok(value) = http::HeaderValue::from_str(&betas)
+                && !betas.is_empty()
+            {
+                headers.insert("anthropic-beta", value);
+            }
+            return execute_messages(&state, &headers, parts.uri.query(), ctx).await;
+        }
         Ok(Some(parsed)) => {
             debug!(
                 route = "messages_loop",
                 stream = parsed.stream(),
-                tools = parsed.tools().map_or(0, Vec::len),
                 "routing HTTP messages request"
             );
-            return execute_messages(&state, &parts.headers, parts.uri.query(), parsed).await;
+            let ctx = match MessagesRequestContext::new(parsed, &state.exec_ctx.messages_upstream_server_tools) {
+                Ok(ctx) => ctx,
+                Err(error) => return messages_error_response(error),
+            };
+            return execute_messages(&state, &parts.headers, parts.uri.query(), ctx).await;
         }
         Err(error) => return messages_error_response(error),
         Ok(None) => debug!(route = "proxy", "routing HTTP messages request"),
     }
 
+    // Server tool blocks the gateway returned earlier go upstream as the rounds
+    // the upstream saw, even when this request declares no gateway tool.
+    let bytes = if may_carry_gateway_server_tool_blocks(&bytes)
+        && let Ok(mut request) = serde_json::from_slice::<serde_json::Value>(&bytes)
+    {
+        match replayed_body(&state, &mut request) {
+            ReplayedBody::Changed(body) => body,
+            ReplayedBody::Unchanged => bytes,
+            ReplayedBody::Refused(response) => return response,
+        }
+    } else {
+        bytes
+    };
     proxy_messages(&state, parts, bytes, "/v1/messages").await
+}
+
+/// A request body after its gateway-made server tool blocks were replayed.
+enum ReplayedBody {
+    Changed(Bytes),
+    Unchanged,
+    Refused(Response),
+}
+
+/// Turn the gateway-made server tool blocks of `request` back into the rounds
+/// the upstream saw.
+fn replayed_body(state: &AppState, request: &mut serde_json::Value) -> ReplayedBody {
+    let replayed = match state.exec_ctx.messages_result_key() {
+        Ok(key) => replay_server_tool_blocks(request, key),
+        Err(error) => Err(error),
+    };
+    match replayed {
+        Ok(true) => match serde_json::to_vec(request) {
+            Ok(body) => ReplayedBody::Changed(Bytes::from(body)),
+            Err(error) => ReplayedBody::Refused(messages_error_response(ExecutorError::from(error))),
+        },
+        Ok(false) => ReplayedBody::Unchanged,
+        Err(error) => ReplayedBody::Refused(messages_error_response(error)),
+    }
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(
@@ -160,19 +263,43 @@ pub async fn messages(State(state): State<AppState>, request: Request) -> Respon
     tag = "messages",
 ))]
 pub async fn count_tokens(State(state): State<AppState>, request: Request) -> Response {
-    let (parts, body) = request.into_parts();
+    let (mut parts, body) = request.into_parts();
     let mut bytes: Bytes = match read_bytes_with_auth(body, ProxyAuth::Anthropic, state.max_request_body_size).await {
         Ok(bytes) => bytes,
         Err(response) => return response,
     };
+    if let Err(error) = scope_session_id(&mut parts, &bytes) {
+        return error.into();
+    }
     if let Ok(mut request_json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-        match normalize_native_web_search_for_upstream(&mut request_json) {
-            Ok(true) => match serde_json::to_vec(&request_json) {
+        if request_json.get("thread").is_some() {
+            return messages_error_response(ExecutorError::InvalidRequest(
+                "token counting does not support thread; send the full conversation".to_owned(),
+            ));
+        }
+        // The executors own the availability policy: a disabled executor
+        // refuses the declaration here too, so counting tokens and sending the
+        // request answer alike.
+        let upstream_tools = &state.exec_ctx.messages_upstream_server_tools;
+        if declares_gateway_native_web_fetch(&request_json, upstream_tools)
+            && let Err(error) = state.exec_ctx.gateway_executors.require_web_fetch()
+        {
+            return messages_error_response(ExecutorError::from(error));
+        }
+        // Count what the upstream would receive: rewritten native declarations
+        // and the rounds behind earlier gateway server tool blocks.
+        let normalized = match normalize_native_server_tools_for_upstream(&mut request_json, upstream_tools) {
+            Ok(normalized) => normalized,
+            Err(error) => return messages_error_response(error),
+        };
+        match replayed_body(&state, &mut request_json) {
+            ReplayedBody::Changed(body) => bytes = body,
+            ReplayedBody::Unchanged if normalized => match serde_json::to_vec(&request_json) {
                 Ok(body) => bytes = Bytes::from(body),
                 Err(error) => return messages_error_response(ExecutorError::from(error)),
             },
-            Ok(false) => {}
-            Err(error) => return messages_error_response(error),
+            ReplayedBody::Unchanged => {}
+            ReplayedBody::Refused(response) => return response,
         }
     }
     proxy_messages(&state, parts, bytes, "/v1/messages/count_tokens").await

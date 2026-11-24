@@ -1,4 +1,6 @@
 //! Session contracts for media-aware compaction and typed message-file rejection.
+use agentic_core::types::io::ResponsesInput;
+
 use super::*;
 
 fn media_request(previous: Option<&str>, input: Value) -> RequestPayload {
@@ -60,8 +62,10 @@ async fn combined_media_session_history_and_forks_do_not_compact_image_bytes() {
     .await;
     let requests = model.requests.lock().await;
     assert_eq!(requests.len(), 3, "one inference per turn, no image-driven summary");
+    let mut model_image = input[0]["content"][1].clone();
+    model_image["detail"] = json!("auto");
     for request in requests.iter() {
-        assert_eq!(retained_image(&request["input"]), &input[0]["content"][1]);
+        assert_eq!(retained_image(&request["input"]), &model_image);
     }
     drop(requests);
     source.wait_until_idle().await.unwrap();
@@ -87,20 +91,42 @@ async fn combined_media_text_compaction_promotes_and_restores_canonical_image_hi
         NonZeroUsize::new(2 * 1024 * 1024).unwrap(),
     );
     let input = media_input(256 * 1024);
+    let mut model_image = input[0]["content"][1].clone();
+    model_image["detail"] = json!("auto");
     let first = execute_local(&model, &session, media_request(None, input.clone())).await;
-    assert_eq!(model.requests.lock().await.len(), 1, "image alone must not compact");
+    {
+        // The image alone does not compact before the round; the long answer then passes the threshold, so the
+        // turn compacts after answering.
+        let requests = model.requests.lock().await;
+        assert_eq!(requests.len(), 2, "long text must still cause a summary");
+        assert!(
+            !requests[0]["input"].to_string().contains(&old_answer),
+            "image alone must not compact"
+        );
+        assert!(requests[1]["input"].to_string().contains(&old_answer));
+    }
     let mut next = media_request(Some(&first.id), json!("second question"));
     next.store = true;
     let second = execute_local(&model, &session, next).await;
-    assert_eq!(
-        model.requests.lock().await.len(),
-        3,
-        "long text must still cause a summary"
-    );
+    {
+        let requests = model.requests.lock().await;
+        assert_eq!(requests.len(), 3, "the compacted history does not compact again");
+        assert_eq!(
+            retained_image(&requests[2]["input"]),
+            &model_image,
+            "the image survives compaction"
+        );
+        assert!(!requests[2]["input"].to_string().contains(&old_answer));
+    }
     assert!(store.get(&first.id).await.unwrap_err().is_not_found());
-    let durable =
-        serde_json::to_value(InOutItem::into_input_items(store.rehydrate(&second.id).await.unwrap())).unwrap();
-    assert_eq!(retained_image(&durable), &input[0]["content"][1]);
+    let durable = ResponsesInput::from(InOutItem::into_input_items(
+        store.rehydrate(&second.id).await.unwrap().1,
+    ));
+    // Automatic compaction carries retained media inside its checkpoint. Inspect the existing model projection
+    // to verify the image survives storage without requiring a duplicate top-level user message.
+    let projected = serde_json::to_value(durable.model_input()).unwrap();
+    assert_eq!(retained_image(&projected), &input[0]["content"][1]);
+    let durable = serde_json::to_value(durable).unwrap();
     assert!(!durable.to_string().contains(&old_answer));
     assert_eq!(
         durable
@@ -121,7 +147,7 @@ async fn combined_media_text_compaction_promotes_and_restores_canonical_image_hi
     execute_local(&model, &fresh, restored).await;
     let requests = model.requests.lock().await;
     assert_eq!(requests.len(), 4, "canonical restore must not recompact image bytes");
-    assert_eq!(retained_image(&requests[3]["input"]), &input[0]["content"][1]);
+    assert_eq!(retained_image(&requests[3]["input"]), &model_image);
     assert!(!requests[3]["input"].to_string().contains(&old_answer));
     drop(requests);
     model.close().await;
@@ -140,7 +166,7 @@ async fn combined_media_token_allowance_does_not_bypass_serialized_retention_bud
         media_request(None, media_input(128 * 1024)),
         Arc::new(model.exec.clone()),
     )
-    .with_session(&session)
+    .with_session(&session, None)
     .unwrap()
     .run()
     .await
@@ -180,13 +206,13 @@ async fn combined_media_message_file_rejection_precedes_compaction_and_releases_
         .unwrap()
         .push(json!({"type":"input_file", "file_data":"encoded document"}));
     let error = ExecuteRequest::new(media_request(None, input), Arc::new(model.exec.clone()))
-        .with_session(&session)
+        .with_session(&session, None)
         .unwrap()
         .run()
         .await
         .err()
         .expect("unsupported message file");
-    assert!(matches!(error, ExecutorError::InvalidRequest(_)));
+    assert!(matches!(error, ExecutorError::InvalidInput(_)));
     assert!(error.to_string().contains("input_file"), "{error}");
     assert!(
         model.requests.lock().await.is_empty(),

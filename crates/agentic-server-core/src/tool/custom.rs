@@ -2,8 +2,9 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 
+use super::declaration::ToolDeclaration;
 use crate::types::io::{CustomToolCall, FunctionTool, FunctionToolCall, OutputItem, ToolChoice};
-use crate::types::tools::{CustomToolParam, ResponsesTool};
+use crate::types::tools::CustomToolParam;
 
 use super::{ToolEntry, ToolError, ToolHandler, ToolType};
 
@@ -15,11 +16,11 @@ pub(crate) struct CustomToolMap {
 }
 
 impl CustomToolMap {
-    fn from_tools(tools: &[ResponsesTool]) -> Option<Self> {
+    fn from_tools(tools: &[ToolDeclaration]) -> Option<Self> {
         let declarations = tools
             .iter()
             .filter_map(|tool| match tool {
-                ResponsesTool::Custom(param) => Some((param.name.as_str().to_owned(), param.clone())),
+                ToolDeclaration::Custom(param) => Some((param.name.as_str().to_owned(), param.clone())),
                 _ => None,
             })
             .collect::<HashMap<_, _>>();
@@ -41,12 +42,12 @@ pub struct CustomHandler;
 
 impl CustomHandler {
     #[must_use]
-    pub(crate) fn build_tool_map(tools: &[ResponsesTool]) -> Option<CustomToolMap> {
+    pub(crate) fn build_tool_map(tools: &[ToolDeclaration]) -> Option<CustomToolMap> {
         CustomToolMap::from_tools(tools)
     }
 
     pub(crate) fn validate_tool_choice(
-        tools: Option<&[ResponsesTool]>,
+        tools: Option<&[ToolDeclaration]>,
         tool_choice: &ToolChoice,
     ) -> Result<(), ToolError> {
         let map = tools.and_then(CustomToolMap::from_tools);
@@ -88,11 +89,13 @@ impl CustomHandler {
     #[must_use]
     pub(crate) fn output_item(call: &FunctionToolCall) -> OutputItem {
         OutputItem::CustomToolCall(CustomToolCall {
+            agent: call.agent.clone(),
             id: public_item_id(&call.id),
             status: Some(call.status),
             call_id: call.call_id.clone(),
             name: call.name.clone(),
             input: input_from_arguments(&call.arguments),
+            async_execution: call.async_execution,
         })
     }
 }
@@ -127,7 +130,12 @@ fn model_visible_description(param: &CustomToolParam) -> String {
         ));
     }
 
-    fragments.join("\n\n")
+    let description = fragments.join("\n\n");
+    if param.is_async() {
+        super::async_execution::async_description(Some(&description))
+    } else {
+        description
+    }
 }
 
 impl ToolHandler for CustomHandler {
@@ -165,7 +173,7 @@ impl ToolHandler for CustomHandler {
 pub(crate) fn insert_custom_entry(entries: &mut HashMap<String, ToolEntry>, param: &CustomToolParam) {
     entries.insert(
         param.name.as_str().to_owned(),
-        ToolEntry::client(ToolType::Custom, None),
+        ToolEntry::client(ToolType::Custom, None).with_async_execution(param.is_async()),
     );
 }
 
@@ -214,6 +222,8 @@ mod tests {
     #[test]
     fn function_fallback_uses_public_custom_tool_shape() {
         let call = FunctionToolCall {
+            async_execution: false,
+            agent: None,
             id: "fc_1".to_owned(),
             call_id: "call_1".to_owned(),
             name: "raw_echo".to_owned(),

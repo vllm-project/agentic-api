@@ -75,6 +75,26 @@ async fn spawn_gateway(authenticator: OidcAuthenticator, upstream_url: &str) -> 
             cors_allowed_origins: Vec::new(),
             #[cfg(feature = "openapi")]
             enable_openapi_docs: false,
+            rate_limit: None,
+        },
+        Some(authenticator),
+    );
+    spawn_router(router).await
+}
+
+async fn spawn_rate_limited_gateway(
+    authenticator: OidcAuthenticator,
+    upstream_url: &str,
+    rate_limit: agentic_server::rate_limit::RateLimitConfig,
+) -> TestGateway {
+    let config = test_config(upstream_url);
+    let router = build_router_with_auth(
+        test_state(&config),
+        &ServerConfig {
+            cors_allowed_origins: Vec::new(),
+            #[cfg(feature = "openapi")]
+            enable_openapi_docs: false,
+            rate_limit: Some(rate_limit),
         },
         Some(authenticator),
     );
@@ -604,6 +624,50 @@ async fn configured_oidc_accepts_valid_identity_and_uses_service_upstream_creden
 }
 
 #[tokio::test]
+async fn rate_limits_key_oidc_callers_by_subject_not_token() {
+    let (issuer, private_key_der, _public_jwk, _jwks_requests, _provider) = spawn_oidc_provider().await;
+    let authenticator = discover_test_authenticator(&issuer).await;
+    let (upstream_url, _observed_headers, _upstream) = spawn_models_upstream().await;
+    let one_per_minute =
+        agentic_server::rate_limit::RateLimitConfig::new(std::num::NonZeroU32::MIN, None).expect("valid rate limit");
+    let gateway = spawn_rate_limited_gateway(authenticator, &upstream_url, one_per_minute).await;
+    let now = jsonwebtoken::get_current_timestamp();
+    let token = |subject: &str, expires_in: u64| {
+        let mut header = Header::new(Algorithm::RS256);
+        header.kid = Some("test-key".to_owned());
+        custom_identity_token(
+            &header,
+            &json!({"iss": issuer, "sub": subject, "aud": "agentic-api", "exp": now + expires_in}),
+            &private_key_der,
+        )
+    };
+    let status = |token: String| {
+        let url = format!("http://{}/v1/models", gateway.address);
+        async move {
+            reqwest::Client::new()
+                .get(url)
+                .bearer_auth(token)
+                .send()
+                .await
+                .expect("request gateway")
+                .status()
+        }
+    };
+
+    assert_eq!(status(token("alice", 300)).await, reqwest::StatusCode::OK);
+    assert_eq!(
+        status(token("alice", 301)).await,
+        reqwest::StatusCode::TOO_MANY_REQUESTS,
+        "a different token for the same subject shares its bucket"
+    );
+    assert_eq!(
+        status(token("bob", 300)).await,
+        reqwest::StatusCode::OK,
+        "another subject has its own bucket"
+    );
+}
+
+#[tokio::test]
 async fn configured_oidc_preserves_distinct_anthropic_upstream_credential() {
     let (issuer, private_key_der, _public_jwk, _jwks_requests, _provider) = spawn_oidc_provider().await;
     let authenticator = discover_test_authenticator(&issuer).await;
@@ -637,6 +701,66 @@ async fn configured_oidc_preserves_distinct_anthropic_upstream_credential() {
         Some(&HeaderValue::from_static("distinct-upstream-key"))
     );
     assert!(headers.get(reqwest::header::AUTHORIZATION).is_none());
+}
+
+#[tokio::test]
+async fn messages_session_id_is_scoped_to_the_authenticated_principal() {
+    use agentic_core::types::session_id::{ScopedSessionId, SessionTenant};
+
+    let (issuer, private_key_der, _public_jwk, _jwks_requests, _provider) = spawn_oidc_provider().await;
+    let authenticator = discover_test_authenticator(&issuer).await;
+    let (upstream_url, observed_headers, _upstream) = spawn_anthropic_upstream().await;
+    let gateway = spawn_gateway(authenticator, &upstream_url).await;
+    let mut header = Header::new(Algorithm::RS256);
+    header.kid = Some("test-key".to_owned());
+    let expires_at = jsonwebtoken::get_current_timestamp() + 300;
+
+    let mut forwarded = Vec::new();
+    for subject in ["user-a", "user-b", "user-a"] {
+        let token = custom_identity_token(
+            &header,
+            &json!({"iss": issuer, "sub": subject, "aud": TEST_AUDIENCE, "exp": expires_at}),
+            &private_key_der,
+        );
+        let response = reqwest::Client::new()
+            .post(format!("http://{}/v1/messages", gateway.address))
+            .bearer_auth(token)
+            .header("x-claude-code-session-id", "shared-client-session")
+            .header("x-session-id", "shared-client-session")
+            .json(&json!({"model": "test-model", "max_tokens": 1, "messages": []}))
+            .send()
+            .await
+            .expect("request gateway");
+        assert_eq!(response.status(), reqwest::StatusCode::OK, "{subject}");
+        let headers = observed_headers
+            .lock()
+            .expect("read captured headers")
+            .take()
+            .expect("upstream request");
+        assert_eq!(
+            headers.get("x-claude-code-session-id"),
+            Some(&HeaderValue::from_static("shared-client-session"))
+        );
+        let values: Vec<_> = headers.get_all("x-session-id").iter().cloned().collect();
+        assert_eq!(values.len(), 1, "{subject}: exactly one forwarded session id");
+        forwarded.push(values[0].clone());
+    }
+
+    let user_a = ScopedSessionId::new(
+        SessionTenant::Principal {
+            issuer: &issuer,
+            subject: "user-a",
+        },
+        "shared-client-session",
+    );
+    assert_eq!(forwarded[0], user_a.as_str());
+    assert_eq!(forwarded[0], forwarded[2], "the same principal keeps its session");
+    assert_ne!(forwarded[0], forwarded[1], "principals never share a session");
+    assert_ne!(
+        forwarded[0],
+        ScopedSessionId::new(SessionTenant::Default, "shared-client-session").as_str(),
+        "a principal's session is not the default tenant's"
+    );
 }
 
 #[tokio::test]
@@ -1007,7 +1131,12 @@ async fn every_v1_route_rejects_missing_credentials() {
     let client = reqwest::Client::new();
 
     for path in [
+        "/v1/audio/transcriptions",
+        "/v1/audio/translations",
+        "/v1/chat/completions",
+        "/v1/completions",
         "/v1/conversations",
+        "/v1/embeddings",
         "/v1/messages",
         "/v1/messages/count_tokens",
         "/v1/responses",
@@ -1020,12 +1149,20 @@ async fn every_v1_route_rejects_missing_credentials() {
             .expect("protected POST");
         assert_eq!(response.status(), reqwest::StatusCode::UNAUTHORIZED, "{path}");
     }
-    let models = client
-        .get(format!("http://{}/v1/models", gateway.address))
+    for path in ["/v1/models", "/v1/models/org/model"] {
+        let models = client
+            .get(format!("http://{}{path}", gateway.address))
+            .send()
+            .await
+            .expect("protected models request");
+        assert_eq!(models.status(), reqwest::StatusCode::UNAUTHORIZED, "{path}");
+    }
+    let retrieved = client
+        .get(format!("http://{}/v1/responses/resp_private", gateway.address))
         .send()
         .await
-        .expect("protected models request");
-    assert_eq!(models.status(), reqwest::StatusCode::UNAUTHORIZED);
+        .expect("protected response retrieval");
+    assert_eq!(retrieved.status(), reqwest::StatusCode::UNAUTHORIZED);
 
     let websocket_error = tokio_tungstenite::connect_async(format!("ws://{}/v1/responses", gateway.address))
         .await
@@ -1235,4 +1372,60 @@ async fn anthropic_authentication_errors_include_matching_request_id() {
     assert!(request_id.starts_with("req_"));
     assert_eq!(body["request_id"], request_id);
     assert_eq!(body["error"]["type"], "authentication_error");
+}
+
+#[tokio::test]
+async fn retrieval_uses_oidc_instead_of_the_configured_upstream_key() {
+    let (issuer, private_key, _public_jwk, _jwks_requests, _provider) = spawn_oidc_provider().await;
+    let authenticator = discover_test_authenticator(&issuer).await;
+    let mut config = test_config("http://127.0.0.1:9");
+    config.db_url = Some("sqlite://?mode=memory".into());
+    let exec = std::sync::Arc::new(
+        agentic_core::executor::ExecutionContext::from_config(&config)
+            .await
+            .unwrap(),
+    );
+    let snapshot = json!({
+        "id": "resp_private", "object": "response", "created_at": 123,
+        "model": "test-model", "status": "completed", "output": []
+    });
+    let payload: agentic_core::types::request_response::ResponsePayload = serde_json::from_value(snapshot).unwrap();
+    let expected = serde_json::to_value(&payload).unwrap();
+    let store = agentic_core::storage::ResponseStore::new(std::sync::Arc::new(exec.storage_pool().unwrap().clone()));
+    store
+        .persist(
+            "resp_private",
+            None,
+            Vec::new(),
+            Some(&payload),
+            &agentic_core::storage::ResponseMetadata::default(),
+        )
+        .await
+        .unwrap();
+    let mut state = test_state(&config);
+    state.exec_ctx = std::sync::Arc::clone(&exec);
+    let gateway = spawn_router(build_router_with_auth(
+        state,
+        &ServerConfig::from_env(),
+        Some(authenticator),
+    ))
+    .await;
+    let client = reqwest::Client::new();
+    let url = format!("http://{}/v1/responses/resp_private", gateway.address);
+    for token in ["test-key", "invalid-oidc-token"] {
+        let response = client.get(&url).bearer_auth(token).send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+    let token = identity_token(
+        &issuer,
+        TEST_AUDIENCE,
+        jsonwebtoken::get_current_timestamp() + 300,
+        "test-key",
+        &private_key,
+    );
+    let response = client.get(&url).bearer_auth(token).send().await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.json::<Value>().await.unwrap(), expected);
+    drop(gateway);
+    exec.storage_pool().unwrap().close().await;
 }

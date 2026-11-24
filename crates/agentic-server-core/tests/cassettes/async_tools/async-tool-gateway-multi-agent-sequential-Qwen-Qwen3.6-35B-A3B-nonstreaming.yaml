@@ -1,0 +1,307 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Check the demo weather snapshot for Paris. Meanwhile, list three essentials
+        for any city trip.
+      instructions: Handle this request yourself; do not start subagents. Start the
+        weather lookup and answer the independent question without waiting. Use the
+        demo weather result when it arrives; never invent it.
+      max_output_tokens: 16384
+      model: Qwen/Qwen3.6-35B-A3B
+      multi_agent:
+        enabled: true
+        max_concurrent_subagents: 1
+      parallel_tool_calls: false
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      openai-beta: responses_multi_agent=v1
+      user-agent: python-httpx/0.28.1
+      x-run-id: multi-agent-sequential/t1-start
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1791453452
+      error: null
+      id: resp_01a11af2-5727-7873-b9e5-8f40f53fadae
+      incomplete_details: null
+      instructions: Handle this request yourself; do not start subagents. Start the
+        weather lookup and answer the independent question without waiting. Use the
+        demo weather result when it arrives; never invent it.
+      max_tool_calls: null
+      model: Qwen/Qwen3.6-35B-A3B
+      object: response
+      output:
+      - agent:
+          agent_name: /root
+        content:
+        - text: 'The user wants me to:
+
+            1. Check the demo weather snapshot for Paris
+
+            2. List three essentials for any city trip
+
+
+            These are two independent tasks. I should start the weather lookup (which
+            runs in the background) and answer the question about city trip essentials
+            right away, without waiting for the weather result.
+
+
+            Let me start the weather lookup for Paris and then provide the city trip
+            essentials.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a11af2-5aaf-7863-9571-47efc3b0adcf
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root
+        content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            I''ll start the weather lookup for Paris and answer your question about
+            city trip essentials right away.
+
+
+            '
+          type: output_text
+        id: msg_01a11af2-5abe-7a71-8ab7-c193efa49bde
+        role: assistant
+        status: completed
+        type: message
+      - agent:
+          agent_name: /root
+        arguments: '{"city": "Paris"}'
+        async: true
+        call_id: chatcmpl-tool-906f4922f32fc992
+        id: fc_01a11af2-5ac2-7412-87d5-4a41027ff209
+        name: get_weather
+        status: completed
+        type: function_call
+      - agent:
+          agent_name: /root
+        content:
+        - text: 'I''ve started the weather lookup for Paris. Now I''ll answer the
+            second part of the question - listing three essentials for any city trip.
+            This is a general knowledge question that doesn''t require any tools.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a11af2-619f-74f0-8f7d-88370915b1a9
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root
+        content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            Great! I''ve started the weather lookup for Paris, and it''s running in
+            the background. Let me answer the second part of your request:
+
+
+            ## Three Essentials for Any City Trip
+
+
+            1. **Comfortable Walking Shoes** – Cities are best explored on foot, and
+            you''ll likely log many miles visiting attractions, neighborhoods, and
+            cafés. Supportive footwear prevents blisters and fatigue.
+
+
+            2. **Portable Power Bank & Charging Cable** – Between navigation, photos,
+            translation apps, and boarding passes, your phone will be your lifeline.
+            A backup battery ensures you never run out of juice when you need it most.
+
+
+            3. **A Reusable Water Bottle** – Staying hydrated is essential, and filling
+            up a reusable bottle saves money and reduces waste while you''re out exploring
+            all day.
+
+
+            ---
+
+
+            The Paris weather snapshot is still loading in the background. I''ll share
+            the results with you as soon as they arrive.'
+          type: output_text
+        id: msg_01a11af2-61a8-7fd2-b2b5-6ae72fcd5680
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: null
+      service_tier: default
+      status: completed
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      usage:
+        input_tokens: 3747
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 365
+        output_tokens_details:
+          reasoning_tokens: 124
+        total_tokens: 4112
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - call_id: chatcmpl-tool-906f4922f32fc992
+        output: '{"city":"Paris","temperature_c":22,"condition":"Clear","source":"demo
+          weather snapshot"}'
+        type: function_call_output
+      - content: What does the Paris demo weather snapshot say? Answer in one sentence.
+        role: user
+        type: message
+      instructions: Handle this request yourself; do not start subagents. Start the
+        weather lookup and answer the independent question without waiting. Use the
+        demo weather result when it arrives; never invent it.
+      max_output_tokens: 16384
+      model: Qwen/Qwen3.6-35B-A3B
+      multi_agent:
+        enabled: true
+        max_concurrent_subagents: 1
+      parallel_tool_calls: false
+      previous_response_id: resp_01a11af2-5727-7873-b9e5-8f40f53fadae
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      openai-beta: responses_multi_agent=v1
+      user-agent: python-httpx/0.28.1
+      x-run-id: multi-agent-sequential/t2-late-output
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1791453454
+      error: null
+      id: resp_01a11af2-6240-7923-8f45-3115f2763a00
+      incomplete_details: null
+      instructions: Handle this request yourself; do not start subagents. Start the
+        weather lookup and answer the independent question without waiting. Use the
+        demo weather result when it arrives; never invent it.
+      max_tool_calls: null
+      model: Qwen/Qwen3.6-35B-A3B
+      object: response
+      output:
+      - agent:
+          agent_name: /root
+        content:
+        - text: 'The user is asking for the Paris demo weather snapshot result. I
+            already called get_weather for Paris earlier and received the result:
+            {"city":"Paris","temperature_c":22,"condition":"Clear","source":"demo
+            weather snapshot"}. The user now wants me to answer in one sentence. I
+            have the result, so I can answer directly without calling any tools.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a11af2-656d-7980-b579-a2e7c0b7b535
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root
+        content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            The Paris demo weather snapshot shows a temperature of 22°C with clear
+            conditions.'
+          type: output_text
+        id: msg_01a11af2-657b-7af1-aa50-8a6ec2cc5ebb
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: resp_01a11af2-5727-7873-b9e5-8f40f53fadae
+      service_tier: default
+      status: completed
+      tool_choice: auto
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      usage:
+        input_tokens: 2067
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 94
+        output_tokens_details:
+          reasoning_tokens: 74
+        total_tokens: 2161
+    headers:
+      content-type: application/json
+    status_code: 200

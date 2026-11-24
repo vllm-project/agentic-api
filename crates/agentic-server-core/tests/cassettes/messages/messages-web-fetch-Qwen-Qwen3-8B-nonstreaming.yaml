@@ -1,0 +1,111 @@
+turns:
+- filename: t1
+  request:
+    body:
+      max_tokens: 1024
+      messages:
+      - content: Fetch http://127.0.0.1:18080/page/release-notes.html with web_fetch
+          and reply with the verification token it contains, nothing else.
+        role: user
+      model: qwen3
+      stream: false
+      tools:
+      - description: 'Fetch the full text of one web page. Only a URL that already
+          appears in the conversation can be fetched: one the user wrote, one returned
+          by a tool, or one from an earlier search or fetch result.'
+        input_schema:
+          properties:
+            url:
+              description: The absolute http or https URL of the page to fetch.
+              type: string
+          required:
+          - url
+          type: object
+        name: web_fetch
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/messages
+    query_params: {}
+  response:
+    body:
+      content:
+      - id: chatcmpl-tool-a9e211ca5fbfc16e
+        input:
+          url: http://127.0.0.1:18080/page/release-notes.html
+        name: web_fetch
+        type: tool_use
+      id: chatcmpl-97c77706f9a4723c
+      model: qwen3
+      role: assistant
+      stop_reason: tool_use
+      type: message
+      usage:
+        input_tokens: 240
+        output_tokens: 40
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      max_tokens: 1024
+      messages:
+      - content: Fetch http://127.0.0.1:18080/page/release-notes.html with web_fetch
+          and reply with the verification token it contains, nothing else.
+        role: user
+      - content:
+        - id: chatcmpl-tool-a9e211ca5fbfc16e
+          input:
+            url: http://127.0.0.1:18080/page/release-notes.html
+          name: web_fetch
+          type: tool_use
+        role: assistant
+      - content:
+        - content: '{"type":"web_fetch_result","url":"http://127.0.0.1:18080/page/release-notes.html","title":"Release
+            notes","content_type":"text/html","retrieved_at":"2026-10-02T01:20:00Z","truncated":false,"content":"Agentic
+            API 0.9.1\nVerification token: AGENTIC-WEBFETCH-7F3A9C"}'
+          is_error: false
+          tool_use_id: chatcmpl-tool-a9e211ca5fbfc16e
+          type: tool_result
+        role: user
+      model: qwen3
+      stream: false
+      tools:
+      - description: 'Fetch the full text of one web page. Only a URL that already
+          appears in the conversation can be fetched: one the user wrote, one returned
+          by a tool, or one from an earlier search or fetch result.'
+        input_schema:
+          properties:
+            url:
+              description: The absolute http or https URL of the page to fetch.
+              type: string
+          required:
+          - url
+          type: object
+        name: web_fetch
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/messages
+    query_params: {}
+  response:
+    body:
+      content:
+      - text: AGENTIC-WEBFETCH-7F3A9C
+        type: text
+      id: chatcmpl-907d0f16d2fead6f
+      model: qwen3
+      role: assistant
+      stop_reason: end_turn
+      type: message
+      usage:
+        input_tokens: 393
+        output_tokens: 13
+    headers:
+      content-type: application/json
+    status_code: 200

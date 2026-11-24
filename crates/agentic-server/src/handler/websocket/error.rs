@@ -24,8 +24,15 @@ pub(super) enum WsError {
     #[error("too many outstanding websocket response.create requests")]
     TooManyRequests,
 
+    /// The caller's request rate limit; the connection stays open.
+    #[error("{message}")]
+    RateLimited { message: String },
+
     #[error("websocket send failed")]
     SendFailed,
+
+    #[error("websocket task failed: {0}")]
+    TaskFailed(#[from] tokio::task::JoinError),
 }
 
 impl From<ExecutorError> for WsError {
@@ -39,8 +46,8 @@ impl WsError {
         match self {
             Self::Executor(err) => err.http_status(),
             Self::InvalidJson(_) | Self::UnexpectedType | Self::BinaryFrame => StatusCode::BAD_REQUEST,
-            Self::TooManyRequests => StatusCode::TOO_MANY_REQUESTS,
-            Self::SerializeJson(_) | Self::SendFailed => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::TooManyRequests | Self::RateLimited { .. } => StatusCode::TOO_MANY_REQUESTS,
+            Self::SerializeJson(_) | Self::SendFailed | Self::TaskFailed(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -49,8 +56,8 @@ impl WsError {
             Self::Executor(err) => err.error_code(),
             Self::InvalidJson(_) => "invalid_json",
             Self::UnexpectedType | Self::BinaryFrame => "invalid_request_error",
-            Self::TooManyRequests => "rate_limit_exceeded",
-            Self::SerializeJson(_) | Self::SendFailed => "server_error",
+            Self::TooManyRequests | Self::RateLimited { .. } => "rate_limit_exceeded",
+            Self::SerializeJson(_) | Self::SendFailed | Self::TaskFailed(_) => "server_error",
         }
     }
 
@@ -59,8 +66,8 @@ impl WsError {
             Self::Executor(err) => err.error_type(),
             Self::InvalidJson(_) => "invalid_json",
             Self::UnexpectedType | Self::BinaryFrame => "invalid_request_error",
-            Self::TooManyRequests => "rate_limit_error",
-            Self::SerializeJson(_) | Self::SendFailed => "server_error",
+            Self::TooManyRequests | Self::RateLimited { .. } => "rate_limit_error",
+            Self::SerializeJson(_) | Self::SendFailed | Self::TaskFailed(_) => "server_error",
         }
     }
 
@@ -79,7 +86,7 @@ impl WsError {
     }
 
     pub(super) fn to_ws_frame(&self) -> Option<Value> {
-        if matches!(self, Self::SerializeJson(_) | Self::SendFailed) {
+        if matches!(self, Self::SerializeJson(_) | Self::SendFailed | Self::TaskFailed(_)) {
             return None;
         }
 

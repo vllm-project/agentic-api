@@ -1,0 +1,214 @@
+turns:
+- filename: t1
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1792567698
+      id: conv_6ad86992d328819392e0abc9483daff607adaf8ad5f6c9b9
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      conversation: conv_6ad86992d328819392e0abc9483daff607adaf8ad5f6c9b9
+      input: Remember the word ORCHID. Reply with exactly OK.
+      model: gpt-4o
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792567699
+      conversation:
+        id: conv_6ad86992d328819392e0abc9483daff607adaf8ad5f6c9b9
+      created_at: 1792567699
+      error: null
+      frequency_penalty: 0.0
+      id: resp_07adaf8ad5f6c9b9016ad869932c448193b8d98db3b7c099fd
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: OK
+          type: output_text
+        id: msg_07adaf8ad5f6c9b9016ad86993b51881939e2dfcbd6ca2ef31
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 19
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 2
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 21
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      conversation: conv_6ad86992d328819392e0abc9483daff607adaf8ad5f6c9b9
+      input: What word did I ask you to remember? Reply with that word only.
+      max_output_tokens: 256
+      model: gpt-4o
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792567702
+      conversation:
+        id: conv_6ad86992d328819392e0abc9483daff607adaf8ad5f6c9b9
+      created_at: 1792567701
+      error: null
+      frequency_penalty: 0.0
+      id: resp_07adaf8ad5f6c9b9016ad8699599d48193a6128d30dfe758a1
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 256
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: I'm sorry, I can't recall previous interactions or remember words.
+          type: output_text
+        id: msg_07adaf8ad5f6c9b9016ad86996217c8193b9e4ebd5945a9ef3
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 22
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 13
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 35
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200

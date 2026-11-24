@@ -1,89 +1,40 @@
+mod estimate;
+use crate::executor::inference::UpstreamHeaders;
+pub(crate) use estimate::{estimate_history_tokens, estimate_input_tokens};
+
+mod carry_over;
 mod context;
 mod summary;
 
+pub(crate) use carry_over::CompactionCarryOver;
+
+use std::borrow::Cow;
+
+use super::telemetry::metrics::Stage;
 use super::telemetry::stages::CompactionTrigger;
 use context::item_has_meaningful_context;
 use summary::completed_summary_text;
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::persist::persist_prepared_turn;
+use crate::executor::persist::{TurnOutput, persist};
+use crate::executor::pipeline::AgentPipeline;
 use crate::executor::prepare::prepare_request_tools;
 use crate::executor::rehydrate::rehydrate_conversation;
+use crate::executor::relay::StreamRelay;
 use crate::executor::request::{ExecutionContext, RequestContext};
-use crate::executor::upstream::{agent_pipeline, fetch_blocking_payload};
-use crate::tool::ToolSearchState;
+use crate::executor::upstream::fetch_blocking_payload;
+use crate::storage::ResponseCheckpoint;
+use crate::tool::{CodexNamespaceHandler, ToolRegistry, ToolSearchState};
 use crate::types::event::MessageStatus;
-use crate::types::io::input::latest_compaction_window;
+use crate::types::io::input::{InputTextContent, expand_carried_windows, latest_compaction_window};
 use crate::types::io::{
-    CompactionItem, InputContent, InputFileContent, InputItem, InputMessage, InputMessageContent, ResponseUsage,
-    ResponsesInput, ToolCallOutput, ToolOutputContent,
+    CompactionItem, InOutItem, InputContent, InputItem, InputMessage, InputMessageContent, OutputItem, ResponseUsage,
+    ResponsesInput,
 };
 use crate::types::request_response::{CompactRequest, CompactedResponse, RequestPayload};
-use crate::types::tools::ResponsesTool;
-use crate::utils::common::{serialize_to_value, utcnow_str, uuid7_str};
+use crate::utils::common::{utcnow_str, uuid7_str};
 
 const COMPACTION_PROMPT: &str = "You are performing a CONTEXT CHECKPOINT COMPACTION. Create a concise handoff summary that preserves current progress, decisions, constraints, unresolved work, and critical references for the next model. Return only the summary.";
-const ESTIMATED_BYTES_PER_TOKEN: u64 = 4;
-const ESTIMATED_INPUT_OVERHEAD_TOKENS: u64 = 1;
-const ESTIMATED_ITEM_OVERHEAD_TOKENS: u64 = 12;
-const ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS: u64 = 7;
-const ESTIMATED_JSON_VALUE_OVERHEAD_TOKENS: u64 = 1;
-
-/// Fixed model-agnostic allowance for one image, including its content-part framing.
-///
-/// Actual vision-token usage depends on the model, processor, image dimensions, and detail
-/// setting. A conservative fixed budget avoids treating images as free without mistaking their
-/// base64 transport encoding for model-visible text.
-const ESTIMATED_IMAGE_TOKENS: u64 = 1_024;
-
-#[derive(Default)]
-struct InputTokenEstimate {
-    text_bytes: u64,
-    fixed_tokens: u64,
-}
-
-impl InputTokenEstimate {
-    fn add_text(&mut self, text: &str) {
-        let bytes = u64::try_from(text.len()).unwrap_or(u64::MAX);
-        self.text_bytes = self.text_bytes.saturating_add(bytes);
-    }
-
-    fn add_optional_text(&mut self, text: Option<&str>) {
-        if let Some(text) = text {
-            self.add_text(text);
-        }
-    }
-
-    const fn add_tokens(&mut self, tokens: u64) {
-        self.fixed_tokens = self.fixed_tokens.saturating_add(tokens);
-    }
-
-    fn add_json_value(&mut self, value: &serde_json::Value) {
-        self.add_tokens(ESTIMATED_JSON_VALUE_OVERHEAD_TOKENS);
-        match value {
-            serde_json::Value::String(text) => self.add_text(text),
-            serde_json::Value::Number(number) => self.add_text(&number.to_string()),
-            serde_json::Value::Array(values) => {
-                for value in values {
-                    self.add_json_value(value);
-                }
-            }
-            serde_json::Value::Object(values) => {
-                for (key, value) in values {
-                    self.add_text(key);
-                    self.add_json_value(value);
-                }
-            }
-            serde_json::Value::Null | serde_json::Value::Bool(_) => {}
-        }
-    }
-
-    fn total_tokens(self) -> u64 {
-        let text_tokens =
-            self.text_bytes / ESTIMATED_BYTES_PER_TOKEN + u64::from(self.text_bytes % ESTIMATED_BYTES_PER_TOKEN != 0);
-        self.fixed_tokens.saturating_add(text_tokens)
-    }
-}
 
 fn retained_user_window(items: &[InputItem]) -> Vec<InputItem> {
     let window = latest_compaction_window(items);
@@ -102,281 +53,139 @@ fn retained_user_window(items: &[InputItem]) -> Vec<InputItem> {
             let mut retained = message.clone();
             retained.id = Some(uuid7_str("msg_"));
             retained.status = Some(MessageStatus::Completed);
+            if let InputMessageContent::Text(text) = &retained.content {
+                retained.content =
+                    InputMessageContent::Parts(vec![InputContent::InputText(InputTextContent::new(text.clone()))]);
+            }
             Some(InputItem::Message(retained))
         })
         .collect()
 }
 
-fn finish_compacted_window(mut output: Vec<InputItem>, summary: String) -> Vec<InputItem> {
-    output.push(InputItem::Compaction(CompactionItem {
-        id: Some(uuid7_str("cmp_")),
-        encrypted_content: summary,
-    }));
-    output
+impl ResponseCheckpoint {
+    /// Starts the history a turn continues at the latest compaction a turn produced in `history`, the rows the
+    /// checkpoint names: as on `OpenAI`, a single-agent turn's input items begin with that compaction, which carries
+    /// its window. A compaction the client supplied is not a starting point, and a multi-agent turn keeps its whole
+    /// history, as on `OpenAI`.
+    pub(in crate::executor) fn continue_from_compaction(&mut self, history: &[InOutItem], request: &RequestPayload) {
+        if self.metadata.multi_agent_tree.is_some() || request.multi_agent.as_ref().is_some_and(|config| config.enabled)
+        {
+            return;
+        }
+        let latest = history
+            .iter()
+            .rposition(|item| matches!(item, InOutItem::Output(OutputItem::Compaction(_))));
+        if let Some(start) = latest {
+            self.history_item_ids.drain(..start);
+        }
+    }
+}
+
+/// A summarized history: the user messages its window keeps, the compaction item that stands in for the rest, and
+/// the summary request's usage and service tier.
+pub(crate) struct CompactedWindow {
+    pub(crate) retained: Vec<InputItem>,
+    pub(crate) compaction: CompactionItem,
+    pub(crate) usage: ResponseUsage,
+    pub(crate) service_tier: Option<String>,
 }
 
 #[cfg(test)]
 fn build_compacted_window(items: &[InputItem], summary: String) -> Vec<InputItem> {
-    finish_compacted_window(retained_user_window(items), summary)
-}
-
-fn add_message_content(estimate: &mut InputTokenEstimate, content: &InputMessageContent) {
-    match content {
-        InputMessageContent::Text(text) => estimate.add_text(text),
-        InputMessageContent::Parts(parts) => {
-            for part in parts {
-                match part {
-                    InputContent::InputText(text)
-                    | InputContent::OutputText(text)
-                    | InputContent::ReasoningText(text) => {
-                        estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
-                        estimate.add_text(&text.text);
-                    }
-                    InputContent::Refusal(refusal) => {
-                        estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
-                        estimate.add_text(&refusal.refusal);
-                    }
-                    InputContent::InputImage(_) => estimate.add_tokens(ESTIMATED_IMAGE_TOKENS),
-                    InputContent::InputFile(file) => add_file_content(estimate, file),
-                    InputContent::Unknown(_) => estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS),
-                }
-            }
-        }
-    }
-}
-
-fn add_file_content(estimate: &mut InputTokenEstimate, file: &InputFileContent) {
-    estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
-    estimate.add_optional_text(file.file_data.as_deref());
-    estimate.add_optional_text(file.file_id.as_deref());
-    estimate.add_optional_text(file.file_url.as_deref());
-    estimate.add_optional_text(file.filename.as_deref());
-    estimate.add_optional_text(file.detail.as_deref());
-}
-
-fn add_tool_definition(estimate: &mut InputTokenEstimate, tool: &ResponsesTool) {
-    // Serialize only declarations, preserving nested schemas and extra fields without
-    // copying image-bearing input. An unrepresentable declaration must not undercount.
-    match serialize_to_value(tool) {
-        Ok(value) => estimate.add_json_value(&value),
-        Err(_) => estimate.add_tokens(u64::MAX),
-    }
-}
-
-fn add_tool_call_output(estimate: &mut InputTokenEstimate, output: &ToolCallOutput) {
-    match output {
-        ToolCallOutput::Text(text) => estimate.add_text(text),
-        ToolCallOutput::Content(parts) => {
-            for part in parts {
-                match part {
-                    ToolOutputContent::InputText(text) => {
-                        estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
-                        estimate.add_text(&text.text);
-                    }
-                    ToolOutputContent::InputImage(_) => estimate.add_tokens(ESTIMATED_IMAGE_TOKENS),
-                    ToolOutputContent::InputFile(file) => add_file_content(estimate, file),
-                }
-            }
-        }
-    }
-}
-
-fn add_input_item(estimate: &mut InputTokenEstimate, item: &InputItem) {
-    if matches!(item, InputItem::McpListTools(_) | InputItem::CompactionTrigger) {
-        return;
-    }
-    estimate.add_tokens(ESTIMATED_ITEM_OVERHEAD_TOKENS);
-
-    match item {
-        InputItem::Message(message) => {
-            estimate.add_optional_text(message.id.as_deref());
-            estimate.add_text(&message.role);
-            add_message_content(estimate, &message.content);
-        }
-        InputItem::FunctionCall(call) => {
-            estimate.add_optional_text(call.id.as_deref());
-            estimate.add_text(&call.call_id);
-            estimate.add_text(&call.name);
-            estimate.add_optional_text(call.namespace.as_deref());
-            estimate.add_text(&call.arguments);
-        }
-        InputItem::FunctionCallOutput(output) => {
-            estimate.add_text(&output.call_id);
-            add_tool_call_output(estimate, &output.output);
-        }
-        InputItem::ToolSearchCall(call) => {
-            estimate.add_text(&call.id);
-            estimate.add_text(&call.call_id);
-            estimate.add_json_value(&call.arguments);
-        }
-        InputItem::ToolSearchOutput(output) => {
-            estimate.add_text(&output.call_id);
-            for tool in &output.tools {
-                add_tool_definition(estimate, tool);
-            }
-        }
-        InputItem::CustomToolCall(call) => {
-            estimate.add_text(&call.id);
-            estimate.add_text(&call.call_id);
-            estimate.add_text(&call.name);
-            estimate.add_text(&call.input);
-        }
-        InputItem::CustomToolCallOutput(output) => {
-            estimate.add_text(&output.call_id);
-            estimate.add_optional_text(output.name.as_deref());
-            add_tool_call_output(estimate, &output.output);
-        }
-        InputItem::ShellCall(_) | InputItem::ShellCallOutput(_) => {
-            // Shell items carry textual commands and outputs, without image payloads.
-            match serialize_to_value(item) {
-                Ok(value) => estimate.add_json_value(&value),
-                Err(_) => estimate.add_tokens(u64::MAX),
-            }
-        }
-        InputItem::Reasoning(reasoning) => {
-            estimate.add_text(&reasoning.id);
-            estimate.add_optional_text(reasoning.status.as_deref());
-            for content in &reasoning.content {
-                estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
-                estimate.add_text(&content.text);
-            }
-            for summary in &reasoning.summary {
-                estimate.add_json_value(summary);
-            }
-            if let Some(encrypted_content) = &reasoning.encrypted_content {
-                estimate.add_json_value(encrypted_content);
-            }
-        }
-        InputItem::Compaction(compaction) => {
-            // `model_input` presents the checkpoint as one assistant output-text message.
-            estimate.add_text("assistant");
-            estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
-            estimate.add_text(&compaction.encrypted_content);
-        }
-        InputItem::Unknown | InputItem::McpListTools(_) | InputItem::CompactionTrigger => {}
-    }
-}
-
-/// Estimate the current model-facing context size without requiring a model-specific tokenizer.
-///
-/// Textual fields are aggregated at four UTF-8 bytes per token, with fixed allowances for
-/// Responses framing. Images receive [`ESTIMATED_IMAGE_TOKENS`] each; their URLs and inline bytes
-/// are deliberately excluded because vision-token usage is unrelated to base64 transport size.
-#[must_use]
-pub(crate) fn estimate_input_tokens(input: &ResponsesInput) -> u64 {
-    let mut estimate = InputTokenEstimate::default();
-    estimate.add_tokens(ESTIMATED_INPUT_OVERHEAD_TOKENS);
-    match input {
-        ResponsesInput::Text(text) => estimate.add_text(text),
-        ResponsesInput::Items(_) => {
-            for item in input.model_items() {
-                add_input_item(&mut estimate, item);
-            }
-        }
-    }
-    estimate.total_tokens()
-}
-
-fn request_payload(model: String, input: ResponsesInput, instructions: Option<String>) -> RequestPayload {
-    RequestPayload {
-        model,
-        input,
-        instructions,
-        previous_response_id: None,
-        conversation_id: None,
-        tools: None,
-        tool_choice: None,
-        stream: false,
-        store: false,
-        include: None,
-        reasoning: None,
-        text: None,
-        temperature: None,
-        top_p: None,
-        max_output_tokens: None,
-        ignore_eos: None,
-        truncation: None,
-        metadata: None,
-        parallel_tool_calls: None,
-        prompt_cache_key: None,
-        cache_salt: None,
-        context_management: None,
-    }
+    let mut window = retained_user_window(items);
+    window.push(InputItem::Compaction(CompactionItem {
+        agent: None,
+        id: Some(uuid7_str("cmp_")),
+        encrypted_content: summary,
+    }));
+    window
 }
 
 /// Summarize an already-resolved item history and return its canonical compacted window.
+/// Normalize history against the source declarations before removing tools from the summary request.
 ///
 /// # Errors
 ///
 /// Returns an invalid-request error for empty input, an upstream error for an unusable model
 /// summary, and propagates inference and serialization failures.
-pub(crate) async fn compact_items(
-    request: &RequestPayload,
-    input: ResponsesInput,
-    exec_ctx: &ExecutionContext,
-    auth: Option<&str>,
-) -> ExecutorResult<(Vec<InputItem>, ResponseUsage)> {
-    compact_items_with_trigger(request, input, exec_ctx, auth, CompactionTrigger::InputItem).await
-}
-
 #[tracing::instrument(name = "agentic.compaction", skip_all, fields(
     agentic.compaction.operation = "summarize", agentic.compaction.trigger = trigger.as_str()
 ))]
-async fn compact_items_with_trigger(
+pub(crate) async fn summarize_items(
     request: &RequestPayload,
     input: ResponsesInput,
     exec_ctx: &ExecutionContext,
-    auth: Option<&str>,
+    auth: Option<&UpstreamHeaders>,
     trigger: CompactionTrigger,
-) -> ExecutorResult<(Vec<InputItem>, ResponseUsage)> {
-    let original_items = Vec::from(input);
-    if !original_items.iter().any(item_has_meaningful_context) {
-        return Err(ExecutorError::InvalidRequest(
-            "compaction requires non-empty input or previous_response_id context".to_owned(),
-        ));
+) -> ExecutorResult<CompactedWindow> {
+    let timer = exec_ctx.metrics.stage(Stage::Compaction);
+    let summarized = async {
+        request.ensure_supported_parameters(
+            exec_ctx.model_capabilities.for_model(&request.model),
+            exec_ctx.responses_config.prompt_cache_options_supported,
+        )?;
+        // A compaction this turn made carries its window; summarize what the model saw.
+        let original_items: Vec<InputItem> = expand_carried_windows(input.input_items())
+            .into_iter()
+            .map(Cow::into_owned)
+            .collect();
+        if !original_items.iter().any(item_has_meaningful_context) {
+            return Err(ExecutorError::InvalidRequest(
+                "compaction requires non-empty input or previous_response_id context".to_owned(),
+            ));
+        }
+
+        let retained = retained_user_window(&original_items);
+        let mut summary_items: Vec<InputItem> = original_items
+            .into_iter()
+            .filter(|item| !item.is_compaction_trigger())
+            .collect();
+        summary_items.push(InputItem::Message(InputMessage {
+            role: "user".to_owned(),
+            content: InputMessageContent::Text(COMPACTION_PROMPT.to_owned()),
+            ..Default::default()
+        }));
+        let original_request = request.summary_settings();
+        let mut enriched_request = RequestPayload {
+            input: ResponsesInput::from(summary_items),
+            ..request.summary_settings()
+        };
+        // The summary offers no tools. Resolve searched top-level function names from the source before discarding
+        // its declarations, while preserving actual namespace members in the summary's public history.
+        let names = request.top_level_function_names();
+        let functions = names.iter().map(String::as_str).collect();
+        enriched_request.input = CodexNamespaceHandler
+            .resolve_input(None, &functions, Cow::Owned(enriched_request.input))
+            .into_owned();
+        let ctx = RequestContext {
+            multi_agent_tree: None,
+            original_request,
+            enriched_request,
+            new_input_items: Vec::new(),
+            response_id: uuid7_str("resp_"),
+            conversation_id: None,
+            checkpoint: None,
+            continuation: None,
+        };
+        let mut agent = AgentPipeline::new(ctx, None, StreamRelay::detached());
+        let response = fetch_blocking_payload(&mut agent, exec_ctx, auth, &ToolRegistry::default(), None).await?;
+        exec_ctx.metrics.record_response_usage(response.usage.as_ref());
+        let summary = completed_summary_text(&response)?;
+
+        Ok(CompactedWindow {
+            retained,
+            compaction: CompactionItem {
+                agent: None,
+                id: Some(uuid7_str("cmp_")),
+                encrypted_content: summary,
+            },
+            usage: response.usage.unwrap_or_default(),
+            service_tier: response.service_tier,
+        })
     }
-
-    let compacted = retained_user_window(&original_items);
-    let mut summary_items: Vec<InputItem> = original_items
-        .into_iter()
-        .filter(|item| !item.is_compaction_trigger())
-        .collect();
-    summary_items.push(InputItem::Message(InputMessage {
-        id: None,
-        role: "user".to_owned(),
-        status: None,
-        content: InputMessageContent::Text(COMPACTION_PROMPT.to_owned()),
-    }));
-    let instructions = request.instructions.clone();
-    let original_request = request_payload(
-        request.model.clone(),
-        ResponsesInput::Items(Vec::new()),
-        instructions.clone(),
-    );
-    let mut enriched_request = request_payload(
-        request.model.clone(),
-        ResponsesInput::Items(summary_items),
-        instructions,
-    );
-    enriched_request.prompt_cache_key.clone_from(&request.prompt_cache_key);
-    let ctx = RequestContext {
-        original_request,
-        enriched_request,
-        new_input_items: Vec::new(),
-        response_id: uuid7_str("resp_"),
-        conversation_id: None,
-        conversation_version: None,
-        continuation: None,
-    };
-    let mut agent = agent_pipeline(ctx, None, None);
-    let response =
-        fetch_blocking_payload(&mut agent, exec_ctx, auth, &crate::tool::ToolRegistry::default(), None).await?;
-    let summary = completed_summary_text(&response)?;
-
-    Ok((
-        finish_compacted_window(compacted, summary),
-        response.usage.unwrap_or_default(),
-    ))
+    .await;
+    timer.finish_result(&summarized);
+    summarized
 }
 
 /// Apply the first configured compaction threshold to the resolved request history.
@@ -390,17 +199,9 @@ async fn compact_items_with_trigger(
 pub(crate) async fn maybe_compact_context(
     ctx: &mut RequestContext,
     exec_ctx: &ExecutionContext,
-    auth: Option<&str>,
-) -> ExecutorResult<Option<ResponseUsage>> {
-    let threshold = ctx
-        .enriched_request
-        .context_management
-        .as_deref()
-        .unwrap_or_default()
-        .iter()
-        .find(|entry| entry.type_ == "compaction")
-        .and_then(|entry| entry.compact_threshold);
-    let Some(threshold) = threshold else {
+    auth: Option<&UpstreamHeaders>,
+) -> ExecutorResult<Option<(CompactionItem, ResponseUsage)>> {
+    let Some(threshold) = ctx.enriched_request.compact_threshold() else {
         return Ok(None);
     };
     let estimated_tokens = estimate_input_tokens(&ctx.enriched_request.input);
@@ -408,22 +209,37 @@ pub(crate) async fn maybe_compact_context(
         return Ok(None);
     }
 
-    tracing::debug!(estimated_tokens, threshold, "compacting response input");
-    let input = std::mem::replace(&mut ctx.enriched_request.input, ResponsesInput::Items(Vec::new()));
-    let (compacted, usage) = compact_items_with_trigger(
+    tracing::debug!(
+        estimated_tokens,
+        threshold,
+        "automatically compacting resolved response input"
+    );
+    let items = Vec::from(&ctx.enriched_request.input);
+    if !items.iter().any(item_has_meaningful_context) {
+        return Ok(None);
+    }
+    // The model continues from the compacted window. The turn's items stay as the request supplied them, and the
+    // compaction item is the turn's output, as on OpenAI.
+    let open_calls = CompactionCarryOver::open_calls(ctx.enriched_request.input.input_items());
+    let window = summarize_items(
         &ctx.enriched_request,
-        input,
+        ResponsesInput::from(items),
         exec_ctx,
         auth,
         CompactionTrigger::ContextManagement,
     )
     .await?;
-    ctx.enriched_request.input = ResponsesInput::Items(compacted.clone());
-    ctx.new_input_items = compacted;
-    if let Some(continuation) = &mut ctx.continuation {
-        continuation.mark_history_replaced();
-    }
-    Ok(Some(usage))
+    // The item carries its window, as OpenAI's opaque item carries its state: the model and every later turn see the
+    // kept user messages through it.
+    let compaction = CompactionItem::carrying(
+        window.compaction.id,
+        window.compaction.encrypted_content,
+        window.retained,
+    )?;
+    let mut model_input = vec![InputItem::Compaction(compaction.clone())];
+    model_input.extend(open_calls);
+    ctx.enriched_request.input = ResponsesInput::from(model_input);
+    Ok(Some((compaction, window.usage)))
 }
 
 /// Compact direct input or a stored previous-response chain into a reusable item window.
@@ -437,58 +253,81 @@ pub async fn compact_response(
     exec_ctx: &ExecutionContext,
     auth: Option<&str>,
 ) -> ExecutorResult<CompactedResponse> {
+    let auth = auth.map(|token| UpstreamHeaders::Bearer(token.to_owned()));
     if request.input.is_none() && request.previous_response_id.is_none() {
-        return Err(ExecutorError::InvalidRequest(
-            "compaction requires input or previous_response_id".to_owned(),
-        ));
+        return Err(ExecutorError::UnsupportedValue {
+            param: None,
+            code: None,
+            message: "Compaction requires either `input` items or a `previous_response_id`.".to_owned(),
+        });
     }
 
-    let mut payload = request_payload(
-        request.model,
-        request.input.unwrap_or_else(|| ResponsesInput::Items(Vec::new())),
-        request.instructions,
-    );
-    payload.previous_response_id = request.previous_response_id;
+    let payload = RequestPayload {
+        model: request.model,
+        input: request.input.unwrap_or_else(|| ResponsesInput::Items(Vec::new())),
+        instructions: request.instructions,
+        previous_response_id: request.previous_response_id,
+        service_tier: request.service_tier,
+        safety_identifier: request.safety_identifier,
+        prompt_cache_key: request.prompt_cache_key,
+        prompt_cache_retention: request.prompt_cache_retention,
+        prompt_cache_options: request.prompt_cache_options,
+        ..RequestPayload::default()
+    };
     let ctx = rehydrate_conversation(payload, exec_ctx).await?;
-    let (mut ctx, tool_search_state) =
-        prepare_request_tools(ctx, &exec_ctx.conv_handler, &exec_ctx.resp_handler).await?;
+    // OpenAI excludes multi-agent execution from the standalone compact endpoint,
+    // including stored trees and public history attributed to a multi-agent run.
+    if ctx.multi_agent_tree.is_some() || ctx.enriched_request.input.has_multi_agent_history() {
+        return Err(ExecutorError::InvalidRequest(
+            "/responses/compact is not supported with multi_agent".into(),
+        ));
+    }
+    let (mut ctx, tool_search_state) = prepare_request_tools(ctx)?;
     let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);
-    let input = std::mem::replace(&mut ctx.enriched_request.input, ResponsesInput::Items(Vec::new()));
-    let (output, usage) = compact_items_with_trigger(
+    // The returned window keeps every open async call, in its public form, so a client replaying it
+    // stays self-contained; storage adds only this request's own items (see `CompactionCarryOver`).
+    let carry_over = CompactionCarryOver::new(
+        ctx.enriched_request.input.input_items(),
+        ctx.new_input_items.iter().filter_map(InOutItem::as_input),
+    );
+    let input = std::mem::take(&mut ctx.enriched_request.input);
+    let window = summarize_items(
         &ctx.enriched_request,
         input,
         exec_ctx,
-        auth,
+        auth.as_ref(),
         CompactionTrigger::Explicit,
     )
     .await?;
+    // Rehydrated history and this request's items are both public, so the open calls are as the client saw them.
+    let mut output = window.retained.clone();
+    output.push(InputItem::Compaction(window.compaction.clone()));
+    output.extend(carry_over.open_calls);
 
     let response_id = ctx.response_id.clone();
-    ctx.new_input_items.clone_from(&output);
-    match persist_prepared_turn(
-        ctx,
-        tool_search_metadata,
-        Vec::new(),
-        &exec_ctx.conv_handler,
-        &exec_ctx.resp_handler,
-    )
-    .await
-    {
-        Ok(()) | Err(ExecutorError::Storage(crate::StorageError::NotConfigured)) => {}
-        Err(error) => return Err(error),
-    }
+    ctx.new_input_items = window
+        .retained
+        .into_iter()
+        .chain(carry_over.before)
+        .chain([InputItem::Compaction(window.compaction)])
+        .chain(carry_over.after)
+        .map(Into::into)
+        .collect();
+    Box::pin(persist(ctx, TurnOutput::Compaction, tool_search_metadata, exec_ctx)).await?;
 
     Ok(CompactedResponse {
+        service_tier: window.service_tier,
         id: response_id,
         object: "response.compaction".to_owned(),
         created_at: utcnow_str(),
         output,
-        usage,
+        usage: window.usage,
     })
 }
 
 #[cfg(test)]
 mod tests {
+    use super::estimate::ESTIMATED_IMAGE_TOKENS;
     use std::sync::{Arc, Mutex};
 
     use axum::Router;
@@ -496,25 +335,26 @@ mod tests {
 
     use crate::executor::modes::{ConversationHandler, ResponseHandler};
     use crate::executor::request::{ExecutionContext, RequestContext};
-    use crate::storage::{ConversationStore, InOutItem, ResponseMetadata, ResponseStore, create_pool_with_schema};
+    use crate::storage::{ConversationStore, ResponseMetadata, ResponseStore, create_pool_with_schema};
+    use crate::types::ServiceTier;
     use crate::types::event::MessageStatus;
+    use crate::types::io::InOutItem;
     use crate::types::io::{
         CompactionItem, CustomToolCallOutputMessage, FunctionToolResultMessage, InputContent, InputImageContent,
         InputItem, InputMessage, InputMessageContent, ResponsesInput, ToolCallOutput, ToolOutputContent,
     };
-    use crate::types::request_response::ContextManagement;
+    use crate::types::request_response::{CompactRequest, ContextManagement, RequestPayload};
 
     use super::{
-        ESTIMATED_IMAGE_TOKENS, build_compacted_window, compact_response, completed_summary_text,
-        estimate_input_tokens, maybe_compact_context, request_payload,
+        build_compacted_window, compact_response, completed_summary_text, estimate_history_tokens,
+        estimate_input_tokens, maybe_compact_context,
     };
 
     fn user_message(text: &str) -> InputItem {
         InputItem::Message(InputMessage {
-            id: None,
             role: "user".to_owned(),
-            status: None,
             content: InputMessageContent::Text(text.to_owned()),
+            ..Default::default()
         })
     }
 
@@ -528,15 +368,16 @@ mod tests {
 
     fn image_message(encoded_bytes: usize) -> InputItem {
         InputItem::Message(InputMessage {
-            id: None,
             role: "user".to_owned(),
-            status: None,
             content: InputMessageContent::Parts(vec![InputContent::InputImage(inline_image(encoded_bytes))]),
+            ..Default::default()
         })
     }
 
     fn function_image_output(encoded_bytes: usize) -> InputItem {
         InputItem::FunctionCallOutput(FunctionToolResultMessage {
+            id: None,
+            status: None,
             call_id: "call_view_image".to_owned(),
             output: ToolCallOutput::Content(vec![ToolOutputContent::InputImage(inline_image(encoded_bytes))]),
         })
@@ -544,6 +385,8 @@ mod tests {
 
     fn custom_image_output(encoded_bytes: usize) -> InputItem {
         InputItem::CustomToolCallOutput(CustomToolCallOutputMessage {
+            status: None,
+            id: None,
             call_id: "call_view_image".to_owned(),
             name: Some("view_image".to_owned()),
             output: ToolCallOutput::Content(vec![ToolOutputContent::InputImage(inline_image(encoded_bytes))]),
@@ -551,19 +394,27 @@ mod tests {
     }
 
     fn context_with_threshold(input: ResponsesInput, threshold: u64) -> RequestContext {
-        let original_request = request_payload("test-model".to_owned(), ResponsesInput::Items(Vec::new()), None);
-        let mut enriched_request = request_payload("test-model".to_owned(), input, None);
+        let original_request = RequestPayload {
+            model: "test-model".to_owned(),
+            ..RequestPayload::default()
+        };
+        let mut enriched_request = RequestPayload {
+            model: "test-model".to_owned(),
+            input,
+            ..RequestPayload::default()
+        };
         enriched_request.context_management = Some(vec![ContextManagement {
             type_: "compaction".to_owned(),
             compact_threshold: Some(threshold),
         }]);
         RequestContext {
+            multi_agent_tree: None,
             original_request,
             enriched_request,
             new_input_items: Vec::new(),
             response_id: "resp_test".to_owned(),
             conversation_id: None,
-            conversation_version: None,
+            checkpoint: None,
             continuation: None,
         }
     }
@@ -648,7 +499,7 @@ mod tests {
         (exec_ctx, requests, server)
     }
 
-    fn compact_request() -> crate::CompactRequest {
+    fn standalone_request() -> CompactRequest {
         serde_json::from_value(serde_json::json!({
             "model": "test-model",
             "input": [{"role": "user", "content": "important context"}]
@@ -660,11 +511,14 @@ mod tests {
     fn compacted_window_retains_user_messages_and_replaces_old_compaction() {
         let items = vec![
             InputItem::Compaction(CompactionItem {
+                agent: None,
                 id: Some("cmp_old".to_owned()),
                 encrypted_content: "old summary".to_owned(),
             }),
             user_message("first"),
             InputItem::FunctionCallOutput(FunctionToolResultMessage {
+                id: None,
+                status: None,
                 call_id: "call_1".to_owned(),
                 output: "tool output".into(),
             }),
@@ -699,74 +553,59 @@ mod tests {
 
     #[test]
     fn token_estimate_counts_large_json_numbers() {
-        assert_text_growth([
-            (
-                "reasoning numbers",
-                serde_json::json!([{"type": "reasoning", "id": "rs_1", "summary": [vec![1_u64; 64]]}]),
-                serde_json::json!([{"type": "reasoning", "id": "rs_1", "summary": [vec![u64::MAX; 64]]}]),
-            ),
-            (
-                "tool-search argument numbers",
-                serde_json::json!([{
-                    "type": "tool_search_call", "id": "ts_1", "call_id": "call_1",
-                    "arguments": {"values": vec![1_u64; 64]}
-                }]),
-                serde_json::json!([{
-                    "type": "tool_search_call", "id": "ts_1", "call_id": "call_1",
-                    "arguments": {"values": vec![u64::MAX; 64]}
-                }]),
-            ),
-        ]);
+        assert_text_growth([(
+            "tool-search argument numbers",
+            serde_json::json!([{
+                "type": "tool_search_call", "id": "ts_1", "call_id": "call_1",
+                "arguments": {"values": vec![1_u64; 64]}
+            }]),
+            serde_json::json!([{
+                "type": "tool_search_call", "id": "ts_1", "call_id": "call_1",
+                "arguments": {"values": vec![u64::MAX; 64]}
+            }]),
+        )]);
     }
 
+    /// A search output counts as the text the model reads: functions with their schemas, namespaces by name and
+    /// description. A loaded namespace's members reach the model as tool declarations, not in the input.
     #[test]
-    fn token_estimate_counts_complete_tool_search_declarations() {
+    fn token_estimate_counts_the_search_output_the_model_reads() {
         let base = serde_json::json!([{
-            "type": "tool_search_output", "call_id": "call_1", "tools": [{
-                "type": "namespace", "name": "workspace", "description": "x", "extra_context": "x",
-                "tools": [{
-                    "type": "function", "name": "lookup", "description": "x",
-                    "parameters": {"type": "object", "description": "x", "enum": [1]},
-                    "extra_context": "x"
-                }]
-            }]
+            "type": "tool_search_output", "call_id": "call_1", "tools": [
+                {
+                    "type": "namespace", "name": "workspace", "description": "x", "extra_context": "x",
+                    "tools": [{"type": "function", "name": "lookup", "description": "x", "parameters": {"type": "object"}}]
+                },
+                {
+                    "type": "function", "name": "fetch", "description": "x",
+                    "parameters": {"type": "object", "description": "x", "enum": [1]}, "extra_context": "x"
+                }
+            ]
         }]);
-        let long_text = "substantial tool context ".repeat(256);
+        let long_text = serde_json::json!("substantial tool context ".repeat(256));
+        let with = |pointer: &str, value: &serde_json::Value| {
+            let mut long = base.clone();
+            *long.pointer_mut(pointer).expect("existing tool field") = value.clone();
+            long
+        };
         for (label, pointer, value) in [
-            (
-                "namespace description",
-                "/0/tools/0/description",
-                serde_json::json!(long_text),
-            ),
-            (
-                "namespace extra",
-                "/0/tools/0/extra_context",
-                serde_json::json!(long_text),
-            ),
-            (
-                "function description",
-                "/0/tools/0/tools/0/description",
-                serde_json::json!(long_text),
-            ),
-            (
-                "function schema",
-                "/0/tools/0/tools/0/parameters/description",
-                serde_json::json!(long_text),
-            ),
-            (
-                "function extra",
-                "/0/tools/0/tools/0/extra_context",
-                serde_json::json!(long_text),
-            ),
+            ("namespace description", "/0/tools/0/description", &long_text),
+            ("function description", "/0/tools/1/description", &long_text),
+            ("function schema", "/0/tools/1/parameters/description", &long_text),
+            ("function extra", "/0/tools/1/extra_context", &long_text),
             (
                 "schema numbers",
-                "/0/tools/0/tools/0/parameters/enum/0",
-                serde_json::json!(u64::MAX),
+                "/0/tools/1/parameters/enum/0",
+                &serde_json::json!(u64::MAX),
             ),
         ] {
-            let mut long = base.clone();
-            *long.pointer_mut(pointer).expect("existing tool field") = value;
-            assert_text_growth([(label, base.clone(), long)]);
+            assert_text_growth([(label, base.clone(), with(pointer, value))]);
+        }
+        let estimate = |value: serde_json::Value| {
+            estimate_input_tokens(&serde_json::from_value(value).expect("valid search output"))
+        };
+        for pointer in ["/0/tools/0/extra_context", "/0/tools/0/tools/0/description"] {
+            assert_eq!(estimate(with(pointer, &long_text)), estimate(base.clone()), "{pointer}");
         }
     }
 
@@ -784,9 +623,11 @@ mod tests {
 
     #[test]
     fn token_estimate_counts_replayed_content() {
-        let input = ResponsesInput::Items(vec![
+        let input = ResponsesInput::from(vec![
             user_message("hello context"),
             InputItem::FunctionCallOutput(FunctionToolResultMessage {
+                id: None,
+                status: None,
                 call_id: "call_1".to_owned(),
                 output: "substantial tool output".into(),
             }),
@@ -795,10 +636,49 @@ mod tests {
         assert!(estimate_input_tokens(&input) > 0);
     }
 
+    /// A hosted search as the model sees it, captured before the public pair became the stored
+    /// record. Storing the public pair instead must not change when auto-compaction triggers.
+    #[test]
+    fn hosted_search_estimate_counts_what_the_model_sees() {
+        let items: Vec<InputItem> = serde_json::from_str(include_str!(
+            "../../tests/fixtures/multi_agent_private_search_history.json"
+        ))
+        .expect("fixture history");
+        assert_eq!(estimate_history_tokens(&items), 137);
+
+        let InputItem::FunctionCallOutput(private_output) = &items[2] else {
+            panic!("the fixture's search output");
+        };
+        let ToolCallOutput::Text(text) = &private_output.output else {
+            panic!("a text search output");
+        };
+        let loaded: serde_json::Value = serde_json::from_str(text).expect("search output JSON");
+        let public: Vec<InputItem> = serde_json::from_value(serde_json::json!([
+            items[0],
+            {"type": "tool_search_call", "id": "tsc_s1", "call_id": null, "execution": "server",
+                "arguments": {"paths": ["get_weather"]}, "status": "completed"},
+            {"type": "tool_search_output", "id": "tso_s1", "call_id": null, "execution": "server",
+                "status": "completed", "tools": loaded["tools"]},
+            items[3]
+        ]))
+        .expect("public history");
+        // The lowered call carries no item id (an upstream such as OpenAI would tie it to a call_id the public pair
+        // does not keep), so the public pair counts as the stored private pair without that id.
+        let mut model_view = items.clone();
+        if let InputItem::FunctionCall(call) = &mut model_view[1] {
+            call.id = None;
+        }
+        assert_eq!(
+            estimate_history_tokens(&public),
+            estimate_history_tokens(&model_view),
+            "the public pair counts as the call and output the model reads"
+        );
+    }
+
     #[test]
     fn inline_image_payload_size_does_not_affect_user_message_estimate() {
-        let small = estimate_input_tokens(&ResponsesInput::Items(vec![image_message(100 * 1_024)]));
-        let large = estimate_input_tokens(&ResponsesInput::Items(vec![image_message(5 * 1_024 * 1_024)]));
+        let small = estimate_input_tokens(&ResponsesInput::from(vec![image_message(100 * 1_024)]));
+        let large = estimate_input_tokens(&ResponsesInput::from(vec![image_message(5 * 1_024 * 1_024)]));
 
         assert_eq!(small, large);
     }
@@ -809,8 +689,8 @@ mod tests {
             function_image_output as fn(usize) -> InputItem,
             custom_image_output as fn(usize) -> InputItem,
         ] {
-            let small = estimate_input_tokens(&ResponsesInput::Items(vec![make_output(100 * 1_024)]));
-            let large = estimate_input_tokens(&ResponsesInput::Items(vec![make_output(5 * 1_024 * 1_024)]));
+            let small = estimate_input_tokens(&ResponsesInput::from(vec![make_output(100 * 1_024)]));
+            let large = estimate_input_tokens(&ResponsesInput::from(vec![make_output(5 * 1_024 * 1_024)]));
 
             assert_eq!(small, large);
         }
@@ -820,10 +700,9 @@ mod tests {
     fn an_image_referenced_by_file_id_is_meaningful_context() {
         let image_by = |content: InputImageContent| {
             InputItem::Message(InputMessage {
-                id: None,
                 role: "user".to_owned(),
-                status: None,
                 content: InputMessageContent::Parts(vec![InputContent::InputImage(content)]),
+                ..Default::default()
             })
         };
 
@@ -843,11 +722,10 @@ mod tests {
     fn each_image_adds_the_fixed_image_budget() {
         let estimate_with_images = |count| {
             let parts = (0..count).map(|_| InputContent::InputImage(inline_image(1))).collect();
-            estimate_input_tokens(&ResponsesInput::Items(vec![InputItem::Message(InputMessage {
-                id: None,
+            estimate_input_tokens(&ResponsesInput::from(vec![InputItem::Message(InputMessage {
                 role: "user".to_owned(),
-                status: None,
                 content: InputMessageContent::Parts(parts),
+                ..Default::default()
             })]))
         };
 
@@ -997,6 +875,22 @@ mod tests {
     }
 
     #[test]
+    fn request_and_checkpoint_estimates_agree_for_public_tool_items() {
+        for wire in [
+            serde_json::json!({"type":"custom_tool_call", "id":"ctc_1", "call_id":"call_1",
+                "name":"notes", "input":"a quoted value: \"hello\""}),
+            serde_json::json!({"type":"shell_call", "id":"sh_1", "call_id":"call_1",
+                "action":{"commands":["printf hello"], "timeout_ms":1000}}),
+            serde_json::json!({"type":"shell_call_output", "call_id":"call_1",
+                "output":[{"stdout":"hello", "stderr":"", "outcome":{"type":"exit", "exit_code":0}}]}),
+        ] {
+            let checkpoint: Vec<InputItem> = vec![serde_json::from_value(wire).unwrap()];
+            let request = ResponsesInput::from(checkpoint.clone());
+            assert_eq!(estimate_input_tokens(&request), estimate_history_tokens(&checkpoint));
+        }
+    }
+
+    #[test]
     fn text_only_estimate_remains_close_to_json_size_baseline() {
         let input: ResponsesInput = serde_json::from_value(serde_json::json!([
             {"role": "user", "content": "hello context"},
@@ -1023,9 +917,10 @@ mod tests {
     #[test]
     fn estimate_uses_only_the_effective_compacted_window() {
         let input_with_stale_text = |stale_text: String| {
-            ResponsesInput::Items(vec![
+            ResponsesInput::from(vec![
                 user_message(&stale_text),
                 InputItem::Compaction(CompactionItem {
+                    agent: None,
                     id: Some("cmp_1".to_owned()),
                     encrypted_content: "durable summary".to_owned(),
                 }),
@@ -1041,7 +936,7 @@ mod tests {
 
     #[tokio::test]
     async fn automatic_compaction_ignores_image_bytes_but_triggers_for_text_and_preserves_image() {
-        let large_image_input = ResponsesInput::Items(vec![image_message(5 * 1_024 * 1_024)]);
+        let large_image_input = ResponsesInput::from(vec![image_message(5 * 1_024 * 1_024)]);
         let image_estimate = estimate_input_tokens(&large_image_input);
         let threshold = image_estimate.saturating_add(100);
         let (exec_ctx, requests, server) = mock_execution_context(ResponseStore::disabled()).await;
@@ -1056,18 +951,20 @@ mod tests {
 
         let retained_image = inline_image(100 * 1_024);
         let expected_url = retained_image.image_url.clone().expect("inline image URL");
-        let text_input = ResponsesInput::Items(vec![
+        let text_input = ResponsesInput::from(vec![
             InputItem::Message(InputMessage {
-                id: None,
                 role: "user".to_owned(),
-                status: None,
                 content: InputMessageContent::Parts(vec![InputContent::InputImage(retained_image)]),
+                ..Default::default()
             }),
             user_message(&"genuine textual context ".repeat(1_000)),
         ]);
         assert!(estimate_input_tokens(&text_input) > threshold);
         let mut text_context = context_with_threshold(text_input, threshold);
         text_context.enriched_request.prompt_cache_key = Some("workspace-a".to_owned());
+        text_context.enriched_request.service_tier = Some(ServiceTier::Priority);
+        text_context.enriched_request.prompt_cache_retention =
+            Some(crate::types::request_response::PromptCacheRetention::TwentyFourHours);
 
         assert!(
             maybe_compact_context(&mut text_context, &exec_ctx, None)
@@ -1075,11 +972,12 @@ mod tests {
                 .expect("long text compacts")
                 .is_some()
         );
-        let ResponsesInput::Items(compacted) = &text_context.enriched_request.input else {
+        let projected = text_context.enriched_request.input.model_input();
+        let ResponsesInput::Items(compacted) = projected.as_ref() else {
             panic!("compaction should produce item input");
         };
         let retained_url = compacted.iter().find_map(|item| {
-            let InputItem::Message(message) = item else {
+            let InOutItem::Input(InputItem::Message(message)) = item else {
                 return None;
             };
             let InputMessageContent::Parts(parts) = &message.content else {
@@ -1094,6 +992,65 @@ mod tests {
         let requests = requests.lock().expect("request capture lock");
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0]["prompt_cache_key"], "workspace-a");
+        assert_eq!(requests[0]["service_tier"], "priority");
+        assert_eq!(requests[0]["prompt_cache_retention"], "24h");
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn multi_agent_compaction_snapshot_preserves_prompt_cache_retention() {
+        use crate::executor::multi_agent::CompactionPlan;
+        use crate::types::agent::AgentIdentity;
+        use crate::types::request_response::PromptCacheRetention;
+
+        let (exec, requests, server) = mock_execution_context(ResponseStore::disabled()).await;
+        let mut request = RequestPayload {
+            model: "test-model".into(),
+            ..RequestPayload::default()
+        };
+        request.prompt_cache_retention = Some(PromptCacheRetention::TwentyFourHours);
+        let plan =
+            CompactionPlan::prepare_explicit(&AgentIdentity::root(), 0, &[user_message("remember context")], &request)
+                .unwrap()
+                .unwrap();
+        request.prompt_cache_retention = Some(PromptCacheRetention::InMemory);
+        plan.execute(&exec, None).await.unwrap();
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0]["prompt_cache_retention"], "24h");
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn prompt_cache_options_survive_automatic_and_snapshot_compaction() {
+        use crate::executor::multi_agent::CompactionPlan;
+        use crate::types::agent::AgentIdentity;
+        let (mut exec, requests, server) = mock_execution_context(ResponseStore::disabled()).await;
+        exec.responses_config.prompt_cache_options_supported = true;
+        let options = serde_json::from_value(serde_json::json!({"mode":"explicit","ttl":"30m"})).unwrap();
+        let mut ctx = context_with_threshold(ResponsesInput::from(vec![user_message(&"context ".repeat(100))]), 1);
+        ctx.enriched_request.prompt_cache_options = Some(options);
+        assert!(maybe_compact_context(&mut ctx, &exec, None).await.unwrap().is_some());
+        assert_eq!(ctx.enriched_request.prompt_cache_options, Some(options));
+        let plan = CompactionPlan::prepare_explicit(
+            &AgentIdentity::root(),
+            0,
+            &[user_message("remember context")],
+            &ctx.enriched_request,
+        )
+        .unwrap()
+        .unwrap();
+        ctx.enriched_request.prompt_cache_options =
+            Some(serde_json::from_value(serde_json::json!({"mode":"implicit"})).unwrap());
+        plan.execute(&exec, None).await.unwrap();
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 2);
+        for request in requests.iter() {
+            assert_eq!(
+                request["prompt_cache_options"],
+                serde_json::json!({"mode":"explicit","ttl":"30m"})
+            );
+        }
         server.abort();
     }
 
@@ -1173,7 +1130,7 @@ mod tests {
     async fn disabled_storage_does_not_fail_compaction() {
         let (exec_ctx, _requests, server) = mock_execution_context(ResponseStore::disabled()).await;
 
-        let response = compact_response(compact_request(), &exec_ctx, None)
+        let response = compact_response(standalone_request(), &exec_ctx, None)
             .await
             .expect("disabled persistence should be ignored");
 
@@ -1192,7 +1149,7 @@ mod tests {
         for input in [
             serde_json::json!(""),
             serde_json::json!([{"role": "user", "content": "   "}]),
-            serde_json::json!([{"type": "future_item"}]),
+            serde_json::json!([]),
         ] {
             let request = serde_json::from_value(serde_json::json!({
                 "model": "test-model",
@@ -1247,10 +1204,10 @@ mod tests {
         let response_store = ResponseStore::new(pool);
         let (exec_ctx, _requests, server) = mock_execution_context(response_store.clone()).await;
 
-        let response = compact_response(compact_request(), &exec_ctx, None)
+        let response = compact_response(standalone_request(), &exec_ctx, None)
             .await
             .expect("compaction succeeds");
-        let history = response_store
+        let (_, history) = response_store
             .rehydrate(&response.id)
             .await
             .expect("compaction checkpoint can be rehydrated");
@@ -1272,7 +1229,9 @@ mod tests {
                 "resp_previous",
                 None,
                 vec![InOutItem::Input(user_message("remember banana"))],
+                None,
                 &ResponseMetadata {
+                    multi_agent_tree: None,
                     model: "test-model".to_owned(),
                     previous_response_id: None,
                     effective_tools: None,
@@ -1293,15 +1252,15 @@ mod tests {
         let response = compact_response(request, &exec_ctx, None)
             .await
             .expect("previous response compacts");
-        let history = response_store
+        let (_, history) = response_store
             .rehydrate(&response.id)
             .await
             .expect("compacted continuation rehydrates");
-        let model_input = ResponsesInput::Items(InOutItem::into_input_items(history));
+        let model_input = ResponsesInput::from(InOutItem::into_input_items(history));
         let serialized = serde_json::to_value(model_input.model_input()).expect("model input serializes");
 
         assert_eq!(serialized.as_array().map(Vec::len), Some(2));
-        assert_eq!(serialized[0]["content"], "remember banana");
+        assert_eq!(serialized[0]["content"][0]["text"], "remember banana");
         assert_eq!(serialized[1]["role"], "assistant");
         assert_eq!(serialized[1]["content"][0]["text"], "durable summary");
         server.abort();

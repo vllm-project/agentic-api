@@ -1,0 +1,3 @@
+{
+  "web_fetch": "{\"type\":\"web_fetch_result\",\"url\":\"http://127.0.0.1:18080/page/release-notes.html\",\"title\":\"Release notes\",\"content_type\":\"text/html\",\"retrieved_at\":\"2026-10-02T01:20:00Z\",\"truncated\":false,\"content\":\"Agentic API 0.9.1\\nVerification token: AGENTIC-WEBFETCH-7F3A9C\"}"
+}

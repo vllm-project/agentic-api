@@ -1,0 +1,472 @@
+turns:
+- filename: t1
+  request:
+    body_base64: LS1lZTE3NjNlOWMwN2FkNTI3Njk1MWYwZjc2NjU3MzM0NA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp2aXNpb24NCi0tZWUxNzYzZTljMDdhZDUyNzY5NTFmMGY3NjY1NzMzNDQNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJjb2xvcnMucG5nIg0KQ29udGVudC1UeXBlOiBpbWFnZS9wbmcNCg0KiVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PsQkAAAzDsPz/dHpCp2wCzwalybTxvgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+Dq47PDiz8p6GQAAAABJRU5ErkJggg0KLS1lZTE3NjNlOWMwN2FkNTI3Njk1MWYwZjc2NjU3MzM0NC0tDQo=
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: multipart/form-data; boundary=ee1763e9c07ad5276951f0f766573344
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      bytes: 136
+      created_at: 1794805719
+      expires_at: null
+      filename: colors.png
+      id: file-67vcQcFaL6NKb3h4DAGjDU
+      object: file
+      purpose: vision
+      status: processed
+      status_details: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/files/file-67vcQcFaL6NKb3h4DAGjDU
+    query_params: {}
+  response:
+    body:
+      bytes: 136
+      created_at: 1794805719
+      expires_at: null
+      filename: colors.png
+      id: file-67vcQcFaL6NKb3h4DAGjDU
+      object: file
+      purpose: vision
+      status: processed
+      status_details: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/files/file-67vcQcFaL6NKb3h4DAGjDU/content
+    query_params: {}
+  response:
+    body_base64: iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PsQkAAAzDsPz/dHpCp2wCzwalybTxvgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+Dq47PDiz8p6GQAAAABJRU5ErkJggg==
+    body_encoding: base64
+    headers:
+      content-type: application/octet-stream
+    status_code: 200
+- filename: t4
+  request:
+    body:
+      input:
+      - content:
+        - text: Which two colors are in the image? Reply with only the two color names.
+          type: input_text
+        - file_id: file-67vcQcFaL6NKb3h4DAGjDU
+          type: input_image
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794805723
+      created_at: 1794805722
+      error: null
+      frequency_penalty: 0.0
+      id: resp_04b1933e5885df75006afa8fd9614c87d29f4bd2f26b591835
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: Red, Blue
+          type: output_text
+        id: msg_04b1933e5885df75006afa8fdb694c87d298a6450feae4c6b3
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 278
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 4
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 282
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      input: Which two colors were in the image? Reply with only the two color names.
+      max_output_tokens: 64
+      model: gpt-4o
+      previous_response_id: resp_04b1933e5885df75006afa8fd9614c87d29f4bd2f26b591835
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794805724
+      created_at: 1794805724
+      error: null
+      frequency_penalty: 0.0
+      id: resp_04b1933e5885df75006afa8fdc3e0487d28728da9c755ec1c5
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: Red, Blue
+          type: output_text
+        id: msg_04b1933e5885df75006afa8fdcc46c87d299da1fa6573dbfb1
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_04b1933e5885df75006afa8fd9614c87d29f4bd2f26b591835
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 305
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 4
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 309
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/files/file-67vcQcFaL6NKb3h4DAGjDU
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: file-67vcQcFaL6NKb3h4DAGjDU
+      object: file
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body:
+      input: Which two colors were in the image? Reply with only the two color names.
+      max_output_tokens: 64
+      model: gpt-4o
+      previous_response_id: resp_04b1933e5885df75006afa8fd9614c87d29f4bd2f26b591835
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794805726
+      created_at: 1794805726
+      error: null
+      frequency_penalty: 0.0
+      id: resp_04b1933e5885df75006afa8fde434887d2a59ac30884d062dc
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: Red, Blue
+          type: output_text
+        id: msg_04b1933e5885df75006afa8fdec65c87d2a40b1223e356e05f
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_04b1933e5885df75006afa8fd9614c87d29f4bd2f26b591835
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 305
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 4
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 309
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body_base64: LS1kNmM5NGMyMjUyNjQyYzM4NTNkMDJhMWFjNGMyY2U0NA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tZDZjOTRjMjI1MjY0MmMzODUzZDAyYTFhYzRjMmNlNDQNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJub3Rlcy50eHQiDQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW4NCg0KRGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg0KLS1kNmM5NGMyMjUyNjQyYzM4NTNkMDJhMWFjNGMyY2U0NC0tDQo=
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: multipart/form-data; boundary=d6c94c2252642c3853d02a1ac4c2ce44
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      bytes: 91
+      created_at: 1794805727
+      expires_at: null
+      filename: notes.txt
+      id: file-5XwYZ4EYEZpvLVvmB5jqEZ
+      object: file
+      purpose: user_data
+      status: processed
+      status_details: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body:
+      input:
+      - content:
+        - text: Which two colors are in the image? Reply with only the two color names.
+          type: input_text
+        - file_id: file-5XwYZ4EYEZpvLVvmB5jqEZ
+          type: input_image
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: 'Invalid input: Expected image type to be a supported format: .jpeg,
+          .jpg, .png, .gif, .webp but got .txt.'
+        param: input
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t10
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/files/file-5XwYZ4EYEZpvLVvmB5jqEZ
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: file-5XwYZ4EYEZpvLVvmB5jqEZ
+      object: file
+    headers:
+      content-type: application/json
+    status_code: 200

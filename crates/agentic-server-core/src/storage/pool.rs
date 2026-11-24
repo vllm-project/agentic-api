@@ -276,7 +276,7 @@ pub async fn create_pool_with_schema_and_configs(
     use crate::storage::PoolWithSchema;
 
     let pool = create_pool_with_configs(db_url, sqlite_config, postgres_config).await?;
-    let pool_with_schema = PoolWithSchema::with_postgres_migration_timeout(pool, postgres_config.migration_timeout);
+    let pool_with_schema = PoolWithSchema::configured(pool, &postgres_config, &sqlite_config);
     pool_with_schema.ensure_schema_ready().await?;
 
     Ok(pool_with_schema.pool().clone())
@@ -524,6 +524,7 @@ mod tests {
             journal_size_limit_bytes: 131_072,
             temp_store: SqliteTempStore::File,
             mmap_size_bytes: 1_048_576,
+            recreate_outdated_schema: false,
         };
         let pool = create_pool_with_sqlite_config(Some(&db_url), config)
             .await

@@ -68,6 +68,35 @@ async fn assert_body_too_large(response: axum::response::Response) {
 }
 
 #[tokio::test]
+async fn hydrate_rejects_unsupported_parameters_with_a_standard_envelope() {
+    let router = build_router(state().await);
+    for (param, value, code) in [
+        ("background", json!(true), "unsupported_value"),
+        ("prompt", json!({"id": "pmpt_1"}), "unsupported_parameter"),
+    ] {
+        let mut body = json!({"model": "test-model", "input": "hi", "store": true});
+        body[param] = value;
+        let response = router
+            .clone()
+            .oneshot(
+                Request::post("/v1alpha/responses/hydrate")
+                    .header("content-type", "application/json")
+                    .header("x-agentic-workload-token", API_TOKEN)
+                    .body(Body::from(body.to_string()))
+                    .expect("request"),
+            )
+            .await
+            .expect("router response");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{body}");
+        let error = response_json(response).await;
+        assert_eq!(error["error"]["type"], "invalid_request_error", "{error}");
+        assert_eq!(error["error"]["code"], code, "{error}");
+        assert_eq!(error["error"]["param"], param, "{error}");
+    }
+}
+
+#[tokio::test]
 async fn missing_workload_token_has_a_standard_error_envelope() {
     let response = build_router(state().await)
         .oneshot(

@@ -1,10 +1,13 @@
 //! Constructed regression fixtures, not live OpenAI/vLLM recordings.
+use agentic_core::types::conversations::ConversationMetadata;
+use std::collections::HashMap;
 use std::fmt::Write;
 use std::sync::Arc;
 
 use agentic_core::executor::request::RequestContext;
 use agentic_core::executor::{ExecuteRequest, UpstreamBody, decode_upstream};
-use agentic_core::storage::InOutItem;
+use agentic_core::storage::ResponseStore;
+use agentic_core::types::io::InOutItem;
 use agentic_core::types::io::{InputItem, OutputItem, ResponsesInput, ShellCall, ShellCallStatus};
 use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
 use either::Either;
@@ -36,12 +39,13 @@ fn shell_output() -> Value {
 fn context() -> RequestContext {
     let request = request(true);
     RequestContext {
+        multi_agent_tree: None,
         original_request: request.clone(),
         enriched_request: request,
         new_input_items: Vec::new(),
         response_id: "resp_reserved".to_owned(),
         conversation_id: None,
-        conversation_version: None,
+        checkpoint: None,
         continuation: None,
     }
 }
@@ -88,8 +92,8 @@ fn prepared_shell_history_and_choice_match_upstream_function_tools() {
     let mut request = request(false);
     request.input = serde_json::from_value(json!([shell_item("completed"), shell_output()])).unwrap();
     let mut prepared = request.clone();
-    prepared.input = ResponsesInput::Items(Vec::from(&request.input));
-    let upstream = serde_json::to_value(prepared.to_upstream_request(false).unwrap()).unwrap();
+    prepared.input = ResponsesInput::from(Vec::from(&request.input));
+    let upstream = serde_json::to_value(prepared.to_upstream_request(false, &HashMap::default()).unwrap()).unwrap();
     assert_eq!(upstream["tool_choice"], json!({"type": "function", "name": "shell"}));
     assert_eq!(upstream["tools"][0]["name"], "shell");
     assert_eq!(upstream["input"][0]["type"], "function_call");
@@ -248,9 +252,10 @@ async fn client_shell_continuation_blocking_and_streaming() {
                 .iter()
                 .any(|item| item["type"] == "shell_call" || item["type"] == "shell_call_output")
         );
-        let mut stored_context = context();
-        stored_context.original_request.previous_response_id = Some(final_response.id.clone());
-        let stored = fixture.exec_ctx.resp_handler.rehydrate(&stored_context).await.unwrap();
+        let (_, stored) = ResponseStore::new(Arc::clone(&fixture.pool))
+            .rehydrate(&final_response.id)
+            .await
+            .unwrap();
         assert!(
             stored
                 .iter()
@@ -274,7 +279,15 @@ async fn submitted_shell_items_preserve_public_fields_in_storage() {
         let fixture = support::TestFixture::new_with_responses(vec![model_response(false, false, "msg_1")]).await;
         let mut req = request(false);
         if conversation {
-            req.conversation_id = Some(fixture.exec_ctx.conv_handler.create().await.unwrap().conversation_id);
+            req.conversation = Some(
+                fixture
+                    .exec_ctx
+                    .conv_handler
+                    .create("default_tenant", &ConversationMetadata::new(), &[])
+                    .await
+                    .unwrap()
+                    .conversation_id,
+            );
         }
         let mut call = shell_item("completed");
         call["extension"] = json!("call metadata");
@@ -282,16 +295,16 @@ async fn submitted_shell_items_preserve_public_fields_in_storage() {
         output["max_output_length"] = json!(128);
         output["extension"] = json!("output metadata");
         req.input = serde_json::from_value(json!([call, output])).unwrap();
-        let conversation_id = req.conversation_id.clone();
+        let conversation_id = req.conversation.clone();
         let response = run(req, fixture.exec_ctx.clone()).await;
         let mut ctx = context();
         let stored = if let Some(id) = conversation_id {
-            ctx.original_request.conversation_id = Some(id.clone());
+            ctx.original_request.conversation = Some(id.clone());
             ctx.conversation_id = Some(id);
-            fixture.exec_ctx.conv_handler.rehydrate(&ctx).await.unwrap()
+            fixture.exec_ctx.conv_handler.rehydrate(&ctx).await.unwrap().items
         } else {
-            ctx.original_request.previous_response_id = Some(response.id);
-            fixture.exec_ctx.resp_handler.rehydrate(&ctx).await.unwrap()
+            let store = ResponseStore::new(Arc::clone(&fixture.pool));
+            store.rehydrate(&response.id).await.unwrap().1
         };
         let inputs = stored
             .iter()
@@ -300,6 +313,7 @@ async fn submitted_shell_items_preserve_public_fields_in_storage() {
                 InOutItem::Output(_) => None,
             })
             .collect::<Vec<_>>();
+        output["status"] = json!("completed");
         assert_eq!(inputs, vec![call, output]);
         let requests = fixture.request_bodies().await;
         assert_eq!(requests[0]["input"][0]["type"], "function_call");

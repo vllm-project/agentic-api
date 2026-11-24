@@ -1,10 +1,13 @@
-use super::{ToolEvent, ToolTranslator, ensure_function_call_size};
+use super::context::mark_async_call;
+use super::{CallExecution, ToolEvent, ToolTranslator, ensure_function_call_size};
 use crate::events::WireEvent;
 use crate::events::{EventFrame, SSEEventType};
 use crate::executor::accumulator::AccumulatedFunctionCall;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway_accumulator::synthetic_event;
 use crate::tool::custom::CustomToolMap;
+use crate::types::event::MessageStatus;
+use crate::types::io::{CustomToolCall, OutputItem};
 use crate::utils::common::serialize_to_value_or_custom_default;
 use serde_json::{Map, Value};
 
@@ -18,9 +21,12 @@ struct CustomCallState {
     input_done: bool,
 }
 
-#[derive(Debug, Default)]
+/// Custom calls are built from the typed accumulated call; an async call's items carry the shared
+/// async marker.
+#[derive(Debug)]
 pub(super) struct CustomTranslator {
     state: Option<CustomCallState>,
+    execution: CallExecution,
 }
 
 impl ToolTranslator for CustomTranslator {
@@ -46,7 +52,7 @@ impl ToolTranslator for CustomTranslator {
                     input_done: false,
                 });
                 Ok(call
-                    .map(|call| custom_added_frame(&call))
+                    .map(|call| custom_added_frame(&call, self.execution))
                     .transpose()?
                     .into_iter()
                     .collect())
@@ -64,7 +70,7 @@ impl ToolTranslator for CustomTranslator {
                     ToolEvent::ArgumentsDone(_) => finish_custom_input(state, call.arguments()),
                     ToolEvent::Done(_) => {
                         let mut frames = finish_custom_input(state, call.arguments())?;
-                        frames.push(custom_done_frame(state, &call)?);
+                        frames.push(custom_done_frame(state, &call, self.execution)?);
                         Ok(frames)
                     }
                     ToolEvent::Added { .. } => unreachable!("handled above"),
@@ -74,22 +80,29 @@ impl ToolTranslator for CustomTranslator {
     }
 }
 
-fn custom_added_frame(call: &AccumulatedFunctionCall<'_>) -> ExecutorResult<EventFrame> {
+fn custom_added_frame(call: &AccumulatedFunctionCall<'_>, execution: CallExecution) -> ExecutorResult<EventFrame> {
+    let item = OutputItem::CustomToolCall(CustomToolCall {
+        agent: call.item.agent.clone(),
+        id: crate::tool::custom::public_item_id(&call.item.id),
+        status: Some(MessageStatus::InProgress),
+        call_id: call.item.call_id.clone(),
+        input: String::new(),
+        name: call.item.name.clone(),
+        async_execution: call.item.async_execution,
+    });
     custom_frame(
         SSEEventType::OutputItemAdded,
         call.output_index,
-        [(
-            "item".to_owned(),
-            serde_json::json!({
-                "id": crate::tool::custom::public_item_id(&call.item.id),
-                "type": "custom_tool_call",
-                "status": "in_progress",
-                "call_id": call.item.call_id,
-                "input": "",
-                "name": call.item.name,
-            }),
-        )],
+        [("item".to_owned(), custom_item_value(item, execution)?)],
     )
+}
+
+/// The serialized custom call item, with the shared async marker for a call to an async tool.
+fn custom_item_value(mut item: OutputItem, execution: CallExecution) -> ExecutorResult<Value> {
+    if execution == CallExecution::Async {
+        mark_async_call(&mut item)?;
+    }
+    Ok(serde_json::to_value(item)?)
 }
 
 fn incremental_custom_delta(state: &mut CustomCallState, arguments: &str) -> ExecutorResult<Option<EventFrame>> {
@@ -146,21 +159,24 @@ fn finish_custom_input(state: &mut CustomCallState, arguments: &str) -> Executor
     Ok(frames)
 }
 
-fn custom_done_frame(state: &CustomCallState, call: &AccumulatedFunctionCall<'_>) -> ExecutorResult<EventFrame> {
+fn custom_done_frame(
+    state: &CustomCallState,
+    call: &AccumulatedFunctionCall<'_>,
+    execution: CallExecution,
+) -> ExecutorResult<EventFrame> {
+    let item = OutputItem::CustomToolCall(CustomToolCall {
+        agent: call.item.agent.clone(),
+        id: state.public_item_id.clone(),
+        status: Some(MessageStatus::Completed),
+        call_id: call.item.call_id.clone(),
+        input: state.emitted_input.clone(),
+        name: call.item.name.clone(),
+        async_execution: call.item.async_execution,
+    });
     custom_frame(
         SSEEventType::OutputItemDone,
         state.output_index,
-        [(
-            "item".to_owned(),
-            serde_json::json!({
-                "id": state.public_item_id,
-                "type": "custom_tool_call",
-                "status": "completed",
-                "call_id": call.item.call_id,
-                "input": state.emitted_input,
-                "name": call.item.name,
-            }),
-        )],
+        [("item".to_owned(), custom_item_value(item, execution)?)],
     )
 }
 
@@ -269,6 +285,10 @@ fn custom_input_start(arguments: &str) -> Option<usize> {
 }
 
 impl CustomTranslator {
+    pub(super) const fn new(execution: CallExecution) -> Self {
+        Self { state: None, execution }
+    }
+
     /// Restores normalized custom-tool declarations in response lifecycle
     /// metadata before the event is emitted to the client.
     pub(super) fn restore_response_wire(wire: &mut WireEvent, map: Option<&CustomToolMap>) -> bool {
@@ -362,8 +382,8 @@ fn normalized_custom_name(value: &Value, map: &CustomToolMap) -> Option<String> 
 #[cfg(test)]
 mod metadata_tests {
     use super::*;
-    use crate::tool::CustomHandler;
-    use crate::types::tools::{CustomToolParam, ResponsesTool};
+    use crate::tool::{CustomHandler, ToolDeclaration};
+    use crate::types::tools::CustomToolParam;
     #[test]
     fn response_lifecycle_metadata_restores_public_custom_tool_shape() {
         let param = serde_json::from_value::<CustomToolParam>(serde_json::json!({
@@ -371,7 +391,7 @@ mod metadata_tests {
             "description": "Echo raw input."
         }))
         .expect("custom tool");
-        let tools = vec![ResponsesTool::Custom(param)];
+        let tools = vec![ToolDeclaration::Custom(param)];
         let map = CustomHandler::build_tool_map(&tools);
         let mut wire = WireEvent::new("response.created");
         wire.rest.insert(
@@ -401,7 +421,7 @@ mod metadata_tests {
             "name": "raw_echo"
         }))
         .expect("custom tool");
-        let tools = vec![ResponsesTool::Custom(param)];
+        let tools = vec![ToolDeclaration::Custom(param)];
         let map = CustomHandler::build_tool_map(&tools);
         let mut wire = WireEvent::new("response.in_progress");
         wire.rest.insert(

@@ -1,0 +1,519 @@
+turns:
+- filename: t1
+  request:
+    body:
+      max_tokens: 1024
+      messages:
+      - content: Fetch http://127.0.0.1:18080/page/release-notes.html with web_fetch
+          and reply with the verification token it contains, nothing else.
+        role: user
+      model: qwen3
+      stream: true
+      tools:
+      - description: 'Fetch the full text of one web page. Only a URL that already
+          appears in the conversation can be fetched: one the user wrote, one returned
+          by a tool, or one from an earlier search or fetch result.'
+        input_schema:
+          properties:
+            url:
+              description: The absolute http or https URL of the page to fetch.
+              type: string
+          required:
+          - url
+          type: object
+        name: web_fetch
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/messages
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: message_start
+
+      '
+    - 'data: {"type":"message_start","message":{"id":"chatcmpl-a55077185ff6293c","type":"message","role":"assistant","content":[],"model":"qwen3","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":240,"output_tokens":0}}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_start
+
+      '
+    - 'data: {"type":"content_block_start","content_block":{"type":"tool_use","id":"chatcmpl-tool-a8d033b32456c29a","name":"web_fetch","input":{}},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{\""},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"url"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"\":"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"
+      \""},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"http"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"://"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"1"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"2"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"7"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"1"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":":"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"1"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"8"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"8"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"/page"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"/release"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"-notes"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":".html"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"\"}"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_stop
+
+      '
+    - 'data: {"type":"content_block_stop","index":0}
+
+      '
+    - '
+
+      '
+    - 'event: message_delta
+
+      '
+    - 'data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"input_tokens":240,"output_tokens":40}}
+
+      '
+    - '
+
+      '
+    - 'event: message_stop
+
+      '
+    - 'data: {"type":"message_stop"}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      max_tokens: 1024
+      messages:
+      - content: Fetch http://127.0.0.1:18080/page/release-notes.html with web_fetch
+          and reply with the verification token it contains, nothing else.
+        role: user
+      - content:
+        - id: chatcmpl-tool-a8d033b32456c29a
+          input:
+            url: http://127.0.0.1:18080/page/release-notes.html
+          name: web_fetch
+          type: tool_use
+        role: assistant
+      - content:
+        - content: '{"type":"web_fetch_result","url":"http://127.0.0.1:18080/page/release-notes.html","title":"Release
+            notes","content_type":"text/html","retrieved_at":"2026-10-02T01:20:00Z","truncated":false,"content":"Agentic
+            API 0.9.1\nVerification token: AGENTIC-WEBFETCH-7F3A9C"}'
+          is_error: false
+          tool_use_id: chatcmpl-tool-a8d033b32456c29a
+          type: tool_result
+        role: user
+      model: qwen3
+      stream: true
+      tools:
+      - description: 'Fetch the full text of one web page. Only a URL that already
+          appears in the conversation can be fetched: one the user wrote, one returned
+          by a tool, or one from an earlier search or fetch result.'
+        input_schema:
+          properties:
+            url:
+              description: The absolute http or https URL of the page to fetch.
+              type: string
+          required:
+          - url
+          type: object
+        name: web_fetch
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/messages
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: message_start
+
+      '
+    - 'data: {"type":"message_start","message":{"id":"chatcmpl-813aa744f5ff4532","type":"message","role":"assistant","content":[],"model":"qwen3","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":393,"output_tokens":0}}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_start
+
+      '
+    - 'data: {"type":"content_block_start","content_block":{"type":"text","text":""},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"AG"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"ENTIC"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"-W"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"EB"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"FETCH"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"-"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"7"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"F"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"3"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"A"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"9"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"C"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_stop
+
+      '
+    - 'data: {"type":"content_block_stop","index":0}
+
+      '
+    - '
+
+      '
+    - 'event: message_delta
+
+      '
+    - 'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":393,"output_tokens":13}}
+
+      '
+    - '
+
+      '
+    - 'event: message_stop
+
+      '
+    - 'data: {"type":"message_stop"}
+
+      '
+    - '
+
+      '
+    status_code: 200

@@ -1,0 +1,565 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Check the demo weather snapshot for Paris. Meanwhile, list three essentials
+        for any city trip.
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: function-delayed-result/t1-start
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790836201
+      created_at: 1790836191
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0f31888ea7f6ad27006abdfddff31087d1894615835f237aa8
+      incomplete_details: null
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-6-astra
+      moderation: null
+      object: response
+      output:
+      - arguments: '{"city":"Paris"}'
+        async: true
+        call_id: call_JBilV4iLsGrUlYq8vSvc13UO
+        id: fc_0f31888ea7f6ad27006abdfde1aa0c87d195ca8e1895f5d790
+        name: get_weather
+        status: completed
+        type: function_call
+      - content:
+        - annotations: []
+          logprobs: []
+          text: 'Three essentials for any city trip:
+
+            - Comfortable walking shoes.
+
+            - A charged phone with maps and a portable charger.
+
+            - A secure day bag for your ID, payment cards, and water.'
+          type: output_text
+        id: msg_0f31888ea7f6ad27006abdfde2ae2487d184a6504faf71d78b
+        phase: commentary
+        role: assistant
+        status: completed
+        type: message
+      - content: []
+        encrypted_content: gAAAAABqvf3poWmdWejMhXGwUXoHzSea9JbRpEjie4JENs-L6S5v947xYTfURyfULoTdiSpCN95hrFghLRDs6B9WO-xtJahWZeIAk8jacC1hnT137sp8wmMMfbi2BUSBve8brWCnWVEZ1X-VJz7P4pgyMrxIn-TIFY3VYtRqPlKI25l5Guml4i1qtQT8YE1rjZsmaj7f8FEeZhgHtFOC8avwtTNxP4_yBJeoNxRIfgMw9L1RO_wRpmA9AZSait0kzulefGZ-tDioGJhSSxyDHShm75--LlSbLGI93gfbAepFNb4EepU36-bqCx5-19tntG2LkSUP9Q1MI5KXhNt2XYDtckjUtfqskCsh9TEh0iapLFVQ8t90XFicdC8ltVetjFezESs9UfE_4KwrxrqhdB6iKvF36R9T8SP8KgGEMIwEbJclXh4nBmfqRNTNiyh4uWz8eY5ixUWCGFuNjjrFMn-K9ABr7xoB4I1DBfMonxIUzadbCdbHoKLAPLA3tMEHEZJrsqjalc4xKbbuQ7qFdEs3A-aL_zoUrYa0tFzdrcclUgVMsKv5xHiKSqMzba49IgRsOy5JPpSF3ZUwdM59LI_9is5ggWQOpsLab2kx0qqEhZ9f70cqVY6bvP3mTJXjnp0ktMlwnaNIxPznn2jR-dIb81aJYz3Abndc6FFfF5NrEN8JYm1PpRI6Pzq_ggtEfjEpxAnz4105b3DVW2Bmkb8uOicXUzPHMmtqPR64y9k6_D3gnMQSZ29irCk2Q21wLCZ1X0j5w14Dqq6sIGTvOrzau0KiqmJ0Xl3uIsgN-vzfb-C8yDkOiBVlIQzFjwu5ZYxnJgn5xld1oz1hCJdHNB6knfnqevuqGFhgKEk5iir2SUQV0g6VUigE4OhSXs41JANCoP2cf4R7FeLHnp-3IjMgOAGFzS3jvWWkocLA82P8ycLjbUPAJmmlZOMOdPU5pjhLSTkid7xDIUkZPUhtPn8Hd8-63ivkGjdg2AC2pzre5jtHQ9u8I_PNufhaGTBKkNt5RzmMyZge0RvZtThyJNBuNYC-UaiG9x17xRv1LfkrFIXHI0AdJRyIFSKySVvpWh2nhikLA_k3dq_F4Mv8mo4-42qxTfOlbPDA1azqpKsJSrw-3F1-lJZ-S1g2tk2YdzOn_7FKY_o67taJaFVEJ0Jvqd_MFELUEiyxx5PgmMUNMLVgrpKs5NM8Ae11BzwyjRb4Owsc1W_oBUcHdcDS4dAHPWii0Y7JgnLiqd2vk0k5NROWnbKYDm8M3BKKkJ-ikLbY_MuQirHikkqyvbFK83DBtslSmhOHCnk-XM4GB0ROZc_lCONnBJlxda2-8I-CLU7bnlOdS5Q9zEwclAu5_LyGwOf8EzS1uP_Y0WClepcKs8MX2sLHJeFYtwuWReV0ZxWbIcTE98wHtqM2YhSVrjxebST99yy8ypbRW1IKAINpI420MFDsWipQVY2Dg1xLI8X9oRkS7WuJvkg6EKpEwVAr8IXvR9NCx_jet_rOY1Q4qIiTtvBtSV4WEMnG_fG7j1Fh4ooPq6QlMSmO4xynHYxUlF1cy1MkVB0R4A4OsEkYx0KtwfUGJ3QEIXvz7GlOOklJoYKv57qOtxpJJ3Idc1GRqxkYpkdp0o6llypwSF7SyuM2ErNUeqm0F4uIxPd0ONkQ11MegDNPb05pO6mMZ6hsMUEa9x-J4VUskXFs9jjCTa1ckD9Q8lhfUP4AgReRvhWY2AhJ4vYOngDINPi_BjRBWR0diP6oAQ2ubWadDLo4ZgXzT3zB6davtSpSkwCtd5bJZYuJJj-7Ribkd2zCLAjVu5ZoQ3keWMzcq9DA0IVuiEeu-MiQf_j7dIOsZn4nsalcBekyKZaudeNOA4hWWOXfSnXr1ZI9fSnxgNQ20Kz685WZh2S-UPkYj3Vj492Ye1KQVxT7lI1LCQCRuddimC4Ce9EMXxZEwj6njwSlWx9m-ZUNhXvce302bhS2TJlwx38_LZoMAjmcLOX-FGLVFJpE0RSS5ugXERbf0GdbHNfcAfDWfdwFj0UfRbC3TxB6M3ppzfIMLMmuhctCHPXNCnM6R-Aj4n8Q8luEqZpp3l8M9V3MMuQh_ulMjQ5YfSyZRulgvCb7yLoNhhardEoWKFHocFh0CAgpDAv2z4zJr4D1gqw8EQvbn08=
+        id: rs_0f31888ea7f6ad27006abdfde3cc2c87d18ca71e2c005affdc
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: 'The Paris demo weather lookup is still pending, so I don’t have a
+            snapshot to report yet.
+
+
+            Three city-trip essentials:
+
+            - Comfortable walking shoes.
+
+            - A phone with maps and a portable charger.
+
+            - A secure day bag for ID, payment cards, and water.'
+          type: output_text
+        id: msg_0f31888ea7f6ad27006abdfde8185887d1b8468c4d159a81c3
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 130
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 265
+        output_tokens_details:
+          reasoning_tokens: 144
+        total_tokens: 395
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input: Also, what is a good umbrella size for travel? Answer in one sentence.
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      previous_response_id: resp_0f31888ea7f6ad27006abdfddff31087d1894615835f237aa8
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: function-delayed-result/t2-follow-up-without-output
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790836232
+      created_at: 1790836230
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0f31888ea7f6ad27006abdfe06810c87d1b9f4f3ef17b6ac93
+      incomplete_details: null
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-6-astra
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: A compact folding umbrella about 25–30 cm (10–12 inches) long when
+            closed, with a 90–100 cm (35–39 inch) canopy, is a good size for travel.
+          type: output_text
+        id: msg_0f31888ea7f6ad27006abdfe08008087d1b9e22a95d4cd234c
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_0f31888ea7f6ad27006abdfddff31087d1894615835f237aa8
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 399
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 46
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 445
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input: Name one Paris museum worth visiting. Answer in one sentence.
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      previous_response_id: resp_0f31888ea7f6ad27006abdfe06810c87d1b9f4f3ef17b6ac93
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: function-delayed-result/t3-follow-up-without-output
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790836237
+      created_at: 1790836235
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0f31888ea7f6ad27006abdfe0ae67487d189d538f8068dad71
+      incomplete_details: null
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-6-astra
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: The Musée d’Orsay is worth visiting for its outstanding Impressionist
+            collection and beautiful former railway-station setting.
+          type: output_text
+        id: msg_0f31888ea7f6ad27006abdfe0c655887d190bf7e0f8be40f1b
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_0f31888ea7f6ad27006abdfe06810c87d1b9f4f3ef17b6ac93
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 463
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 26
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 489
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body:
+      input:
+      - call_id: call_JBilV4iLsGrUlYq8vSvc13UO
+        output: '{"city":"Paris","temperature_c":22,"condition":"Clear","source":"demo
+          weather snapshot"}'
+        type: function_call_output
+      - content: What does the Paris demo weather snapshot say? Answer in one sentence.
+        role: user
+        type: message
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      previous_response_id: resp_0f31888ea7f6ad27006abdfe0ae67487d189d538f8068dad71
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: function-delayed-result/t4-late-output
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790836245
+      created_at: 1790836243
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0f31888ea7f6ad27006abdfe13b82087d1b6740f4d0e0a6ce9
+      incomplete_details: null
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-6-astra
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: The demo weather snapshot for Paris shows clear skies and a temperature
+            of 22°C.
+          type: output_text
+        id: msg_0f31888ea7f6ad27006abdfe14e60887d1a6d138d19e901740
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_0f31888ea7f6ad27006abdfe0ae67487d189d538f8068dad71
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 520
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 21
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 541
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200

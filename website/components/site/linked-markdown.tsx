@@ -1,4 +1,5 @@
 import Markdown, { type Options } from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import rehypeSlug from 'rehype-slug';
 import rehypeAutolinkHeadings, {
   type Options as HeadingLinkOptions,
@@ -8,7 +9,11 @@ export function LinkedMarkdown({
   children,
   urlTransform,
   commandHeadings = false,
-}: Pick<Options, 'children' | 'urlTransform'> & { commandHeadings?: boolean }) {
+  gfm = false,
+}: Pick<Options, 'children' | 'urlTransform'> & {
+  commandHeadings?: boolean;
+  gfm?: boolean;
+}) {
   const headingLinks: HeadingLinkOptions = {
     behavior: 'wrap',
     properties: { className: ['heading-anchor'] },
@@ -34,6 +39,7 @@ export function LinkedMarkdown({
     <Markdown
       skipHtml
       urlTransform={urlTransform}
+      remarkPlugins={gfm ? [remarkGfm] : []}
       rehypePlugins={[rehypeSlug, [rehypeAutolinkHeadings, headingLinks]]}
     >
       {children}

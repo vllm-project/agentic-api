@@ -1,15 +1,22 @@
 # Documentation versioning
 
-The marketing site and documentation content have separate publishing lifecycles. The site preserves the upstream MkDocs Material stack and Read the Docs configuration; it does not duplicate or rebuild the documentation source.
+The marketing site and MkDocs have separate publishing lifecycles. Files under the repository's `docs/` directory remain the documentation source. The website renders a selected set of latest/development guides from build-time snapshots of those files; it does not maintain separately authored copies. The MkDocs Material stack and Read the Docs configuration remain available.
 
 ## Current behavior
 
-- `/docs` displays the version selected by `defaultVersion` in `lib/data/docs-versions.json`.
+- `/docs` displays the version selected by `defaultVersion` in `lib/data/docs-versions.json`, currently `latest`.
 - `/docs/<version>` is a static, shareable directory for that specific version.
 - `/docs/latest` tracks development on `main`. Its notice makes clear that features may be unreleased.
+- Selected `/docs/latest/<guide-path>` pages render Markdown from `docs/` in the website. Each has a `.md` export with relative links resolved to absolute site or GitHub URLs; both are refreshed during the build.
 - Tagged versions point to immutable source commits. Their links never silently switch to `main`.
 - The picker and the plain version links use the same manifest. The links also work without JavaScript.
 - Only sections verified to exist in that snapshot are listed. All other docs remain accessible through “Browse all”.
+
+## Native development guides
+
+`lib/data/site-docs.json` declares the source paths, route slugs, titles, and descriptions for native latest/development pages. `scripts/refresh-site-docs.mjs` validates the manifest and copies each source into `content/docs/` before the website build. It also writes a Markdown export under `public/docs/latest/`, resolving links to other native exports, generated CLI references, or GitHub source files. The native route reads the bundled snapshot. Standalone website builds use those snapshots when the repository's `docs/` tree is absent. The Website workflow runs for changes under `docs/**`, so editing the canonical source republishes these pages after merging to `main`.
+
+To add a guide, add its path to the manifest, keep its top-level heading aligned with the manifest title, link it from the appropriate latest/development directory, and add its Markdown export to `public/llms.txt`. Run `npm test`, `npm run build`, `npm run prepare:pages`, and `npm run check` from `website/`. Do not add a new guide to a tagged version's section list unless that version's pinned commit contains it.
 
 The initial snapshot was checked against the [upstream tags](https://github.com/vllm-project/agentic-api/tags) on September 9, 2026. A tag's presence does not imply an upstream support or maintenance guarantee. The `sourceRef` fields record the resolved tag commits; v0.2.0 and v0.3.0 currently resolve to the same commit.
 
@@ -18,13 +25,13 @@ The initial snapshot was checked against the [upstream tags](https://github.com/
 1. Verify the upstream tag and its full commit SHA. Keep existing entries unchanged.
 2. Add an entry to `lib/data/docs-versions.json` with a unique route-safe `id`, label, `channel: "release"`, tag in `ref`, and the full SHA in `sourceRef`.
 3. Check each section's path in that commit. Add only available IDs from `lib/docs.ts` to `sections`. Leave `hostedBaseUrl` null while serving links to GitHub.
-4. Update `defaultVersion` only when the new tag is intended to be the default. Keep development and prereleases distinct from the default release.
+4. Keep `defaultVersion` on `latest` unless the project's documentation policy explicitly changes the default. Do not move it merely because a new tag was added.
 5. Update `checkedAt`, then run the build and `node scripts/check-static.mjs`. The dynamic route statically exports every manifest entry automatically.
 6. Publish the updated website to its static host. Existing version URLs remain valid.
 
 ## Connect hosted documentation
 
-The upstream repository already contains `mkdocs.yaml`, `.readthedocs.yaml`, and `docs/requirements.txt`. The configured `https://agentic-api.readthedocs.io/` endpoint returned 404 during this update, so no links to unavailable builds are exposed.
+The upstream repository already contains `mkdocs.yaml`, `.readthedocs.yaml`, and `docs/requirements.txt`. The configured `https://agentic-api.readthedocs.io/` endpoint returned 404 at the last hosted-docs check, so `hostedBaseUrl` remains unset. Native latest/development pages do not change the release directories' source pinning.
 
 [Read the Docs versioning](https://docs.readthedocs.com/platform/stable/versions.html) supports active builds from tags and branches, a `latest` development version, and a `stable` alias for the greatest stable semantic version. It also provides a docs-site version menu and configurable version notices.
 

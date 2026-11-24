@@ -5,13 +5,16 @@
 
 mod support;
 
-use agentic_core::executor::execute;
 use agentic_core::executor::request::RequestContext;
-use agentic_core::storage::InOutItem;
-use agentic_core::types::request_response::RequestPayload;
+use agentic_core::executor::{ExecutionContext, ExecutorError, commit, execute, persist_turn, rehydrate_conversation};
+use agentic_core::storage::{ResponseStore, StorageError};
+use agentic_core::types::conversations::ConversationMetadata;
+use agentic_core::types::io::InOutItem;
+use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
 use agentic_core::types::tools::{FunctionToolParam, NonEmptyToolName};
 use agentic_core::{
-    FunctionToolResultMessage, InputItem, OutputItem, ReasoningOutput, ResponsesInput, ResponsesTool, ToolChoice,
+    FunctionToolResultMessage, InputItem, OpaqueReasoning, OutputItem, ReasoningOutput, ReasoningStatus,
+    ResponsesInput, ResponsesTool, ToolChoice,
 };
 use either::Either;
 use futures::StreamExt;
@@ -416,7 +419,7 @@ async fn test_previous_response_id_rehydrates_function_call_before_tool_output()
             "incomplete_details": null,
             "error": null,
             "previous_response_id": null,
-            "conversation_id": null,
+            "conversation": null,
             "instructions": null
         })
         .to_string(),
@@ -427,7 +430,9 @@ async fn test_previous_response_id_rehydrates_function_call_before_tool_output()
     let p1 = unwrap_blocking(execute(first, Arc::clone(&fixture.exec_ctx)).await.expect("first turn"));
 
     let mut second = make_request("ignored", true, false, Some(p1.id), None);
-    second.input = ResponsesInput::Items(vec![InputItem::FunctionCallOutput(FunctionToolResultMessage {
+    second.input = ResponsesInput::from(vec![InputItem::FunctionCallOutput(FunctionToolResultMessage {
+        id: None,
+        status: None,
         call_id: "call_1".to_string(),
         output: "{\"stdout\":\"/workspace\"}".into(),
     })]);
@@ -489,7 +494,9 @@ async fn test_encrypted_only_persisted_reasoning_fails_before_upstream() {
 
     for stream in [false, true] {
         let mut continuation = make_request("continue", true, stream, Some(first.id.clone()), None);
-        continuation.input = ResponsesInput::Items(vec![InputItem::FunctionCallOutput(FunctionToolResultMessage {
+        continuation.input = ResponsesInput::from(vec![InputItem::FunctionCallOutput(FunctionToolResultMessage {
+            id: None,
+            status: None,
             call_id: "call_prior".to_owned(),
             output: "tool output".into(),
         })]);
@@ -535,7 +542,7 @@ async fn test_mcp_namespace_showcase_round_trip_rehydrates_calls_tools_and_outpu
             "incomplete_details": null,
             "error": null,
             "previous_response_id": null,
-            "conversation_id": null,
+            "conversation": null,
             "instructions": null
         })
         .to_string(),
@@ -553,7 +560,7 @@ async fn test_mcp_namespace_showcase_round_trip_rehydrates_calls_tools_and_outpu
     );
 
     let mut second = make_request("ignored", true, false, Some(p1.id), None);
-    second.input = ResponsesInput::Items(vec![
+    second.input = ResponsesInput::from(vec![
         tool_output(
             "call_echo",
             r#"{"echo":"NAMESPACE SHOWCASE","characters":18,"words":2}"#,
@@ -598,8 +605,14 @@ async fn test_mcp_namespace_showcase_round_trip_rehydrates_calls_tools_and_outpu
 
 #[tokio::test]
 async fn test_store_false_with_previous_response_id_hydrates_but_does_not_persist() {
-    let fixture =
-        TestFixture::new_with_responses(vec![text_response("stored answer"), text_response("stateless answer")]).await;
+    // Arrange — a third reply is queued so that a refused continuation cannot be
+    // mistaken for an exhausted mock.
+    let fixture = TestFixture::new_with_responses(vec![
+        text_response("stored answer"),
+        text_response("stateless answer"),
+        text_response("stored parent answer"),
+    ])
+    .await;
 
     let p1 = unwrap_blocking(
         execute(
@@ -611,13 +624,14 @@ async fn test_store_false_with_previous_response_id_hydrates_but_does_not_persis
     );
     let p2 = unwrap_blocking(
         execute(
-            make_request("follow up", false, false, Some(p1.id), None),
+            make_request("follow up", false, false, Some(p1.id.clone()), None),
             Arc::clone(&fixture.exec_ctx),
         )
         .await
         .expect("store=false follow-up"),
     );
 
+    // Assert — the child was hydrated from the stored parent.
     assert_eq!(output_text(&p2), "stateless answer");
     let requests = fixture.request_bodies().await;
     assert_eq!(requests.len(), 2);
@@ -626,12 +640,93 @@ async fn test_store_false_with_previous_response_id_hydrates_but_does_not_persis
         vec!["seed", "stored answer", "follow up"]
     );
 
-    let result = execute(
+    // Assert — the child left no row: continuing from it fails before inference.
+    let Err(error) = execute(
         make_request("should not find stateless response", true, false, Some(p2.id), None),
         Arc::clone(&fixture.exec_ctx),
     )
-    .await;
-    assert!(result.is_err(), "store=false response should not be persisted");
+    .await
+    else {
+        panic!("store=false response must not be persisted");
+    };
+    assert!(
+        matches!(
+            &error,
+            ExecutorError::Storage(StorageError::PreviousResponseNotFound { .. })
+        ),
+        "expected a missing previous response, got {error}"
+    );
+    assert_eq!(
+        fixture.request_bodies().await.len(),
+        2,
+        "no inference may run from an unstored previous response"
+    );
+
+    // Assert — the stored parent is still continuable.
+    let p3 = unwrap_blocking(
+        execute(
+            make_request("again", true, false, Some(p1.id), None),
+            Arc::clone(&fixture.exec_ctx),
+        )
+        .await
+        .expect("stored parent stays continuable"),
+    );
+    assert_eq!(output_text(&p3), "stored parent answer");
+    let requests = fixture.request_bodies().await;
+    assert_eq!(requests.len(), 3);
+    assert_eq!(
+        request_input_texts(&requests[2]),
+        vec!["seed", "stored answer", "again"]
+    );
+}
+
+/// The composable persist steps apply the same storage policy as `execute`.
+#[tokio::test]
+async fn test_public_persist_steps_honor_the_storage_policy() {
+    let fixture = TestFixture::new_with_responses(vec![text_response("stored answer")]).await;
+    let exec_ctx = Arc::clone(&fixture.exec_ctx);
+    let parent = unwrap_blocking(
+        execute(make_request("seed", true, false, None, None), Arc::clone(&exec_ctx))
+            .await
+            .expect("stored turn"),
+    );
+
+    for store in [false, true] {
+        let follow_up = || make_request("follow up", store, false, Some(parent.id.clone()), None);
+
+        let ctx = rehydrate_conversation(follow_up(), &exec_ctx)
+            .await
+            .expect("hydrates from the stored parent");
+        let id = ctx.response_id.clone();
+        let payload: ResponsePayload = serde_json::from_value(json!({
+            "id": id, "object": "response", "created_at": 0, "model": "test-model", "status": "completed",
+            "output": [{"type": "message", "id": format!("msg_public_{store}"), "role": "assistant",
+                "status": "completed", "content": [{"type": "output_text", "text": "public answer"}]}]
+        }))
+        .expect("completed payload");
+        Box::pin(commit(ctx, payload, &exec_ctx)).await.expect("commit");
+        assert_eq!(is_continuable(&exec_ctx, &id).await, store, "commit with store={store}");
+
+        let ctx = rehydrate_conversation(follow_up(), &exec_ctx)
+            .await
+            .expect("hydrates from the stored parent");
+        let id = ctx.response_id.clone();
+        persist_turn(ctx, &exec_ctx).await.expect("persist_turn");
+        assert_eq!(
+            is_continuable(&exec_ctx, &id).await,
+            store,
+            "persist_turn with store={store}"
+        );
+    }
+}
+
+/// Whether `id` resolves as `previous_response_id`; a missing row is the only accepted failure.
+async fn is_continuable(exec_ctx: &ExecutionContext, id: &str) -> bool {
+    match rehydrate_conversation(make_request("next", true, false, Some(id.to_owned()), None), exec_ctx).await {
+        Ok(_) => true,
+        Err(ExecutorError::Storage(StorageError::PreviousResponseNotFound { .. })) => false,
+        Err(error) => panic!("unexpected rehydration error for {id}: {error}"),
+    }
 }
 
 #[tokio::test]
@@ -885,12 +980,13 @@ async fn tool_search_store_false_manual_replay_completes_without_reusable_respon
     assert_eq!(output_text(&final_response), "manual replay complete");
 
     let lookup_ctx = RequestContext {
+        multi_agent_tree: None,
         original_request: make_request("lookup", true, false, Some(final_response.id.clone()), None),
         enriched_request: make_request("lookup", true, false, Some(final_response.id), None),
         new_input_items: Vec::new(),
         response_id: "resp_lookup".to_owned(),
         conversation_id: None,
-        conversation_version: None,
+        checkpoint: None,
         continuation: None,
     };
     let error = fixture
@@ -899,7 +995,10 @@ async fn tool_search_store_false_manual_replay_completes_without_reusable_respon
         .get(&lookup_ctx)
         .await
         .expect_err("store:false response ID must not be reusable");
-    assert!(matches!(error, agentic_core::executor::ExecutorError::Storage(source) if source.is_not_found()));
+    assert!(matches!(
+        error,
+        ExecutorError::Storage(StorageError::PreviousResponseNotFound { .. })
+    ));
 }
 
 #[tokio::test]
@@ -918,6 +1017,7 @@ async fn test_previous_response_id_persists_inherited_tools_and_choice() {
         })),
         strict: Some(true),
         defer_loading: None,
+        async_execution: None,
         extra: std::collections::HashMap::new(),
     });
 
@@ -944,6 +1044,7 @@ async fn test_previous_response_id_persists_inherited_tools_and_choice() {
     assert_eq!(output_text(&p2), "follow up answer");
 
     let lookup_ctx = RequestContext {
+        multi_agent_tree: None,
         original_request: RequestPayload {
             previous_response_id: Some(p2.id.clone()),
             ..second_request
@@ -955,7 +1056,7 @@ async fn test_previous_response_id_persists_inherited_tools_and_choice() {
         new_input_items: vec![],
         response_id: "resp_lookup".into(),
         conversation_id: None,
-        conversation_version: None,
+        checkpoint: None,
         continuation: None,
     };
 
@@ -1118,6 +1219,8 @@ fn upstream_mcp_fixture_call(id: &str, call_id: &str, name: &str, arguments: &st
 
 fn tool_output(call_id: &str, output: &str) -> InputItem {
     InputItem::FunctionCallOutput(FunctionToolResultMessage {
+        id: None,
+        status: None,
         call_id: call_id.to_string(),
         output: output.into(),
     })
@@ -1204,7 +1307,19 @@ async fn assert_plaintext_reasoning_replay(stream: bool, conversation: bool, opa
         follow_up,
     ])
     .await;
-    let conversation_id = conversation.then(|| "conv_reasoning_replay".to_owned());
+    let conversation_id = if conversation {
+        Some(
+            fixture
+                .exec_ctx
+                .conv_handler
+                .create("default_tenant", &ConversationMetadata::new(), &[])
+                .await
+                .expect("create conversation")
+                .conversation_id,
+        )
+    } else {
+        None
+    };
     let first = run_response(
         make_request("historical user", true, stream, None, conversation_id.clone()),
         Arc::clone(&fixture.exec_ctx),
@@ -1268,30 +1383,18 @@ async fn assert_plaintext_reasoning_replay(stream: bool, conversation: bool, opa
     );
     assert!(!contains_key(&requests[1], "_agentic_item_kind"));
 
-    let lookup = lookup_context(previous_response_id, conversation_id);
-    let history = if conversation {
-        fixture
-            .exec_ctx
-            .conv_handler
-            .rehydrate(&lookup)
-            .await
-            .expect("rehydrate conversation")
-    } else {
-        fixture
-            .exec_ctx
-            .resp_handler
-            .rehydrate(&lookup)
-            .await
-            .expect("rehydrate response")
-    };
+    let history = stored_history(&fixture, previous_response_id, conversation_id).await;
     let stored = persisted_reasoning(&history);
     assert_eq!(stored.content.len(), 2);
     assert_eq!(stored.content[0].text, "");
     assert_eq!(stored.content[1].text, "plaintext continuation");
-    assert_eq!(stored.summary[0]["text"], "public summary");
-    let expected_state = opaque_state.then(|| serde_json::json!("opaque-provider-state"));
-    assert_eq!(stored.encrypted_content, expected_state);
-    assert_eq!(stored.status.as_deref(), Some("completed"));
+    assert_eq!(stored.summary[0].text, "public summary");
+    let expected_state = opaque_state.then_some("opaque-provider-state");
+    assert_eq!(
+        stored.encrypted_content.as_ref().map(OpaqueReasoning::as_str),
+        expected_state
+    );
+    assert_eq!(stored.status, Some(ReasoningStatus::Completed));
 }
 
 async fn assert_summary_only_reasoning_not_replayed(stream: bool, conversation: bool) {
@@ -1302,7 +1405,19 @@ async fn assert_summary_only_reasoning_not_replayed(stream: bool, conversation: 
         text_response("follow-up answer")
     };
     let fixture = TestFixture::new_with_responses(vec![reasoning_response(stream, &[], false), follow_up]).await;
-    let conversation_id = conversation.then(|| format!("conv_summary_only_{stream}"));
+    let conversation_id = if conversation {
+        Some(
+            fixture
+                .exec_ctx
+                .conv_handler
+                .create("default_tenant", &ConversationMetadata::new(), &[])
+                .await
+                .expect("create conversation")
+                .conversation_id,
+        )
+    } else {
+        None
+    };
     let first = run_response(
         make_request("historical user", true, stream, None, conversation_id.clone()),
         Arc::clone(&fixture.exec_ctx),
@@ -1348,27 +1463,12 @@ async fn assert_summary_only_reasoning_not_replayed(stream: bool, conversation: 
         "a reasoning summary must never be promoted into the vLLM-bound copy"
     );
 
-    let lookup = lookup_context(previous_response_id, conversation_id);
-    let history = if conversation {
-        fixture
-            .exec_ctx
-            .conv_handler
-            .rehydrate(&lookup)
-            .await
-            .expect("rehydrate conversation")
-    } else {
-        fixture
-            .exec_ctx
-            .resp_handler
-            .rehydrate(&lookup)
-            .await
-            .expect("rehydrate response")
-    };
+    let history = stored_history(&fixture, previous_response_id, conversation_id).await;
     let stored = persisted_reasoning(&history);
     assert!(stored.content.is_empty());
-    assert_eq!(stored.summary[0]["text"], "public summary");
+    assert_eq!(stored.summary[0].text, "public summary");
     assert_eq!(stored.encrypted_content, None);
-    assert_eq!(stored.status.as_deref(), Some("completed"));
+    assert_eq!(stored.status, Some(ReasoningStatus::Completed));
 }
 
 async fn run_response(
@@ -1384,15 +1484,40 @@ async fn run_response(
     }
 }
 
+/// Rehydrate the stored history of the conversation, or else of the previous response.
+async fn stored_history(
+    fixture: &TestFixture,
+    previous_response_id: Option<String>,
+    conversation_id: Option<String>,
+) -> Vec<InOutItem> {
+    let conversation = conversation_id.is_some();
+    let lookup = lookup_context(previous_response_id, conversation_id);
+    if conversation {
+        let snapshot = fixture.exec_ctx.conv_handler.rehydrate(&lookup).await;
+        snapshot.expect("rehydrate conversation").items
+    } else {
+        let response_id = lookup
+            .original_request
+            .previous_response_id
+            .as_deref()
+            .expect("previous response");
+        let response = ResponseStore::new(Arc::clone(&fixture.pool))
+            .rehydrate(response_id)
+            .await;
+        response.expect("rehydrate response").1
+    }
+}
+
 fn lookup_context(previous_response_id: Option<String>, conversation_id: Option<String>) -> RequestContext {
     let request = make_request("lookup", true, false, previous_response_id, conversation_id);
     RequestContext {
+        multi_agent_tree: None,
         enriched_request: request.clone(),
         original_request: request,
         new_input_items: Vec::new(),
         response_id: "resp_lookup".to_owned(),
         conversation_id: None,
-        conversation_version: None,
+        checkpoint: None,
         continuation: None,
     }
 }

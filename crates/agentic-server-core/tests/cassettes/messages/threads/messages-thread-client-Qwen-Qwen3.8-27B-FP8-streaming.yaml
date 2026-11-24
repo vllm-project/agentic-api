@@ -1,0 +1,262 @@
+turns:
+- filename: t1
+  request:
+    body:
+      chat_template_kwargs:
+        enable_thinking: false
+      max_tokens: 256
+      messages:
+      - content: Call client_echo exactly once to get a verification token. After
+          its result, reply with the entire token verbatim and do not call tools again.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      stream: true
+      system: Follow instructions exactly. Keep answers short.
+      temperature: 0
+      tool_choice:
+        type: auto
+      tools:
+      - description: Get the verification token.
+        input_schema:
+          properties: {}
+          type: object
+        name: client_echo
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/messages
+    query_params:
+      beta: 'true'
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: message_start
+
+      '
+    - 'data: {"type":"message_start","message":{"id":"chatcmpl-993801d50a36cc42","type":"message","role":"assistant","content":[],"model":"Qwen/Qwen3.8-27B-FP8","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":292,"output_tokens":0}}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_start
+
+      '
+    - 'data: {"type":"content_block_start","content_block":{"type":"tool_use","id":"chatcmpl-tool-a8c361b88940e993","name":"client_echo","input":{}},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{}"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_stop
+
+      '
+    - 'data: {"type":"content_block_stop","index":0}
+
+      '
+    - '
+
+      '
+    - 'event: message_delta
+
+      '
+    - 'data: {"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":292,"output_tokens":15}}
+
+      '
+    - '
+
+      '
+    - 'event: message_stop
+
+      '
+    - 'data: {"type":"message_stop"}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      chat_template_kwargs:
+        enable_thinking: false
+      max_tokens: 256
+      messages:
+      - content: Call client_echo exactly once to get a verification token. After
+          its result, reply with the entire token verbatim and do not call tools again.
+        role: user
+      - content:
+        - id: chatcmpl-tool-a8c361b88940e993
+          input: {}
+          name: client_echo
+          type: tool_use
+        role: assistant
+      - content:
+        - content: THREAD_PROOF_91827
+          tool_use_id: chatcmpl-tool-a8c361b88940e993
+          type: tool_result
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      stream: true
+      system: Follow instructions exactly. Keep answers short.
+      temperature: 0
+      tool_choice:
+        type: auto
+      tools:
+      - description: Get the verification token.
+        input_schema:
+          properties: {}
+          type: object
+        name: client_echo
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/messages
+    query_params:
+      beta: 'true'
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: message_start
+
+      '
+    - 'data: {"type":"message_start","message":{"id":"chatcmpl-ab26da0ad6d6b3dc","type":"message","role":"assistant","content":[],"model":"Qwen/Qwen3.8-27B-FP8","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":333,"output_tokens":0}}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_start
+
+      '
+    - 'data: {"type":"content_block_start","content_block":{"type":"text","text":""},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"THREAD"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"_PRO"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"OF"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"_"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"9"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"1"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"8"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"2"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"7"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_stop
+
+      '
+    - 'data: {"type":"content_block_stop","index":0}
+
+      '
+    - '
+
+      '
+    - 'event: message_delta
+
+      '
+    - 'data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":333,"output_tokens":10}}
+
+      '
+    - '
+
+      '
+    - 'event: message_stop
+
+      '
+    - 'data: {"type":"message_stop"}
+
+      '
+    - '
+
+      '
+    status_code: 200

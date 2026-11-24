@@ -7,6 +7,9 @@
 
 #![allow(dead_code)]
 
+pub mod replay;
+
+use std::fmt::Write as _;
 use std::sync::Arc;
 
 use axum::Router;
@@ -22,24 +25,32 @@ use tokio::task::JoinHandle;
 
 use agentic_core::executor::{BoxStream, ConversationHandler, ExecutionContext, ResponseHandler};
 use agentic_core::storage::{ConversationStore, DbPool, ResponseStore, create_pool_with_schema};
-use agentic_core::types::io::OutputItem;
+use agentic_core::storage::{ResponseMetadata, StoreResult};
+use agentic_core::types::io::InOutItem;
+use agentic_core::types::io::{OutputItem, OutputMessageContent};
 use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
 
 #[derive(Debug, Deserialize)]
-pub struct Cassette {
-    pub turns: Vec<Turn>,
+pub struct Cassette<B = TurnBody> {
+    pub turns: Vec<Turn<B>>,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct Turn {
-    pub request: TurnRequest,
+pub struct Turn<B = TurnBody> {
+    #[serde(default)]
+    pub filename: String,
+    pub request: TurnRequest<B>,
     pub response: TurnResponse,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct TurnRequest {
+pub struct TurnRequest<B = TurnBody> {
+    #[serde(default)]
+    pub method: String,
     pub path: String,
-    pub body: TurnBody,
+    #[serde(default)]
+    pub query_params: Value,
+    pub body: B,
 }
 
 #[derive(Debug, Deserialize, Default, PartialEq)]
@@ -78,6 +89,9 @@ pub struct TurnResponse {
     pub body: Option<serde_json::Value>,
     /// Streaming: list of raw SSE strings from the recording.
     pub sse: Option<Vec<String>>,
+    /// Recorded HTTP status, when the recorder captured one.
+    #[serde(default)]
+    pub status_code: Option<u16>,
 }
 
 /// Load and parse a cassette YAML file (all turns preserved).
@@ -117,14 +131,12 @@ pub fn expected_text(turn: &Turn) -> String {
         let mut out = String::new();
         for raw in sse {
             for line in raw.lines() {
-                if let Some(data) = line.strip_prefix("data: ") {
-                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
-                        if json["type"].as_str() == Some("response.output_text.delta") {
-                            if let Some(delta) = json["delta"].as_str() {
-                                out.push_str(delta);
-                            }
-                        }
-                    }
+                if let Some(data) = line.strip_prefix("data: ")
+                    && let Ok(json) = serde_json::from_str::<serde_json::Value>(data)
+                    && json["type"].as_str() == Some("response.output_text.delta")
+                    && let Some(delta) = json["delta"].as_str()
+                {
+                    out.push_str(delta);
                 }
             }
         }
@@ -339,6 +351,8 @@ pub async fn setup_pool() -> Arc<DbPool> {
 /// Bundles everything a test needs.  Dropped at end of test scope.
 pub struct TestFixture {
     pub exec_ctx: Arc<ExecutionContext>,
+    /// Database behind the handlers, exposed for store-level assertions.
+    pub pool: Arc<DbPool>,
     // Kept for its Drop impl — aborts the mock server when the test ends.
     pub server: MockServer,
 }
@@ -368,7 +382,7 @@ impl TestFixture {
             server.url().to_string(),
         ));
 
-        Self { exec_ctx, server }
+        Self { exec_ctx, pool, server }
     }
 
     pub async fn new_with_responses(responses: Vec<MockResponse>) -> Self {
@@ -385,12 +399,96 @@ impl TestFixture {
             server.url().to_string(),
         ));
 
-        Self { exec_ctx, server }
+        Self { exec_ctx, pool, server }
     }
 
     pub async fn request_bodies(&self) -> Vec<Value> {
         self.server.request_bodies().await
     }
+}
+
+/// How the search backend behind a gateway `web_search` answers.
+#[derive(Clone)]
+pub enum Search {
+    /// One result titled "private search result", a value no span or metric may carry.
+    Answers,
+    /// Every query fails with a 500.
+    Fails,
+    /// Signals that a search arrived, then never answers it.
+    Hangs(Arc<tokio::sync::Notify>),
+}
+
+/// A search backend serving `GET /v1/search`.
+pub async fn search_server(search: Search) -> (String, JoinHandle<()>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let router = Router::new().route(
+        "/v1/search",
+        axum::routing::get(move || {
+            let search = search.clone();
+            async move {
+                match search {
+                    Search::Answers => axum::Json(serde_json::json!({"results": {
+                        "web": [{"url": "https://example.com", "title": "private search result"}],
+                        "news": []
+                    }}))
+                    .into_response(),
+                    Search::Fails => {
+                        (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "search backend down").into_response()
+                    }
+                    Search::Hangs(arrived) => {
+                        arrived.notify_one();
+                        std::future::pending().await
+                    }
+                }
+            }
+        }),
+    );
+    let task = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    (url, task)
+}
+
+/// A Messages SSE body: each event framed with its `type` as the event name.
+pub fn messages_sse(events: &[Value]) -> MockResponse {
+    let mut body = String::new();
+    for event in events {
+        writeln!(body, "event: {}\ndata: {event}\n", event["type"].as_str().unwrap()).unwrap();
+    }
+    MockResponse::Sse(body)
+}
+
+/// The `message_start` event that opens an upstream Messages stream.
+pub fn messages_start_event() -> Value {
+    serde_json::json!({"type": "message_start", "message": {
+        "id": "msg_upstream", "type": "message", "role": "assistant", "model": "test-model",
+        "content": [], "stop_reason": null, "stop_sequence": null,
+        "usage": {"input_tokens": 3, "output_tokens": 0}}})
+}
+
+/// A Messages turn that answers "hello" and ends with `stop_reason`.
+pub fn messages_json_response(stop_reason: &str) -> MockResponse {
+    MockResponse::Json(
+        serde_json::json!({
+            "id": "msg_upstream", "type": "message", "role": "assistant", "model": "test-model",
+            "content": [{"type": "text", "text": "hello"}],
+            "stop_reason": stop_reason, "stop_sequence": null,
+            "usage": {"input_tokens": 3, "output_tokens": 1}
+        })
+        .to_string(),
+    )
+}
+
+/// The streamed form of [`messages_json_response`].
+pub fn messages_sse_response(stop_reason: &str) -> MockResponse {
+    messages_sse(&[
+        messages_start_event(),
+        serde_json::json!({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}),
+        serde_json::json!({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "hello"}}),
+        serde_json::json!({"type": "content_block_stop", "index": 0}),
+        serde_json::json!({"type": "message_delta", "delta": {"stop_reason": stop_reason, "stop_sequence": null},
+            "usage": {"output_tokens": 1}}),
+        serde_json::json!({"type": "message_stop"}),
+    ])
 }
 
 pub fn text_response(text: &str) -> MockResponse {
@@ -422,6 +520,68 @@ pub fn text_response(text: &str) -> MockResponse {
         })
         .to_string(),
     )
+}
+
+/// A minimal SSE response that streams one assistant message and completes.
+pub fn text_sse_response(text: &str) -> MockResponse {
+    let events = [
+        serde_json::json!({
+            "type": "response.created",
+            "response": {"id": "resp_upstream_final", "status": "in_progress", "usage": null}
+        }),
+        serde_json::json!({
+            "type": "response.output_item.added",
+            "output_index": 0,
+            "item": {
+                "id": "msg_upstream_final", "type": "message", "role": "assistant",
+                "status": "in_progress", "content": []
+            }
+        }),
+        serde_json::json!({
+            "type": "response.output_text.delta", "item_id": "msg_upstream_final",
+            "output_index": 0, "content_index": 0, "delta": text
+        }),
+        serde_json::json!({
+            "type": "response.completed",
+            "response": {"id": "resp_upstream_final", "status": "completed", "usage": null}
+        }),
+    ];
+    let mut body = String::new();
+    for event in events {
+        body.push_str("data: ");
+        body.push_str(&serde_json::to_string(&event).expect("event serializes"));
+        body.push_str("\n\n");
+    }
+    body.push_str("data: [DONE]\n\n");
+    MockResponse::Sse(body)
+}
+
+/// A model server whose lifecycle snapshots omit `tools` and `tool_choice` entirely. The
+/// gateway has to report the declarations the client submitted on those frames itself.
+pub fn sse_omitting_tool_declarations(response: MockResponse) -> MockResponse {
+    let MockResponse::Sse(body) = response else {
+        panic!("expected an SSE fixture");
+    };
+    let mut out = String::new();
+    for line in body.lines() {
+        let Some(payload) = line.strip_prefix("data: ") else {
+            continue;
+        };
+        if payload == "[DONE]" {
+            continue;
+        }
+        let mut event: Value = serde_json::from_str(payload).expect("SSE data is JSON");
+        if event["type"] == "response.created" || event["type"] == "response.in_progress" {
+            let response = event["response"].as_object_mut().expect("response object");
+            response.remove("tools");
+            response.remove("tool_choice");
+        }
+        out.push_str("data: ");
+        out.push_str(&serde_json::to_string(&event).expect("event serializes"));
+        out.push_str("\n\n");
+    }
+    out.push_str("data: [DONE]\n\n");
+    MockResponse::Sse(out)
 }
 
 pub fn function_call_response(id: &str, call_id: &str, name: &str, arguments: &str) -> MockResponse {
@@ -514,6 +674,16 @@ pub fn request_input_texts(body: &Value) -> Vec<String> {
     }
 }
 
+/// The `type` of each input item in a request body the gateway sent upstream.
+pub fn input_item_types(body: &Value) -> Vec<Value> {
+    body["input"]
+        .as_array()
+        .expect("item input")
+        .iter()
+        .map(|item| item["type"].clone())
+        .collect()
+}
+
 pub fn make_request(
     input: impl Serialize,
     store: bool,
@@ -522,29 +692,14 @@ pub fn make_request(
     conversation_id: Option<String>,
 ) -> RequestPayload {
     RequestPayload {
-        model: "test-model".to_string(),
+        model: "test-model".into(),
         input: serde_json::from_value(serde_json::to_value(input).expect("serialize Responses input"))
             .expect("request should contain valid Responses input"),
-        instructions: None,
         previous_response_id,
-        conversation_id,
-        tools: None,
-        tool_choice: None,
+        conversation: conversation_id,
         stream,
         store,
-        include: None,
-        reasoning: None,
-        text: None,
-        temperature: None,
-        top_p: None,
-        max_output_tokens: None,
-        ignore_eos: None,
-        truncation: None,
-        metadata: None,
-        parallel_tool_calls: None,
-        prompt_cache_key: None,
-        cache_salt: None,
-        context_management: None,
+        ..Default::default()
     }
 }
 
@@ -563,14 +718,13 @@ pub async fn collect_stream(result: Either<ResponsePayload, BoxStream>) -> Respo
     };
     let mut stream = Box::pin(stream);
     while let Some(chunk) = stream.next().await {
-        if let Some(mut event) = streamed_sse_event(&chunk) {
-            if event.get("type").and_then(Value::as_str) == Some("response.completed")
-                && let Some(response) = event.get_mut("response")
-                && let Ok(payload) = serde_json::from_value::<ResponsePayload>(response.take())
-            {
-                while stream.next().await.is_some() {}
-                return payload;
-            }
+        if let Some(mut event) = streamed_sse_event(&chunk)
+            && event.get("type").and_then(Value::as_str) == Some("response.completed")
+            && let Some(response) = event.get_mut("response")
+            && let Ok(payload) = serde_json::from_value::<ResponsePayload>(response.take())
+        {
+            while stream.next().await.is_some() {}
+            return payload;
         }
     }
     panic!("stream ended without a ResponsePayload chunk");
@@ -582,16 +736,22 @@ pub fn output_text(payload: &ResponsePayload) -> String {
         .output
         .iter()
         .filter_map(|item| match item {
-            OutputItem::Message(msg) => Some(msg.content.iter().map(|c| c.text.as_str()).collect::<String>()),
+            OutputItem::Message(msg) => Some(msg.content.iter().map(OutputMessageContent::text).collect::<String>()),
             OutputItem::FunctionCall(_)
+            | OutputItem::CodeInterpreterCall(_)
             | OutputItem::ToolSearchCall(_)
+            | OutputItem::ToolSearchOutput(_)
             | OutputItem::CustomToolCall(_)
             | OutputItem::ShellCall(_)
+            | OutputItem::FileSearchCall(_)
             | OutputItem::WebSearchCall(_)
             | OutputItem::McpCall(_)
             | OutputItem::McpListTools(_)
             | OutputItem::Reasoning(_)
             | OutputItem::Compaction(_)
+            | OutputItem::MultiAgentCall(_)
+            | OutputItem::MultiAgentCallOutput(_)
+            | OutputItem::AgentMessage(_)
             | OutputItem::Unknown => None,
         })
         .collect::<String>()
@@ -622,4 +782,18 @@ pub fn query_params_as_json(uri: &axum::http::Uri) -> serde_json::Value {
         }
     }
     serde_json::Value::Object(params)
+}
+
+/// Persist a turn without a response snapshot.
+pub async fn persist_turn(
+    store: &ConversationStore,
+    conversation_id: &str,
+    response_id: &str,
+    items: Vec<InOutItem>,
+    metadata: &ResponseMetadata,
+) -> StoreResult<()> {
+    let checkpoint = store.rehydrate(conversation_id).await?.checkpoint;
+    store
+        .persist(conversation_id, &checkpoint, response_id, items, None, metadata)
+        .await
 }

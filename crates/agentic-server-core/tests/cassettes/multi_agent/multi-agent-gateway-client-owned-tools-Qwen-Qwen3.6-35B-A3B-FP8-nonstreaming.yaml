@@ -1,0 +1,1354 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: 'Use three subagents: one to find Paris weather using a discovered function
+        tool, one to get the Paris time zone using a discovered function tool, and
+        one to call the custom tool agentic_raw_echo with CUSTOM_CASSETTE_OK and report
+        its output on one line.'
+      max_output_tokens: 16384
+      model: Qwen/Qwen3.6-35B-A3B-FP8
+      multi_agent:
+        enabled: true
+        max_concurrent_subagents: 3
+      store: true
+      stream: false
+      tools:
+      - description: Search the client tool catalog for tools that can satisfy the
+          request.
+        execution: client
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: A concise description of the needed capabilities.
+              type: string
+          required:
+          - query
+          type: object
+        type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Search for hotels in a city
+        name: search_hotels
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - description: Emit the requested cassette token as raw text. The input must
+          be exactly CUSTOM_CASSETTE_OK.
+        name: agentic_raw_echo
+        type: custom
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      openai-beta: responses_multi_agent=v1
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1790678080
+      error: null
+      id: resp_01a0ecbb-1c55-7682-8bac-171a8af5d710
+      incomplete_details: null
+      instructions: null
+      model: Qwen/Qwen3.6-35B-A3B-FP8
+      object: response
+      output:
+      - agent:
+          agent_name: /root
+        content:
+        - text: 'The user wants me to use three subagents:
+
+            1. One to find Paris weather using a discovered function tool
+
+            2. One to get the Paris time zone using a discovered function tool
+
+            3. One to call the custom tool `agentic_raw_echo` with `CUSTOM_CASSETTE_OK`
+            and report its output on one line
+
+
+            Let me first search for available tools to understand what''s available.
+            The tool catalog mentions:
+
+            - get_weather — Get the current weather for a city
+
+            - get_exchange_rate — Get the exchange rate between two currencies
+
+            - search_hotels — Search for hotels in a city
+
+            - travel — Travel location tools
+
+
+            I need to find tools for weather and timezone. Let me search for them
+            first.
+
+
+            Actually, looking at the available tools, I see `get_weather` which can
+            get weather for a city. But I don''t see a specific timezone tool mentioned.
+            Let me search for what''s available.
+
+
+            Let me start by spawning the three agents:
+
+            1. A weather agent that uses `get_weather` for Paris
+
+            2. A timezone agent - I need to search for a timezone tool
+
+            3. A custom tool agent that calls `agentic_raw_echo` with "CUSTOM_CASSETTE_OK"
+
+
+            First, let me search for available tools to see what I can use.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_a550cb7f4052b0dd
+        status: null
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root
+        content:
+        - annotations: []
+          text: I'll start by searching for available tools to find weather and timezone
+            capabilities, then spawn the three subagents.
+          type: output_text
+        id: msg_baed097a7f7bf010
+        role: assistant
+        status: completed
+        type: message
+      - agent:
+          agent_name: /root
+        arguments:
+          query: get weather for a city
+        call_id: chatcmpl-tool-8244bf0d4659fac1
+        execution: client
+        id: tsc_9c85e2942eea77b2
+        status: completed
+        type: tool_search_call
+      - agent:
+          agent_name: /root
+        arguments:
+          query: get timezone for a city
+        call_id: chatcmpl-tool-b27cfdae84441aa8
+        execution: client
+        id: tsc_b86a77e18170e76e
+        status: completed
+        type: tool_search_call
+      previous_response_id: null
+      status: completed
+      tools:
+      - description: Search the client tool catalog for tools that can satisfy the
+          request.
+        execution: client
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: A concise description of the needed capabilities.
+              type: string
+          required:
+          - query
+          type: object
+        type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Search for hotels in a city
+        name: search_hotels
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - description: Emit the requested cassette token as raw text. The input must
+          be exactly CUSTOM_CASSETTE_OK.
+        name: agentic_raw_echo
+        type: custom
+      usage:
+        input_tokens: 2027
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 357
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 2384
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - call_id: chatcmpl-tool-8244bf0d4659fac1
+        execution: client
+        status: completed
+        tools:
+        - defer_loading: true
+          description: Get the current weather for a city
+          name: get_weather
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - description: Travel location tools
+          name: travel
+          tools:
+          - defer_loading: true
+            description: Get the IANA time zone for a city
+            name: get_timezone
+            parameters:
+              additionalProperties: false
+              properties:
+                city:
+                  type: string
+              required:
+              - city
+              type: object
+            strict: true
+            type: function
+          type: namespace
+        type: tool_search_output
+      - call_id: chatcmpl-tool-b27cfdae84441aa8
+        execution: client
+        status: completed
+        tools:
+        - defer_loading: true
+          description: Get the current weather for a city
+          name: get_weather
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - description: Travel location tools
+          name: travel
+          tools:
+          - defer_loading: true
+            description: Get the IANA time zone for a city
+            name: get_timezone
+            parameters:
+              additionalProperties: false
+              properties:
+                city:
+                  type: string
+              required:
+              - city
+              type: object
+            strict: true
+            type: function
+          type: namespace
+        type: tool_search_output
+      max_output_tokens: 16384
+      model: Qwen/Qwen3.6-35B-A3B-FP8
+      multi_agent:
+        enabled: true
+        max_concurrent_subagents: 3
+      previous_response_id: resp_01a0ecbb-1c55-7682-8bac-171a8af5d710
+      store: true
+      stream: false
+      tools:
+      - description: Search the client tool catalog for tools that can satisfy the
+          request.
+        execution: client
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: A concise description of the needed capabilities.
+              type: string
+          required:
+          - query
+          type: object
+        type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Search for hotels in a city
+        name: search_hotels
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - description: Emit the requested cassette token as raw text. The input must
+          be exactly CUSTOM_CASSETTE_OK.
+        name: agentic_raw_echo
+        type: custom
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      openai-beta: responses_multi_agent=v1
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1790678083
+      error: null
+      id: resp_01a0ecbb-25f8-7cd1-a3d9-ec4219e73dd2
+      incomplete_details: null
+      instructions: null
+      model: Qwen/Qwen3.6-35B-A3B-FP8
+      object: response
+      output:
+      - agent:
+          agent_name: /root
+        content:
+        - text: 'Good, I found `get_weather` for the weather task. For timezone, let
+            me check the travel namespace - it might have a timezone tool. Let me
+            search more specifically or check the travel tools.
+
+
+            Actually, I can see from my function definitions that `agentic_ns__travel__get_timezone`
+            exists - so there''s a timezone tool in the travel namespace. Let me proceed
+            to spawn the three agents now.
+
+
+            1. Agent 1: Get Paris weather using `get_weather`
+
+            2. Agent 2: Get Paris timezone using `agentic_ns__travel__get_timezone`
+
+            3. Agent 3: Call `agentic_raw_echo` with "CUSTOM_CASSETTE_OK"
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_96bab71749bcf032
+        status: null
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root
+        content:
+        - annotations: []
+          text: I found `get_weather` for weather. The travel namespace likely contains
+            the timezone tool. Let me spawn all three subagents now.
+          type: output_text
+        id: msg_a50a5abbe71620f2
+        role: assistant
+        status: completed
+        type: message
+      - action: spawn_agent
+        agent:
+          agent_name: /root
+        arguments: '{"task_name":"paris_weather","message":"enc_nbCKEJiNSi7YknPCGhU5nPZr6hDBqqhr1jUAogVkteTTm-8MYsSYhbYghkQkQ83L5Wk0kHBPv8o2p8hX7VCeeVUbznnYf_rVD1_gPsYlBCDvYmGOaSOpW3pE9jEyrGquudP8b7e1gbSPIK_nPg","fork_turns":"all"}'
+        call_id: chatcmpl-tool-8e675d076762faf6
+        id: mac_01a0ecbb-2fb0-73e2-b0e8-40317366cb47
+        type: multi_agent_call
+      - agent:
+          agent_name: /root/paris_weather
+        author: /root
+        content:
+        - encrypted_content: enc_7VVjWZ4wYogVvzKvDfmJaBMna2kimK_77Nr5gPEH4Cm3fmDMXUZj_RM2-CqeX0e1q9mt15B56zH15RhgrWPGCEjsw6aR_RZqAD53rCzkOLLtzpyQNKgcsaWNohg-vGyA3xfMQe75hiAwLaeSzg
+          type: encrypted_content
+        id: amsg_01a0ecbb-2fb0-73e2-b0e8-40541cb0c07a
+        recipient: /root/paris_weather
+        type: agent_message
+      - action: spawn_agent
+        agent:
+          agent_name: /root
+        call_id: chatcmpl-tool-8e675d076762faf6
+        id: maco_01a0ecbb-2fb0-73e2-b0e8-40669c7bd533
+        output:
+        - annotations: []
+          text: '{"task_name":"/root/paris_weather"}'
+          type: output_text
+        type: multi_agent_call_output
+      - action: spawn_agent
+        agent:
+          agent_name: /root
+        arguments: '{"task_name":"paris_timezone","message":"enc_T8WRlPyOz78uDMwzZYHadxRFB0UvNKjHArgru5KdNt2AZlXCWuQz-3UQmrkm61iPpwjkolU0mUXJrXYmiBofJNCHHVh8T9tQCxIoPOk8CNegqCqd3XOviIzg_x-Rvn--0ph3vppZ1md1_hZ8t2c4myTT-lNuoyGRjoOEGzaqQbQ","fork_turns":"all"}'
+        call_id: chatcmpl-tool-b81742018f4e9539
+        id: mac_01a0ecbb-2fb0-73e2-b0e8-4071b168ff72
+        type: multi_agent_call
+      - agent:
+          agent_name: /root/paris_timezone
+        author: /root
+        content:
+        - encrypted_content: enc_yyDKzni_YkJrHTvj7BmmfglnK4aqDIcPFwtbNix5XSbrgKYLbQxMZdRF4Rk3BlE5pXGr8pImgHYTS6Dqo-wlzvU74Pj8A5i8SnWSn8rhXtcar8aMCek-w-Jp4ug4FZBmb_4k_3Ac03ZOjuiZz2sZQO0LwsQ7bMjDT2ERJgG87H4
+          type: encrypted_content
+        id: amsg_01a0ecbb-2fb0-73e2-b0e8-40915caa860e
+        recipient: /root/paris_timezone
+        type: agent_message
+      - action: spawn_agent
+        agent:
+          agent_name: /root
+        call_id: chatcmpl-tool-b81742018f4e9539
+        id: maco_01a0ecbb-2fb0-73e2-b0e8-40a48ab72e0d
+        output:
+        - annotations: []
+          text: '{"task_name":"/root/paris_timezone"}'
+          type: output_text
+        type: multi_agent_call_output
+      - action: spawn_agent
+        agent:
+          agent_name: /root
+        arguments: '{"task_name":"custom_echo","message":"enc_mKv5J9wJVWW8ETmxjvmujdTrsnv94KmDD1eeT2KUjx_K0htWTLCXXvLSVXXEi0_bsZ1CfI9ix87YPSrsEiVU_E9NznflpCuivikg-YLMsipZwYGbVm_EfjoDXYJXJvSW5Qzyn5xKZoWvrfTaDSjbtrla-ta_Wm30uKJ_BHwJvFVjuVMp","fork_turns":"all"}'
+        call_id: chatcmpl-tool-9a1c360d31dc6aed
+        id: mac_01a0ecbb-2fb0-73e2-b0e8-40b0c0baea68
+        type: multi_agent_call
+      - agent:
+          agent_name: /root/custom_echo
+        author: /root
+        content:
+        - encrypted_content: enc_v_abfZ8uMDmi5e3qPrVoROa54xKALTz_ZrwlJOb-359i-2nS0J3SsnqYvQSNCpXoVd3N-f8zzoYJ-N07fUibXhfW7ByDGTNxNB4Oy3K6VWyeryAVooOrBVbQJPOM32yhuoQ4EbsNi2mdEg8UNUWFdBYmLcG5n7KXN28m0mCfruMeQvBh
+          type: encrypted_content
+        id: amsg_01a0ecbb-2fb0-73e2-b0e8-40d479970255
+        recipient: /root/custom_echo
+        type: agent_message
+      - action: spawn_agent
+        agent:
+          agent_name: /root
+        call_id: chatcmpl-tool-9a1c360d31dc6aed
+        id: maco_01a0ecbb-2fb0-73e2-b0e8-40eba6495e6e
+        output:
+        - annotations: []
+          text: '{"task_name":"/root/custom_echo"}'
+          type: output_text
+        type: multi_agent_call_output
+      - agent:
+          agent_name: /root/paris_weather
+        content:
+        - text: 'The user wants me to get the current weather for Paris using the
+            get_weather tool and report the result. This is my assigned task. I should
+            call get_weather with city="Paris".
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_9d78601f9768c3ce
+        status: null
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root/paris_weather
+        arguments: '{"city": "Paris"}'
+        call_id: chatcmpl-tool-81d60e51eee3ef40
+        id: fc_aaae440ef226fb68
+        name: get_weather
+        status: completed
+        type: function_call
+      - agent:
+          agent_name: /root/paris_timezone
+        content:
+        - text: 'I am `/root/paris_timezone`. My assignment is to use the `agentic_ns__travel__get_timezone`
+            tool to get the IANA timezone for Paris and report the result. I should
+            do this directly myself.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_b7599496d49424c3
+        status: null
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root/paris_timezone
+        arguments: '{"city": "Paris"}'
+        call_id: chatcmpl-tool-be0fc05b8a03317c
+        id: fc_85b583eee48dfc68
+        name: get_timezone
+        namespace: travel
+        status: completed
+        type: function_call
+      - agent:
+          agent_name: /root/custom_echo
+        content:
+        - text: 'I am /root/custom_echo, and my assignment is to use the agentic_raw_echo
+            tool with input exactly "CUSTOM_CASSETTE_OK" and report its output on
+            one line. This is straightforward - I just need to call the tool and report
+            the result.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_b326b3ae4f4896ab
+        status: null
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root/custom_echo
+        call_id: chatcmpl-tool-8363409fa78adbd6
+        id: ctc_950c64c2254223d4
+        input: CUSTOM_CASSETTE_OK
+        name: agentic_raw_echo
+        status: completed
+        type: custom_tool_call
+      - agent:
+          agent_name: /root
+        content:
+        - text: 'All three agents have been spawned successfully:
+
+            1. /root/paris_weather - to get Paris weather
+
+            2. /root/paris_timezone - to get Paris timezone
+
+            3. /root/custom_echo - to call the custom echo tool
+
+
+            Now I need to wait for them to complete and collect their results. Let
+            me wait for all of them.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_b649e1a33ad070ed
+        status: null
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root
+        content:
+        - annotations: []
+          text: All three subagents have been spawned successfully. Now I'll wait
+            for their results.
+          type: output_text
+        id: msg_8562c2b4ce4f8a3b
+        role: assistant
+        status: completed
+        type: message
+      - action: wait_agent
+        agent:
+          agent_name: /root
+        arguments: '{"timeout_ms":30000}'
+        call_id: chatcmpl-tool-806b5602caa50a6b
+        id: mac_01a0ecbb-3630-76c2-86b3-8509615b6db5
+        type: multi_agent_call
+      - action: wait_agent
+        agent:
+          agent_name: /root
+        call_id: chatcmpl-tool-806b5602caa50a6b
+        id: maco_01a0ecbb-3630-76c2-86b3-8516d8e55602
+        output:
+        - annotations: []
+          text: '{"message":"Agents are waiting for client tool outputs.","timed_out":false}'
+          type: output_text
+        type: multi_agent_call_output
+      previous_response_id: resp_01a0ecbb-1c55-7682-8bac-171a8af5d710
+      status: completed
+      tool_choice: auto
+      tools:
+      - description: Search the client tool catalog for tools that can satisfy the
+          request.
+        execution: client
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: A concise description of the needed capabilities.
+              type: string
+          required:
+          - query
+          type: object
+        type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Search for hotels in a city
+        name: search_hotels
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - description: Emit the requested cassette token as raw text. The input must
+          be exactly CUSTOM_CASSETTE_OK.
+        name: agentic_raw_echo
+        type: custom
+      usage:
+        input_tokens: 14398
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 725
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 15123
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input:
+      - call_id: chatcmpl-tool-81d60e51eee3ef40
+        output: '{"city":"Paris","condition":"clear","temperature_c":21}'
+        type: function_call_output
+      - call_id: chatcmpl-tool-be0fc05b8a03317c
+        output: '{"city":"Paris","iana_timezone":"Europe/Paris"}'
+        type: function_call_output
+      - call_id: chatcmpl-tool-8363409fa78adbd6
+        output: CUSTOM_CASSETTE_OUTPUT_OK
+        type: custom_tool_call_output
+      max_output_tokens: 16384
+      model: Qwen/Qwen3.6-35B-A3B-FP8
+      multi_agent:
+        enabled: true
+        max_concurrent_subagents: 3
+      previous_response_id: resp_01a0ecbb-25f8-7cd1-a3d9-ec4219e73dd2
+      store: true
+      stream: false
+      tools:
+      - description: Search the client tool catalog for tools that can satisfy the
+          request.
+        execution: client
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: A concise description of the needed capabilities.
+              type: string
+          required:
+          - query
+          type: object
+        type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Search for hotels in a city
+        name: search_hotels
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - description: Emit the requested cassette token as raw text. The input must
+          be exactly CUSTOM_CASSETTE_OK.
+        name: agentic_raw_echo
+        type: custom
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      openai-beta: responses_multi_agent=v1
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1790678087
+      error: null
+      id: resp_01a0ecbb-36b3-7fa3-9e44-d3c6d298ab4f
+      incomplete_details: null
+      instructions: null
+      model: Qwen/Qwen3.6-35B-A3B-FP8
+      object: response
+      output:
+      - agent:
+          agent_name: /root/paris_timezone
+        content:
+        - text: 'The tool returned that Paris has the IANA timezone "Europe/Paris".
+            This is my result to report to my parent.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_86ea092edde29c47
+        status: null
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root/paris_timezone
+        content:
+        - annotations: []
+          text: '
+
+
+            The IANA timezone for Paris is **Europe/Paris**.'
+          type: output_text
+        id: msg_9286e673a099b48b
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      - agent:
+          agent_name: /root
+        author: /root/paris_timezone
+        content:
+        - encrypted_content: enc_fKm8x32ZDtrtk9PqjhOBKZW7edICHWZfENjLaRD_d49LKRKipFl7a8O2dh0K9liZRsD1mJQtjWS6olugLlgqJB6zBLYZtIIGzpwUJJH5
+          type: encrypted_content
+        id: amsg_01a0ecbb-3a26-7111-b431-1854f42b3d16
+        recipient: /root
+        type: agent_message
+      - agent:
+          agent_name: /root/custom_echo
+        content:
+        - text: 'The agentic_raw_echo tool returned "CUSTOM_CASSETTE_OUTPUT_OK" when
+            given the input "CUSTOM_CASSETTE_OK". I should report this output on one
+            line as instructed.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_8c5b71ce7027e97b
+        status: null
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root/custom_echo
+        content:
+        - annotations: []
+          text: '
+
+
+            CUSTOM_CASSETTE_OUTPUT_OK'
+          type: output_text
+        id: msg_91ef2132d5c37bdb
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      - agent:
+          agent_name: /root
+        author: /root/custom_echo
+        content:
+        - encrypted_content: enc_xAFoh1EdSnNTCv_dKupPgNV5JXdqKUIZQrxlco9n9i6pI8AJ1i9AN5QRZY00TRATXG5iCP6oUA
+          type: encrypted_content
+        id: amsg_01a0ecbb-3b0a-7bc0-a21b-69c9f20fea8e
+        recipient: /root
+        type: agent_message
+      - agent:
+          agent_name: /root/paris_weather
+        content:
+        - text: 'I got the weather data for Paris. The result shows:
+
+            - City: Paris
+
+            - Condition: clear
+
+            - Temperature: 21°C
+
+
+            I should report this result to my parent.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_b52be86f2774a450
+        status: null
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root/paris_weather
+        content:
+        - annotations: []
+          text: '
+
+
+            The current weather in Paris is **clear** with a temperature of **21°C**.'
+          type: output_text
+        id: msg_8fe2d0cc1c002bcf
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      - agent:
+          agent_name: /root
+        author: /root/paris_weather
+        content:
+        - encrypted_content: enc_poyhpHTGi6HdkDkQZFWVpww3_x1g99nmYMVquhFiLSZ60N6-7Ct9q_s_GANu70vshh5QbffRZfkSP4ddh4vmEvXbv0Ruj2a8p4AwFtYwn50pjJkJ3ZIUneoRYNZgRuNEU1d7fOsmpXY
+          type: encrypted_content
+        id: amsg_01a0ecbb-3b6a-7e10-8bfd-67e9b5b2ffe9
+        recipient: /root
+        type: agent_message
+      - agent:
+          agent_name: /root
+        content:
+        - text: 'One of the agents has finished with a FINAL_ANSWER. Let me check
+            for the others'' results.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_85fed456f7175df3
+        status: null
+        summary: []
+        type: reasoning
+      - action: wait_agent
+        agent:
+          agent_name: /root
+        arguments: '{"timeout_ms":30000}'
+        call_id: chatcmpl-tool-8f7f16fc70d2e025
+        id: mac_01a0ecbb-3c69-7933-ad79-118cfd72f9ec
+        type: multi_agent_call
+      - action: wait_agent
+        agent:
+          agent_name: /root
+        call_id: chatcmpl-tool-8f7f16fc70d2e025
+        id: maco_01a0ecbb-3c69-7933-ad79-11910ed33d42
+        output:
+        - annotations: []
+          text: '{"message":"Agent mailbox updated.","timed_out":false}'
+          type: output_text
+        type: multi_agent_call_output
+      - agent:
+          agent_name: /root
+        content:
+        - text: 'All three subagents have completed their tasks. Let me summarize
+            the results:
+
+
+            1. Paris weather: clear, 21°C
+
+            2. Paris timezone: Europe/Paris
+
+            3. Custom echo output: CUSTOM_CASSETTE_OUTPUT_OK
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_8b4030f601348978
+        status: null
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root
+        content:
+        - annotations: []
+          text: '
+
+
+            All three subagents have completed their tasks. Here are the results:
+
+
+            1. **Paris weather**: Clear with a temperature of 21°C
+
+            2. **Paris timezone**: Europe/Paris
+
+            3. **Custom echo output**: CUSTOM_CASSETTE_OUTPUT_OK'
+          type: output_text
+        id: msg_87f14ff121604c22
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: resp_01a0ecbb-25f8-7cd1-a3d9-ec4219e73dd2
+      status: completed
+      tool_choice: auto
+      tools:
+      - description: Search the client tool catalog for tools that can satisfy the
+          request.
+        execution: client
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: A concise description of the needed capabilities.
+              type: string
+          required:
+          - query
+          type: object
+        type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Search for hotels in a city
+        name: search_hotels
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - description: Emit the requested cassette token as raw text. The input must
+          be exactly CUSTOM_CASSETTE_OK.
+        name: agentic_raw_echo
+        type: custom
+      usage:
+        input_tokens: 14674
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 318
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 14992
+    headers:
+      content-type: application/json
+    status_code: 200

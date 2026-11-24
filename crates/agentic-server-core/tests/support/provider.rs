@@ -64,14 +64,14 @@ impl Provider {
         for (turn_index, turn) in cassette.turns.iter().enumerate() {
             if let Some(raw_frames) = &turn.response.sse {
                 for (frame_index, line) in raw_frames.iter().flat_map(|raw| raw.lines()).enumerate() {
-                    if let Some(data) = line.strip_prefix("data:") {
-                        if data.trim() != "[DONE]" {
-                            assert!(
-                                normalize_sse_line(line).is_some(),
-                                "{path}, turn {}, frame {frame_index}: discarded {line}",
-                                turn_index + 1
-                            );
-                        }
+                    if let Some(data) = line.strip_prefix("data:")
+                        && data.trim() != "[DONE]"
+                    {
+                        assert!(
+                            normalize_sse_line(line).is_some(),
+                            "{path}, turn {}, frame {frame_index}: discarded {line}",
+                            turn_index + 1
+                        );
                     }
                 }
             }
@@ -108,10 +108,65 @@ fn first_message_id(payload: &ResponsePayload) -> &str {
         .expect("turn 1 output contains an assistant message")
 }
 
+fn first_reasoning_id(payload: &ResponsePayload) -> Option<&str> {
+    payload.output.iter().find_map(|item| match item {
+        OutputItem::Reasoning(reasoning) => Some(reasoning.id.as_str()),
+        _ => None,
+    })
+}
+
+/// Older recordings replay missing reasoning fields as `null`; omission has
+/// the same meaning for these optional fields.
+fn omit_null_reasoning_fields(history: &mut Value) {
+    for item in history.as_array_mut().into_iter().flatten() {
+        if item["type"] == "reasoning" {
+            for key in ["status", "encrypted_content"] {
+                if item.get(key).is_some_and(Value::is_null) {
+                    item.as_object_mut().map(|fields| fields.remove(key));
+                }
+            }
+        }
+    }
+}
+
+/// Recorded clients can omit empty output-text metadata when replaying a
+/// response item. Treat those empty fields as equivalent to omission while
+/// still comparing the full ordered history and all non-empty metadata.
+fn omit_empty_output_text_metadata(history: &mut Value) {
+    let Some(items) = history.as_array_mut() else {
+        return;
+    };
+    for item in items {
+        if item["type"] != "message" || item["role"] != "assistant" {
+            continue;
+        }
+        let Some(parts) = item.get_mut("content").and_then(Value::as_array_mut) else {
+            continue;
+        };
+        for part in parts {
+            if part["type"] != "output_text" {
+                continue;
+            }
+            let Some(fields) = part.as_object_mut() else {
+                continue;
+            };
+            for key in ["annotations", "logprobs"] {
+                if fields
+                    .get(key)
+                    .is_some_and(|value| value.as_array().is_some_and(Vec::is_empty))
+                {
+                    fields.remove(key);
+                }
+            }
+        }
+    }
+}
+
 /// The upstream request for the second turn must carry the rehydrated item
 /// history instead of forwarding gateway-managed response IDs upstream.
-/// The history is compared structurally with the recorded turn-2 request; only
-/// the assistant message id differs per run, so it is taken from turn 1's payload.
+/// The history is compared structurally with the recorded turn-2 request; the
+/// assistant message and reasoning ids are the gateway's public ids, so they are
+/// taken from turn 1's payload.
 fn assert_upstream_requests_are_stateless(requests: &[Value], t2: &Turn, p1: &ResponsePayload) {
     assert_eq!(requests.len(), 2, "one upstream call per turn");
     for request in requests {
@@ -130,8 +185,19 @@ fn assert_upstream_requests_are_stateless(requests: &[Value], t2: &Turn, p1: &Re
         .find(|item| item["type"] == "message" && item["role"] == "assistant")
         .expect("recorded turn 2 replays the assistant item");
     recorded_assistant["id"] = Value::String(first_message_id(p1).to_owned());
+    if let Some(reasoning_id) = first_reasoning_id(p1)
+        && let Some(recorded_reasoning) = expected_history
+            .as_array_mut()
+            .and_then(|items| items.iter_mut().find(|item| item["type"] == "reasoning"))
+    {
+        recorded_reasoning["id"] = Value::String(reasoning_id.to_owned());
+    }
+    let mut actual_history = requests[1]["input"].clone();
+    omit_empty_output_text_metadata(&mut actual_history);
+    omit_empty_output_text_metadata(&mut expected_history);
+    omit_null_reasoning_fields(&mut expected_history);
     assert_eq!(
-        requests[1]["input"], expected_history,
+        actual_history, expected_history,
         "turn 2 must replay the full item history to the stateless upstream"
     );
 }

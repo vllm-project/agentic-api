@@ -1,0 +1,190 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Remember the word ORCHID. Reply with exactly OK.
+      max_output_tokens: 2048
+      model: Qwen/Qwen3.8-27B-FP8
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1793003459
+      created_at: 1793003459
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a17755-9134-74f2-aeaf-0ca5dfa07172
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 2048
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to remember the word "ORCHID" and reply with exactly
+            "OK".
+
+            '
+          type: reasoning_text
+        id: rs_8931b270f5326fe7
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            OK'
+          type: output_text
+        id: msg_80a71a2c2b232e03
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 52
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 25
+        output_tokens_details:
+          reasoning_tokens: 21
+        total_tokens: 77
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - content: Remember the word ORCHID. Reply with exactly OK.
+        role: user
+      - content:
+        - text: 'The user wants me to remember the word "ORCHID" and reply with exactly
+            "OK".
+
+            '
+          type: reasoning_text
+        id: rs_8931b270f5326fe7
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            OK'
+          type: output_text
+        id: msg_80a71a2c2b232e03
+        role: assistant
+        status: completed
+        type: message
+      - content: What word did I ask you to remember? Reply with that word only.
+        role: user
+      max_output_tokens: 2048
+      model: Qwen/Qwen3.8-27B-FP8
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1793003461
+      created_at: 1793003461
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a17755-9935-7400-baa5-7e25c1aff8c1
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 2048
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user is asking me to recall the word they asked me to remember.
+            In the previous message, they asked me to remember the word "ORCHID".
+            I should reply with just that word.
+
+            '
+          type: reasoning_text
+        id: rs_bad504f48ae5c82d
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            ORCHID'
+          type: output_text
+        id: msg_82a5fd4fbcded5dd
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 103
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 47
+        output_tokens_details:
+          reasoning_tokens: 41
+        total_tokens: 150
+    headers:
+      content-type: application/json
+    status_code: 200

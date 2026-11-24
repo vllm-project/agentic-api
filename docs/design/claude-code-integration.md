@@ -86,7 +86,7 @@ Per the [Anthropic Gateway Protocol reference](https://code.claude.com/docs/en/l
 
 Forward `anthropic-version` (currently `2023-06-01`) and `anthropic-beta` to vLLM unchanged. Do not allowlist beta values — the set changes per release, so treat it as open.
 
-The gateway may consume rather than forward `Authorization` / `x-api-key` (accept either; Claude Code sends the credential in one or both depending on `ANTHROPIC_AUTH_TOKEN` vs `ANTHROPIC_API_KEY`). Claude Code also sends `x-claude-code-session-id` / `x-claude-code-agent-id` / `x-claude-code-parent-agent-id` attribution headers; the gateway can log them for observability but does not act on them (no session state). Extra headers (`ANTHROPIC_CUSTOM_HEADERS`) should be tolerated.
+The gateway may consume rather than forward `Authorization` / `x-api-key` (accept either; Claude Code sends the credential in one or both depending on `ANTHROPIC_AUTH_TOKEN` vs `ANTHROPIC_API_KEY`). Claude Code also sends `x-claude-code-session-id` / `x-claude-code-agent-id` / `x-claude-code-parent-agent-id` attribution headers. They are forwarded unchanged and the gateway keeps no session state, but it derives one tenant-scoped `X-Session-ID` from `x-claude-code-session-id` for the upstream (see [Messages](../api/index.md#messages)). Extra headers (`ANTHROPIC_CUSTOM_HEADERS`) should be tolerated.
 
 ### Feature pass-through
 
@@ -132,7 +132,7 @@ So the whole gateway is stateless orchestration: accept Messages, map tool calls
 - Serve a `/v1/messages` endpoint that Claude Code targets via `ANTHROPIC_BASE_URL` (transparent proxy landed in [#99](https://github.com/vllm-project/agentic-api/pull/99)).
 - Execute gateway-owned tools server-side, reusing the existing tool loop rather than forking a Messages-specific one.
 - Support what Claude Code uses: streaming, `tool_use`/`tool_result`, `system` prompt, `thinking`.
-- Keep the gateway stateless — the raw pass-through path stays transparent, mirroring the Responses `store=false` proxy.
+- Keep the gateway stateless — the raw pass-through path stays transparent, while HTTP Responses uses typed execution even with `store:false`.
 
 ### Non-goals
 
@@ -188,16 +188,53 @@ Recommendation: ship A.
 | `tools: [{name, description, input_schema}]` | normalized to registry tool entries (as Responses `function` tools) |
 | `tool_use` content block | a tool call the loop classifies gateway-owned vs. client-owned |
 | gateway-owned `tool_use` (web_search, MCP) | gateway executes, appends a `tool_result`, loops |
+| executed call to a native `web_search` / `web_fetch` declaration | also shown to the client as `server_tool_use` (`srvtoolu_gw_<upstream id>`) and `web_search_tool_result` / `web_fetch_tool_result`, turned back into the round when a later turn sends them |
 | client-owned `tool_use` | returned to the client, which executes and resends `tool_result` |
 | `tool_result` content block (may carry `is_error: true`) | fed into the next upstream turn |
 | `tool_choice` (`auto`/`any`/`tool`/`none`, `disable_parallel_tool_use`) | forwarded on the first round; a fulfilled forced choice becomes `auto` after gateway tool results are appended; parallel-use settings remain unchanged |
 | `usage` | after hidden gateway rounds, the returned message (JSON) and the terminal `message_delta` (SSE) report the saturating sum of `input_tokens`, `output_tokens`, `cache_creation_input_tokens`, and `cache_read_input_tokens` across every inference round, each streamed round being its `message_start.usage` overlaid by its `message_delta.usage`; a counter no round reported stays absent, other fields pass through from the final round, `message_start.usage` is the first round's snapshot, a single-round turn is unchanged, and a final round that omits `usage` still reports the hidden rounds' counters |
+
+Both Messages tool loops enforce `tools.max_concurrent_gateway_calls` (default 5,
+overridden by `AGENTIC_MAX_CONCURRENT_GATEWAY_CALLS`) for each inference round.
+Calls to the same bound handler overlap only when it declares parallel execution safe;
+aliases of that handler share the same exclusion. A call waiting for same-tool exclusion
+does not occupy a round slot. Messages also shares the execution context's 16-permit
+materialization window with Responses and MCP discovery. The 60-second per-call timeout
+starts after permit acquisition; it does not bound time spent waiting for capacity.
+Results enter the next upstream request in model call order, regardless of completion order.
+Dropping the loop cancels its local active and waiting calls and releases their permits.
+This bounds active executions; aggregate retained content, tool outputs, and pending-call
+limits remain separate work in [#313](https://github.com/vllm-project/agentic-api/issues/313).
 
 vLLM may label a completed named tool call `end_turn`. The gateway accepts that stop only when the explicitly
 selected gateway tool appears in the round; streaming also requires `message_stop`. Rounds containing
 client-executed function tools return control to the client with `stop_reason: tool_use`, including when vLLM
 labels a completed call `end_turn`. The correction applies to JSON and the terminal streaming `message_delta`;
 gateway calls in a mixed round remain hidden. Truncation and other stop reasons retain their original meaning.
+
+For streaming requests using the built-in tool loop, every upstream round must end with `message_stop`
+before the gateway dispatches its tools or emits successful completion. EOF or `[DONE]` without that event
+produces an Anthropic SSE `error` (`api_error`), with no terminal `message_delta` or synthetic `message_stop`.
+Malformed JSON in an upstream SSE data payload also terminates the loop with `api_error` before tool dispatch
+or successful completion. The error does not echo upstream data. Well-formed unknown event types and SSE comments
+remain tolerated. Each started content block must receive `content_block_stop` before `message_stop`, including
+hidden built-in tool blocks. Otherwise the round fails before dispatch or successful completion. Full event-schema
+validation remains separate work. Block indexes must be non-negative integers and cannot be reused within a round;
+deltas and stops require an open block, so duplicate stops and post-stop deltas fail before dispatch or completion.
+`message_start` events require a non-empty string message ID, including in later rounds.
+Content and terminal events require a preceding `message_start` in each upstream round.
+Block starts and deltas require object payloads with non-empty string types before buffering or delivery.
+Known text, thinking, signature, and input-JSON deltas require string fragments; empty strings remain valid.
+For known block types, text deltas require text blocks, thinking/signature deltas require thinking blocks,
+and input-JSON deltas require tool-use blocks.
+Named extension types remain accepted; these checks are not complete schema validation.
+Duplicate `message_start` events within one round fail before usage updates or tool dispatch;
+a new upstream start in a later tool round remains valid. Tool-use blocks require non-empty string IDs and names.
+Invalid identifiers fail before dispatch or completion, including in hidden built-in tool blocks.
+Tool-use IDs must be unique within each upstream round, across built-in and client-executed tools.
+Already-streamed content remains partial. A valid `message_stop` still releases the upstream body immediately,
+without waiting for HTTP EOF. This completion gate does not yet validate every content-block transition;
+full lifecycle validation and aggregate resource limits remain tracked in #313. Pass-through requests are unchanged.
 
 A round that ends while a gateway call is present — a `max_tokens` truncation mid-call, or an `end_turn` the
 gateway does not accept as a tool stop — does not execute that call, and both transports keep it hidden. The

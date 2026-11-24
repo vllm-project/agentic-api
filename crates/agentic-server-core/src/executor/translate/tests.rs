@@ -1,8 +1,16 @@
 use super::*;
-use crate::events::{SSEEventType, SseLine};
-use crate::executor::accumulator::ResponseAccumulator;
+use crate::events::{EventPayload, SSEEventType, SseLine};
+use crate::executor::accumulator::{ResponseAccumulator, Validation};
+use crate::executor::engine::upstream_events;
+use crate::executor::modes::ResponseHandler;
 use crate::executor::pipeline::RoundIngestion;
-use crate::tool::ToolType;
+use crate::storage::ResponseStore;
+use crate::tool::{
+    ToolType, custom::public_item_id as custom_item_id, shell::public_item_id as shell_item_id,
+    tool_search::public_item_id as search_item_id,
+};
+use crate::types::io::InOutItem;
+use crate::types::request_response::RequestPayload;
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -23,6 +31,236 @@ fn translate(
     RoundIngestion::translate_line(accumulator, SseLine::parse(&sse(value)), translator)
         .expect("translation succeeds")
         .expect("SSE event")
+}
+
+#[tokio::test]
+async fn bare_provider_message_ids_remain_replayable_across_json_and_sse() {
+    for raw in ["aa50fd35914b7610", "msg-123", "msg123"] {
+        let public = format!("msg_{raw}");
+        let payload = serde_json::json!({
+            "id":"upstream", "object":"response", "model":"test", "status":"completed", "created_at":0,
+            "output":[
+                {"id":raw,"type":"message","role":"assistant","status":"completed",
+                    "content":[{"type":"output_text","text":"finished","annotations":[],"logprobs":[]}]},
+                {"id":"msg_existing","type":"message","role":"assistant","status":"completed",
+                    "content":[{"type":"output_text","text":"existing","annotations":[],"logprobs":[]}]},
+                {"id":"fc_existing","type":"function_call","call_id":raw,"name":"client_tool",
+                    "arguments":"{}","status":"completed"}
+            ]
+        });
+        let handler = ResponseHandler::new(ResponseStore::disabled());
+        let mut invalid: Vec<InOutItem> = serde_json::from_value(payload["output"].clone()).unwrap();
+        assert!(
+            handler
+                .resolve_input_items(&mut invalid, std::iter::empty())
+                .await
+                .is_err(),
+            "client validation stays strict"
+        );
+        for stream in [false, true] {
+            let context = TranslationContext::default().with_request_fields(&RequestPayload {
+                store: false,
+                ..RequestPayload::default()
+            });
+            let mut round = RoundIngestion::new("resp_test".into(), None, Validation::Strict, context, None);
+            let mut frames = Vec::new();
+            if stream {
+                let mut events = Vec::<Value>::new();
+                for line in upstream_events(&payload).lines() {
+                    if let Some(data) = line.strip_prefix("data: ") {
+                        events.push(serde_json::from_str(data).unwrap());
+                    }
+                }
+                events.insert(
+                    1,
+                    serde_json::json!({"type":"response.in_progress",
+                "response":{"id":"upstream","status":"in_progress","output":[]}}),
+                );
+                for (sequence, mut event) in events.into_iter().enumerate() {
+                    event["sequence_number"] = serde_json::json!(sequence);
+                    frames.extend(round.push(SseLine::parse(&sse(&event))).unwrap().frames);
+                }
+                for frame in frames {
+                    let wire = serde_json::to_value(frame.wire).unwrap();
+                    let index = wire["output_index"].as_u64();
+                    if index == Some(0) {
+                        if let Some(id) = wire.get("item_id") {
+                            assert_eq!(id, &public);
+                        }
+                        if let Some(item) = wire.get("item") {
+                            assert_eq!(item["id"], public);
+                        }
+                    }
+                    if wire["type"] == "response.completed" {
+                        assert_eq!(wire["response"]["output"][0]["id"], public);
+                    }
+                }
+            } else {
+                round.load_json_body(&payload.to_string()).unwrap();
+            }
+            let response = round.finish("test", None, None).unwrap();
+            assert_eq!(response.output[0].id(), Some(public.as_str()));
+            assert_eq!(response.output[1].id(), Some("msg_existing"));
+            assert_eq!(response.output[2].id(), Some("fc_existing"));
+            let OutputItem::FunctionCall(call) = &response.output[2] else {
+                panic!("function call")
+            };
+            assert_eq!(call.call_id, raw);
+            let mut history: Vec<InOutItem> =
+                serde_json::from_value(serde_json::to_value(response.output).unwrap()).unwrap();
+            handler
+                .resolve_input_items(&mut history, std::iter::empty())
+                .await
+                .expect("returned history is accepted unchanged");
+        }
+    }
+}
+
+#[tokio::test]
+async fn bare_provider_function_ids_are_public_without_changing_call_identity() {
+    for (raw, kind, asynchronous, unnamed) in [
+        ("843504fdc3165785", ToolType::Function, false, false),
+        ("8d00640e121d1da0", ToolType::Function, true, false),
+        ("9b19cfe961b24eba", ToolType::CodexNamespace, false, false),
+        ("843504fdc3165785", ToolType::Function, false, true),
+    ] {
+        let public = format!("fc_{raw}");
+        let call_id = format!("call_{raw}");
+        let payload = serde_json::json!({
+            "id":"upstream", "object":"response", "model":"test", "status":"completed", "created_at":0,
+            "output":[
+                {"id":raw,"type":"function_call","call_id":call_id,"name":"lookup",
+                    "arguments":"{\"city\":\"Paris\"}","status":"completed"},
+                {"id":"fc_existing","type":"function_call","call_id":"call_existing","name":"lookup",
+                    "arguments":"{}","status":"completed"}
+            ]
+        });
+        for stream in [false, true] {
+            let context =
+                test_context(HashMap::from([("lookup".into(), kind)])).with_async_tool_names(if asynchronous {
+                    HashSet::from(["lookup".into()])
+                } else {
+                    HashSet::new()
+                });
+            let mut round = RoundIngestion::new("resp_test".into(), None, Validation::Strict, context, None);
+            let mut deltas = 0;
+            if stream {
+                let mut events: Vec<Value> = upstream_events(&payload)
+                    .lines()
+                    .filter_map(|line| line.strip_prefix("data: "))
+                    .map(|data| serde_json::from_str(data).unwrap())
+                    .collect();
+                events.insert(
+                    1,
+                    serde_json::json!({"type":"response.in_progress",
+                    "response":{"id":"upstream","status":"in_progress","output":[]}}),
+                );
+                for (sequence, mut event) in events.into_iter().enumerate() {
+                    event["sequence_number"] = serde_json::json!(sequence);
+                    if unnamed && event["type"] == "response.output_item.added" && event["output_index"] == 0 {
+                        event["item"].as_object_mut().unwrap().remove("name");
+                    }
+                    for frame in round.push(SseLine::parse(&sse(&event))).unwrap().frames {
+                        let wire = serde_json::to_value(frame.wire).unwrap();
+                        if wire["output_index"] == 0 {
+                            if let Some(id) = wire.get("item_id") {
+                                assert_eq!(id, &public);
+                            }
+                            if let Some(item) = wire.get("item") {
+                                assert_eq!(item["id"], public);
+                                assert_eq!(item["call_id"], call_id);
+                            }
+                            if wire["type"] == "response.function_call_arguments.delta" {
+                                deltas += 1;
+                            }
+                        }
+                        if wire["type"] == "response.completed" {
+                            assert_eq!(wire["response"]["output"][0]["id"], public);
+                            assert_eq!(wire["response"]["output"][1]["id"], "fc_existing");
+                        }
+                    }
+                }
+                assert_eq!(deltas, 1);
+            } else {
+                round.load_json_body(&payload.to_string()).unwrap();
+            }
+            let response = round.finish("test", None, None).unwrap();
+            assert_eq!(response.output[0].id(), Some(public.as_str()));
+            assert_eq!(response.output[1].id(), Some("fc_existing"));
+            let OutputItem::FunctionCall(call) = &response.output[0] else {
+                panic!("function call")
+            };
+            assert_eq!(call.call_id, call_id);
+            assert_eq!(call.arguments, "{\"city\":\"Paris\"}");
+            assert_eq!(call.async_execution, asynchronous);
+            let mut history: Vec<InOutItem> =
+                serde_json::from_value(serde_json::to_value(response.output).unwrap()).unwrap();
+            InOutItem::admit_all(&history, "input").unwrap();
+            ResponseHandler::new(ResponseStore::disabled())
+                .resolve_input_items(&mut history, std::iter::empty())
+                .await
+                .unwrap();
+        }
+    }
+}
+
+#[test]
+fn public_function_id_normalization_keeps_other_tool_projection_ids() {
+    let raw = "843504fdc3165785";
+    for (name, kind, arguments, expected) in [
+        (
+            "raw_echo",
+            ToolType::Custom,
+            r#"{"input":"hello"}"#,
+            custom_item_id(raw),
+        ),
+        ("shell", ToolType::Shell, r#"{"commands":["pwd"]}"#, shell_item_id(raw)),
+        (
+            "tool_search",
+            ToolType::ToolSearch,
+            r#"{"query":"weather"}"#,
+            search_item_id(raw),
+        ),
+    ] {
+        let mut accumulator = ResponseAccumulator::new("resp_1".into(), None);
+        let context = test_context(HashMap::from([(name.into(), kind)]));
+        let mut translator = TranslationDispatcher::new(context);
+        for mut event in function_call_events(0, name, arguments) {
+            if let Some(item) = event.get_mut("item") {
+                item["id"] = serde_json::json!(raw);
+            }
+            if let Some(id) = event.get_mut("item_id") {
+                *id = serde_json::json!(raw);
+            }
+            for frame in translate(&mut accumulator, &mut translator, &event).frames {
+                if let Some(id) = frame.wire.rest.get("item_id") {
+                    assert_eq!(id, &expected);
+                }
+                if let Some(item) = frame.wire.rest.get("item") {
+                    assert_eq!(item["id"], expected);
+                }
+            }
+        }
+        translator.finish().unwrap();
+    }
+    for kind in [
+        ToolType::Mcp,
+        ToolType::WebSearch,
+        ToolType::CodeInterpreter,
+        ToolType::Custom,
+        ToolType::Shell,
+    ] {
+        let context = test_context(HashMap::from([("private_tool".into(), kind)]));
+        let mut output = vec![
+            serde_json::from_value(serde_json::json!({"type":"function_call", "id":raw,
+            "call_id":"call_original", "name":"private_tool", "arguments":"{}", "status":"completed"}))
+            .unwrap(),
+        ];
+        context
+            .normalize_response_output(&mut output, ResponseStatus::Completed, &HashSet::new())
+            .unwrap();
+        assert_eq!(output[0].id(), Some(raw), "private identity for {kind:?}");
+    }
 }
 
 #[test]
@@ -257,6 +495,148 @@ fn custom_input_over_limit_is_rejected() {
     let error = RoundIngestion::translate_line(&mut accumulator, SseLine::parse(&sse(&oversized)), &mut translator)
         .expect_err("oversized custom input must fail");
     assert!(error.to_string().contains("function-call SSE exceeded"));
+}
+
+fn function_call_events(output_index: u32, name: &str, arguments: &str) -> Vec<Value> {
+    let item_id = format!("fc_{output_index}");
+    let call_id = format!("call_{output_index}");
+    vec![
+        serde_json::json!({
+            "type": "response.output_item.added", "output_index": output_index,
+            "item": {"id": item_id, "type": "function_call", "status": "in_progress",
+                     "call_id": call_id, "name": name, "arguments": ""}
+        }),
+        serde_json::json!({
+            "type": "response.function_call_arguments.delta", "output_index": output_index,
+            "item_id": item_id, "call_id": call_id, "delta": arguments
+        }),
+        serde_json::json!({
+            "type": "response.function_call_arguments.done", "output_index": output_index,
+            "item_id": item_id, "call_id": call_id, "name": name, "arguments": arguments
+        }),
+        serde_json::json!({
+            "type": "response.output_item.done", "output_index": output_index,
+            "item": {"id": item_id, "type": "function_call", "status": "completed",
+                     "call_id": call_id, "name": name, "arguments": arguments}
+        }),
+    ]
+}
+
+/// Async client calls carry `async: true` on their public item lifecycle (stream) and on the
+/// round's final call items; other client calls are unchanged. Custom calls keep the marker in
+/// their restored public shape. A streamed item, its event payload and the final output item agree.
+#[test]
+fn async_tool_calls_are_marked_on_stream_items_and_final_output() {
+    let mut accumulator = ResponseAccumulator::new("resp_1".to_owned(), None);
+    let context = test_context(HashMap::from([
+        ("get_weather".to_owned(), ToolType::Function),
+        ("get_time".to_owned(), ToolType::Function),
+        ("echo".to_owned(), ToolType::Custom),
+    ]))
+    .with_async_tool_names(HashSet::from(["get_weather".to_owned(), "echo".to_owned()]));
+    let mut translator = TranslationDispatcher::new(context);
+
+    let mut lifecycle = Vec::new();
+    let mut done_items = Vec::new();
+    for (index, name, arguments) in [
+        (0, "get_weather", r#"{"city":"Paris"}"#),
+        (1, "get_time", r#"{"city":"Tokyo"}"#),
+        (2, "echo", r#"{"input":"hi"}"#),
+    ] {
+        for event in function_call_events(index, name, arguments) {
+            for frame in translate(&mut accumulator, &mut translator, &event).frames {
+                if matches!(
+                    frame.event_type,
+                    SSEEventType::OutputItemAdded | SSEEventType::OutputItemDone
+                ) {
+                    lifecycle.push((index, frame.wire.rest["item"].clone()));
+                }
+                if frame.event_type == SSEEventType::OutputItemDone {
+                    // Built frames carry no payload; a passed-through one must agree with the wire.
+                    if let EventPayload::OutputItemDone { item, .. } = &frame.payload {
+                        assert_eq!(item, &frame.wire.rest["item"], "payload and wire items agree");
+                    }
+                    done_items.push(frame.wire.rest["item"].clone());
+                }
+            }
+        }
+    }
+    assert_eq!(lifecycle.len(), 6, "added and done for each call");
+    for (index, item) in &lifecycle {
+        let expected = *index != 1;
+        assert_eq!(
+            item.get("async") == Some(&Value::Bool(true)),
+            expected,
+            "{index}: {item}"
+        );
+    }
+    assert!(
+        lifecycle
+            .iter()
+            .any(|(index, item)| *index == 2 && item["type"] == "custom_tool_call"),
+        "custom calls are restored to their public shape"
+    );
+
+    // The final output holds the upstream items, which carry no marker.
+    let mut output: Vec<OutputItem> = done_items[..2]
+        .iter()
+        .map(|item| {
+            let mut upstream = item.clone();
+            upstream.as_object_mut().unwrap().remove("async");
+            serde_json::from_value(upstream).unwrap()
+        })
+        .collect();
+    translator
+        .finish()
+        .unwrap()
+        .normalize_response_output(&mut output, ResponseStatus::Completed)
+        .unwrap();
+    let marked: Vec<bool> = output
+        .iter()
+        .map(|item| matches!(item, OutputItem::FunctionCall(call) if call.async_execution))
+        .collect();
+    assert_eq!(marked, [true, false]);
+    let finals: Vec<Value> = output.iter().map(|item| serde_json::to_value(item).unwrap()).collect();
+    assert_eq!(finals, done_items[..2], "streamed and final call items agree");
+}
+
+/// Marking an async call keeps what the upstream item left out: a call identified only by its
+/// `item_id` keeps that ID, and an added call without a status stays in progress.
+#[test]
+fn async_marking_keeps_the_upstream_id_and_in_progress_status() {
+    let mut accumulator = ResponseAccumulator::new("resp_1".to_owned(), None);
+    let context = test_context(HashMap::from([("get_weather".to_owned(), ToolType::Function)]))
+        .with_async_tool_names(HashSet::from(["get_weather".to_owned()]));
+    let mut translator = TranslationDispatcher::new(context);
+    let mut events = function_call_events(0, "get_weather", r#"{"city":"Paris"}"#);
+    for event in &mut events {
+        let added = event["type"] == "response.output_item.added";
+        if let Some(item) = event.get_mut("item").and_then(Value::as_object_mut) {
+            let id = item.insert("id".to_owned(), Value::from("")).unwrap();
+            item.insert("item_id".to_owned(), id);
+            if added {
+                item.insert("status".to_owned(), Value::Null);
+            }
+        }
+    }
+    let mut items = Vec::new();
+    for event in &events {
+        for frame in translate(&mut accumulator, &mut translator, event).frames {
+            if matches!(
+                frame.event_type,
+                SSEEventType::OutputItemAdded | SSEEventType::OutputItemDone
+            ) {
+                items.push(frame.wire.rest["item"].clone());
+            }
+        }
+    }
+    assert_eq!(items.len(), 2, "{items:?}");
+    assert!(
+        items.iter().all(|item| item["id"] == "fc_0" && item["async"] == true),
+        "{items:?}"
+    );
+    assert_eq!(items[0]["status"], "in_progress");
+    assert_eq!(items[1]["status"], "completed");
 }
 
 #[test]
@@ -560,6 +940,51 @@ fn gateway_owned_functions_are_suppressed_and_mark_the_defer_boundary() {
     assert_eq!(delta.defer_from_output_index, Some(2));
 }
 
+/// An async call that precedes the round's first gateway call streams at once, as in the recorded
+/// `OpenAI` web-search response. One that follows it keeps output-index order: it is released with
+/// the gateway call's lifecycle, after that tool completes.
+#[test]
+fn async_calls_keep_output_order_around_gateway_calls() {
+    let mut accumulator = ResponseAccumulator::new("resp_1".to_owned(), None);
+    let context = test_context(HashMap::from([
+        ("get_weather".to_owned(), ToolType::Function),
+        ("web_search".to_owned(), ToolType::WebSearch),
+    ]))
+    .with_gateway_owned_names(HashSet::from(["web_search".to_owned()]))
+    .with_async_tool_names(HashSet::from(["get_weather".to_owned()]));
+    let mut translator = TranslationDispatcher::new(context);
+
+    let mut async_frames = Vec::new();
+    for event in function_call_events(0, "get_weather", r#"{"city":"Paris"}"#) {
+        let translated = translate(&mut accumulator, &mut translator, &event);
+        assert_eq!(
+            translated.defer_from_output_index, None,
+            "nothing precedes the async call"
+        );
+        async_frames.extend(translated.frames);
+    }
+    assert!(!async_frames.is_empty(), "the async call streams immediately");
+    for event in function_call_events(1, "web_search", r#"{"query":"Lisbon"}"#) {
+        let translated = translate(&mut accumulator, &mut translator, &event);
+        assert!(
+            translated.frames.is_empty(),
+            "the gateway produces the search lifecycle"
+        );
+        assert_eq!(translated.defer_from_output_index, Some(1));
+    }
+    for event in function_call_events(2, "get_weather", r#"{"city":"Rome"}"#) {
+        let translated = translate(&mut accumulator, &mut translator, &event);
+        assert_eq!(
+            translated.defer_from_output_index,
+            Some(1),
+            "a later async call is held behind the gateway call"
+        );
+        for frame in translated.frames {
+            assert!(frame.wire.output_index.is_some_and(|index| index > 1));
+        }
+    }
+}
+
 #[test]
 fn synthetic_tool_search_emits_public_frames_but_accumulates_function_call() {
     let mut accumulator = ResponseAccumulator::new("resp_1".to_owned(), None);
@@ -648,7 +1073,7 @@ fn synthetic_tool_search_emits_public_frames_but_accumulates_function_call() {
 }
 
 #[test]
-fn second_tool_search_call_is_rejected_across_native_and_synthetic_shapes() {
+fn duplicate_tool_search_call_id_is_rejected_across_native_and_synthetic_shapes() {
     let synthetic = |output_index: u32, suffix: &str| {
         serde_json::json!({
             "type": "response.output_item.added",
@@ -688,7 +1113,8 @@ fn second_tool_search_call_is_rejected_across_native_and_synthetic_shapes() {
         ("native then synthetic", native(0, "first"), synthetic(1, "second")),
     ];
 
-    for (case, first, second) in cases {
+    for (case, first, mut second) in cases {
+        second["item"]["call_id"] = first["item"]["call_id"].clone();
         let mut accumulator = ResponseAccumulator::new("resp_1".to_owned(), None);
         let context = test_context(HashMap::from([("tool_search".to_owned(), ToolType::ToolSearch)]));
         let mut translator = TranslationDispatcher::new(context);
@@ -710,7 +1136,7 @@ fn second_tool_search_call_is_rejected_across_native_and_synthetic_shapes() {
 }
 
 #[test]
-fn terminal_output_rejects_multiple_tool_search_calls() {
+fn terminal_output_rejects_duplicate_tool_search_call_ids() {
     let mut accumulator = ResponseAccumulator::new("resp_1".to_owned(), None);
     let context = test_context(HashMap::from([("tool_search".to_owned(), ToolType::ToolSearch)]));
     let mut translator = TranslationDispatcher::new(context);
@@ -731,7 +1157,7 @@ fn terminal_output_rejects_multiple_tool_search_calls() {
                 {
                     "id": "fc_synthetic",
                     "type": "function_call",
-                    "call_id": "call_synthetic",
+                    "call_id": "call_native",
                     "name": "tool_search",
                     "arguments": "",
                     "status": "in_progress"
@@ -741,7 +1167,7 @@ fn terminal_output_rejects_multiple_tool_search_calls() {
     });
 
     let error = RoundIngestion::translate_line(&mut accumulator, SseLine::parse(&sse(&terminal)), &mut translator)
-        .expect_err("terminal response must not contain two search calls");
+        .expect_err("terminal response must not contain duplicate search call IDs");
     assert!(matches!(
         error,
         ExecutorError::Tool(crate::tool::ToolError::InvalidUpstreamToolSearch)
@@ -829,53 +1255,55 @@ fn synthetic_tool_search_rejects_non_string_name_in_buffered_added_item() {
 
 #[test]
 fn native_tool_search_frames_pass_through_and_accumulate_natively() {
-    let mut accumulator = ResponseAccumulator::new("resp_1".to_owned(), None);
-    let context = test_context(HashMap::new());
-    let mut translator = TranslationDispatcher::new(context);
-    let events = [
-        serde_json::json!({
-            "type": "response.output_item.added",
-            "output_index": 0,
-            "item": {
-                "id": "tsc_native",
-                "type": "tool_search_call",
-                "call_id": "call_search",
-                "execution": "client",
-                "arguments": {},
-                "status": "in_progress"
-            }
-        }),
-        serde_json::json!({
-            "type": "response.output_item.done",
-            "output_index": 0,
-            "item": {
-                "id": "tsc_native",
-                "type": "tool_search_call",
-                "call_id": "call_search",
-                "execution": "client",
-                "arguments": ["weather", "timezone"],
-                "status": "completed"
-            }
-        }),
-        serde_json::json!({
-            "type": "response.completed",
-            "response": {"id": "resp_1", "status": "completed", "output": []}
-        }),
-    ];
+    for added_status in ["in_progress", "completed"] {
+        let mut accumulator = ResponseAccumulator::new("resp_1".to_owned(), None);
+        let context = test_context(HashMap::new());
+        let mut translator = TranslationDispatcher::new(context);
+        let events = [
+            serde_json::json!({
+                "type": "response.output_item.added",
+                "output_index": 0,
+                "item": {
+                    "id": "tsc_native",
+                    "type": "tool_search_call",
+                    "call_id": "call_search",
+                    "execution": "client",
+                    "arguments": {},
+                    "status": added_status
+                }
+            }),
+            serde_json::json!({
+                "type": "response.output_item.done",
+                "output_index": 0,
+                "item": {
+                    "id": "tsc_native",
+                    "type": "tool_search_call",
+                    "call_id": "call_search",
+                    "execution": "client",
+                    "arguments": ["weather", "timezone"],
+                    "status": "completed"
+                }
+            }),
+            serde_json::json!({
+                "type": "response.completed",
+                "response": {"id": "resp_1", "status": "completed", "output": []}
+            }),
+        ];
 
-    let frames = events
-        .iter()
-        .flat_map(|event| translate(&mut accumulator, &mut translator, event).frames)
-        .collect::<Vec<_>>();
-    translator.finish().expect("completed native lifecycle");
-    assert_eq!(frames[0].wire.rest["item"]["type"], "tool_search_call");
-    assert_eq!(frames[1].wire.rest["item"]["type"], "tool_search_call");
+        let frames = events
+            .iter()
+            .flat_map(|event| translate(&mut accumulator, &mut translator, event).frames)
+            .collect::<Vec<_>>();
+        translator.finish().expect("completed native lifecycle");
+        assert_eq!(frames[0].wire.rest["item"]["type"], "tool_search_call");
+        assert_eq!(frames[1].wire.rest["item"]["type"], "tool_search_call");
 
-    let payload = accumulator.finalize("test", None, None);
-    let [OutputItem::ToolSearchCall(call)] = payload.output.as_slice() else {
-        panic!("native tool_search_call must remain typed");
-    };
-    assert_eq!(call.arguments, serde_json::json!(["weather", "timezone"]));
+        let payload = accumulator.finalize("test", None, None);
+        let [OutputItem::ToolSearchCall(call)] = payload.output.as_slice() else {
+            panic!("native tool_search_call must remain typed");
+        };
+        assert_eq!(call.arguments, serde_json::json!(["weather", "timezone"]));
+    }
 }
 
 #[test]
@@ -1009,7 +1437,7 @@ fn incomplete_stream_preserves_unfinished_synthetic_search() {
         .find(|frame| frame.event_type == SSEEventType::OutputItemAdded)
         .expect("public added frame");
     assert_eq!(call.id, added.wire.rest["item"]["id"]);
-    assert_eq!(call.call_id, added.wire.rest["item"]["call_id"]);
+    assert_eq!(call.call_id.as_deref(), added.wire.rest["item"]["call_id"].as_str());
     assert_eq!(call.arguments, serde_json::json!({}));
     assert_eq!(call.status, crate::types::tools::ToolSearchStatus::Incomplete);
     assert!(payload.output[0].to_input_item().is_none());
@@ -1346,7 +1774,7 @@ fn withheld_names_are_rejected_at_every_translation_entry_and_final_projection()
         let mut dispatcher = TranslationDispatcher::new(context);
         let frame = crate::events::normalize_sse_line(&sse(&event)).expect("normalized event");
         let error = dispatcher
-            .translate(frame, None)
+            .translate(frame, None, None)
             .expect_err("withheld name must be rejected before dispatch");
         assert!(matches!(error, ExecutorError::Tool(_)));
     }
@@ -1544,4 +1972,112 @@ fn malformed_shell_arguments_fail_closed() {
     let error = RoundIngestion::translate_line(&mut accumulator, SseLine::parse(&sse(&done)), &mut translator)
         .expect_err("invalid shell action must fail");
     assert!(error.to_string().contains("invalid action arguments"));
+}
+
+fn attributed_call_events(name: &str, arguments: &str) -> [Value; 4] {
+    [
+        serde_json::json!({
+            "type": "response.output_item.added", "output_index": 0,
+            "item": {"id": "fc_attributed", "type": "function_call", "call_id": "call_attributed",
+                "name": name, "arguments": "", "status": "in_progress"}
+        }),
+        serde_json::json!({
+            "type": "response.function_call_arguments.delta", "output_index": 0,
+            "item_id": "fc_attributed", "delta": arguments
+        }),
+        serde_json::json!({
+            "type": "response.function_call_arguments.done", "output_index": 0,
+            "item_id": "fc_attributed", "call_id": "call_attributed", "name": name,
+            "arguments": arguments
+        }),
+        serde_json::json!({
+            "type": "response.output_item.done", "output_index": 0,
+            "item": {"id": "fc_attributed", "type": "function_call", "call_id": "call_attributed",
+                "name": name, "arguments": arguments, "status": "completed"}
+        }),
+    ]
+}
+
+#[test]
+fn translators_preserve_event_and_item_attribution_independently() {
+    let attribution = serde_json::json!({"agent_name": "/root/worker"});
+    let event_attribution = serde_json::json!({"agent_name": "/root"});
+    for (name, kind, arguments, public_type) in [
+        ("lookup", ToolType::Function, "{}", "function_call"),
+        ("lookup", ToolType::CodexNamespace, "{}", "function_call"),
+        ("raw_echo", ToolType::Custom, r#"{"input":"hello"}"#, "custom_tool_call"),
+        ("shell", ToolType::Shell, r#"{"commands":["pwd"]}"#, "shell_call"),
+        (
+            "tool_search",
+            ToolType::ToolSearch,
+            r#"{"query":"weather"}"#,
+            "tool_search_call",
+        ),
+    ] {
+        for (event_agent, item_agent) in [(false, false), (false, true), (true, false), (true, true)] {
+            let mut accumulator = ResponseAccumulator::new("resp_1".to_owned(), None);
+            let mut translator = TranslationDispatcher::new(test_context(HashMap::from([(name.to_owned(), kind)])));
+            let mut lifecycle_count = 0;
+            for (index, mut event) in attributed_call_events(name, arguments).into_iter().enumerate() {
+                // An unattributed delta after an attributed opening must stay unattributed.
+                if event_agent && index != 1 {
+                    event["agent"] = event_attribution.clone();
+                }
+                if item_agent && let Some(item) = event.get_mut("item") {
+                    item["agent"] = attribution.clone();
+                }
+                for frame in translate(&mut accumulator, &mut translator, &event).frames {
+                    let wire = serde_json::to_value(&frame.wire).unwrap();
+                    assert_eq!(wire.get("agent"), event.get("agent"), "{name}: event attribution");
+                    if let Some(item) = wire.get("item") {
+                        lifecycle_count += 1;
+                        assert_eq!(item["type"], public_type);
+                        assert_eq!(
+                            item.get("agent"),
+                            item_agent.then_some(&attribution),
+                            "{name}: item attribution"
+                        );
+                    }
+                }
+            }
+            assert_eq!(lifecycle_count, 2, "{name}: added and done snapshots");
+        }
+    }
+}
+
+#[test]
+fn buffered_translation_preserves_each_source_events_attribution() {
+    let mut accumulator = ResponseAccumulator::new("resp_1".to_owned(), None);
+    let mut translator =
+        TranslationDispatcher::new(test_context(HashMap::from([("raw_echo".to_owned(), ToolType::Custom)])));
+    let mut events = attributed_call_events("raw_echo", r#"{"input":"hello"}"#);
+    events[0]["item"].as_object_mut().unwrap().remove("name");
+    events[0]["agent"] = serde_json::json!({"agent_name": "/root"});
+    events[0]["item"]["agent"] = serde_json::json!({"agent_name": "/root/worker"});
+    assert!(
+        translate(&mut accumulator, &mut translator, &events[0])
+            .frames
+            .is_empty()
+    );
+    assert!(
+        translate(&mut accumulator, &mut translator, &events[1])
+            .frames
+            .is_empty()
+    );
+    // The resolving event omits attribution. It must not overwrite the buffered opening.
+    let frames = translate(&mut accumulator, &mut translator, &events[2]).frames;
+    let added = serde_json::to_value(&frames[0].wire).unwrap();
+    assert_eq!(added["agent"], events[0]["agent"]);
+    assert_eq!(added["item"]["agent"], events[0]["item"]["agent"]);
+    assert!(frames.iter().skip(1).all(|frame| frame.wire.agent.is_none()));
+    assert!(
+        frames
+            .iter()
+            .any(|frame| frame.event_type == SSEEventType::CustomToolCallInputDelta)
+    );
+    // An authoritative completion can omit item attribution; do not fill it from earlier events.
+    let frames = translate(&mut accumulator, &mut translator, &events[3]).frames;
+    let done = serde_json::to_value(&frames.last().unwrap().wire).unwrap();
+    assert!(done.get("agent").is_none());
+    assert!(done["item"].get("agent").is_none());
 }

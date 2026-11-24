@@ -239,7 +239,7 @@ fn finish_preserves_terminal_metadata_under_both_policies() {
             let payload = pipeline.finish("model", None, None).unwrap();
             assert_eq!(payload.status, if status == "failed" { "error" } else { status });
             assert_eq!(payload.id, "resp_1");
-            assert_eq!(payload.conversation_id.as_deref(), Some("conv_1"));
+            assert_eq!(payload.conversation.as_deref(), Some("conv_1"));
             assert_eq!(payload.error, Some(error));
             assert_eq!(
                 payload.incomplete_details.unwrap().reason.as_deref(),
@@ -248,6 +248,59 @@ fn finish_preserves_terminal_metadata_under_both_policies() {
             assert_eq!(payload.usage.unwrap().total_tokens, 5);
         }
     }
+}
+
+#[test]
+fn native_code_interpreter_stream_passes_through_and_assembles() {
+    let mut pipeline = pipeline(Validation::Strict, &[]);
+    start(&mut pipeline);
+
+    let added_item = json!({
+        "type": "code_interpreter_call",
+        "id": "ci_1",
+        "container_id": "cntr_1",
+        "code": "",
+        "status": "in_progress",
+        "outputs": null
+    });
+    let completed_item = json!({
+        "type": "code_interpreter_call",
+        "id": "ci_1",
+        "container_id": "cntr_1",
+        "code": "print(42)",
+        "status": "completed",
+        "outputs": [{"type": "logs", "logs": "42\n"}]
+    });
+    let events = [
+        json!({"type": "response.output_item.added", "output_index": 0, "item": added_item}),
+        json!({"type": "response.code_interpreter_call.in_progress", "output_index": 0, "item_id": "ci_1"}),
+        json!({"type": "response.code_interpreter_call_code.delta", "output_index": 0, "item_id": "ci_1", "delta": "print("}),
+        json!({"type": "response.code_interpreter_call_code.delta", "output_index": 0, "item_id": "ci_1", "delta": "42)"}),
+        json!({"type": "response.code_interpreter_call_code.done", "output_index": 0, "item_id": "ci_1", "code": "print(42)"}),
+        json!({"type": "response.code_interpreter_call.interpreting", "output_index": 0, "item_id": "ci_1"}),
+        json!({"type": "response.code_interpreter_call.completed", "output_index": 0, "item_id": "ci_1"}),
+        json!({"type": "response.output_item.done", "output_index": 0, "item": completed_item.clone()}),
+    ];
+
+    for event in events {
+        let event_type = event["type"].as_str().expect("event type");
+        let translated = push(&mut pipeline, &event);
+        assert_eq!(translated.frames.len(), 1, "{event_type} must pass through");
+        assert_eq!(translated.frames[0].wire.event_type.as_deref(), Some(event_type));
+    }
+
+    push(
+        &mut pipeline,
+        &json!({
+            "type": "response.completed",
+            "response": {"id": "resp_1", "status": "completed", "output": [completed_item.clone()]}
+        }),
+    );
+    let payload = pipeline.finish("model", None, None).expect("valid native stream");
+    assert_eq!(
+        serde_json::to_value(payload.output).expect("serialize output"),
+        json!([completed_item])
+    );
 }
 
 #[test]

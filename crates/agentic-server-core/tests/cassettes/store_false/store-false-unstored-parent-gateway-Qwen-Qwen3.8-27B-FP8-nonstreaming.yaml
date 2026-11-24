@@ -1,0 +1,110 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Remember the word ORCHID. Reply with exactly OK.
+      max_output_tokens: 2048
+      model: Qwen/Qwen3.8-27B-FP8
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1793003469
+      created_at: 1793003469
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a17755-ba4e-7563-997f-8587bf0dfd14
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 2048
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to remember the word "ORCHID" and reply with exactly
+            "OK".
+
+            '
+          type: reasoning_text
+        id: rs_b135372c701b8f3e
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            OK'
+          type: output_text
+        id: msg_89cba2bd41e1f62f
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 52
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 25
+        output_tokens_details:
+          reasoning_tokens: 21
+        total_tokens: 77
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input: Say OK.
+      max_output_tokens: 2048
+      model: Qwen/Qwen3.8-27B-FP8
+      previous_response_id: resp_01a17755-ba4e-7563-997f-8587bf0dfd14
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: previous_response_not_found
+        message: Previous response with id 'resp_01a17755-ba4e-7563-997f-8587bf0dfd14'
+          not found.
+        param: previous_response_id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400

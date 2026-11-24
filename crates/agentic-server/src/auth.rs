@@ -1,3 +1,7 @@
+pub(crate) mod api_key;
+
+use api_key::bearer_token;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -5,18 +9,17 @@ use std::time::Instant;
 
 use axum::body::Body;
 use axum::extract::State;
-use axum::http::{HeaderMap, Request, StatusCode, header};
+use axum::http::{HeaderMap, HeaderValue, Request, StatusCode, header};
 use axum::middleware::Next;
 use axum::response::Response;
 use jsonwebtoken::jwk::{Jwk, JwkSet, KeyAlgorithm, KeyOperations, PublicKeyUse};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, decode_header};
 use serde::Deserialize;
-use serde_json::json;
 use tokio::sync::RwLock;
 use tracing::{debug, warn};
 use url::{Host, Url};
 
-use agentic_core::utils::common::uuid7_str;
+use crate::error_response::{ErrorFormat, GatewayError};
 
 const OIDC_HTTP_TIMEOUT: Duration = Duration::from_secs(10);
 const JWKS_REFRESH_COOLDOWN: Duration = Duration::from_secs(30);
@@ -249,10 +252,10 @@ impl OidcAuthenticator {
     async fn verification_key(&self, kid: &str) -> Result<Arc<CachedKey>, OidcAuthError> {
         {
             let keys = self.keys.read().await;
-            if Instant::now() < keys.expires_at {
-                if let Some(key) = keys.keys.get(kid) {
-                    return Ok(Arc::clone(key));
-                }
+            if Instant::now() < keys.expires_at
+                && let Some(key) = keys.keys.get(kid)
+            {
+                return Ok(Arc::clone(key));
             }
         }
 
@@ -353,7 +356,7 @@ pub async fn require_oidc(
     mut request: Request<Body>,
     next: Next,
 ) -> Response {
-    let error_format = AuthErrorFormat::for_path(request.uri().path());
+    let error_format = ErrorFormat::for_path(request.uri().path());
     let Some(token) = bearer_token(request.headers()) else {
         return authentication_error(error_format, "missing_bearer_token", "missing bearer token");
     };
@@ -366,7 +369,7 @@ pub async fn require_oidc(
     match authenticator.authenticate(token).await {
         Ok(principal) => {
             request.headers_mut().remove(header::AUTHORIZATION);
-            if duplicate_identity_api_key || !error_format.allows_upstream_api_key() {
+            if duplicate_identity_api_key || !allows_upstream_api_key(error_format) {
                 request.headers_mut().remove("x-api-key");
             }
             request.extensions_mut().insert(principal);
@@ -384,110 +387,35 @@ pub async fn require_oidc(
     }
 }
 
-fn bearer_token(headers: &axum::http::HeaderMap) -> Option<&str> {
-    headers
-        .get(header::AUTHORIZATION)?
-        .to_str()
-        .ok()?
-        .split_once(' ')
-        .and_then(|(scheme, token)| {
-            let token = token.trim();
-            (scheme.eq_ignore_ascii_case("bearer") && !token.is_empty()).then_some(token)
-        })
+/// Anthropic clients send their upstream credential in `x-api-key`.
+fn allows_upstream_api_key(format: ErrorFormat) -> bool {
+    format == ErrorFormat::Anthropic
 }
 
-#[derive(Clone, Copy)]
-enum AuthErrorFormat {
-    OpenAi,
-    Anthropic,
-}
-
-impl AuthErrorFormat {
-    fn for_path(path: &str) -> Self {
-        if matches!(path, ANTHROPIC_MESSAGES_PATH | ANTHROPIC_COUNT_TOKENS_PATH) {
-            Self::Anthropic
-        } else {
-            Self::OpenAi
-        }
-    }
-
-    fn allows_upstream_api_key(self) -> bool {
-        matches!(self, Self::Anthropic)
-    }
-}
-
-fn authentication_error(format: AuthErrorFormat, code: &'static str, message: &'static str) -> Response {
-    protocol_error(
-        format,
-        StatusCode::UNAUTHORIZED,
-        "authentication_error",
-        "authentication_error",
+fn authentication_error(format: ErrorFormat, code: &'static str, message: &'static str) -> Response {
+    let mut response = GatewayError {
+        status: StatusCode::UNAUTHORIZED,
+        openai_type: "authentication_error",
+        anthropic_type: "authentication_error",
         code,
         message,
-        true,
-    )
+    }
+    .into_response(format);
+    response
+        .headers_mut()
+        .insert(header::WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
+    response
 }
 
-fn authentication_service_unavailable(format: AuthErrorFormat) -> Response {
-    protocol_error(
-        format,
-        StatusCode::SERVICE_UNAVAILABLE,
-        "server_error",
-        "api_error",
-        "authentication_service_unavailable",
-        "authentication service temporarily unavailable",
-        false,
-    )
-}
-
-fn protocol_error(
-    format: AuthErrorFormat,
-    status: StatusCode,
-    openai_error_type: &'static str,
-    anthropic_error_type: &'static str,
-    code: &'static str,
-    message: &'static str,
-    challenge: bool,
-) -> Response {
-    let (body, request_id) = match format {
-        AuthErrorFormat::OpenAi => (
-            json!({
-                "error": {
-                    "message": message,
-                    "type": openai_error_type,
-                    "param": null,
-                    "code": code
-                }
-            }),
-            None,
-        ),
-        AuthErrorFormat::Anthropic => {
-            let request_id = uuid7_str("req_");
-            (
-                json!({
-                    "type": "error",
-                    "error": {
-                        "type": anthropic_error_type,
-                        "message": message
-                    },
-                    "request_id": &request_id
-                }),
-                Some(request_id),
-            )
-        }
-    };
-    let mut builder = Response::builder()
-        .status(status)
-        .header(header::CONTENT_TYPE, "application/json");
-    if let Some(request_id) = request_id.as_deref() {
-        builder = builder.header("request-id", request_id);
+fn authentication_service_unavailable(format: ErrorFormat) -> Response {
+    GatewayError {
+        status: StatusCode::SERVICE_UNAVAILABLE,
+        openai_type: "server_error",
+        anthropic_type: "api_error",
+        code: "authentication_service_unavailable",
+        message: "authentication service temporarily unavailable",
     }
-    if challenge {
-        builder = builder.header(header::WWW_AUTHENTICATE, "Bearer");
-    }
-    builder
-        .body(Body::from(body.to_string()))
-        .expect("valid authentication protocol error response")
+    .into_response(format)
 }
 
 #[derive(Clone, Copy)]
@@ -671,15 +599,15 @@ fn jwks_ttl(headers: &HeaderMap) -> Duration {
             if directive.eq_ignore_ascii_case("no-cache") || directive.eq_ignore_ascii_case("no-store") {
                 return Duration::ZERO;
             }
-            if let Some((name, seconds)) = directive.split_once('=') {
-                if name.trim().eq_ignore_ascii_case("max-age") {
-                    let parsed = seconds.trim().trim_matches('"').parse::<u64>().ok();
-                    max_age = match (max_age, parsed) {
-                        (Some(existing), Some(parsed)) => Some(existing.min(parsed)),
-                        (None, parsed) => parsed,
-                        (existing, None) => existing,
-                    };
-                }
+            if let Some((name, seconds)) = directive.split_once('=')
+                && name.trim().eq_ignore_ascii_case("max-age")
+            {
+                let parsed = seconds.trim().trim_matches('"').parse::<u64>().ok();
+                max_age = match (max_age, parsed) {
+                    (Some(existing), Some(parsed)) => Some(existing.min(parsed)),
+                    (None, parsed) => parsed,
+                    (existing, None) => existing,
+                };
             }
         }
     }

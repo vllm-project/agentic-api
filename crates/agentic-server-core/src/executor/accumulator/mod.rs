@@ -8,7 +8,7 @@
 //! convenience method uses a channel and `spawn_blocking` worker; that worker is
 //! not the executor's main streaming path.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::mpsc;
 
@@ -16,28 +16,27 @@ use futures::{Stream, StreamExt};
 
 use crate::events::{
     ClassifiedSseLine, EventFrame, EventPayload, SSEEventType, SSEItemType, SseLine, ValidatedFrame,
-    normalize_sse_data_checked, output_item_identity, validate_frame,
+    normalize_sse_data_checked, validate_frame,
 };
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::response_budget::{
-    ExecutorResponseBudget, RETAINED_CONTAINER_OVERHEAD_BYTES, RetainedAccount, RetainedSize,
-    retained_response_parts_bytes,
-};
+use crate::executor::response_budget::{ExecutorResponseBudget, RETAINED_CONTAINER_OVERHEAD_BYTES, RetainedAccount};
 use crate::types::event::ResponseStatus;
 use crate::types::io::{FunctionToolCall, OutputItem, ResponseUsage};
-use crate::types::request_response::{IncompleteDetails, ResponsePayload};
-use crate::utils::common::{deserialize_from_str, deserialize_from_value_opt};
+use crate::types::request_response::IncompleteDetails;
 use crate::utils::uuid7_str;
 
 mod active;
 mod active_text;
 mod identity;
-use identity::{invalid_lifecycle, invalid_lifecycle_or_id, invalid_stream, item_identity, output_item_call_id};
+use identity::{
+    CallIdObservation, invalid_lifecycle, invalid_lifecycle_or_id, invalid_stream, item_identity, output_item_call_id,
+};
 mod completion;
 mod details;
 mod json;
 mod slot;
 mod source;
+mod terminal;
 
 use active::ActiveItem;
 use slot::{OutputIndex, SlotMap, SlotState};
@@ -47,25 +46,6 @@ use slot::{OutputIndex, SlotMap, SlotState};
 pub(super) enum Validation {
     Strict,
     Lenient,
-}
-
-#[derive(Debug, Default)]
-struct CallIdObservation {
-    first: Option<String>,
-    changed: bool,
-}
-
-impl CallIdObservation {
-    fn observe(&mut self, call_id: Option<&str>) {
-        let Some(call_id) = call_id.filter(|call_id| !call_id.is_empty()) else {
-            return;
-        };
-        match self.first.as_deref() {
-            Some(first) if first != call_id => self.changed = true,
-            None => self.first = Some(call_id.to_owned()),
-            Some(_) => {}
-        }
-    }
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -128,6 +108,8 @@ pub struct ResponseAccumulator {
     conversation_id: Option<String>,
     output: Vec<OutputItem>,
     usage: Option<ResponseUsage>,
+    service_tier: Option<String>,
+    service_tier_account: RetainedAccount,
     status: ResponseStatus,
     incomplete_details: Option<IncompleteDetails>,
     error: Option<serde_json::Value>,
@@ -157,6 +139,8 @@ impl ResponseAccumulator {
             conversation_id,
             output: Vec::new(),
             usage: None,
+            service_tier: None,
+            service_tier_account: RetainedAccount::default(),
             status: ResponseStatus::InProgress,
             incomplete_details: None,
             error: None,
@@ -177,72 +161,6 @@ impl ResponseAccumulator {
         let mut acc = Self::with_validation(response_id, conversation_id, validation);
         acc.budget = budget;
         acc
-    }
-
-    /// Parses a non-streaming JSON response body.
-    ///
-    /// # Errors
-    /// Returns `ExecutorError::ParseError` if JSON parsing fails or required fields are missing.
-    pub fn from_json(body: &str, conversation_id: Option<&str>) -> ExecutorResult<Self> {
-        Self::read_json(body, conversation_id.map(str::to_owned), Validation::Lenient)
-    }
-
-    pub(super) fn load_json_body(&mut self, body: &str) -> ExecutorResult<()> {
-        let acc = Self::read_json(body, self.conversation_id.clone(), self.validation)?;
-        let retained = retained_response_parts_bytes(&acc.response_id, &acc.output)
-            + acc.incomplete_details.retained_bytes()
-            + acc.error.retained_bytes();
-        if let Some(budget) = &self.budget {
-            budget.consume(retained)?;
-        }
-        let budget = self.budget.clone();
-        *self = acc;
-        self.budget = budget;
-        Ok(())
-    }
-
-    fn read_json(body: &str, conversation_id: Option<String>, validation: Validation) -> ExecutorResult<Self> {
-        let mut json: serde_json::Value = deserialize_from_str(body).map_err(ExecutorError::JsonError)?;
-        if validation == Validation::Strict {
-            json::ensure_strict_response(&json)?;
-        }
-
-        let response_id = json["id"]
-            .as_str()
-            .ok_or_else(|| ExecutorError::ParseError("missing 'id' field in response".into()))?
-            .to_string();
-
-        let output = deserialize_from_value_opt::<Vec<serde_json::Value>>(json["output"].take())
-            .map(|items| {
-                let mut out = Vec::with_capacity(items.len());
-                out.extend(items.into_iter().filter_map(deserialize_from_value_opt::<OutputItem>));
-                out
-            })
-            .unwrap_or_default();
-
-        let status = json["status"]
-            .as_str()
-            .map_or(ResponseStatus::Completed, |s| s.parse().unwrap_or_default());
-
-        let usage = deserialize_from_value_opt::<ResponseUsage>(json["usage"].take());
-        let incomplete_details = deserialize_from_value_opt::<IncompleteDetails>(json["incomplete_details"].take());
-        let error = (!json["error"].is_null()).then(|| json["error"].take());
-
-        Ok(Self {
-            validation,
-            response_id,
-            conversation_id,
-            output,
-            usage,
-            status,
-            incomplete_details,
-            error,
-            terminal_details_account: RetainedAccount::default(),
-            slots: SlotMap::default(),
-            strict_call_ids: HashMap::new(),
-            stream_lifecycle: StreamLifecycle::Terminal,
-            budget: None,
-        })
     }
 
     /// Accumulates an async stream of raw SSE lines with parallel processing.
@@ -297,13 +215,6 @@ impl ResponseAccumulator {
         Ok(acc)
     }
 
-    /// Finalizes all streaming items in upstream `output_index` order.
-    pub(crate) fn finalize_all(&mut self) -> ExecutorResult<()> {
-        self.output
-            .extend(self.slots.drain_output_with_budget(self.budget.as_ref())?);
-        Ok(())
-    }
-
     /// Normalize classified data once, then validate and fold under the fixed policy.
     pub(super) fn process_line(&mut self, line: ClassifiedSseLine) -> ExecutorResult<Option<EventFrame>> {
         let Some(frame) = self.normalize_line(line)? else {
@@ -328,7 +239,24 @@ impl ResponseAccumulator {
     /// Shares validation and assembly between normalized frames and HTTP/SSE input.
     pub(super) fn process_event_frame(&mut self, frame: EventFrame) -> ExecutorResult<Option<EventFrame>> {
         let disposition = self.process_normalized_event(&frame)?;
-        Ok(disposition.into_frame(frame))
+        let Some(mut frame) = disposition.into_frame(frame) else {
+            return Ok(None);
+        };
+        if let EventPayload::OutputItemDone {
+            item_id,
+            item_type: SSEItemType::CodeInterpreterCall,
+            output_index: Some(index),
+            ..
+        } = &frame.payload
+            && item_id.is_empty()
+            && let Some(OutputItem::CodeInterpreterCall(call)) = self
+                .slots
+                .get(OutputIndex::new(*index))
+                .and_then(|slot| slot.state.done_item())
+        {
+            frame.set_done_item_id(&call.id);
+        }
+        Ok(Some(frame))
     }
 
     fn process_normalized_event(&mut self, frame: &EventFrame) -> ExecutorResult<EventDisposition> {
@@ -387,94 +315,12 @@ impl ResponseAccumulator {
         Err(invalid_lifecycle(event_name))
     }
 
-    fn validate_terminal_output(&mut self, frame: &EventFrame, enforce_call_id_stability: bool) -> ExecutorResult<()> {
-        if enforce_call_id_stability {
-            self.ensure_stable_strict_call_ids()?;
-        }
-        let response = frame
-            .wire
-            .rest
-            .get("response")
-            .and_then(serde_json::Value::as_object)
-            .ok_or_else(|| invalid_stream("terminal upstream response has no valid 'response'"))?;
-        let Some(output) = response.get("output") else {
-            return Ok(());
-        };
-        if output.is_null() {
-            return Ok(());
-        }
-        let output = output
-            .as_array()
-            .ok_or_else(|| invalid_stream("terminal upstream response has no valid 'output'"))?;
-        if output.len() != self.slots.len() {
-            return Err(invalid_stream(
-                "terminal upstream response output does not match completed item events",
-            ));
-        }
-
-        let mut terminal_item_ids = HashSet::with_capacity(output.len());
-        for (output_index, item) in output.iter().enumerate() {
-            let output_index = u32::try_from(output_index)
-                .map_err(|_| invalid_stream("terminal upstream response has too many output items"))?;
-            let item = item
-                .as_object()
-                .ok_or_else(|| invalid_stream("terminal upstream response contains an invalid output item"))?;
-            let (item_id, item_type) = output_item_identity(item, "terminal output item")
-                .map_err(|error| invalid_stream(error.to_string()))?;
-            if !terminal_item_ids.insert(item_id) {
-                return Err(invalid_stream(format!(
-                    "terminal upstream response repeats output item '{item_id}'"
-                )));
-            }
-            let Some(completed) = self
-                .slots
-                .get(OutputIndex::new(output_index))
-                .and_then(|slot| slot.state.done_item())
-            else {
-                return Err(invalid_stream(
-                    "terminal upstream response output does not match completed item events",
-                ));
-            };
-            if SSEItemType::try_from(completed) != Ok(item_type) {
-                return Err(invalid_stream(
-                    "terminal upstream response output does not match completed item events",
-                ));
-            }
-            let mut canonical = serde_json::Value::Object(item.clone());
-            if canonical
-                .get("id")
-                .and_then(serde_json::Value::as_str)
-                .is_none_or(str::is_empty)
-            {
-                canonical["id"] = serde_json::Value::String(item_id.to_owned());
-            }
-            let terminal_item = serde_json::from_value(canonical).map_err(|error| {
-                invalid_stream(format!("terminal upstream response output item is invalid: {error}"))
-            })?;
-            self.observe_strict_call_id(output_index, output_item_call_id(&terminal_item));
-        }
-        if enforce_call_id_stability {
-            self.ensure_stable_strict_call_ids()?;
-        }
-        Ok(())
-    }
-
-    fn ensure_stable_strict_call_ids(&self) -> ExecutorResult<()> {
-        if let Some(output_index) = self
-            .strict_call_ids
-            .iter()
-            .filter_map(|(output_index, observation)| observation.changed.then_some(*output_index))
-            .min()
-        {
-            return Err(invalid_stream(format!(
-                "upstream stream changes 'call_id' for output[{output_index}]"
-            )));
-        }
-        Ok(())
-    }
-
     fn observe_strict_call_id(&mut self, output_index: u32, call_id: Option<&str>) {
         self.strict_call_ids.entry(output_index).or_default().observe(call_id);
+    }
+
+    pub(super) fn accumulated_item_type(&self, output_index: u32) -> Option<SSEItemType> {
+        self.slots.get(OutputIndex::new(output_index))?.state.item_type()
     }
 
     pub(super) fn accumulated_function_call(&self, output_index: u32) -> Option<AccumulatedFunctionCall<'_>> {
@@ -492,24 +338,6 @@ impl ResponseAccumulator {
             }),
             _ => None,
         }
-    }
-
-    pub(crate) fn finish_strict_stream(&mut self) -> ExecutorResult<()> {
-        if self.stream_lifecycle != StreamLifecycle::Terminal {
-            return Err(ExecutorError::InvalidRequest(
-                "upstream stream ended without a terminal event".to_owned(),
-            ));
-        }
-        self.finish_stream()
-    }
-
-    pub(crate) fn finish_stream(&mut self) -> ExecutorResult<()> {
-        self.finalize_all()?;
-        if self.status == ResponseStatus::InProgress {
-            self.status = ResponseStatus::Completed;
-        }
-        self.stream_lifecycle = StreamLifecycle::Terminal;
-        Ok(())
     }
 
     /// Feeds typed test fixtures through the same policy-controlled transitions as ingestion.
@@ -538,8 +366,10 @@ impl ResponseAccumulator {
                 event_type @ (SSEEventType::ResponseCompleted
                 | SSEEventType::ResponseFailed
                 | SSEEventType::ResponseIncomplete),
-                EventPayload::Response { usage, .. },
-            ) => self.finish_response_event(*event_type, *usage)?,
+                EventPayload::Response {
+                    usage, service_tier, ..
+                },
+            ) => self.finish_response_event(*event_type, *usage, service_tier.clone())?,
             _ => {
                 let Some(identity) = item_identity(frame, validated) else {
                     return Ok(EventDisposition::Emit(None));
@@ -586,75 +416,6 @@ impl ResponseAccumulator {
             }
         }
         Ok(EventDisposition::Emit(None))
-    }
-
-    fn finish_response_event(&mut self, event_type: SSEEventType, usage: Option<ResponseUsage>) -> ExecutorResult<()> {
-        let status = match event_type {
-            SSEEventType::ResponseCompleted => ResponseStatus::Completed,
-            SSEEventType::ResponseFailed => ResponseStatus::Error,
-            SSEEventType::ResponseIncomplete => ResponseStatus::Incomplete,
-            _ => return Ok(()),
-        };
-        self.finish_response(status, usage)
-    }
-
-    fn finish_response(&mut self, status: ResponseStatus, usage: Option<ResponseUsage>) -> ExecutorResult<()> {
-        self.finalize_all()?;
-        self.status = status;
-        self.usage = usage;
-        self.stream_lifecycle = StreamLifecycle::Terminal;
-        Ok(())
-    }
-
-    /// Marks the response as incomplete due to an error or interruption.
-    pub fn mark_incomplete(&mut self, reason: impl Into<String>) {
-        self.status = ResponseStatus::Incomplete;
-        self.incomplete_details = Some(IncompleteDetails {
-            reason: Some(reason.into()),
-        });
-    }
-
-    /// Applies the selected stream policy and consumes the assembled response.
-    pub(super) fn finish(
-        mut self,
-        model: &str,
-        previous_response_id: Option<&str>,
-        instructions: Option<&str>,
-    ) -> ExecutorResult<ResponsePayload> {
-        match self.validation {
-            Validation::Strict => self.finish_strict_stream()?,
-            Validation::Lenient => self.finish_stream()?,
-        }
-        Ok(self.finalize(model, previous_response_id, instructions))
-    }
-
-    /// Finalizes the accumulator into a `ResponsePayload`.
-    ///
-    /// The caller supplies fields that come from the original request, not from
-    /// the LLM response stream.
-    #[must_use]
-    pub fn finalize(
-        self,
-        model: &str,
-        previous_response_id: Option<&str>,
-        instructions: Option<&str>,
-    ) -> ResponsePayload {
-        ResponsePayload {
-            id: self.response_id,
-            object: "response".to_string(),
-            created_at: chrono::Utc::now().timestamp(),
-            model: model.to_string(),
-            status: self.status.as_str().to_string(),
-            output: self.output,
-            usage: self.usage,
-            incomplete_details: self.incomplete_details,
-            error: self.error,
-            previous_response_id: previous_response_id.map(str::to_string),
-            conversation_id: self.conversation_id,
-            instructions: instructions.map(str::to_string),
-            tools: None,
-            tool_choice: None,
-        }
     }
 }
 

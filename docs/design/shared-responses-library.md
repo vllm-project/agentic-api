@@ -33,7 +33,7 @@ implemented. A live engine smoke test and model-profile qualification remain req
 | `executor/prepare.rs` and `upstream.rs` | Shared tool/request preparation and model-visible projection before each round, for both modes. |
 | `events/` and `executor/accumulator/` | Normalize events and perform the single lifecycle/identity/assembly implementation. |
 | `executor/pipeline/ingest.rs` | Own the shared `EventFrame` input beneath framing, preserving translation and finalization. |
-| `executor/translate/` and `pipeline/delivery.rs` | Restore public tool shapes and deliver ordered events using the existing bounded path. |
+| `executor/translate/` and `executor/relay/` | Restore public tool shapes and deliver ordered events using the existing bounded path. |
 | Shared vLLM libraries | Model rendering, tokenization, multimodal preparation, decoding, reasoning/tool parsing, and engine communication. |
 | llm-d | Endpoint selection, canonical cache-key mapping, residency indexing, and session policy. |
 | vLLM EngineCore | Inference, KV-cache mechanisms, cache events, and supported cache-control actions. |
@@ -154,7 +154,8 @@ Reuse `Option<ResponseUsage>` for round accounting. Reasoning is a subset of out
 input. The existing engine combines per-round counts once. Adapters must check nonnegative counts, subset relations,
 and checked conversion/addition within the public signed integer range. Cache-read counts do not prove current
 residency and do not imply cache-write or billing counters. Absent usage means unavailable, not zero. The existing
-usage type defaults omitted counters to zero for HTTP compatibility; it cannot express unknown individual counters.
+usage type defaults its required counters to zero for HTTP compatibility. Its optional `cache_write_tokens`
+counter preserves absence; the native adapter fills it from the engine's reported cache-creation count.
 Native usage capability claims must state which counters are known. Any availability extension belongs on the
 existing usage contract, with an explicit public mapping, before advertising complete usage support. Do not add
 another usage struct or manufacture cache-hit or reasoning counts.

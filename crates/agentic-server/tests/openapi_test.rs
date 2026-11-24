@@ -3,6 +3,7 @@
 
 mod common;
 
+use agentic_core::types::RequestPayload;
 use agentic_server::app::{AppState, ServerConfig, build_router};
 use common::{spawn_mock_llm, test_config, test_state};
 use tokio::net::TcpListener;
@@ -29,6 +30,68 @@ async fn fetch_spec() -> serde_json::Value {
 }
 
 #[tokio::test]
+async fn prompt_cache_options_schema_exposes_the_closed_mode_ttl_contract() {
+    let spec = fetch_spec().await;
+    let schemas = &spec["components"]["schemas"];
+    assert_eq!(
+        schemas["PromptCacheMode"]["enum"],
+        serde_json::json!(["implicit", "explicit"])
+    );
+    assert_eq!(schemas["PromptCacheTtl"]["enum"], serde_json::json!(["30m"]));
+    let options = &schemas["PromptCacheOptions"];
+    assert_eq!(options["additionalProperties"], false);
+    let properties = options["properties"].as_object().unwrap();
+    assert_eq!(properties.len(), 2);
+    assert!(properties.contains_key("mode"));
+    assert!(properties.contains_key("ttl"));
+    for name in ["RequestPayload", "CompactRequest", "ResponsePayload"] {
+        assert!(!schemas[name]["properties"]["prompt_cache_options"].is_null());
+    }
+}
+
+#[tokio::test]
+async fn responses_capability_parameter_schemas_match_typed_decoding() {
+    let spec = fetch_spec().await;
+    let schema = serde_json::json!({
+        "$ref":"#/components/schemas/RequestPayload", "components":spec["components"]
+    });
+    let validator = jsonschema::validator_for(&schema).expect("Responses request schema");
+    for fields in [
+        serde_json::json!({}),
+        serde_json::json!({"top_logprobs":null,"reasoning":{"effort":null},"service_tier":null}),
+        serde_json::json!({"top_logprobs":-1,"reasoning":{"effort":"none"},"service_tier":"fast"}),
+        serde_json::json!({"top_logprobs":21,"reasoning":{"effort":"minimal"},"service_tier":"ultrafast"}),
+        serde_json::json!({"reasoning":{"effort":"max"},"service_tier":"scale"}),
+    ] {
+        let mut wire = serde_json::json!({"model":"test-model","input":"hi"});
+        wire.as_object_mut()
+            .unwrap()
+            .extend(fields.as_object().unwrap().clone());
+        assert!(validator.is_valid(&wire), "schema rejected {wire}");
+        assert!(serde_json::from_value::<RequestPayload>(wire).is_ok());
+    }
+    for fields in [
+        serde_json::json!({"top_logprobs":"3"}),
+        serde_json::json!({"top_logprobs":1.5}),
+        serde_json::json!({"reasoning":{"effort":"hgih"}}),
+        serde_json::json!({"service_tier":"custom"}),
+    ] {
+        let mut wire = serde_json::json!({"model":"test-model","input":"hi"});
+        wire.as_object_mut()
+            .unwrap()
+            .extend(fields.as_object().unwrap().clone());
+        assert!(!validator.is_valid(&wire), "schema accepted {wire}");
+        assert!(serde_json::from_value::<RequestPayload>(wire).is_err());
+    }
+    let compact = serde_json::json!({
+        "$ref":"#/components/schemas/CompactRequest", "components":spec["components"]
+    });
+    let validator = jsonschema::validator_for(&compact).expect("compact request schema");
+    assert!(validator.is_valid(&serde_json::json!({"model":"test-model","service_tier":"flex"})));
+    assert!(!validator.is_valid(&serde_json::json!({"model":"test-model","service_tier":"custom"})));
+}
+
+#[tokio::test]
 async fn openapi_json_returns_valid_spec() {
     let body = fetch_spec().await;
 
@@ -37,6 +100,10 @@ async fn openapi_json_returns_valid_spec() {
         "must be OpenAPI 3.x"
     );
     assert_eq!(body["info"]["title"], "vLLM Agentic API");
+    assert_eq!(
+        body["components"]["schemas"]["RequestPayload"]["additionalProperties"],
+        true
+    );
 
     let paths = body["paths"].as_object().expect("paths must be an object");
     for expected in [
@@ -45,6 +112,7 @@ async fn openapi_json_returns_valid_spec() {
         "/v1/models",
         "/v1/responses",
         "/v1/responses/compact",
+        "/v1/responses/{response_id}",
         "/v1/conversations",
         "/v1/messages",
         "/v1/messages/count_tokens",
@@ -215,14 +283,26 @@ async fn tagged_enum_discriminators_present() {
                 .or_else(|| variant["allOf"][0]["properties"]["type"]["enum"][0].as_str())
         })
         .collect();
-    assert!(
-        type_values.contains(&"compaction_trigger"),
-        "InputItem missing 'compaction_trigger', got: {type_values:?}"
+    for expected in ["compaction_trigger", "message", "web_search_call", "mcp_call"] {
+        assert!(
+            type_values.contains(&expected),
+            "InputItem missing '{expected}', got: {type_values:?}"
+        );
+    }
+    assert!(schemas.get("ConversationItem").is_none());
+    assert_eq!(schemas["InOutItem"]["$ref"], "#/components/schemas/InputItem");
+    assert_eq!(
+        schemas["ResponsesInput"]["oneOf"][1]["items"]["$ref"],
+        "#/components/schemas/InOutItem"
     );
-    assert!(
-        type_values.contains(&"message"),
-        "InputItem missing 'message', got: {type_values:?}"
-    );
+    let output_types = schemas["OutputItem"]["oneOf"].as_array().unwrap();
+    for kind in ["web_search_call", "mcp_call"] {
+        assert!(
+            output_types
+                .iter()
+                .any(|variant| variant["allOf"][0]["properties"]["type"]["enum"][0] == kind)
+        );
+    }
 }
 
 #[tokio::test]
@@ -242,4 +322,53 @@ async fn swagger_ui_returns_html() {
         content_type.contains("text/html"),
         "swagger-ui should return HTML, got: {content_type}"
     );
+}
+
+#[tokio::test]
+async fn collaboration_input_schemas_allow_omitted_ids_without_weakening_output() {
+    let spec = fetch_spec().await;
+    let schemas = &spec["components"]["schemas"];
+    for name in ["MultiAgentCall", "MultiAgentCallOutput", "AgentMessage"] {
+        let has_required_id = |name: &str| {
+            schemas[name]["required"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|value| value == "id")
+        };
+        assert!(has_required_id(name), "{name} output requires id");
+        assert!(
+            !has_required_id(&format!("Input{name}")),
+            "{name} input allows omitted id"
+        );
+    }
+}
+
+#[tokio::test]
+async fn prompt_cache_retention_schema_matches_request_validation() {
+    let spec = fetch_spec().await;
+    let schemas = &spec["components"]["schemas"];
+    assert_eq!(
+        schemas["PromptCacheRetention"]["enum"],
+        serde_json::json!(["in_memory", "24h"])
+    );
+    for name in ["RequestPayload", "CompactRequest"] {
+        let property = &schemas[name]["properties"]["prompt_cache_retention"];
+        assert!(!property.is_null(), "{name} must expose retention");
+        let alternatives = property["oneOf"].as_array().expect("nullable retention alternatives");
+        assert!(alternatives.iter().any(|schema| schema["type"] == "null"));
+        assert!(
+            alternatives
+                .iter()
+                .any(|schema| schema["enum"] == serde_json::json!(["in_memory", "24h"])
+                    || schema["$ref"] == "#/components/schemas/PromptCacheRetention")
+        );
+        assert!(
+            !schemas[name]["required"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|field| field == "prompt_cache_retention")
+        );
+    }
 }

@@ -172,10 +172,12 @@ class CommandTests(unittest.TestCase):
         self.policy = {"version": 1, "baseline": {}, "exceptions": {}, "generated": {}}
         self.environment = dict(os.environ)
         self.environment.pop("RUST_FILE_SIZE_BASE", None)
+        for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_PREFIX"):
+            self.environment.pop(name, None)
         self.git("init", "-q")
 
     def git(self, *args):
-        return subprocess.run(["git", *args], cwd=self.root, check=True, capture_output=True)
+        return subprocess.run(["git", *args], cwd=self.root, env=self.environment, check=True, capture_output=True)
 
     def source(self, name="src/main.rs", lines=500, tracked=True):
         path = self.root / name

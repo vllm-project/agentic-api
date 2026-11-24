@@ -18,24 +18,30 @@
 //! Every attribute value is bounded: outcomes and failure categories are
 //! closed enums, and no request identifier, model name, prompt, or error
 //! message is recorded.
+//!
+//! The same guard records the execution metrics (see [`metrics`]), so they
+//! are finalized exactly once on the same paths and do not depend on whether
+//! the trace was sampled.
 
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use std::time::Instant;
 
 use futures::Stream;
 use tracing::{Span, field, info_span};
 use tracing_opentelemetry::OpenTelemetrySpanExt as _;
 
 use super::error::ExecutorError;
+use metrics::{ATTR_DELIVERY_OUTCOME, ATTR_ERROR_TYPE, ATTR_EXECUTION_OUTCOME, ExecutionClock};
 
+pub mod metrics;
 pub(crate) mod stages;
+
+pub use metrics::ExecutorMetrics;
 
 /// Span name shared by every API and transport.
 pub const EXECUTE_SPAN_NAME: &str = "agentic.execute";
 
-const ATTR_EXECUTION_OUTCOME: &str = "agentic.execution.outcome";
-const ATTR_DELIVERY_OUTCOME: &str = "agentic.delivery.outcome";
-const ATTR_ERROR_TYPE: &str = "error.type";
 const ATTR_OTEL_STATUS: &str = "otel.status_code";
 
 /// Which public API the request arrived on.
@@ -75,8 +81,7 @@ impl Route {
     }
 }
 
-/// Terminal state of the execution itself, independent of whether the client
-/// received it.
+/// Terminal state of execution, independent of client delivery.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExecutionOutcome {
     /// The response reached a terminal `completed` status.
@@ -105,8 +110,7 @@ impl ExecutionOutcome {
 /// Whether the transport was handed everything the execution produced.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeliveryOutcome {
-    /// The payload, or the terminal streamed frame, was handed to the
-    /// transport. Whether the transport wrote it is the transport's span.
+    /// The payload or terminal frame was handed off; the transport records the write.
     Delivered,
     /// The stream was dropped before its terminal frame.
     Disconnected,
@@ -180,61 +184,90 @@ impl FailureCategory {
 }
 
 impl From<&ExecutorError> for FailureCategory {
-    /// Exhaustive on purpose: a new [`ExecutorError`] variant must choose its
-    /// category here rather than silently falling into a catch-all.
+    /// Exhaustive: every new [`ExecutorError`] variant chooses a category here.
     fn from(error: &ExecutorError) -> Self {
         match error {
+            ExecutorError::FileSearch(source) => match source.status_code() {
+                400 => Self::InvalidRequest,
+                404 => Self::NotFound,
+                409 => Self::Conflict,
+                502 => Self::UpstreamError,
+                _ => Self::Storage,
+            },
             ExecutorError::Storage(source) if source.is_not_found() => Self::NotFound,
             ExecutorError::Storage(_) => Self::Storage,
             ExecutorError::Persistence(_) => Self::Persistence,
             ExecutorError::ConversationLocked { .. } => Self::ConversationLocked,
             ExecutorError::LLMRequest { .. } => Self::UpstreamStatus,
             ExecutorError::LLMTransport { .. } => Self::UpstreamTransport,
-            ExecutorError::DirectInference(_) => Self::UpstreamError,
+            ExecutorError::DirectInference(_) | ExecutorError::UpstreamProtocol(_) => Self::UpstreamError,
             ExecutorError::NetworkError(_) => Self::Network,
             ExecutorError::JsonError(_) | ExecutorError::ParseError(_) => Self::Parse,
             ExecutorError::StreamError(_) => Self::Stream,
-            ExecutorError::NotFound { .. } | ExecutorError::PreviousResponseNotFound { .. } => Self::NotFound,
-            ExecutorError::InvalidRequest(_) => Self::InvalidRequest,
+            ExecutorError::NotFound { .. } | ExecutorError::FileReferencesNotFound { .. } => Self::NotFound,
+            ExecutorError::InvalidRequest(_)
+            | ExecutorError::InvalidInput(_)
+            | ExecutorError::ClientItem(_)
+            | ExecutorError::InvalidMaxToolCalls(_)
+            | ExecutorError::UnsupportedValue { .. }
+            | ExecutorError::UnsupportedParameter(_) => Self::InvalidRequest,
             ExecutorError::PayloadTooLarge(_) => Self::PayloadTooLarge,
             ExecutorError::ResourceLimitExceeded { .. } => Self::ResourceLimit,
             ExecutorError::Conflict(_) => Self::Conflict,
             ExecutorError::CompactionFailed { .. } => Self::Compaction,
-            ExecutorError::Tool(_) => Self::Tool,
+            ExecutorError::Tool(_) | ExecutorError::McpListToolsFailed(_) => Self::Tool,
+            ExecutorError::StreamProducerPanicked => Self::Panic,
         }
     }
 }
 
-/// The `agentic.execute` span plus the guard that finalizes its outcome.
+/// The `agentic.execute` span plus the guard that finalizes its outcome and
+/// records the execution metrics.
 ///
 /// Create it with [`ExecutionSpan::start`], run the request inside
 /// [`ExecutionSpan::span`] (via `Instrument`), state the outcome on the
-/// paths that know it, and let `Drop` finalize the rest.
+/// paths that know it, and let `Drop` finalize the rest. Creating the guard
+/// counts the execution as active; dropping it records its count, duration,
+/// and delivery outcome and releases the active count.
 #[derive(Debug)]
 pub struct ExecutionSpan {
     span: Span,
     execution: Option<ExecutionOutcome>,
+    failure: Option<FailureCategory>,
     delivery: Option<DeliveryOutcome>,
+    clock: ExecutionClock,
 }
 
 impl ExecutionSpan {
     /// Open the span as a child of whatever span is current.
     #[must_use]
-    pub fn start(api: Api, route: Route, stream: bool) -> Self {
-        Self::with_parent(api, route, stream, Span::current().id())
+    pub fn start(api: Api, route: Route, stream: bool, metrics: &ExecutorMetrics) -> Self {
+        Self::with_parent(api, route, stream, metrics, Span::current().id())
     }
 
     /// Start an independent execution trace linked to a long-lived session.
     #[must_use]
-    pub fn start_linked(api: Api, route: Route, stream: bool, link: opentelemetry::trace::SpanContext) -> Self {
-        let execution = Self::with_parent(api, route, stream, None);
+    pub fn start_linked(
+        api: Api,
+        route: Route,
+        stream: bool,
+        metrics: &ExecutorMetrics,
+        link: opentelemetry::trace::SpanContext,
+    ) -> Self {
+        let execution = Self::with_parent(api, route, stream, metrics, None);
         if link.is_valid() {
             execution.span.add_link(link);
         }
         execution
     }
 
-    fn with_parent(api: Api, route: Route, stream: bool, parent: Option<tracing::Id>) -> Self {
+    fn with_parent(
+        api: Api,
+        route: Route,
+        stream: bool,
+        metrics: &ExecutorMetrics,
+        parent: Option<tracing::Id>,
+    ) -> Self {
         // Field names must be literal here; the `ATTR_*` constants name the
         // same fields for `record` calls.
         let span = info_span!(
@@ -252,7 +285,9 @@ impl ExecutionSpan {
         Self {
             span,
             execution: None,
+            failure: None,
             delivery: None,
+            clock: ExecutionClock::start(metrics.clone(), api, route, stream),
         }
     }
 
@@ -260,6 +295,11 @@ impl ExecutionSpan {
     #[must_use]
     pub fn span(&self) -> &Span {
         &self.span
+    }
+
+    /// Timing state shared with the upstream reader and the client relay.
+    pub(crate) fn clock(&self) -> &ExecutionClock {
+        &self.clock
     }
 
     /// The execution reached a terminal state.
@@ -301,6 +341,7 @@ impl ExecutionSpan {
     /// The execution failed for a reason that is not an [`ExecutorError`].
     pub fn failed_with(&mut self, category: FailureCategory) {
         if self.set_execution(ExecutionOutcome::Failed) {
+            self.failure = Some(category);
             self.span.record(ATTR_ERROR_TYPE, category.as_str());
             self.span.record(ATTR_OTEL_STATUS, "ERROR");
         }
@@ -351,14 +392,63 @@ impl ExecutionSpan {
 /// persistence after the last inference round, the outcome guard's `Drop` —
 /// is attributed to the request. `tracing`'s `Instrument` covers futures
 /// only; this is the stream equivalent.
+///
+/// Built with [`InstrumentedStream::delivering`] it is also the client-facing
+/// relay boundary: it measures how long the transport takes to ask for the
+/// next frame after taking one, which is where a slow client's backpressure
+/// shows up.
 pub struct InstrumentedStream<S> {
     inner: S,
     span: Span,
+    delivery: Option<DeliveryTimer>,
+}
+
+struct DeliveryTimer {
+    clock: ExecutionClock,
+    handed_at: Option<Instant>,
+}
+
+impl DeliveryTimer {
+    /// The transport asked for the next frame: add the wait since it took
+    /// the previous one.
+    fn resumed(&mut self) {
+        if let Some(handed_at) = self.handed_at.take() {
+            self.clock.transport_waited(handed_at.elapsed());
+        }
+    }
+
+    /// The transport took a frame.
+    fn handed(&mut self) {
+        self.clock.frame_handed();
+        self.handed_at = Some(Instant::now());
+    }
 }
 
 impl<S> InstrumentedStream<S> {
     pub fn new(inner: S, span: Span) -> Self {
-        Self { inner, span }
+        Self {
+            inner,
+            span,
+            delivery: None,
+        }
+    }
+
+    /// The execution's client-facing frame stream, polled inside the
+    /// execution span.
+    pub(crate) fn delivering(inner: S, span: Span, clock: ExecutionClock) -> Self {
+        Self {
+            inner,
+            span,
+            delivery: Some(DeliveryTimer { clock, handed_at: None }),
+        }
+    }
+
+    /// A frame stream whose execution runs inside its span on another task.
+    /// Delivery is timed without holding the span, which the stream can
+    /// outlive: a retained response's events end only when its connection
+    /// releases the sink, so holding the span would delay its export until then.
+    pub(crate) fn timing_delivery(inner: S, clock: ExecutionClock) -> Self {
+        Self::delivering(inner, Span::none(), clock)
     }
 }
 
@@ -367,8 +457,17 @@ impl<S: Stream + Unpin> Stream for InstrumentedStream<S> {
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
+        // Before polling: the outcome guard inside `inner` may finalize on
+        // this poll and must see the wait that led up to it.
+        if let Some(delivery) = &mut this.delivery {
+            delivery.resumed();
+        }
         let _entered = this.span.enter();
-        Pin::new(&mut this.inner).poll_next(cx)
+        let polled = Pin::new(&mut this.inner).poll_next(cx);
+        if let (Some(delivery), Poll::Ready(Some(_))) = (&mut this.delivery, &polled) {
+            delivery.handed();
+        }
+        polled
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -392,12 +491,16 @@ impl Drop for ExecutionSpan {
             };
             self.set_delivery(delivery);
         }
+        if let (Some(execution), Some(delivery)) = (self.execution, self.delivery) {
+            self.clock.finalize(execution, self.failure, delivery);
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::StorageError;
     use crate::tool::ToolError;
     use http::StatusCode;
 
@@ -455,15 +558,16 @@ mod tests {
                 FailureCategory::Tool,
             ),
             (
-                ExecutorError::PreviousResponseNotFound {
+                ExecutorError::Storage(StorageError::PreviousResponseNotFound {
                     id: "resp_1".to_owned(),
-                },
+                }),
                 FailureCategory::NotFound,
             ),
             (
                 ExecutorError::Persistence(Box::new(ExecutorError::Conflict("inner".to_owned()))),
                 FailureCategory::Persistence,
             ),
+            (ExecutorError::StreamProducerPanicked, FailureCategory::Panic),
         ];
         for (error, expected) in cases {
             assert_eq!(FailureCategory::from(&error), expected, "{error}");
@@ -475,7 +579,8 @@ mod tests {
 
     #[test]
     fn first_execution_outcome_wins() {
-        let mut execution = ExecutionSpan::start(Api::Responses, Route::Executor, true);
+        let mut execution =
+            ExecutionSpan::start(Api::Responses, Route::Executor, true, &ExecutorMetrics::from_global());
         execution.failed_with(FailureCategory::Stream);
         execution.completed();
         assert_eq!(execution.execution, Some(ExecutionOutcome::Failed));
@@ -483,7 +588,8 @@ mod tests {
 
     #[test]
     fn drop_defaults_to_cancelled_and_disconnected() {
-        let mut execution = ExecutionSpan::start(Api::Responses, Route::Executor, true);
+        let mut execution =
+            ExecutionSpan::start(Api::Responses, Route::Executor, true, &ExecutorMetrics::from_global());
         assert_eq!(execution.execution, None);
         // Simulate `Drop` bookkeeping without consuming the value.
         execution.cancelled();
@@ -492,15 +598,18 @@ mod tests {
 
     #[test]
     fn incomplete_status_is_its_own_outcome() {
-        let mut execution = ExecutionSpan::start(Api::Responses, Route::Executor, false);
+        let mut execution =
+            ExecutionSpan::start(Api::Responses, Route::Executor, false, &ExecutorMetrics::from_global());
         execution.completed_with_status("incomplete");
         assert_eq!(execution.execution, Some(ExecutionOutcome::Incomplete));
 
-        let mut execution = ExecutionSpan::start(Api::Messages, Route::Executor, false);
+        let mut execution =
+            ExecutionSpan::start(Api::Messages, Route::Executor, false, &ExecutorMetrics::from_global());
         execution.completed_with_stop_reason(Some("max_tokens"));
         assert_eq!(execution.execution, Some(ExecutionOutcome::Incomplete));
 
-        let mut execution = ExecutionSpan::start(Api::Messages, Route::Executor, false);
+        let mut execution =
+            ExecutionSpan::start(Api::Messages, Route::Executor, false, &ExecutorMetrics::from_global());
         execution.completed_with_stop_reason(Some("end_turn"));
         assert_eq!(execution.execution, Some(ExecutionOutcome::Completed));
     }

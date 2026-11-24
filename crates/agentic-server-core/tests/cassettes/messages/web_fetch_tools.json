@@ -1,0 +1,13 @@
+[
+  {
+    "name": "web_fetch",
+    "description": "Fetch the full text of one web page. Only a URL that already appears in the conversation can be fetched: one the user wrote, one returned by a tool, or one from an earlier search or fetch result.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "url": { "type": "string", "description": "The absolute http or https URL of the page to fetch." }
+      },
+      "required": ["url"]
+    }
+  }
+]

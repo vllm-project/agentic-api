@@ -5,6 +5,8 @@ use crate::types::request_response::ResponsePayload;
 use crate::utils::common::{serialize_to_string, serialize_to_value};
 use serde_json::Value;
 
+/// Cross-round presentation state: sequence numbers, output-index rebasing, and
+/// response-start deduplication. `StreamRelay` owns the instance for a response.
 #[derive(Clone)]
 pub struct GatewayStreamAccumulator {
     next_sequence_number: u64,
@@ -13,9 +15,27 @@ pub struct GatewayStreamAccumulator {
     max_stream_event_bytes: usize,
 }
 
-pub(super) struct StreamEvent {
+/// Ordered delivery messages. Flush barriers carry no wire data or sequence.
+pub(super) enum StreamEvent {
+    Frame(StreamFrame),
+    Flush(tokio::sync::oneshot::Sender<()>),
+}
+
+pub(super) struct StreamFrame {
     pub(super) content: String,
     pub(super) sequence_number: u64,
+    /// An output-text delta, for the relay's first-text timing.
+    pub(super) text: bool,
+}
+
+#[cfg(test)]
+impl StreamEvent {
+    pub(super) fn into_frame(self) -> StreamFrame {
+        match self {
+            Self::Frame(frame) => frame,
+            Self::Flush(_) => panic!("expected a wire frame, received a flush barrier"),
+        }
+    }
 }
 
 /// Executor streams keep only a small number of bounded-size events ahead of
@@ -40,13 +60,17 @@ impl GatewayStreamAccumulator {
         }
     }
 
-    pub(crate) fn max_stream_event_bytes(&self) -> usize {
-        self.max_stream_event_bytes
-    }
-
     pub fn process_sse_line(&mut self, line: &str, output_offset: usize) -> Option<EventFrame> {
         let mut frame = normalize_sse_line(line)?;
         self.process_event(&mut frame, output_offset).then_some(frame)
+    }
+
+    /// Sequence number that the next successfully enqueued event will receive.
+    ///
+    /// Typed gateway event construction may use this value, but
+    /// [`Self::process_event`] remains the authority that stamps and advances it.
+    pub(crate) const fn upcoming_sequence_number(&self) -> u64 {
+        self.next_sequence_number
     }
 
     #[must_use]
@@ -61,6 +85,18 @@ impl GatewayStreamAccumulator {
     fn stamp_event(&mut self, frame: &mut EventFrame, output_offset: usize) {
         frame.wire.sequence_number = Some(self.take_sequence_number());
         rebase_output_index(&mut frame.wire, output_offset);
+    }
+
+    /// Stamps and serializes gateway-built frames in order. Response lifecycle
+    /// events already presented by this stream are skipped.
+    pub(crate) fn frames_chunk(&mut self, frames: Vec<EventFrame>) -> ExecutorResult<String> {
+        let mut chunk = String::new();
+        for mut frame in frames {
+            if self.process_event(&mut frame, 0) {
+                chunk.push_str(&checked_stream_event_limited(&frame, self.max_stream_event_bytes)?);
+            }
+        }
+        Ok(chunk)
     }
 
     pub(crate) fn terminal_response_chunk(&mut self, payload: &ResponsePayload) -> ExecutorResult<String> {
@@ -124,7 +160,7 @@ fn rebase_output_index(wire: &mut WireEvent, output_offset: usize) {
     }
 }
 
-fn terminal_response_frame(payload: &ResponsePayload) -> ExecutorResult<EventFrame> {
+pub(super) fn terminal_response_frame(payload: &ResponsePayload) -> ExecutorResult<EventFrame> {
     let event_type = match payload.terminal_event_type() {
         "response.incomplete" => SSEEventType::ResponseIncomplete,
         "response.failed" => SSEEventType::ResponseFailed,
@@ -140,7 +176,7 @@ fn terminal_response_frame(payload: &ResponsePayload) -> ExecutorResult<EventFra
         .ok_or_else(|| ExecutorError::StreamError("terminal response event has no wire representation".to_owned()))
 }
 
-fn executor_error_frame(error: &ExecutorError) -> EventFrame {
+pub(super) fn executor_error_frame(error: &ExecutorError) -> EventFrame {
     let mut wire = WireEvent::new("error");
     wire.rest
         .insert("status".to_owned(), serde_json::json!(error.http_status().as_u16()));
@@ -201,10 +237,11 @@ pub(super) async fn emit_sse_frame_limited(
         .ok_or_else(|| ExecutorError::StreamError("stream event has no sequence number".to_owned()))?;
     let content = checked_stream_event_limited(frame, max_bytes)?;
     sender
-        .send(StreamEvent {
+        .send(StreamEvent::Frame(StreamFrame {
             content,
             sequence_number,
-        })
+            text: frame.event_type == SSEEventType::OutputTextDelta,
+        }))
         .await
         .map_err(|_| ExecutorError::StreamError("stream receiver closed while emitting gateway event".to_owned()))
 }
@@ -339,7 +376,11 @@ mod tests {
         });
 
         for expected_sequence_number in 0..300 {
-            let event = receiver.recv().await.expect("all burst events should arrive");
+            let event = receiver
+                .recv()
+                .await
+                .expect("all burst events should arrive")
+                .into_frame();
             assert_eq!(event.sequence_number, expected_sequence_number);
         }
         producer.await.expect("producer should not panic");

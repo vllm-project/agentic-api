@@ -8,9 +8,14 @@ pub mod inference;
 pub mod messages_context;
 pub mod messages_loop;
 mod messages_request;
+mod messages_round;
+mod messages_server_tools;
 pub mod messages_stream;
+pub use modes::messages_threads;
+mod messages_tools;
 mod messages_usage;
 pub mod modes;
+pub mod multi_agent;
 pub mod persist;
 mod prepare;
 pub mod rehydrate;
@@ -21,23 +26,32 @@ pub mod translate;
 
 mod gateway;
 pub mod gateway_accumulator;
+mod item_lifecycle;
 mod pending_calls;
 mod pipeline;
+mod relay;
 mod response_budget;
 mod upstream;
 
 pub use compaction::compact_response;
-pub use engine::{BoxStream, ExecuteRequest, create_conversation, execute};
+pub use engine::{BoxStream, ExecuteRequest, execute, prepare_non_generating_turn};
 pub use error::{ExecutorError, ExecutorResult, ResourceLimit};
-pub use inference::call_inference;
 pub use messages_context::{MessagesRequestContext, ParsedMessagesRequest};
 pub use messages_loop::{MessagesResponse, MessagesUpstream, run_messages_loop};
-pub use messages_request::normalize_native_web_search_for_upstream;
+pub use messages_request::{
+    declares_gateway_native_web_fetch, normalize_native_server_tools_for_upstream,
+    normalize_native_web_search_for_upstream,
+};
+pub use messages_server_tools::may_carry_gateway_server_tool_blocks;
+pub use messages_server_tools::replay::replay_server_tool_blocks;
+pub use messages_server_tools::sealing::{MESSAGES_RESULT_KEY_ENV, MessagesResultKey, MessagesResultKeyError};
 pub use messages_stream::run_messages_stream;
-pub use modes::{ConversationHandler, ResponseHandler};
-pub use persist::{commit, persist_response, persist_turn};
+pub use modes::{ConversationHandler, FileHandler, ResponseHandler};
+pub use persist::{commit, persist_turn};
 pub use rehydrate::{rehydrate_conversation, rehydrate_in_session};
-pub use request::ExecutionContext;
-pub use request::RequestContext;
+pub use request::{DEFAULT_MAX_REQUEST_BODY_SIZE_BYTES, ExecutionContext, RequestContext};
 pub use session::{ResponseSession, ResponseSessionGroup};
 pub use upstream::{UpstreamBody, decode_upstream, upstream_request};
+
+pub mod response_events;
+pub use engine::retained::{ResponseRunOwner, RunningResponse};

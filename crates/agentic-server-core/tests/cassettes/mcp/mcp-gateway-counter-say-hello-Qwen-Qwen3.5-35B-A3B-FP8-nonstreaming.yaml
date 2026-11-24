@@ -14,7 +14,7 @@ turns:
         - say_hello
         require_approval: never
         server_label: counter
-        server_url: https://forgotten-available-corporation-planet.trycloudflare.com/mcp
+        server_url: https://bear-impact-devel-venture.trycloudflare.com/mcp
         type: mcp
     headers:
       accept: '*/*'
@@ -25,16 +25,21 @@ turns:
     query_params: {}
   response:
     body:
-      conversation_id: null
-      created_at: 1789100656
+      background: false
+      completed_at: 1792389915
+      created_at: 1792389915
       error: null
-      id: resp_01a08eb5-81cb-7730-a712-ba3ec3d20d0b
+      frequency_penalty: 0.0
+      id: resp_01a152c3-9c0b-7851-986b-6c6652d71681
       incomplete_details: null
       instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
       model: Qwen/Qwen3.5-35B-A3B-FP8
       object: response
       output:
-      - id: mcpl_01a08eb5-8282-7f63-b6d7-39fcb8153a18
+      - id: mcpl_01a152c3-9d3e-7643-a186-d20c1320ef4a
         server_label: counter
         tools:
         - annotations:
@@ -48,43 +53,38 @@ turns:
       - content:
         - text: 'The user wants me to:
 
-            1. Call the mcp__counter__say_hello function exactly once
+            1. Call the mcp__counter__say_hello function exactly once with {} (empty
+            parameters)
 
-            2. Pass {} as the parameter
+            2. Not call any other tool
 
-            3. Not call any other tool
-
-            4. Return exactly "MCP_SAYS=hello"
+            3. Return exactly "MCP_SAYS=hello"
 
 
-            Let me make the function call first, then I''ll return the exact string
-            they requested.
+            I need to make the function call and then return the specified text. Let
+            me call the function first.
 
             '
           type: reasoning_text
-        encrypted_content: null
-        id: rs_9126b937aba5d451
-        status: null
+        id: rs_8f0a032851b5b98c
         summary: []
         type: reasoning
       - approval_request_id: null
         arguments: '{"parameters": "{}"}'
         error: null
-        id: mcp_a23d04c8b3da0606
+        id: mcp_8d0abfb40bd3def1
         name: say_hello
         output: hello
         server_label: counter
         status: completed
         type: mcp_call
       - content:
-        - text: 'The function returned "hello" as expected. Now I need to return exactly
-            "MCP_SAYS=hello" as the user requested.
+        - text: 'Great, the function was called successfully and returned "hello".
+            Now I need to return exactly "MCP_SAYS=hello" as specified by the user.
 
             '
           type: reasoning_text
-        encrypted_content: null
-        id: rs_92201db848f273df
-        status: null
+        id: rs_bee1d1d6f2f6bccd
         summary: []
         type: reasoning
       - content:
@@ -94,20 +94,42 @@ turns:
 
             MCP_SAYS=hello'
           type: output_text
-        id: msg_886b94e78c27ed38
+        id: msg_aa36de9de7dcacd1
         role: assistant
         status: completed
         type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
       previous_response_id: null
+      prompt_cache_key: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
       status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: required
+      tools:
+      - allowed_tools:
+        - say_hello
+        require_approval: never
+        server_label: counter
+        server_url: https://bear-impact-devel-venture.trycloudflare.com/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
       usage:
-        input_tokens: 745
+        input_tokens: 746
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 140
+        output_tokens: 145
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 885
+        total_tokens: 891
     headers:
       content-type: application/json
     status_code: 200

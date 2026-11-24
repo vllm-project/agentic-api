@@ -18,23 +18,7 @@ concurrency:
 
 jobs:
   harness-cli-e2e:
-    name: ${{ matrix.name }} through Agentic API
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Claude Code
-            package: '@anthropic-ai/claude-code'
-            version: '2.1.245'
-            binary: claude
-            expected-version: '2.1.245 (Claude Code)'
-            smoke-script: scripts/claude-code-smoke.sh
-          - name: Codex
-            package: '@openai/codex'
-            version: '0.149.1'
-            binary: codex
-            expected-version: 'codex-cli 0.149.1'
-            smoke-script: scripts/codex-smoke.sh
+    name: Claude Code and Codex through Agentic API
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -70,14 +54,21 @@ jobs:
       - name: Install pinned test dependencies
         run: |
           python -m pip install 'PyYAML==6.0.3'
-          npm install --global '${{ matrix.package }}@${{ matrix.version }}'
-          test "$(${{ matrix.binary }} --version)" = '${{ matrix.expected-version }}'
+          npm install --global '@anthropic-ai/claude-code@2.1.245' '@openai/codex@0.149.1'
+          test "$(claude --version)" = '2.1.245 (Claude Code)'
+          test "$(codex --version)" = 'codex-cli 0.149.1'
 
       - name: Test replay server
         run: python -m unittest scripts/test_claude_code_replay_server.py -v
 
       - name: Build Agentic API CLI and server
+        id: build
         run: cargo build -p agentic-server --bins
 
-      - name: Run ${{ matrix.name }} through Agentic API
-        run: bash '${{ matrix.smoke-script }}'
+      - name: Run Claude Code through Agentic API
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: bash scripts/claude-code-smoke.sh
+
+      - name: Run Codex through Agentic API
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: bash scripts/codex-smoke.sh

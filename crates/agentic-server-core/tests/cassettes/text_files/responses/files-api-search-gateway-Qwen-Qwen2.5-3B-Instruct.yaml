@@ -1,0 +1,1630 @@
+turns:
+- filename: t1
+  request:
+    body_base64: LS0wNjM5ODJiMTNjYjZjMzYxNjYxNzRmNWFiNDFmMTdhNg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQphc3Npc3RhbnRzDQotLTA2Mzk4MmIxM2NiNmMzNjE2NjE3NGY1YWI0MWYxN2E2DQpDb250ZW50LURpc3Bvc2l0aW9uOiBmb3JtLWRhdGE7IG5hbWU9ImZpbGUiOyBmaWxlbmFtZT0ibm90ZXMudHh0Ig0KQ29udGVudC1UeXBlOiB0ZXh0L3BsYWluDQoNCkRlcGxveW1lbnQgY2hlY2tsaXN0Ci0gUmVnaW9uOiBldS13ZXN0Ci0gUmVsZWFzZSBjb2Rld29yZDogUEFQQVlBLTcKLSBPd25lcjogcGxhdGZvcm0gdGVhbQoNCi0tMDYzOTgyYjEzY2I2YzM2MTY2MTc0ZjVhYjQxZjE3YTYtLQ0K
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      content-type: multipart/form-data; boundary=063982b13cb6c36166174f5ab41f17a6
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      bytes: 91
+      created_at: 1794836003
+      filename: notes.txt
+      id: file-01a1e48f-faf4-7102-9e21-49aafadce7c6
+      object: file
+      purpose: assistants
+      status: processed
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body_base64: LS03MjM1YTlhYjJiZDRiMDVlNGM4ZDllOGZhNTJhMjIzNQ0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQphc3Npc3RhbnRzDQotLTcyMzVhOWFiMmJkNGIwNWU0YzhkOWU4ZmE1MmEyMjM1DQpDb250ZW50LURpc3Bvc2l0aW9uOiBmb3JtLWRhdGE7IG5hbWU9ImZpbGUiOyBmaWxlbmFtZT0idGVhbS1ub3Rlcy50eHQiDQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW4NCg0KRGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg0KLS03MjM1YTlhYjJiZDRiMDVlNGM4ZDllOGZhNTJhMjIzNS0tDQo=
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      content-type: multipart/form-data; boundary=7235a9ab2bd4b05e4c8d9e8fa52a2235
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      bytes: 91
+      created_at: 1794836003
+      filename: team-notes.txt
+      id: file-01a1e48f-fafb-75f0-aefb-9c4ebeef2ff7
+      object: file
+      purpose: assistants
+      status: processed
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      file_ids:
+      - file-01a1e48f-faf4-7102-9e21-49aafadce7c6
+      name: agentic-api-recorder
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/vector_stores
+    query_params: {}
+  response:
+    body:
+      created_at: 1794836003
+      file_counts:
+        cancelled: 0
+        completed: 1
+        failed: 0
+        in_progress: 0
+        total: 1
+      id: vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+      metadata: {}
+      name: agentic-api-recorder
+      object: vector_store
+      status: completed
+      usage_bytes: 91
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/vector_stores/vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+    query_params: {}
+  response:
+    body:
+      created_at: 1794836003
+      file_counts:
+        cancelled: 0
+        completed: 1
+        failed: 0
+        in_progress: 0
+        total: 1
+      id: vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+      metadata: {}
+      name: agentic-api-recorder
+      object: vector_store
+      status: completed
+      usage_bytes: 91
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/vector_stores
+    query_params:
+      limit: '1'
+  response:
+    body:
+      data:
+      - created_at: 1794836003
+        file_counts:
+          cancelled: 0
+          completed: 1
+          failed: 0
+          in_progress: 0
+          total: 1
+        id: vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+        metadata: {}
+        name: agentic-api-recorder
+        object: vector_store
+        status: completed
+        usage_bytes: 91
+      first_id: vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+      has_more: false
+      last_id: vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/vector_stores/vs_01a1e48f-fb03-7661-8abf-cd463629fce9/files
+    query_params: {}
+  response:
+    body:
+      data:
+      - attributes: {}
+        chunking_strategy:
+          type: auto
+        created_at: 1794836003
+        id: file-01a1e48f-faf4-7102-9e21-49aafadce7c6
+        last_error: null
+        object: vector_store.file
+        status: completed
+        usage_bytes: 91
+        vector_store_id: vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+      first_id: file-01a1e48f-faf4-7102-9e21-49aafadce7c6
+      has_more: false
+      last_id: file-01a1e48f-faf4-7102-9e21-49aafadce7c6
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/vector_stores/vs_01a1e48f-fb03-7661-8abf-cd463629fce9/files/file-01a1e48f-faf4-7102-9e21-49aafadce7c6
+    query_params: {}
+  response:
+    body:
+      attributes: {}
+      chunking_strategy:
+        type: auto
+      created_at: 1794836003
+      id: file-01a1e48f-faf4-7102-9e21-49aafadce7c6
+      last_error: null
+      object: vector_store.file
+      status: completed
+      usage_bytes: 91
+      vector_store_id: vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body:
+      attributes:
+        department: engineering
+      file_id: file-01a1e48f-fafb-75f0-aefb-9c4ebeef2ff7
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/vector_stores/vs_01a1e48f-fb03-7661-8abf-cd463629fce9/files
+    query_params: {}
+  response:
+    body:
+      attributes:
+        department: engineering
+      chunking_strategy:
+        type: auto
+      created_at: 1794836003
+      id: file-01a1e48f-fafb-75f0-aefb-9c4ebeef2ff7
+      last_error: null
+      object: vector_store.file
+      status: completed
+      usage_bytes: 91
+      vector_store_id: vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body:
+      file_id: file-00000000-0000-7000-8000-000000000000
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/vector_stores/vs_01a1e48f-fb03-7661-8abf-cd463629fce9/files
+    query_params: {}
+  response:
+    body:
+      error:
+        code: not_found
+        message: File not found
+        type: not_found
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t10
+  request:
+    body:
+      query: release codeword
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/vector_stores/vs_01a1e48f-fb03-7661-8abf-cd463629fce9/search
+    query_params: {}
+  response:
+    body:
+      data:
+      - attributes: {}
+        content:
+        - text: 'Deployment checklist
+
+            - Region: eu-west
+
+            - Release codeword: PAPAYA-7
+
+            - Owner: platform team
+
+            '
+          type: text
+        file_id: file-01a1e48f-faf4-7102-9e21-49aafadce7c6
+        filename: notes.txt
+        score: 0.26720767500096954
+      - attributes:
+          department: engineering
+        content:
+        - text: 'Deployment checklist
+
+            - Region: eu-west
+
+            - Release codeword: PAPAYA-7
+
+            - Owner: platform team
+
+            '
+          type: text
+        file_id: file-01a1e48f-fafb-75f0-aefb-9c4ebeef2ff7
+        filename: team-notes.txt
+        score: 0.26720767500096954
+      has_more: false
+      next_page: null
+      object: vector_store.search_results.page
+      search_query:
+      - release codeword
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t11
+  request:
+    body:
+      filters:
+        key: department
+        type: eq
+        value: engineering
+      max_num_results: 1
+      query: release codeword
+      ranking_options:
+        score_threshold: 0.0
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/vector_stores/vs_01a1e48f-fb03-7661-8abf-cd463629fce9/search
+    query_params: {}
+  response:
+    body:
+      data:
+      - attributes:
+          department: engineering
+        content:
+        - text: 'Deployment checklist
+
+            - Region: eu-west
+
+            - Release codeword: PAPAYA-7
+
+            - Owner: platform team
+
+            '
+          type: text
+        file_id: file-01a1e48f-fafb-75f0-aefb-9c4ebeef2ff7
+        filename: team-notes.txt
+        score: 0.3652261267751422
+      has_more: false
+      next_page: null
+      object: vector_store.search_results.page
+      search_query:
+      - release codeword
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t12
+  request:
+    body:
+      query:
+      - release codeword
+      - deployment owner
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/vector_stores/vs_01a1e48f-fb03-7661-8abf-cd463629fce9/search
+    query_params: {}
+  response:
+    body:
+      data:
+      - attributes: {}
+        content:
+        - text: 'Deployment checklist
+
+            - Region: eu-west
+
+            - Release codeword: PAPAYA-7
+
+            - Owner: platform team
+
+            '
+          type: text
+        file_id: file-01a1e48f-faf4-7102-9e21-49aafadce7c6
+        filename: notes.txt
+        score: 0.26720767500096954
+      - attributes:
+          department: engineering
+        content:
+        - text: 'Deployment checklist
+
+            - Region: eu-west
+
+            - Release codeword: PAPAYA-7
+
+            - Owner: platform team
+
+            '
+          type: text
+        file_id: file-01a1e48f-fafb-75f0-aefb-9c4ebeef2ff7
+        filename: team-notes.txt
+        score: 0.26720767500096954
+      has_more: false
+      next_page: null
+      object: vector_store.search_results.page
+      search_query:
+      - release codeword
+      - deployment owner
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t13
+  request:
+    body:
+      filters:
+        key: department
+        type: between
+        value: x
+      query: release codeword
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/vector_stores/vs_01a1e48f-fb03-7661-8abf-cd463629fce9/search
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_request_error
+        message: 'Failed to deserialize the JSON body into the target type: filters:
+          data did not match any variant of untagged enum SearchFilter at line 1 column
+          88'
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t14
+  request:
+    body:
+      max_num_results: 0
+      query: release codeword
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/vector_stores/vs_01a1e48f-fb03-7661-8abf-cd463629fce9/search
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_request_error
+        message: max_num_results must be between 1 and 50
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t15
+  request:
+    body:
+      query: release codeword
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/vector_stores/vs_00000000000000000000000000/search
+    query_params: {}
+  response:
+    body:
+      error:
+        code: not_found
+        message: Vector store not found
+        type: not_found
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t16
+  request:
+    body:
+      include:
+      - file_search_call.results
+      input: What is the release codeword in the deployment notes? Reply with only
+        the codeword.
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-3B-Instruct
+      store: true
+      stream: false
+      tools:
+      - type: file_search
+        vector_store_ids:
+        - vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794836005
+      created_at: 1794836005
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1e48f-fd49-7db2-a521-7c26510fbeca
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen2.5-3B-Instruct
+      object: response
+      output:
+      - id: fs_fc_a0b57651770097e1
+        queries:
+        - deployment notes release codeword
+        results:
+        - attributes: {}
+          file_id: file-01a1e48f-faf4-7102-9e21-49aafadce7c6
+          filename: notes.txt
+          score: 0.35357282609876745
+          text: 'Deployment checklist
+
+            - Region: eu-west
+
+            - Release codeword: PAPAYA-7
+
+            - Owner: platform team
+
+            '
+        - attributes:
+            department: engineering
+          file_id: file-01a1e48f-fafb-75f0-aefb-9c4ebeef2ff7
+          filename: team-notes.txt
+          score: 0.35357282609876745
+          text: 'Deployment checklist
+
+            - Region: eu-west
+
+            - Release codeword: PAPAYA-7
+
+            - Owner: platform team
+
+            '
+        status: completed
+        type: file_search_call
+      - content:
+        - annotations: []
+          logprobs: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_89cdbebcc3a986c0
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools:
+      - type: file_search
+        vector_store_ids:
+        - vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 827
+        input_tokens_details:
+          cache_write_tokens: 480
+          cached_tokens: 336
+        output_tokens: 33
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 860
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t17
+  request:
+    body:
+      include:
+      - file_search_call.results
+      input: What is the release codeword in the deployment notes? Reply with only
+        the codeword.
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-3B-Instruct
+      store: true
+      stream: true
+      tools:
+      - type: file_search
+        vector_store_ids:
+        - vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a1e490-03c5-7681-80cb-3d870f8d475f","created_at":1794836005,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen2.5-3B-Instruct","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"auto","tools":[{"type":"file_search","vector_store_ids":["vs_01a1e48f-fb03-7661-8abf-cd463629fce9"]}],"top_p":1.0,"background":false,"max_output_tokens":64,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"prompt_cache_options":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":null,"safety_identifier":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":true,"error":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a1e490-03c5-7681-80cb-3d870f8d475f","created_at":1794836005,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen2.5-3B-Instruct","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"auto","tools":[{"type":"file_search","vector_store_ids":["vs_01a1e48f-fb03-7661-8abf-cd463629fce9"]}],"top_p":1.0,"background":false,"max_output_tokens":64,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"prompt_cache_options":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":null,"safety_identifier":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":true,"error":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"msg_8f0c8311acf49346","content":[],"role":"assistant","status":"in_progress","type":"message"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","sequence_number":3,"output_index":0,"content_index":0,"item_id":"msg_8f0c8311acf49346","part":{"annotations":[],"text":"","type":"output_text","logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":4,"output_index":0,"content_index":0,"delta":"Please","item_id":"msg_8f0c8311acf49346","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":5,"output_index":0,"content_index":0,"delta":"
+      provide","item_id":"msg_8f0c8311acf49346","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":6,"output_index":0,"content_index":0,"delta":"
+      the","item_id":"msg_8f0c8311acf49346","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":7,"output_index":0,"content_index":0,"delta":"
+      relevant","item_id":"msg_8f0c8311acf49346","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":8,"output_index":0,"content_index":0,"delta":"
+      passage","item_id":"msg_8f0c8311acf49346","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":9,"output_index":0,"content_index":0,"delta":"
+      from","item_id":"msg_8f0c8311acf49346","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":10,"output_index":0,"content_index":0,"delta":"
+      the","item_id":"msg_8f0c8311acf49346","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":11,"output_index":0,"content_index":0,"delta":"
+      deployment","item_id":"msg_8f0c8311acf49346","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":12,"output_index":0,"content_index":0,"delta":"
+      notes","item_id":"msg_8f0c8311acf49346","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":13,"output_index":0,"content_index":0,"delta":"
+      so","item_id":"msg_8f0c8311acf49346","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":14,"output_index":0,"content_index":0,"delta":"
+      I","item_id":"msg_8f0c8311acf49346","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":15,"output_index":0,"content_index":0,"delta":"
+      can","item_id":"msg_8f0c8311acf49346","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":16,"output_index":0,"content_index":0,"delta":"
+      locate","item_id":"msg_8f0c8311acf49346","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":17,"output_index":0,"content_index":0,"delta":"
+      the","item_id":"msg_8f0c8311acf49346","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":18,"output_index":0,"content_index":0,"delta":"
+      release","item_id":"msg_8f0c8311acf49346","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":19,"output_index":0,"content_index":0,"delta":"
+      cod","item_id":"msg_8f0c8311acf49346","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":20,"output_index":0,"content_index":0,"delta":"ew","item_id":"msg_8f0c8311acf49346","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":21,"output_index":0,"content_index":0,"delta":"ord","item_id":"msg_8f0c8311acf49346","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":22,"output_index":0,"content_index":0,"delta":"
+      for","item_id":"msg_8f0c8311acf49346","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":23,"output_index":0,"content_index":0,"delta":"
+      you","item_id":"msg_8f0c8311acf49346","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":24,"output_index":0,"content_index":0,"delta":".","item_id":"msg_8f0c8311acf49346","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","sequence_number":25,"output_index":0,"content_index":0,"item_id":"msg_8f0c8311acf49346","logprobs":[],"text":"Please
+      provide the relevant passage from the deployment notes so I can locate the release
+      codeword for you."}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","sequence_number":26,"output_index":0,"content_index":0,"item_id":"msg_8f0c8311acf49346","part":{"annotations":[],"text":"Please
+      provide the relevant passage from the deployment notes so I can locate the release
+      codeword for you.","type":"output_text","logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":27,"output_index":0,"item":{"id":"msg_8f0c8311acf49346","content":[{"annotations":[],"text":"Please
+      provide the relevant passage from the deployment notes so I can locate the release
+      codeword for you.","type":"output_text","logprobs":[]}],"role":"assistant","status":"completed","type":"message"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","sequence_number":28,"response":{"id":"resp_01a1e490-03c5-7681-80cb-3d870f8d475f","object":"response","created_at":1794836006,"model":"Qwen/Qwen2.5-3B-Instruct","status":"completed","output":[{"type":"message","id":"msg_8f0c8311acf49346","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Please
+      provide the relevant passage from the deployment notes so I can locate the release
+      codeword for you.","annotations":[],"logprobs":[]}]}],"usage":{"input_tokens":258,"output_tokens":22,"total_tokens":280,"input_tokens_details":{"cached_tokens":256,"cache_write_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":null,"instructions":null,"max_tool_calls":null,"service_tier":"auto","tools":[{"type":"file_search","vector_store_ids":["vs_01a1e48f-fb03-7661-8abf-cd463629fce9"]}],"tool_choice":"auto","completed_at":1794836006,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":1.0,"reasoning":null,"max_output_tokens":64,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null}}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t18
+  request:
+    body:
+      input: What is the release codeword in the deployment notes? Reply with only
+        the codeword.
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-3B-Instruct
+      store: true
+      stream: false
+      tool_choice:
+        type: file_search
+      tools:
+      - filters:
+          key: department
+          type: eq
+          value: engineering
+        max_num_results: 1
+        type: file_search
+        vector_store_ids:
+        - vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794836007
+      created_at: 1794836007
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1e490-061b-71c2-ad6d-bc703e48120a
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen2.5-3B-Instruct
+      object: response
+      output:
+      - id: fs_fc_aeeaa212e5203b71
+        queries:
+        - deployment notes release codeword
+        status: completed
+        type: file_search_call
+      - content:
+        - annotations: []
+          logprobs: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_8b3c6fe9443873c7
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice:
+        type: file_search
+      tools:
+      - filters:
+          key: department
+          type: eq
+          value: engineering
+        max_num_results: 1
+        type: file_search
+        vector_store_ids:
+        - vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 727
+        input_tokens_details:
+          cache_write_tokens: 96
+          cached_tokens: 624
+        output_tokens: 33
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 760
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t19
+  request:
+    body:
+      input: Which codeword did you find in the notes? Reply with only the codeword.
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-3B-Instruct
+      previous_response_id: resp_01a1e48f-fd49-7db2-a521-7c26510fbeca
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794836007
+      created_at: 1794836007
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1e490-0992-7590-b91f-6ff23c46f3cc
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen2.5-3B-Instruct
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_ad9f73febd0280a9
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_01a1e48f-fd49-7db2-a521-7c26510fbeca
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools:
+      - type: file_search
+        vector_store_ids:
+        - vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 604
+        input_tokens_details:
+          cache_write_tokens: 32
+          cached_tokens: 560
+        output_tokens: 7
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 611
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t20
+  request:
+    body:
+      input: Which codeword did you find in the notes? Reply with only the codeword.
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-3B-Instruct
+      previous_response_id: resp_01a1e48f-fd49-7db2-a521-7c26510fbeca
+      store: true
+      stream: false
+      tools:
+      - type: file_search
+        vector_store_ids:
+        - vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794836007
+      created_at: 1794836007
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1e490-0a9f-7a01-98f3-b5df076dea19
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen2.5-3B-Instruct
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_b018341fbedd5403
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_01a1e48f-fd49-7db2-a521-7c26510fbeca
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools:
+      - type: file_search
+        vector_store_ids:
+        - vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 604
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 592
+        output_tokens: 7
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 611
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t21
+  request:
+    body:
+      input: What is the release codeword in the deployment notes? Reply with only
+        the codeword.
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-3B-Instruct
+      store: true
+      stream: false
+      tools:
+      - type: file_search
+        vector_store_ids:
+        - vs_00000000000000000000000000
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794836008
+      created_at: 1794836008
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1e490-0bb6-7391-9553-38bd8a069ee7
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen2.5-3B-Instruct
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: It seems that you have not provided any context or question related
+            to deployment notes or file content. Could you please provide more details
+            such as the file ID or the specific passage from the deployment notes
+            you're looking for?
+          type: output_text
+        id: msg_8a7e8f527dd3b46c
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools:
+      - type: file_search
+        vector_store_ids:
+        - vs_00000000000000000000000000
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 258
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 256
+        output_tokens: 44
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 302
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t22
+  request:
+    body:
+      input: What is the release codeword in the deployment notes? Reply with only
+        the codeword.
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-3B-Instruct
+      store: true
+      stream: false
+      tools:
+      - type: file_search
+        vector_store_ids: []
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_request_error
+        message: 'tool error: invalid tool config: file_search requires between 1
+          and 16 non-empty vector_store_ids (at most 256 bytes each)'
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t23
+  request:
+    body:
+      input: What is the release codeword in the deployment notes? Reply with only
+        the codeword.
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-3B-Instruct
+      store: true
+      stream: false
+      tools:
+      - type: file_search
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_request_error
+        message: 'tool error: invalid tool config: file_search requires between 1
+          and 16 non-empty vector_store_ids (at most 256 bytes each)'
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t24
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/vector_stores/vs_01a1e48f-fb03-7661-8abf-cd463629fce9/files/file-01a1e48f-fafb-75f0-aefb-9c4ebeef2ff7
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: file-01a1e48f-fafb-75f0-aefb-9c4ebeef2ff7
+      object: vector_store.file.deleted
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t25
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/files/file-01a1e48f-fafb-75f0-aefb-9c4ebeef2ff7
+    query_params: {}
+  response:
+    body:
+      bytes: 91
+      created_at: 1794836003
+      filename: team-notes.txt
+      id: file-01a1e48f-fafb-75f0-aefb-9c4ebeef2ff7
+      object: file
+      purpose: assistants
+      status: processed
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t26
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/vector_stores/vs_01a1e48f-fb03-7661-8abf-cd463629fce9/files
+    query_params: {}
+  response:
+    body:
+      data:
+      - attributes: {}
+        chunking_strategy:
+          type: auto
+        created_at: 1794836003
+        id: file-01a1e48f-faf4-7102-9e21-49aafadce7c6
+        last_error: null
+        object: vector_store.file
+        status: completed
+        usage_bytes: 91
+        vector_store_id: vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+      first_id: file-01a1e48f-faf4-7102-9e21-49aafadce7c6
+      has_more: false
+      last_id: file-01a1e48f-faf4-7102-9e21-49aafadce7c6
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t27
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/files/file-01a1e48f-faf4-7102-9e21-49aafadce7c6
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: file-01a1e48f-faf4-7102-9e21-49aafadce7c6
+      object: file
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t28
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/vector_stores/vs_01a1e48f-fb03-7661-8abf-cd463629fce9/files/file-01a1e48f-faf4-7102-9e21-49aafadce7c6
+    query_params: {}
+  response:
+    body:
+      error:
+        code: not_found
+        message: Vector store file not found
+        type: not_found
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t29
+  request:
+    body:
+      query: release codeword
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/vector_stores/vs_01a1e48f-fb03-7661-8abf-cd463629fce9/search
+    query_params: {}
+  response:
+    body:
+      data: []
+      has_more: false
+      next_page: null
+      object: vector_store.search_results.page
+      search_query:
+      - release codeword
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t30
+  request:
+    body:
+      input: Which codeword did you find in the notes? Reply with only the codeword.
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-3B-Instruct
+      previous_response_id: resp_01a1e48f-fd49-7db2-a521-7c26510fbeca
+      store: true
+      stream: false
+      tools:
+      - type: file_search
+        vector_store_ids:
+        - vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794836009
+      created_at: 1794836009
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1e490-1351-7ab0-a5fe-9a1022f9de4d
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen2.5-3B-Instruct
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_ba8cb0be954fe395
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_01a1e48f-fd49-7db2-a521-7c26510fbeca
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools:
+      - type: file_search
+        vector_store_ids:
+        - vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 604
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 592
+        output_tokens: 7
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 611
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t31
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/vector_stores/vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+      object: vector_store.deleted
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t32
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/vector_stores/vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+    query_params: {}
+  response:
+    body:
+      error:
+        code: not_found
+        message: Vector store not found
+        type: not_found
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t33
+  request:
+    body:
+      query: release codeword
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/vector_stores/vs_01a1e48f-fb03-7661-8abf-cd463629fce9/search
+    query_params: {}
+  response:
+    body:
+      error:
+        code: not_found
+        message: Vector store not found
+        type: not_found
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t34
+  request:
+    body:
+      input: What is the release codeword in the deployment notes? Reply with only
+        the codeword.
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-3B-Instruct
+      store: true
+      stream: false
+      tools:
+      - type: file_search
+        vector_store_ids:
+        - vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: null
+      created_at: 1794836011
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1e490-15f2-7840-9ce9-062c0258130d
+      incomplete_details:
+        reason: max_output_tokens
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen2.5-3B-Instruct
+      object: response
+      output: []
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: incomplete
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools:
+      - type: file_search
+        vector_store_ids:
+        - vs_01a1e48f-fb03-7661-8abf-cd463629fce9
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 258
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 256
+        output_tokens: 64
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 322
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t35
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/files/file-01a1e48f-fafb-75f0-aefb-9c4ebeef2ff7
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: file-01a1e48f-fafb-75f0-aefb-9c4ebeef2ff7
+      object: file
+    headers:
+      content-type: application/json
+    status_code: 200

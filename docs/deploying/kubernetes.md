@@ -5,6 +5,15 @@ against managed PostgreSQL and an external OpenAI-compatible inference service. 
 portable base does not choose an identity provider or expose an Ingress. Enable the gateway's native OIDC validation
 or put an authenticated application boundary in front of it before allowing traffic from outside the cluster.
 
+## Local Files API storage
+
+The base deployment uses PostgreSQL for API metadata and a read-only container
+filesystem. To use the Files API, add a persistent writable volume and set
+`AGENTIC_FILES_STORAGE_DIR` to its mount path. The default two replicas must share
+that volume; otherwise, use a single replica with persistent local storage.
+Back up uploaded bytes together with the database. See the
+[Files and vector stores API guide](../api/file-search.md).
+
 ## Prepare the image and configuration
 
 Build and publish the production image described in the [container guide](container.md). The base uses
@@ -271,19 +280,13 @@ By default, every new pod applies the embedded SQLx migrations before starting t
 locking serializes concurrent migration attempts, and a failed migration keeps the pod out of service. Keep migrations
 backward-compatible with the previous gateway version so a rolling update can run old and new replicas together.
 
-The first upgrade from a release that used 32-bit timestamp and sequence columns is an exception: do not use the base
-rolling strategy for that upgrade. Older replicas do not take the per-conversation row lock and can allocate duplicate
-sequence values while an upgraded replica is serving. During a maintenance window:
+Upgrading from a release before this one is an exception: this release rejects a database created by an earlier
+release instead of migrating it, so old and new replicas cannot share a database. During a maintenance window:
 
 1. stop or drain inbound writers, scale every older gateway replica to zero, and verify that no old pod remains;
-2. run the duplicate `(conversation_id, seq)` query in the
-   [PostgreSQL upgrade notes](container.md#postgresql-production-settings), resolving any rows according to the
-   deployment's data-retention policy;
-3. apply the compatibility migration with a dedicated migration role, or start exactly one upgraded replica and wait
-   for its embedded migration to finish;
-4. verify that the integer columns and unique conversation-sequence index are present; and
-5. start the upgraded Deployment, restore the desired replica count, and reopen inbound traffic only after `/ready`
-   succeeds.
+2. back up the database if its contents must be kept, then point `DATABASE_URL` at a new empty database or drop the
+   persistence tables as described in the [PostgreSQL notes](container.md#postgresql-production-settings);
+3. start the upgraded Deployment and reopen inbound traffic only after `/ready` succeeds.
 
 Ordinary rolling updates are appropriate only after every migration in the target release has been verified as
 expand/contract compatible with the previously deployed gateway.
@@ -364,6 +367,12 @@ development cluster unschedulable. Use hard topology-spread constraints across n
 availability requires them. The PodDisruptionBudget only limits voluntary disruptions; it cannot prevent simultaneous
 loss of co-located replicas during a node failure.
 
+Per-caller rate limits (`AGENTIC_RATE_LIMIT_REQUESTS_PER_MINUTE`) are enforced by each replica separately, so with the
+base's two replicas a caller can send up to twice the configured rate. With OIDC enabled, a caller is identified by its
+token's issuer and subject. Without OIDC, callers are told apart by peer address: behind an Ingress or another proxy
+every request arrives from the proxy, so all callers share one bucket. Enable OIDC for per-caller limits. See
+[Rate limits](../api/index.md#rate-limits).
+
 ## Verify persistence and transport
 
 Reach the private Service through a temporary port-forward in a separate terminal:
@@ -421,7 +430,17 @@ default You.com provider it is enabled when `YOU_API_KEY` and `YOU_API_BASE_URL`
 Secret and use the current You.com Search API base URL, `https://ydc-index.io`. To use Brave Search instead, set
 `AGENTIC_WEB_SEARCH_PROVIDER=brave` in the ConfigMap and store `BRAVE_API_KEY` in the Secret; no base URL is needed.
 The Brave free plan is rate limited to roughly one request per second, so the gateway runs batched queries serially by
-default; raise `AGENTIC_WEB_SEARCH_MAX_CONCURRENT_QUERIES` only on a paid plan.
+default; raise `AGENTIC_WEB_SEARCH_MAX_CONCURRENT_QUERIES` only on a paid plan. To use Tavily, set
+`AGENTIC_WEB_SEARCH_PROVIDER=tavily` and store `TAVILY_API_KEY` in the Secret; the endpoint defaults to
+`https://api.tavily.com` and batched queries inherit the gateway concurrency limit. Serply works the same way with
+`AGENTIC_WEB_SEARCH_PROVIDER=serply`, `SERPLY_API_KEY`, and the default endpoint `https://api.serply.io`. For a deployment that reaches no
+search vendor, set `AGENTIC_WEB_SEARCH_PROVIDER=searxng` and `AGENTIC_WEB_SEARCH_BASE_URL` to the in-cluster URL of a
+self-hosted SearXNG instance; no provider key is needed, and the server refuses to start if the base URL is missing. The
+SearXNG instance must enable the JSON format (`search.formats: [html, json]` in `settings.yml`), and if its
+`server.limiter` is on, the source address SearXNG observes for the gateway (normally the gateway Pod CIDR) must be
+listed in `botdetection.ip_lists.pass_ip` in `limiter.toml`, because the gateway never sends `Accept-Encoding: gzip`
+and the limiter otherwise rejects it. SearXNG still forwards queries to the engines it has enabled, so restrict those
+to internal or offline engines when the cluster must not reach the public internet.
 
 Create the Secret from a protected environment file so the key does not enter shell history or process arguments:
 
@@ -434,9 +453,14 @@ kubectl --namespace agentic-api create secret generic agentic-api-web-search \
   kubectl apply --server-side --field-manager=agentic-api-operator --filename=-
 ```
 
-The file contains one line, `YOU_API_KEY=...` (or `BRAVE_API_KEY=...` for Brave Search). Remove it securely after
-creating the Secret. Patch the environment in the production overlay (for Brave, replace the `YOU_API_BASE_URL`
-operation with `path: /data/AGENTIC_WEB_SEARCH_PROVIDER`, `value: brave`):
+The file contains `YOU_API_KEY=...` (or `BRAVE_API_KEY=...` for Brave Search, `TAVILY_API_KEY=...` for Tavily,
+`SERPLY_API_KEY=...` for Serply) and `AGENTIC_MESSAGES_RESULT_KEY=` followed by the output of
+`openssl rand -base64 48`. Every replica then seals the search results it returns to Messages clients under the same
+key, so a returned result stays readable after a restart and on any replica; without it, each Pod generates its own
+key. Remove the file securely after creating the Secret. Patch the environment in the
+production overlay (for Brave, Tavily, or Serply, replace the `YOU_API_BASE_URL` operation with
+`path: /data/AGENTIC_WEB_SEARCH_PROVIDER` and `value: brave`, `value: tavily`, or `value: serply`; for SearXNG, keep only the `AGENTIC_MESSAGES_RESULT_KEY` line in the Secret and set `AGENTIC_WEB_SEARCH_PROVIDER` to `searxng` plus
+`AGENTIC_WEB_SEARCH_BASE_URL` to the instance URL):
 
 ```yaml
 patches:
@@ -493,5 +517,8 @@ Remove the `Authorization` header when inbound OIDC validation is disabled. A to
 `status: "completed"` even when an individual `web_search_call` failed, so inspect the output item status rather than
 only the response status. A `403 Forbidden` from You.com means the external search request was rejected; confirm the
 documented base URL and refresh the Secret, restart the Deployment, and test again without printing the key. A failed
-`web_search_call` naming `BRAVE_API_KEY` means Brave rejected the key; one reporting `429` means the Brave plan's rate
-limit was hit, and the gateway does not retry it.
+`web_search_call` naming `BRAVE_API_KEY`, `TAVILY_API_KEY`, or `SERPLY_API_KEY` means that provider rejected the key;
+one reporting `429` means the plan's rate limit was hit, and one reporting `432` or `433` means the Tavily plan's credit
+limit was exceeded. With SearXNG, a `403` means the instance has not enabled the JSON format and a `429` means its limiter
+blocked the gateway, with the failure message naming the `settings.yml` or `limiter.toml` change to make. The gateway
+does not retry any of these.

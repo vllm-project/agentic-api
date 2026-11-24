@@ -1,28 +1,26 @@
 //! Request-owned pipeline with a synchronous ingestion core and awaited stream delivery.
-mod delivery;
 mod ingest;
 
-pub(super) use delivery::{emit_deferred_stream_events, emit_gateway_event};
 pub(super) use ingest::RoundIngestion;
 
 use crate::events::{ClassifiedSseLine, EventFrame, SseLine};
 use crate::executor::accumulator::Validation;
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, StreamEvent};
+use crate::executor::gateway_accumulator::GatewayStreamAccumulator;
+use crate::executor::multi_agent::RunControlReceiver;
+use crate::executor::relay::{AgentRoundId, StreamRelay};
 use crate::executor::request::RequestContext;
 use crate::executor::response_budget::ExecutorResponseBudget;
+use crate::executor::response_events::ResponseEventSink;
+use crate::executor::telemetry::metrics::ExecutionClock;
 use crate::executor::translate::{Translation, TranslationContext};
 use crate::tool::{ToolRegistry, ToolSearchMetadata, ToolSearchState};
+use crate::types::agent::AgentIdentity;
+use crate::types::io::{InputMessage, OutputItem};
 use crate::types::request_response::ResponsePayload;
-use delivery::StreamDelivery;
+use crate::types::tools::ResponsesTool;
 use futures::{Stream, StreamExt};
-use tokio::sync::mpsc::Sender;
-
-#[derive(Debug)]
-pub(super) struct StreamPayload {
-    pub(super) payload: ResponsePayload,
-    pub(super) deferred_events: Vec<EventFrame>,
-}
+use tokio_util::sync::CancellationToken;
 
 trait InferenceInput {
     fn ingest(self, round: &mut RoundIngestion) -> ExecutorResult<Translation>;
@@ -42,42 +40,106 @@ impl InferenceInput for EventFrame {
 
 /// Lives for the response, preserving gateway event numbering across inference rounds.
 pub(super) struct AgentPipeline {
+    pub(super) control: Option<RunControlReceiver>,
+    pub(super) steering: Option<ResponseEventSink>,
     pub(super) request: RequestContext,
     tool_search_state: Option<ToolSearchState>,
-    delivery: StreamDelivery,
+    relay: StreamRelay,
     round: Option<RoundIngestion>,
+    cancellation: CancellationToken,
+    agent_guidance: Option<InputMessage>,
+    /// Set after a `max_tool_calls` refusal; later rounds omit gateway-executed tools.
+    builtin_tools_withheld: bool,
+    /// Timing state of the execution this pipeline serves, when it streams.
+    clock: Option<ExecutionClock>,
 }
 
 impl AgentPipeline {
-    pub(super) fn new(
-        request: RequestContext,
-        tool_search_state: Option<ToolSearchState>,
-        sender: Option<Sender<StreamEvent>>,
-    ) -> Self {
-        Self {
-            request,
-            tool_search_state,
-            delivery: StreamDelivery::new(sender),
-            round: None,
-        }
+    pub(super) fn steering_requested(&self) -> bool {
+        self.steering
+            .as_ref()
+            .is_some_and(ResponseEventSink::steering_requested)
     }
 
-    pub(super) fn with_limits(
-        request: RequestContext,
-        tool_search_state: Option<ToolSearchState>,
-        sender: Option<Sender<StreamEvent>>,
-        max_stream_event_bytes: usize,
-    ) -> Self {
+    /// Report the first upstream line of the execution's streamed bodies to `clock`.
+    pub(super) fn set_execution_clock(&mut self, clock: ExecutionClock) {
+        self.clock = Some(clock);
+    }
+
+    pub(super) fn execution_clock(&self) -> Option<&ExecutionClock> {
+        self.clock.as_ref()
+    }
+
+    pub(super) fn set_agent_guidance(&mut self, guidance: InputMessage) {
+        self.agent_guidance = Some(guidance);
+    }
+
+    pub(super) fn agent_guidance(&self) -> Option<&InputMessage> {
+        self.agent_guidance.as_ref()
+    }
+
+    pub(super) fn withhold_builtin_tools(&mut self) {
+        self.builtin_tools_withheld = true;
+    }
+
+    pub(super) const fn builtin_tools_withheld(&self) -> bool {
+        self.builtin_tools_withheld
+    }
+
+    pub(super) fn has_live_agent_items(&self, agent: &AgentIdentity) -> bool {
+        self.relay.has_live_agent_items(agent)
+    }
+    pub(super) async fn accept_agent_frame(&mut self, source: &AgentRoundId, frame: EventFrame) -> ExecutorResult<()> {
+        self.relay.accept_agent_frame(source, frame).await
+    }
+
+    pub(super) async fn emit_agent_item(&mut self, item: &OutputItem) -> ExecutorResult<usize> {
+        self.relay.emit_agent_item(item).await
+    }
+
+    pub(super) fn finish_agent_source(&mut self, source: &AgentRoundId) {
+        self.relay.finish_agent_source(source);
+    }
+    pub(super) fn is_streaming(&self) -> bool {
+        self.relay.is_live()
+    }
+    pub(super) fn relay_mut(&mut self) -> &mut StreamRelay {
+        &mut self.relay
+    }
+    pub(super) fn cancellation_token(&self) -> CancellationToken {
+        self.cancellation.clone()
+    }
+    /// One pipeline per response or agent round. The relay's sink decides whether
+    /// and where its frames are presented.
+    pub(super) fn new(request: RequestContext, tool_search_state: Option<ToolSearchState>, relay: StreamRelay) -> Self {
         Self {
             request,
             tool_search_state,
-            delivery: StreamDelivery::with_max_stream_event_bytes(sender, max_stream_event_bytes),
+            relay,
             round: None,
+            cancellation: CancellationToken::new(),
+            agent_guidance: None,
+            control: None,
+            steering: None,
+            builtin_tools_withheld: false,
+            clock: None,
         }
     }
 
     pub(super) fn tool_search_state(&self) -> Option<&ToolSearchState> {
         self.tool_search_state.as_ref()
+    }
+
+    /// The search state, from which the registry takes the request's catalog.
+    pub(super) fn tool_search_state_mut(&mut self) -> Option<&mut ToolSearchState> {
+        self.tool_search_state.as_mut()
+    }
+
+    /// Records the public snapshot persistence keeps after the registry loaded searched tools.
+    pub(super) fn record_tool_search_loads(&mut self, effective_tools: Vec<ResponsesTool>, loaded: Vec<ResponsesTool>) {
+        if let Some(state) = self.tool_search_state.as_mut() {
+            state.record_loads(effective_tools, loaded);
+        }
     }
 
     pub(super) fn ensure_request_prepared(&self) -> ExecutorResult<()> {
@@ -95,23 +157,13 @@ impl AgentPipeline {
             .map(ToolSearchState::into_public_metadata)
     }
 
-    pub(super) fn parts_mut(
-        &mut self,
-    ) -> (
-        &mut RequestContext,
-        Option<(&mut GatewayStreamAccumulator, &Sender<StreamEvent>)>,
-    ) {
-        (
-            &mut self.request,
-            self.delivery
-                .sender
-                .as_ref()
-                .map(|sender| (&mut self.delivery.accumulator, sender)),
-        )
+    /// The request beside its relay, for engine steps that present upstream frames.
+    pub(super) fn parts_mut(&mut self) -> (&mut RequestContext, &mut StreamRelay) {
+        (&mut self.request, &mut self.relay)
     }
 
     pub(super) fn into_parts(self) -> (RequestContext, GatewayStreamAccumulator) {
-        (self.request, self.delivery.accumulator)
+        (self.request, self.relay.into_presentation())
     }
 
     fn begin_round(
@@ -148,6 +200,9 @@ impl AgentPipeline {
             .round
             .take()
             .expect("body runner starts a round before finalization");
+        if self.steering_requested() {
+            round.ensure_steering_settled()?;
+        }
         let mut payload = round.finish(
             &self.request.enriched_request.model,
             self.request.original_request.previous_response_id.as_deref(),
@@ -166,10 +221,9 @@ impl AgentPipeline {
         registry: &ToolRegistry,
         output_offset: usize,
         budget: Option<ExecutorResponseBudget>,
-    ) -> ExecutorResult<StreamPayload> {
+    ) -> ExecutorResult<ResponsePayload> {
         let body = body.map(|line| line.map(|line| SseLine::parse(&line)));
-        self.run_body(body, validation, context, registry, output_offset, budget)
-            .await
+        Box::pin(self.run_body(body, validation, context, registry, output_offset, budget)).await
     }
 
     /// Direct runtime output enters the same ingestion and awaited delivery loop.
@@ -180,9 +234,8 @@ impl AgentPipeline {
         registry: &ToolRegistry,
         output_offset: usize,
         budget: Option<ExecutorResponseBudget>,
-    ) -> ExecutorResult<StreamPayload> {
-        self.run_body(body, Validation::Strict, context, registry, output_offset, budget)
-            .await
+    ) -> ExecutorResult<ResponsePayload> {
+        Box::pin(self.run_body(body, Validation::Strict, context, registry, output_offset, budget)).await
     }
 
     async fn run_body<I: InferenceInput>(
@@ -193,20 +246,49 @@ impl AgentPipeline {
         registry: &ToolRegistry,
         output_offset: usize,
         budget: Option<ExecutorResponseBudget>,
-    ) -> ExecutorResult<StreamPayload> {
+    ) -> ExecutorResult<ResponsePayload> {
+        self.relay.begin_round(output_offset)?;
         self.begin_round(validation, context, budget)?;
         futures::pin_mut!(body);
-        while let Some(input) = body.next().await {
-            let translation = self.push(input?)?;
-            self.delivery
-                .accept(translation, &self.request, registry, output_offset)
-                .await?;
+        loop {
+            let boundary = self
+                .round
+                .as_ref()
+                .expect("stream runner owns an active ingestion round")
+                .at_steering_boundary();
+            if boundary && self.steering_requested() {
+                self.round
+                    .as_mut()
+                    .expect("stream runner owns an active ingestion round")
+                    .finish_for_steering()?;
+                break;
+            }
+            let line = if let Some(steering) = self.steering.as_ref().filter(|_| boundary) {
+                // Only interrupt the wait when ingestion already owns a safe
+                // boundary. A requested steer during an open item waits for its
+                // completion instead of repeatedly waking this loop.
+                tokio::select! {
+                    biased;
+                    result = steering.wait_steering() => {
+                        result?;
+                        continue;
+                    }
+                    line = body.next() => line,
+                }
+            } else {
+                body.next().await
+            };
+            let Some(line) = line else { break };
+            let line = line?;
+            if let Some(clock) = &self.clock {
+                clock.upstream_data();
+            }
+            let translation = self.push(line)?;
+            self.relay.accept(translation, &self.request, registry).await?;
         }
-        let payload = self.finish()?;
-        Ok(StreamPayload {
-            payload,
-            deferred_events: self.delivery.take_deferred_events(),
-        })
+        // Frames still deferred stay with the relay until the engine releases them
+        // around this round's gateway-executed calls.
+        self.finish()
     }
 
     /// JSON shares finalization but retains its status instead of applying SSE EOF policy.

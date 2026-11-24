@@ -21,6 +21,7 @@ export function Footer() {
           <div className="footer-links">
             <div>
               <span>PROJECT</span>
+              <Link href="/docs/latest/guides/quickstart">Quickstart</Link>
               <Link href={DOCS}>Documentation</Link>
               <a href={REPO}>
                 GitHub <ArrowUpRight size={13} />

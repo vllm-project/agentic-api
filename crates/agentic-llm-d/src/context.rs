@@ -51,10 +51,10 @@ impl From<RequestContext> for SplitContext {
 
 impl From<SplitContext> for RequestContext {
     fn from(wire: SplitContext) -> Self {
-        let new_input_items = Vec::from(&wire.original_request.input);
+        let new_input_items = wire.original_request.input.clone().into_canonical_items();
         let mut enriched_request = wire.original_request.clone();
         enriched_request.previous_response_id = None;
-        enriched_request.input = ResponsesInput::Items(new_input_items.clone());
+        enriched_request.input = ResponsesInput::from(new_input_items.clone());
         enriched_request.tools = wire.effective_tools;
         enriched_request.tool_choice = wire.effective_tool_choice;
         Self {
@@ -64,8 +64,9 @@ impl From<SplitContext> for RequestContext {
             response_id: wire.response_id,
             conversation_id: wire.conversation_id,
             // Conversation mode is rejected, so there is no version to resume.
-            conversation_version: None,
+            checkpoint: None,
             continuation: None,
+            multi_agent_tree: None,
         }
     }
 }

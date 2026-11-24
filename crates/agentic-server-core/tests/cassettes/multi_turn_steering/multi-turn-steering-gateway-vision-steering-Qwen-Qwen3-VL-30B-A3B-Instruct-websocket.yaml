@@ -1,0 +1,2274 @@
+format: responses-websocket-v1
+sessions:
+  - handshake:
+      request:
+        method: GET
+        url: ws://localhost:9000/v1/responses
+        headers: {}
+      probe:
+        case: array-image-user
+        category: vision-steering
+        attempt: 1
+        connection_index: 0
+        timeout_seconds: 300.0
+        model: Qwen/Qwen3-VL-30B-A3B-Instruct
+        provider: gateway
+        source: https://developers.openai.com/api/docs/guides/steering
+      response:
+        status_code: 101
+        headers:
+          upgrade: websocket
+          sec-websocket-accept: lHGrsGZFYaHqA2gjtIjvTHYS+5k=
+          vary: origin, access-control-request-method, access-control-request-headers
+          access-control-allow-origin: '*'
+          date: Wed, 14 Oct 2026 04:07:59 GMT
+    frames:
+      - ordinal: 0
+        elapsed_ms: 1.367
+        direction: client
+        opcode: 1
+        fin: true
+        text: '{"type":"response.create","model":"Qwen/Qwen3-VL-30B-A3B-Instruct","store":true,"max_output_tokens":8192,"input":"Draft
+          a detailed project plan for a task-tracking app. Include at least 20 numbered tasks.","instructions":"Be concise. Preserve
+          any requested verification marker verbatim."}'
+      - ordinal: 1
+        elapsed_ms: 44.595
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.created","sequence_number":0,"response":{"id":"resp_01a13898-7a2f-7202-b7d5-511627d1bb94","created_at":1791950879,"incomplete_details":null,"instructions":"Be
+          concise. Preserve any requested verification marker verbatim.","metadata":{},"model":"Qwen/Qwen3-VL-30B-A3B-Instruct","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":8192,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":true,"safety_identifier":null,"prompt_cache_key":null,"error":null}}'
+      - ordinal: 2
+        elapsed_ms: 47.464
+        direction: client
+        opcode: 1
+        fin: true
+        text: '{"type":"response.steer","previous_response_id":"resp_01a13898-7a2f-7202-b7d5-511627d1bb94","input":[{"role":"user","content":[{"type":"input_text","text":"Change
+          the task: describe the colors on the left and right of the attached image. Include IMAGE_STEER_ORCHID in your answer."},{"type":"input_image","image_url":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PsQkAAAzDsPz/dHpCp2wCzwalybTxvgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+Dq47PDiz8p6GQAAAABJRU5ErkJggg==","detail":"low"}]}]}'
+      - ordinal: 3
+        elapsed_ms: 48.769
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a13898-7a2f-7202-b7d5-511627d1bb94","created_at":1791950879,"incomplete_details":null,"instructions":"Be
+          concise. Preserve any requested verification marker verbatim.","metadata":{},"model":"Qwen/Qwen3-VL-30B-A3B-Instruct","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":8192,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":true,"safety_identifier":null,"prompt_cache_key":null,"error":null}}'
+      - ordinal: 4
+        elapsed_ms: 49.691
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.steer.accepted","sequence_number":2,"steer":{"id":"steer_01a13898-7a5d-76d0-9ad1-38638ea8e033","previous_response_id":"resp_01a13898-7a2f-7202-b7d5-511627d1bb94"}}'
+      - ordinal: 5
+        elapsed_ms: 377.241
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.added","sequence_number":3,"output_index":0,"item":{"id":"b1a638e40729da39","summary":[],"type":"reasoning","content":[],"status":"in_progress"}}'
+      - ordinal: 6
+        elapsed_ms: 378.383
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_part.added","sequence_number":4,"output_index":0,"content_index":0,"item_id":"b1a638e40729da39","part":{"text":"","type":"reasoning_text"}}'
+      - ordinal: 7
+        elapsed_ms: 379.036
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":5,"output_index":0,"content_index":0,"delta":"1","item_id":"b1a638e40729da39"}'
+      - ordinal: 8
+        elapsed_ms: 440.382
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":6,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 9
+        elapsed_ms: 446.243
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":7,"output_index":0,"content_index":0,"delta":" Define","item_id":"b1a638e40729da39"}'
+      - ordinal: 10
+        elapsed_ms: 453.697
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":8,"output_index":0,"content_index":0,"delta":" project","item_id":"b1a638e40729da39"}'
+      - ordinal: 11
+        elapsed_ms: 460.132
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":9,"output_index":0,"content_index":0,"delta":" scope","item_id":"b1a638e40729da39"}'
+      - ordinal: 12
+        elapsed_ms: 467.083
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":10,"output_index":0,"content_index":0,"delta":" and","item_id":"b1a638e40729da39"}'
+      - ordinal: 13
+        elapsed_ms: 474.123
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":11,"output_index":0,"content_index":0,"delta":" objectives","item_id":"b1a638e40729da39"}'
+      - ordinal: 14
+        elapsed_ms: 480.796
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":12,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 15
+        elapsed_ms: 488.077
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":13,"output_index":0,"content_index":0,"delta":"  \n","item_id":"b1a638e40729da39"}'
+      - ordinal: 16
+        elapsed_ms: 494.564
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":14,"output_index":0,"content_index":0,"delta":"2","item_id":"b1a638e40729da39"}'
+      - ordinal: 17
+        elapsed_ms: 501.543
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":15,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 18
+        elapsed_ms: 508.679
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":16,"output_index":0,"content_index":0,"delta":" Conduct","item_id":"b1a638e40729da39"}'
+      - ordinal: 19
+        elapsed_ms: 515.691
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":17,"output_index":0,"content_index":0,"delta":" market","item_id":"b1a638e40729da39"}'
+      - ordinal: 20
+        elapsed_ms: 522.575
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":18,"output_index":0,"content_index":0,"delta":" research","item_id":"b1a638e40729da39"}'
+      - ordinal: 21
+        elapsed_ms: 529.72
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":19,"output_index":0,"content_index":0,"delta":" and","item_id":"b1a638e40729da39"}'
+      - ordinal: 22
+        elapsed_ms: 537.345
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":20,"output_index":0,"content_index":0,"delta":" competitor","item_id":"b1a638e40729da39"}'
+      - ordinal: 23
+        elapsed_ms: 544.106
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":21,"output_index":0,"content_index":0,"delta":" analysis","item_id":"b1a638e40729da39"}'
+      - ordinal: 24
+        elapsed_ms: 550.407
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":22,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 25
+        elapsed_ms: 557.446
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":23,"output_index":0,"content_index":0,"delta":"  \n","item_id":"b1a638e40729da39"}'
+      - ordinal: 26
+        elapsed_ms: 564.381
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":24,"output_index":0,"content_index":0,"delta":"3","item_id":"b1a638e40729da39"}'
+      - ordinal: 27
+        elapsed_ms: 571.477
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":25,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 28
+        elapsed_ms: 578.273
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":26,"output_index":0,"content_index":0,"delta":" Identify","item_id":"b1a638e40729da39"}'
+      - ordinal: 29
+        elapsed_ms: 585.38
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":27,"output_index":0,"content_index":0,"delta":" target","item_id":"b1a638e40729da39"}'
+      - ordinal: 30
+        elapsed_ms: 592.178
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":28,"output_index":0,"content_index":0,"delta":" users","item_id":"b1a638e40729da39"}'
+      - ordinal: 31
+        elapsed_ms: 599.473
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":29,"output_index":0,"content_index":0,"delta":" and","item_id":"b1a638e40729da39"}'
+      - ordinal: 32
+        elapsed_ms: 606.332
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":30,"output_index":0,"content_index":0,"delta":" their","item_id":"b1a638e40729da39"}'
+      - ordinal: 33
+        elapsed_ms: 613.051
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":31,"output_index":0,"content_index":0,"delta":" needs","item_id":"b1a638e40729da39"}'
+      - ordinal: 34
+        elapsed_ms: 619.979
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":32,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 35
+        elapsed_ms: 627.384
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":33,"output_index":0,"content_index":0,"delta":"  \n","item_id":"b1a638e40729da39"}'
+      - ordinal: 36
+        elapsed_ms: 634.325
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":34,"output_index":0,"content_index":0,"delta":"4","item_id":"b1a638e40729da39"}'
+      - ordinal: 37
+        elapsed_ms: 641.28
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":35,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 38
+        elapsed_ms: 648.655
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":36,"output_index":0,"content_index":0,"delta":" Develop","item_id":"b1a638e40729da39"}'
+      - ordinal: 39
+        elapsed_ms: 655.217
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":37,"output_index":0,"content_index":0,"delta":" user","item_id":"b1a638e40729da39"}'
+      - ordinal: 40
+        elapsed_ms: 662.133
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":38,"output_index":0,"content_index":0,"delta":" personas","item_id":"b1a638e40729da39"}'
+      - ordinal: 41
+        elapsed_ms: 669.0
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":39,"output_index":0,"content_index":0,"delta":" and","item_id":"b1a638e40729da39"}'
+      - ordinal: 42
+        elapsed_ms: 676.352
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":40,"output_index":0,"content_index":0,"delta":" use","item_id":"b1a638e40729da39"}'
+      - ordinal: 43
+        elapsed_ms: 683.2
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":41,"output_index":0,"content_index":0,"delta":" cases","item_id":"b1a638e40729da39"}'
+      - ordinal: 44
+        elapsed_ms: 690.252
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":42,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 45
+        elapsed_ms: 697.086
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":43,"output_index":0,"content_index":0,"delta":"  \n","item_id":"b1a638e40729da39"}'
+      - ordinal: 46
+        elapsed_ms: 704.034
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":44,"output_index":0,"content_index":0,"delta":"5","item_id":"b1a638e40729da39"}'
+      - ordinal: 47
+        elapsed_ms: 711.025
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":45,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 48
+        elapsed_ms: 717.955
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":46,"output_index":0,"content_index":0,"delta":" Create","item_id":"b1a638e40729da39"}'
+      - ordinal: 49
+        elapsed_ms: 725.063
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":47,"output_index":0,"content_index":0,"delta":" a","item_id":"b1a638e40729da39"}'
+      - ordinal: 50
+        elapsed_ms: 731.759
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":48,"output_index":0,"content_index":0,"delta":" feature","item_id":"b1a638e40729da39"}'
+      - ordinal: 51
+        elapsed_ms: 738.698
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":49,"output_index":0,"content_index":0,"delta":" list","item_id":"b1a638e40729da39"}'
+      - ordinal: 52
+        elapsed_ms: 745.843
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":50,"output_index":0,"content_index":0,"delta":" and","item_id":"b1a638e40729da39"}'
+      - ordinal: 53
+        elapsed_ms: 752.894
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":51,"output_index":0,"content_index":0,"delta":" prioritize","item_id":"b1a638e40729da39"}'
+      - ordinal: 54
+        elapsed_ms: 760.216
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":52,"output_index":0,"content_index":0,"delta":" functionalities","item_id":"b1a638e40729da39"}'
+      - ordinal: 55
+        elapsed_ms: 767.077
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":53,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 56
+        elapsed_ms: 773.759
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":54,"output_index":0,"content_index":0,"delta":"  \n","item_id":"b1a638e40729da39"}'
+      - ordinal: 57
+        elapsed_ms: 780.721
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":55,"output_index":0,"content_index":0,"delta":"6","item_id":"b1a638e40729da39"}'
+      - ordinal: 58
+        elapsed_ms: 787.872
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":56,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 59
+        elapsed_ms: 794.783
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":57,"output_index":0,"content_index":0,"delta":" Design","item_id":"b1a638e40729da39"}'
+      - ordinal: 60
+        elapsed_ms: 801.647
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":58,"output_index":0,"content_index":0,"delta":" wire","item_id":"b1a638e40729da39"}'
+      - ordinal: 61
+        elapsed_ms: 808.599
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":59,"output_index":0,"content_index":0,"delta":"frames","item_id":"b1a638e40729da39"}'
+      - ordinal: 62
+        elapsed_ms: 815.705
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":60,"output_index":0,"content_index":0,"delta":" for","item_id":"b1a638e40729da39"}'
+      - ordinal: 63
+        elapsed_ms: 822.597
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":61,"output_index":0,"content_index":0,"delta":" core","item_id":"b1a638e40729da39"}'
+      - ordinal: 64
+        elapsed_ms: 829.614
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":62,"output_index":0,"content_index":0,"delta":" screens","item_id":"b1a638e40729da39"}'
+      - ordinal: 65
+        elapsed_ms: 836.578
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":63,"output_index":0,"content_index":0,"delta":" (","item_id":"b1a638e40729da39"}'
+      - ordinal: 66
+        elapsed_ms: 843.539
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":64,"output_index":0,"content_index":0,"delta":"dashboard","item_id":"b1a638e40729da39"}'
+      - ordinal: 67
+        elapsed_ms: 850.593
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":65,"output_index":0,"content_index":0,"delta":",","item_id":"b1a638e40729da39"}'
+      - ordinal: 68
+        elapsed_ms: 857.631
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":66,"output_index":0,"content_index":0,"delta":" task","item_id":"b1a638e40729da39"}'
+      - ordinal: 69
+        elapsed_ms: 864.494
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":67,"output_index":0,"content_index":0,"delta":" list","item_id":"b1a638e40729da39"}'
+      - ordinal: 70
+        elapsed_ms: 871.553
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":68,"output_index":0,"content_index":0,"delta":",","item_id":"b1a638e40729da39"}'
+      - ordinal: 71
+        elapsed_ms: 878.545
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":69,"output_index":0,"content_index":0,"delta":" task","item_id":"b1a638e40729da39"}'
+      - ordinal: 72
+        elapsed_ms: 885.657
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":70,"output_index":0,"content_index":0,"delta":" details","item_id":"b1a638e40729da39"}'
+      - ordinal: 73
+        elapsed_ms: 892.518
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":71,"output_index":0,"content_index":0,"delta":").","item_id":"b1a638e40729da39"}'
+      - ordinal: 74
+        elapsed_ms: 899.446
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":72,"output_index":0,"content_index":0,"delta":"  \n","item_id":"b1a638e40729da39"}'
+      - ordinal: 75
+        elapsed_ms: 906.6
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":73,"output_index":0,"content_index":0,"delta":"7","item_id":"b1a638e40729da39"}'
+      - ordinal: 76
+        elapsed_ms: 913.492
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":74,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 77
+        elapsed_ms: 920.245
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":75,"output_index":0,"content_index":0,"delta":" Develop","item_id":"b1a638e40729da39"}'
+      - ordinal: 78
+        elapsed_ms: 927.247
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":76,"output_index":0,"content_index":0,"delta":" a","item_id":"b1a638e40729da39"}'
+      - ordinal: 79
+        elapsed_ms: 934.549
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":77,"output_index":0,"content_index":0,"delta":" high","item_id":"b1a638e40729da39"}'
+      - ordinal: 80
+        elapsed_ms: 941.232
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":78,"output_index":0,"content_index":0,"delta":"-f","item_id":"b1a638e40729da39"}'
+      - ordinal: 81
+        elapsed_ms: 948.039
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":79,"output_index":0,"content_index":0,"delta":"idelity","item_id":"b1a638e40729da39"}'
+      - ordinal: 82
+        elapsed_ms: 955.305
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":80,"output_index":0,"content_index":0,"delta":" UI","item_id":"b1a638e40729da39"}'
+      - ordinal: 83
+        elapsed_ms: 962.271
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":81,"output_index":0,"content_index":0,"delta":"/","item_id":"b1a638e40729da39"}'
+      - ordinal: 84
+        elapsed_ms: 969.551
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":82,"output_index":0,"content_index":0,"delta":"UX","item_id":"b1a638e40729da39"}'
+      - ordinal: 85
+        elapsed_ms: 976.372
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":83,"output_index":0,"content_index":0,"delta":" design","item_id":"b1a638e40729da39"}'
+      - ordinal: 86
+        elapsed_ms: 983.241
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":84,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 87
+        elapsed_ms: 990.377
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":85,"output_index":0,"content_index":0,"delta":"  \n","item_id":"b1a638e40729da39"}'
+      - ordinal: 88
+        elapsed_ms: 997.299
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":86,"output_index":0,"content_index":0,"delta":"8","item_id":"b1a638e40729da39"}'
+      - ordinal: 89
+        elapsed_ms: 1004.244
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":87,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 90
+        elapsed_ms: 1011.415
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":88,"output_index":0,"content_index":0,"delta":" Choose","item_id":"b1a638e40729da39"}'
+      - ordinal: 91
+        elapsed_ms: 1018.449
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":89,"output_index":0,"content_index":0,"delta":" technology","item_id":"b1a638e40729da39"}'
+      - ordinal: 92
+        elapsed_ms: 1024.962
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":90,"output_index":0,"content_index":0,"delta":" stack","item_id":"b1a638e40729da39"}'
+      - ordinal: 93
+        elapsed_ms: 1031.885
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":91,"output_index":0,"content_index":0,"delta":" (","item_id":"b1a638e40729da39"}'
+      - ordinal: 94
+        elapsed_ms: 1038.971
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":92,"output_index":0,"content_index":0,"delta":"e","item_id":"b1a638e40729da39"}'
+      - ordinal: 95
+        elapsed_ms: 1046.218
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":93,"output_index":0,"content_index":0,"delta":".g","item_id":"b1a638e40729da39"}'
+      - ordinal: 96
+        elapsed_ms: 1053.124
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":94,"output_index":0,"content_index":0,"delta":".,","item_id":"b1a638e40729da39"}'
+      - ordinal: 97
+        elapsed_ms: 1060.11
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":95,"output_index":0,"content_index":0,"delta":" React","item_id":"b1a638e40729da39"}'
+      - ordinal: 98
+        elapsed_ms: 1067.112
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":96,"output_index":0,"content_index":0,"delta":" Native","item_id":"b1a638e40729da39"}'
+      - ordinal: 99
+        elapsed_ms: 1073.963
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":97,"output_index":0,"content_index":0,"delta":",","item_id":"b1a638e40729da39"}'
+      - ordinal: 100
+        elapsed_ms: 1080.78
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":98,"output_index":0,"content_index":0,"delta":" Node","item_id":"b1a638e40729da39"}'
+      - ordinal: 101
+        elapsed_ms: 1087.823
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":99,"output_index":0,"content_index":0,"delta":".js","item_id":"b1a638e40729da39"}'
+      - ordinal: 102
+        elapsed_ms: 1094.743
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":100,"output_index":0,"content_index":0,"delta":",","item_id":"b1a638e40729da39"}'
+      - ordinal: 103
+        elapsed_ms: 1101.865
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":101,"output_index":0,"content_index":0,"delta":" MongoDB","item_id":"b1a638e40729da39"}'
+      - ordinal: 104
+        elapsed_ms: 1109.07
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":102,"output_index":0,"content_index":0,"delta":").","item_id":"b1a638e40729da39"}'
+      - ordinal: 105
+        elapsed_ms: 1115.765
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":103,"output_index":0,"content_index":0,"delta":"  \n","item_id":"b1a638e40729da39"}'
+      - ordinal: 106
+        elapsed_ms: 1122.765
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":104,"output_index":0,"content_index":0,"delta":"9","item_id":"b1a638e40729da39"}'
+      - ordinal: 107
+        elapsed_ms: 1130.062
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":105,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 108
+        elapsed_ms: 1136.848
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":106,"output_index":0,"content_index":0,"delta":" Set","item_id":"b1a638e40729da39"}'
+      - ordinal: 109
+        elapsed_ms: 1143.815
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":107,"output_index":0,"content_index":0,"delta":" up","item_id":"b1a638e40729da39"}'
+      - ordinal: 110
+        elapsed_ms: 1150.803
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":108,"output_index":0,"content_index":0,"delta":" development","item_id":"b1a638e40729da39"}'
+      - ordinal: 111
+        elapsed_ms: 1157.788
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":109,"output_index":0,"content_index":0,"delta":" environment","item_id":"b1a638e40729da39"}'
+      - ordinal: 112
+        elapsed_ms: 1164.813
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":110,"output_index":0,"content_index":0,"delta":" and","item_id":"b1a638e40729da39"}'
+      - ordinal: 113
+        elapsed_ms: 1171.841
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":111,"output_index":0,"content_index":0,"delta":" version","item_id":"b1a638e40729da39"}'
+      - ordinal: 114
+        elapsed_ms: 1178.71
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":112,"output_index":0,"content_index":0,"delta":" control","item_id":"b1a638e40729da39"}'
+      - ordinal: 115
+        elapsed_ms: 1185.596
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":113,"output_index":0,"content_index":0,"delta":" (","item_id":"b1a638e40729da39"}'
+      - ordinal: 116
+        elapsed_ms: 1192.566
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":114,"output_index":0,"content_index":0,"delta":"e","item_id":"b1a638e40729da39"}'
+      - ordinal: 117
+        elapsed_ms: 1199.576
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":115,"output_index":0,"content_index":0,"delta":".g","item_id":"b1a638e40729da39"}'
+      - ordinal: 118
+        elapsed_ms: 1206.435
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":116,"output_index":0,"content_index":0,"delta":".,","item_id":"b1a638e40729da39"}'
+      - ordinal: 119
+        elapsed_ms: 1213.462
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":117,"output_index":0,"content_index":0,"delta":" Git","item_id":"b1a638e40729da39"}'
+      - ordinal: 120
+        elapsed_ms: 1220.692
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":118,"output_index":0,"content_index":0,"delta":").","item_id":"b1a638e40729da39"}'
+      - ordinal: 121
+        elapsed_ms: 1227.579
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":119,"output_index":0,"content_index":0,"delta":"  \n","item_id":"b1a638e40729da39"}'
+      - ordinal: 122
+        elapsed_ms: 1234.516
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":120,"output_index":0,"content_index":0,"delta":"1","item_id":"b1a638e40729da39"}'
+      - ordinal: 123
+        elapsed_ms: 1241.626
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":121,"output_index":0,"content_index":0,"delta":"0","item_id":"b1a638e40729da39"}'
+      - ordinal: 124
+        elapsed_ms: 1248.428
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":122,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 125
+        elapsed_ms: 1255.476
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":123,"output_index":0,"content_index":0,"delta":" Design","item_id":"b1a638e40729da39"}'
+      - ordinal: 126
+        elapsed_ms: 1262.73
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":124,"output_index":0,"content_index":0,"delta":" database","item_id":"b1a638e40729da39"}'
+      - ordinal: 127
+        elapsed_ms: 1269.635
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":125,"output_index":0,"content_index":0,"delta":" schema","item_id":"b1a638e40729da39"}'
+      - ordinal: 128
+        elapsed_ms: 1276.525
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":126,"output_index":0,"content_index":0,"delta":" for","item_id":"b1a638e40729da39"}'
+      - ordinal: 129
+        elapsed_ms: 1283.676
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":127,"output_index":0,"content_index":0,"delta":" users","item_id":"b1a638e40729da39"}'
+      - ordinal: 130
+        elapsed_ms: 1290.527
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":128,"output_index":0,"content_index":0,"delta":",","item_id":"b1a638e40729da39"}'
+      - ordinal: 131
+        elapsed_ms: 1297.505
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":129,"output_index":0,"content_index":0,"delta":" tasks","item_id":"b1a638e40729da39"}'
+      - ordinal: 132
+        elapsed_ms: 1304.415
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":130,"output_index":0,"content_index":0,"delta":",","item_id":"b1a638e40729da39"}'
+      - ordinal: 133
+        elapsed_ms: 1311.489
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":131,"output_index":0,"content_index":0,"delta":" projects","item_id":"b1a638e40729da39"}'
+      - ordinal: 134
+        elapsed_ms: 1318.434
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":132,"output_index":0,"content_index":0,"delta":",","item_id":"b1a638e40729da39"}'
+      - ordinal: 135
+        elapsed_ms: 1325.539
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":133,"output_index":0,"content_index":0,"delta":" and","item_id":"b1a638e40729da39"}'
+      - ordinal: 136
+        elapsed_ms: 1332.394
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":134,"output_index":0,"content_index":0,"delta":" permissions","item_id":"b1a638e40729da39"}'
+      - ordinal: 137
+        elapsed_ms: 1339.354
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":135,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 138
+        elapsed_ms: 1346.369
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":136,"output_index":0,"content_index":0,"delta":"  \n","item_id":"b1a638e40729da39"}'
+      - ordinal: 139
+        elapsed_ms: 1353.541
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":137,"output_index":0,"content_index":0,"delta":"1","item_id":"b1a638e40729da39"}'
+      - ordinal: 140
+        elapsed_ms: 1360.505
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":138,"output_index":0,"content_index":0,"delta":"1","item_id":"b1a638e40729da39"}'
+      - ordinal: 141
+        elapsed_ms: 1367.759
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":139,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 142
+        elapsed_ms: 1374.486
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":140,"output_index":0,"content_index":0,"delta":" Implement","item_id":"b1a638e40729da39"}'
+      - ordinal: 143
+        elapsed_ms: 1381.483
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":141,"output_index":0,"content_index":0,"delta":" user","item_id":"b1a638e40729da39"}'
+      - ordinal: 144
+        elapsed_ms: 1388.432
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":142,"output_index":0,"content_index":0,"delta":" authentication","item_id":"b1a638e40729da39"}'
+      - ordinal: 145
+        elapsed_ms: 1395.276
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":143,"output_index":0,"content_index":0,"delta":" and","item_id":"b1a638e40729da39"}'
+      - ordinal: 146
+        elapsed_ms: 1402.334
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":144,"output_index":0,"content_index":0,"delta":" authorization","item_id":"b1a638e40729da39"}'
+      - ordinal: 147
+        elapsed_ms: 1409.344
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":145,"output_index":0,"content_index":0,"delta":" (","item_id":"b1a638e40729da39"}'
+      - ordinal: 148
+        elapsed_ms: 1416.317
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":146,"output_index":0,"content_index":0,"delta":"e","item_id":"b1a638e40729da39"}'
+      - ordinal: 149
+        elapsed_ms: 1423.171
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":147,"output_index":0,"content_index":0,"delta":".g","item_id":"b1a638e40729da39"}'
+      - ordinal: 150
+        elapsed_ms: 1430.102
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":148,"output_index":0,"content_index":0,"delta":".,","item_id":"b1a638e40729da39"}'
+      - ordinal: 151
+        elapsed_ms: 1437.366
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":149,"output_index":0,"content_index":0,"delta":" JWT","item_id":"b1a638e40729da39"}'
+      - ordinal: 152
+        elapsed_ms: 1444.14
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":150,"output_index":0,"content_index":0,"delta":",","item_id":"b1a638e40729da39"}'
+      - ordinal: 153
+        elapsed_ms: 1451.101
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":151,"output_index":0,"content_index":0,"delta":" OAuth","item_id":"b1a638e40729da39"}'
+      - ordinal: 154
+        elapsed_ms: 1458.365
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":152,"output_index":0,"content_index":0,"delta":").","item_id":"b1a638e40729da39"}'
+      - ordinal: 155
+        elapsed_ms: 1465.182
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":153,"output_index":0,"content_index":0,"delta":"  \n","item_id":"b1a638e40729da39"}'
+      - ordinal: 156
+        elapsed_ms: 1472.384
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":154,"output_index":0,"content_index":0,"delta":"1","item_id":"b1a638e40729da39"}'
+      - ordinal: 157
+        elapsed_ms: 1479.439
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":155,"output_index":0,"content_index":0,"delta":"2","item_id":"b1a638e40729da39"}'
+      - ordinal: 158
+        elapsed_ms: 1486.428
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":156,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 159
+        elapsed_ms: 1493.404
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":157,"output_index":0,"content_index":0,"delta":" Build","item_id":"b1a638e40729da39"}'
+      - ordinal: 160
+        elapsed_ms: 1500.382
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":158,"output_index":0,"content_index":0,"delta":" task","item_id":"b1a638e40729da39"}'
+      - ordinal: 161
+        elapsed_ms: 1507.394
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":159,"output_index":0,"content_index":0,"delta":" creation","item_id":"b1a638e40729da39"}'
+      - ordinal: 162
+        elapsed_ms: 1514.063
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":160,"output_index":0,"content_index":0,"delta":",","item_id":"b1a638e40729da39"}'
+      - ordinal: 163
+        elapsed_ms: 1521.115
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":161,"output_index":0,"content_index":0,"delta":" editing","item_id":"b1a638e40729da39"}'
+      - ordinal: 164
+        elapsed_ms: 1528.167
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":162,"output_index":0,"content_index":0,"delta":",","item_id":"b1a638e40729da39"}'
+      - ordinal: 165
+        elapsed_ms: 1535.684
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":163,"output_index":0,"content_index":0,"delta":" and","item_id":"b1a638e40729da39"}'
+      - ordinal: 166
+        elapsed_ms: 1542.359
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":164,"output_index":0,"content_index":0,"delta":" deletion","item_id":"b1a638e40729da39"}'
+      - ordinal: 167
+        elapsed_ms: 1549.208
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":165,"output_index":0,"content_index":0,"delta":" functionality","item_id":"b1a638e40729da39"}'
+      - ordinal: 168
+        elapsed_ms: 1556.231
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":166,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 169
+        elapsed_ms: 1563.123
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":167,"output_index":0,"content_index":0,"delta":"  \n","item_id":"b1a638e40729da39"}'
+      - ordinal: 170
+        elapsed_ms: 1570.152
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":168,"output_index":0,"content_index":0,"delta":"1","item_id":"b1a638e40729da39"}'
+      - ordinal: 171
+        elapsed_ms: 1577.01
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":169,"output_index":0,"content_index":0,"delta":"3","item_id":"b1a638e40729da39"}'
+      - ordinal: 172
+        elapsed_ms: 1584.365
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":170,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 173
+        elapsed_ms: 1590.913
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":171,"output_index":0,"content_index":0,"delta":" Develop","item_id":"b1a638e40729da39"}'
+      - ordinal: 174
+        elapsed_ms: 1598.088
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":172,"output_index":0,"content_index":0,"delta":" project","item_id":"b1a638e40729da39"}'
+      - ordinal: 175
+        elapsed_ms: 1605.055
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":173,"output_index":0,"content_index":0,"delta":" and","item_id":"b1a638e40729da39"}'
+      - ordinal: 176
+        elapsed_ms: 1612.02
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":174,"output_index":0,"content_index":0,"delta":" team","item_id":"b1a638e40729da39"}'
+      - ordinal: 177
+        elapsed_ms: 1618.962
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":175,"output_index":0,"content_index":0,"delta":" management","item_id":"b1a638e40729da39"}'
+      - ordinal: 178
+        elapsed_ms: 1625.958
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":176,"output_index":0,"content_index":0,"delta":" features","item_id":"b1a638e40729da39"}'
+      - ordinal: 179
+        elapsed_ms: 1633.036
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":177,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 180
+        elapsed_ms: 1640.017
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":178,"output_index":0,"content_index":0,"delta":"  \n","item_id":"b1a638e40729da39"}'
+      - ordinal: 181
+        elapsed_ms: 1647.132
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":179,"output_index":0,"content_index":0,"delta":"1","item_id":"b1a638e40729da39"}'
+      - ordinal: 182
+        elapsed_ms: 1654.073
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":180,"output_index":0,"content_index":0,"delta":"4","item_id":"b1a638e40729da39"}'
+      - ordinal: 183
+        elapsed_ms: 1660.843
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":181,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 184
+        elapsed_ms: 1667.851
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":182,"output_index":0,"content_index":0,"delta":" Implement","item_id":"b1a638e40729da39"}'
+      - ordinal: 185
+        elapsed_ms: 1674.913
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":183,"output_index":0,"content_index":0,"delta":" task","item_id":"b1a638e40729da39"}'
+      - ordinal: 186
+        elapsed_ms: 1681.924
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":184,"output_index":0,"content_index":0,"delta":" status","item_id":"b1a638e40729da39"}'
+      - ordinal: 187
+        elapsed_ms: 1688.671
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":185,"output_index":0,"content_index":0,"delta":" tracking","item_id":"b1a638e40729da39"}'
+      - ordinal: 188
+        elapsed_ms: 1695.667
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":186,"output_index":0,"content_index":0,"delta":" (","item_id":"b1a638e40729da39"}'
+      - ordinal: 189
+        elapsed_ms: 1702.845
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":187,"output_index":0,"content_index":0,"delta":"e","item_id":"b1a638e40729da39"}'
+      - ordinal: 190
+        elapsed_ms: 1709.796
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":188,"output_index":0,"content_index":0,"delta":".g","item_id":"b1a638e40729da39"}'
+      - ordinal: 191
+        elapsed_ms: 1716.488
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":189,"output_index":0,"content_index":0,"delta":".,","item_id":"b1a638e40729da39"}'
+      - ordinal: 192
+        elapsed_ms: 1723.741
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":190,"output_index":0,"content_index":0,"delta":" To","item_id":"b1a638e40729da39"}'
+      - ordinal: 193
+        elapsed_ms: 1730.842
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":191,"output_index":0,"content_index":0,"delta":" Do","item_id":"b1a638e40729da39"}'
+      - ordinal: 194
+        elapsed_ms: 1737.902
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":192,"output_index":0,"content_index":0,"delta":",","item_id":"b1a638e40729da39"}'
+      - ordinal: 195
+        elapsed_ms: 1744.885
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":193,"output_index":0,"content_index":0,"delta":" In","item_id":"b1a638e40729da39"}'
+      - ordinal: 196
+        elapsed_ms: 1751.434
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":194,"output_index":0,"content_index":0,"delta":" Progress","item_id":"b1a638e40729da39"}'
+      - ordinal: 197
+        elapsed_ms: 1758.44
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":195,"output_index":0,"content_index":0,"delta":",","item_id":"b1a638e40729da39"}'
+      - ordinal: 198
+        elapsed_ms: 1765.793
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":196,"output_index":0,"content_index":0,"delta":" Done","item_id":"b1a638e40729da39"}'
+      - ordinal: 199
+        elapsed_ms: 1772.798
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":197,"output_index":0,"content_index":0,"delta":").","item_id":"b1a638e40729da39"}'
+      - ordinal: 200
+        elapsed_ms: 1779.718
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":198,"output_index":0,"content_index":0,"delta":"  \n","item_id":"b1a638e40729da39"}'
+      - ordinal: 201
+        elapsed_ms: 1786.539
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":199,"output_index":0,"content_index":0,"delta":"1","item_id":"b1a638e40729da39"}'
+      - ordinal: 202
+        elapsed_ms: 1793.558
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":200,"output_index":0,"content_index":0,"delta":"5","item_id":"b1a638e40729da39"}'
+      - ordinal: 203
+        elapsed_ms: 1800.442
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":201,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 204
+        elapsed_ms: 1807.756
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":202,"output_index":0,"content_index":0,"delta":" Add","item_id":"b1a638e40729da39"}'
+      - ordinal: 205
+        elapsed_ms: 1814.392
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":203,"output_index":0,"content_index":0,"delta":" due","item_id":"b1a638e40729da39"}'
+      - ordinal: 206
+        elapsed_ms: 1821.483
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":204,"output_index":0,"content_index":0,"delta":" dates","item_id":"b1a638e40729da39"}'
+      - ordinal: 207
+        elapsed_ms: 1828.526
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":205,"output_index":0,"content_index":0,"delta":",","item_id":"b1a638e40729da39"}'
+      - ordinal: 208
+        elapsed_ms: 1836.004
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":206,"output_index":0,"content_index":0,"delta":" reminders","item_id":"b1a638e40729da39"}'
+      - ordinal: 209
+        elapsed_ms: 1842.751
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":207,"output_index":0,"content_index":0,"delta":",","item_id":"b1a638e40729da39"}'
+      - ordinal: 210
+        elapsed_ms: 1849.726
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":208,"output_index":0,"content_index":0,"delta":" and","item_id":"b1a638e40729da39"}'
+      - ordinal: 211
+        elapsed_ms: 1856.683
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":209,"output_index":0,"content_index":0,"delta":" notifications","item_id":"b1a638e40729da39"}'
+      - ordinal: 212
+        elapsed_ms: 1863.77
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":210,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 213
+        elapsed_ms: 1870.446
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":211,"output_index":0,"content_index":0,"delta":"  \n","item_id":"b1a638e40729da39"}'
+      - ordinal: 214
+        elapsed_ms: 1877.508
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":212,"output_index":0,"content_index":0,"delta":"1","item_id":"b1a638e40729da39"}'
+      - ordinal: 215
+        elapsed_ms: 1884.561
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":213,"output_index":0,"content_index":0,"delta":"6","item_id":"b1a638e40729da39"}'
+      - ordinal: 216
+        elapsed_ms: 1891.573
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":214,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 217
+        elapsed_ms: 1898.516
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":215,"output_index":0,"content_index":0,"delta":" Int","item_id":"b1a638e40729da39"}'
+      - ordinal: 218
+        elapsed_ms: 1905.387
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":216,"output_index":0,"content_index":0,"delta":"egrate","item_id":"b1a638e40729da39"}'
+      - ordinal: 219
+        elapsed_ms: 1912.542
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":217,"output_index":0,"content_index":0,"delta":" search","item_id":"b1a638e40729da39"}'
+      - ordinal: 220
+        elapsed_ms: 1919.219
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":218,"output_index":0,"content_index":0,"delta":" and","item_id":"b1a638e40729da39"}'
+      - ordinal: 221
+        elapsed_ms: 1926.267
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":219,"output_index":0,"content_index":0,"delta":" filtering","item_id":"b1a638e40729da39"}'
+      - ordinal: 222
+        elapsed_ms: 1933.466
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":220,"output_index":0,"content_index":0,"delta":" capabilities","item_id":"b1a638e40729da39"}'
+      - ordinal: 223
+        elapsed_ms: 1940.228
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":221,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 224
+        elapsed_ms: 1947.462
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":222,"output_index":0,"content_index":0,"delta":"  \n","item_id":"b1a638e40729da39"}'
+      - ordinal: 225
+        elapsed_ms: 1954.591
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":223,"output_index":0,"content_index":0,"delta":"1","item_id":"b1a638e40729da39"}'
+      - ordinal: 226
+        elapsed_ms: 1961.37
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":224,"output_index":0,"content_index":0,"delta":"7","item_id":"b1a638e40729da39"}'
+      - ordinal: 227
+        elapsed_ms: 1968.347
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":225,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 228
+        elapsed_ms: 1975.64
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":226,"output_index":0,"content_index":0,"delta":" Implement","item_id":"b1a638e40729da39"}'
+      - ordinal: 229
+        elapsed_ms: 1982.152
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":227,"output_index":0,"content_index":0,"delta":" drag","item_id":"b1a638e40729da39"}'
+      - ordinal: 230
+        elapsed_ms: 1989.007
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":228,"output_index":0,"content_index":0,"delta":"-and","item_id":"b1a638e40729da39"}'
+      - ordinal: 231
+        elapsed_ms: 1996.443
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":229,"output_index":0,"content_index":0,"delta":"-drop","item_id":"b1a638e40729da39"}'
+      - ordinal: 232
+        elapsed_ms: 2003.006
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":230,"output_index":0,"content_index":0,"delta":" task","item_id":"b1a638e40729da39"}'
+      - ordinal: 233
+        elapsed_ms: 2010.04
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":231,"output_index":0,"content_index":0,"delta":" organization","item_id":"b1a638e40729da39"}'
+      - ordinal: 234
+        elapsed_ms: 2017.612
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":232,"output_index":0,"content_index":0,"delta":" (","item_id":"b1a638e40729da39"}'
+      - ordinal: 235
+        elapsed_ms: 2023.97
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":233,"output_index":0,"content_index":0,"delta":"e","item_id":"b1a638e40729da39"}'
+      - ordinal: 236
+        elapsed_ms: 2030.87
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":234,"output_index":0,"content_index":0,"delta":".g","item_id":"b1a638e40729da39"}'
+      - ordinal: 237
+        elapsed_ms: 2038.366
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":235,"output_index":0,"content_index":0,"delta":".,","item_id":"b1a638e40729da39"}'
+      - ordinal: 238
+        elapsed_ms: 2045.362
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":236,"output_index":0,"content_index":0,"delta":" Kan","item_id":"b1a638e40729da39"}'
+      - ordinal: 239
+        elapsed_ms: 2051.887
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":237,"output_index":0,"content_index":0,"delta":"ban","item_id":"b1a638e40729da39"}'
+      - ordinal: 240
+        elapsed_ms: 2059.039
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":238,"output_index":0,"content_index":0,"delta":" board","item_id":"b1a638e40729da39"}'
+      - ordinal: 241
+        elapsed_ms: 2066.562
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":239,"output_index":0,"content_index":0,"delta":").","item_id":"b1a638e40729da39"}'
+      - ordinal: 242
+        elapsed_ms: 2073.497
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":240,"output_index":0,"content_index":0,"delta":"  \n","item_id":"b1a638e40729da39"}'
+      - ordinal: 243
+        elapsed_ms: 2080.279
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":241,"output_index":0,"content_index":0,"delta":"1","item_id":"b1a638e40729da39"}'
+      - ordinal: 244
+        elapsed_ms: 2087.304
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":242,"output_index":0,"content_index":0,"delta":"8","item_id":"b1a638e40729da39"}'
+      - ordinal: 245
+        elapsed_ms: 2094.424
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":243,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 246
+        elapsed_ms: 2101.411
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":244,"output_index":0,"content_index":0,"delta":" Develop","item_id":"b1a638e40729da39"}'
+      - ordinal: 247
+        elapsed_ms: 2108.452
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":245,"output_index":0,"content_index":0,"delta":" reporting","item_id":"b1a638e40729da39"}'
+      - ordinal: 248
+        elapsed_ms: 2115.397
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":246,"output_index":0,"content_index":0,"delta":" and","item_id":"b1a638e40729da39"}'
+      - ordinal: 249
+        elapsed_ms: 2122.267
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":247,"output_index":0,"content_index":0,"delta":" analytics","item_id":"b1a638e40729da39"}'
+      - ordinal: 250
+        elapsed_ms: 2129.309
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":248,"output_index":0,"content_index":0,"delta":" dashboard","item_id":"b1a638e40729da39"}'
+      - ordinal: 251
+        elapsed_ms: 2136.391
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":249,"output_index":0,"content_index":0,"delta":" (","item_id":"b1a638e40729da39"}'
+      - ordinal: 252
+        elapsed_ms: 2143.473
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":250,"output_index":0,"content_index":0,"delta":"e","item_id":"b1a638e40729da39"}'
+      - ordinal: 253
+        elapsed_ms: 2150.478
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":251,"output_index":0,"content_index":0,"delta":".g","item_id":"b1a638e40729da39"}'
+      - ordinal: 254
+        elapsed_ms: 2157.418
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":252,"output_index":0,"content_index":0,"delta":".,","item_id":"b1a638e40729da39"}'
+      - ordinal: 255
+        elapsed_ms: 2164.355
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":253,"output_index":0,"content_index":0,"delta":" task","item_id":"b1a638e40729da39"}'
+      - ordinal: 256
+        elapsed_ms: 2171.292
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":254,"output_index":0,"content_index":0,"delta":" completion","item_id":"b1a638e40729da39"}'
+      - ordinal: 257
+        elapsed_ms: 2178.251
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":255,"output_index":0,"content_index":0,"delta":" rates","item_id":"b1a638e40729da39"}'
+      - ordinal: 258
+        elapsed_ms: 2185.222
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":256,"output_index":0,"content_index":0,"delta":").","item_id":"b1a638e40729da39"}'
+      - ordinal: 259
+        elapsed_ms: 2192.507
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":257,"output_index":0,"content_index":0,"delta":"  \n","item_id":"b1a638e40729da39"}'
+      - ordinal: 260
+        elapsed_ms: 2199.411
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":258,"output_index":0,"content_index":0,"delta":"1","item_id":"b1a638e40729da39"}'
+      - ordinal: 261
+        elapsed_ms: 2205.853
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":259,"output_index":0,"content_index":0,"delta":"9","item_id":"b1a638e40729da39"}'
+      - ordinal: 262
+        elapsed_ms: 2213.398
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":260,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 263
+        elapsed_ms: 2220.233
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":261,"output_index":0,"content_index":0,"delta":" Conduct","item_id":"b1a638e40729da39"}'
+      - ordinal: 264
+        elapsed_ms: 2227.112
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":262,"output_index":0,"content_index":0,"delta":" internal","item_id":"b1a638e40729da39"}'
+      - ordinal: 265
+        elapsed_ms: 2234.103
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":263,"output_index":0,"content_index":0,"delta":" testing","item_id":"b1a638e40729da39"}'
+      - ordinal: 266
+        elapsed_ms: 2241.345
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":264,"output_index":0,"content_index":0,"delta":" and","item_id":"b1a638e40729da39"}'
+      - ordinal: 267
+        elapsed_ms: 2248.298
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":265,"output_index":0,"content_index":0,"delta":" bug","item_id":"b1a638e40729da39"}'
+      - ordinal: 268
+        elapsed_ms: 2255.044
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":266,"output_index":0,"content_index":0,"delta":" fixing","item_id":"b1a638e40729da39"}'
+      - ordinal: 269
+        elapsed_ms: 2262.043
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":267,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 270
+        elapsed_ms: 2268.948
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":268,"output_index":0,"content_index":0,"delta":"  \n","item_id":"b1a638e40729da39"}'
+      - ordinal: 271
+        elapsed_ms: 2276.053
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":269,"output_index":0,"content_index":0,"delta":"2","item_id":"b1a638e40729da39"}'
+      - ordinal: 272
+        elapsed_ms: 2283.311
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":270,"output_index":0,"content_index":0,"delta":"0","item_id":"b1a638e40729da39"}'
+      - ordinal: 273
+        elapsed_ms: 2290.324
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":271,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 274
+        elapsed_ms: 2297.361
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":272,"output_index":0,"content_index":0,"delta":" Deploy","item_id":"b1a638e40729da39"}'
+      - ordinal: 275
+        elapsed_ms: 2304.117
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":273,"output_index":0,"content_index":0,"delta":" app","item_id":"b1a638e40729da39"}'
+      - ordinal: 276
+        elapsed_ms: 2311.006
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":274,"output_index":0,"content_index":0,"delta":" to","item_id":"b1a638e40729da39"}'
+      - ordinal: 277
+        elapsed_ms: 2317.975
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":275,"output_index":0,"content_index":0,"delta":" production","item_id":"b1a638e40729da39"}'
+      - ordinal: 278
+        elapsed_ms: 2324.964
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":276,"output_index":0,"content_index":0,"delta":" environment","item_id":"b1a638e40729da39"}'
+      - ordinal: 279
+        elapsed_ms: 2331.901
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":277,"output_index":0,"content_index":0,"delta":" and","item_id":"b1a638e40729da39"}'
+      - ordinal: 280
+        elapsed_ms: 2339.001
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":278,"output_index":0,"content_index":0,"delta":" monitor","item_id":"b1a638e40729da39"}'
+      - ordinal: 281
+        elapsed_ms: 2346.119
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":279,"output_index":0,"content_index":0,"delta":" performance","item_id":"b1a638e40729da39"}'
+      - ordinal: 282
+        elapsed_ms: 2352.687
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":280,"output_index":0,"content_index":0,"delta":".","item_id":"b1a638e40729da39"}'
+      - ordinal: 283
+        elapsed_ms: 2400.549
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":281,"output_index":0,"content_index":0,"delta":"<|im_end|>","item_id":"b1a638e40729da39"}'
+      - ordinal: 284
+        elapsed_ms: 2401.777
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.done","sequence_number":282,"output_index":0,"content_index":0,"item_id":"b1a638e40729da39","text":"1.
+          Define project scope and objectives.  \n2. Conduct market research and competitor analysis.  \n3. Identify target users
+          and their needs.  \n4. Develop user personas and use cases.  \n5. Create a feature list and prioritize functionalities.  \n6.
+          Design wireframes for core screens (dashboard, task list, task details).  \n7. Develop a high-fidelity UI/UX design.  \n8.
+          Choose technology stack (e.g., React Native, Node.js, MongoDB).  \n9. Set up development environment and version control
+          (e.g., Git).  \n10. Design database schema for users, tasks, projects, and permissions.  \n11. Implement user authentication
+          and authorization (e.g., JWT, OAuth).  \n12. Build task creation, editing, and deletion functionality.  \n13. Develop
+          project and team management features.  \n14. Implement task status tracking (e.g., To Do, In Progress, Done).  \n15. Add
+          due dates, reminders, and notifications.  \n16. Integrate search and filtering capabilities.  \n17. Implement drag-and-drop
+          task organization (e.g., Kanban board).  \n18. Develop reporting and analytics dashboard (e.g., task completion rates).  \n19.
+          Conduct internal testing and bug fixing.  \n20. Deploy app to production environment and monitor performance.<|im_end|>"}'
+      - ordinal: 285
+        elapsed_ms: 2403.974
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_part.done","sequence_number":283,"output_index":0,"content_index":0,"item_id":"b1a638e40729da39","part":{"text":"1.
+          Define project scope and objectives.  \n2. Conduct market research and competitor analysis.  \n3. Identify target users
+          and their needs.  \n4. Develop user personas and use cases.  \n5. Create a feature list and prioritize functionalities.  \n6.
+          Design wireframes for core screens (dashboard, task list, task details).  \n7. Develop a high-fidelity UI/UX design.  \n8.
+          Choose technology stack (e.g., React Native, Node.js, MongoDB).  \n9. Set up development environment and version control
+          (e.g., Git).  \n10. Design database schema for users, tasks, projects, and permissions.  \n11. Implement user authentication
+          and authorization (e.g., JWT, OAuth).  \n12. Build task creation, editing, and deletion functionality.  \n13. Develop
+          project and team management features.  \n14. Implement task status tracking (e.g., To Do, In Progress, Done).  \n15. Add
+          due dates, reminders, and notifications.  \n16. Integrate search and filtering capabilities.  \n17. Implement drag-and-drop
+          task organization (e.g., Kanban board).  \n18. Develop reporting and analytics dashboard (e.g., task completion rates).  \n19.
+          Conduct internal testing and bug fixing.  \n20. Deploy app to production environment and monitor performance.<|im_end|>","type":"reasoning_text"}}'
+      - ordinal: 286
+        elapsed_ms: 2406.093
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.done","sequence_number":284,"output_index":0,"item":{"id":"b1a638e40729da39","summary":[],"type":"reasoning","content":[{"text":"1.
+          Define project scope and objectives.  \n2. Conduct market research and competitor analysis.  \n3. Identify target users
+          and their needs.  \n4. Develop user personas and use cases.  \n5. Create a feature list and prioritize functionalities.  \n6.
+          Design wireframes for core screens (dashboard, task list, task details).  \n7. Develop a high-fidelity UI/UX design.  \n8.
+          Choose technology stack (e.g., React Native, Node.js, MongoDB).  \n9. Set up development environment and version control
+          (e.g., Git).  \n10. Design database schema for users, tasks, projects, and permissions.  \n11. Implement user authentication
+          and authorization (e.g., JWT, OAuth).  \n12. Build task creation, editing, and deletion functionality.  \n13. Develop
+          project and team management features.  \n14. Implement task status tracking (e.g., To Do, In Progress, Done).  \n15. Add
+          due dates, reminders, and notifications.  \n16. Integrate search and filtering capabilities.  \n17. Implement drag-and-drop
+          task organization (e.g., Kanban board).  \n18. Develop reporting and analytics dashboard (e.g., task completion rates).  \n19.
+          Conduct internal testing and bug fixing.  \n20. Deploy app to production environment and monitor performance.<|im_end|>","type":"reasoning_text"}],"status":"completed"}}'
+      - ordinal: 287
+        elapsed_ms: 2408.067
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.incomplete","sequence_number":285,"response":{"id":"resp_01a13898-7a2f-7202-b7d5-511627d1bb94","object":"response","created_at":1791950881,"model":"Qwen/Qwen3-VL-30B-A3B-Instruct","status":"incomplete","output":[{"type":"reasoning","id":"b1a638e40729da39","content":[{"type":"reasoning_text","text":"1.
+          Define project scope and objectives.  \n2. Conduct market research and competitor analysis.  \n3. Identify target users
+          and their needs.  \n4. Develop user personas and use cases.  \n5. Create a feature list and prioritize functionalities.  \n6.
+          Design wireframes for core screens (dashboard, task list, task details).  \n7. Develop a high-fidelity UI/UX design.  \n8.
+          Choose technology stack (e.g., React Native, Node.js, MongoDB).  \n9. Set up development environment and version control
+          (e.g., Git).  \n10. Design database schema for users, tasks, projects, and permissions.  \n11. Implement user authentication
+          and authorization (e.g., JWT, OAuth).  \n12. Build task creation, editing, and deletion functionality.  \n13. Develop
+          project and team management features.  \n14. Implement task status tracking (e.g., To Do, In Progress, Done).  \n15. Add
+          due dates, reminders, and notifications.  \n16. Integrate search and filtering capabilities.  \n17. Implement drag-and-drop
+          task organization (e.g., Kanban board).  \n18. Develop reporting and analytics dashboard (e.g., task completion rates).  \n19.
+          Conduct internal testing and bug fixing.  \n20. Deploy app to production environment and monitor performance.<|im_end|>"}],"summary":[],"status":"completed"}],"usage":null,"incomplete_details":{"reason":"steered"},"error":null,"previous_response_id":null,"instructions":"Be
+          concise. Preserve any requested verification marker verbatim.","max_tool_calls":null,"service_tier":"default","tools":[],"tool_choice":"auto","completed_at":null,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":1.0,"reasoning":null,"max_output_tokens":8192,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null}}'
+      - ordinal: 288
+        elapsed_ms: 2441.295
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.created","sequence_number":0,"response":{"id":"resp_01a13898-8395-7053-a412-1c8b7ff4b279","created_at":1791950881,"incomplete_details":null,"instructions":"Be
+          concise. Preserve any requested verification marker verbatim.","metadata":{},"model":"Qwen/Qwen3-VL-30B-A3B-Instruct","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":8192,"max_tool_calls":null,"previous_response_id":"resp_01a13898-7a2f-7202-b7d5-511627d1bb94","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":true,"safety_identifier":null,"prompt_cache_key":null,"error":null}}'
+      - ordinal: 289
+        elapsed_ms: 2442.292
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a13898-8395-7053-a412-1c8b7ff4b279","created_at":1791950881,"incomplete_details":null,"instructions":"Be
+          concise. Preserve any requested verification marker verbatim.","metadata":{},"model":"Qwen/Qwen3-VL-30B-A3B-Instruct","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":8192,"max_tool_calls":null,"previous_response_id":"resp_01a13898-7a2f-7202-b7d5-511627d1bb94","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":true,"safety_identifier":null,"prompt_cache_key":null,"error":null}}'
+      - ordinal: 290
+        elapsed_ms: 2506.53
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"b1197afe3773cbf6","summary":[],"type":"reasoning","content":[],"status":"in_progress"}}'
+      - ordinal: 291
+        elapsed_ms: 2507.718
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_part.added","sequence_number":3,"output_index":0,"content_index":0,"item_id":"b1197afe3773cbf6","part":{"text":"","type":"reasoning_text"}}'
+      - ordinal: 292
+        elapsed_ms: 2508.4
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":4,"output_index":0,"content_index":0,"delta":"The","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 293
+        elapsed_ms: 2512.193
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":5,"output_index":0,"content_index":0,"delta":" image","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 294
+        elapsed_ms: 2518.9
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":6,"output_index":0,"content_index":0,"delta":" is","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 295
+        elapsed_ms: 2525.865
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":7,"output_index":0,"content_index":0,"delta":" divided","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 296
+        elapsed_ms: 2532.784
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":8,"output_index":0,"content_index":0,"delta":" vertically","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 297
+        elapsed_ms: 2539.765
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":9,"output_index":0,"content_index":0,"delta":" into","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 298
+        elapsed_ms: 2546.658
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":10,"output_index":0,"content_index":0,"delta":" two","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 299
+        elapsed_ms: 2553.385
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":11,"output_index":0,"content_index":0,"delta":" equal","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 300
+        elapsed_ms: 2560.701
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":12,"output_index":0,"content_index":0,"delta":" sections","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 301
+        elapsed_ms: 2567.543
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":13,"output_index":0,"content_index":0,"delta":".","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 302
+        elapsed_ms: 2574.635
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":14,"output_index":0,"content_index":0,"delta":" On","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 303
+        elapsed_ms: 2581.469
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":15,"output_index":0,"content_index":0,"delta":" the","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 304
+        elapsed_ms: 2588.362
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":16,"output_index":0,"content_index":0,"delta":" left","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 305
+        elapsed_ms: 2595.438
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":17,"output_index":0,"content_index":0,"delta":" side","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 306
+        elapsed_ms: 2602.522
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":18,"output_index":0,"content_index":0,"delta":",","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 307
+        elapsed_ms: 2609.69
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":19,"output_index":0,"content_index":0,"delta":" the","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 308
+        elapsed_ms: 2616.592
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":20,"output_index":0,"content_index":0,"delta":" color","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 309
+        elapsed_ms: 2623.475
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":21,"output_index":0,"content_index":0,"delta":" is","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 310
+        elapsed_ms: 2630.457
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":22,"output_index":0,"content_index":0,"delta":" a","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 311
+        elapsed_ms: 2637.428
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":23,"output_index":0,"content_index":0,"delta":" bright","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 312
+        elapsed_ms: 2644.397
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":24,"output_index":0,"content_index":0,"delta":" red","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 313
+        elapsed_ms: 2651.334
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":25,"output_index":0,"content_index":0,"delta":".","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 314
+        elapsed_ms: 2658.196
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":26,"output_index":0,"content_index":0,"delta":" On","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 315
+        elapsed_ms: 2665.059
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":27,"output_index":0,"content_index":0,"delta":" the","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 316
+        elapsed_ms: 2671.994
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":28,"output_index":0,"content_index":0,"delta":" right","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 317
+        elapsed_ms: 2678.955
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":29,"output_index":0,"content_index":0,"delta":" side","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 318
+        elapsed_ms: 2686.058
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":30,"output_index":0,"content_index":0,"delta":",","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 319
+        elapsed_ms: 2693.034
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":31,"output_index":0,"content_index":0,"delta":" the","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 320
+        elapsed_ms: 2700.1
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":32,"output_index":0,"content_index":0,"delta":" color","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 321
+        elapsed_ms: 2707.033
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":33,"output_index":0,"content_index":0,"delta":" is","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 322
+        elapsed_ms: 2714.393
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":34,"output_index":0,"content_index":0,"delta":" a","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 323
+        elapsed_ms: 2720.736
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":35,"output_index":0,"content_index":0,"delta":" vivid","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 324
+        elapsed_ms: 2727.551
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":36,"output_index":0,"content_index":0,"delta":" blue","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 325
+        elapsed_ms: 2735.127
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":37,"output_index":0,"content_index":0,"delta":".","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 326
+        elapsed_ms: 2741.522
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":38,"output_index":0,"content_index":0,"delta":" The","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 327
+        elapsed_ms: 2748.466
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":39,"output_index":0,"content_index":0,"delta":" color","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 328
+        elapsed_ms: 2756.102
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":40,"output_index":0,"content_index":0,"delta":" IMAGE","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 329
+        elapsed_ms: 2762.372
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":41,"output_index":0,"content_index":0,"delta":"_ST","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 330
+        elapsed_ms: 2769.329
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":42,"output_index":0,"content_index":0,"delta":"E","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 331
+        elapsed_ms: 2776.873
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":43,"output_index":0,"content_index":0,"delta":"ER","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 332
+        elapsed_ms: 2783.297
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":44,"output_index":0,"content_index":0,"delta":"_OR","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 333
+        elapsed_ms: 2790.304
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":45,"output_index":0,"content_index":0,"delta":"CH","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 334
+        elapsed_ms: 2797.508
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":46,"output_index":0,"content_index":0,"delta":"ID","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 335
+        elapsed_ms: 2804.833
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":47,"output_index":0,"content_index":0,"delta":" is","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 336
+        elapsed_ms: 2811.896
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":48,"output_index":0,"content_index":0,"delta":" not","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 337
+        elapsed_ms: 2818.784
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":49,"output_index":0,"content_index":0,"delta":" present","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 338
+        elapsed_ms: 2825.658
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":50,"output_index":0,"content_index":0,"delta":" in","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 339
+        elapsed_ms: 2832.707
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":51,"output_index":0,"content_index":0,"delta":" the","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 340
+        elapsed_ms: 2839.535
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":52,"output_index":0,"content_index":0,"delta":" image","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 341
+        elapsed_ms: 2846.765
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":53,"output_index":0,"content_index":0,"delta":".","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 342
+        elapsed_ms: 2855.236
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":54,"output_index":0,"content_index":0,"delta":"<|im_end|>","item_id":"b1197afe3773cbf6"}'
+      - ordinal: 343
+        elapsed_ms: 2856.084
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.done","sequence_number":55,"output_index":0,"content_index":0,"item_id":"b1197afe3773cbf6","text":"The
+          image is divided vertically into two equal sections. On the left side, the color is a bright red. On the right side, the
+          color is a vivid blue. The color IMAGE_STEER_ORCHID is not present in the image.<|im_end|>"}'
+      - ordinal: 344
+        elapsed_ms: 2857.457
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_part.done","sequence_number":56,"output_index":0,"content_index":0,"item_id":"b1197afe3773cbf6","part":{"text":"The
+          image is divided vertically into two equal sections. On the left side, the color is a bright red. On the right side, the
+          color is a vivid blue. The color IMAGE_STEER_ORCHID is not present in the image.<|im_end|>","type":"reasoning_text"}}'
+      - ordinal: 345
+        elapsed_ms: 2859.044
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.done","sequence_number":57,"output_index":0,"item":{"id":"b1197afe3773cbf6","summary":[],"type":"reasoning","content":[{"text":"The
+          image is divided vertically into two equal sections. On the left side, the color is a bright red. On the right side, the
+          color is a vivid blue. The color IMAGE_STEER_ORCHID is not present in the image.<|im_end|>","type":"reasoning_text"}],"status":"completed"}}'
+      - ordinal: 346
+        elapsed_ms: 2860.545
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.completed","sequence_number":58,"response":{"id":"resp_01a13898-8395-7053-a412-1c8b7ff4b279","object":"response","created_at":1791950882,"model":"Qwen/Qwen3-VL-30B-A3B-Instruct","status":"completed","output":[{"type":"reasoning","id":"b1197afe3773cbf6","content":[{"type":"reasoning_text","text":"The
+          image is divided vertically into two equal sections. On the left side, the color is a bright red. On the right side, the
+          color is a vivid blue. The color IMAGE_STEER_ORCHID is not present in the image.<|im_end|>"}],"summary":[],"status":"completed"}],"usage":{"input_tokens":149,"output_tokens":51,"total_tokens":200,"input_tokens_details":{"cached_tokens":32},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":"resp_01a13898-7a2f-7202-b7d5-511627d1bb94","instructions":"Be
+          concise. Preserve any requested verification marker verbatim.","max_tool_calls":null,"service_tier":"auto","tools":[],"tool_choice":"auto","completed_at":1791950882,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":1.0,"reasoning":null,"max_output_tokens":8192,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null}}'
+      - ordinal: 347
+        elapsed_ms: 5866.123
+        direction: client
+        opcode: 8
+        fin: true
+        payload_base64: ''
+      - ordinal: 348
+        elapsed_ms: 5867.097
+        direction: server
+        opcode: 8
+        fin: true
+        payload_base64: ''
+    close_outcome:
+      kind: completed
+      probe:
+        connection_index: 0
+        created:
+        - resp_01a13898-7a2f-7202-b7d5-511627d1bb94
+        - resp_01a13898-8395-7053-a412-1c8b7ff4b279
+        terminals:
+          resp_01a13898-7a2f-7202-b7d5-511627d1bb94:
+            type: response.incomplete
+            status: incomplete
+            incomplete_details:
+              reason: steered
+            previous_response_id: null
+            usage: null
+            output_types:
+            - reasoning
+          resp_01a13898-8395-7053-a412-1c8b7ff4b279:
+            type: response.completed
+            status: completed
+            incomplete_details: null
+            previous_response_id: resp_01a13898-7a2f-7202-b7d5-511627d1bb94
+            usage:
+              input_tokens: 149
+              output_tokens: 51
+              total_tokens: 200
+              input_tokens_details:
+                cached_tokens: 32
+              output_tokens_details:
+                reasoning_tokens: 0
+            output_types:
+            - reasoning
+        controls:
+        - frame_ordinal: 4
+          event:
+            type: response.steer.accepted
+            sequence_number: 2
+            steer:
+              id: steer_01a13898-7a5d-76d0-9ad1-38638ea8e033
+              previous_response_id: resp_01a13898-7a2f-7202-b7d5-511627d1bb94
+        submissions:
+        - trigger: initial
+          type: response.create
+          previous_response_id: null
+          frame_ordinal_before_send: 0
+        - trigger: response.created
+          type: response.steer
+          previous_response_id: resp_01a13898-7a2f-7202-b7d5-511627d1bb94
+          frame_ordinal_before_send: 2
+        event_counts:
+          response.created: 2
+          response.in_progress: 2
+          response.steer.accepted: 1
+          response.output_item.added: 2
+          response.reasoning_part.added: 2
+          response.reasoning_text.delta: 328
+          response.reasoning_text.done: 2
+          response.reasoning_part.done: 2
+          response.output_item.done: 2
+          response.incomplete: 1
+          response.completed: 1
+        steer_outcomes:
+          steer_01a13898-7a5d-76d0-9ad1-38638ea8e033:
+            events:
+            - response.steer.accepted
+            acknowledged: true
+            latest_event: response.steer.accepted
+        steering_submissions:
+        - input:
+          - role: user
+            content:
+            - type: input_text
+              text: 'Change the task: describe the colors on the left and right of the attached image. Include IMAGE_STEER_ORCHID
+                in your answer.'
+            - type: input_image
+              image_url: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PsQkAAAzDsPz/dHpCp2wCzwalybTxvgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+Dq47PDiz8p6GQAAAABJRU5ErkJggg==
+              detail: low
+          previous_response_id: resp_01a13898-7a2f-7202-b7d5-511627d1bb94
+          acknowledged: true
+          steer_id: steer_01a13898-7a5d-76d0-9ad1-38638ea8e033
+          events:
+          - response.steer.accepted
+          latest_event: response.steer.accepted
+          correlation: acknowledgement_order
+        trigger_reached: true
+        hosted_tools: {}
+        unacknowledged_submission_count: 0
+        steering_trigger:
+          event: response.created
+          ordinal: 1
+          item_id: null
+          output_index: null
+          agent: ''
+          response_id: resp_01a13898-7a2f-7202-b7d5-511627d1bb94
+          parent_terminal_observed: false
+          ordering_only: A received activity event does not prove server execution was still active when steering arrived.
+        settled_for_seconds: 3.0
+      peer_close_received: true

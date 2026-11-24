@@ -1,3 +1,16 @@
+mod annotation;
+mod apply_done;
+mod file_search;
+mod history;
+mod text;
+pub use annotation::OutputAnnotation;
+pub use file_search::{FileCitation, FileSearchCall, FileSearchCallResult, FileSearchCallStatus};
+pub(crate) mod tool_search_call;
+mod web_search_status;
+pub use apply_done::ApplyDone;
+pub use tool_search_call::ToolSearchCall;
+pub use web_search_status::WebSearchCallStatus;
+
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
@@ -7,50 +20,103 @@ use crate::executor::error::ExecutorError;
 use crate::tool::ToolRegistry;
 use crate::types::event::MessageStatus;
 use crate::types::tools::{ToolSearchExecution, ToolSearchStatus};
-use crate::utils::common::deserialize_from_value_opt;
+use crate::utils::common::{deserialize_from_value_opt, deserialize_nullable_vec};
 use crate::utils::uuid7_str;
 
-use super::input::{
-    CompactionItem, InputContent, InputFunctionToolCall, InputItem, InputMessage, InputMessageContent,
-    InputTextContent, InputToolSearchCall, deserialize_non_blank_string,
-};
+use super::code_interpreter::CodeInterpreterCall;
+#[cfg(test)]
+use super::input::InputFunctionToolCall;
+use super::input::{CompactionItem, InputTextContent, ToolSearchOutputMessage};
+use super::multi_agent::{AgentAttribution, AgentMessage, MultiAgentCall, MultiAgentCallOutput};
+pub use super::reasoning::ReasoningTextContent;
+use super::reasoning::{OpaqueReasoning, ReasoningStatus, ReasoningSummaryContent};
 use super::shell::ShellCall;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Text emitted by an assistant or a hosted collaboration action.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct OutputTextContent {
-    #[serde(rename = "type")]
-    pub type_: String,
     pub text: String,
-    #[serde(default)]
-    pub annotations: Vec<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub annotations: Option<Vec<OutputAnnotation>>,
+    #[serde(default, deserialize_with = "deserialize_nullable_vec")]
+    pub logprobs: Vec<OutputTextLogprob>,
 }
 
-impl OutputTextContent {
-    pub fn new(text: impl Into<String>) -> Self {
-        Self {
-            type_: "output_text".into(),
-            text: text.into(),
-            annotations: vec![],
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct TopLogprob {
+    pub token: String,
+    pub bytes: Vec<u8>,
+    pub logprob: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct OutputTextLogprob {
+    pub token: String,
+    pub bytes: Vec<u8>,
+    pub logprob: f64,
+    pub top_logprobs: Vec<TopLogprob>,
+}
+
+/// Public messages include assistant output and forked user input.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OutputMessageContent {
+    InputText(InputTextContent),
+    OutputText(OutputTextContent),
+}
+
+impl OutputMessageContent {
+    #[must_use]
+    pub fn text(&self) -> &str {
+        match self {
+            Self::InputText(part) => &part.text,
+            Self::OutputText(part) => &part.text,
         }
     }
+}
+
+impl From<OutputTextContent> for OutputMessageContent {
+    fn from(part: OutputTextContent) -> Self {
+        Self::OutputText(part)
+    }
+}
+
+/// The purpose of an assistant message, independent of its lifecycle status.
+/// A completed commentary message is not a final answer, and a final answer from
+/// one agent does not by itself complete the public response.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum MessagePhase {
+    Commentary,
+    FinalAnswer,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct OutputMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentAttribution>,
     pub id: String,
     pub role: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase: Option<MessagePhase>,
     pub status: MessageStatus,
     #[serde(default)]
-    pub content: Vec<OutputTextContent>,
+    pub content: Vec<OutputMessageContent>,
 }
 
 impl OutputMessage {
     pub fn new(id: impl Into<String>, status: MessageStatus) -> Self {
         Self {
+            agent: None,
             id: id.into(),
             role: "assistant".into(),
+            phase: None,
             status,
             content: vec![],
         }
@@ -61,9 +127,15 @@ impl TryFrom<&EventPayload> for OutputMessage {
     type Error = ExecutorError;
 
     fn try_from(payload: &EventPayload) -> Result<Self, Self::Error> {
-        let EventPayload::OutputItemAdded { item_id, .. } = payload else {
+        let EventPayload::OutputItemAdded {
+            item_id, initial_item, ..
+        } = payload
+        else {
             return Err(ExecutorError::ParseError("expected OutputItemAdded payload".into()));
         };
+        if let Some(OutputItem::Message(item)) = initial_item.as_deref() {
+            return Ok(item.clone());
+        }
         let id = if item_id.is_empty() {
             uuid7_str("msg_")
         } else {
@@ -73,25 +145,11 @@ impl TryFrom<&EventPayload> for OutputMessage {
     }
 }
 
-impl From<OutputMessage> for InputMessage {
-    fn from(msg: OutputMessage) -> Self {
-        let parts = msg
-            .content
-            .into_iter()
-            .map(|c| InputContent::OutputText(InputTextContent::new(c.text)))
-            .collect();
-        Self {
-            id: Some(msg.id),
-            role: msg.role,
-            status: Some(msg.status),
-            content: InputMessageContent::Parts(parts),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct FunctionToolCall {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentAttribution>,
     #[serde(default = "default_function_call_id")]
     #[serde(deserialize_with = "deserialize_function_call_id")]
     pub id: String,
@@ -107,22 +165,15 @@ pub struct FunctionToolCall {
     #[serde(default = "default_completed_status")]
     #[serde(deserialize_with = "deserialize_status_or_default")]
     pub status: MessageStatus,
-}
-
-/// A newly emitted public client tool-search call.
-///
-/// Unlike replay input, execution and status have no serde defaults: response
-/// translation must populate both fields explicitly.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct ToolSearchCall {
-    #[serde(deserialize_with = "deserialize_non_blank_string")]
-    pub id: String,
-    #[serde(deserialize_with = "deserialize_non_blank_string")]
-    pub call_id: String,
-    pub execution: ToolSearchExecution,
-    pub arguments: Value,
-    pub status: ToolSearchStatus,
+    /// The call targets an async tool: the response continues without its output, which the client
+    /// returns later on this `call_id`. Serialized only when true.
+    #[serde(
+        default,
+        rename = "async",
+        deserialize_with = "crate::utils::common::null_as_default",
+        skip_serializing_if = "std::ops::Not::not"
+    )]
+    pub async_execution: bool,
 }
 
 /// A freeform custom tool invocation.
@@ -131,6 +182,8 @@ pub struct ToolSearchCall {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct CustomToolCall {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentAttribution>,
     #[serde(default)]
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -141,6 +194,15 @@ pub struct CustomToolCall {
     pub name: String,
     #[serde(default)]
     pub input: String,
+    /// The call targets an async tool: the response continues without its output, which the client
+    /// returns later on this `call_id`. Serialized only when true.
+    #[serde(
+        default,
+        rename = "async",
+        deserialize_with = "crate::utils::common::null_as_default",
+        skip_serializing_if = "std::ops::Not::not"
+    )]
+    pub async_execution: bool,
 }
 
 fn default_completed_status() -> MessageStatus {
@@ -177,6 +239,7 @@ impl TryFrom<&EventPayload> for FunctionToolCall {
             call_id,
             name,
             namespace,
+            initial_item,
             ..
         } = payload
         else {
@@ -187,13 +250,21 @@ impl TryFrom<&EventPayload> for FunctionToolCall {
         } else {
             item_id.clone()
         };
+        let initial_call = match initial_item.as_deref() {
+            Some(OutputItem::FunctionCall(call)) => Some(call),
+            _ => None,
+        };
         Ok(Self {
+            agent: initial_call.and_then(|call| call.agent.clone()),
             id,
             call_id: call_id.as_deref().unwrap_or_default().to_owned(),
             name: name.as_deref().unwrap_or_default().to_owned(),
             namespace: namespace.clone(),
             arguments: String::new(),
             status: MessageStatus::InProgress,
+            // A provider that already marks async calls keeps its marker; the gateway marks the
+            // calls of declared async tools when it restores the round's public output.
+            async_execution: initial_call.is_some_and(|call| call.async_execution),
         })
     }
 }
@@ -213,8 +284,9 @@ impl TryFrom<&EventPayload> for ToolSearchCall {
             return Err(ExecutorError::ParseError("tool_search_call is missing id".into()));
         }
         Ok(Self {
+            agent: None,
             id: item_id.clone(),
-            call_id: call_id.to_owned(),
+            call_id: Some(call_id.to_owned()),
             execution: ToolSearchExecution::Client,
             arguments: Value::Object(serde_json::Map::new()),
             status: ToolSearchStatus::InProgress,
@@ -238,11 +310,13 @@ impl TryFrom<&EventPayload> for CustomToolCall {
             item_id.clone()
         };
         Ok(Self {
+            agent: None,
             id,
             status: Some(MessageStatus::InProgress),
             call_id: call_id.as_deref().unwrap_or_default().to_owned(),
             name: name.as_deref().unwrap_or_default().to_owned(),
             input: String::new(),
+            async_execution: false,
         })
     }
 }
@@ -260,6 +334,7 @@ impl TryFrom<&EventPayload> for CompactionItem {
             item_id.clone()
         };
         Ok(Self {
+            agent: None,
             id: Some(id),
             encrypted_content: String::new(),
         })
@@ -271,12 +346,16 @@ impl TryFrom<&EventPayload> for ShellCall {
 
     fn try_from(payload: &EventPayload) -> Result<Self, Self::Error> {
         let EventPayload::OutputItemAdded {
-            shell_call: Some(call), ..
+            initial_item: Some(item),
+            ..
         } = payload
         else {
             return Err(ExecutorError::ParseError("expected OutputItemAdded payload".into()));
         };
-        Ok(call.as_ref().clone())
+        let OutputItem::ShellCall(call) = item.as_ref() else {
+            return Err(ExecutorError::ParseError("expected initial shell item".into()));
+        };
+        Ok(call.clone())
     }
 }
 
@@ -328,8 +407,6 @@ impl GatewayCallStatus {
         }
     }
 }
-
-pub type WebSearchCallStatus = GatewayCallStatus;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -482,6 +559,8 @@ impl WebSearchAction {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct WebSearchCall {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentAttribution>,
     pub id: String,
     pub status: WebSearchCallStatus,
     pub action: WebSearchAction,
@@ -500,6 +579,7 @@ impl WebSearchCall {
         sources: Vec<WebSearchSource>,
     ) -> Result<Self, WebSearchActionError> {
         Ok(Self {
+            agent: None,
             id: id.into(),
             status,
             action: WebSearchAction::Search(WebSearchActionSearch::try_new(queries, sources)?),
@@ -580,6 +660,8 @@ pub struct McpToolExecutionErrorContent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct McpCall {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentAttribution>,
     pub id: String,
     pub server_label: String,
     pub name: String,
@@ -603,6 +685,7 @@ impl McpCall {
         error: Option<McpCallError>,
     ) -> Self {
         Self {
+            agent: None,
             id: id.into(),
             server_label: server_label.into(),
             name: name.into(),
@@ -646,6 +729,8 @@ impl McpListTool {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct McpListTools {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentAttribution>,
     pub id: String,
     pub server_label: String,
     pub tools: Vec<McpListTool>,
@@ -657,6 +742,7 @@ impl McpListTools {
     #[must_use]
     pub fn new(id: impl Into<String>, server_label: impl Into<String>, tools: Vec<McpListTool>) -> Self {
         Self {
+            agent: None,
             id: id.into(),
             server_label: server_label.into(),
             tools,
@@ -705,47 +791,30 @@ impl TryFrom<&EventPayload> for McpCall {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct ReasoningTextContent {
-    #[serde(rename = "type")]
-    pub type_: String,
-    pub text: String,
-}
-
-impl ReasoningTextContent {
-    pub fn new(text: impl Into<String>) -> Self {
-        Self {
-            type_: "reasoning_text".into(),
-            text: text.into(),
-        }
-    }
-}
-
+/// Canonical reasoning item. Content containers and text are charged to the
+/// shared retained-response budget during ingestion, including empty parts.
+/// Input and stored history retain the public representation, not a replay projection.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ReasoningOutput {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentAttribution>,
     #[serde(default)]
     pub id: String,
     #[serde(default, deserialize_with = "deserialize_nullable_vec")]
     pub content: Vec<ReasoningTextContent>,
     #[serde(default, deserialize_with = "deserialize_nullable_vec")]
-    pub summary: Vec<Value>,
-    pub encrypted_content: Option<Value>,
-    pub status: Option<String>,
-}
-
-fn deserialize_nullable_vec<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    Option::<Vec<T>>::deserialize(deserializer).map(Option::unwrap_or_default)
+    pub summary: Vec<ReasoningSummaryContent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encrypted_content: Option<OpaqueReasoning>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<ReasoningStatus>,
 }
 
 impl ReasoningOutput {
     pub fn new(id: impl Into<String>) -> Self {
         Self {
+            agent: None,
             id: id.into(),
             content: vec![],
             summary: vec![],
@@ -788,212 +857,32 @@ impl TryFrom<&EventPayload> for ReasoningOutput {
     }
 }
 
-/// Applies a `*Done` event payload onto an in-flight output item.
-///
-/// `buffer` holds accumulated delta text/arguments when an output type needs
-/// fallback reconstruction. Implementations clear it when the done payload is
-/// authoritative.
-pub trait ApplyDone {
-    fn apply_done(&mut self, payload: &EventPayload, buffer: &mut String);
-}
-
-impl ApplyDone for ReasoningOutput {
-    fn apply_done(&mut self, payload: &EventPayload, buffer: &mut String) {
-        match payload {
-            EventPayload::ReasoningTextDone {
-                text, content_index, ..
-            } => {
-                buffer.clear();
-                if !text.is_empty() {
-                    insert_at_part_index(&mut self.content, *content_index, ReasoningTextContent::new(text));
-                }
-            }
-            EventPayload::ReasoningSummaryTextDone {
-                text, summary_index, ..
-            } => {
-                buffer.clear();
-                if !text.is_empty() {
-                    insert_at_part_index(
-                        &mut self.summary,
-                        *summary_index,
-                        serde_json::json!({"type": "summary_text", "text": text}),
-                    );
-                }
-            }
-            EventPayload::OutputItemDone { item, .. } => {
-                let Some(raw_item) = item.as_object() else {
-                    return;
-                };
-                let Ok(mut completed) = Self::try_from(payload) else {
-                    return;
-                };
-
-                if !raw_item.contains_key("content") {
-                    completed.content = std::mem::take(&mut self.content);
-                }
-                if !raw_item.contains_key("summary") {
-                    completed.summary = std::mem::take(&mut self.summary);
-                }
-                *self = completed;
-            }
-            _ => {}
-        }
-    }
-}
-
-fn insert_at_part_index<T>(parts: &mut Vec<T>, part_index: u32, part: T) {
-    // Part indexes address a contiguous wire array. Clamp malformed sparse
-    // indexes instead of manufacturing placeholder parts that never arrived.
-    let index = usize::try_from(part_index).unwrap_or(usize::MAX).min(parts.len());
-    parts.insert(index, part);
-}
-
-impl ApplyDone for FunctionToolCall {
-    fn apply_done(&mut self, payload: &EventPayload, buffer: &mut String) {
-        match payload {
-            EventPayload::FunctionCallArgsDone {
-                arguments,
-                call_id,
-                name,
-                ..
-            } => {
-                self.arguments = if arguments.is_empty() {
-                    std::mem::take(buffer)
-                } else {
-                    buffer.clear();
-                    arguments.clone()
-                };
-                if let Some(cid) = call_id.as_deref().filter(|s| !s.is_empty()) {
-                    cid.clone_into(&mut self.call_id);
-                }
-                if !name.is_empty() {
-                    name.clone_into(&mut self.name);
-                }
-            }
-            EventPayload::OutputItemDone { item, .. } => {
-                let Some(mut call) = deserialize_from_value_opt::<Self>(item.clone()) else {
-                    return;
-                };
-                if item.get("id").and_then(Value::as_str).is_none_or(str::is_empty) {
-                    call.id.clone_from(&self.id);
-                }
-                if call.call_id.is_empty() {
-                    call.call_id.clone_from(&self.call_id);
-                }
-                if call.name.is_empty() {
-                    call.name.clone_from(&self.name);
-                }
-                if call.namespace.is_none() {
-                    call.namespace.clone_from(&self.namespace);
-                }
-                if call.arguments.is_empty() {
-                    call.arguments = if self.arguments.is_empty() {
-                        std::mem::take(buffer)
-                    } else {
-                        std::mem::take(&mut self.arguments)
-                    };
-                } else {
-                    buffer.clear();
-                }
-                *self = call;
-            }
-            _ => {}
-        }
-    }
-}
-
-impl ApplyDone for ToolSearchCall {
-    fn apply_done(&mut self, payload: &EventPayload, _buffer: &mut String) {
-        let EventPayload::OutputItemDone { item, .. } = payload else {
-            return;
-        };
-        if let Some(call) = deserialize_from_value_opt(item.clone()) {
-            *self = call;
-        }
-    }
-}
-
-impl ApplyDone for CustomToolCall {
-    fn apply_done(&mut self, payload: &EventPayload, buffer: &mut String) {
-        match payload {
-            EventPayload::CustomToolCallInputDone { input, .. } => {
-                self.input = if input.is_empty() {
-                    std::mem::take(buffer)
-                } else {
-                    buffer.clear();
-                    input.clone()
-                };
-            }
-            EventPayload::OutputItemDone { item, .. } => {
-                let Some(mut call) = deserialize_from_value_opt::<Self>(item.clone()) else {
-                    return;
-                };
-                if call.input.is_empty() {
-                    call.input = if self.input.is_empty() {
-                        std::mem::take(buffer)
-                    } else {
-                        std::mem::take(&mut self.input)
-                    };
-                } else {
-                    buffer.clear();
-                }
-                *self = call;
-            }
-            _ => {}
-        }
-    }
-}
-
-impl ApplyDone for McpCall {
-    fn apply_done(&mut self, payload: &EventPayload, _buffer: &mut String) {
-        let EventPayload::OutputItemDone { item, .. } = payload else {
-            return;
-        };
-        if let Some(call) = deserialize_from_value_opt(item.clone()) {
-            *self = call;
-        }
-    }
-}
-
-impl ApplyDone for McpListTools {
-    fn apply_done(&mut self, payload: &EventPayload, _buffer: &mut String) {
-        let EventPayload::OutputItemDone { item, .. } = payload else {
-            return;
-        };
-        if let Some(list_tools) = deserialize_from_value_opt(item.clone()) {
-            *self = list_tools;
-        }
-    }
-}
-
-impl ApplyDone for CompactionItem {
-    fn apply_done(&mut self, payload: &EventPayload, _buffer: &mut String) {
-        let EventPayload::OutputItemDone { item, .. } = payload else {
-            return;
-        };
-        let Some(mut compaction) = deserialize_from_value_opt::<Self>(item.clone()) else {
-            return;
-        };
-        if compaction.id.as_deref().is_none_or(str::is_empty) {
-            compaction.id.clone_from(&self.id);
-        }
-        *self = compaction;
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum OutputItem {
+    #[serde(rename = "multi_agent_call")]
+    MultiAgentCall(MultiAgentCall),
+    #[serde(rename = "multi_agent_call_output")]
+    MultiAgentCallOutput(MultiAgentCallOutput),
+    #[serde(rename = "agent_message")]
+    AgentMessage(AgentMessage),
     #[serde(rename = "message")]
     Message(OutputMessage),
     #[serde(rename = "function_call")]
     FunctionCall(FunctionToolCall),
+    #[serde(rename = "code_interpreter_call")]
+    CodeInterpreterCall(CodeInterpreterCall),
     #[serde(rename = "tool_search_call")]
     ToolSearchCall(ToolSearchCall),
+    /// The tools a hosted search loaded; produced only by the gateway.
+    #[serde(rename = "tool_search_output")]
+    ToolSearchOutput(ToolSearchOutputMessage),
     #[serde(rename = "custom_tool_call")]
     CustomToolCall(CustomToolCall),
     #[serde(rename = "shell_call")]
     ShellCall(ShellCall),
+    #[serde(rename = "file_search_call")]
+    FileSearchCall(FileSearchCall),
     #[serde(rename = "web_search_call")]
     WebSearchCall(WebSearchCall),
     #[serde(rename = "mcp_call")]
@@ -1034,14 +923,20 @@ impl utoipa::PartialSchema for OutputItem {
             .discriminator(Some(utoipa::openapi::schema::Discriminator::new("type")))
             .item(tagged("message", "OutputMessage"))
             .item(tagged("function_call", "FunctionToolCall"))
+            .item(tagged("code_interpreter_call", "CodeInterpreterCall"))
             .item(tagged("tool_search_call", "ToolSearchCall"))
+            .item(tagged("tool_search_output", "ToolSearchOutputMessage"))
             .item(tagged("custom_tool_call", "CustomToolCall"))
             .item(tagged("shell_call", "ShellCall"))
+            .item(tagged("file_search_call", "FileSearchCall"))
             .item(tagged("web_search_call", "WebSearchCall"))
             .item(tagged("mcp_call", "McpCall"))
             .item(tagged("mcp_list_tools", "McpListTools"))
             .item(tagged("reasoning", "ReasoningOutput"))
             .item(tagged("compaction", "CompactionItem"))
+            .item(tagged("multi_agent_call", "MultiAgentCall"))
+            .item(tagged("multi_agent_call_output", "MultiAgentCallOutput"))
+            .item(tagged("agent_message", "AgentMessage"))
             .into()
     }
 }
@@ -1054,38 +949,97 @@ impl utoipa::ToSchema for OutputItem {
 
 impl OutputItem {
     #[must_use]
-    pub fn requires_client_action(&self, registry: &ToolRegistry) -> bool {
+    pub fn agent(&self) -> Option<&AgentAttribution> {
         match self {
-            Self::FunctionCall(call) => registry
-                .lookup(&call.name)
-                .is_none_or(|entry| !entry.ownership.is_gateway()),
-            Self::ToolSearchCall(_) | Self::CustomToolCall(_) | Self::ShellCall(_) => true,
-            Self::Message(_)
+            Self::MultiAgentCall(item) => item.agent.as_ref(),
+            Self::MultiAgentCallOutput(item) => item.agent.as_ref(),
+            Self::AgentMessage(item) => item.agent.as_ref(),
+            Self::Message(item) => item.agent.as_ref(),
+            Self::FunctionCall(item) => item.agent.as_ref(),
+            Self::CodeInterpreterCall(item) => item.agent.as_ref(),
+            Self::ToolSearchCall(item) => item.agent.as_ref(),
+            Self::ToolSearchOutput(item) => item.agent.as_ref(),
+            Self::CustomToolCall(item) => item.agent.as_ref(),
+            Self::ShellCall(item) => item.agent.as_ref(),
+            Self::FileSearchCall(item) => item.agent.as_ref(),
+            Self::WebSearchCall(item) => item.agent.as_ref(),
+            Self::McpCall(item) => item.agent.as_ref(),
+            Self::McpListTools(item) => item.agent.as_ref(),
+            Self::Reasoning(item) => item.agent.as_ref(),
+            Self::Compaction(item) => item.agent.as_ref(),
+            Self::Unknown { .. } => None,
+        }
+    }
+
+    /// Set gateway-owned attribution after model ingestion.
+    pub fn set_agent(&mut self, agent: AgentAttribution) {
+        let slot = match self {
+            Self::MultiAgentCall(item) => &mut item.agent,
+            Self::MultiAgentCallOutput(item) => &mut item.agent,
+            Self::AgentMessage(item) => &mut item.agent,
+            Self::Message(item) => &mut item.agent,
+            Self::FunctionCall(item) => &mut item.agent,
+            Self::CodeInterpreterCall(item) => &mut item.agent,
+            Self::ToolSearchCall(item) => &mut item.agent,
+            Self::ToolSearchOutput(item) => &mut item.agent,
+            Self::CustomToolCall(item) => &mut item.agent,
+            Self::ShellCall(item) => &mut item.agent,
+            Self::FileSearchCall(item) => &mut item.agent,
+            Self::WebSearchCall(item) => &mut item.agent,
+            Self::McpCall(item) => &mut item.agent,
+            Self::McpListTools(item) => &mut item.agent,
+            Self::Reasoning(item) => &mut item.agent,
+            Self::Compaction(item) => &mut item.agent,
+            Self::Unknown { .. } => return,
+        };
+        *slot = Some(agent);
+    }
+
+    /// Whether this item is a call to an async client tool, whose output may arrive later.
+    #[must_use]
+    pub fn is_async_call(&self) -> bool {
+        match self {
+            Self::FunctionCall(call) => call.async_execution,
+            Self::CustomToolCall(call) => call.async_execution,
+            Self::ToolSearchCall(_)
+            | Self::ToolSearchOutput(_)
+            | Self::ShellCall(_)
+            | Self::Message(_)
+            | Self::CodeInterpreterCall(_)
+            | Self::FileSearchCall(_)
             | Self::WebSearchCall(_)
             | Self::McpCall(_)
             | Self::McpListTools(_)
             | Self::Reasoning(_)
             | Self::Compaction(_)
-            | Self::Unknown => false,
+            | Self::MultiAgentCall(_)
+            | Self::MultiAgentCallOutput(_)
+            | Self::AgentMessage(_)
+            | Self::Unknown { .. } => false,
         }
     }
 
-    /// Shapes a stored output item as continuation input.
-    /// Public output for gateway-executed built-in tools is omitted because the model-facing
-    /// function call and output are persisted separately as input items. MCP
-    /// list metadata is retained here and removed by `ResponsesInput::model_input`.
     #[must_use]
-    pub fn to_input_item(&self) -> Option<InputItem> {
+    pub fn requires_client_action(&self, registry: &ToolRegistry) -> bool {
         match self {
-            Self::Message(message) => Some(InputItem::Message(message.clone().into())),
-            Self::Reasoning(reasoning) => Some(InputItem::Reasoning(reasoning.clone())),
-            Self::FunctionCall(call) => Some(InputItem::FunctionCall(InputFunctionToolCall::from(call.clone()))),
-            Self::ToolSearchCall(call) => InputToolSearchCall::try_from(call).ok().map(InputItem::ToolSearchCall),
-            Self::CustomToolCall(call) => Some(InputItem::FunctionCall(call.clone().into())),
-            Self::ShellCall(call) => Some(InputItem::FunctionCall(call.clone().into())),
-            Self::McpListTools(list_tools) => Some(InputItem::McpListTools(list_tools.clone())),
-            Self::Compaction(item) => Some(InputItem::Compaction(item.clone())),
-            Self::WebSearchCall(_) | Self::McpCall(_) | Self::Unknown => None,
+            Self::FunctionCall(call) => registry
+                .lookup(&call.name)
+                .is_none_or(|entry| !entry.ownership.is_gateway()),
+            Self::ToolSearchCall(call) => call.execution == ToolSearchExecution::Client,
+            Self::CustomToolCall(_) | Self::ShellCall(_) => true,
+            Self::Message(_)
+            | Self::ToolSearchOutput(_)
+            | Self::CodeInterpreterCall(_)
+            | Self::FileSearchCall(_)
+            | Self::WebSearchCall(_)
+            | Self::McpCall(_)
+            | Self::McpListTools(_)
+            | Self::Reasoning(_)
+            | Self::Compaction(_)
+            | Self::MultiAgentCall(_)
+            | Self::MultiAgentCallOutput(_)
+            | Self::AgentMessage(_)
+            | Self::Unknown { .. } => false,
         }
     }
 }
@@ -1093,7 +1047,236 @@ impl OutputItem {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::io::InputItem;
+    use crate::types::io::{InputContent, InputItem, InputMessageContent};
+    use crate::utils::common::deserialize_from_value;
+
+    /// `OpenAI` marks async calls with `async: true` and omits the field on other calls; some
+    /// upstream servers send `async: null`, which must read as not async.
+    #[test]
+    fn call_async_marker_is_written_only_when_true_and_tolerates_null() {
+        let function = serde_json::json!({
+            "type": "function_call", "id": "fc_1", "call_id": "call_1", "name": "get_weather",
+            "arguments": "{}", "status": "completed", "async": true
+        });
+        let OutputItem::FunctionCall(call) = serde_json::from_value(function.clone()).unwrap() else {
+            panic!("function call");
+        };
+        assert!(call.async_execution);
+        assert_eq!(
+            serde_json::to_value(OutputItem::FunctionCall(call.clone())).unwrap(),
+            function
+        );
+
+        let replayed = InputFunctionToolCall::from(call.clone());
+        assert!(replayed.async_execution, "replay keeps the marker");
+        assert_eq!(serde_json::to_value(&replayed).unwrap()["async"], true);
+
+        let synchronous = FunctionToolCall {
+            async_execution: false,
+            ..call
+        };
+        assert!(
+            serde_json::to_value(&synchronous).unwrap().get("async").is_none(),
+            "a synchronous call omits the marker"
+        );
+
+        for value in [serde_json::Value::Null, serde_json::json!(false)] {
+            let mut item = function.clone();
+            item["async"] = value;
+            let OutputItem::FunctionCall(call) = serde_json::from_value(item).unwrap() else {
+                panic!("function call");
+            };
+            assert!(!call.async_execution);
+        }
+
+        let custom = serde_json::json!({
+            "type": "custom_tool_call", "id": "ctc_1", "call_id": "call_2", "name": "echo",
+            "input": "hi", "async": true
+        });
+        let OutputItem::CustomToolCall(call) = serde_json::from_value(custom.clone()).unwrap() else {
+            panic!("custom call");
+        };
+        assert!(call.async_execution);
+        assert!(
+            InputFunctionToolCall::from(call).async_execution,
+            "custom calls lowered for the model keep the marker"
+        );
+    }
+
+    #[test]
+    fn message_content_requires_a_known_type() {
+        let part = serde_json::json!({"type": "unsupported", "text": ""});
+        assert!(serde_json::from_value::<OutputMessageContent>(part).is_err());
+    }
+
+    #[test]
+    fn output_text_logprobs_default_to_an_array() {
+        for logprobs in [None, Some(Value::Null), Some(serde_json::json!([]))] {
+            let mut wire = serde_json::json!({"type": "output_text", "text": "OK", "annotations": []});
+            if let Some(logprobs) = logprobs {
+                wire["logprobs"] = logprobs;
+            }
+            let part: OutputMessageContent = deserialize_from_value(wire).unwrap();
+            let expected = serde_json::json!({"type": "output_text", "text": "OK", "annotations": [], "logprobs": []});
+            assert_eq!(serde_json::to_value(&part).unwrap(), expected);
+            assert_eq!(serde_json::to_value(InputContent::from(part)).unwrap(), expected);
+        }
+        for invalid in [serde_json::json!("invalid"), serde_json::json!([{}])] {
+            assert!(
+                deserialize_from_value::<OutputTextContent>(serde_json::json!({
+                    "text": "OK", "logprobs": invalid
+                }))
+                .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn attributed_message_preserves_text_metadata_on_continuation() {
+        for content in [
+            serde_json::json!({"type": "input_text", "text": "Review", "extension": "keep"}),
+            serde_json::json!({"type": "output_text", "text": "OK"}),
+            serde_json::json!({"type": "output_text", "text": "OK", "annotations": [], "logprobs": []}),
+            serde_json::json!({"type": "output_text", "text": "OK",
+                "annotations": [{"type": "url_citation", "url": "https://example.com", "title": "Source", "start_index": 0, "end_index": 2}],
+                "logprobs": [{"token": "OK", "bytes": [79, 75], "logprob": -0.5,
+                    "top_logprobs": [{"token": "NO", "bytes": [78, 79], "logprob": -1.5}]}]}),
+        ] {
+            let wire = serde_json::json!({"type": "message", "id": "msg_child",
+                "role": if content["type"] == "input_text" { "user" } else { "assistant" },
+                "agent": {"agent_name": "/root/review"}, "status": "completed", "content": [content]});
+            let item: OutputItem = serde_json::from_value(wire.clone()).unwrap();
+            let mut expected = wire;
+            if expected["content"][0]["type"] == "output_text" && expected["content"][0].get("logprobs").is_none() {
+                expected["content"][0]["logprobs"] = serde_json::json!([]);
+            }
+            assert_eq!(serde_json::to_value(&item).unwrap(), expected);
+            assert_eq!(serde_json::to_value(item.to_input_item().unwrap()).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn existing_item_kinds_preserve_optional_agent_attribution() {
+        for mut wire in [
+            serde_json::json!({"type": "function_call", "id": "fc_1", "call_id": "call_1", "name": "lookup", "arguments": "{}"}),
+            serde_json::json!({"type": "custom_tool_call", "id": "ctc_1", "call_id": "call_1", "name": "custom", "input": "x"}),
+            serde_json::json!({"type": "tool_search_call", "id": "tsc_1", "call_id": "call_1", "execution": "client", "arguments": {}, "status": "completed"}),
+            serde_json::json!({"type": "shell_call", "id": "sh_1", "call_id": "call_1", "action": {"commands": ["pwd"]}}),
+            serde_json::json!({"type": "web_search_call", "id": "ws_1", "status": "completed", "action": {"type": "search", "query": "docs", "queries": [], "sources": []}}),
+            serde_json::json!({"type": "mcp_call", "id": "mcp_1", "server_label": "docs", "name": "search", "arguments": "{}"}),
+            serde_json::json!({"type": "mcp_list_tools", "id": "mcpl_1", "server_label": "docs", "tools": []}),
+            serde_json::json!({"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "opaque"}),
+            serde_json::json!({"type": "compaction", "id": "cmp_1", "encrypted_content": "opaque"}),
+        ] {
+            let unattributed: OutputItem = serde_json::from_value(wire.clone()).unwrap();
+            assert!(serde_json::to_value(unattributed).unwrap().get("agent").is_none());
+            wire["agent"] = serde_json::json!({"agent_name": "/root/review"});
+            let attributed: OutputItem = serde_json::from_value(wire.clone()).unwrap();
+            assert_eq!(serde_json::to_value(&attributed).unwrap()["agent"], wire["agent"]);
+            if let Some(input) = attributed.to_input_item() {
+                assert_eq!(serde_json::to_value(input).unwrap()["agent"], wire["agent"]);
+            }
+        }
+    }
+
+    #[test]
+    fn output_message_preserves_phase_independently_of_completed_status() {
+        for (phase, expected) in [
+            (None, None),
+            (Some("commentary"), Some(MessagePhase::Commentary)),
+            (Some("final_answer"), Some(MessagePhase::FinalAnswer)),
+        ] {
+            let mut wire = serde_json::json!({
+                "type": "message",
+                "id": "msg_phase",
+                "role": "assistant",
+                "status": "completed",
+                "content": [{"type": "output_text", "text": "Review result.", "annotations": [], "logprobs": []}]
+            });
+            if let Some(phase) = phase {
+                wire["phase"] = serde_json::json!(phase);
+            }
+            let item: OutputItem = serde_json::from_value(wire.clone()).unwrap();
+            let OutputItem::Message(message) = &item else {
+                panic!("expected a message item");
+            };
+            assert_eq!(message.phase, expected);
+            assert_eq!(message.status, MessageStatus::Completed);
+            let replay = item.to_input_item().unwrap();
+            let InputItem::Message(replayed_message) = &replay else {
+                panic!("expected a continuation message");
+            };
+            assert_eq!(replayed_message.phase, expected);
+            assert_eq!(serde_json::to_value(replay).unwrap().get("phase"), wire.get("phase"));
+            assert_eq!(serde_json::to_value(item).unwrap(), wire);
+        }
+    }
+
+    #[test]
+    fn forked_user_message_remains_input_text_on_continuation() {
+        let output: OutputItem = serde_json::from_value(serde_json::json!({
+            "type": "message",
+            "id": "msg_forked",
+            "role": "user",
+            "status": "completed",
+            "content": [
+                {"type": "input_text", "text": "Review the parser."},
+                {"type": "input_text", "text": "Check error handling."}
+            ]
+        }))
+        .unwrap();
+
+        assert!(serde_json::to_value(&output).unwrap().get("phase").is_none());
+        let input = output.to_input_item().unwrap();
+        assert_eq!(
+            serde_json::to_value(input).unwrap(),
+            serde_json::json!({
+                "type": "message",
+                "id": "msg_forked",
+                "role": "user",
+                "status": "completed",
+                "content": [
+                    {"type": "input_text", "text": "Review the parser."},
+                    {"type": "input_text", "text": "Check error handling."}
+                ]
+            })
+        );
+    }
+
+    #[test]
+    fn assistant_message_remains_output_text_on_continuation() {
+        let mut output = OutputMessage::new("msg_answer", MessageStatus::Completed);
+        assert!(output.phase.is_none());
+        output
+            .content
+            .push(OutputTextContent::new("The parser handles errors correctly.").into());
+
+        let input = OutputItem::Message(output).to_input_item().unwrap();
+        assert_eq!(
+            serde_json::to_value(input).unwrap(),
+            serde_json::json!({
+                "type": "message",
+                "id": "msg_answer",
+                "role": "assistant",
+                "status": "completed",
+                "content": [{"type": "output_text", "text": "The parser handles errors correctly.", "annotations": [], "logprobs": []}]
+            })
+        );
+    }
+
+    #[test]
+    fn file_search_call_preserves_retrieved_identifiers() {
+        let wire = serde_json::json!({
+            "type": "file_search_call", "id": "fs_1", "status": "completed",
+            "queries": ["policy"], "results": [{"file_id": "file_1", "filename": "policy.txt",
+                "score": 0.9, "attributes": {}, "text": "Policy text"}]
+        });
+        let item: OutputItem = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(item.id(), Some("fs_1"));
+        assert_eq!(serde_json::to_value(&item).unwrap(), wire);
+        assert!(!item.requires_client_action(&ToolRegistry::default()));
+        assert!(item.to_input_item().is_none());
+    }
 
     #[test]
     fn emitted_tool_search_call_is_explicit_and_requires_client_action() {
@@ -1223,15 +1406,16 @@ mod tests {
         };
         assert_eq!(call.status, Some(MessageStatus::Completed));
 
-        let Some(InputItem::FunctionCall(call)) = item.to_input_item() else {
-            panic!("custom call should rehydrate as a function call");
+        let Some(InputItem::CustomToolCall(replayed)) = item.to_input_item() else {
+            panic!("custom call should rehydrate as itself");
         };
+        let call = InputFunctionToolCall::from(replayed);
         assert_eq!(call.name, "apply_patch");
         assert_eq!(call.arguments, r#"{"input":"*** Begin Patch\n*** End Patch"}"#);
     }
 
     #[test]
-    fn shell_call_round_trips_and_rehydrates_as_function_input() {
+    fn shell_call_round_trips_and_lowers_to_function_input() {
         let item: OutputItem = serde_json::from_value(serde_json::json!({
             "type": "shell_call",
             "id": "sh_1",
@@ -1246,9 +1430,10 @@ mod tests {
         .unwrap();
 
         assert!(item.requires_client_action(&ToolRegistry::default()));
-        let Some(InputItem::FunctionCall(call)) = item.to_input_item() else {
-            panic!("shell call should rehydrate as a function call input item");
+        let Some(InputItem::ShellCall(replayed)) = item.to_input_item() else {
+            panic!("shell call should rehydrate as itself");
         };
+        let call = InputFunctionToolCall::from(replayed);
         assert_eq!(call.call_id, "call_1");
         assert_eq!(call.name, "shell");
         assert_eq!(call.id.as_deref(), Some("fc_1"));
@@ -1291,16 +1476,15 @@ mod tests {
     }
 
     #[test]
-    fn gateway_public_tool_outputs_are_not_replayed_as_model_input() {
-        let web_search = OutputItem::WebSearchCall(
-            WebSearchCall::try_new(
-                "ws_1",
-                WebSearchCallStatus::Completed,
-                vec!["rust async".to_owned()],
-                Vec::new(),
-            )
-            .unwrap(),
-        );
+    fn gateway_public_tool_outputs_replay_as_public_input_and_lower_to_function_calls() {
+        let search = WebSearchCall::try_new(
+            "ws_1",
+            WebSearchCallStatus::Completed,
+            vec!["rust async".to_owned()],
+            Vec::new(),
+        )
+        .unwrap();
+        let web_search = OutputItem::WebSearchCall(search.clone());
         let mcp = OutputItem::McpCall(McpCall::new(
             "mcp_1",
             "counter",
@@ -1311,8 +1495,13 @@ mod tests {
             None,
         ));
 
-        assert!(web_search.to_input_item().is_none());
-        assert!(mcp.to_input_item().is_none());
+        assert!(matches!(web_search.to_input_item(), Some(InputItem::WebSearchCall(_))));
+        assert!(matches!(mcp.to_input_item(), Some(InputItem::McpCall(_))));
+        let call = InputFunctionToolCall::from(&search);
+        let output = crate::types::io::FunctionToolResultMessage::from(&search);
+        assert_eq!((call.name.as_str(), call.call_id.as_str()), ("web_search", "ws_1"));
+        assert_eq!(call.arguments, r#"{"queries":["rust async"]}"#);
+        assert_eq!(output.call_id, "ws_1");
     }
 
     #[test]
@@ -1355,7 +1544,7 @@ mod tests {
     #[test]
     fn reasoning_output_builds_from_added_and_applies_indexed_done_events() {
         let added = EventPayload::OutputItemAdded {
-            shell_call: None,
+            initial_item: None,
             item_id: "rs_1".to_owned(),
             item_type: crate::events::SSEItemType::Reasoning,
             output_index: Some(2),
@@ -1393,16 +1582,15 @@ mod tests {
             item.content.iter().map(|part| part.text.as_str()).collect::<Vec<_>>(),
             ["first thought", "second thought"]
         );
-        assert_eq!(item.summary[0]["text"], "first summary");
-        assert_eq!(item.summary[1]["text"], "second summary");
+        assert_eq!(item.summary[0].text, "first summary");
+        assert_eq!(item.summary[1].text, "second summary");
     }
 
     #[test]
     fn reasoning_output_done_owns_authoritative_field_reconciliation() {
         let mut item = ReasoningOutput::new("rs_1");
         item.content.push(ReasoningTextContent::new("buffered thought"));
-        item.summary
-            .push(serde_json::json!({"type": "summary_text", "text": "buffered summary"}));
+        item.summary.push(ReasoningSummaryContent::new("buffered summary"));
         let done = EventPayload::OutputItemDone {
             item_id: "rs_1".to_owned(),
             item_type: crate::events::SSEItemType::Reasoning,
@@ -1423,8 +1611,11 @@ mod tests {
         item.apply_done(&done, &mut String::new());
         assert_eq!(item.content[0].text, "buffered thought");
         assert!(item.summary.is_empty());
-        assert_eq!(item.encrypted_content, Some(serde_json::json!("opaque-state")));
-        assert_eq!(item.status.as_deref(), Some("completed"));
+        assert_eq!(
+            item.encrypted_content.as_ref().map(OpaqueReasoning::as_str),
+            Some("opaque-state")
+        );
+        assert_eq!(item.status, Some(ReasoningStatus::Completed));
 
         let before = serde_json::to_value(&item).unwrap();
         let malformed = EventPayload::OutputItemDone {
@@ -1557,7 +1748,7 @@ mod tests {
     #[test]
     fn mcp_list_tools_builds_from_added_and_applies_done_item() {
         let added = EventPayload::OutputItemAdded {
-            shell_call: None,
+            initial_item: None,
             item_id: "mcpl_1".to_owned(),
             item_type: crate::events::SSEItemType::McpListTools,
             output_index: Some(0),
@@ -1648,8 +1839,10 @@ mod tests {
         assert!(matches!(item, OutputItem::Unknown));
 
         let unknown = serde_json::json!({"type": "new_item", "payload": {"a": 1}});
-        let item: InputItem = serde_json::from_value(unknown).unwrap();
-        assert!(matches!(item, InputItem::Unknown));
+        assert!(
+            serde_json::from_value::<InputItem>(unknown).is_err(),
+            "unmodeled input item types are rejected"
+        );
     }
 
     #[test]
@@ -1673,5 +1866,20 @@ mod tests {
             panic!("expected message parts");
         };
         assert!(matches!(parts.as_slice(), [InputContent::Unknown(kind)] if kind == "future_content"));
+    }
+
+    #[test]
+    fn reasoning_omits_a_missing_status_for_openai_compatible_replay() {
+        // OpenAI rejects `status: null` on a replayed reasoning input item and omits the key on output.
+        let without: ReasoningOutput =
+            serde_json::from_value(serde_json::json!({"type": "reasoning", "id": "rs_1", "summary": []})).unwrap();
+        let value = serde_json::to_value(InputItem::Reasoning(without)).unwrap();
+        assert!(value.get("status").is_none(), "{value}");
+
+        let with: ReasoningOutput = serde_json::from_value(serde_json::json!({
+            "type": "reasoning", "id": "rs_2", "summary": [], "status": "completed"
+        }))
+        .unwrap();
+        assert_eq!(serde_json::to_value(with).unwrap()["status"], "completed");
     }
 }

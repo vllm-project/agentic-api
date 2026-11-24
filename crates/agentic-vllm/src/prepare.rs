@@ -6,6 +6,7 @@ mod tests;
 
 use crate::Result;
 use agentic_core::executor::error::ExecutorError;
+use agentic_core::types::ServiceTier;
 use agentic_core::types::io::{AllowedToolsMode, ToolChoice};
 use agentic_core::types::request_response::{ResponseTextFormat, UpstreamRequest, UpstreamTool};
 use num_traits::ToPrimitive;
@@ -21,7 +22,7 @@ pub(crate) fn chat_request(request: UpstreamRequest<'_>, request_id: &str, model
         return Err(ExecutorError::InvalidRequest(format!("direct runtime serves model '{model}'")).into());
     }
     validate_options(&request)?;
-    let messages = messages::convert(&request.input, request.instructions)?;
+    let messages = messages::convert(request.input.into_owned(), request.instructions)?;
     let tools = request
         .tools
         .unwrap_or_default()
@@ -53,8 +54,8 @@ pub(crate) fn chat_request(request: UpstreamRequest<'_>, request_id: &str, model
         chat_options: ChatOptions {
             reasoning_effort: request
                 .reasoning
-                .and_then(|reasoning| reasoning.effort.clone())
-                .map(EffortValue::String),
+                .and_then(|reasoning| reasoning.effort)
+                .map(|effort| EffortValue::String(effort.as_str().to_owned())),
             ..ChatOptions::default()
         },
         tool_context,
@@ -83,6 +84,22 @@ fn sampling_float(value: Option<f64>, field: &str) -> Result<Option<f32>> {
 }
 
 fn validate_options(request: &UpstreamRequest<'_>) -> Result<()> {
+    if request.top_logprobs.as_ref().is_some() {
+        return Err(unsupported("top_logprobs").into());
+    }
+    if request.prompt_cache_options.is_some() {
+        return Err(unsupported("prompt_cache_options").into());
+    }
+    if request
+        .service_tier
+        .is_some_and(|tier| !matches!(tier, ServiceTier::Auto | ServiceTier::Default))
+    {
+        return Err(unsupported("service_tier").into());
+    }
+    if !request.extra.is_empty() {
+        return Err(unsupported("upstream extension fields").into());
+    }
+
     if request.include.is_some_and(|include| !include.is_empty()) {
         return Err(unsupported("include").into());
     }
@@ -136,9 +153,11 @@ fn tool_choice(choice: &ToolChoice) -> Result<ChatToolChoice> {
                 names,
             })
         }
-        ToolChoice::Function { .. } | ToolChoice::Custom { .. } | ToolChoice::Shell => {
-            Err(unsupported("unresolved tool choice").into())
-        }
+        ToolChoice::Function { .. }
+        | ToolChoice::Custom { .. }
+        | ToolChoice::Shell
+        | ToolChoice::FileSearch
+        | ToolChoice::Mcp { .. } => Err(unsupported("unresolved tool choice").into()),
     }
 }
 

@@ -1,0 +1,104 @@
+{
+  "turns": [
+    {
+      "request": {
+        "model": "Qwen/Qwen3.8-27B-FP8",
+        "max_tokens": 256,
+        "stream": false,
+        "temperature": 0,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "thread": {
+          "type": "create"
+        },
+        "system": "Follow instructions exactly. Keep answers short.",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Call client_echo exactly once to get a verification token. After its result, reply with the entire token verbatim and do not call tools again."
+          }
+        ],
+        "tools": [
+          {
+            "name": "client_echo",
+            "description": "Get the verification token.",
+            "input_schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "tool_choice": {
+          "type": "auto"
+        }
+      },
+      "response": {
+        "id": "msg_01a1a45b94c97ba2bb390600fd067c52",
+        "type": "message",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_use",
+            "id": "chatcmpl-tool-9b20fed882992dd9",
+            "name": "client_echo",
+            "input": {}
+          }
+        ],
+        "model": "Qwen/Qwen3.8-27B-FP8",
+        "stop_reason": "tool_use",
+        "usage": {
+          "input_tokens": 292,
+          "output_tokens": 15
+        }
+      }
+    },
+    {
+      "request": {
+        "model": "Qwen/Qwen3.8-27B-FP8",
+        "max_tokens": 256,
+        "stream": false,
+        "temperature": 0,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "tool_choice": {
+          "type": "auto"
+        },
+        "thread": {
+          "type": "continue",
+          "previous_message_id": "msg_01a1a45b94c97ba2bb390600fd067c52"
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "tool_result",
+                "tool_use_id": "chatcmpl-tool-9b20fed882992dd9",
+                "content": "THREAD_PROOF_91827"
+              }
+            ]
+          }
+        ]
+      },
+      "response": {
+        "id": "msg_01a1a45ba00c7431a6e2f1eb3de0c771",
+        "type": "message",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "THREAD_PROOF_91827"
+          }
+        ],
+        "model": "Qwen/Qwen3.8-27B-FP8",
+        "stop_reason": "end_turn",
+        "usage": {
+          "input_tokens": 333,
+          "output_tokens": 10
+        }
+      }
+    }
+  ]
+}

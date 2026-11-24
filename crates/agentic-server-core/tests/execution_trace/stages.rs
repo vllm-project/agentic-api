@@ -1,20 +1,5 @@
 use super::*;
 
-async fn search_server() -> (String, tokio::task::JoinHandle<()>) {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let url = format!("http://{}", listener.local_addr().unwrap());
-    let router = axum::Router::new().route(
-        "/v1/search",
-        axum::routing::get(|| async {
-            axum::Json(
-                json!({"results":{"web":[{"url":"https://example.com", "title":"private search result"}],"news":[]}}),
-            )
-        }),
-    );
-    let task = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
-    (url, task)
-}
-
 #[tokio::test]
 async fn recorded_two_round_stream_has_exact_stage_tree_and_upstream_parent() {
     let traces = Traces::new();
@@ -23,7 +8,7 @@ async fn recorded_two_round_stream_has_exact_stage_tree_and_upstream_parent() {
         "/tests/cassettes/codex/codex-openai-web-search-then-namespace-gpt-4o-streaming.yaml"
     ));
     let mut fixture = TestFixture::new(&support::responses_turns(&cassette)).await;
-    let (search_url, search_task) = search_server().await;
+    let (search_url, search_task) = support::search_server(support::Search::Answers).await;
     let context = Arc::try_unwrap(fixture.exec_ctx).ok().unwrap();
     fixture.exec_ctx = Arc::new(context.with_gateway_executor(Arc::new(
         agentic_core::tool::WebSearchHandler::with_api_key(
@@ -37,15 +22,15 @@ async fn recorded_two_round_stream_has_exact_stage_tree_and_upstream_parent() {
         {"type":"web_search_preview"},
         {"type":"namespace","name":"mcp__shell","tools":[{"type":"function","name":"run","parameters":{"type":"object"}}]}
     ])).unwrap());
-    let Either::Right(stream) = traces
-        .run(
+    let Either::Right(stream) = Box::pin(
+        traces.run(
             ExecuteRequest::new(payload, fixture.exec_ctx)
                 .with_auth(Some("private-auth".into()))
                 .run(),
-        )
-        .await
-        .unwrap()
-    else {
+        ),
+    )
+    .await
+    .unwrap() else {
         panic!("expected stream");
     };
     // Poll outside the initiating future: the executor must carry its own context.
@@ -144,8 +129,7 @@ async fn http_failure_records_status_without_error_body() {
     let fixture =
         TestFixture::new_with_responses(vec![MockResponse::Status(503, "private upstream error".into())]).await;
     assert!(
-        traces
-            .run(ExecuteRequest::new(request(false), fixture.exec_ctx).run())
+        Box::pin(traces.run(ExecuteRequest::new(request(false), fixture.exec_ctx).run()))
             .await
             .is_err()
     );

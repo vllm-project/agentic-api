@@ -26,24 +26,40 @@ pub(super) fn item_has_meaningful_context(item: &InputItem) -> bool {
                     .flatten()
                     .any(|reference| !reference.trim().is_empty()),
                 InputContent::Refusal(refusal) => !refusal.refusal.trim().is_empty(),
-                // Message files and unmodeled parts are rejected during typed input validation.
-                InputContent::InputFile(_) | InputContent::Unknown(_) => false,
+                // Validation accepts only inline text files, so the file data is the context.
+                InputContent::InputFile(file) => file.file_data.as_deref().is_some_and(|data| !data.trim().is_empty()),
+                // Unmodeled parts are rejected during typed input validation.
+                InputContent::Unknown(_) => false,
             }),
         },
         InputItem::FunctionCall(call) => !call.name.trim().is_empty() || !call.arguments.trim().is_empty(),
+        InputItem::CodeInterpreterCall(call) => {
+            !call.code.trim().is_empty() || call.outputs.as_ref().is_some_and(|outputs| !outputs.is_empty())
+        }
         InputItem::FunctionCallOutput(output) => output.output.has_content(),
-        InputItem::ToolSearchCall(call) => !call.call_id.trim().is_empty() || value_has_content(&call.arguments),
-        InputItem::ToolSearchOutput(output) => !output.call_id.trim().is_empty() || !output.tools.is_empty(),
+        InputItem::ToolSearchCall(call) => call.call_id.is_some() || value_has_content(&call.arguments),
+        InputItem::ToolSearchOutput(output) => output.call_id.is_some() || !output.tools.is_empty(),
         InputItem::CustomToolCall(call) => !call.name.trim().is_empty() || !call.input.trim().is_empty(),
         InputItem::CustomToolCallOutput(output) => output.output.has_content(),
         InputItem::ShellCall(call) => !call.action.commands.is_empty(),
         InputItem::ShellCallOutput(output) => !output.output.is_empty(),
         InputItem::Reasoning(reasoning) => {
             reasoning.content.iter().any(|content| !content.text.trim().is_empty())
-                || reasoning.summary.iter().any(value_has_content)
-                || reasoning.encrypted_content.as_ref().is_some_and(value_has_content)
+                // Preserve the previous JSON policy: even an empty summary part
+                // carried its nonempty `summary_text` discriminator.
+                || !reasoning.summary.is_empty()
+                || reasoning
+                    .encrypted_content
+                    .as_ref()
+                    .is_some_and(|state| !state.as_str().trim().is_empty())
         }
         InputItem::Compaction(compaction) => !compaction.encrypted_content.trim().is_empty(),
-        InputItem::McpListTools(_) | InputItem::CompactionTrigger | InputItem::Unknown => false,
+        InputItem::MultiAgentCall(_)
+        | InputItem::MultiAgentCallOutput(_)
+        | InputItem::AgentMessage(_)
+        | InputItem::McpListTools(_)
+        | InputItem::CompactionTrigger
+        | InputItem::WebSearchCall(_)
+        | InputItem::McpCall(_) => false,
     }
 }

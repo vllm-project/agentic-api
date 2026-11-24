@@ -1,0 +1,180 @@
+{
+  "weather_async": [
+    {
+      "type": "function",
+      "name": "get_weather",
+      "description": "Read a demo weather snapshot for a city.",
+      "async": true,
+      "strict": true,
+      "parameters": {
+        "type": "object",
+        "properties": {"city": {"type": "string"}},
+        "required": ["city"],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "weather_sync": [
+    {
+      "type": "function",
+      "name": "get_weather",
+      "description": "Read a demo weather snapshot for a city.",
+      "strict": true,
+      "parameters": {
+        "type": "object",
+        "properties": {"city": {"type": "string"}},
+        "required": ["city"],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "custom_async": [
+    {
+      "type": "custom",
+      "name": "agentic_async_echo",
+      "description": "Start a background echo job. The raw text input must be exactly ASYNC_CUSTOM_OK.",
+      "async": true
+    }
+  ],
+  "weather_async_with_web_search": [
+    {
+      "type": "function",
+      "name": "get_weather",
+      "description": "Read a demo weather snapshot for a city.",
+      "async": true,
+      "strict": true,
+      "parameters": {
+        "type": "object",
+        "properties": {"city": {"type": "string"}},
+        "required": ["city"],
+        "additionalProperties": false
+      }
+    },
+    {"type": "web_search"}
+  ],
+  "wait_tool": [
+    {
+      "type": "function",
+      "name": "lookup_price",
+      "async": true,
+      "description": "Look up a product price in the background. Choose a fresh task_handle unique within this conversation, including completed tasks.",
+      "strict": true,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "sku": {"type": "string"},
+          "task_handle": {"type": "string"}
+        },
+        "required": ["sku", "task_handle"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "type": "function",
+      "name": "wait_for_tasks",
+      "description": "Wait for selected tasks whose results you need. Pass a nonempty list of distinct task_handles from your earlier async tool calls. Results arrive on their original calls; this tool returns status only. Do not wait again for results that have already arrived.",
+      "strict": true,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task_handles": {"type": "array", "items": {"type": "string"}}
+        },
+        "required": ["task_handles"],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "parallel_mixed": [
+    {
+      "type": "function",
+      "name": "get_weather",
+      "description": "Read a demo weather snapshot for a city.",
+      "async": true,
+      "strict": true,
+      "parameters": {
+        "type": "object",
+        "properties": {"city": {"type": "string"}},
+        "required": ["city"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "type": "function",
+      "name": "get_local_time",
+      "description": "Read the demo local time for a city.",
+      "strict": true,
+      "parameters": {
+        "type": "object",
+        "properties": {"city": {"type": "string"}},
+        "required": ["city"],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "async_hosted_web_search": [
+    {"type": "web_search", "async": true}
+  ],
+  "namespace_member_async": [
+    {
+      "type": "namespace",
+      "name": "weather_tools",
+      "description": "Demo weather tools.",
+      "tools": [
+        {
+          "type": "function",
+          "name": "get_weather",
+          "description": "Read a demo weather snapshot for a city.",
+          "async": true,
+          "strict": true,
+          "parameters": {
+            "type": "object",
+            "properties": {"city": {"type": "string"}},
+            "required": ["city"],
+            "additionalProperties": false
+          }
+        }
+      ]
+    }
+  ],
+  "namespace_itself_async": [
+    {
+      "type": "namespace",
+      "name": "weather_tools",
+      "description": "Demo weather tools.",
+      "async": true,
+      "tools": [
+        {
+          "type": "function",
+          "name": "get_weather",
+          "description": "Read a demo weather snapshot for a city.",
+          "strict": true,
+          "parameters": {
+            "type": "object",
+            "properties": {"city": {"type": "string"}},
+            "required": ["city"],
+            "additionalProperties": false
+          }
+        }
+      ]
+    }
+  ],
+  "shell_async": [
+    {"type": "shell", "environment": {"type": "local"}, "async": true}
+  ],
+  "tool_search_client_async": [
+    {
+      "type": "tool_search",
+      "execution": "client",
+      "async": true,
+      "description": "Search the client tool catalog for tools that can satisfy the request.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string", "description": "A concise description of the needed capabilities."}
+        },
+        "required": ["query"],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

@@ -12,9 +12,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use agentic_core::executor::{ConversationHandler, ExecuteRequest, ExecutionContext, ResponseHandler};
 use agentic_core::storage::{ConversationStore, ResponseStore, create_pool_with_schema};
+use agentic_core::tool::web_search;
 use agentic_core::tool::{
     GatewayExecutor, ToolError, ToolHandler, ToolOutput, ToolType, model_visible_namespace_member_name,
 };
+use agentic_core::types::io::output::{FunctionToolCall, GatewayCallStatus};
 use agentic_core::types::io::{FunctionTool, OutputItem};
 use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
 use agentic_core::types::tools::WebSearchToolParam;
@@ -52,6 +54,20 @@ impl ToolHandler for CountingWebSearch {
 impl GatewayExecutor for CountingWebSearch {
     type ExecutionParams = WebSearchToolParam;
 
+    fn started_output(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> Option<OutputItem> {
+        web_search::started_output_item(call)
+    }
+
+    fn public_output(
+        &self,
+        call: &FunctionToolCall,
+        output: &ToolOutput,
+        status: GatewayCallStatus,
+        _params: &WebSearchToolParam,
+    ) -> Option<OutputItem> {
+        web_search::output_item(call, output, status.into())
+    }
+
     fn execute(
         &self,
         call_id: &str,
@@ -60,10 +76,7 @@ impl GatewayExecutor for CountingWebSearch {
         _config: &WebSearchToolParam,
     ) -> Pin<Box<dyn Future<Output = Result<ToolOutput, ToolError>> + Send + '_>> {
         self.calls.fetch_add(1, Ordering::SeqCst);
-        Box::pin(std::future::ready(Ok(ToolOutput {
-            call_id: call_id.to_owned(),
-            output: "must not execute".to_owned(),
-        })))
+        Box::pin(std::future::ready(Ok(ToolOutput::success(call_id, "must not execute"))))
     }
 }
 
@@ -393,7 +406,7 @@ fn assert_public_search_call(response: &ResponsePayload) -> Value {
         panic!("normalized search call must be public")
     };
     assert_eq!(search_call.id, "tsc_search_1");
-    assert_eq!(search_call.call_id, "call_search_1");
+    assert_eq!(search_call.call_id.as_deref(), Some("call_search_1"));
     assert_eq!(search_call.arguments, json!(["weather", "timezone"]));
     let public_search_call = serde_json::to_value(&response.output[0]).expect("public search call serializes");
     assert_eq!(public_search_call["execution"], "client");
@@ -711,7 +724,7 @@ async fn streaming_incomplete_search_preserves_public_item_in_terminal_response(
 }
 
 #[tokio::test]
-async fn streaming_rejects_a_second_search_call_before_its_added_event() {
+async fn streaming_rejects_duplicate_search_call_ids_before_their_added_event() {
     let cases = [
         (
             "synthetic",
@@ -730,7 +743,8 @@ async fn streaming_rejects_a_second_search_call_before_its_added_event() {
         ),
     ];
 
-    for (case, first, second) in cases {
+    for (case, first, mut second) in cases {
+        second["call_id"] = first["call_id"].clone();
         let upstream = streaming_response([
             json!({
                 "type": "response.created",
@@ -986,7 +1000,7 @@ async fn blocking_incomplete_search_preserves_a_non_replayable_public_item() {
             panic!("{case}: incomplete search call must use the public shape");
         };
         assert_eq!(call.id, "tsc_partial", "{case}");
-        assert_eq!(call.call_id, "call_partial", "{case}");
+        assert_eq!(call.call_id.as_deref(), Some("call_partial"), "{case}");
         assert_eq!(call.arguments, expected_arguments, "{case}");
         assert_eq!(call.status, agentic_core::types::ToolSearchStatus::Incomplete, "{case}");
         assert!(response.output[0].to_input_item().is_none(), "{case}");
@@ -994,7 +1008,7 @@ async fn blocking_incomplete_search_preserves_a_non_replayable_public_item() {
 }
 
 #[tokio::test]
-async fn blocking_rejects_multiple_search_calls_in_native_synthetic_or_mixed_output() {
+async fn blocking_accepts_distinct_search_calls_in_native_synthetic_or_mixed_output() {
     let completed_synthetic = |suffix| synthetic_search_call(suffix, "{}", "completed");
     let completed_native = |suffix| native_search_call(suffix, &json!({}), "completed");
     let cases = [
@@ -1022,11 +1036,16 @@ async fn blocking_rejects_multiple_search_calls_in_native_synthetic_or_mixed_out
             &json!([search_declaration(), deferred_weather()]),
         );
 
-        let Err(error) = ExecuteRequest::new(request, context).run().await else {
-            panic!("{case}: multiple search calls must be rejected");
+        let Either::Left(response) = ExecuteRequest::new(request, context).run().await.expect(case) else {
+            panic!("blocking response expected");
         };
-        assert_eq!(error.http_status(), http::StatusCode::BAD_GATEWAY, "{case}");
-        assert_eq!(error.error_type(), "tool_error", "{case}");
+        assert_eq!(response.output.len(), 2, "{case}");
+        assert!(
+            response
+                .output
+                .iter()
+                .all(|item| matches!(item, OutputItem::ToolSearchCall(_)))
+        );
     }
 }
 

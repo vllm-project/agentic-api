@@ -33,12 +33,19 @@ use tracing_subscriber::layer::SubscriberExt as _;
 
 #[path = "execution_trace/compaction.rs"]
 mod compaction;
+#[path = "support/messages_gateway_tools.rs"]
+mod messages_gateway_tools;
+#[path = "execution_trace/messages_tools.rs"]
+mod messages_tools;
 #[path = "execution_trace/stages.rs"]
 mod stages;
 mod support;
 #[path = "../../agentic-server/tests/execution_traces/attributes.rs"]
 mod trace_attributes;
-use support::{MockResponse, MockServer, TestFixture, text_response};
+use support::{
+    MockResponse, MockServer, TestFixture, messages_json_response, messages_sse, messages_sse_response,
+    messages_start_event, text_response,
+};
 
 const PROMPT: &str = "the prompt text must never be exported";
 
@@ -210,26 +217,10 @@ fn request(stream: bool) -> RequestPayload {
     RequestPayload {
         model: "test-model".to_owned(),
         input: ResponsesInput::Text(PROMPT.to_owned()),
-        instructions: None,
-        previous_response_id: None,
-        conversation_id: None,
-        tools: None,
-        tool_choice: None,
         stream,
         store: true,
-        include: None,
-        reasoning: None,
-        text: None,
-        temperature: None,
-        top_p: None,
         max_output_tokens: Some(64),
-        ignore_eos: None,
-        truncation: None,
-        metadata: None,
-        parallel_tool_calls: None,
-        prompt_cache_key: None,
-        cache_salt: None,
-        context_management: None,
+        ..Default::default()
     }
 }
 
@@ -438,7 +429,8 @@ async fn failure_before_execution_starts_is_not_delivered() {
     let Err(error) = run(&traces, Arc::clone(&fixture.exec_ctx), payload).await else {
         panic!("unknown previous_response_id fails rehydration");
     };
-    assert_eq!(error.http_status(), 404, "{error}");
+    assert_eq!(error.http_status(), 400, "{error}");
+    assert_eq!(error.error_code(), "previous_response_not_found");
 
     let span = traces.execute_span().await;
     assert_execute_attributes(&span, false, "failed", "not_started");
@@ -505,53 +497,6 @@ fn messages_request(stream: bool) -> MessagesRequestContext {
         "messages": [{"role": "user", "content": PROMPT}]
     }))
     .unwrap()
-}
-
-fn messages_json_response(stop_reason: &str) -> MockResponse {
-    MockResponse::Json(
-        json!({
-            "id": "msg_upstream", "type": "message", "role": "assistant", "model": "test-model",
-            "content": [{"type": "text", "text": "hello"}],
-            "stop_reason": stop_reason, "stop_sequence": null,
-            "usage": {"input_tokens": 3, "output_tokens": 1}
-        })
-        .to_string(),
-    )
-}
-
-fn messages_sse_response(stop_reason: &str) -> MockResponse {
-    let events = [
-        (
-            "message_start",
-            json!({"type": "message_start", "message": {
-            "id": "msg_upstream", "type": "message", "role": "assistant", "model": "test-model",
-            "content": [], "stop_reason": null, "stop_sequence": null,
-            "usage": {"input_tokens": 3, "output_tokens": 0}}}),
-        ),
-        (
-            "content_block_start",
-            json!({"type": "content_block_start", "index": 0,
-            "content_block": {"type": "text", "text": ""}}),
-        ),
-        (
-            "content_block_delta",
-            json!({"type": "content_block_delta", "index": 0,
-            "delta": {"type": "text_delta", "text": "hello"}}),
-        ),
-        ("content_block_stop", json!({"type": "content_block_stop", "index": 0})),
-        (
-            "message_delta",
-            json!({"type": "message_delta",
-            "delta": {"stop_reason": stop_reason, "stop_sequence": null},
-            "usage": {"output_tokens": 1}}),
-        ),
-        ("message_stop", json!({"type": "message_stop"})),
-    ];
-    let mut body = String::new();
-    for (name, event) in events {
-        writeln!(body, "event: {name}\ndata: {event}\n").unwrap();
-    }
-    MockResponse::Sse(body)
 }
 
 #[tokio::test]
@@ -679,6 +624,54 @@ async fn messages_stream_records_completed_and_delivered() {
         headers[0].get("tracestate").is_none_or(http::HeaderValue::is_empty),
         "stale outbound trace state was replaced"
     );
+}
+
+// #313: a clean HTTP EOF without `message_stop` yields an error frame; the
+// execution span must agree and report a failed execution, not a completed one.
+#[tokio::test]
+async fn messages_stream_clean_eof_without_message_stop_is_failed() {
+    let traces = Traces::new();
+    // A valid start and one complete block, but no `message_delta`/`message_stop`.
+    let fixture = messages_fixture(vec![messages_sse(&[
+        messages_start_event(),
+        json!({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}),
+        json!({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "hi"}}),
+        json!({"type": "content_block_stop", "index": 0}),
+    ])])
+    .await;
+
+    let response = run_messages_stream(
+        messages_request(true),
+        Arc::clone(&fixture.registry),
+        Arc::clone(&fixture.exec_ctx),
+        fixture.upstream.clone(),
+    )
+    .instrument(traces.root.clone())
+    .await
+    .unwrap();
+
+    // The client sees an error, and no successful terminal.
+    let frames = tokio::spawn(
+        response
+            .body
+            .collect::<Vec<_>>()
+            .instrument(tracing::info_span!(parent: None, "unrelated.consumer")),
+    )
+    .await
+    .unwrap();
+    assert!(
+        frames.iter().any(|frame| frame.starts_with("event: error")),
+        "{frames:?}"
+    );
+    assert!(
+        frames.iter().all(|frame| !frame.starts_with("event: message_stop")),
+        "{frames:?}"
+    );
+
+    let span = traces.execute_span().await;
+    assert_execute_attributes_for(&span, "messages", true, "failed", "delivered");
+    assert_eq!(attribute(&span, "error.type"), Some(&Value::from("stream")));
+    assert!(matches!(span.status, Status::Error { .. }));
 }
 
 #[tokio::test]

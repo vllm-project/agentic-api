@@ -1,24 +1,33 @@
+mod file_search;
+mod models;
+use file_search::{FileSearchFileConfig, FilesFileConfig};
+use models::ModelFileConfig;
+
 use std::collections::{BTreeMap, HashMap};
 use std::io::Write;
-use std::num::NonZeroUsize;
+use std::num::{NonZeroU32, NonZeroU64, NonZeroUsize};
 use std::path::Path;
+use std::time::Duration;
 
 use agentic_core::McpServerEntry;
-use agentic_core::config::{CONFIG_FILE_NAME, WebSearchProviderKind};
+use agentic_core::config::{CONFIG_FILE_NAME, CodeInterpreterRuntimeConfig, WebSearchProviderKind};
 use agentic_core::error::Error;
-use agentic_server::model_capabilities::{InputModalities, ModelCapabilities};
+use agentic_core::types::model_capabilities::{ModelCapabilities, ModelOverride};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct WebSearchFileConfig {
-    /// Search backend (`you` or `brave`); unset selects You.com.
+    /// Search backend (`you`, `brave`, `tavily`, `searxng`, `serply`, or `keenable`); unset selects You.com.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider: Option<WebSearchProviderKind>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
     /// Environment variable holding the provider's API key; unset uses the
-    /// provider's conventional variable (`YOU_API_KEY`, `BRAVE_API_KEY`).
+    /// provider's conventional variable (`YOU_API_KEY`, `BRAVE_API_KEY`,
+    /// `TAVILY_API_KEY`, `SEARXNG_API_KEY`, `SERPLY_API_KEY`, `KEENABLE_API_KEY`);
+    /// SearXNG needs no key unless a proxy demands one, and Keenable falls back
+    /// to its key-free public endpoint without one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_key_env: Option<String>,
     /// Ceiling on concurrent provider requests within one batched search.
@@ -32,6 +41,32 @@ impl WebSearchFileConfig {
             && self.base_url.is_none()
             && self.api_key_env.is_none()
             && self.max_concurrent_queries.is_none()
+    }
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct WebFetchFileConfig {
+    /// Whether native `web_fetch` declarations are executed; unset means enabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    /// Whether fetches may reach private, loopback, and other non-public addresses.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allow_private_networks: Option<bool>,
+    /// Bytes read from one page before the download is cut.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_response_bytes: Option<NonZeroUsize>,
+    /// Seconds allowed for one fetch, including redirects.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_secs: Option<NonZeroU64>,
+}
+
+impl WebFetchFileConfig {
+    fn is_empty(&self) -> bool {
+        self.enabled.is_none()
+            && self.allow_private_networks.is_none()
+            && self.max_response_bytes.is_none()
+            && self.timeout_secs.is_none()
     }
 }
 
@@ -53,11 +88,87 @@ impl McpFileConfig {
 pub(crate) struct ServerFileConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_request_body_size_bytes: Option<NonZeroUsize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rate_limit_requests_per_minute: Option<NonZeroU32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rate_limit_burst: Option<NonZeroU32>,
 }
 
 impl ServerFileConfig {
     fn is_empty(&self) -> bool {
         self.max_request_body_size_bytes.is_none()
+            && self.rate_limit_requests_per_minute.is_none()
+            && self.rate_limit_burst.is_none()
+    }
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct CodeInterpreterFileConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_source_bytes: Option<NonZeroUsize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub execution_wall_time_seconds: Option<NonZeroU64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_fuel: Option<NonZeroU64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_guest_memory_bytes: Option<NonZeroUsize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_stdout_bytes: Option<NonZeroUsize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_stderr_bytes: Option<NonZeroUsize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_concurrent_guests: Option<NonZeroUsize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_aggregate_guest_memory_bytes: Option<NonZeroUsize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_worker_memory_bytes: Option<NonZeroUsize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_aggregate_worker_memory_bytes: Option<NonZeroUsize>,
+}
+
+impl CodeInterpreterFileConfig {
+    fn is_empty(&self) -> bool {
+        self.enabled.is_none()
+            && self.max_source_bytes.is_none()
+            && self.execution_wall_time_seconds.is_none()
+            && self.max_fuel.is_none()
+            && self.max_guest_memory_bytes.is_none()
+            && self.max_stdout_bytes.is_none()
+            && self.max_stderr_bytes.is_none()
+            && self.max_concurrent_guests.is_none()
+            && self.max_aggregate_guest_memory_bytes.is_none()
+            && self.max_worker_memory_bytes.is_none()
+            && self.max_aggregate_worker_memory_bytes.is_none()
+    }
+
+    /// Apply file values to safe, disabled defaults. Environment precedence is
+    /// resolved separately by the server entry point.
+    #[must_use]
+    pub(crate) fn with_defaults(&self) -> CodeInterpreterRuntimeConfig {
+        let defaults = CodeInterpreterRuntimeConfig::default();
+        CodeInterpreterRuntimeConfig {
+            enabled: self.enabled.unwrap_or(defaults.enabled),
+            max_source_bytes: self.max_source_bytes.unwrap_or(defaults.max_source_bytes),
+            execution_wall_time: Duration::from_secs(
+                self.execution_wall_time_seconds
+                    .map_or(defaults.execution_wall_time.as_secs(), NonZeroU64::get),
+            ),
+            max_fuel: self.max_fuel.unwrap_or(defaults.max_fuel),
+            max_guest_memory_bytes: self.max_guest_memory_bytes.unwrap_or(defaults.max_guest_memory_bytes),
+            max_stdout_bytes: self.max_stdout_bytes.unwrap_or(defaults.max_stdout_bytes),
+            max_stderr_bytes: self.max_stderr_bytes.unwrap_or(defaults.max_stderr_bytes),
+            max_concurrent_guests: self.max_concurrent_guests.unwrap_or(defaults.max_concurrent_guests),
+            max_aggregate_guest_memory_bytes: self
+                .max_aggregate_guest_memory_bytes
+                .unwrap_or(defaults.max_aggregate_guest_memory_bytes),
+            max_worker_memory_bytes: self.max_worker_memory_bytes.unwrap_or(defaults.max_worker_memory_bytes),
+            max_aggregate_worker_memory_bytes: self
+                .max_aggregate_worker_memory_bytes
+                .unwrap_or(defaults.max_aggregate_worker_memory_bytes),
+        }
     }
 }
 
@@ -79,25 +190,14 @@ impl ToolsFileConfig {
 pub(crate) struct MessagesGatewayFileConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_aliases: Option<String>,
+    /// Comma-separated native server-tool types the upstream runs itself.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub upstream_server_tools: Option<String>,
 }
 
 impl MessagesGatewayFileConfig {
     fn is_empty(&self) -> bool {
-        self.tool_aliases.is_none()
-    }
-}
-
-/// Per-model overrides for capabilities the gateway cannot infer from upstream metadata.
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[serde(default, deny_unknown_fields)]
-pub(crate) struct ModelFileConfig {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub input_modalities: Option<InputModalities>,
-}
-
-impl ModelFileConfig {
-    fn is_empty(&self) -> bool {
-        self.input_modalities.is_none()
+        self.tool_aliases.is_none() && self.upstream_server_tools.is_none()
     }
 }
 
@@ -105,6 +205,8 @@ impl ModelFileConfig {
 #[serde(default, deny_unknown_fields)]
 #[allow(clippy::struct_field_names)]
 pub(crate) struct ResponsesFileConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_cache_options_supported: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_retained_bytes: Option<NonZeroUsize>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -117,7 +219,8 @@ pub(crate) struct ResponsesFileConfig {
 
 impl ResponsesFileConfig {
     fn is_empty(&self) -> bool {
-        self.max_retained_bytes.is_none()
+        self.prompt_cache_options_supported.is_none()
+            && self.max_retained_bytes.is_none()
             && self.max_upstream_json_bytes.is_none()
             && self.max_upstream_sse_line_bytes.is_none()
             && self.max_stream_event_bytes.is_none()
@@ -127,18 +230,26 @@ impl ResponsesFileConfig {
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct FileConfig {
+    #[serde(skip_serializing_if = "FilesFileConfig::is_empty")]
+    pub files: FilesFileConfig,
+    #[serde(skip_serializing_if = "FileSearchFileConfig::is_empty")]
+    pub file_search: FileSearchFileConfig,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub llm_api_base: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub database_url: Option<String>,
     #[serde(skip_serializing_if = "WebSearchFileConfig::is_empty")]
     pub web_search: WebSearchFileConfig,
+    #[serde(skip_serializing_if = "WebFetchFileConfig::is_empty")]
+    pub web_fetch: WebFetchFileConfig,
     #[serde(skip_serializing_if = "McpFileConfig::is_empty")]
     pub mcp: McpFileConfig,
     #[serde(skip_serializing_if = "ServerFileConfig::is_empty")]
     pub server: ServerFileConfig,
     #[serde(skip_serializing_if = "ToolsFileConfig::is_empty")]
     pub tools: ToolsFileConfig,
+    #[serde(skip_serializing_if = "CodeInterpreterFileConfig::is_empty")]
+    pub code_interpreter: CodeInterpreterFileConfig,
     #[serde(skip_serializing_if = "MessagesGatewayFileConfig::is_empty")]
     pub messages_gateway: MessagesGatewayFileConfig,
     #[serde(skip_serializing_if = "ResponsesFileConfig::is_empty")]
@@ -252,12 +363,46 @@ impl FileConfig {
         ModelCapabilities::new(
             self.models
                 .iter()
-                .filter_map(|(model_id, model)| Some((model_id.clone(), model.input_modalities?)))
+                .filter(|(_, model)| !model.is_empty())
+                .map(|(model_id, model)| (model_id.clone(), ModelOverride::from(model)))
                 .collect(),
         )
     }
 
     fn validate(&self, path: &Path) -> Result<(), Error> {
+        if self
+            .file_search
+            .sqlite_vec_extension_path
+            .as_ref()
+            .is_some_and(|extension| extension.as_os_str().is_empty())
+        {
+            return Err(Error::Config(format!(
+                "configuration file {} contains an empty file_search.sqlite_vec_extension_path",
+                path.display()
+            )));
+        }
+        if self
+            .files
+            .storage_dir
+            .as_ref()
+            .is_some_and(|directory| directory.as_os_str().is_empty())
+        {
+            return Err(Error::Config(format!(
+                "configuration file {} contains an empty files.storage_dir",
+                path.display()
+            )));
+        }
+        if self
+            .file_search
+            .api_key_env
+            .as_deref()
+            .is_some_and(|name| name.trim().is_empty())
+        {
+            return Err(Error::Config(format!(
+                "configuration file {} contains an empty file_search.api_key_env",
+                path.display()
+            )));
+        }
         if self
             .web_search
             .api_key_env
@@ -276,18 +421,7 @@ impl FileConfig {
             )));
         }
         for (model_id, model) in &self.models {
-            if model_id.trim().is_empty() {
-                return Err(Error::Config(format!(
-                    "configuration file {} contains an empty model ID",
-                    path.display()
-                )));
-            }
-            if model.is_empty() {
-                return Err(Error::Config(format!(
-                    "configuration file {} contains no settings for model {model_id:?}; set input_modalities",
-                    path.display()
-                )));
-            }
+            model.validate(path, model_id)?;
         }
         if let Some(label) = self.mcp_servers.keys().find(|label| label.trim().is_empty()) {
             return Err(Error::Config(format!(
@@ -295,6 +429,12 @@ impl FileConfig {
                 path.display()
             )));
         }
+        self.code_interpreter.with_defaults().validate().map_err(|error| {
+            Error::Config(format!(
+                "configuration file {} contains invalid code interpreter limits: {error}",
+                path.display()
+            ))
+        })?;
         for (label, server) in &self.mcp_servers {
             if let Some(allowed_tools) = server.allowed_tools() {
                 if allowed_tools.is_empty() {
@@ -324,13 +464,89 @@ impl FileConfig {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::num::NonZeroUsize;
+    use std::num::{NonZeroU64, NonZeroUsize};
 
     use agentic_core::McpServerEntry;
-    use agentic_server::model_capabilities::{InputModalities, UpstreamCapabilities};
+    use agentic_core::types::messages::ReasoningEffortLevel;
+    use agentic_server::model_capabilities::{DEFAULT_REASONING_LEVELS, InputModalities, UpstreamCapabilities};
     use tempfile::tempdir;
 
-    use super::{FileConfig, McpFileConfig, ServerFileConfig, WebSearchFileConfig, WebSearchProviderKind};
+    use super::{
+        CodeInterpreterFileConfig, FileConfig, McpFileConfig, ServerFileConfig, WebSearchFileConfig,
+        WebSearchProviderKind,
+    };
+
+    #[test]
+    fn loads_local_files_storage_directory() {
+        let home = tempdir().expect("temp home");
+        fs::write(
+            home.path().join("config.toml"),
+            "[files]\nstorage_dir = \"/var/lib/agentic/files\"\n",
+        )
+        .unwrap();
+        let config = FileConfig::load(home.path())
+            .expect("valid Files API configuration")
+            .unwrap();
+        let encoded = serde_json::to_value(config).unwrap();
+        assert_eq!(encoded["files"]["storage_dir"], "/var/lib/agentic/files");
+    }
+
+    #[test]
+    fn rejects_empty_local_files_storage_directory() {
+        let home = tempdir().expect("temp home");
+        fs::write(home.path().join("config.toml"), "[files]\nstorage_dir = \"\"\n").unwrap();
+        assert!(
+            FileConfig::load(home.path())
+                .unwrap_err()
+                .to_string()
+                .contains("files.storage_dir")
+        );
+    }
+
+    #[test]
+    fn loads_embedding_configuration_without_persisting_credentials() {
+        let home = tempdir().expect("temp home");
+        fs::write(home.path().join("config.toml"), "[file_search]\nembedding_base_url = \"http://localhost:8001/v1\"\nembedding_model = \"local-embedding\"\napi_key_env = \"LOCAL_EMBEDDING_KEY\"\n").unwrap();
+        let config = FileConfig::load(home.path()).unwrap().unwrap();
+        assert_eq!(config.file_search.embedding_model.as_deref(), Some("local-embedding"));
+        assert_eq!(config.file_search.api_key_env.as_deref(), Some("LOCAL_EMBEDDING_KEY"));
+        fs::write(
+            home.path().join("config.toml"),
+            "[file_search]\nembedding_api_key = \"secret\"\n",
+        )
+        .unwrap();
+        assert!(
+            FileConfig::load(home.path()).is_err(),
+            "raw credentials are not a supported config-file field"
+        );
+    }
+
+    #[test]
+    fn loads_sqlite_vec_extension_path() {
+        let home = tempdir().unwrap();
+        fs::write(
+            home.path().join("config.toml"),
+            "[file_search]\nsqlite_vec_extension_path = \"/opt/sqlite-vec/vec0.so\"\n",
+        )
+        .unwrap();
+        let config = FileConfig::load(home.path()).unwrap().unwrap();
+        assert_eq!(
+            config.file_search.sqlite_vec_extension_path.as_deref(),
+            Some(std::path::Path::new("/opt/sqlite-vec/vec0.so"))
+        );
+    }
+
+    #[test]
+    fn rejects_blank_embedding_api_key_environment_name() {
+        let home = tempdir().expect("temp home");
+        fs::write(home.path().join("config.toml"), "[file_search]\napi_key_env = \" \"\n").unwrap();
+        assert!(
+            FileConfig::load(home.path())
+                .unwrap_err()
+                .to_string()
+                .contains("file_search.api_key_env")
+        );
+    }
 
     #[test]
     fn missing_config_file_uses_defaults() {
@@ -347,7 +563,7 @@ mod tests {
             llm_api_base: Some("http://127.0.0.1:5050".to_owned()),
             web_search: WebSearchFileConfig {
                 provider: Some(WebSearchProviderKind::You),
-                base_url: Some("https://api.ydc-index.io".to_owned()),
+                base_url: Some("https://ydc-index.io".to_owned()),
                 api_key_env: Some("YOU_API_KEY".to_owned()),
                 max_concurrent_queries: None,
             },
@@ -356,6 +572,8 @@ mod tests {
             },
             server: ServerFileConfig {
                 max_request_body_size_bytes: std::num::NonZeroUsize::new(20 * 1024 * 1024),
+                rate_limit_requests_per_minute: std::num::NonZeroU32::new(120),
+                rate_limit_burst: None,
             },
             ..FileConfig::default()
         };
@@ -372,6 +590,8 @@ mod tests {
         assert!(contents.contains("allowed_hosts = [\"mcp.example.com\"]"));
         assert!(contents.contains("[server]"));
         assert!(contents.contains("max_request_body_size_bytes = 20971520"));
+        assert!(contents.contains("rate_limit_requests_per_minute = 120"));
+        assert!(!contents.contains("rate_limit_burst"), "an unset burst is not written");
         assert!(!contents.contains("YOU_API_KEY ="));
         assert!(!contents.contains("[mcp_servers]"));
         assert!(!contents.contains("[models"));
@@ -412,6 +632,18 @@ mod tests {
         assert_eq!(
             config.models["Qwen/Qwen3-VL-8B-Instruct"].input_modalities,
             Some(InputModalities::TextAndImage)
+        );
+        assert_eq!(
+            config.models["zai-org/GLM-5.3-Flash"]
+                .supported_reasoning_levels
+                .as_ref()
+                .expect("configured reasoning levels")
+                .as_slice(),
+            [
+                ReasoningEffortLevel::Low,
+                ReasoningEffortLevel::High,
+                ReasoningEffortLevel::Max
+            ]
         );
     }
 
@@ -455,6 +687,110 @@ mod tests {
     }
 
     #[test]
+    fn model_reasoning_levels_are_resolved_from_configuration() {
+        let home = tempdir().expect("temp home");
+        fs::write(
+            home.path().join("config.toml"),
+            concat!(
+                "[models.\"glm-model\"]\nsupported_reasoning_levels = [\"low\", \"high\", \"max\"]\n\n",
+                "[models.\"vision-model\"]\ninput_modalities = [\"text\", \"image\"]\n",
+            ),
+        )
+        .expect("write config");
+
+        let capabilities = FileConfig::load(home.path())
+            .expect("per-model reasoning levels must parse")
+            .expect("existing config")
+            .model_capabilities();
+
+        assert_eq!(
+            capabilities.resolve_reasoning_levels("glm-model"),
+            [
+                ReasoningEffortLevel::Low,
+                ReasoningEffortLevel::High,
+                ReasoningEffortLevel::Max
+            ],
+            "configured levels must be advertised in the configured order"
+        );
+        assert_eq!(
+            capabilities.resolve_reasoning_levels("vision-model"),
+            DEFAULT_REASONING_LEVELS,
+            "an override that sets only input modalities must not change the advertised levels"
+        );
+        assert_eq!(
+            capabilities.resolve_reasoning_levels("unconfigured-model"),
+            DEFAULT_REASONING_LEVELS
+        );
+    }
+
+    #[test]
+    fn accepts_model_section_with_only_reasoning_levels() {
+        let home = tempdir().expect("temp home");
+        fs::write(
+            home.path().join("config.toml"),
+            "[models.\"glm-model\"]\nsupported_reasoning_levels = [\"low\", \"high\", \"max\"]\n",
+        )
+        .expect("write config");
+
+        let capabilities = FileConfig::load(home.path())
+            .expect("a model that sets only reasoning levels must parse")
+            .expect("existing config")
+            .model_capabilities();
+
+        assert_eq!(
+            capabilities.resolve_reasoning_levels("glm-model"),
+            [
+                ReasoningEffortLevel::Low,
+                ReasoningEffortLevel::High,
+                ReasoningEffortLevel::Max
+            ]
+        );
+        assert_eq!(
+            capabilities.resolve("glm-model", UpstreamCapabilities::default()),
+            InputModalities::Text,
+            "a model without a modality override keeps the text-only fallback"
+        );
+    }
+
+    #[test]
+    fn rejects_unusable_reasoning_level_lists() {
+        for (levels, expected) in [
+            ("[]", "at least one level"),
+            ("[\"low\", \"low\"]", "lists \"low\" more than once"),
+        ] {
+            let home = tempdir().expect("temp home");
+            fs::write(
+                home.path().join("config.toml"),
+                format!("[models.\"glm-model\"]\nsupported_reasoning_levels = {levels}\n"),
+            )
+            .expect("write config");
+
+            let error = FileConfig::load(home.path()).expect_err("an unusable level list must fail");
+            let message = error.to_string();
+
+            assert!(message.contains("supported_reasoning_levels"), "{levels}: {message}");
+            assert!(message.contains(expected), "{levels}: {message}");
+        }
+    }
+
+    #[test]
+    fn rejects_unknown_reasoning_level() {
+        let home = tempdir().expect("temp home");
+        fs::write(
+            home.path().join("config.toml"),
+            "[models.\"glm-model\"]\nsupported_reasoning_levels = [\"low\", \"ultra\"]\n",
+        )
+        .expect("write config");
+
+        let error = FileConfig::load(home.path()).expect_err("an unknown level must fail");
+        let message = error.to_string();
+
+        assert!(message.contains("config.toml"), "{message}");
+        assert!(message.contains("ultra"), "{message}");
+        assert!(message.contains("max"), "{message}");
+    }
+
+    #[test]
     fn rejects_unknown_input_modality() {
         let home = tempdir().expect("temp home");
         fs::write(
@@ -491,6 +827,60 @@ mod tests {
     }
 
     #[test]
+    fn model_capability_only_sections_are_loaded_and_preserved() {
+        for setting in [
+            "sampling_supported = false",
+            "logprobs_supported = false",
+            "prompt_cache_options_supported = false",
+            "prompt_cache_retention_supported = false",
+            "service_tiers = [\"default\"]",
+        ] {
+            let home = tempdir().expect("temp home");
+            fs::write(
+                home.path().join("config.toml"),
+                format!("[models.example]\n{setting}\n"),
+            )
+            .expect("write config");
+            let file = FileConfig::load(home.path())
+                .expect("a capability is a model setting")
+                .expect("config file exists");
+            let capabilities = file.model_capabilities();
+            let model = capabilities.for_model("example").expect("configured model");
+            assert!(model.supported_reasoning_levels.is_none());
+            assert_eq!(
+                capabilities.resolve_reasoning_levels("example"),
+                DEFAULT_REASONING_LEVELS
+            );
+            assert!(
+                capabilities.for_model("EXAMPLE").is_none(),
+                "model IDs are case-sensitive"
+            );
+            let encoded = toml::to_string(&file).unwrap();
+            assert!(encoded.contains(setting), "{encoded}");
+            let restored: FileConfig = toml::from_str(&encoded).unwrap();
+            assert_eq!(restored.model_capabilities().for_model("example"), Some(model));
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_model_service_tiers() {
+        for (tiers, expected) in [
+            ("[]", "must list at least one tier"),
+            ("[\"default\", \"default\"]", "more than once"),
+            ("[\"custom\"]", "unknown variant"),
+        ] {
+            let home = tempdir().expect("temp home");
+            fs::write(
+                home.path().join("config.toml"),
+                format!("[models.example]\nservice_tiers = {tiers}\n"),
+            )
+            .expect("write config");
+            let error = FileConfig::load(home.path()).expect_err("invalid tier list must fail");
+            assert!(error.to_string().contains(expected), "{tiers}: {error}");
+        }
+    }
+
+    #[test]
     fn rejects_empty_model_id() {
         let home = tempdir().expect("temp home");
         fs::write(
@@ -513,6 +903,7 @@ mod tests {
 
         assert!(message.contains("no settings for model \"a-model\""), "{message}");
         assert!(message.contains("input_modalities"), "{message}");
+        assert!(message.contains("supported_reasoning_levels"), "{message}");
     }
 
     #[test]
@@ -581,6 +972,80 @@ mod tests {
     }
 
     #[test]
+    fn code_interpreter_file_limits_are_operator_owned_and_default_disabled() {
+        let defaults = CodeInterpreterFileConfig::default().with_defaults();
+        assert!(!defaults.enabled);
+
+        let home = tempdir().expect("temp home");
+        fs::write(
+            home.path().join("config.toml"),
+            concat!(
+                "[code_interpreter]\n",
+                "enabled = true\n",
+                "max_source_bytes = 4096\n",
+                "execution_wall_time_seconds = 3\n",
+                "max_fuel = 12345\n",
+                "max_guest_memory_bytes = 64\n",
+                "max_stdout_bytes = 16\n",
+                "max_stderr_bytes = 8\n",
+                "max_concurrent_guests = 2\n",
+                "max_aggregate_guest_memory_bytes = 128\n"
+            ),
+        )
+        .expect("write config");
+
+        let config = FileConfig::load(home.path())
+            .expect("valid operator limits")
+            .expect("existing config")
+            .code_interpreter
+            .with_defaults();
+        assert!(config.enabled);
+        assert_eq!(config.max_source_bytes.get(), 4096);
+        assert_eq!(config.execution_wall_time, std::time::Duration::from_secs(3));
+        assert_eq!(config.max_fuel.get(), 12_345);
+        assert_eq!(config.max_guest_memory_bytes.get(), 64);
+        assert_eq!(config.max_aggregate_guest_memory_bytes.get(), 128);
+    }
+
+    #[test]
+    fn rejects_code_interpreter_under_tools() {
+        let home = tempdir().expect("temp home");
+        fs::write(
+            home.path().join("config.toml"),
+            "[tools.code_interpreter]\nenabled = true\n",
+        )
+        .expect("write config");
+
+        let error = FileConfig::load(home.path()).expect_err("code interpreter config must be top-level");
+        assert!(error.to_string().contains("unknown field `code_interpreter`"));
+    }
+
+    #[test]
+    fn code_interpreter_file_limits_reject_zero_and_impossible_memory_reservations() {
+        let home = tempdir().expect("temp home");
+        fs::write(
+            home.path().join("config.toml"),
+            "[code_interpreter]\nmax_stdout_bytes = 0\n",
+        )
+        .expect("write config");
+        let zero_error = FileConfig::load(home.path()).expect_err("zero byte limit must fail deserialization");
+        assert!(zero_error.to_string().contains("max_stdout_bytes"));
+
+        fs::write(
+            home.path().join("config.toml"),
+            concat!(
+                "[code_interpreter]\n",
+                "max_guest_memory_bytes = 129\n",
+                "max_aggregate_guest_memory_bytes = 128\n"
+            ),
+        )
+        .expect("replace config");
+        let reservation_error =
+            FileConfig::load(home.path()).expect_err("an impossible single guest reservation must fail startup config");
+        assert!(reservation_error.to_string().contains("max_guest_memory_bytes"));
+    }
+
+    #[test]
     fn rejects_zero_max_request_body_size() {
         let home = tempdir().expect("temp home");
         fs::write(
@@ -615,6 +1080,67 @@ mod tests {
     }
 
     #[test]
+    fn rate_limit_settings_parse_and_reject_zero() {
+        let home = tempdir().expect("temp home");
+        fs::write(
+            home.path().join("config.toml"),
+            "[server]\nrate_limit_requests_per_minute = 600\nrate_limit_burst = 20\n",
+        )
+        .expect("write config");
+        let config = FileConfig::load(home.path())
+            .expect("rate limit settings parse")
+            .expect("existing config");
+        assert_eq!(
+            config
+                .server
+                .rate_limit_requests_per_minute
+                .map(std::num::NonZeroU32::get),
+            Some(600)
+        );
+        assert_eq!(config.server.rate_limit_burst.map(std::num::NonZeroU32::get), Some(20));
+
+        for key in ["rate_limit_requests_per_minute", "rate_limit_burst"] {
+            fs::write(home.path().join("config.toml"), format!("[server]\n{key} = 0\n")).expect("write config");
+            let error = FileConfig::load(home.path()).expect_err("zero must fail");
+            assert!(error.to_string().contains(key), "{error}");
+        }
+    }
+
+    #[test]
+    fn web_fetch_settings_round_trip_and_reject_unknown_keys() {
+        let home = tempdir().expect("temp home");
+        fs::write(
+            home.path().join("config.toml"),
+            "[web_fetch]\nenabled = false\nallow_private_networks = true\nmax_response_bytes = 4096\ntimeout_secs = 7\n",
+        )
+        .expect("write config");
+        let config = FileConfig::load(home.path())
+            .expect("load config")
+            .expect("existing config");
+        assert_eq!(config.web_fetch.enabled, Some(false));
+        assert_eq!(config.web_fetch.allow_private_networks, Some(true));
+        assert_eq!(config.web_fetch.max_response_bytes.map(NonZeroUsize::get), Some(4096));
+        assert_eq!(config.web_fetch.timeout_secs.map(NonZeroU64::get), Some(7));
+        let rendered = toml::to_string(&config).expect("serialize config");
+        assert!(rendered.contains("[web_fetch]"), "{rendered}");
+        assert!(rendered.contains("allow_private_networks = true"), "{rendered}");
+
+        let rendered = toml::to_string(&FileConfig::default()).expect("serialize defaults");
+        assert!(
+            !rendered.contains("web_fetch"),
+            "an empty section is not written: {rendered}"
+        );
+
+        fs::write(home.path().join("config.toml"), "[web_fetch]\nmax_response_bytes = 0\n").expect("write config");
+        let error = FileConfig::load(home.path()).expect_err("zero download ceiling must fail");
+        assert!(error.to_string().contains("max_response_bytes"), "{error}");
+
+        fs::write(home.path().join("config.toml"), "[web_fetch]\nfetch_timeout = 1\n").expect("write config");
+        let error = FileConfig::load(home.path()).expect_err("unknown keys must fail");
+        assert!(error.to_string().contains("fetch_timeout"), "{error}");
+    }
+
+    #[test]
     fn web_search_provider_settings_round_trip_and_reject_invalid_values() {
         let home = tempdir().expect("temp home");
         fs::write(
@@ -632,6 +1158,39 @@ mod tests {
         let rendered = toml::to_string(&config).expect("serialize config");
         assert!(rendered.contains("provider = \"brave\""));
         assert!(rendered.contains("max_concurrent_queries = 2"));
+
+        fs::write(
+            home.path().join("config.toml"),
+            "[web_search]\nprovider = \"tavily\"\nbase_url = \"https://tavily.example\"\n",
+        )
+        .expect("write config");
+        let config = FileConfig::load(home.path())
+            .expect("load config")
+            .expect("existing config");
+        assert_eq!(config.web_search.provider, Some(WebSearchProviderKind::Tavily));
+        assert_eq!(config.web_search.base_url.as_deref(), Some("https://tavily.example"));
+        assert!(
+            toml::to_string(&config)
+                .expect("serialize config")
+                .contains("provider = \"tavily\"")
+        );
+
+        fs::write(
+            home.path().join("config.toml"),
+            "[web_search]\nprovider = \"searxng\"\nbase_url = \"http://searxng:8080\"\n",
+        )
+        .expect("write config");
+        let config = FileConfig::load(home.path())
+            .expect("load config")
+            .expect("existing config");
+        assert_eq!(config.web_search.provider, Some(WebSearchProviderKind::Searxng));
+        assert_eq!(config.web_search.base_url.as_deref(), Some("http://searxng:8080"));
+        assert_eq!(config.web_search.api_key_env, None);
+        assert!(
+            toml::to_string(&config)
+                .expect("serialize config")
+                .contains("provider = \"searxng\"")
+        );
 
         fs::write(home.path().join("config.toml"), "[web_search]\nprovider = \"bing\"\n").expect("write config");
         let error = FileConfig::load(home.path()).expect_err("unknown provider must fail");
@@ -666,6 +1225,26 @@ mod tests {
 
         let error = FileConfig::load(home.path()).expect_err("ambiguous transport must fail");
         assert!(error.to_string().contains("did not match any variant"));
+    }
+
+    #[test]
+    fn loads_deferred_mcp_server_with_a_catalog_description() {
+        let home = tempdir().expect("temp home");
+        fs::write(
+            home.path().join("config.toml"),
+            "[mcp_servers.docs]\nurl = \"https://mcp.example.com/mcp\"\ndefer_loading = true\n\
+             description = \"Product documentation search.\"\n",
+        )
+        .expect("write config");
+
+        let config = FileConfig::load(home.path())
+            .expect("deferred server config")
+            .expect("existing config");
+        assert_eq!(config.mcp_servers["docs"].defer_loading(), Some(true));
+        assert_eq!(
+            config.mcp_servers["docs"].description(),
+            Some("Product documentation search.")
+        );
     }
 
     #[test]

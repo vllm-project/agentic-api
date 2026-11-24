@@ -79,6 +79,7 @@ pub async fn serve(
 mod tests {
     use super::*;
     use agentic_core::config::{PostgresConfig, ResponsesConfig, SqliteConfig, ToolRuntimeConfig};
+    use agentic_core::types::model_capabilities::ModelCapabilities;
 
     #[tokio::test]
     async fn backend_drain_preserves_server_errors() {
@@ -101,8 +102,10 @@ mod tests {
             db_url: Some("sqlite://?mode=memory".to_owned()),
             postgres: PostgresConfig::default(),
             sqlite: SqliteConfig::default(),
+            max_request_body_size: agentic_core::executor::DEFAULT_MAX_REQUEST_BODY_SIZE_BYTES,
             tools: ToolRuntimeConfig::default(),
             responses: ResponsesConfig::default(),
+            model_capabilities: ModelCapabilities::default(),
         };
         let shutdown = CancellationToken::new();
         shutdown.cancel();

@@ -1,25 +1,71 @@
+mod calls;
 mod content;
+mod conversions;
+mod file_text;
+mod history_naming;
+mod search_history;
+mod tool_search;
+mod validation;
+mod window;
 
-pub use content::{InputContent, InputFileContent, InputImageContent, InputTextContent, RefusalContent};
+pub(crate) use conversions::internal_mcp_tool_name;
+pub use file_text::InputFileError;
+pub(crate) use file_text::kinds::{IMAGE_MEDIA_TYPES, is_image_media_type};
+pub(crate) use history_naming::HistoryNaming;
+pub(crate) use search_history::{
+    SearchHistory, SearchHistoryDefect, TOOL_SEARCH_NAME, hosted_search_output_text, is_search_item,
+};
+pub(super) use tool_search::check_tool_search_call_id;
+pub use tool_search::{InputToolSearchCall, ToolSearchOutputMessage};
+pub use validation::InputValidationError;
+pub(crate) use validation::{FileReference, file_references};
+
+pub(crate) use window::{
+    async_records, expand_carried_windows, latest_compaction_window, model_items, open_async_call_ids, retain_window,
+    retained_async_call,
+};
+
+pub use content::{InputContent, InputFileContent, InputImageContent, InputTextContent, RefusalContent, ResolvedFiles};
 
 use std::borrow::Cow;
 
+use either::Either;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use crate::types::event::MessageStatus;
-use crate::types::tools::{ResponsesTool, ToolSearchExecution, ToolSearchStatus};
-use crate::utils::common::deserialize_from_value;
 
-use super::output::{CustomToolCall, FunctionToolCall, McpListTools, ReasoningOutput, ToolSearchCall};
+use super::{InOutItem, OutputItem};
+
+use super::code_interpreter::CodeInterpreterCall;
+use super::multi_agent::{AgentAttribution, InputAgentMessage, InputMultiAgentCall, InputMultiAgentCallOutput};
+use super::output::{
+    CustomToolCall, FunctionToolCall, McpCall, McpListTools, MessagePhase, ReasoningOutput, WebSearchCall,
+};
 use super::shell::{ShellCall, ShellCallOutputMessage, ShellCallStatus};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// The optional wire discriminator of a message input item.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+pub enum InputMessageType {
+    #[default]
+    #[serde(rename = "message")]
+    Message,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct InputMessage {
+    // InputItem's schema already supplies this discriminator. Its typed default
+    // accepts shorthand messages without accepting another item's explicit type.
+    #[serde(default, rename = "type")]
+    #[cfg_attr(feature = "openapi", schema(ignore))]
+    pub kind: InputMessageType,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentAttribution>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     pub role: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase: Option<MessagePhase>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<MessageStatus>,
     pub content: InputMessageContent,
@@ -32,9 +78,19 @@ pub enum InputMessageContent {
     Parts(Vec<InputContent>),
 }
 
+impl Default for InputMessageContent {
+    fn default() -> Self {
+        Self::Parts(Vec::new())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct FunctionToolResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<MessageStatus>,
     pub call_id: String,
     pub output: ToolCallOutput,
 }
@@ -62,175 +118,7 @@ pub enum ToolOutputContent {
 }
 
 #[cfg(feature = "openapi")]
-mod openapi_schemas {
-    use super::{InputContent, InputItem, InputMessageContent, ResponsesInput, ToolCallOutput};
-    use utoipa::openapi::schema::{ArrayBuilder, OneOfBuilder, Schema, SchemaType, Type};
-    use utoipa::openapi::{ObjectBuilder, Ref, RefOr};
-
-    fn string_schema() -> RefOr<Schema> {
-        ObjectBuilder::new().schema_type(SchemaType::new(Type::String)).into()
-    }
-
-    impl utoipa::PartialSchema for InputMessageContent {
-        fn schema() -> RefOr<Schema> {
-            OneOfBuilder::new()
-                .item(string_schema())
-                .item(ArrayBuilder::new().items(Ref::from_schema_name("InputContent")))
-                .into()
-        }
-    }
-    impl utoipa::ToSchema for InputMessageContent {
-        fn name() -> std::borrow::Cow<'static, str> {
-            std::borrow::Cow::Borrowed("InputMessageContent")
-        }
-    }
-
-    impl utoipa::PartialSchema for ToolCallOutput {
-        fn schema() -> RefOr<Schema> {
-            OneOfBuilder::new()
-                .item(string_schema())
-                .item(ArrayBuilder::new().items(Ref::from_schema_name("ToolOutputContent")))
-                .into()
-        }
-    }
-    impl utoipa::ToSchema for ToolCallOutput {
-        fn name() -> std::borrow::Cow<'static, str> {
-            std::borrow::Cow::Borrowed("ToolCallOutput")
-        }
-    }
-
-    impl utoipa::PartialSchema for ResponsesInput {
-        fn schema() -> RefOr<Schema> {
-            OneOfBuilder::new()
-                .item(string_schema())
-                .item(ArrayBuilder::new().items(Ref::from_schema_name("InputItem")))
-                .into()
-        }
-    }
-    impl utoipa::ToSchema for ResponsesInput {
-        fn name() -> std::borrow::Cow<'static, str> {
-            std::borrow::Cow::Borrowed("ResponsesInput")
-        }
-    }
-
-    fn tagged_text_variant(type_value: &str) -> RefOr<Schema> {
-        ObjectBuilder::new()
-            .property(
-                "type",
-                ObjectBuilder::new()
-                    .schema_type(SchemaType::new(Type::String))
-                    .enum_values(Some([type_value])),
-            )
-            .required("type")
-            .property("text", ObjectBuilder::new().schema_type(SchemaType::new(Type::String)))
-            .required("text")
-            .into()
-    }
-
-    impl utoipa::PartialSchema for InputContent {
-        fn schema() -> RefOr<Schema> {
-            OneOfBuilder::new()
-                .discriminator(Some(utoipa::openapi::schema::Discriminator::new("type")))
-                .item(tagged_text_variant("input_text"))
-                .item(
-                    ObjectBuilder::new()
-                        .property(
-                            "type",
-                            ObjectBuilder::new()
-                                .schema_type(SchemaType::new(Type::String))
-                                .enum_values(Some(["input_image"])),
-                        )
-                        .required("type")
-                        .property(
-                            "file_id",
-                            ObjectBuilder::new().schema_type(SchemaType::new(Type::String)),
-                        )
-                        .property(
-                            "image_url",
-                            ObjectBuilder::new().schema_type(SchemaType::new(Type::String)),
-                        )
-                        .property(
-                            "detail",
-                            ObjectBuilder::new().schema_type(SchemaType::new(Type::String)),
-                        ),
-                )
-                .item(tagged_ref("input_file", "InputFileContent"))
-                .item(tagged_text_variant("output_text"))
-                .item(tagged_ref("refusal", "RefusalContent"))
-                .item(tagged_text_variant("reasoning_text"))
-                .into()
-        }
-    }
-    impl utoipa::ToSchema for InputContent {
-        fn name() -> std::borrow::Cow<'static, str> {
-            std::borrow::Cow::Borrowed("InputContent")
-        }
-    }
-
-    fn tagged_ref(type_value: &str, schema_name: &str) -> RefOr<Schema> {
-        use utoipa::openapi::schema::AllOfBuilder;
-        AllOfBuilder::new()
-            .item(
-                ObjectBuilder::new()
-                    .property(
-                        "type",
-                        ObjectBuilder::new()
-                            .schema_type(SchemaType::new(Type::String))
-                            .enum_values(Some([type_value])),
-                    )
-                    .required("type"),
-            )
-            .item(Ref::from_schema_name(schema_name))
-            .into()
-    }
-
-    impl utoipa::PartialSchema for InputItem {
-        fn schema() -> RefOr<Schema> {
-            use utoipa::openapi::schema::AllOfBuilder;
-            let message_branch: RefOr<Schema> = AllOfBuilder::new()
-                .item(
-                    ObjectBuilder::new().property(
-                        "type",
-                        ObjectBuilder::new()
-                            .schema_type(SchemaType::new(Type::String))
-                            .enum_values(Some(["message"])),
-                    ),
-                )
-                .item(Ref::from_schema_name("InputMessage"))
-                .into();
-            OneOfBuilder::new()
-                .discriminator(Some(utoipa::openapi::schema::Discriminator::new("type")))
-                .item(message_branch)
-                .item(tagged_ref("function_call", "InputFunctionToolCall"))
-                .item(tagged_ref("function_call_output", "FunctionToolResultMessage"))
-                .item(tagged_ref("tool_search_call", "InputToolSearchCall"))
-                .item(tagged_ref("tool_search_output", "ToolSearchOutputMessage"))
-                .item(tagged_ref("custom_tool_call", "CustomToolCall"))
-                .item(tagged_ref("custom_tool_call_output", "CustomToolCallOutputMessage"))
-                .item(tagged_ref("shell_call", "ShellCall"))
-                .item(tagged_ref("shell_call_output", "ShellCallOutputMessage"))
-                .item(tagged_ref("reasoning", "ReasoningOutput"))
-                .item(tagged_ref("mcp_list_tools", "McpListTools"))
-                .item(tagged_ref("compaction", "CompactionItem"))
-                .item(
-                    ObjectBuilder::new()
-                        .property(
-                            "type",
-                            ObjectBuilder::new()
-                                .schema_type(SchemaType::new(Type::String))
-                                .enum_values(Some(["compaction_trigger"])),
-                        )
-                        .required("type"),
-                )
-                .into()
-        }
-    }
-    impl utoipa::ToSchema for InputItem {
-        fn name() -> std::borrow::Cow<'static, str> {
-            std::borrow::Cow::Borrowed("InputItem")
-        }
-    }
-}
+mod openapi_schemas;
 
 impl ToolCallOutput {
     #[must_use]
@@ -263,6 +151,8 @@ impl From<&str> for ToolCallOutput {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct InputFunctionToolCall {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentAttribution>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     pub call_id: String,
     pub name: String,
@@ -271,17 +161,28 @@ pub struct InputFunctionToolCall {
     pub arguments: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<MessageStatus>,
+    /// Replayed `async` marker: a pending async call does not require its output before the next
+    /// request. Serialized only when true.
+    #[serde(
+        default,
+        rename = "async",
+        deserialize_with = "crate::utils::common::null_as_default",
+        skip_serializing_if = "std::ops::Not::not"
+    )]
+    pub async_execution: bool,
 }
 
 impl From<FunctionToolCall> for InputFunctionToolCall {
     fn from(call: FunctionToolCall) -> Self {
         Self {
+            agent: call.agent,
             id: Some(call.id),
             call_id: call.call_id,
             name: call.name,
             namespace: call.namespace,
             arguments: call.arguments,
             status: Some(call.status),
+            async_execution: call.async_execution,
         }
     }
 }
@@ -289,12 +190,14 @@ impl From<FunctionToolCall> for InputFunctionToolCall {
 impl From<CustomToolCall> for InputFunctionToolCall {
     fn from(call: CustomToolCall) -> Self {
         Self {
+            agent: call.agent,
             id: function_call_item_id(&call.id),
             call_id: call.call_id,
             name: call.name,
             namespace: None,
             arguments: serde_json::json!({ "input": call.input }).to_string(),
             status: call.status,
+            async_execution: call.async_execution,
         }
     }
 }
@@ -302,6 +205,7 @@ impl From<CustomToolCall> for InputFunctionToolCall {
 impl From<ShellCall> for InputFunctionToolCall {
     fn from(call: ShellCall) -> Self {
         Self {
+            agent: call.agent,
             id: call.id.as_deref().and_then(function_call_item_id),
             call_id: call.call_id,
             name: "shell".to_owned(),
@@ -313,18 +217,8 @@ impl From<ShellCall> for InputFunctionToolCall {
                 Some(ShellCallStatus::InProgress) => Some(MessageStatus::InProgress),
                 Some(ShellCallStatus::Incomplete) | None => None,
             },
-        }
-    }
-}
-
-impl From<ShellCallOutputMessage> for FunctionToolResultMessage {
-    fn from(output: ShellCallOutputMessage) -> Self {
-        Self {
-            call_id: output.call_id,
-            // Command outputs contain only JSON-compatible values and string map keys.
-            output: serde_json::to_string(&output.output)
-                .expect("shell outputs serialize to JSON")
-                .into(),
+            // Shell does not accept `async`; its calls always need their output.
+            async_execution: false,
         }
     }
 }
@@ -340,55 +234,24 @@ where
     Ok(value)
 }
 
-/// A public model-generated tool-search call replayed as Responses input.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct InputToolSearchCall {
-    #[serde(deserialize_with = "deserialize_non_blank_string")]
-    pub id: String,
-    #[serde(deserialize_with = "deserialize_non_blank_string")]
-    pub call_id: String,
-    #[serde(default)]
-    pub execution: ToolSearchExecution,
-    pub arguments: Value,
-    #[serde(default)]
-    pub status: ToolSearchStatus,
-}
-
-impl TryFrom<&ToolSearchCall> for InputToolSearchCall {
-    type Error = ToolSearchStatus;
-
-    fn try_from(call: &ToolSearchCall) -> Result<Self, Self::Error> {
-        if call.status != ToolSearchStatus::Completed {
-            return Err(call.status);
-        }
-        Ok(Self {
-            id: call.id.clone(),
-            call_id: call.call_id.clone(),
-            execution: call.execution,
-            arguments: call.arguments.clone(),
-            status: ToolSearchStatus::Completed,
-        })
+/// A call id that is `null` for a hosted (server-executed) item and otherwise non-blank.
+pub(super) fn deserialize_optional_non_blank_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<String>::deserialize(deserializer)?;
+    if value.as_deref().is_some_and(|value| value.trim().is_empty()) {
+        return Err(serde::de::Error::custom("value must not be blank"));
     }
-}
-
-/// Client-returned declarations resolving a public tool-search call.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct ToolSearchOutputMessage {
-    #[serde(deserialize_with = "deserialize_non_blank_string")]
-    pub call_id: String,
-    #[serde(default)]
-    pub execution: ToolSearchExecution,
-    #[serde(default)]
-    pub status: ToolSearchStatus,
-    pub tools: Vec<ResponsesTool>,
+    Ok(value)
 }
 
 /// An opaque compacted context checkpoint accepted as Responses input.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct CompactionItem {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentAttribution>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     pub encrypted_content: String,
@@ -398,30 +261,31 @@ pub struct CompactionItem {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct CustomToolCallOutputMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<MessageStatus>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     pub call_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub output: ToolCallOutput,
 }
 
-impl From<CustomToolCallOutputMessage> for FunctionToolResultMessage {
-    fn from(output: CustomToolCallOutputMessage) -> Self {
-        Self {
-            call_id: output.call_id,
-            output: output.output,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum InputItem {
-    #[serde(rename = "message")]
-    Message(InputMessage),
+    #[serde(rename = "multi_agent_call")]
+    MultiAgentCall(InputMultiAgentCall),
+    #[serde(rename = "multi_agent_call_output")]
+    MultiAgentCallOutput(InputMultiAgentCallOutput),
+    #[serde(rename = "agent_message")]
+    AgentMessage(InputAgentMessage),
     /// The model's tool invocation — appears in rehydrated history so vLLM sees
     /// the full call/output pair across turns.
     #[serde(rename = "function_call")]
     FunctionCall(InputFunctionToolCall),
+    #[serde(rename = "code_interpreter_call")]
+    CodeInterpreterCall(CodeInterpreterCall),
     #[serde(rename = "function_call_output")]
     FunctionCallOutput(FunctionToolResultMessage),
     #[serde(rename = "tool_search_call")]
@@ -439,6 +303,12 @@ pub enum InputItem {
     ShellCallOutput(ShellCallOutputMessage),
     #[serde(rename = "reasoning")]
     Reasoning(ReasoningOutput),
+    /// A public web-search call supplied as request history.
+    #[serde(rename = "web_search_call")]
+    WebSearchCall(WebSearchCall),
+    /// A public MCP call supplied as request history, including its output.
+    #[serde(rename = "mcp_call")]
+    McpCall(McpCall),
     /// Internal history record used by gateway orchestration to remember that
     /// an MCP server's tools were already listed. It is never sent to the model.
     #[serde(rename = "mcp_list_tools")]
@@ -450,44 +320,12 @@ pub enum InputItem {
     /// Carries no payload; it is never forwarded to the upstream model.
     #[serde(rename = "compaction_trigger")]
     CompactionTrigger,
-    #[serde(other)]
-    Unknown,
-}
-
-impl<'de> Deserialize<'de> for InputItem {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let mut value = Value::deserialize(deserializer)?;
-        // Consume the enum discriminator before a flattened payload can retain it.
-        let kind = value.as_object_mut().and_then(|object| object.remove("type"));
-        let item = match kind.as_ref().and_then(Value::as_str) {
-            None | Some("message") => deserialize_from_value(value).map(Self::Message),
-            Some("function_call") => deserialize_from_value(value).map(Self::FunctionCall),
-            Some("function_call_output") => deserialize_from_value(value).map(Self::FunctionCallOutput),
-            Some("tool_search_call") => deserialize_from_value(value).map(Self::ToolSearchCall),
-            Some("tool_search_output") => deserialize_from_value(value).map(Self::ToolSearchOutput),
-            Some("custom_tool_call") => deserialize_from_value(value).map(Self::CustomToolCall),
-            Some("custom_tool_call_output") => deserialize_from_value(value).map(Self::CustomToolCallOutput),
-            Some("shell_call") => deserialize_from_value(value).map(Self::ShellCall),
-            Some("shell_call_output") => deserialize_from_value(value).map(Self::ShellCallOutput),
-            Some("reasoning") => deserialize_from_value(value).map(Self::Reasoning),
-            Some("mcp_list_tools") => deserialize_from_value(value).map(Self::McpListTools),
-            Some("compaction") => deserialize_from_value(value).map(Self::Compaction),
-            Some("compaction_trigger") => Ok(Self::CompactionTrigger),
-            Some(_) => return Ok(Self::Unknown),
-        };
-        item.map_err(serde::de::Error::custom)
-    }
+    /// Messages allow an omitted discriminator, but reject any type other than `message`.
+    #[serde(untagged)]
+    Message(InputMessage),
 }
 
 impl InputItem {
-    #[must_use]
-    pub(crate) fn is_unknown(&self) -> bool {
-        matches!(self, Self::Unknown)
-    }
-
     #[must_use]
     pub(crate) fn is_compaction_trigger(&self) -> bool {
         matches!(self, Self::CompactionTrigger)
@@ -495,7 +333,16 @@ impl InputItem {
 
     #[must_use]
     pub(crate) fn is_model_visible(&self) -> bool {
-        !matches!(self, Self::McpListTools(_) | Self::CompactionTrigger)
+        // Public collaboration data is opaque. The coordinator owns the separate
+        // canonical plaintext context; never forward these items as model commands.
+        !matches!(
+            self,
+            Self::McpListTools(_)
+                | Self::CompactionTrigger
+                | Self::MultiAgentCall(_)
+                | Self::MultiAgentCallOutput(_)
+                | Self::AgentMessage(_)
+        )
     }
 }
 
@@ -503,75 +350,57 @@ impl InputItem {
 #[serde(untagged)]
 pub enum ResponsesInput {
     Text(String),
-    Items(Vec<InputItem>),
+    Items(Vec<InOutItem>),
 }
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct CompactionWindow {
-    latest_index: usize,
-    retained_start: usize,
-}
-
-impl CompactionWindow {
-    #[must_use]
-    pub(crate) const fn latest_index(self) -> usize {
-        self.latest_index
+impl Default for ResponsesInput {
+    /// An empty item list for programmatic request construction. This does not change
+    /// whether the containing request requires an `input` field during deserialization.
+    fn default() -> Self {
+        Self::Items(Vec::new())
     }
-
-    #[must_use]
-    pub(crate) fn retains_user_item(self, index: usize, item: &InputItem) -> bool {
-        index >= self.retained_start
-            && index < self.latest_index
-            && matches!(item, InputItem::Message(message)
-                if message.role == "user"
-                    && message.id.is_some()
-                    && message.status == Some(MessageStatus::Completed))
-    }
-}
-
-#[must_use]
-pub(crate) fn latest_compaction_window(items: &[InputItem]) -> Option<CompactionWindow> {
-    let latest_index = items
-        .iter()
-        .rposition(|item| matches!(item, InputItem::Compaction(_)))?;
-    let retained_start = items[..latest_index]
-        .iter()
-        .rposition(|item| matches!(item, InputItem::Compaction(_)))
-        .map_or(0, |index| index + 1);
-    Some(CompactionWindow {
-        latest_index,
-        retained_start,
-    })
 }
 
 impl ResponsesInput {
-    /// Iterate over the items in the canonical context sent to vLLM without cloning them.
-    pub(crate) fn model_items(&self) -> impl Iterator<Item = &InputItem> {
-        let items = match self {
-            Self::Text(_) => &[][..],
-            Self::Items(items) => items.as_slice(),
-        };
-        let window = latest_compaction_window(items);
+    pub(crate) fn has_multi_agent_history(&self) -> bool {
+        self.input_items().any(|item| {
+            item.agent().is_some()
+                || matches!(
+                    item.as_ref(),
+                    InputItem::MultiAgentCall(_) | InputItem::MultiAgentCallOutput(_) | InputItem::AgentMessage(_)
+                )
+        })
+    }
 
-        items
-            .iter()
-            .enumerate()
-            .filter(move |(index, item)| {
-                item.is_model_visible()
-                    && window
-                        .is_none_or(|window| *index >= window.latest_index() || window.retains_user_item(*index, item))
-            })
-            .map(|(_, item)| item)
+    /// Borrow input records and project outputs through the continuation conversion.
+    pub(crate) fn input_items(&self) -> impl Iterator<Item = Cow<'_, InputItem>> {
+        match self {
+            Self::Text(_) => Either::Left(Vec::<InputItem>::from(self).into_iter().map(Cow::Owned)),
+            Self::Items(items) => Either::Right(items.iter().filter_map(InOutItem::as_input)),
+        }
     }
 
     #[must_use]
     pub fn contains_compaction(&self) -> bool {
-        matches!(self, Self::Items(items) if items.iter().any(|item| matches!(item, InputItem::Compaction(_))))
+        matches!(self, Self::Items(items) if items.iter().any(|item| matches!(item,
+            InOutItem::Input(InputItem::Compaction(_)) | InOutItem::Output(OutputItem::Compaction(_)))))
     }
 
     #[must_use]
     pub fn has_compaction_trigger(&self) -> bool {
-        matches!(self, Self::Items(items) if items.iter().any(InputItem::is_compaction_trigger))
+        matches!(self, Self::Items(items) if items.iter().any(|item| matches!(item,
+            InOutItem::Input(InputItem::CompactionTrigger))))
+    }
+
+    /// Whether the input replays a call to an async tool.
+    #[must_use]
+    pub fn has_async_call(&self) -> bool {
+        matches!(self, Self::Items(items) if items.iter().any(|item| match item {
+            InOutItem::Input(item) => item.is_async_call(),
+            InOutItem::Output(OutputItem::FunctionCall(call)) => call.async_execution,
+            InOutItem::Output(OutputItem::CustomToolCall(call)) => call.async_execution,
+            InOutItem::Output(_) => false,
+        }))
     }
 
     /// Return the canonical context sent to vLLM.
@@ -580,36 +409,51 @@ impl ResponsesInput {
     /// becomes an assistant message containing the locally generated summary.
     /// Items before that checkpoint are superseded and are omitted.
     /// Internal MCP-list records and `compaction_trigger` markers are stripped
-    /// and never reach the model.
+    /// and never reach the model. Each paired `tool_search_call` and
+    /// `tool_search_output` becomes the function call and output the model saw live.
     #[must_use]
     pub fn model_input(&self) -> Cow<'_, Self> {
+        self.project_for_model(true)
+    }
+
+    /// [`Self::model_input`] for a projection that runs before definition loading: search items stay public records
+    /// until the upstream request lowers them.
+    pub(crate) fn model_input_keeping_search_items(&self) -> Cow<'_, Self> {
+        self.project_for_model(false)
+    }
+
+    fn project_for_model(&self, lower_searches: bool) -> Cow<'_, Self> {
         let Self::Items(items) = self else {
             return Cow::Borrowed(self);
         };
 
-        if latest_compaction_window(items).is_none() {
-            if items.iter().any(|item| !item.is_model_visible()) {
-                let stripped = self.model_items().cloned().collect();
-                return Cow::Owned(Self::Items(stripped));
-            }
+        if !self.contains_compaction()
+            && items.iter().all(|item| {
+                matches!(item, InOutItem::Input(input)
+                    if input.is_model_visible() && !(lower_searches && search_history::is_search_item(input)))
+            })
+        {
             return Cow::Borrowed(self);
         }
-
-        let model_items = self
-            .model_items()
-            .map(|item| match item {
+        let projected = expand_carried_windows(self.input_items());
+        let model = model_items(projected)
+            .map(|item| match item.into_owned() {
                 InputItem::Compaction(compaction) => InputItem::Message(InputMessage {
-                    id: None,
                     role: "assistant".to_owned(),
-                    status: None,
                     content: InputMessageContent::Parts(vec![InputContent::OutputText(InputTextContent::new(
-                        compaction.encrypted_content.clone(),
+                        compaction.encrypted_content,
                     ))]),
+                    ..Default::default()
                 }),
-                other => other.clone(),
+                other => other,
             })
-            .collect();
-        Cow::Owned(Self::Items(model_items))
+            .collect::<Vec<_>>();
+        let model = if lower_searches {
+            SearchHistory::lower(model)
+        } else {
+            model
+        };
+        Cow::Owned(Self::from(model))
     }
 }
 
@@ -629,7 +473,41 @@ fn function_call_item_id(item_id: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
+    use serde_json::Value;
+
     use super::*;
+
+    #[test]
+    fn assistant_phase_survives_input_parsing_and_model_projection() {
+        for (phase, expected) in [
+            (None, None),
+            (Some("commentary"), Some(MessagePhase::Commentary)),
+            (Some("final_answer"), Some(MessagePhase::FinalAnswer)),
+        ] {
+            let mut wire = serde_json::json!({
+                "type": "message",
+                "id": "msg_history",
+                "role": "assistant",
+                "status": "completed",
+                "content": [{"type": "output_text", "text": "Review result."}]
+            });
+            if let Some(phase) = phase {
+                wire["phase"] = serde_json::json!(phase);
+            }
+            let item: InputItem = serde_json::from_value(wire.clone()).unwrap();
+            let InputItem::Message(message) = &item else {
+                panic!("expected a message item");
+            };
+            assert_eq!(message.phase, expected);
+            let input = ResponsesInput::from(vec![item]);
+            assert_eq!(
+                serde_json::to_value(input.model_input()).unwrap(),
+                serde_json::json!([wire])
+            );
+        }
+    }
 
     #[test]
     fn structured_input_without_message_type() {
@@ -662,7 +540,7 @@ mod tests {
         };
         assert_eq!(items.len(), 1);
 
-        let InputItem::Message(message) = &items[0] else {
+        let InOutItem::Input(InputItem::Message(message)) = &items[0] else {
             panic!("expected InputItem::Message");
         };
         assert_eq!(message.role, "user");
@@ -706,9 +584,11 @@ mod tests {
             panic!("expected ResponsesInput::Items");
         };
         assert_eq!(items.len(), 3);
-        assert!(matches!(&items[0], InputItem::Message(message) if message.role == "user"));
-        assert!(matches!(&items[1], InputItem::FunctionCall(call) if call.name == "lookup"));
-        assert!(matches!(&items[2], InputItem::CustomToolCallOutput(output) if output.call_id == "call_1"));
+        assert!(matches!(&items[0], InOutItem::Input(InputItem::Message(message)) if message.role == "user"));
+        assert!(matches!(&items[1], InOutItem::Input(InputItem::FunctionCall(call)) if call.name == "lookup"));
+        assert!(
+            matches!(&items[2], InOutItem::Input(InputItem::CustomToolCallOutput(output)) if output.call_id == "call_1")
+        );
     }
 
     #[test]
@@ -729,7 +609,7 @@ mod tests {
         };
         assert_eq!(items.len(), 1);
 
-        let InputItem::Message(message) = &items[0] else {
+        let InOutItem::Input(InputItem::Message(message)) = &items[0] else {
             panic!("expected InputItem::Message");
         };
         let InputMessageContent::Parts(parts) = &message.content else {
@@ -850,12 +730,99 @@ mod tests {
             );
         }
 
-        let future: InputItem = serde_json::from_value(serde_json::json!({
+        let future = serde_json::from_value::<InputItem>(serde_json::json!({
             "type": "future_search_item",
             "payload": {"opaque": true}
+        }));
+        assert!(future.is_err(), "unmodeled input item types are rejected");
+    }
+
+    #[test]
+    fn gateway_emitted_calls_keep_their_payloads() {
+        let web_search: InOutItem = serde_json::from_value(serde_json::json!({
+            "type": "web_search_call",
+            "id": "ws_1",
+            "status": "completed",
+            "action": {"type": "search", "query": "rust"}
         }))
-        .expect("unrelated future item remains forward-compatible");
-        assert!(matches!(future, InputItem::Unknown));
+        .unwrap();
+        assert!(matches!(web_search, InOutItem::Input(InputItem::WebSearchCall(_))));
+        assert_eq!(
+            serde_json::to_value(&web_search).unwrap()["action"]["query"],
+            "rust",
+            "the action payload survives replay"
+        );
+
+        let mcp: InOutItem = serde_json::from_value(serde_json::json!({
+            "type": "mcp_call",
+            "id": "mcp_1",
+            "server_label": "search",
+            "name": "find",
+            "arguments": "{\"q\":\"rust\"}",
+            "status": "completed",
+            "output": "found"
+        }))
+        .unwrap();
+        assert!(matches!(mcp, InOutItem::Input(InputItem::McpCall(_))));
+        let value = serde_json::to_value(&mcp).unwrap();
+        assert_eq!(value["server_label"], "search");
+        assert_eq!(value["output"], "found", "the output payload survives replay");
+    }
+
+    #[test]
+    fn unmodeled_input_item_types_fail_deserialization() {
+        for kind in [
+            "computer_call",
+            "image_generation_call",
+            "file_search_call",
+            "local_shell_call",
+            "mcp_approval_response",
+        ] {
+            assert!(
+                serde_json::from_value::<InputItem>(serde_json::json!({"type": kind, "id": "x"})).is_err(),
+                "{kind} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn shorthand_messages_stay_accepted() {
+        let input: ResponsesInput =
+            serde_json::from_value(serde_json::json!([{"role": "user", "content": "hi"}])).unwrap();
+        let ResponsesInput::Items(items) = input else {
+            panic!("expected item array");
+        };
+        assert!(matches!(items[0], InOutItem::Input(InputItem::Message(_))));
+
+        for wire in [
+            serde_json::json!({"role": "user", "content": "hi"}),
+            serde_json::json!({"type": "message", "role": "user", "content": "hi"}),
+        ] {
+            let item: InputItem = serde_json::from_value(wire).unwrap();
+            assert!(matches!(item, InputItem::Message(_)));
+            let serialized = serde_json::to_string(&item).unwrap();
+            assert_eq!(serialized.matches("\"type\"").count(), 1);
+            assert_eq!(
+                serde_json::from_str::<Value>(&serialized).unwrap(),
+                serde_json::json!({"type": "message", "role": "user", "content": "hi"})
+            );
+        }
+    }
+
+    #[test]
+    fn explicit_non_message_types_cannot_fall_back_to_shorthand() {
+        for kind in [
+            serde_json::json!("computer_call"),
+            serde_json::json!("function_call"),
+            serde_json::json!("web_search_call"),
+            serde_json::json!("mcp_call"),
+            Value::Null,
+            serde_json::json!(7),
+        ] {
+            let wire = serde_json::json!({"type": kind, "role": "user", "content": "hi"});
+            assert!(serde_json::from_value::<InputItem>(wire.clone()).is_err(), "{wire}");
+            assert!(serde_json::from_value::<ResponsesInput>(serde_json::json!([wire])).is_err());
+        }
     }
 
     #[test]
@@ -946,7 +913,7 @@ mod tests {
         let ResponsesInput::Items(items) = &input else {
             panic!("expected items");
         };
-        let InputItem::Message(message) = &items[0] else {
+        let InOutItem::Input(InputItem::Message(message)) = &items[0] else {
             panic!("expected message item");
         };
         let InputMessageContent::Parts(parts) = &message.content else {
@@ -1071,13 +1038,12 @@ mod tests {
 
     #[test]
     fn model_input_strips_internal_mcp_list_tools() {
-        let input = ResponsesInput::Items(vec![
+        let input = ResponsesInput::from(vec![
             InputItem::McpListTools(McpListTools::new("mcpl_1", "counter", Vec::new())),
             InputItem::Message(InputMessage {
-                id: None,
                 role: "user".to_owned(),
-                status: None,
                 content: InputMessageContent::Text("continue".to_owned()),
+                ..Default::default()
             }),
         ]);
 
@@ -1134,7 +1100,7 @@ mod tests {
     }
 
     #[test]
-    fn custom_items_convert_to_function_history() {
+    fn custom_items_stay_public_until_the_upstream_projection() {
         let input: ResponsesInput = serde_json::from_value(serde_json::json!([
             {
                 "type": "custom_tool_call",
@@ -1153,11 +1119,19 @@ mod tests {
         .expect("custom history");
 
         let canonical_value = serde_json::to_value(Vec::<InputItem>::from(&input)).expect("canonical items");
-        assert_eq!(canonical_value[0]["type"], "function_call");
-        assert_eq!(canonical_value[0]["id"], "fc_1");
-        assert_eq!(canonical_value[0]["arguments"], r#"{"input":"hello"}"#);
-        assert_eq!(canonical_value[1]["type"], "function_call_output");
-        assert_eq!(canonical_value[1]["output"], "done");
+        assert_eq!(canonical_value[0]["type"], "custom_tool_call");
+        assert_eq!(canonical_value[1]["type"], "custom_tool_call_output");
+        let model_value = serde_json::to_value(
+            input
+                .normalized_model_input(&[], &HashMap::default())
+                .expect("model input"),
+        )
+        .unwrap();
+        assert_eq!(model_value[0]["type"], "function_call");
+        assert_eq!(model_value[0]["id"], "fc_1");
+        assert_eq!(model_value[0]["arguments"], r#"{"input":"hello"}"#);
+        assert_eq!(model_value[1]["type"], "function_call_output");
+        assert_eq!(model_value[1]["output"], "done");
 
         let public_value = serde_json::to_value(input).expect("public input");
         assert_eq!(public_value[0]["type"], "custom_tool_call");
@@ -1191,15 +1165,14 @@ mod tests {
         let ResponsesInput::Items(items) = &input else {
             panic!("expected item input");
         };
-        assert!(matches!(items[0], InputItem::ShellCall(_)));
-        assert!(matches!(items[1], InputItem::ShellCallOutput(_)));
+        assert!(matches!(items[0], InOutItem::Input(InputItem::ShellCall(_))));
+        assert!(matches!(items[1], InOutItem::Input(InputItem::ShellCallOutput(_))));
 
         let borrowed = serde_json::to_value(Vec::<InputItem>::from(&input)).unwrap();
         let owned = serde_json::to_value(Vec::<InputItem>::from(input.clone())).unwrap();
-        let prepared = ResponsesInput::Items(Vec::from(&input));
-        let model = serde_json::to_value(prepared.model_input()).unwrap();
         assert_eq!(borrowed, owned);
-        assert_eq!(borrowed, model);
+        assert_eq!(borrowed[0]["type"], "shell_call");
+        let model = serde_json::to_value(input.normalized_model_input(&[], &HashMap::default()).unwrap()).unwrap();
         assert_eq!(model[0]["type"], "function_call");
         assert_eq!(model[0]["id"], "fc_1");
         assert_eq!(model[0]["name"], "shell");
@@ -1214,5 +1187,76 @@ mod tests {
         assert_eq!(serialized[0]["type"], "shell_call");
         assert_eq!(serialized[1]["type"], "shell_call_output");
         assert_eq!(serialized[1]["output"][0]["outcome"]["exit_code"], 0);
+    }
+}
+
+#[cfg(test)]
+mod borrowed_history_tests {
+    use std::collections::HashMap;
+
+    use super::*;
+    use crate::types::io::InOutItem;
+    use crate::types::io::OutputItem;
+    use serde_json::json;
+
+    #[test]
+    fn model_window_borrows_retained_media_and_moves_output_projections() {
+        let input: ResponsesInput = serde_json::from_value(json!([
+            {"role":"user", "content":"superseded"},
+            {"type":"compaction", "encrypted_content":"summary"},
+            {"role":"user", "content":[{"type":"input_image", "image_url":"data:image/png;base64,abc"}]}
+        ]))
+        .unwrap();
+        let ResponsesInput::Items(mut items) = input else {
+            panic!("item history")
+        };
+        let output: OutputItem = serde_json::from_value(json!({
+            "type":"message", "id":"msg_1", "role":"assistant", "status":"completed",
+            "content":[{"type":"output_text", "text":"answer"}]
+        }))
+        .unwrap();
+        items.push(InOutItem::Output(output));
+        let InOutItem::Input(image_message) = &items[2] else {
+            panic!("input message")
+        };
+        let projected: Vec<_> = items.iter().filter_map(InOutItem::as_input).collect();
+        let InputItem::Message(message) = projected.last().unwrap().as_ref() else {
+            panic!("output message")
+        };
+        let id_ptr = message.id.as_ref().unwrap().as_ptr();
+        let selected: Vec<_> = model_items(projected).collect();
+        assert_eq!(selected.len(), 3);
+        assert!(matches!(&selected[1], Cow::Borrowed(item) if std::ptr::eq(*item, image_message)));
+        let Cow::Owned(InputItem::Message(message)) = &selected[2] else {
+            panic!("owned projection")
+        };
+        assert_eq!(
+            message.id.as_ref().unwrap().as_ptr(),
+            id_ptr,
+            "move the projected payload instead of cloning it"
+        );
+    }
+
+    #[test]
+    fn replay_view_keeps_public_calls_while_model_conversion_lowers_them() {
+        let input: ResponsesInput = serde_json::from_value(json!([
+            {"type":"custom_tool_call", "id":"ctc_1", "call_id":"custom", "name":"notes", "input":"text"},
+            {"type":"shell_call", "id":"sh_1", "call_id":"shell", "action":{"commands":["pwd"]}}
+        ]))
+        .unwrap();
+        let public: Vec<_> = input.input_items().map(Cow::into_owned).collect();
+        assert!(matches!(
+            public.as_slice(),
+            [InputItem::CustomToolCall(_), InputItem::ShellCall(_)]
+        ));
+        assert!(matches!(
+            Vec::<InputItem>::from(&input).as_slice(),
+            [InputItem::CustomToolCall(_), InputItem::ShellCall(_)]
+        ));
+        let model = Vec::<InputItem>::from(input.normalized_model_input(&[], &HashMap::default()).unwrap());
+        assert!(matches!(
+            model.as_slice(),
+            [InputItem::FunctionCall(_), InputItem::FunctionCall(_)]
+        ));
     }
 }

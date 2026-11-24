@@ -1,0 +1,111 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input:
+      - content:
+        - text: Remember the release codeword in the attached file for the next model.
+          type: input_text
+        - text: 'File: notes.txt
+
+            Deployment checklist
+
+            - Region: eu-west
+
+            - Release codeword: PAPAYA-7
+
+            - Owner: platform team
+
+            '
+          type: input_text
+        role: user
+        type: message
+      - content: You are performing a CONTEXT CHECKPOINT COMPACTION. Create a concise
+          handoff summary that preserves current progress, decisions, constraints,
+          unresolved work, and critical references for the next model. Return only
+          the summary.
+        role: user
+        type: message
+      max_output_tokens: 256
+      model: Qwen/Qwen2.5-3B-Instruct
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      created_at: 1792570436
+      ec_transfer_params: null
+      frequency_penalty: 0.0
+      id: resp_9f74e2dbba1b10de
+      incomplete_details: null
+      input_messages: null
+      instructions: null
+      kv_transfer_params: null
+      max_output_tokens: 256
+      max_tool_calls: null
+      metadata: null
+      model: Qwen/Qwen2.5-3B-Instruct
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: null
+          text: 'Handoff Summary:
+
+            - Deployment to be performed in the eu-west region.
+
+            - The release codeword for the next deployment is PAPAYA-7.
+
+            - Ownership of the deployment is with the platform team.
+
+            - Current progress and decisions should be aligned with these details.
+
+            - Unresolved work or issues should be communicated for follow-up.
+
+            - Critical references include the attached ''notes.txt'' file.'
+          type: output_text
+        id: msg_a54e52d7c45b9db8
+        phase: null
+        role: assistant
+        status: completed
+        type: message
+      output_messages: null
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt: null
+      reasoning: null
+      service_tier: auto
+      status: completed
+      temperature: 0.7
+      text: null
+      tool_choice: none
+      tools: []
+      top_logprobs: null
+      top_p: 0.8
+      truncation: disabled
+      usage:
+        input_tokens: 124
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 112
+          cached_tokens_per_turn: []
+          input_tokens_per_turn: []
+        output_tokens: 82
+        output_tokens_details:
+          output_tokens_per_turn: []
+          reasoning_tokens: 0
+          tool_output_tokens: 0
+          tool_output_tokens_per_turn: []
+        total_tokens: 206
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200

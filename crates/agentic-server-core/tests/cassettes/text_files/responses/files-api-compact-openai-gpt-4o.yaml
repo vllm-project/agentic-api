@@ -1,0 +1,868 @@
+turns:
+- filename: t1
+  request:
+    body_base64: LS1iNzk2YjE3MDRjM2U2ZmMyMWViYmU2MjE1ZjljNmFhYg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tYjc5NmIxNzA0YzNlNmZjMjFlYmJlNjIxNWY5YzZhYWINCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJub3Rlcy50eHQiDQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW4NCg0KRGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg0KLS1iNzk2YjE3MDRjM2U2ZmMyMWViYmU2MjE1ZjljNmFhYi0tDQo=
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: multipart/form-data; boundary=b796b1704c3e6fc21ebbe6215f9c6aab
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      bytes: 91
+      created_at: 1794807460
+      expires_at: null
+      filename: notes.txt
+      id: file-CQfCw7HMwgPwjKcnPDj1rr
+      object: file
+      purpose: user_data
+      status: processed
+      status_details: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body_base64: LS1kM2M4OGIyOTg3OTM1YjBkZGI1OTczODE0NDczNzgxOQ0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwdXJwb3NlIg0KDQp1c2VyX2RhdGENCi0tZDNjODhiMjk4NzkzNWIwZGRiNTk3MzgxNDQ3Mzc4MTkNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZSI7IGZpbGVuYW1lPSJub3Rlcy5wZGYiDQpDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL3BkZg0KDQolUERGLTEuNAoxIDAgb2JqCjw8IC9UeXBlIC9DYXRhbG9nIC9QYWdlcyAyIDAgUiA+PgplbmRvYmoKMiAwIG9iago8PCAvVHlwZSAvUGFnZXMgL0tpZHMgWzMgMCBSXSAvQ291bnQgMSA+PgplbmRvYmoKMyAwIG9iago8PCAvVHlwZSAvUGFnZSAvUGFyZW50IDIgMCBSIC9NZWRpYUJveCBbMCAwIDYxMiA3OTJdIC9SZXNvdXJjZXMgPDwgL0ZvbnQgPDwgL0YxIDUgMCBSID4+ID4+IC9Db250ZW50cyA0IDAgUiA+PgplbmRvYmoKNCAwIG9iago8PCAvTGVuZ3RoIDEzOCA+PgpzdHJlYW0KQlQKL0YxIDE0IFRmCjcyIDcyMCBUZAoxOCBUTAooRGVwbG95bWVudCBjaGVja2xpc3QpICcKKC0gUmVnaW9uOiBldS13ZXN0KSAnCigtIFJlbGVhc2UgY29kZXdvcmQ6IFBBUEFZQS03KSAnCigtIE93bmVyOiBwbGF0Zm9ybSB0ZWFtKSAnCkVUCmVuZHN0cmVhbQplbmRvYmoKNSAwIG9iago8PCAvVHlwZSAvRm9udCAvU3VidHlwZSAvVHlwZTEgL0Jhc2VGb250IC9IZWx2ZXRpY2EgPj4KZW5kb2JqCnhyZWYKMCA2CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAwMDU4IDAwMDAwIG4gCjAwMDAwMDAxMTUgMDAwMDAgbiAKMDAwMDAwMDI0MSAwMDAwMCBuIAowMDAwMDAwNDMwIDAwMDAwIG4gCnRyYWlsZXIKPDwgL1NpemUgNiAvUm9vdCAxIDAgUiA+PgpzdGFydHhyZWYKNTAwCiUlRU9GCg0KLS1kM2M4OGIyOTg3OTM1YjBkZGI1OTczODE0NDczNzgxOS0tDQo=
+    body_encoding: base64
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: multipart/form-data; boundary=d3c88b2987935b0ddb59738144737819
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/files
+    query_params: {}
+  response:
+    body:
+      bytes: 683
+      created_at: 1794807461
+      expires_at: null
+      filename: notes.pdf
+      id: file-RLyhfAWtSZZZnh8Kk5xYGc
+      object: file
+      purpose: user_data
+      status: processed
+      status_details: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input:
+      - content:
+        - text: Remember these deployment notes for later.
+          type: input_text
+        - file_id: file-CQfCw7HMwgPwjKcnPDj1rr
+          type: input_file
+        role: user
+        type: message
+      model: gpt-4o
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses/compact
+    query_params: {}
+  response:
+    body:
+      created_at: 1794807465
+      id: resp_0953a77e6695b49c016afa96a5f2d087d29d5cea9658912d2d
+      image:
+        context_compression: disabled
+      object: response.compaction
+      output:
+      - content:
+        - text: Remember these deployment notes for later.
+          type: input_text
+        - detail: auto
+          file_id: file-CQfCw7HMwgPwjKcnPDj1rr
+          type: input_file
+        id: msg_0953a77e6695b49c016afa96a5f72c87d29450b618591d7c99
+        role: user
+        status: completed
+        type: message
+      - encrypted_content: gAAAAABq-papdRd5EiNcUNS45eZuIiRh7NtJFW_PjxvLNaGF29tyFJzdR1rxbPkPdD0tDk5BB-BELkNo16fyMpMws4vQWkiOUNQejtCxdHKmG1Tpy_R_07sWLxMfI9Uhuc9-87BANEWRwJ1dTf4pu_KZS9fbo07un2efBomOXgdeyQtduJ-O01KWWEbvCCHBamaENL1WGn_BNuANgX3yxbX6lBAnkwERUQjqmy00ntYVDktvviUq99lsnGNcZReETd-V1cZYgdZySjOYum_i_od6cBn917BBj_8y_mBsNZU2GRrDgfk19BLf58Sob32-Dx66_CQunXqccfrUWof7oQ4GlNVuULotTNzQ8YAHFeAyxpXjt3Ihgu2svbVoLToADHZBviAggLjlK2uYfJmBA9rwYhRxPQ9c3BYzAoYWIKIOXSxfotUB7koHF-Y26loMjPWvZQ__z3OgM69kKa84ri2APlQtl8NoMuZ0v3WqImbDKAhr-UpALVwA4RuW4Bx7eI1wjxwtR4VGIG8bC4twkNXwtpts2T-Jp012o52ZscK3MVFn17zxcE1EUJGkp1RByVsCRaZFc3FGyB3LDZ3b34iVu4lNDg_8waveP1c1D9NriV3GvxTonpRHK6jdEmk_15ZheMRtKJOYNiMvohpO001HdsR9gA7CVafkinGwhQaygFNH7BHtCdLtr_bQswq_Gjim86kaJbndxVpMh10Kvr1SFIo7_1fQlQZSbhDkI0ACt0mzKjo7SRU3WheFLENWd14Z1iYsngATOs4ql5XdiP5yUOCJYjZ9bDUARCA0kl6AA3M1wEbSf2JTQQAMeqFeb0QAPtrF5tDbGUYllgkXIU4amxgoikJb5DQ5dtJ2kyyvazFdT1aoJd7kZRsCQVq2NxRsfCW5ceIY1driWGpkNwa-FqkTZBiCvFZbp3rH8IjMx3vVag6pStL4OfCkOOcUNghtMv1NZDmKeBocljDilO8tj0OLgx786PcBAjJ5H_6ed-oG7GznylkdLgBVpwGJOe8LdFTZ5oXq21wdjnQTFit_j8UaORYuuPUUvDobivHAoIWG2ZBwBmkGvu3sPgK3EZJYPJE0qM3hgzAtEfqLXoiEFJD1Y_8QJz3_zcJe8V8fHwr7fP7KImdhYUtT4gcCEJH9CZlMictyE4bKdRlGkM3iyzmTv7ys7v8dpEOVqQJ6i5lw450Umc08C3WuacgS2KMIQGucUQj7AOpjW_qun453qxGjm-opC-fpVoW6aa-gmhaePP2i0dVOmoySSwJWadcNgm_u_QWXcWw4XeLhg4biUWoIOHhegD7iJHYcWjmBo0hJPBD_GPybDYmXPyXE1V0UdZysevgBSFO6vz39j5ZHmzowxJmslVp3CuZg2dOjF-MNWZiDcGe1zdrrR9A_c-ZMO8BLELVVLQVicPB-yfFQMmelL84-EdgFiMCdAwSoJVpEZ3k-QDx-IV-UW5tVrA29FgFvyWBELEiK2OWKDr9dhw7OmNrK595FOSdSFk9D9Z8JrYHY90TluWndbH2muh_fGJ5FT2Xy-aJl1kGMtDSWvtqwPASdpZYP325SiDz16g7f97HF6Td5cLofaDWPKfOExB-mrC_XZP_LuPZ3aO1LdDdfJez5gKvLuOOLsdaMG_tnKgajzeROyeFYxgfRLOJjgLB1B4qm6N4-blK8DGKBsRbJItGoUtbMITSEqdwMAGBenzuJX0dz2T3A_chjwQKMUlKvSU6y5UnR5l01yowUsG3kZlDi472QCfQ1KVrwkYlqjPSipUqHoQs8aDr7gP6DzgCH7cVH5fGMXxJ04wzRkE9EybU8L-uxvqsBvZCMxeXzOqbe8uokvh-dH3s9hx6jtLji_OfmNaruXUxvR4sazL4xpZmbFIE50Uu8lV65o5XGfuXeeEAueXnaWCJbBKzB6PrEobSw8uv5TcTR8OdUzJIvZu3YNYQZNZZxNiU2o-f5l6jdfQjD0PC2PUTXlNHIkpoaKqczI29i5N478WUMI6-W8PTci7ecVr-zWD2BLCDFj6EbXu18TYcapTzdB2X3o1jMOXugGu20xW9scN_5OYNYOXZrvifIgBTilUqP5HVO4nw3Gb3cESGHk2lLBjgTptPnHwb5Bgt2GNAxTnVHsZCUsm08RUNcljoQAGEQegtx5AvhPHq0tM3kP5r8M907fhNKubeUII3LtOWoUnsUoMnFrJ7byCu_X2nPV4EvEgVa-Bb_kIYrI1OZyY4yJyDB3zAG21BwSuDcViexeG4m0V4Qsdp7lmFTFYyz2lD2WNpzHJzFjkyUa2brVTYXWUrdBhpp7hd0I35G_y0AH4eMpz1bVtvu65CmuEDukC6xixF0vp1h-z98MEaxjhN_YK436CIeO8XWWGpe6lD30j2f8uATIkwYrSqM3bzgGXWHt-4bbB0hwNJHER14zLALhoYpeY3dencERGxZ3s303dW-zKVRY7YtJaXDJ-51XSLE4g6n3ap8he4CkizyuA6yCc5Ixyv4A_Hp3UEGeFhH8g2OMQtlFSqkVX-nFRKURhjd5ImPra9fRSVkklqLP_BTvUZR6DiCFiCDs6DdXd1FlMifHSRwnJ8yypyMElsk5p8JGsXhHgcMdx9XU8uzmzPca64BkASMteQ69QODQFmWKBVrLtpqjhHwuzNb1SeltpKez4CqjanbtHbeEj3y__J4B18aHzP3MDL2jkQAWs2uLgVo1yQmlC6Y1Act-uxpxle9-09jXDMyRBXO5YwGjoQQre4KUfp5njroTAuuQX-p6uj5U4wisrYXfq4DOlDZIOnjVTIpiAVVmpuLSTGxOQXCrD83MVBdByRTf9xJFwYeLxP2cJely04Nqz6aLkxxyGMmjS2wnH0Qi_RxSBeR_-jD6DhhHTWGSp4BhwqxsI_oTgeKR4_PPGSPJclLIyln6Dj15YG7T4BTOhXfxplyRZ_gvc4zdYiHsOQVtRZzVYaR9I8BPGDmW6iefokfC7ocF83oLl86fBlvOuJKJBEBTMt8mphHPSPIJYHlh7I3fqB49tIUqfVU4n7xUB2my29E5xbdNVdd-y7FfnFIIaKpxbbjBqMXCSFaKEy3eA-xIb2xDxB7mX1sXXzFLuhV-po270VC8fT7gI9OQTCLOe8rEiIqXSQ4bUB1-Q_Bda5shgBt89g6jL2GU3kdlysVrSO_kg7SVQQavUygG241hBUj59ByspQ5C2SkdCeVzXySqU0gKtzeZAyi3oqPFOdC72VP4Cdjwc1Y702wSdHmxK33h_mI73lCSOOEfMOTqsVp9XhOKWJqyEuc142yywmndUgWV2WrUItU59NHQXkzbeqbpNlT7TaGQALz_IAxP0lY0GN6w-6x_iqMUfJ_yWlDilqejAN9FdTZCqU_O9b5bqWC5ebpVAFFnBYeTDL0LswyKU_ro6LukQuZ6QgJO_ufg3v9RIF4jwYkVO6kG9QCOI2OPWHLEJrUuLhr98HkVPX6IRlxZJ4yBbVj2ylL6zAYvKPawjiFLxmBjffixiGdklfb1hQkUTvuO1_nmTCzG7jF_Efoa0ltJgBI5thK5MKsbbwXfY6otox13I81i7lQ25--2kA7Int42d3GylshBLFC_kbZifjybydXHaBfJ6cNBNYpfXz5QLO9gsurhfGUbRfTPYCJaREkF60EtOKrBbac86_XnAhkkfzVIUvElB5COLTr3Bfy3PY9uwxT05pRfoe4vZKSjuXhfbl5Gie7-n7BLrEItlpmm7Veo_9iP6wlejVnZP95dBeskTTDvYTN0bZDWgM8A4csDRmQx5EXqedIf5sMy7Dd8EcBamGmyElCAfvcTxaQapB2fXQokuRPmh-q2kJR7KheOn0x8sHEwSlwBivIccIUhAmPDIItlSgr4LycauHoSjHsXu7Blyb17D0DLEb3mMxKwn5xclKrZWF4SS_szvITJ3GtAdxFCr8iKNstCLWOv1EPgVwp14RJecl88jvbZ2TUUcAqqn18nN9w8fOXDlt4W-hYNC1CJDVA3dIaAZMSoteffbRH8PHWIcj1nfsjoEOJJMeh5wQzXoZY2DMQ_j0hrzqWXegiYg==
+        id: cmp_0953a77e6695b49c016afa96a7977c87d28a88f4ab02c5afcb
+        type: compaction
+      usage:
+        input_tokens: 136
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 274
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 410
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body:
+      input:
+      - content:
+        - text: Remember these deployment notes for later.
+          type: input_text
+        - detail: auto
+          file_id: file-CQfCw7HMwgPwjKcnPDj1rr
+          type: input_file
+        id: msg_0953a77e6695b49c016afa96a5f72c87d29450b618591d7c99
+        role: user
+        status: completed
+        type: message
+      - encrypted_content: gAAAAABq-papdRd5EiNcUNS45eZuIiRh7NtJFW_PjxvLNaGF29tyFJzdR1rxbPkPdD0tDk5BB-BELkNo16fyMpMws4vQWkiOUNQejtCxdHKmG1Tpy_R_07sWLxMfI9Uhuc9-87BANEWRwJ1dTf4pu_KZS9fbo07un2efBomOXgdeyQtduJ-O01KWWEbvCCHBamaENL1WGn_BNuANgX3yxbX6lBAnkwERUQjqmy00ntYVDktvviUq99lsnGNcZReETd-V1cZYgdZySjOYum_i_od6cBn917BBj_8y_mBsNZU2GRrDgfk19BLf58Sob32-Dx66_CQunXqccfrUWof7oQ4GlNVuULotTNzQ8YAHFeAyxpXjt3Ihgu2svbVoLToADHZBviAggLjlK2uYfJmBA9rwYhRxPQ9c3BYzAoYWIKIOXSxfotUB7koHF-Y26loMjPWvZQ__z3OgM69kKa84ri2APlQtl8NoMuZ0v3WqImbDKAhr-UpALVwA4RuW4Bx7eI1wjxwtR4VGIG8bC4twkNXwtpts2T-Jp012o52ZscK3MVFn17zxcE1EUJGkp1RByVsCRaZFc3FGyB3LDZ3b34iVu4lNDg_8waveP1c1D9NriV3GvxTonpRHK6jdEmk_15ZheMRtKJOYNiMvohpO001HdsR9gA7CVafkinGwhQaygFNH7BHtCdLtr_bQswq_Gjim86kaJbndxVpMh10Kvr1SFIo7_1fQlQZSbhDkI0ACt0mzKjo7SRU3WheFLENWd14Z1iYsngATOs4ql5XdiP5yUOCJYjZ9bDUARCA0kl6AA3M1wEbSf2JTQQAMeqFeb0QAPtrF5tDbGUYllgkXIU4amxgoikJb5DQ5dtJ2kyyvazFdT1aoJd7kZRsCQVq2NxRsfCW5ceIY1driWGpkNwa-FqkTZBiCvFZbp3rH8IjMx3vVag6pStL4OfCkOOcUNghtMv1NZDmKeBocljDilO8tj0OLgx786PcBAjJ5H_6ed-oG7GznylkdLgBVpwGJOe8LdFTZ5oXq21wdjnQTFit_j8UaORYuuPUUvDobivHAoIWG2ZBwBmkGvu3sPgK3EZJYPJE0qM3hgzAtEfqLXoiEFJD1Y_8QJz3_zcJe8V8fHwr7fP7KImdhYUtT4gcCEJH9CZlMictyE4bKdRlGkM3iyzmTv7ys7v8dpEOVqQJ6i5lw450Umc08C3WuacgS2KMIQGucUQj7AOpjW_qun453qxGjm-opC-fpVoW6aa-gmhaePP2i0dVOmoySSwJWadcNgm_u_QWXcWw4XeLhg4biUWoIOHhegD7iJHYcWjmBo0hJPBD_GPybDYmXPyXE1V0UdZysevgBSFO6vz39j5ZHmzowxJmslVp3CuZg2dOjF-MNWZiDcGe1zdrrR9A_c-ZMO8BLELVVLQVicPB-yfFQMmelL84-EdgFiMCdAwSoJVpEZ3k-QDx-IV-UW5tVrA29FgFvyWBELEiK2OWKDr9dhw7OmNrK595FOSdSFk9D9Z8JrYHY90TluWndbH2muh_fGJ5FT2Xy-aJl1kGMtDSWvtqwPASdpZYP325SiDz16g7f97HF6Td5cLofaDWPKfOExB-mrC_XZP_LuPZ3aO1LdDdfJez5gKvLuOOLsdaMG_tnKgajzeROyeFYxgfRLOJjgLB1B4qm6N4-blK8DGKBsRbJItGoUtbMITSEqdwMAGBenzuJX0dz2T3A_chjwQKMUlKvSU6y5UnR5l01yowUsG3kZlDi472QCfQ1KVrwkYlqjPSipUqHoQs8aDr7gP6DzgCH7cVH5fGMXxJ04wzRkE9EybU8L-uxvqsBvZCMxeXzOqbe8uokvh-dH3s9hx6jtLji_OfmNaruXUxvR4sazL4xpZmbFIE50Uu8lV65o5XGfuXeeEAueXnaWCJbBKzB6PrEobSw8uv5TcTR8OdUzJIvZu3YNYQZNZZxNiU2o-f5l6jdfQjD0PC2PUTXlNHIkpoaKqczI29i5N478WUMI6-W8PTci7ecVr-zWD2BLCDFj6EbXu18TYcapTzdB2X3o1jMOXugGu20xW9scN_5OYNYOXZrvifIgBTilUqP5HVO4nw3Gb3cESGHk2lLBjgTptPnHwb5Bgt2GNAxTnVHsZCUsm08RUNcljoQAGEQegtx5AvhPHq0tM3kP5r8M907fhNKubeUII3LtOWoUnsUoMnFrJ7byCu_X2nPV4EvEgVa-Bb_kIYrI1OZyY4yJyDB3zAG21BwSuDcViexeG4m0V4Qsdp7lmFTFYyz2lD2WNpzHJzFjkyUa2brVTYXWUrdBhpp7hd0I35G_y0AH4eMpz1bVtvu65CmuEDukC6xixF0vp1h-z98MEaxjhN_YK436CIeO8XWWGpe6lD30j2f8uATIkwYrSqM3bzgGXWHt-4bbB0hwNJHER14zLALhoYpeY3dencERGxZ3s303dW-zKVRY7YtJaXDJ-51XSLE4g6n3ap8he4CkizyuA6yCc5Ixyv4A_Hp3UEGeFhH8g2OMQtlFSqkVX-nFRKURhjd5ImPra9fRSVkklqLP_BTvUZR6DiCFiCDs6DdXd1FlMifHSRwnJ8yypyMElsk5p8JGsXhHgcMdx9XU8uzmzPca64BkASMteQ69QODQFmWKBVrLtpqjhHwuzNb1SeltpKez4CqjanbtHbeEj3y__J4B18aHzP3MDL2jkQAWs2uLgVo1yQmlC6Y1Act-uxpxle9-09jXDMyRBXO5YwGjoQQre4KUfp5njroTAuuQX-p6uj5U4wisrYXfq4DOlDZIOnjVTIpiAVVmpuLSTGxOQXCrD83MVBdByRTf9xJFwYeLxP2cJely04Nqz6aLkxxyGMmjS2wnH0Qi_RxSBeR_-jD6DhhHTWGSp4BhwqxsI_oTgeKR4_PPGSPJclLIyln6Dj15YG7T4BTOhXfxplyRZ_gvc4zdYiHsOQVtRZzVYaR9I8BPGDmW6iefokfC7ocF83oLl86fBlvOuJKJBEBTMt8mphHPSPIJYHlh7I3fqB49tIUqfVU4n7xUB2my29E5xbdNVdd-y7FfnFIIaKpxbbjBqMXCSFaKEy3eA-xIb2xDxB7mX1sXXzFLuhV-po270VC8fT7gI9OQTCLOe8rEiIqXSQ4bUB1-Q_Bda5shgBt89g6jL2GU3kdlysVrSO_kg7SVQQavUygG241hBUj59ByspQ5C2SkdCeVzXySqU0gKtzeZAyi3oqPFOdC72VP4Cdjwc1Y702wSdHmxK33h_mI73lCSOOEfMOTqsVp9XhOKWJqyEuc142yywmndUgWV2WrUItU59NHQXkzbeqbpNlT7TaGQALz_IAxP0lY0GN6w-6x_iqMUfJ_yWlDilqejAN9FdTZCqU_O9b5bqWC5ebpVAFFnBYeTDL0LswyKU_ro6LukQuZ6QgJO_ufg3v9RIF4jwYkVO6kG9QCOI2OPWHLEJrUuLhr98HkVPX6IRlxZJ4yBbVj2ylL6zAYvKPawjiFLxmBjffixiGdklfb1hQkUTvuO1_nmTCzG7jF_Efoa0ltJgBI5thK5MKsbbwXfY6otox13I81i7lQ25--2kA7Int42d3GylshBLFC_kbZifjybydXHaBfJ6cNBNYpfXz5QLO9gsurhfGUbRfTPYCJaREkF60EtOKrBbac86_XnAhkkfzVIUvElB5COLTr3Bfy3PY9uwxT05pRfoe4vZKSjuXhfbl5Gie7-n7BLrEItlpmm7Veo_9iP6wlejVnZP95dBeskTTDvYTN0bZDWgM8A4csDRmQx5EXqedIf5sMy7Dd8EcBamGmyElCAfvcTxaQapB2fXQokuRPmh-q2kJR7KheOn0x8sHEwSlwBivIccIUhAmPDIItlSgr4LycauHoSjHsXu7Blyb17D0DLEb3mMxKwn5xclKrZWF4SS_szvITJ3GtAdxFCr8iKNstCLWOv1EPgVwp14RJecl88jvbZ2TUUcAqqn18nN9w8fOXDlt4W-hYNC1CJDVA3dIaAZMSoteffbRH8PHWIcj1nfsjoEOJJMeh5wQzXoZY2DMQ_j0hrzqWXegiYg==
+        id: cmp_0953a77e6695b49c016afa96a7977c87d28a88f4ab02c5afcb
+        type: compaction
+      - content: What was the release codeword in the file I attached earlier? Reply
+          with only the codeword.
+        role: user
+      max_output_tokens: 64
+      model: gpt-4o
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794807467
+      created_at: 1794807466
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0953a77e6695b49c016afa96a954b487d291ceac5e95c40392
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_0953a77e6695b49c016afa96abd59887d2b1f90c3eb92854ff
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 421
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 6
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 427
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      input:
+      - content:
+        - text: Remember these deployment notes for later.
+          type: input_text
+        - file_data: data:text/plain;base64,RGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg==
+          filename: notes.txt
+          type: input_file
+        role: user
+        type: message
+      model: gpt-4o
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses/compact
+    query_params: {}
+  response:
+    body:
+      created_at: 1794807470
+      id: resp_04f1e8456010b595016afa96ac40c087d29d7166a16b1020fd
+      image:
+        context_compression: disabled
+      object: response.compaction
+      output:
+      - content:
+        - text: Remember these deployment notes for later.
+          type: input_text
+        - detail: auto
+          file_data: data:text/plain;base64,RGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg==
+          file_id: null
+          filename: notes.txt
+          type: input_file
+        id: msg_04f1e8456010b595016afa96ac452c87d284b1597332113dde
+        role: user
+        status: completed
+        type: message
+      - encrypted_content: gAAAAABq-pauqbxK07pluz4glJpJSB8hFjIQTeO-B6mL3HLYIZCf42Ln26YqL1LqXuBG0wCnAv9wR9GdXJ_Q4AAUdPNDgpBSw1_xZ7Ws8wt8Cgei765vGKw4OD-5y3dc930DcOnlmcfCSV-tdJPWe97XnVBw1em6HzVoRnOCiHuJ-pTdcvbY5cc3_16D3GIRGtUG3NQmhBJmfR5oTm6PFbvD5EaCoJd8zw9yzwkbay99PaYYvEAznOHqtB0FwmgGTIKAq1n1exGVHZMr6wl5xPpj-dfaeC_Vkf0HqdfkFY22Ak7cQ5VWLepf0NGrWz24GHpTstuOUJT1PuEOOEjFTpplMf4JlaH_zxam4q_QzW8O1tq07mAqWR8fl-Jwetw0FB91ybvg5swCMCAb-gpYgkhetA4CImmiW1_jtnc9y5TkI3ocA4cophisdr_DBBEzr6iLYn2CnVJbwpoecmhcvwTYzs3v3HUMdEk1T452s4rEuf3aAC_IqlS1Q-RP4PdbovECLpETOUEIlhkbuEgNrT6pNl4U5AYISMgCGwnh3RlHq4oLshKhyenb4NXMOaZvWNmOjJyASdQ6R9NCtT2jIVGmdC5Z5VolrAxnhv9J9-3hQieYSImpZGiUiR7f22GViSY5mYGCMRxyC6y8aM9ycKRheJ6jgoiAvpmU2GEUTGEMCjuAEPE2RK-1Z6eyYnB42t30cvsL28R4AxVq0wT_A2fdLfWOVn6RWqL4NdZIBU0_C0-cQshucDDmdgqSNfjZQFU6yY0mfHmAPc8A9s77CD4jcULMA7aFiHYK0oM3VymnJrIBYwzkfa5NmMFBTyxGn3eQByxUwUj5MhPlRaUw7dj7I8FmsKTOAhG7xiYgOdSv_Z1w-vR-P3GeLrTsJ8MH09eHZBaI7VveCe309V4HyaUhPPy3MRkSO-mituYgVn6x3XdpElVcnuwFF_LuB219LSKCZ_wtJTbFu5iyWVJze2aVE1NJUFs8nTdgi0BctK6Fm1zIXYFwdHO1r1f33XCxfUx8BZZt-2xVi6SJWmMksyHpg4gb60DcRDBJ32ii7_JYWyMOhg9U6ZCJvv3ZjVv9Ugl_Qwj9Nl9JTs3vmzbdXlaBJdWnLRXpNSdMucsYJ986TJFuFVK-SBqWmVDB9qx06_nOSwKftcl0y-O5_O09wgnaIhTuYukH6Nhxl65vSujfLLkVFBmBJhoml79mzHGZO7MtD18uRzAzktXqgp_mlwvWRTGoRkcSI1jh6zYJ6KRzTN1We5tyDAAErS3uId58PqLzVy1T-LdmSV-oa3m9QFt5biXI5eDDI3HelsPdNDUsyCJB2nN5I1NP91fyiwjVu3-2ZHEZrEbt4FNKEawOYnpzgVFa_mGkmzhqg2lfGTm-SXxL2teCvKaNhFmR_Qv-SpRnJy2Py-ebtNQFaa8hKXxserhBdSeUN45wAI7k6W5MtBXtE-aFffmuf0dFHoAMjoDCrPt5JY3PQ2Xr-VK0_i1oJzVXtAqi-J864ptp59aoGb5UQJWVzzRb_ZplHFkZaOuz9ZgqmnkUdnUdp5c7Aj2LFhpovsGnGR7A4BHp4irGkBirKgVDdD8eDqFRamRdkVt9Pg1wRX5_2vjrtahlHBNq8E6_SIKPmm8ZYD1m2uL1NASg6n4b1SCuXHPIArcj5-or5JmkCM9Xz8Go8miqzCgM97kbr3HcE1zjsIUoet2IXaTjI9zKOemsW9NBZ5JJSvDaNisR-u-4HZwer0irt4ybhIzMzU7FH99_sHPS3TfUUiZimXRMEERXlYGrjLc6o3UFpxRxEvt5tdO8qDu0s9HX4jiGUARyqDoATkShS1dIAnP9JO3GeWtagwZM9S6e-2oU_TkqmQJoF6gkdOAwW2i0fx0R81tkdaNHKxBfyCR2z6-6IinnLpZ7SvH7ZGD5sKapaGmaspmwSh_pLYbG6T2zuCGtfsZ_aaHkX6oYla8xJg2PvaLm69dC6QccNkxFRppXqD4buZAqROgC-7fX404C6JT3xsrYIJB5cuICdCjZx7KrV5sT5b60MfOg030EYPifGC-9qES6anPsOinjg1JRVn5Cthygb6diKuBmgwVLL6jbNTkiRpF6k_UbdPfREDJLVfQQ_rOnj42k9LekwDJGT1mZSeo4w7Sv6BywF0GAlhZd1yBf4REohaJi_-XoqkjsSbuPaW4wrgeP-DzZcB9k9i_6f1SgoiTxZU-PyCBkt90O5XabfGctQmEc-5A_u4ADVE2Z1lFeaqZXeFR-OAQBMklSdQAeGbI6r1XUo2IaS8hjfIFPgcL4cSE5TVeKW70qbMOn0w85IWLotdGEqWVqi7p59pYIvx3p-m09pSze-RED_79bqCqNYIdvoJTYC9R-QBe0LkPRRmImBxe64ImT2rmj2-kmGbz8YPjyZK3Dbi31oLngvtwLLLEKCEzO5-ChEmHNdCuoTaNlIHWogEzQFlV4ZW6AFch-finb9EyRu6XEYh7ydfM7RozRX0IBiHHKAtjZOlXh5BA81MOEy5on4kyIIFNdBgBWCiG4VPpgWPXYIjvjk9aSMx7fJgDkbgW0qmnmMbEPv6cd1THDpr3WAynPCfehi93USuHOjuvwM4iWHfotuVsmOq87KoX8VGeeXmXHil0VUaGRiEnw-voR95mpFqlgTcQZQZ_IN02lqoY_OxQUu72MeDcDouFaS90cUIpMe_2znX_wiPn4g3iWSDm45D3OIH0bePXy52DTMXGXhgSCzJW5XYNAb45leCTmAvp-2rKTZb6op3TlhDgT9uWnbv2JpucD__Yi0HakhLRRdzk_ZoZwR-_l6buXZikwmkg0E6RMi4Zt15VjAp7CvPC6LjslKhM7uJojvzvwxauRCkeh6C3o8Rbni7AB0DAqx4np2LMOS2r68Y0aX5DIhNy8cSVtebXJvbgsD4K_78phVAuyp8KuiJDD15Viv75n24bdUvs0H8z16-lwu7vYH9ahkuhEO3tx6rzGjuuGvZnWTxxWLTh1iIm6ct1KIN3MX-oUCjqpllQjPRt5NwMPmpNieCZNCp2o38t4nS-SIzF9s2oFwxQ1xEqujFV112oPHt4Gh40ucW7_7k7ASMfHOQjA9fkkrIG-e32tAHWVZ3glVA6HiN7ovO-GdLcW8UEYsZxthTtDh2V1TthEHsZ3KdrzEVIHVxySY3jovcPuqbTQU39fQhKEHFoJZVy26ystpLK7tubm1x0g9l1inviXdR6eReQDLtUKXsKBDReQMqYXWVEaHbC-rtqwQmcSOOm5s0c2WifPNSW9Xb8PHfzOm4QIBvwtPcOQK1XHF-GfBgMYF70QFDrDXMB7WOYceX6DZQOI1ajP7M0nRfBf538FsAigCEiYVINkC31lLTWSn3DMKhvOZIxLDqjkg5aBvpI7LLUd0PwWS2u8BfcakhDEwwPOOW4p7XFBwH6Mw0GIm8ohwjvTPdV-foOoCc6ineuVVLcx71le9rzqbzVHDXUFo2KSaboecmxcUsMk5dfmJCnk0852VNRnFX95CTCHiGBeI2idFl5I8cweBZJey3OGe0IJ8Pm7VT9haXlnGN3sAUmPHC1DssZ7OKi1bEorSUp9l9oGlnTI5bTYGQfAZWZLMuOtLTFXXFlHMn9HgXK94hy3PljrGsWc7LdJyUsdBFRlejMyT0q3vb9zy6BywrZxmS9V7CbCP5z2DEK1Yjz9UU3cuUhFdATJ8rgN_rPBebJMdWIxVH9eFh74ngZ4ELxsUwDr3FyXhSx_zn-uSIPKvLANAhlLEJvBVFnhOCtz0sm3K79rjmvzuvpmkc3Ed79IWTgOuQJwgdgKqeezO-DebQP7DI_EyYw=
+        id: cmp_04f1e8456010b595016afa96acc8bc87d2aaf663c4a25ade0b
+        type: compaction
+      usage:
+        input_tokens: 136
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 253
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 389
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body:
+      input:
+      - content:
+        - text: Remember these deployment notes for later.
+          type: input_text
+        - detail: auto
+          file_data: data:text/plain;base64,RGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg==
+          file_id: null
+          filename: notes.txt
+          type: input_file
+        id: msg_04f1e8456010b595016afa96ac452c87d284b1597332113dde
+        role: user
+        status: completed
+        type: message
+      - encrypted_content: gAAAAABq-pauqbxK07pluz4glJpJSB8hFjIQTeO-B6mL3HLYIZCf42Ln26YqL1LqXuBG0wCnAv9wR9GdXJ_Q4AAUdPNDgpBSw1_xZ7Ws8wt8Cgei765vGKw4OD-5y3dc930DcOnlmcfCSV-tdJPWe97XnVBw1em6HzVoRnOCiHuJ-pTdcvbY5cc3_16D3GIRGtUG3NQmhBJmfR5oTm6PFbvD5EaCoJd8zw9yzwkbay99PaYYvEAznOHqtB0FwmgGTIKAq1n1exGVHZMr6wl5xPpj-dfaeC_Vkf0HqdfkFY22Ak7cQ5VWLepf0NGrWz24GHpTstuOUJT1PuEOOEjFTpplMf4JlaH_zxam4q_QzW8O1tq07mAqWR8fl-Jwetw0FB91ybvg5swCMCAb-gpYgkhetA4CImmiW1_jtnc9y5TkI3ocA4cophisdr_DBBEzr6iLYn2CnVJbwpoecmhcvwTYzs3v3HUMdEk1T452s4rEuf3aAC_IqlS1Q-RP4PdbovECLpETOUEIlhkbuEgNrT6pNl4U5AYISMgCGwnh3RlHq4oLshKhyenb4NXMOaZvWNmOjJyASdQ6R9NCtT2jIVGmdC5Z5VolrAxnhv9J9-3hQieYSImpZGiUiR7f22GViSY5mYGCMRxyC6y8aM9ycKRheJ6jgoiAvpmU2GEUTGEMCjuAEPE2RK-1Z6eyYnB42t30cvsL28R4AxVq0wT_A2fdLfWOVn6RWqL4NdZIBU0_C0-cQshucDDmdgqSNfjZQFU6yY0mfHmAPc8A9s77CD4jcULMA7aFiHYK0oM3VymnJrIBYwzkfa5NmMFBTyxGn3eQByxUwUj5MhPlRaUw7dj7I8FmsKTOAhG7xiYgOdSv_Z1w-vR-P3GeLrTsJ8MH09eHZBaI7VveCe309V4HyaUhPPy3MRkSO-mituYgVn6x3XdpElVcnuwFF_LuB219LSKCZ_wtJTbFu5iyWVJze2aVE1NJUFs8nTdgi0BctK6Fm1zIXYFwdHO1r1f33XCxfUx8BZZt-2xVi6SJWmMksyHpg4gb60DcRDBJ32ii7_JYWyMOhg9U6ZCJvv3ZjVv9Ugl_Qwj9Nl9JTs3vmzbdXlaBJdWnLRXpNSdMucsYJ986TJFuFVK-SBqWmVDB9qx06_nOSwKftcl0y-O5_O09wgnaIhTuYukH6Nhxl65vSujfLLkVFBmBJhoml79mzHGZO7MtD18uRzAzktXqgp_mlwvWRTGoRkcSI1jh6zYJ6KRzTN1We5tyDAAErS3uId58PqLzVy1T-LdmSV-oa3m9QFt5biXI5eDDI3HelsPdNDUsyCJB2nN5I1NP91fyiwjVu3-2ZHEZrEbt4FNKEawOYnpzgVFa_mGkmzhqg2lfGTm-SXxL2teCvKaNhFmR_Qv-SpRnJy2Py-ebtNQFaa8hKXxserhBdSeUN45wAI7k6W5MtBXtE-aFffmuf0dFHoAMjoDCrPt5JY3PQ2Xr-VK0_i1oJzVXtAqi-J864ptp59aoGb5UQJWVzzRb_ZplHFkZaOuz9ZgqmnkUdnUdp5c7Aj2LFhpovsGnGR7A4BHp4irGkBirKgVDdD8eDqFRamRdkVt9Pg1wRX5_2vjrtahlHBNq8E6_SIKPmm8ZYD1m2uL1NASg6n4b1SCuXHPIArcj5-or5JmkCM9Xz8Go8miqzCgM97kbr3HcE1zjsIUoet2IXaTjI9zKOemsW9NBZ5JJSvDaNisR-u-4HZwer0irt4ybhIzMzU7FH99_sHPS3TfUUiZimXRMEERXlYGrjLc6o3UFpxRxEvt5tdO8qDu0s9HX4jiGUARyqDoATkShS1dIAnP9JO3GeWtagwZM9S6e-2oU_TkqmQJoF6gkdOAwW2i0fx0R81tkdaNHKxBfyCR2z6-6IinnLpZ7SvH7ZGD5sKapaGmaspmwSh_pLYbG6T2zuCGtfsZ_aaHkX6oYla8xJg2PvaLm69dC6QccNkxFRppXqD4buZAqROgC-7fX404C6JT3xsrYIJB5cuICdCjZx7KrV5sT5b60MfOg030EYPifGC-9qES6anPsOinjg1JRVn5Cthygb6diKuBmgwVLL6jbNTkiRpF6k_UbdPfREDJLVfQQ_rOnj42k9LekwDJGT1mZSeo4w7Sv6BywF0GAlhZd1yBf4REohaJi_-XoqkjsSbuPaW4wrgeP-DzZcB9k9i_6f1SgoiTxZU-PyCBkt90O5XabfGctQmEc-5A_u4ADVE2Z1lFeaqZXeFR-OAQBMklSdQAeGbI6r1XUo2IaS8hjfIFPgcL4cSE5TVeKW70qbMOn0w85IWLotdGEqWVqi7p59pYIvx3p-m09pSze-RED_79bqCqNYIdvoJTYC9R-QBe0LkPRRmImBxe64ImT2rmj2-kmGbz8YPjyZK3Dbi31oLngvtwLLLEKCEzO5-ChEmHNdCuoTaNlIHWogEzQFlV4ZW6AFch-finb9EyRu6XEYh7ydfM7RozRX0IBiHHKAtjZOlXh5BA81MOEy5on4kyIIFNdBgBWCiG4VPpgWPXYIjvjk9aSMx7fJgDkbgW0qmnmMbEPv6cd1THDpr3WAynPCfehi93USuHOjuvwM4iWHfotuVsmOq87KoX8VGeeXmXHil0VUaGRiEnw-voR95mpFqlgTcQZQZ_IN02lqoY_OxQUu72MeDcDouFaS90cUIpMe_2znX_wiPn4g3iWSDm45D3OIH0bePXy52DTMXGXhgSCzJW5XYNAb45leCTmAvp-2rKTZb6op3TlhDgT9uWnbv2JpucD__Yi0HakhLRRdzk_ZoZwR-_l6buXZikwmkg0E6RMi4Zt15VjAp7CvPC6LjslKhM7uJojvzvwxauRCkeh6C3o8Rbni7AB0DAqx4np2LMOS2r68Y0aX5DIhNy8cSVtebXJvbgsD4K_78phVAuyp8KuiJDD15Viv75n24bdUvs0H8z16-lwu7vYH9ahkuhEO3tx6rzGjuuGvZnWTxxWLTh1iIm6ct1KIN3MX-oUCjqpllQjPRt5NwMPmpNieCZNCp2o38t4nS-SIzF9s2oFwxQ1xEqujFV112oPHt4Gh40ucW7_7k7ASMfHOQjA9fkkrIG-e32tAHWVZ3glVA6HiN7ovO-GdLcW8UEYsZxthTtDh2V1TthEHsZ3KdrzEVIHVxySY3jovcPuqbTQU39fQhKEHFoJZVy26ystpLK7tubm1x0g9l1inviXdR6eReQDLtUKXsKBDReQMqYXWVEaHbC-rtqwQmcSOOm5s0c2WifPNSW9Xb8PHfzOm4QIBvwtPcOQK1XHF-GfBgMYF70QFDrDXMB7WOYceX6DZQOI1ajP7M0nRfBf538FsAigCEiYVINkC31lLTWSn3DMKhvOZIxLDqjkg5aBvpI7LLUd0PwWS2u8BfcakhDEwwPOOW4p7XFBwH6Mw0GIm8ohwjvTPdV-foOoCc6ineuVVLcx71le9rzqbzVHDXUFo2KSaboecmxcUsMk5dfmJCnk0852VNRnFX95CTCHiGBeI2idFl5I8cweBZJey3OGe0IJ8Pm7VT9haXlnGN3sAUmPHC1DssZ7OKi1bEorSUp9l9oGlnTI5bTYGQfAZWZLMuOtLTFXXFlHMn9HgXK94hy3PljrGsWc7LdJyUsdBFRlejMyT0q3vb9zy6BywrZxmS9V7CbCP5z2DEK1Yjz9UU3cuUhFdATJ8rgN_rPBebJMdWIxVH9eFh74ngZ4ELxsUwDr3FyXhSx_zn-uSIPKvLANAhlLEJvBVFnhOCtz0sm3K79rjmvzuvpmkc3Ed79IWTgOuQJwgdgKqeezO-DebQP7DI_EyYw=
+        id: cmp_04f1e8456010b595016afa96acc8bc87d2aaf663c4a25ade0b
+        type: compaction
+      - content: What was the release codeword in the file I attached earlier? Reply
+          with only the codeword.
+        role: user
+      max_output_tokens: 64
+      model: gpt-4o
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794807470
+      created_at: 1794807470
+      error: null
+      frequency_penalty: 0.0
+      id: resp_04f1e8456010b595016afa96ae765887d2ae970781f74ab741
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_04f1e8456010b595016afa96aee5bc87d2a96bce9221219256
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 400
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 6
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 406
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body:
+      input:
+      - content:
+        - text: Remember these deployment notes for later.
+          type: input_text
+        - file_id: file-CQfCw7HMwgPwjKcnPDj1rr
+          type: input_file
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794807473
+      created_at: 1794807472
+      error: null
+      frequency_penalty: 0.0
+      id: resp_00905d683afe6f11006afa96af543487d2b6346633a98467f9
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: 'Got it! Here are the deployment notes:
+
+
+            - **Region:** EU-West
+
+            - **Release Codeword:** PAPAYA-7
+
+            - **Owner:** Platform Team
+
+
+            If there''s anything else you need, just let me know!'
+          type: output_text
+        id: msg_00905d683afe6f11006afa96b0d36487d2b8afb0ffca0a4fb3
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 43
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 47
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 90
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body:
+      model: gpt-4o
+      previous_response_id: resp_00905d683afe6f11006afa96af543487d2b6346633a98467f9
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses/compact
+    query_params: {}
+  response:
+    body:
+      created_at: 1794807477
+      id: resp_00905d683afe6f11016afa96b1e97087d28f3861ac7cee25e5
+      image:
+        context_compression: disabled
+      object: response.compaction
+      output:
+      - content:
+        - text: Remember these deployment notes for later.
+          type: input_text
+        - detail: auto
+          file_id: file-CQfCw7HMwgPwjKcnPDj1rr
+          type: input_file
+        id: msg_00905d683afe6f11006afa96af5d7087d2a013d6ac546834b2
+        role: user
+        status: completed
+        type: message
+      - encrypted_content: gAAAAABq-pa1dAqmh_eG21C58vyJcITsmqyynkobh3_yuXHjA6MqlL10bocOUwOwHo44BSaFP-KXejCw66EOTO6elQTZHD-vtbHNIPCW3-p6TKTFJFEQRT7-NS4wmKUzPetVXIvpocWEY3yvyq9fJlfP9XcL9jPisxKyaUxq_8gu25_U-RoPNCTiOBLPsFDJ7AXuWn5IOs1WzHULjeszLcUtUc8jGD6B2sao4PA5E6Hpzk5Tz5Oc0-dP6_Z-dp8zaQxxrzfYGdcfurr58p3TKZIz2Ku0C3za6eWH3gaqcFP4teinblb4vqRSTRJA91BeEyc2eKaxajCnRnlepgGmUFSpj-967rScaS17B-l1TrffaJSN8LieMjRKIP_cnnQagq-Jpm_gou8ReRQ51cSjKqg0mDdzHVZ8lJoVs8JJSziu6sIsp888qv46u5lOt5whpD_JgzxZdWKKFj2CTs5CYocH4XClPasfGwPa7ppjWa6nxVZAJNjvUQTOgWNIarmeEaPpXXEiixs7kSEP5SzVaHV85LQEEuUyrkw_Q90ZuOr6Xa7HD9N__wan_C1_7LmvmIUxT8iqYGXXf30foZBYQRx3R0ETfXuS9bu9C8PFAHJSAwiKT2gddg3zLvLygZZ0kIhxAtAtSMMwkui9K0mESs1ITyNJWmNnc0YnBHs9hqZDcxb91Np94Qvx2x7xOaX_hJYoMbLns24BJ-dnykBXSvI7T6WTGu3EosmiBcyaNC46rUthzBmiReBWrgBE5G9PXJXcx8t6bedC9mxCeA9mQMQszcGv36oE3jUs4nKmh_oe10SG2zHybas-3ODynEHTKhjNRAb-l_moJ8RJ1Rx_WX7scLMPbYfr98yk8pedjDpzfMg2yg00nDeKfMLJcVgGF6HbooZEoRDq7yC-SBqyZH8iJCWzH3dXr2iaQISPomPWF6-IswxHLPiK4B7TLeUDdAfJMcMi5AeeeLkArRlgnUNZIFAwwkKyrgXY8wdjLbTv89rbi5CMttr2nSG-qihunEcywBMLUUSDOtMoJ-31EG9hRTeszOrUVdA_4lFY7XfB6HuWgCwa8HuK8zy9FYle2y1FdNgkea7MFB8YGjCv2GfOVHH4M1uy7SCOdb0ckBncklIlu_PcLVfu1XVyrrHIAhvlqoHxbptCXdSof6jmrW8PXf9KyvioLUBQrcx1GDbe4vh-ZVOo3CnW-RFltMwCXLqYtpFaqUgXf-4zU4EFacuDTnZWY4e4uvRP1DIjtr14sg_vB_Tl6Yjffv-qii0NmFgpOvkLR3ybHuXHz_vtJH-kal4LFRm3zW4211qM5xuSHN0lFAkPe-m3JjGI1rdDQL-3MaVjziX1omPn3j393W4s6ewpVPym962nddAswAdle1bDcyQ3PR3Sq9BQzJsBsbxprodUQL_B4Elf3XQ-YsG2blOM8bSrBNKgyXQNVjyVNe-UdOC53Lq6u0grYZiffEtG6nPTbug7XfEVUosHRBDcArQ5udyWmXXDPPYPa5N-I0U4f-2fNkjhPbvSCjQC6XLtcSnaC_8_KbLFDKVkrnN4q2XykC-_Zcd87SdAgkCs6Q9SGZNWHhHIzKOov8t1zRywQ2XmfBzbMSDyA3KDCgyxJ4_l8rnZOvuoLgEX-8fyytYWapJE8NVXl0MMLgAit1nInBp3bYo6ky65-48mwUnPo2R9b-E5teJ53w8jOMPXjhlM3uTRoeBM8ylAzqrt0xu7kJ0DJStS7hZHq4dcapUmD4sh55w14HvpCMDegjoXFmCXVmrscjDwACknQNwSSb3rVWNYIXNGJrZAWRrY-8XQq-94PgeX9tRhfOtxZm2LqtwUiPWAlMJZfyE3JAifERbjDQc6OP2KHnStIwfeLVwquIiWSwUXQXpDHA--PW6KNzHqtraQSTQQ_IA5X_UxRjBYCz12ZYAGPtXorvmZfJEtOvQJkcIEbYdW-Qx5hA19dv1yDXmjqmZ5uAYTw0R6uCyTFAy3QCdvLqXrcDvGxrQNskGM71LcMfCiTz5YyPXe4mkwreUqa4hX_4eCbraqziWvSQf3Ji__pZLk166999rGBfkI9y-uSeJ3igojFn0RgWuIKkPbxxsHScX_TNK7m6mSAWZjjkYl6Q6Rx6KWHzSk_XqD087-g0wy9L3ET5OqpimMtr-1nSEKPfB-5CNOHPbfUSXQKlPfgicj_T0E96HOcF4PuJBxjjkaOrIH5VPpCjDlDQ8yZ3PWNReefb-D2h2uBT_dejcV8tCc6wRfSDyekMl2bZAzX-5jMskC_bNXdUuQvYMuIYlJoyJOLEeLM8BVr_DUNCNB6XoTz4azjOxriN2SbeI4ovgna76IsZLQYmovxyUKW7tkDlKRnSfVAd9mSJSA53BxH_J1jkFemKzmV1cUpgsJDePsj_JuT_0m80Owv-JLzan1COv9XNilwtpXFpgGkXNG8eE9XDzXVuCbIycBweT6w6smGuEZpDmgMdVmkaTk5m9faug9ntE7bLlfFNWUJJykIzeGosDSOSHuhyVSKY2sXMFsfZEgb64Kx8dRngRb8RbMZjPpdzTD-xLvf-q-yPPTXsoTV0G-6m3aJBm9aBLa7hjmnqwD-7DKS85c37fuLwsukFciQo8X59_xIgwHtqS1PAja3DUcsVZn-qLGpSXfbCl9bCQ8Jfi695Ww2vmFCy5O4uZsaxXTOYmx2uz48a8MegCdQr_avO2X91aOyGZkYOJjtfW_FKz85LDHhTf6QpFnwBoDAw-RrNyF3t51nPRhUEflhYMG3dWQPnqfsYoUZU5aOgbYFlG_MdTM4nujvx3b4lUquElIHZGd9ndsaR3HKgjpl7m46mQ7vO2GmKE5HT-FKVgkYpLDTUSyC2ech3qXbp6zp4BWptCCFZS6OnxQPfQS7rj_Rt5l4OIjw-eMjCkWdFTA5POI5dKGckEbMe2to9x1ZTkpUIG4k6M8MTcvKCXPxETAD0gEjPvQuwvecZZlBAtb0lLaD9pKNOYjLZ7_yRN32AaCdm86NaWGfiFZ0wtlGBZy9Mdy1TtNHfpMghyht66aW1UmniYsrw8_zJucYihI6UkpWrF-uXgsjHjiJhvTTMXjkTkwQ9hzhqnokhyhM-SfniXFJcUvwJ245v2jvSAtqJDPkAcgUAgh99O-GyLHfNoTpwj55mYqXg4sCNH1ihgzyGXX8SPfNhd0oGX_gCPCoAU3Gi0PMxwlJby3Y3uFZLfO7emoQO-W5p890lkcbtc5yc5JRMMWhYBWdRMibOPu9I_oP40qhRbHR5Yz4YZ_aJHX7xW2-J0lqkphk-CBqiDMOCZ9OtmYhq_WbCS9J4VLRLV58FqLET1t8IZ_auFq6NzJYZ8KeCCMqd9uIoD3X5OdTZFRXX0g6p4RECGZS7CTXRlHaNINNJscyF7Onbf3CfHbvAvJV8815EPEBawdVJGTfra1tV38VpR-FkblzagBtia69sc19zyr2N2ejS-6JmqzH3jcTNnSbgiZ5LqC9794lA-U9AH6-n95ndDrLpZaQvPnBCTLmpvETLWHPK3xU-wD17-D9U-Pst97KHF-nuGlwNnMvmx3Icrc1I5cZmPD2ozz0D7gJjTxYn7ISL87pfX9ieGgb-I3Dk8UxOmzAjGhNScJY_6WK5OS5KW8NsxnwCryv3-y-QWA6BWCtOsKEbpgddR80OcvKPLSXT7zzF_L35Oqj3L4yO-Wuh0FsGLju36hWA47LudG-XE-6ZjOK7MfeOZ0FiuhUnbK7g==
+        id: cmp_00905d683afe6f11016afa96b4053887d280582461a3ea768d
+        type: compaction
+      usage:
+        input_tokens: 186
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 224
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 410
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body:
+      input:
+      - content:
+        - text: Remember these deployment notes for later.
+          type: input_text
+        - detail: auto
+          file_id: file-CQfCw7HMwgPwjKcnPDj1rr
+          type: input_file
+        id: msg_00905d683afe6f11006afa96af5d7087d2a013d6ac546834b2
+        role: user
+        status: completed
+        type: message
+      - encrypted_content: gAAAAABq-pa1dAqmh_eG21C58vyJcITsmqyynkobh3_yuXHjA6MqlL10bocOUwOwHo44BSaFP-KXejCw66EOTO6elQTZHD-vtbHNIPCW3-p6TKTFJFEQRT7-NS4wmKUzPetVXIvpocWEY3yvyq9fJlfP9XcL9jPisxKyaUxq_8gu25_U-RoPNCTiOBLPsFDJ7AXuWn5IOs1WzHULjeszLcUtUc8jGD6B2sao4PA5E6Hpzk5Tz5Oc0-dP6_Z-dp8zaQxxrzfYGdcfurr58p3TKZIz2Ku0C3za6eWH3gaqcFP4teinblb4vqRSTRJA91BeEyc2eKaxajCnRnlepgGmUFSpj-967rScaS17B-l1TrffaJSN8LieMjRKIP_cnnQagq-Jpm_gou8ReRQ51cSjKqg0mDdzHVZ8lJoVs8JJSziu6sIsp888qv46u5lOt5whpD_JgzxZdWKKFj2CTs5CYocH4XClPasfGwPa7ppjWa6nxVZAJNjvUQTOgWNIarmeEaPpXXEiixs7kSEP5SzVaHV85LQEEuUyrkw_Q90ZuOr6Xa7HD9N__wan_C1_7LmvmIUxT8iqYGXXf30foZBYQRx3R0ETfXuS9bu9C8PFAHJSAwiKT2gddg3zLvLygZZ0kIhxAtAtSMMwkui9K0mESs1ITyNJWmNnc0YnBHs9hqZDcxb91Np94Qvx2x7xOaX_hJYoMbLns24BJ-dnykBXSvI7T6WTGu3EosmiBcyaNC46rUthzBmiReBWrgBE5G9PXJXcx8t6bedC9mxCeA9mQMQszcGv36oE3jUs4nKmh_oe10SG2zHybas-3ODynEHTKhjNRAb-l_moJ8RJ1Rx_WX7scLMPbYfr98yk8pedjDpzfMg2yg00nDeKfMLJcVgGF6HbooZEoRDq7yC-SBqyZH8iJCWzH3dXr2iaQISPomPWF6-IswxHLPiK4B7TLeUDdAfJMcMi5AeeeLkArRlgnUNZIFAwwkKyrgXY8wdjLbTv89rbi5CMttr2nSG-qihunEcywBMLUUSDOtMoJ-31EG9hRTeszOrUVdA_4lFY7XfB6HuWgCwa8HuK8zy9FYle2y1FdNgkea7MFB8YGjCv2GfOVHH4M1uy7SCOdb0ckBncklIlu_PcLVfu1XVyrrHIAhvlqoHxbptCXdSof6jmrW8PXf9KyvioLUBQrcx1GDbe4vh-ZVOo3CnW-RFltMwCXLqYtpFaqUgXf-4zU4EFacuDTnZWY4e4uvRP1DIjtr14sg_vB_Tl6Yjffv-qii0NmFgpOvkLR3ybHuXHz_vtJH-kal4LFRm3zW4211qM5xuSHN0lFAkPe-m3JjGI1rdDQL-3MaVjziX1omPn3j393W4s6ewpVPym962nddAswAdle1bDcyQ3PR3Sq9BQzJsBsbxprodUQL_B4Elf3XQ-YsG2blOM8bSrBNKgyXQNVjyVNe-UdOC53Lq6u0grYZiffEtG6nPTbug7XfEVUosHRBDcArQ5udyWmXXDPPYPa5N-I0U4f-2fNkjhPbvSCjQC6XLtcSnaC_8_KbLFDKVkrnN4q2XykC-_Zcd87SdAgkCs6Q9SGZNWHhHIzKOov8t1zRywQ2XmfBzbMSDyA3KDCgyxJ4_l8rnZOvuoLgEX-8fyytYWapJE8NVXl0MMLgAit1nInBp3bYo6ky65-48mwUnPo2R9b-E5teJ53w8jOMPXjhlM3uTRoeBM8ylAzqrt0xu7kJ0DJStS7hZHq4dcapUmD4sh55w14HvpCMDegjoXFmCXVmrscjDwACknQNwSSb3rVWNYIXNGJrZAWRrY-8XQq-94PgeX9tRhfOtxZm2LqtwUiPWAlMJZfyE3JAifERbjDQc6OP2KHnStIwfeLVwquIiWSwUXQXpDHA--PW6KNzHqtraQSTQQ_IA5X_UxRjBYCz12ZYAGPtXorvmZfJEtOvQJkcIEbYdW-Qx5hA19dv1yDXmjqmZ5uAYTw0R6uCyTFAy3QCdvLqXrcDvGxrQNskGM71LcMfCiTz5YyPXe4mkwreUqa4hX_4eCbraqziWvSQf3Ji__pZLk166999rGBfkI9y-uSeJ3igojFn0RgWuIKkPbxxsHScX_TNK7m6mSAWZjjkYl6Q6Rx6KWHzSk_XqD087-g0wy9L3ET5OqpimMtr-1nSEKPfB-5CNOHPbfUSXQKlPfgicj_T0E96HOcF4PuJBxjjkaOrIH5VPpCjDlDQ8yZ3PWNReefb-D2h2uBT_dejcV8tCc6wRfSDyekMl2bZAzX-5jMskC_bNXdUuQvYMuIYlJoyJOLEeLM8BVr_DUNCNB6XoTz4azjOxriN2SbeI4ovgna76IsZLQYmovxyUKW7tkDlKRnSfVAd9mSJSA53BxH_J1jkFemKzmV1cUpgsJDePsj_JuT_0m80Owv-JLzan1COv9XNilwtpXFpgGkXNG8eE9XDzXVuCbIycBweT6w6smGuEZpDmgMdVmkaTk5m9faug9ntE7bLlfFNWUJJykIzeGosDSOSHuhyVSKY2sXMFsfZEgb64Kx8dRngRb8RbMZjPpdzTD-xLvf-q-yPPTXsoTV0G-6m3aJBm9aBLa7hjmnqwD-7DKS85c37fuLwsukFciQo8X59_xIgwHtqS1PAja3DUcsVZn-qLGpSXfbCl9bCQ8Jfi695Ww2vmFCy5O4uZsaxXTOYmx2uz48a8MegCdQr_avO2X91aOyGZkYOJjtfW_FKz85LDHhTf6QpFnwBoDAw-RrNyF3t51nPRhUEflhYMG3dWQPnqfsYoUZU5aOgbYFlG_MdTM4nujvx3b4lUquElIHZGd9ndsaR3HKgjpl7m46mQ7vO2GmKE5HT-FKVgkYpLDTUSyC2ech3qXbp6zp4BWptCCFZS6OnxQPfQS7rj_Rt5l4OIjw-eMjCkWdFTA5POI5dKGckEbMe2to9x1ZTkpUIG4k6M8MTcvKCXPxETAD0gEjPvQuwvecZZlBAtb0lLaD9pKNOYjLZ7_yRN32AaCdm86NaWGfiFZ0wtlGBZy9Mdy1TtNHfpMghyht66aW1UmniYsrw8_zJucYihI6UkpWrF-uXgsjHjiJhvTTMXjkTkwQ9hzhqnokhyhM-SfniXFJcUvwJ245v2jvSAtqJDPkAcgUAgh99O-GyLHfNoTpwj55mYqXg4sCNH1ihgzyGXX8SPfNhd0oGX_gCPCoAU3Gi0PMxwlJby3Y3uFZLfO7emoQO-W5p890lkcbtc5yc5JRMMWhYBWdRMibOPu9I_oP40qhRbHR5Yz4YZ_aJHX7xW2-J0lqkphk-CBqiDMOCZ9OtmYhq_WbCS9J4VLRLV58FqLET1t8IZ_auFq6NzJYZ8KeCCMqd9uIoD3X5OdTZFRXX0g6p4RECGZS7CTXRlHaNINNJscyF7Onbf3CfHbvAvJV8815EPEBawdVJGTfra1tV38VpR-FkblzagBtia69sc19zyr2N2ejS-6JmqzH3jcTNnSbgiZ5LqC9794lA-U9AH6-n95ndDrLpZaQvPnBCTLmpvETLWHPK3xU-wD17-D9U-Pst97KHF-nuGlwNnMvmx3Icrc1I5cZmPD2ozz0D7gJjTxYn7ISL87pfX9ieGgb-I3Dk8UxOmzAjGhNScJY_6WK5OS5KW8NsxnwCryv3-y-QWA6BWCtOsKEbpgddR80OcvKPLSXT7zzF_L35Oqj3L4yO-Wuh0FsGLju36hWA47LudG-XE-6ZjOK7MfeOZ0FiuhUnbK7g==
+        id: cmp_00905d683afe6f11016afa96b4053887d280582461a3ea768d
+        type: compaction
+      - content: What was the release codeword in the file I attached earlier? Reply
+          with only the codeword.
+        role: user
+      max_output_tokens: 64
+      model: gpt-4o
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794807479
+      created_at: 1794807478
+      error: null
+      frequency_penalty: 0.0
+      id: resp_00905d683afe6f11016afa96b5833087d2bf9072d7f96b7b6a
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_00905d683afe6f11016afa96b7019087d2b9f1d991bf527d2b
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 371
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 6
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 377
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t10
+  request:
+    body:
+      items:
+      - content:
+        - text: Remember these deployment notes for later.
+          type: input_text
+        - file_id: file-RLyhfAWtSZZZnh8Kk5xYGc
+          type: input_file
+        role: user
+        type: message
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1794807479
+      id: conv_6afa96b77d348190a54424d880a620a9020f03e828e74248
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t11
+  request:
+    body:
+      conversation: conv_6afa96b77d348190a54424d880a620a9020f03e828e74248
+      model: gpt-4o
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses/compact
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Compaction requires either `input` items or a `previous_response_id`.
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t12
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/files/file-CQfCw7HMwgPwjKcnPDj1rr
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: file-CQfCw7HMwgPwjKcnPDj1rr
+      object: file
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t13
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/files/file-RLyhfAWtSZZZnh8Kk5xYGc
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: file-RLyhfAWtSZZZnh8Kk5xYGc
+      object: file
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t14
+  request:
+    body:
+      input:
+      - content:
+        - text: Remember these deployment notes for later.
+          type: input_text
+        - detail: auto
+          file_id: file-CQfCw7HMwgPwjKcnPDj1rr
+          type: input_file
+        id: msg_0953a77e6695b49c016afa96a5f72c87d29450b618591d7c99
+        role: user
+        status: completed
+        type: message
+      - encrypted_content: gAAAAABq-papdRd5EiNcUNS45eZuIiRh7NtJFW_PjxvLNaGF29tyFJzdR1rxbPkPdD0tDk5BB-BELkNo16fyMpMws4vQWkiOUNQejtCxdHKmG1Tpy_R_07sWLxMfI9Uhuc9-87BANEWRwJ1dTf4pu_KZS9fbo07un2efBomOXgdeyQtduJ-O01KWWEbvCCHBamaENL1WGn_BNuANgX3yxbX6lBAnkwERUQjqmy00ntYVDktvviUq99lsnGNcZReETd-V1cZYgdZySjOYum_i_od6cBn917BBj_8y_mBsNZU2GRrDgfk19BLf58Sob32-Dx66_CQunXqccfrUWof7oQ4GlNVuULotTNzQ8YAHFeAyxpXjt3Ihgu2svbVoLToADHZBviAggLjlK2uYfJmBA9rwYhRxPQ9c3BYzAoYWIKIOXSxfotUB7koHF-Y26loMjPWvZQ__z3OgM69kKa84ri2APlQtl8NoMuZ0v3WqImbDKAhr-UpALVwA4RuW4Bx7eI1wjxwtR4VGIG8bC4twkNXwtpts2T-Jp012o52ZscK3MVFn17zxcE1EUJGkp1RByVsCRaZFc3FGyB3LDZ3b34iVu4lNDg_8waveP1c1D9NriV3GvxTonpRHK6jdEmk_15ZheMRtKJOYNiMvohpO001HdsR9gA7CVafkinGwhQaygFNH7BHtCdLtr_bQswq_Gjim86kaJbndxVpMh10Kvr1SFIo7_1fQlQZSbhDkI0ACt0mzKjo7SRU3WheFLENWd14Z1iYsngATOs4ql5XdiP5yUOCJYjZ9bDUARCA0kl6AA3M1wEbSf2JTQQAMeqFeb0QAPtrF5tDbGUYllgkXIU4amxgoikJb5DQ5dtJ2kyyvazFdT1aoJd7kZRsCQVq2NxRsfCW5ceIY1driWGpkNwa-FqkTZBiCvFZbp3rH8IjMx3vVag6pStL4OfCkOOcUNghtMv1NZDmKeBocljDilO8tj0OLgx786PcBAjJ5H_6ed-oG7GznylkdLgBVpwGJOe8LdFTZ5oXq21wdjnQTFit_j8UaORYuuPUUvDobivHAoIWG2ZBwBmkGvu3sPgK3EZJYPJE0qM3hgzAtEfqLXoiEFJD1Y_8QJz3_zcJe8V8fHwr7fP7KImdhYUtT4gcCEJH9CZlMictyE4bKdRlGkM3iyzmTv7ys7v8dpEOVqQJ6i5lw450Umc08C3WuacgS2KMIQGucUQj7AOpjW_qun453qxGjm-opC-fpVoW6aa-gmhaePP2i0dVOmoySSwJWadcNgm_u_QWXcWw4XeLhg4biUWoIOHhegD7iJHYcWjmBo0hJPBD_GPybDYmXPyXE1V0UdZysevgBSFO6vz39j5ZHmzowxJmslVp3CuZg2dOjF-MNWZiDcGe1zdrrR9A_c-ZMO8BLELVVLQVicPB-yfFQMmelL84-EdgFiMCdAwSoJVpEZ3k-QDx-IV-UW5tVrA29FgFvyWBELEiK2OWKDr9dhw7OmNrK595FOSdSFk9D9Z8JrYHY90TluWndbH2muh_fGJ5FT2Xy-aJl1kGMtDSWvtqwPASdpZYP325SiDz16g7f97HF6Td5cLofaDWPKfOExB-mrC_XZP_LuPZ3aO1LdDdfJez5gKvLuOOLsdaMG_tnKgajzeROyeFYxgfRLOJjgLB1B4qm6N4-blK8DGKBsRbJItGoUtbMITSEqdwMAGBenzuJX0dz2T3A_chjwQKMUlKvSU6y5UnR5l01yowUsG3kZlDi472QCfQ1KVrwkYlqjPSipUqHoQs8aDr7gP6DzgCH7cVH5fGMXxJ04wzRkE9EybU8L-uxvqsBvZCMxeXzOqbe8uokvh-dH3s9hx6jtLji_OfmNaruXUxvR4sazL4xpZmbFIE50Uu8lV65o5XGfuXeeEAueXnaWCJbBKzB6PrEobSw8uv5TcTR8OdUzJIvZu3YNYQZNZZxNiU2o-f5l6jdfQjD0PC2PUTXlNHIkpoaKqczI29i5N478WUMI6-W8PTci7ecVr-zWD2BLCDFj6EbXu18TYcapTzdB2X3o1jMOXugGu20xW9scN_5OYNYOXZrvifIgBTilUqP5HVO4nw3Gb3cESGHk2lLBjgTptPnHwb5Bgt2GNAxTnVHsZCUsm08RUNcljoQAGEQegtx5AvhPHq0tM3kP5r8M907fhNKubeUII3LtOWoUnsUoMnFrJ7byCu_X2nPV4EvEgVa-Bb_kIYrI1OZyY4yJyDB3zAG21BwSuDcViexeG4m0V4Qsdp7lmFTFYyz2lD2WNpzHJzFjkyUa2brVTYXWUrdBhpp7hd0I35G_y0AH4eMpz1bVtvu65CmuEDukC6xixF0vp1h-z98MEaxjhN_YK436CIeO8XWWGpe6lD30j2f8uATIkwYrSqM3bzgGXWHt-4bbB0hwNJHER14zLALhoYpeY3dencERGxZ3s303dW-zKVRY7YtJaXDJ-51XSLE4g6n3ap8he4CkizyuA6yCc5Ixyv4A_Hp3UEGeFhH8g2OMQtlFSqkVX-nFRKURhjd5ImPra9fRSVkklqLP_BTvUZR6DiCFiCDs6DdXd1FlMifHSRwnJ8yypyMElsk5p8JGsXhHgcMdx9XU8uzmzPca64BkASMteQ69QODQFmWKBVrLtpqjhHwuzNb1SeltpKez4CqjanbtHbeEj3y__J4B18aHzP3MDL2jkQAWs2uLgVo1yQmlC6Y1Act-uxpxle9-09jXDMyRBXO5YwGjoQQre4KUfp5njroTAuuQX-p6uj5U4wisrYXfq4DOlDZIOnjVTIpiAVVmpuLSTGxOQXCrD83MVBdByRTf9xJFwYeLxP2cJely04Nqz6aLkxxyGMmjS2wnH0Qi_RxSBeR_-jD6DhhHTWGSp4BhwqxsI_oTgeKR4_PPGSPJclLIyln6Dj15YG7T4BTOhXfxplyRZ_gvc4zdYiHsOQVtRZzVYaR9I8BPGDmW6iefokfC7ocF83oLl86fBlvOuJKJBEBTMt8mphHPSPIJYHlh7I3fqB49tIUqfVU4n7xUB2my29E5xbdNVdd-y7FfnFIIaKpxbbjBqMXCSFaKEy3eA-xIb2xDxB7mX1sXXzFLuhV-po270VC8fT7gI9OQTCLOe8rEiIqXSQ4bUB1-Q_Bda5shgBt89g6jL2GU3kdlysVrSO_kg7SVQQavUygG241hBUj59ByspQ5C2SkdCeVzXySqU0gKtzeZAyi3oqPFOdC72VP4Cdjwc1Y702wSdHmxK33h_mI73lCSOOEfMOTqsVp9XhOKWJqyEuc142yywmndUgWV2WrUItU59NHQXkzbeqbpNlT7TaGQALz_IAxP0lY0GN6w-6x_iqMUfJ_yWlDilqejAN9FdTZCqU_O9b5bqWC5ebpVAFFnBYeTDL0LswyKU_ro6LukQuZ6QgJO_ufg3v9RIF4jwYkVO6kG9QCOI2OPWHLEJrUuLhr98HkVPX6IRlxZJ4yBbVj2ylL6zAYvKPawjiFLxmBjffixiGdklfb1hQkUTvuO1_nmTCzG7jF_Efoa0ltJgBI5thK5MKsbbwXfY6otox13I81i7lQ25--2kA7Int42d3GylshBLFC_kbZifjybydXHaBfJ6cNBNYpfXz5QLO9gsurhfGUbRfTPYCJaREkF60EtOKrBbac86_XnAhkkfzVIUvElB5COLTr3Bfy3PY9uwxT05pRfoe4vZKSjuXhfbl5Gie7-n7BLrEItlpmm7Veo_9iP6wlejVnZP95dBeskTTDvYTN0bZDWgM8A4csDRmQx5EXqedIf5sMy7Dd8EcBamGmyElCAfvcTxaQapB2fXQokuRPmh-q2kJR7KheOn0x8sHEwSlwBivIccIUhAmPDIItlSgr4LycauHoSjHsXu7Blyb17D0DLEb3mMxKwn5xclKrZWF4SS_szvITJ3GtAdxFCr8iKNstCLWOv1EPgVwp14RJecl88jvbZ2TUUcAqqn18nN9w8fOXDlt4W-hYNC1CJDVA3dIaAZMSoteffbRH8PHWIcj1nfsjoEOJJMeh5wQzXoZY2DMQ_j0hrzqWXegiYg==
+        id: cmp_0953a77e6695b49c016afa96a7977c87d28a88f4ab02c5afcb
+        type: compaction
+      - content: What was the release codeword in the file I attached earlier? Reply
+          with only the codeword.
+        role: user
+      max_output_tokens: 64
+      model: gpt-4o
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Files [file-CQfCw7HMwgPwjKcnPDj1rr] were not found
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t15
+  request:
+    body:
+      model: gpt-4o
+      previous_response_id: resp_00905d683afe6f11006afa96af543487d2b6346633a98467f9
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses/compact
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Files [file-CQfCw7HMwgPwjKcnPDj1rr] were not found
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t16
+  request:
+    body:
+      conversation: conv_6afa96b77d348190a54424d880a620a9020f03e828e74248
+      model: gpt-4o
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses/compact
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Compaction requires either `input` items or a `previous_response_id`.
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t17
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/conversations/conv_6afa96b77d348190a54424d880a620a9020f03e828e74248
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: conv_6afa96b77d348190a54424d880a620a9020f03e828e74248
+      object: conversation.deleted
+    headers:
+      content-type: application/json
+    status_code: 200

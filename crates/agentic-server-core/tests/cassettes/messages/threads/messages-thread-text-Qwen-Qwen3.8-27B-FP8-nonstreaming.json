@@ -1,0 +1,80 @@
+{
+  "turns": [
+    {
+      "request": {
+        "model": "Qwen/Qwen3.8-27B-FP8",
+        "max_tokens": 256,
+        "stream": false,
+        "temperature": 0,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "thread": {
+          "type": "create"
+        },
+        "system": "Follow instructions exactly. Keep answers short.",
+        "messages": [
+          {
+            "role": "user",
+            "content": "The verification token for this conversation is THREAD_PROOF_91827."
+          }
+        ]
+      },
+      "response": {
+        "id": "msg_01a1a45b783573209fc70d877e81ca88",
+        "type": "message",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "Acknowledged."
+          }
+        ],
+        "model": "Qwen/Qwen3.8-27B-FP8",
+        "stop_reason": "end_turn",
+        "usage": {
+          "input_tokens": 42,
+          "output_tokens": 4
+        }
+      }
+    },
+    {
+      "request": {
+        "model": "Qwen/Qwen3.8-27B-FP8",
+        "max_tokens": 256,
+        "stream": false,
+        "temperature": 0,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "thread": {
+          "type": "continue",
+          "previous_message_id": "msg_01a1a45b783573209fc70d877e81ca88"
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "Write the verification token from my first message. Output only the token."
+          }
+        ]
+      },
+      "response": {
+        "id": "msg_01a1a45b7c257363ad27a36a5e69f0c0",
+        "type": "message",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "THREAD_PROOF_91827"
+          }
+        ],
+        "model": "Qwen/Qwen3.8-27B-FP8",
+        "stop_reason": "end_turn",
+        "usage": {
+          "input_tokens": 73,
+          "output_tokens": 10
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agentic API Engineering"
+  short_description: "Architecture, typed Rust, parity, and regression checks"
+  default_prompt: "Use $agentic-api-engineering before implementing or reviewing this agentic-api change."

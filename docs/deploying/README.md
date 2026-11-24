@@ -401,13 +401,21 @@ to the Deployment’s container environment. The default provider is You.com:
             # Opt Claude Code's WebSearch function into gateway execution.
             - name: MESSAGES_GATEWAY_TOOL_ALIASES
               value: WebSearch=web_search
+            # The same secret (at least 32 random bytes) on every replica keeps
+            # returned web search results readable across restarts and replicas.
+            - name: AGENTIC_MESSAGES_RESULT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentic-api-secrets
+                  key: messages-result-key
 ```
 
 Create the secret before applying the Deployment:
 
 ```console
 kubectl create secret generic agentic-api-secrets \
-  --from-literal=you-api-key="$YOU_API_KEY"
+  --from-literal=you-api-key="$YOU_API_KEY" \
+  --from-literal=messages-result-key="$(openssl rand -base64 48)"
 ```
 
 To use Brave Search instead, select the provider and supply its key; the endpoint
@@ -429,7 +437,75 @@ kubectl create secret generic agentic-api-secrets \
   --from-literal=brave-api-key="$BRAVE_API_KEY"
 ```
 
+To use Tavily instead, select the provider and supply its key; the endpoint defaults
+to `https://api.tavily.com` and batched queries inherit the gateway concurrency limit:
+
+```yaml
+            - name: AGENTIC_WEB_SEARCH_PROVIDER
+              value: tavily
+            - name: TAVILY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentic-api-secrets
+                  key: tavily-api-key
+```
+
+```console
+kubectl create secret generic agentic-api-secrets \
+  --from-literal=tavily-api-key="$TAVILY_API_KEY"
+```
+
+Serply works the same way with `value: serply`, a `SERPLY_API_KEY` variable read from a `serply-api-key` secret key,
+and the default endpoint `https://api.serply.io`.
+
+Keenable works with `value: keenable` and needs no Secret: without `KEENABLE_API_KEY` it uses Keenable's key-free
+public endpoint (default host `https://api.keenable.ai`). Add a `KEENABLE_API_KEY` variable from a secret to use the
+keyed endpoint.
+
+To avoid a search vendor account altogether, point the gateway at a self-hosted
+[SearXNG](https://docs.searxng.org/) Service instead. The gateway only talks to that
+instance; SearXNG forwards queries to the engines enabled in its `settings.yml`, so an
+air-gapped cluster must restrict it to internal or offline engines. No Secret is needed;
+the base URL is mandatory, and the instance must enable the JSON format
+(`search.formats: [html, json]`). If the instance runs with `server.limiter: true`, add
+the source address it sees for the gateway (normally the gateway Pod CIDR, or the proxy
+address when one sits in between, alongside `trusted_proxies`) to
+`botdetection.ip_lists.pass_ip` in its `limiter.toml`, because the gateway never sends
+`Accept-Encoding: gzip` and would otherwise be rejected with `429`:
+
+```yaml
+            - name: AGENTIC_WEB_SEARCH_PROVIDER
+              value: searxng
+            - name: AGENTIC_WEB_SEARCH_BASE_URL
+              value: http://searxng.agentic-api.svc.cluster.local:8080
+```
+
 Do not commit API keys to the manifest or source tree.
+
+## Optional web fetch
+
+Claude's native `web_fetch` tool on `/v1/messages` (`web_fetch_20250910`, and the later
+versions when their `allowed_callers` includes `"direct"`) is executed by the gateway
+itself and needs no provider or key; it is on by default. The fetcher refuses non-public
+addresses (loopback, private, link-local, cloud metadata, carrier-grade NAT) directly,
+through DNS, and through redirects, and bounds every fetch in time and size. The
+defaults, and the variables that change them:
+
+```yaml
+            # "false" switches the fetcher off; declarations are then rejected with HTTP 400.
+            - name: AGENTIC_WEB_FETCH_ENABLED
+              value: "true"
+            # "true" only for deployments that fetch intranet pages on purpose.
+            - name: AGENTIC_WEB_FETCH_ALLOW_PRIVATE_NETWORKS
+              value: "false"
+            - name: AGENTIC_WEB_FETCH_MAX_RESPONSE_BYTES
+              value: "10485760"
+            - name: AGENTIC_WEB_FETCH_TIMEOUT_SECS
+              value: "20"
+```
+
+The same settings live under `[web_fetch]` in `config.toml`; the README describes the
+per-request contract (`max_uses`, domain filters, `max_content_tokens`, error codes).
 
 ## Optional: deploy with llm-d
 

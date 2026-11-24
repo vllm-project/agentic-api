@@ -130,7 +130,7 @@ Describes a flow in which the service retains or resolves prior state, such as R
 
 Describes a flow in which the request supplies all required context and the service does not rely on retained response
 or conversation state. `store: false` disables durable response storage, although callers may still replay prior items
-or continue from the active WebSocket connection's transient checkpoint. An explicit conversation remains durable.
+or continue from the active WebSocket connection's transient checkpoint. An explicit conversation can supply stored history, but `store: false` does not append the current turn.
 
 ### compaction
 
@@ -347,6 +347,14 @@ OpenAI-compatible provider. Upstream is a request-flow role, not necessarily a t
 
 Model generation performed by the upstream. Tool execution, storage, transport handling, and rehydration are
 orchestration rather than inference.
+
+### session ID
+
+The client's name for the session a Messages request belongs to, sent as `x-claude-code-session-id` or
+`X-Session-ID`. The gateway forwards a tenant-scoped value derived from it as `X-Session-ID`, which vLLM reads as a
+routing and retention hint. It is unrelated to a response session (`ResponseSession`), which holds transient
+continuation state for serial Responses requests, and it is not KV-cache identity: it names no cached blocks and does
+not prove they are resident.
 
 ## Protocol-specific vocabulary
 

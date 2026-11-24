@@ -16,11 +16,7 @@ async fn test_conversation_tenant_isolation() {
 
     // Create conversation for tenant A with metadata
     let conv_a = store
-        .create_with_metadata_and_items(
-            Some("tenant_a"),
-            Some(metadata(json!({"user": "alice", "project": "test"}))),
-            vec![],
-        )
+        .create("tenant_a", &metadata(json!({"user": "alice", "project": "test"})), &[])
         .await
         .expect("create for tenant_a failed");
 
@@ -54,7 +50,7 @@ async fn test_conversation_metadata_update_with_tenant() {
 
     // Create conversation
     let conv = store
-        .create_with_metadata_and_items(Some("tenant_a"), Some(metadata(json!({"status": "draft"}))), vec![])
+        .create("tenant_a", &metadata(json!({"status": "draft"})), &[])
         .await
         .expect("create failed");
 
@@ -86,7 +82,7 @@ async fn test_conversation_delete_with_tenant_scoping() {
 
     // Create conversation for tenant A
     let conv = store
-        .create_with_metadata_and_items(Some("tenant_a"), Some(metadata(json!({"temp": "true"}))), vec![])
+        .create("tenant_a", &metadata(json!({"temp": "true"})), &[])
         .await
         .expect("create failed");
 
@@ -115,26 +111,21 @@ async fn test_conversation_delete_with_tenant_scoping() {
 
 #[tokio::test]
 async fn test_conversation_create_with_initial_items() {
-    use agentic_core::storage::InOutItem;
+    use agentic_core::types::io::InOutItem;
     use agentic_core::types::io::{InputItem, InputMessage, InputMessageContent};
 
     let pool = setup_pool().await;
     let store = ConversationStore::new(pool);
 
     let initial_items = vec![InOutItem::Input(InputItem::Message(InputMessage {
-        id: None,
         role: "user".to_string(),
-        status: None,
         content: InputMessageContent::Text("Hello, world!".to_string()),
+        ..Default::default()
     }))];
 
     // Create conversation with initial items
     let conv = store
-        .create_with_metadata_and_items(
-            Some("tenant_a"),
-            Some(metadata(json!({"test": "initial_items"}))),
-            initial_items,
-        )
+        .create("tenant_a", &metadata(json!({"test": "initial_items"})), &initial_items)
         .await
         .expect("create with items failed");
 
@@ -143,5 +134,5 @@ async fn test_conversation_create_with_initial_items() {
     // Rehydrate and verify items are present
     let items = store.rehydrate(&conv.conversation_id).await.expect("rehydrate failed");
 
-    assert_eq!(items.len(), 1, "should have 1 initial item");
+    assert_eq!(items.items.len(), 1, "should have 1 initial item");
 }

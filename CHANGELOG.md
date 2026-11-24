@@ -11,6 +11,321 @@ All notable changes to Agentic API are documented here.
 - Split executor inference into HTTP and injected direct backends. Added unpublished
   `agentic-vllm` integration using shared vLLM model preparation, parsing, and EngineCore
   communication, while reusing request preparation, tool orchestration, sessions, and compaction.
+- Resolve Responses message `input_image` and `input_file` `file_id` references from the Files API when the
+  gateway builds the model-facing request, so stateless backends receive the referenced media inline. Stored
+  history, compaction windows, and multi-agent tree snapshots keep the client's reference and resolve it again
+  on each request; a reference part must not also carry its inline field (`image_url`, `file_data`, or
+  `file_url`), an `input_image` must reference a stored file with an accepted image filename, a missing file
+  returns `OpenAI`'s `Files [<id>] were not found` 404, and resolved content counts toward the request body
+  limit. A `file_id` in a structured function/custom tool call output is resolved the same way, while other
+  tool-output parts pass through unchanged. Upload purpose `vision` is now accepted (#356).
+- Added one tenant-scoped session id on `/v1/messages` and `/v1/messages/count_tokens` (#159).
+  `x-claude-code-session-id` and `X-Session-ID` must agree or the request fails with HTTP 400 before any upstream
+  call. The gateway forwards `X-Session-ID`, which vLLM reads as the request's `session_id`, set to a SHA-256 of the
+  verified OIDC principal (or the default tenant) and the client's id, so a client's own `X-Session-ID` no longer
+  reaches the upstream unchanged. With neither header, `vllm_xargs.session_id` in the body is scoped the same way.
+
+### Changed
+
+- `RequestPayload::to_upstream_request` now takes the per-request resolved-file lookup
+  (`&ResolvedFiles`) built with `FileHandler::resolve`. Embedders calling it directly must resolve the
+  payload's `file_id` references first, or pass an empty map when the payload has none.
+- `executor::upstream_request` is now async: it resolves the `file_id` references in the input it lowers
+  from its `ExecutionContext`. Callers await it, and the lookup no longer lives on `RequestContext`.
+- Files API rows now follow the recorded `OpenAI` behavior: only `vision` uploads can be downloaded
+  (`400 Not allowed to download files of purpose: <purpose>` otherwise), any unusable file ID is reported as
+  `404` `No such File object: <id>` naming `id`, `after`, or `before`, and upload rule failures use
+  `invalid_request_error` with `code: null`. These failures are `FileSearchError` row variants rendered by
+  `ExecutorError`; `ExecutionContext.file_search` is replaced by the `FileHandler` that owns the one service
+  (`FileHandler::new`, `FileHandler::service`).
+- Typed streaming inference uses `STREAMING_CHUNK_TIMEOUT_S` for response headers as well as body progress.
+  The configured shared HTTP client has a fixed 10-second connect timeout; JSON waits remain unbounded and
+  streaming has no total deadline. See [the timeout tradeoff](docs/guides/configuration.md#typed-upstream-timeouts).
+  The Rust `executor::call_inference` re-export and `inference::call_inference`/`call_inference_limited` helpers
+  are removed; transport is internal to the typed executor and receives explicit headers and configured limits.
+
+- An MCP declaration's `require_approval` is now typed (`McpApprovalPolicy`) and parses the Responses API filter
+  object as well as `"always"` and `"never"` (part of #145). There is still no approval step, so a request is
+  accepted only when no tool it can call needs approval: `"never"`, or a filter whose `never.tool_names` lists every
+  tool discovery returns (narrow `allowed_tools` if needed). A discovered tool the filter gates fails the request
+  with a 400 naming the server and tool; `"always"`, `read_only` filters, and a tool listed under both `always` and
+  `never` are rejected by request validation. Before, any object form failed to deserialize. A filter is echoed and
+  stored as the Responses API echoes it: both sides, `null` when absent, each with `read_only` (`null` when absent)
+  and `tool_names` (`[]` when absent). Recordings of every form against OpenAI and the gateway are in
+  `tests/cassettes/mcp/mcp-approval-*`.
+  `agentic_core`: `McpToolParam::require_approval` is `Option<McpApprovalPolicy>` instead of `Option<String>`.
+
+## [0.10.0] - 2026-11-09
+
+### Upgrade notes
+
+- Back up persisted conversation state before upgrading. A database containing history from before migration 9
+  is incompatible with this release. The gateway automatically recreates its default SQLite database, discarding
+  that history; explicitly configured SQLite/PostgreSQL databases are rejected until reset or replaced.
+  Empty databases migrate normally. See the storage compatibility entry below before rolling out.
+- Rust source builds require Rust 1.98.1. Public Rust types and storage APIs have changed; review the migration
+  notes below when embedding `agentic-server-core`.
+
+### Added
+
+- Added the Files and vector-store HTTP APIs, document ingestion, and the Responses `file_search` built-in tool.
+  File metadata, searchable chunks, and blob storage use injectable `FileSearchRepository` and `FileBlobStore`
+  contracts. The defaults use SQL metadata and local files; sqlite-vec is available for semantic search, and
+  keyword/hybrid retrieval and optional PDF ingestion share the same service. Search results are opt-in through
+  `file_search_call.results`; explicit file citations survive JSON, streaming, persistence, and continuation
+  (#483, #484, #485, #486, #513). PostgreSQL/pgvector indexing remains separate and is not part of this release.
+- Added opt-in durable Messages threads with SQLite/PostgreSQL checkpoints, incremental continuation, and a
+  Claude Code compatibility mode. Send the documented `message-threads-2026-08-12` beta on each applicable turn.
+  Thread state is independent of Responses conversations; the basic beta contract is documented and gateway
+  behavior is covered by replay tests, while live Anthropic reference parity remains qualified (#508).
+- Added Responses WebSocket multi-agent execution and single-agent mid-turn steering with bounded admission,
+  ordered successor input, retained tool obligations, and disconnect handling. Vision scenarios require a
+  vision-capable upstream; protocol replay does not establish successful model completion in every capture
+  (#407, #445).
+- Added asynchronous client function/custom tools and namespace members. Calls marked `async: true` can remain
+  pending while the gateway continues inference, including through compaction and multi-agent continuation.
+  Synchronous client tools continue to require their outputs before resuming (#428).
+- Added `DELETE /v1/responses/{id}` and paginated `GET /v1/responses/{id}/input_items`, with recorded management
+  lifecycle and continuation coverage (#466).
+- Added opt-in per-caller request rate limiting for HTTP API requests and WebSocket `response.create`, with
+  OIDC identity or verified connection identity, bounded caller tracking, and retry/rate-limit headers (#458).
+- Added streaming passthrough for audio transcription/translation, embeddings passthrough, and
+  `GET /v1/models/{model}` upstream retrieval (#430, #440).
+- Added request, execution-stage, delivery, and Messages gateway-tool metrics with a local Collector smoke test;
+  propagated trace context and baggage to MCP calls (#375, #453, #473).
+- Added the Agentic API playground and expanded source-backed website quickstarts and CLI references (#426, #446).
+
+- Returned the native web search and web fetch calls the gateway runs on `/v1/messages` to the client, as Anthropic
+  returns them (part of #409): each executed call is a `server_tool_use` block (id `srvtoolu_gw_<upstream id>`)
+  followed by its `web_search_tool_result` or `web_fetch_tool_result`, over JSON and SSE, and
+  `usage.server_tool_use` counts the searches (one per query) and fetches that ran. Claude Code's web search now
+  shows its sources and search count through the gateway. A later turn that sends the blocks back reaches the
+  upstream as the rounds it saw, with the same ids and result text, on `/v1/messages` (with or without a gateway
+  tool) and `/v1/messages/count_tokens`; an unpaired or repeated gateway block, or altered search content, is refused
+  with HTTP 400.
+  Search page text travels sealed in `encrypted_content`; set `AGENTIC_MESSAGES_RESULT_KEY` (at least 32 random
+  bytes) on every replica to keep results readable across restarts and replicas, since results sealed under another
+  key reach the model as a note that they are no longer available. A web fetch result also carries the content
+  type, truncation flag, and refusal message the model read. The model now reads native search results without the
+  provider's `metadata`, and a failed native search as its documented error code. Calls through
+  `MESSAGES_GATEWAY_TOOL_ALIASES`, a plain function named `web_search`, and a call in a round the gateway does not
+  run stay hidden. The JSON response now carries the content of every round, as the stream did.
+- Made the reasoning effort levels of the Codex model catalog configurable per model
+  (`[models."<served-model-id>"] supported_reasoning_levels = ["low", "high", "max"]`), instead of
+  hard-coding `low`/`medium`/`high` for every model (#358). The configured order is preserved,
+  descriptions come from a fixed per-level table, and a model without the setting keeps
+  `["low", "medium", "high"]`. Empty lists, repeated levels, and unknown level names are rejected
+  at startup with the offending file and line. The launcher reads the advertised levels from the
+  same gateway catalog response, so `agentic run codex` offers them too.
+- Accepted the later versions of Claude's native server tools on `/v1/messages` and `/v1/messages/count_tokens`:
+  `web_search_20260209` and `web_search_20260318`, and `web_fetch_20260209`, `web_fetch_20260309`, and
+  `web_fetch_20260318` (#419). These versions add dynamic filtering, which calls the tool from Anthropic's code
+  execution by default; the gateway does not run code execution, so a declaration whose `allowed_callers` includes
+  `"direct"` runs exactly as the basic version, and one without it is rejected with HTTP 400 that names
+  `allowed_callers` and the reason, as Anthropic's API answers for models without programmatic tool calling.
+  `use_cache` (`web_fetch_20260309` and later) is honoured because the built-in fetcher keeps no cache of fetched
+  pages, and `response_inclusion` (the `_20260318` versions) is accepted because it only affects results that code
+  execution consumed; either setting on a version that does not define it is rejected with HTTP 400, as is a version
+  the gateway does not list. In `agentic_core::types::messages::tool_seam`, `NATIVE_WEB_SEARCH_VERSIONS` and
+  `NATIVE_WEB_FETCH_VERSIONS` list the versions as `NativeToolVersion` entries recording what each defines, and
+  `NativeToolVersion::find` looks a declared type up.
+- Added SearXNG as a selectable backend for the gateway-owned `web_search` tool (#326, part of #291). Select it
+  with `AGENTIC_WEB_SEARCH_PROVIDER=searxng` or `[web_search] provider = "searxng"` and point
+  `AGENTIC_WEB_SEARCH_BASE_URL` or `[web_search] base_url` at a self-hosted instance; the endpoint is mandatory
+  (an absolute `http(s)` URL without a query or fragment, sub-path mounts allowed) and the server refuses to start
+  without it. No API key is needed; `SEARXNG_API_KEY` (or the variable named by `api_key_env`) is sent as a `Bearer`
+  token only when set. Web and news results come from one `format=json&categories=general,news` request per query,
+  split by category. The gateway adapts the shared tool contract: `allowed_domains` / `blocked_domains` and the
+  model's `include_domains` / `exclude_domains` are enforced client-side on a label boundary, `count` is applied
+  client-side after filtering, `freshness` maps to `time_range` (date ranges are ignored), `language` is normalized
+  to SearXNG's `xx` / `xx-YY` form, `safesearch` maps to `0` / `1` / `2`, and `country` plus the You.com-specific
+  arguments are ignored. A `403` is reported as the JSON format being disabled, and a `429` explains SearXNG's
+  bot-detection limiter, which rejects the gateway's `Accept-Encoding`-free requests unless its address is on
+  `pass_ip`; neither is retried. The SearXNG provider uses a dedicated client with redirects disabled: a "bang"
+  query (`!!g`, `!ddg`, ...) makes SearXNG redirect to the named external engine before it looks at `format=json`,
+  and the gateway reports that 3xx as a failed `web_search_call` rather than following it out of the configured
+  instance. Each SearXNG `metadata[]` entry carries `"provider": "searxng"`. Concurrency inherits
+  `max_concurrent_gateway_calls`.
+- Added Keenable as a selectable `web_search` provider with `AGENTIC_WEB_SEARCH_PROVIDER=keenable`. It works without
+  an API key through Keenable's public endpoint; `KEENABLE_API_KEY` switches to the keyed endpoint.
+- Added Serply as a selectable `web_search` provider with `AGENTIC_WEB_SEARCH_PROVIDER=serply` and `SERPLY_API_KEY`
+  (#381). `language` maps to Google's `hl` plus the `lr=lang_xx` result-language restrict where Google supports one.
+- Added Claude's native `web_fetch_20250910` server tool as a gateway-executed tool on `/v1/messages` and
+  `/v1/messages/count_tokens` (#408). The declaration is rewritten into an ordinary `web_fetch` function tool for the
+  upstream, and the gateway fetches the page the model names and feeds the text back to the model as a
+  `tool_result`. `max_uses` is a request-wide budget of fetches charged for
+  every admitted call, `allowed_domains` / `blocked_domains` match on the host and apply to every redirect hop, and
+  `max_content_tokens` cuts the text at an approximate four bytes per token below the 1 MiB tool output cap. Only a
+  URL that already appeared in a user message or a tool result can be fetched; non-public addresses (loopback,
+  private, link-local, cloud metadata, carrier-grade NAT) are refused directly, through DNS, and through redirects,
+  with connections pinned to the checked addresses and made directly, without environment proxies, under the default
+  policy; every fetch is bounded in time, size, and redirects, and at most `max_concurrent_gateway_calls` fetches run
+  at once. Failures reach the model as the documented
+  `web_fetch_tool_result_error` codes. `citations` enabled is rejected with HTTP 400; a plain function named
+  `web_fetch` stays client-owned. Operators tune or disable the fetcher with `[web_fetch]` in
+  `config.toml` or `AGENTIC_WEB_FETCH_ENABLED`, `AGENTIC_WEB_FETCH_ALLOW_PRIVATE_NETWORKS`,
+  `AGENTIC_WEB_FETCH_MAX_RESPONSE_BYTES`, and `AGENTIC_WEB_FETCH_TIMEOUT_SECS`.
+- Accepted user-message `input_file` parts that carry an inline UTF-8 text file in `file_data` (#469). The typed
+  Responses executor decodes base64 `file_data` identified as text, by a text media type (`text/*`,
+  `application/json`, `application/xml`, `application/yaml`, any `+json` or `+xml` type, and text `application/*`
+  types such as JavaScript, TypeScript, shell, SQL, and TOML) or by a `filename` with a common text or source
+  extension or a name such as `Dockerfile`, which decides for raw base64 and for any media type other than PDF,
+  image, audio, or video, and sends it
+  upstream as an `input_text` part, prefixed with `File: <filename>` when a filename is given, so text-only models
+  can read it. Stored history and compacted windows keep the original `input_file`; the text is re-inlined on each
+  continuation. On typed paths, `file_id`, `file_url`, binary or PDF data, invalid base64, and non-UTF-8 content
+  are still rejected with HTTP 400 and a specific reason. Eligible raw `store: false` proxy requests are unchanged
+  and still reach the upstream byte for byte. No file is fetched and no dependency is added.
+- Added gateway-executed (hosted) `tool_search` on the Responses API (#448). A request that declares
+  `{"type": "tool_search"}` without `execution` or with `execution: "server"` has the gateway run the search in the
+  same response, over deferred functions (`defer_loading: true`), namespaces with deferred members, and `type: "mcp"`
+  servers with `defer_loading: true` (searched as the namespace `mcp_<server_label>`). The model calls `tool_search`
+  with `paths` and an optional `query`, which keeps tools whose name or description contains it, ignoring case; the
+  loaded tools join the round and persist across `previous_response_id`, conversations, WebSocket sessions,
+  compaction, and multi-agent, and across a `store: false` replay that sends back the search items. Each search adds
+  a `tool_search_call` and a `tool_search_output` item with `execution: "server"` and `call_id: null`, streamed as
+  `output_item.added`/`done` only, and does not count toward `max_tool_calls`. `tool_search` with no deferred tool,
+  deferred MCP with `execution: "client"`, and a `tool_choice` naming an unloaded deferred tool are rejected with
+  HTTP 400. `[mcp_servers]` entries accept `defer_loading` and `description` as defaults. `execution: "client"` is
+  unchanged.
+  A replay that also sends back a hosted MCP response's `mcp_call` items still fails on vLLM, as before, and one that
+  refers to a stored `mcp_call` by `id` leaves it out of the model's input: replayed gateway calls are not converted
+  to model input yet.
+
+### Changed
+
+- Source builds now require Rust 1.98.1. The workspace declares and CI checks this MSRV, including the optional
+  embedded interpreter dependency requirements (#379).
+- Storage compatibility: databases containing history from before migration 9 are no longer accepted. The
+  default SQLite database is recreated automatically; operators of explicitly configured SQLite/PostgreSQL
+  databases must reset incompatible state before startup. Back up conversation state before upgrading.
+  Item kind now lives in typed `items.metadata`, every row has a public ID, and the retrievable response lives
+  in `responses.snapshot` rather than continuation metadata (#501, #502, #503, #505).
+- Rust API migration: history uses `InOutItem` and one typed persistence/rehydration path, with public items kept
+  distinct from model-facing projections. Update exhaustive matches for file-search output and typed reasoning.
+  `OutputTextContent.annotations` now contains `OutputAnnotation`; match `FileCitation` for supported citations and
+  preserve `Other` for extension kinds. `FileSearchCallResult` fields are optional. Embedders should use
+  `ExecutionContext::with_file_search_service` when sharing a custom service between HTTP routes and execution
+  (#465, #483, #486, #501, #502, #505, #513).
+- Conversation turns append atomically instead of rejecting a concurrent turn merely because another response
+  advanced the conversation. Repeated public IDs retain separate stored occurrences (#455, #503).
+- Typed HTTP `store: false` requests run gateway tools and multi-agent execution without writing a durable
+  response. Unsupported background/prompt parameters fail admission with typed errors (#456, #475, #476).
+- Preserved `service_tier`, `prompt_cache_retention`, and `prompt_cache_options` through typed execution and
+  compaction, and preserved public built-in tool declarations in response metadata (#389, #412, #413, #436, #451).
+- Enforced `max_tool_calls` for single-agent Responses and shared configured tool-scheduling limits on Messages
+  execution (#422, #437).
+
+- `agentic_core`: `NATIVE_WEB_SEARCH_TYPE` and `NATIVE_WEB_FETCH_TYPE` still name the basic versions, which are no
+  longer the only versions the Messages gateway executes; code that compares a declared type with them should look it
+  up with `NativeToolVersion::find` in `NATIVE_WEB_SEARCH_VERSIONS` or `NATIVE_WEB_FETCH_VERSIONS` (#419). On
+  `/v1/messages` and `/v1/messages/count_tokens`, a `web_search` declaration that sets `use_cache`, which no web
+  search version defines, or `response_inclusion` before `web_search_20260318` is rejected with HTTP 400 instead of
+  being ignored; a basic version whose `allowed_callers` omits `"direct"` is refused in the message shape every
+  version uses, which names the type, `allowed_callers`, and the reason; and the refusal of an unlisted `web_search_*`
+  version now lists the supported versions.
+- The domain lists of `web_search` and `web_fetch` declarations are one shared type, `DomainFilters` (formerly
+  `WebSearchFilters`, the same two fields), matched by one shared policy module that also validates a `web_fetch`
+  entry as a host name (`web_search` keeps its non-empty-entry rule in the Messages adapter); the request and
+  response wire shapes are unchanged, and the OpenAPI component is named `DomainFilters`.
+- `agentic_core`: `ToolOutput` carries an explicit success/failure status set by the handler, which the Messages
+  loop reports as `is_error`; the request-scoped tool registry and the declaration helpers take one concrete
+  `ToolDeclaration`, which each API converts to at its adapter boundary (`responses_declarations` for the Responses
+  wire tools, `registry_tools` for Messages), so `ResponsesTool` is a pure wire enum without the Messages-only
+  `web_fetch` variant and without declaration behaviour; discovered MCP tools reach a Responses request through
+  `record_discovered_mcp_tools`.
+- `WebSearchProviderKind` gains a `Searxng` variant (`"searxng"`) with no default endpoint, `SEARXNG_API_KEY` as its
+  conventional key variable, and no provider concurrency ceiling; `WebSearchProviderKind::ALL` lists it after
+  `Tavily`, so the operator-facing "expected one of" message is now `you, brave, tavily, searxng`.
+  `agentic_core::tool::SEARXNG_BASE_URL_HINT` and `validate_searxng_base_url` carry the operator-facing rules for
+  the mandatory endpoint (absolute `http(s)` URL with a host and no query or fragment), shared by the startup check
+  and the provider.
+- A Responses request whose MCP server cannot list its tools now fails, as the Responses API does, instead of
+  continuing with a failed `mcp_list_tools` item and no tools from that server (#448). JSON requests get HTTP 424
+  with `type: "external_connector_error"`, `code: "http_error"`, and `param: "tools"`; streaming requests get the
+  listing's `response.mcp_list_tools.failed`, an `error` event, and `response.failed`. A continuation whose history
+  already holds a successful listing for that server keeps going. An MCP server whose `allowed_tools` matches none
+  of its tools is no longer rejected with HTTP 400; its listing is empty and the response completes. An MCP
+  `tool_choice` (`{"type": "mcp", ...}`) is rejected with HTTP 400 `unsupported_value` on `tool_choice` instead of
+  a generic parse error.
+- Replayed tool-search history is checked the same way on every path (#448). A `store: false` request carrying
+  `tool_search_call` / `tool_search_output` items now runs the pending-call check a `previous_response_id` or
+  conversation continuation runs, so a duplicate client `call_id` or output, an output with no call, or a client
+  search or other synchronous call without its output gets that check's HTTP 400 (for example "No tool call found
+  for function call output with call_id …" with `param: "input"`) instead of a `tool error: invalid tool config: …`
+  message; a request without search items is unchanged. A hosted `tool_search_call` whose item id equals another
+  call's `call_id` is rejected (`duplicate tool_search_call call_id`), since the model would otherwise see two calls
+  with one id. A `function_call` whose `namespace` equals its `name`, that no declared namespace maps, and whose
+  name is a top-level function the request declares or a search output in its input loaded reaches the model
+  unqualified, as a searched top-level function does; a compaction summary, which declares no tools, uses its
+  source request's functions. Any other call keeps its namespace, since a namespace may hold a member of its own
+  name. Compaction's token estimate counts a search output as the text the model reads
+  (functions with their schemas, namespaces by name and description), as it already did during a response.
+  `agentic_core`: `CodexNamespaceHandler::resolve_input` takes the request's top-level function names
+  (`&HashSet<&str>`) between the namespace map and the input.
+  `CodexNamespaceHandler::validate_namespace_collisions` is removed: the tool catalog owns the model-visible name
+  rule, which the registry applies to every request's declarations and tool search to its whole catalog, with the
+  same messages.
+- An MCP declaration with `connector_id`, or a `require_approval` other than `"never"`, is now rejected with request
+  validation (`McpHandler::validate`) instead of during MCP discovery, with the same message: a streaming HTTP or
+  WebSocket request gets the error before its stream starts instead of an error event in the stream. A request with
+  several invalid declarations or inputs may now get this error first.
+
+### Fixed
+
+- Registered the configured file-search service as the built-in tool executor at server startup. File uploads
+  and direct search no longer succeed while Responses search reports the service as unavailable (#513).
+- Preserved native upstream annotations when the gateway does not own `file_search`, including when a
+  client function has the same name. Added OGX-guided shared citation fixtures and official OpenAI client checks
+  for Unicode offsets, split markers, unknown IDs, result inclusion, storage, and continuation (#513).
+- Made Responses orchestration advance with client stream consumption and gave ordered client delivery one
+  bounded owner, preserving cancellation, backpressure, and terminal response assembly (#386, #423).
+- Rejected malformed Messages block payloads before assembly and preserved future Messages parameter variants
+  through the appropriate passthrough paths (#411, #510).
+- Corrected PostgreSQL conversation upserts and preserved cache breakpoints when inlining text files (#467, #481).
+- Aligned output-item validation and public Responses shapes with recorded/Open Responses acceptance contracts,
+  including typed reasoning and corrupt-history failures (#384, #432, #487).
+
+## [0.9.0] - 2026-09-30
+
+### Added
+
+- Added an OpenAI-compatible Conversations API with conversation and item CRUD, metadata updates, cursor pagination,
+  and atomic initial-item creation. Stored Responses items can be managed through conversations (#351, #370).
+- Added `GET /v1/responses/{response_id}` for stored response payloads, preserving output, status, usage, and IDs
+  without another upstream request. History-only and legacy records return 409 because they lack a retrievable
+  snapshot (#354).
+- Added opt-in multi-agent HTTP Responses execution for stored requests with `multi_agent.enabled: true`. The gateway
+  can coordinate subagents, stream their work as one response, and resume their stored tree through
+  `previous_response_id`; it validates the stored tree and enforces a shared response budget (#372, #373).
+- Added opt-in gateway-executed `code_interpreter` using isolated Linux workers and a `code_interpreter_call` output
+  lifecycle. Building with `embedded-code-interpreter` also requires the documented runtime setup and operator
+  enablement; default builds do not register the tool (#368).
+- Added Tavily as a selectable `web_search` provider with `AGENTIC_WEB_SEARCH_PROVIDER=tavily` and `TAVILY_API_KEY`
+  (#329).
+- Passed `/v1/chat/completions` and `/v1/completions` through to the configured upstream, including streaming
+  responses and upstream status codes (#369).
+- Added execution-level OpenTelemetry spans for Responses and Messages, including inference rounds, gateway tool
+  calls, compaction, persistence, delivery, and upstream trace-context propagation (#349).
+
+### Changed
+
+- Rust API migration: `InputItem` and `OutputItem` include multi-agent item variants, and Responses streaming
+  event types include agent attribution and collaboration events. Downstream exhaustive matches must handle the
+  new variants. `WebSearchProviderKind::ALL` is now a `&'static [Self]` slice (#329, #372).
+- Preserved `prompt_cache_key` across typed Responses execution, gateway tool rounds, and internal compaction;
+  callers must supply it again on a later request if they want it on that continuation (#347).
+- Disabled Nagle's algorithm on accepted gateway connections to avoid delayed small SSE and WebSocket frames (#380).
+
+### Fixed
+
+- Rejected incomplete or malformed upstream Messages streams before built-in tool dispatch or successful
+  completion, including missing starts or stops, invalid block indexes, duplicate events, and malformed SSE data
+  (#345, #396).
+- Counted every search in a batched Messages `web_search` call against `max_uses`; a call that would exceed the
+  remaining budget is refused in full (#391).
+- Hid unexecuted gateway-executed tool calls from terminal Messages results (#346).
+- Prevented `store: false` HTTP continuations of stored Responses from writing a durable child response (#387).
 
 ## [0.8.0] - 2026-09-19
 

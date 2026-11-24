@@ -3,9 +3,15 @@
 //! Wire format types (`ResponsesTool`, param structs) live in [`crate::types::tools`].
 //! This module owns the behavioral layer: routing, handler interface, and normalization.
 
+pub mod async_execution;
+pub(crate) mod catalog;
+pub mod code_interpreter;
 pub mod codex;
 pub mod custom;
+pub mod declaration;
+pub(crate) mod domain_policy;
 pub mod executors;
+pub mod file_search;
 pub mod function;
 pub mod handler;
 pub mod mcp;
@@ -14,17 +20,24 @@ pub mod ownership;
 pub mod registry;
 pub mod shell;
 pub mod tool_search;
+pub mod web_fetch;
 pub mod web_search;
 
+pub use code_interpreter::CodeInterpreterHandler;
 pub use codex::{CodexNamespaceHandler, NamespaceMap, model_visible_namespace_member_name};
 pub use custom::CustomHandler;
+pub use declaration::{
+    ToolDeclaration, declares_async, record_discovered_mcp_tools, registry_tools, responses_declarations,
+};
 pub use executors::{GatewayExecutorRegistration, GatewayExecutors};
 pub use function::FunctionHandler;
-pub use handler::{GatewayExecutor, GatewayToolEventPlan, ToolError, ToolHandler, ToolOutput};
+pub use handler::{GatewayExecutor, GatewayToolEventPlan, ToolError, ToolHandler, ToolOutput, ToolOutputStatus};
 pub use mcp::{McpClient, McpClientPool, McpDiscoveredHandler, McpError, McpHandler, McpOperation, McpServerEntry};
 pub use ownership::{GatewayBinding, ToolOwnership};
 pub use registry::{GatewayDispatchResult, ToolEntry, ToolRegistry, ToolType};
 pub use shell::ShellHandler;
 pub(crate) use tool_search::ToolSearchMetadata;
 pub use tool_search::{ToolSearchHandler, ToolSearchState};
+pub use web_fetch::WebFetchHandler;
 pub use web_search::WebSearchHandler;
+pub use web_search::searxng::{SEARXNG_BASE_URL_HINT, validate_searxng_base_url};

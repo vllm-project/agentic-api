@@ -13,9 +13,9 @@ use agentic_core::executor::inference::direct::{EventStream, GenerationControl};
 use agentic_core::types::event::MessageStatus;
 use agentic_core::types::io::{
     FunctionToolCall, InputTokenDetails, OutputItem, OutputMessage, OutputTextContent, OutputTokenDetails,
-    ReasoningOutput, ReasoningTextContent, ResponseUsage,
+    ReasoningOutput, ReasoningStatus, ReasoningTextContent, ResponseUsage,
 };
-use agentic_core::types::request_response::{IncompleteDetails, ResponsePayload};
+use agentic_core::types::request_response::{IncompleteDetails, ResponsePayload, StandardResponseFields};
 use agentic_core::utils::common::{serialize_to_value, utcnow_str};
 use async_stream::stream;
 use futures::{Stream, StreamExt};
@@ -83,7 +83,10 @@ impl EventAdapter {
                 incomplete_details: None,
                 error: None,
                 previous_response_id: None,
-                conversation_id: None,
+                conversation: None,
+                max_tool_calls: None,
+                service_tier: None,
+                standard_fields: StandardResponseFields::default(),
                 instructions: None,
                 tools: None,
                 tool_choice: None,
@@ -219,6 +222,8 @@ impl EventAdapter {
             arguments,
             status,
             namespace: None,
+            async_execution: false,
+            agent: None,
         })
     }
 }
@@ -228,13 +233,16 @@ fn text_item(id: String, kind: AssistantBlockKind, text: String, status: Message
         AssistantBlockKind::Text => {
             let mut message = OutputMessage::new(id, status);
             if status == MessageStatus::Completed {
-                message.content.push(OutputTextContent::new(text));
+                message.content.push(OutputTextContent::new(text).into());
             }
             Ok(OutputItem::Message(message))
         }
         AssistantBlockKind::Reasoning => {
             let mut reasoning = ReasoningOutput::new(id);
-            reasoning.status = Some(status.as_str().to_owned());
+            reasoning.status = Some(match status {
+                MessageStatus::InProgress => ReasoningStatus::InProgress,
+                MessageStatus::Completed => ReasoningStatus::Completed,
+            });
             if status == MessageStatus::Completed {
                 reasoning.content.push(ReasoningTextContent::new(text));
             }
@@ -294,6 +302,7 @@ fn response_usage(usage: ChatTokenUsage) -> Result<ResponseUsage> {
             .ok_or_else(|| protocol_error("direct token usage overflow"))?,
         input_tokens_details: InputTokenDetails {
             cached_tokens: count(usage.prompt_cache_usage.cached_token_count)?,
+            cache_write_tokens: Some(count(usage.prompt_cache_usage.cache_creation_token_count)?),
         },
         output_tokens_details: OutputTokenDetails {
             reasoning_tokens: count(usage.reasoning_tokens)?,

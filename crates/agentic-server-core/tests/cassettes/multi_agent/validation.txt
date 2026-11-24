@@ -1,0 +1,1 @@
+Do not delegate or call any tools. Reply with exactly OK.

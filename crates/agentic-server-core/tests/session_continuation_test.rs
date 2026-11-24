@@ -3,6 +3,7 @@
 //! Set `AGENTIC_SESSION_TEST_POSTGRES_URL` to an isolated PostgreSQL database with
 //! CREATE DATABASE privileges to rerun persistence cases using fresh databases.
 
+use agentic_core::types::conversations::ConversationMetadata;
 use std::collections::VecDeque;
 use std::future::Future;
 use std::num::NonZeroUsize;
@@ -15,11 +16,14 @@ use agentic_core::executor::{
     ResponseSession, ResponseSessionGroup, commit, rehydrate_in_session,
 };
 use agentic_core::storage::{
-    ConversationStore, InOutItem, ResponseMetadata, ResponseStore, StorageError, create_pool_with_schema,
+    ConversationStore, ResponseMetadata, ResponseStore, StorageError, create_pool_with_schema,
 };
+use agentic_core::tool::web_search;
 use agentic_core::tool::{GatewayExecutor, ToolError, ToolHandler, ToolOutput, ToolType};
 use agentic_core::types::io::FunctionTool;
-use agentic_core::types::io::output::{FunctionToolCall, GatewayCallStatus, OutputItem, WebSearchCall};
+use agentic_core::types::io::InOutItem;
+use agentic_core::types::io::OutputItem;
+use agentic_core::types::io::output::{FunctionToolCall, GatewayCallStatus};
 use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
 use agentic_core::types::tools::WebSearchToolParam;
 use axum::{Json, Router, routing::post};
@@ -58,6 +62,20 @@ impl ToolHandler for LocalSearch {
 impl GatewayExecutor for LocalSearch {
     type ExecutionParams = WebSearchToolParam;
 
+    fn started_output(&self, call: &FunctionToolCall, _params: &WebSearchToolParam) -> Option<OutputItem> {
+        web_search::started_output_item(call)
+    }
+
+    fn public_output(
+        &self,
+        call: &FunctionToolCall,
+        output: &ToolOutput,
+        status: GatewayCallStatus,
+        _params: &WebSearchToolParam,
+    ) -> Option<OutputItem> {
+        web_search::output_item(call, output, status.into())
+    }
+
     fn execute(
         &self,
         call_id: &str,
@@ -67,30 +85,7 @@ impl GatewayExecutor for LocalSearch {
     ) -> Pin<Box<dyn Future<Output = Result<ToolOutput, ToolError>> + Send + '_>> {
         self.calls.fetch_add(1, Ordering::Relaxed);
         let call_id = call_id.to_owned();
-        Box::pin(async move {
-            Ok(ToolOutput {
-                call_id,
-                output: "local search result".to_owned(),
-            })
-        })
-    }
-
-    fn public_output(
-        &self,
-        call: &FunctionToolCall,
-        _output: &ToolOutput,
-        status: GatewayCallStatus,
-        _params: &WebSearchToolParam,
-    ) -> Option<OutputItem> {
-        Some(OutputItem::WebSearchCall(
-            WebSearchCall::try_new(
-                format!("ws_{}", call.id.strip_prefix("fc_").unwrap_or(&call.id)),
-                status,
-                vec!["local".to_owned()],
-                Vec::new(),
-            )
-            .unwrap(),
-        ))
+        Box::pin(async move { Ok(ToolOutput::success(call_id, "local search result")) })
     }
 }
 
@@ -182,9 +177,48 @@ fn search_request() -> RequestPayload {
     payload
 }
 
+#[tokio::test]
+async fn session_tool_choice_inherits_request_policy_after_internal_relaxation() {
+    use agentic_core::types::io::ToolChoice;
+
+    let mut model = LocalModel::start(vec![
+        search_round("first_search", "searching"),
+        model_message("first_answer", "first answer"),
+        search_round("second_search", "searching again"),
+        model_message("second_answer", "second answer"),
+    ])
+    .await;
+    let calls = with_local_search(&mut model);
+    let session = session();
+    let mut first_request = search_request();
+    first_request.tool_choice = Some(ToolChoice::Required);
+    let first = execute_local(&model, &session, first_request).await;
+    session.wait_until_idle().await.unwrap();
+    let second = execute_local(&model, &session, request(Some(&first.id), json!("Search again"))).await;
+    session.wait_until_idle().await.unwrap();
+
+    assert_eq!(first.tool_choice, Some(ToolChoice::Required));
+    assert_eq!(second.tool_choice, Some(ToolChoice::Required));
+    assert_eq!(calls.load(Ordering::Relaxed), 2);
+    let requests = model.requests.lock().await;
+    assert_eq!(requests.len(), 4);
+    for round in [0, 2] {
+        assert_eq!(
+            requests[round]["tool_choice"], "required",
+            "first round of each client request"
+        );
+        assert!(
+            requests[round + 1].get("tool_choice").is_none(),
+            "internal round still uses auto"
+        );
+    }
+    drop(requests);
+    model.close().await;
+}
+
 async fn execute_local(model: &LocalModel, session: &ResponseSession, payload: RequestPayload) -> ResponsePayload {
     let result = ExecuteRequest::new(payload, Arc::new(model.exec.clone()))
-        .with_session(session)
+        .with_session(session, None)
         .unwrap()
         .run()
         .await
@@ -275,15 +309,20 @@ async fn session_explicit_conversation_generated_turns_match_no_session_history(
             let conversations = ConversationStore::new(pool.clone());
             model.exec.conv_handler = ConversationHandler::new(conversations.clone());
             model.exec.resp_handler = ResponseHandler::new(ResponseStore::new(Arc::clone(&pool)));
-            let conversation = model.exec.conv_handler.create().await.unwrap();
+            let conversation = model
+                .exec
+                .conv_handler
+                .create("default_tenant", &ConversationMetadata::new(), &[])
+                .await
+                .unwrap();
             let session = session();
             for input in ["first question", "second question"] {
                 let mut payload = request(None, json!(input));
-                payload.conversation_id = Some(conversation.conversation_id.clone());
+                payload.conversation = Some(conversation.conversation_id.clone());
                 payload.store = store;
                 let execution = ExecuteRequest::new(payload, Arc::new(model.exec.clone()));
                 let execution = if use_session {
-                    execution.with_session(&session).unwrap()
+                    execution.with_session(&session, None).unwrap()
                 } else {
                     execution
                 };
@@ -293,13 +332,23 @@ async fn session_explicit_conversation_generated_turns_match_no_session_history(
             }
             let requests = model.requests.lock().await;
             let input = requests[1]["input"].as_array().unwrap();
-            assert_eq!(input.len(), 3, "session={use_session}, store={store}: {input:?}");
-            assert!(input[0].to_string().contains("first question"));
-            assert!(input[1].to_string().contains("first answer"));
-            assert!(input[2].to_string().contains("second question"));
+            assert_eq!(
+                input.len(),
+                if store { 3 } else { 1 },
+                "session={use_session}, store={store}: {input:?}"
+            );
+            if store {
+                assert!(input[0].to_string().contains("first question"));
+                assert!(input[1].to_string().contains("first answer"));
+            }
+            assert!(input.last().unwrap().to_string().contains("second question"));
             drop(requests);
             let history = conversations.rehydrate(&conversation.conversation_id).await.unwrap();
-            assert_eq!(history.len(), 4, "session={use_session}, store={store}");
+            assert_eq!(
+                history.items.len(),
+                if store { 4 } else { 0 },
+                "session={use_session}, store={store}"
+            );
             model.close().await;
             pool.close().await;
         }
@@ -324,16 +373,28 @@ async fn explicit_conversation_tool_history(use_session: bool, gateway_tool: boo
     let conversations = ConversationStore::new(Arc::clone(&pool));
     model.exec.conv_handler = ConversationHandler::new(conversations.clone());
     model.exec.resp_handler = ResponseHandler::new(ResponseStore::new(Arc::clone(&pool)));
-    let conversation = model.exec.conv_handler.create().await.unwrap();
+    let conversation = model
+        .exec
+        .conv_handler
+        .create("default_tenant", &ConversationMetadata::new(), &[])
+        .await
+        .unwrap();
     let session = session();
     let next_input = if gateway_tool {
         json!("second question")
-    } else {
+    } else if store {
         json!([{"type":"function_call_output", "call_id":"client", "output":"sunny"}])
+    } else {
+        // Unstored conversation turns require the client to replay the call too.
+        json!([
+            {"role":"user", "content":"first question"},
+            function_call("client"),
+            {"type":"function_call_output", "call_id":"client", "output":"sunny"}
+        ])
     };
     for (index, input) in [json!("first question"), next_input].into_iter().enumerate() {
         let mut payload = request(None, input);
-        payload.conversation_id = Some(conversation.conversation_id.clone());
+        payload.conversation = Some(conversation.conversation_id.clone());
         payload.store = store;
         if index == 0 {
             payload.tools = Some(if gateway_tool {
@@ -347,7 +408,7 @@ async fn explicit_conversation_tool_history(use_session: bool, gateway_tool: boo
         }
         let execution = ExecuteRequest::new(payload, Arc::new(model.exec.clone()));
         let execution = if use_session {
-            execution.with_session(&session).unwrap()
+            execution.with_session(&session, None).unwrap()
         } else {
             execution
         };
@@ -360,10 +421,26 @@ async fn explicit_conversation_tool_history(use_session: bool, gateway_tool: boo
     assert_eq!(calls.load(Ordering::Relaxed), usize::from(gateway_tool));
     let requests = model.requests.lock().await;
     assert_eq!(requests.len(), if gateway_tool { 3 } else { 2 });
-    let model_history = requests.last().unwrap()["input"].clone();
+    let mut model_history = requests.last().unwrap()["input"].clone();
     drop(requests);
     let history = conversations.rehydrate(&conversation.conversation_id).await.unwrap();
-    let stored_history = serde_json::to_value(InOutItem::into_input_items(history)).unwrap();
+    let mut stored_history = serde_json::to_value(InOutItem::into_input_items(history.items)).unwrap();
+    // Independently executed sessions generate different result item IDs. Check
+    // persistence within each execution before comparing their semantic history.
+    for item in model_history.as_array_mut().unwrap() {
+        if item["type"] == "function_call_output" && !item["id"].is_null() {
+            assert!(item["id"].as_str().unwrap().starts_with("fc_"));
+            let stored = stored_history
+                .as_array_mut()
+                .unwrap()
+                .iter_mut()
+                .find(|stored| stored["type"] == "function_call_output" && stored["call_id"] == item["call_id"])
+                .unwrap();
+            assert_eq!(stored["id"], item["id"]);
+            item.as_object_mut().unwrap().remove("id");
+            stored.as_object_mut().unwrap().remove("id");
+        }
+    }
     model.close().await;
     pool.close().await;
     (model_history, stored_history)
@@ -472,7 +549,10 @@ async fn grouped_session_late_fork_does_not_restore_an_evicted_transient_parent(
     )
     .await
     .unwrap_err();
-    assert!(matches!(error, ExecutorError::PreviousResponseNotFound { .. }));
+    assert!(matches!(
+        error,
+        ExecutorError::Storage(StorageError::PreviousResponseNotFound { .. })
+    ));
 }
 
 #[tokio::test]
@@ -513,7 +593,10 @@ async fn session_cache_miss_does_not_mask_disabled_durable_storage() {
     let missing = rehydrate_in_session(payload.clone(), &exec, &session)
         .await
         .unwrap_err();
-    assert!(matches!(missing, ExecutorError::PreviousResponseNotFound { .. }));
+    assert!(matches!(
+        missing,
+        ExecutorError::Storage(StorageError::PreviousResponseNotFound { .. })
+    ));
     payload.store = true;
     let unavailable = rehydrate_in_session(payload, &exec, &session).await.unwrap_err();
     assert!(matches!(
@@ -579,17 +662,28 @@ async fn session_commit_accepts_a_new_call_without_reading_disabled_storage() {
 }
 
 #[tokio::test]
-async fn session_commit_rejects_reused_call_id_against_pinned_history() {
+async fn session_continuation_accepts_a_call_id_the_pinned_history_already_used() {
     let exec = execution();
     let session = session();
     let parent = parent_with_call(&exec, &session).await;
     let ctx = resolved_continuation(&exec, &session, &parent).await;
     let payload = response(&ctx, json!([function_call("call_first")]));
-    let error = commit(ctx, payload, &exec).await.unwrap_err();
-    assert!(
-        matches!(&error, ExecutorError::InvalidRequest(message) if message.contains("continued history")),
-        "must reject the repeated call, not fail on a database lookup: {error:?}"
-    );
+    // As on OpenAI, a call_id may repeat: the turn is stored and a turn answering it continues.
+    let repeated = commit(ctx, payload, &exec).await.expect("the turn is stored").id;
+    let next = rehydrate_in_session(
+        request(
+            Some(&repeated),
+            json!([
+                {"type": "function_call_output", "call_id": "call_first", "output": "rainy"}
+            ]),
+        ),
+        &exec,
+        &session,
+    )
+    .await
+    .expect("a repeated call_id continues without reading disabled storage");
+    let history = serde_json::to_value(&next.enriched_request.input).unwrap();
+    assert_eq!(history.as_array().unwrap().len(), 5);
 }
 
 #[tokio::test]
@@ -630,6 +724,7 @@ async fn session_automatic_compaction_fits_the_replaced_history_budget() {
         model_message("resp_old", "obsolete assistant detail"),
         model_message("resp_summary", "compact summary"),
         model_message("resp_compacted", "new answer"),
+        model_message("resp_summary_after", "compact summary after the answer"),
     ])
     .await;
     let session = ResponseSession::new(NonZeroUsize::new(4).unwrap(), NonZeroUsize::new(100_000).unwrap());
@@ -642,17 +737,22 @@ async fn session_automatic_compaction_fits_the_replaced_history_budget() {
         .await
         .unwrap();
     let history = serde_json::to_value(&next.enriched_request.input).unwrap();
+    // The turn compacted again after answering; that latest compaction stands in for everything before it.
     assert_eq!(
         history.as_array().unwrap().len(),
-        5,
-        "four retained items plus the new user item"
+        2,
+        "the latest compaction item plus the new user item"
     );
     assert!(!history.to_string().contains("obsolete assistant detail"));
     assert_eq!(
-        history[2]["type"], "compaction",
+        history[0]["type"], "compaction",
         "retain canonical items, not model-normalized summaries"
     );
-    assert_eq!(model.requests.lock().await.len(), 3);
+    let projected = serde_json::to_value(next.enriched_request.input.model_input()).unwrap();
+    assert_eq!(projected[0]["content"][0]["text"], "first user");
+    assert_eq!(projected[1]["content"][0]["text"], "second user");
+    assert_eq!(projected[2]["content"][0]["text"], "compact summary after the answer");
+    assert_eq!(model.requests.lock().await.len(), 4);
     model.close().await;
 }
 
@@ -676,7 +776,10 @@ async fn session_compaction_trigger_replaces_history_before_retention() {
         .await
         .unwrap();
     let history = serde_json::to_value(&next.enriched_request.input).unwrap();
-    assert_eq!(history.as_array().unwrap().len(), 3);
+    // The compaction carries its window, the kept user message, which the model sees expanded before the summary.
+    assert_eq!(history.as_array().unwrap().len(), 2);
+    assert_eq!(history[0]["type"], "compaction");
+    assert!(history[0]["encrypted_content"].as_str().unwrap().contains("first user"));
     assert!(!history.to_string().contains("obsolete assistant detail"));
     assert_eq!(model.requests.lock().await.len(), 2);
     model.close().await;
@@ -688,6 +791,7 @@ async fn session_compacted_transient_parent_promotes_only_the_canonical_window()
         model_message("resp_old", "obsolete assistant detail"),
         model_message("resp_summary", "compact summary"),
         model_message("resp_compacted", "new answer"),
+        model_message("resp_summary_after", "compact summary after the answer"),
     ])
     .await;
     let pool = storage_pool().await;
@@ -701,22 +805,23 @@ async fn session_compacted_transient_parent_promotes_only_the_canonical_window()
         Some(serde_json::from_value(json!([{"type":"compaction", "compact_threshold":1}])).unwrap());
     let second = execute_local(&model, &session, payload).await;
     assert!(store.get(&first.id).await.unwrap_err().is_not_found());
-    let durable =
-        serde_json::to_value(InOutItem::into_input_items(store.rehydrate(&second.id).await.unwrap())).unwrap();
-    assert_eq!(durable.as_array().unwrap().len(), 4);
-    assert!(!durable.to_string().contains("obsolete assistant detail"));
+    let durable = serde_json::to_value(InOutItem::into_input_items(
+        store.rehydrate(&second.id).await.unwrap().1,
+    ))
+    .unwrap();
+    // The stored turn keeps the history it continued: the promoted parent, its own items and outputs, ending
+    // with the compaction made after the answer.
+    assert_eq!(durable.as_array().unwrap().len(), 6);
+    assert_eq!(durable[5]["type"], "compaction");
     let fresh = ResponseSession::new(NonZeroUsize::new(4).unwrap(), NonZeroUsize::new(100_000).unwrap());
     let mut continuation = request(Some(&second.id), json!("third user"));
     continuation.store = true;
     let restored = rehydrate_in_session(continuation, &model.exec, &fresh).await.unwrap();
-    assert_eq!(
-        serde_json::to_value(&restored.enriched_request.input)
-            .unwrap()
-            .as_array()
-            .unwrap()
-            .len(),
-        5
-    );
+    // A continuation restores only the window from the latest compaction.
+    let restored_input = serde_json::to_value(&restored.enriched_request.input).unwrap();
+    assert_eq!(restored_input.as_array().unwrap().len(), 2, "{restored_input}");
+    assert_eq!(restored_input[0]["type"], "compaction");
+    assert!(!restored_input.to_string().contains("obsolete assistant detail"));
     drop(restored);
     model.close().await;
     pool.close().await;
@@ -737,7 +842,10 @@ async fn session_failed_response_evicts_only_a_referenced_parent() {
         assert_eq!(failed.error.as_ref().unwrap()["code"], "upstream_error");
         let result = rehydrate_in_session(request(Some(&first.id), json!("retry")), &model.exec, &session).await;
         if references_parent {
-            assert!(matches!(result, Err(ExecutorError::PreviousResponseNotFound { .. })));
+            assert!(matches!(
+                result,
+                Err(ExecutorError::Storage(StorageError::PreviousResponseNotFound { .. }))
+            ));
         } else {
             assert!(result.is_ok(), "an unrelated failed turn must not erase the checkpoint");
         }
@@ -749,7 +857,7 @@ async fn session_failed_response_evicts_only_a_referenced_parent() {
                 &session
             )
             .await,
-            Err(ExecutorError::PreviousResponseNotFound { .. })
+            Err(ExecutorError::Storage(StorageError::PreviousResponseNotFound { .. }))
         ));
         model.close().await;
     }
@@ -799,8 +907,9 @@ async fn session_tool_round_compaction_does_not_restore_superseded_output() {
         let mut payload = request(None, json!("short"));
         payload.store = store_durable;
         payload.tools = Some(serde_json::from_value(json!([{"type":"web_search_preview"}])).unwrap());
+        // Above the short final history, so the turn does not compact again after its answer.
         payload.context_management =
-            Some(serde_json::from_value(json!([{"type":"compaction", "compact_threshold":50}])).unwrap());
+            Some(serde_json::from_value(json!([{"type":"compaction", "compact_threshold":100}])).unwrap());
         let result = execute_local(&model, &session, payload).await;
         let public_output = serde_json::to_value(&result.output).unwrap();
         assert!(public_output.to_string().contains(&obsolete));
@@ -822,17 +931,17 @@ async fn session_tool_round_compaction_does_not_restore_superseded_output() {
             !history.to_string().contains(&obsolete),
             "pre-compaction output must remain public without returning to retained history: {history}"
         );
-        assert_eq!(history.as_array().unwrap().len(), 4);
-        assert_eq!(history[1]["type"], "compaction");
+        assert_eq!(history.as_array().unwrap().len(), 3);
+        assert_eq!(history[0]["type"], "compaction");
         if store_durable {
-            let durable = InOutItem::into_input_items(store.rehydrate(&result.id).await.unwrap());
+            let durable = InOutItem::into_input_items(store.rehydrate(&result.id).await.unwrap().1);
             let durable = serde_json::to_value(durable).unwrap();
             assert_eq!(durable.as_array().unwrap().len(), 3);
             assert!(!durable.to_string().contains(&obsolete));
         } else {
             assert!(matches!(
                 store.get(&result.id).await,
-                Err(StorageError::NotFound { .. })
+                Err(StorageError::ResponseNotFound { .. })
             ));
         }
         model.close().await;
@@ -875,7 +984,7 @@ async fn grouped_aggregate_rejection_precedes_durable_child_writes_and_preserves
         let mut payload = request(Some(&parent.id), json!("fork"));
         payload.store = true;
         let result = ExecuteRequest::new(payload, Arc::new(model.exec.clone()))
-            .with_session(&target)
+            .with_session(&target, None)
             .unwrap()
             .run()
             .await;
@@ -971,7 +1080,7 @@ async fn grouped_aggregate_sql_failure_rolls_back_items_and_releases_capacity() 
         // the candidate's items before hitting this duplicate response ID.
         // This tests a SQL failure after writes, not a disabled store/pool wait.
         store
-            .persist(&failed_id, None, vec![], &ResponseMetadata::default())
+            .persist(&failed_id, None, vec![], None, &ResponseMetadata::default())
             .await
             .unwrap();
         let existing = store.get(&failed_id).await.unwrap();
@@ -1002,7 +1111,7 @@ async fn grouped_aggregate_sql_failure_rolls_back_items_and_releases_capacity() 
         assert_eq!(after.created_at, existing.created_at);
         assert!(matches!(
             rehydrate_in_session(request(Some(&failed_id), json!("no failed checkpoint")), &exec, target).await,
-            Err(ExecutorError::PreviousResponseNotFound { .. })
+            Err(ExecutorError::Storage(StorageError::PreviousResponseNotFound { .. }))
         ));
 
         // With a leaked prepared checkpoint neither size fits. A failed fork
@@ -1027,7 +1136,7 @@ async fn grouped_aggregate_sql_failure_rolls_back_items_and_releases_capacity() 
         } else {
             assert!(matches!(
                 source_result,
-                Err(ExecutorError::PreviousResponseNotFound { .. })
+                Err(ExecutorError::Storage(StorageError::PreviousResponseNotFound { .. }))
             ));
         }
         pool.close().await;
@@ -1069,7 +1178,7 @@ async fn grouped_aggregate_cancellation_while_waiting_for_storage_releases_capac
         assert!(futures::poll!(&mut pending).is_pending());
         assert!(
             ExecuteRequest::new(request(None, json!("busy")), Arc::new(exec.clone()))
-                .with_session(target)
+                .with_session(target, None)
                 .is_err()
         );
         let probe_ctx = rehydrate_in_session(request(None, json!("p".repeat(2_000))), &exec, &probe)
@@ -1119,7 +1228,7 @@ async fn grouped_aggregate_cancellation_while_waiting_for_storage_releases_capac
         } else {
             assert!(matches!(
                 source_result,
-                Err(ExecutorError::PreviousResponseNotFound { .. })
+                Err(ExecutorError::Storage(StorageError::PreviousResponseNotFound { .. }))
             ));
         }
         pool.close().await;
@@ -1151,7 +1260,7 @@ async fn grouped_aggregate_durable_fallback_is_rejected_before_inference_and_can
     let mut payload = request(Some(&parent.id), json!("continue"));
     payload.store = true;
     let result = ExecuteRequest::new(payload, Arc::new(model.exec.clone()))
-        .with_session(&restored)
+        .with_session(&restored, None)
         .unwrap()
         .run()
         .await;
@@ -1199,7 +1308,7 @@ async fn session_budget_rejection_does_not_partially_store_a_child() {
             let mut payload = request(Some(&parent.id), json!("child"));
             payload.store = true;
             let result = ExecuteRequest::new(payload, Arc::new(model.exec.clone()))
-                .with_session(&session)
+                .with_session(&session, None)
                 .unwrap()
                 .run()
                 .await;
@@ -1213,7 +1322,7 @@ async fn session_budget_rejection_does_not_partially_store_a_child() {
             assert_eq!(after, before, "a failed budget check must precede durable writes");
             assert!(matches!(
                 rehydrate_in_session(request(Some(&parent.id), json!("next")), &model.exec, &session).await,
-                Err(ExecutorError::PreviousResponseNotFound { .. })
+                Err(ExecutorError::Storage(StorageError::PreviousResponseNotFound { .. }))
             ));
             let recovery = execute_local(&model, &session, request(None, json!("fresh"))).await;
             assert_eq!(
@@ -1267,19 +1376,18 @@ async fn session_tool_round_preserves_reasoning_message_call_output_order() {
                 json!("message"),
                 json!("reasoning"),
                 json!("message"),
-                json!("function_call"),
-                json!("function_call_output"),
+                json!("web_search_call"),
                 json!("message"),
                 json!("message")
             ],
             "canonical continuation must preserve inference-round order: {history}"
         );
         assert!(history[2].to_string().contains("intermediate answer"));
-        assert!(history[5].to_string().contains("final answer"));
+        assert!(history[4].to_string().contains("final answer"));
         if store_durable {
-            let durable = InOutItem::into_input_items(store.rehydrate(&result.id).await.unwrap());
+            let durable = InOutItem::into_input_items(store.rehydrate(&result.id).await.unwrap().1);
             let durable = serde_json::to_value(durable).unwrap();
-            assert_eq!(durable, Value::Array(history.as_array().unwrap()[..6].to_vec()));
+            assert_eq!(durable, Value::Array(history.as_array().unwrap()[..5].to_vec()));
         }
         model.close().await;
     }
@@ -1316,13 +1424,12 @@ async fn session_mixed_tool_round_records_calls_once_before_client_continuation(
     .await
     .expect("the client call is retained exactly once despite the mixed round");
     let history = serde_json::to_value(&next.enriched_request.input).unwrap();
-    assert_eq!(history.as_array().unwrap().len(), 6);
+    assert_eq!(history.as_array().unwrap().len(), 5);
     assert!(history[1].to_string().contains("before the calls"));
-    assert_eq!(history[2]["call_id"], "call_search");
+    assert_eq!(history[2]["type"], "web_search_call");
     assert_eq!(history[3]["call_id"], "client");
     assert_eq!(history[4]["type"], "function_call_output");
-    assert_eq!(history[4]["call_id"], "call_search");
-    assert_eq!(history[5]["call_id"], "client");
+    assert_eq!(history[4]["call_id"], "client");
     model.close().await;
 }
 
@@ -1344,13 +1451,11 @@ async fn session_round_limit_retains_the_final_call_output_in_order() {
         .expect("round exhaustion must not leave an unanswered built-in call");
     let history = serde_json::to_value(&next.enriched_request.input).unwrap();
     let items = history.as_array().unwrap();
-    assert_eq!(items.len(), 32);
-    for (round, items) in items[1..31].chunks_exact(3).enumerate() {
+    assert_eq!(items.len(), 22);
+    for (round, items) in items[1..21].as_chunks::<2>().0.iter().enumerate() {
         assert_eq!(items[0]["type"], "message");
-        assert_eq!(items[1]["type"], "function_call");
-        assert_eq!(items[2]["type"], "function_call_output");
-        assert_eq!(items[1]["call_id"], format!("call_round_{round}"));
-        assert_eq!(items[2]["call_id"], items[1]["call_id"]);
+        assert_eq!(items[1]["type"], "web_search_call");
+        assert_eq!(items[1]["id"], format!("ws_round_{round}"));
     }
     model.close().await;
 }
@@ -1368,13 +1473,14 @@ async fn session_repeated_in_round_compaction_retains_only_the_latest_window() {
     let calls = with_local_search(&mut model);
     let session = ResponseSession::new(NonZeroUsize::new(3).unwrap(), NonZeroUsize::new(100_000).unwrap());
     let mut payload = search_request();
+    // Above the short final history, so the turn does not compact again after its answer.
     payload.context_management =
-        Some(serde_json::from_value(json!([{"type":"compaction", "compact_threshold":50}])).unwrap());
+        Some(serde_json::from_value(json!([{"type":"compaction", "compact_threshold":100}])).unwrap());
     let result = execute_local(&model, &session, payload).await;
     assert_eq!(
         result.output.len(),
-        5,
-        "both intermediate messages and search calls remain public"
+        7,
+        "both intermediate messages and search calls remain public, each compaction item before its round"
     );
     assert_eq!(calls.load(Ordering::Relaxed), 2);
     assert_eq!(model.requests.lock().await.len(), 5);
@@ -1382,10 +1488,12 @@ async fn session_repeated_in_round_compaction_retains_only_the_latest_window() {
         .await
         .unwrap();
     let history = serde_json::to_value(&next.enriched_request.input).unwrap();
-    assert_eq!(history.as_array().unwrap().len(), 4);
-    assert_eq!(history[1]["type"], "compaction");
-    assert_eq!(history[1]["encrypted_content"], "second summary");
-    assert!(history[2].to_string().contains("final answer"));
+    assert_eq!(history.as_array().unwrap().len(), 3);
+    assert_eq!(history[0]["type"], "compaction");
+    let projected = serde_json::to_value(next.enriched_request.input.model_input()).unwrap();
+    assert_eq!(projected[0]["content"][0]["text"], "short");
+    assert_eq!(projected[1]["content"][0]["text"], "second summary");
+    assert!(history[1].to_string().contains("final answer"));
     assert!(!history.to_string().contains("obsolete"));
     assert!(!history.to_string().contains("first summary"));
     model.close().await;
@@ -1398,6 +1506,7 @@ async fn session_compacted_durable_parent_restores_within_the_canonical_budget()
             model_message("resp_old", &"obsolete durable assistant detail".repeat(1_000)),
             model_message("resp_summary", "compact durable summary"),
             model_message("resp_compacted", "compacted answer"),
+            model_message("resp_summary_after", "durable summary after the answer"),
             model_message("resp_child", "new answer"),
         ])
         .await;
@@ -1414,7 +1523,7 @@ async fn session_compacted_durable_parent_restores_within_the_canonical_budget()
             Some(serde_json::from_value(json!([{"type":"compaction", "compact_threshold":1}])).unwrap());
         let compacted = execute_local(&model, &original_session, payload).await;
         assert_eq!(
-            store.rehydrate(&compacted.id).await.unwrap().len(),
+            store.rehydrate(&compacted.id).await.unwrap().1.len(),
             6,
             "durable history still references its pre-compaction parent rows"
         );
@@ -1441,8 +1550,9 @@ async fn session_compacted_durable_parent_restores_within_the_canonical_budget()
             .await
             .unwrap();
         let history = serde_json::to_value(&ctx.enriched_request.input).unwrap();
-        assert_eq!(history.as_array().unwrap().len(), 7);
-        assert_eq!(history[2]["type"], "compaction");
+        // The compaction made after the compacting turn's answer, then the child turn and the next user item.
+        assert_eq!(history.as_array().unwrap().len(), 4);
+        assert_eq!(history[0]["type"], "compaction");
         assert!(!history.to_string().contains("obsolete durable assistant detail"));
         assert!(
             store.get(&first.id).await.is_ok(),
@@ -1453,7 +1563,9 @@ async fn session_compacted_durable_parent_restores_within_the_canonical_budget()
 }
 
 #[tokio::test]
-async fn replayed_compaction_releases_superseded_session_history() {
+/// As on `OpenAI`, a compaction the client supplies is used for its turn only: it is not stored, so the next turn
+/// continues the history it replaced, including a call that history left unanswered.
+async fn replayed_compaction_is_used_for_its_turn_only() {
     let exec = execution();
     for pending_call in [false, true] {
         let session = ResponseSession::new(NonZeroUsize::new(2).unwrap(), NonZeroUsize::new(100_000).unwrap());
@@ -1479,23 +1591,31 @@ async fn replayed_compaction_releases_superseded_session_history() {
             &session,
         )
         .await
-        .expect("a replayed window supersedes old pending calls");
+        .expect("the replayed window is this turn's model input");
         let child = ctx.response_id.clone();
         let output = response(&ctx, json!([]));
-        commit(ctx, output, &exec)
-            .await
-            .expect("superseded history must not consume the checkpoint budget");
-        let ctx = rehydrate_in_session(request(Some(&child), json!([])), &exec, &session)
-            .await
-            .unwrap();
-        let items = serde_json::to_value(&ctx.enriched_request.input).unwrap();
-        assert_eq!(items.as_array().unwrap().len(), 1);
-        assert_eq!(items[0]["type"], "compaction");
+        commit(ctx, output, &exec).await.expect("the turn is stored");
+        let next = rehydrate_in_session(request(Some(&child), json!([])), &exec, &session).await;
+        if pending_call {
+            assert!(
+                matches!(next, Err(ExecutorError::Tool(_))),
+                "the old call is still unanswered"
+            );
+            continue;
+        }
+        let items = serde_json::to_value(&next.unwrap().enriched_request.input).unwrap();
+        assert!(
+            !items.to_string().contains("cmp_replayed"),
+            "the supplied compaction is not stored"
+        );
+        assert!(items.to_string().contains("obsolete answer"));
     }
 }
 
 #[tokio::test]
-async fn session_commit_validates_call_ids_against_replayed_compaction_window() {
+/// The replayed compaction is not stored, so the history it superseded is continued: the old and the new call share
+/// `call_first`, and one output answers both, as repeated call IDs are accepted.
+async fn session_continuation_keeps_history_a_replayed_compaction_superseded() {
     let exec = execution();
     let session = session();
     let parent = parent_with_call(&exec, &session).await;
@@ -1517,8 +1637,17 @@ async fn session_commit_validates_call_ids_against_replayed_compaction_window() 
         .expect("the old call is outside the effective history");
     let ctx = resolved_continuation(&exec, &session, &child.id).await;
     let items = serde_json::to_value(&ctx.enriched_request.input).unwrap();
-    assert_eq!(items.as_array().unwrap().len(), 3);
-    assert_eq!(items[0]["type"], "compaction");
-    assert_eq!(items[1]["type"], "function_call");
-    assert_eq!(items[2]["type"], "function_call_output");
+    let types = items
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["type"].as_str().unwrap_or("message"))
+        .collect::<Vec<_>>();
+    assert!(!types.contains(&"compaction"), "{types:?}");
+    assert_eq!(
+        types.iter().filter(|kind| **kind == "function_call").count(),
+        2,
+        "{types:?}"
+    );
+    assert_eq!(types.last(), Some(&"function_call_output"));
 }

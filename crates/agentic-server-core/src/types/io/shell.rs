@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use super::multi_agent::AgentAttribution;
+
 /// Lifecycle status for a shell call or shell call output item.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -22,23 +24,51 @@ impl From<crate::types::event::MessageStatus> for ShellCallStatus {
     }
 }
 
+/// A supplied shell limit can be numeric or explicitly null.
+/// The enclosing `Option` distinguishes either case from an omitted field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(untagged)]
+pub enum ShellCallLimit {
+    Value(u64),
+    Null,
+}
+
 /// Commands and execution limits requested by a model-generated shell call.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ShellCallAction {
     pub commands: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub timeout_ms: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub max_output_length: Option<u64>,
+    /// `None` omits the field; `Some(ShellCallLimit::Null)` preserves an explicit null.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_optional_limit",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub timeout_ms: Option<ShellCallLimit>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_optional_limit",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub max_output_length: Option<ShellCallLimit>,
     #[serde(default, flatten)]
     pub extra: HashMap<String, Value>,
+}
+
+fn deserialize_optional_limit<'de, D>(deserializer: D) -> Result<Option<ShellCallLimit>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    ShellCallLimit::deserialize(deserializer).map(Some)
 }
 
 /// A model-generated request to execute one or more shell commands.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ShellCall {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentAttribution>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     pub call_id: String,
@@ -97,6 +127,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn shell_preserves_absent_null_and_numeric_limits_and_environment() {
+        for mut action in [
+            serde_json::json!({"commands": ["pwd"]}),
+            serde_json::json!({"commands": ["pwd"], "timeout_ms": null, "max_output_length": null}),
+            serde_json::json!({"commands": ["pwd"], "timeout_ms": 1000, "max_output_length": 4096}),
+        ] {
+            action["extension"] = serde_json::json!(true);
+            let mut wire = serde_json::json!({"id": "sh_test", "call_id": "call_test", "action": action});
+            for environment in [
+                None,
+                Some(serde_json::Value::Null),
+                Some(serde_json::json!({"type": "local"})),
+            ] {
+                if let Some(environment) = environment {
+                    wire["environment"] = environment;
+                }
+                let call: ShellCall = serde_json::from_value(wire.clone()).unwrap();
+                assert_eq!(serde_json::to_value(call).unwrap(), wire);
+            }
+        }
+    }
+
+    #[test]
     fn shell_call_round_trips_with_limits_and_extra_fields() {
         let value = serde_json::json!({
             "id": "sh_1",
@@ -113,7 +166,7 @@ mod tests {
 
         let call: ShellCall = serde_json::from_value(value).unwrap();
         assert_eq!(call.action.commands, ["pwd", "cargo test"]);
-        assert_eq!(call.action.timeout_ms, Some(120_000));
+        assert_eq!(call.action.timeout_ms, Some(ShellCallLimit::Value(120_000)));
         assert_eq!(call.status, Some(ShellCallStatus::InProgress));
 
         let serialized = serde_json::to_value(call).unwrap();

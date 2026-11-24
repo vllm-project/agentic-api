@@ -1,0 +1,128 @@
+//! Construction of the default and injected file-search providers.
+
+use std::{path::PathBuf, sync::Arc};
+
+use tokio::sync::Semaphore;
+
+use super::FileSearchService;
+use crate::{
+    config::agentic_api_home,
+    storage::{DbPool, file_search::FileSearchStorage, local_files::LocalFiles},
+    tool::file_search::{
+        SqliteVecRepository,
+        embeddings::Embeddings,
+        provider::{FileBlobStore, FileSearchRepository},
+    },
+    types::file_search::{FileSearchConfig, FileSearchError},
+};
+
+impl FileSearchService {
+    /// Builds the configured SQL or sqlite-vec provider and local blob store.
+    ///
+    /// # Errors
+    /// Returns an error if the trusted extension cannot be loaded or providers cannot initialize.
+    pub async fn configured(
+        pool: Arc<DbPool>,
+        client: Arc<reqwest::Client>,
+        config: FileSearchConfig,
+    ) -> Result<Self, FileSearchError> {
+        let storage: Arc<dyn FileSearchRepository> = match &config.sqlite_vec_extension_path {
+            Some(extension_path) => Arc::new(SqliteVecRepository::open(pool, extension_path).await?),
+            None => Arc::new(FileSearchStorage::new(pool)),
+        };
+        Self::with_local_files(storage, client, &config)
+    }
+
+    /// Creates a service; no embeddings configuration selects keyword retrieval.
+    ///
+    /// # Errors
+    /// Returns invalid-request when embedding configuration is incomplete or malformed.
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "the shared service constructor owns deployment configuration"
+    )]
+    pub fn new(
+        pool: Arc<DbPool>,
+        client: Arc<reqwest::Client>,
+        config: FileSearchConfig,
+    ) -> Result<Self, FileSearchError> {
+        Self::with_local_files(Arc::new(FileSearchStorage::new(pool)), client, &config)
+    }
+
+    fn with_local_files(
+        storage: Arc<dyn FileSearchRepository>,
+        client: Arc<reqwest::Client>,
+        config: &FileSearchConfig,
+    ) -> Result<Self, FileSearchError> {
+        let directory = files_storage_dir(config)?;
+        Self::with_providers(storage, Arc::new(LocalFiles::new(directory)?), client, config)
+    }
+
+    /// Constructs the service with caller-supplied metadata/index and blob
+    /// providers. The default `new` constructor supplies SQL and local files.
+    ///
+    /// # Errors
+    /// Returns invalid-request when embedding configuration is incomplete or malformed.
+    pub fn with_providers(
+        storage: Arc<dyn FileSearchRepository>,
+        files: Arc<dyn FileBlobStore>,
+        client: Arc<reqwest::Client>,
+        config: &FileSearchConfig,
+    ) -> Result<Self, FileSearchError> {
+        if storage
+            .index_identity()
+            .is_some_and(|identity| identity.is_empty() || identity.len() > 256)
+        {
+            return Err(FileSearchError::InvalidRequest(
+                "search provider identity must contain 1 to 256 bytes".into(),
+            ));
+        }
+        Ok(Self {
+            storage,
+            files,
+            embeddings: Embeddings::from_config(client, config)?,
+            workers: Arc::new(Semaphore::new(4)),
+        })
+    }
+}
+
+fn files_storage_dir(config: &FileSearchConfig) -> Result<PathBuf, FileSearchError> {
+    config.files_storage_dir.clone().map_or_else(
+        || {
+            agentic_api_home()
+                .map(|home| home.join("files"))
+                .map_err(|error| FileSearchError::Configuration(Box::new(error)))
+        },
+        Ok,
+    )
+}
+
+pub(super) fn scoped_identity(index: Option<&str>, embedding: &str) -> String {
+    match index {
+        Some(index) => format!("index:{}:{index}:{embedding}", index.len()),
+        None => embedding.to_owned(),
+    }
+}
+
+pub(super) fn same_index(index: Option<&str>, stored: &str) -> bool {
+    match index {
+        Some(index) => stored.starts_with(&format!("index:{}:{index}:", index.len())),
+        None => !stored.starts_with("index:"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{same_index, scoped_identity};
+
+    #[test]
+    fn index_identity_rejects_cross_provider_reuse_even_in_keyword_mode() {
+        let external = scoped_identity(Some("milvus:tenant"), "keyword:cl100k_base:v1");
+        let legacy = scoped_identity(None, "keyword:cl100k_base:v1");
+        assert!(same_index(Some("milvus:tenant"), &external));
+        assert!(!same_index(Some("milvus:other"), &external));
+        assert!(!same_index(None, &external));
+        assert!(!same_index(Some("milvus:tenant"), &legacy));
+        assert!(same_index(None, &legacy));
+    }
+}

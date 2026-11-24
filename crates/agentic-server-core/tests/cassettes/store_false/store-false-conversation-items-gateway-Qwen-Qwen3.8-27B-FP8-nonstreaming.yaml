@@ -1,0 +1,601 @@
+turns:
+- filename: t1
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1793003484
+      id: conv_01a17755-f3b7-7e60-817e-a508546e0ee9
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      conversation: conv_01a17755-f3b7-7e60-817e-a508546e0ee9
+      input:
+      - content: Remember the secret word ORCHID. Reply with only OK.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1793003485
+      conversation:
+        id: conv_01a17755-f3b7-7e60-817e-a508546e0ee9
+      created_at: 1793003485
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a17755-f3c2-77e2-9b7e-fdfba310297a
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user is asking me to remember a "secret word" which is ORCHID,
+            and to reply with only "OK". This is a simple request. I''ll comply.
+
+            '
+          type: reasoning_text
+        id: rs_b7786f946368117a
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            OK'
+          type: output_text
+        id: msg_8fc34f2b9b39e0cd
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 53
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 41
+        output_tokens_details:
+          reasoning_tokens: 37
+        total_tokens: 94
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_01a17755-f3b7-7e60-817e-a508546e0ee9/items
+    query_params:
+      order: asc
+  response:
+    body:
+      data: []
+      first_id: null
+      has_more: false
+      last_id: null
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a17755-f3c2-77e2-9b7e-fdfba310297a
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Response with id 'resp_01a17755-f3c2-77e2-9b7e-fdfba310297a' not
+          found.
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t5
+  request:
+    body:
+      conversation: conv_01a17755-f3b7-7e60-817e-a508546e0ee9
+      input:
+      - content: Remember the secret word SAPPHIRE. Reply with only OK.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1793003485
+      conversation:
+        id: conv_01a17755-f3b7-7e60-817e-a508546e0ee9
+      created_at: 1793003485
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a17755-f7ac-7483-9dfe-4bafa35aa215
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to remember the secret word "SAPPHIRE" and reply
+            with only "OK".
+
+            '
+          type: reasoning_text
+        id: rs_ab994a89d51b8508
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            OK'
+          type: output_text
+        id: msg_a4ce11d139ea2d15
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 53
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 27
+        output_tokens_details:
+          reasoning_tokens: 23
+        total_tokens: 80
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_01a17755-f3b7-7e60-817e-a508546e0ee9/items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember the secret word SAPPHIRE. Reply with only OK.
+          type: input_text
+        id: msg_01a17755-fa41-7270-a211-a9c019141115
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to remember the secret word "SAPPHIRE" and reply
+            with only "OK".
+
+            '
+          type: reasoning_text
+        id: rs_ab994a89d51b8508
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            OK'
+          type: output_text
+        id: msg_a4ce11d139ea2d15
+        role: assistant
+        status: completed
+        type: message
+      first_id: msg_01a17755-fa41-7270-a211-a9c019141115
+      has_more: false
+      last_id: msg_a4ce11d139ea2d15
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body:
+      conversation: conv_01a17755-f3b7-7e60-817e-a508546e0ee9
+      input:
+      - content: What secret word did I ask you to remember? Reply with that word
+          only. After replying, remember RUBY instead.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1793003487
+      conversation:
+        id: conv_01a17755-f3b7-7e60-817e-a508546e0ee9
+      created_at: 1793003487
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a17755-fa94-7ec0-b2ad-60232fa4f13c
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user is asking me what secret word they asked me to remember.
+            In the previous message, they told me to remember "SAPPHIRE". They want
+            me to reply with that word only. They also ask me to remember "RUBY" instead
+            going forward.
+
+
+            I''ll reply with just the word as requested.
+
+            '
+          type: reasoning_text
+        id: rs_b8c5092b2117e2f8
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_aebe785108a295d4
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 116
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 73
+        output_tokens_details:
+          reasoning_tokens: 66
+        total_tokens: 189
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_01a17755-f3b7-7e60-817e-a508546e0ee9/items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember the secret word SAPPHIRE. Reply with only OK.
+          type: input_text
+        id: msg_01a17755-fa41-7270-a211-a9c019141115
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to remember the secret word "SAPPHIRE" and reply
+            with only "OK".
+
+            '
+          type: reasoning_text
+        id: rs_ab994a89d51b8508
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            OK'
+          type: output_text
+        id: msg_a4ce11d139ea2d15
+        role: assistant
+        status: completed
+        type: message
+      first_id: msg_01a17755-fa41-7270-a211-a9c019141115
+      has_more: false
+      last_id: msg_a4ce11d139ea2d15
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a17755-fa94-7ec0-b2ad-60232fa4f13c
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Response with id 'resp_01a17755-fa94-7ec0-b2ad-60232fa4f13c' not
+          found.
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t10
+  request:
+    body:
+      conversation: conv_01a17755-f3b7-7e60-817e-a508546e0ee9
+      input:
+      - content: What secret word did I ask you to remember? Reply with that word
+          only.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1793003488
+      conversation:
+        id: conv_01a17755-f3b7-7e60-817e-a508546e0ee9
+      created_at: 1793003488
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a17756-018d-7840-b711-4c21d9dc67bd
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user is asking me to recall the secret word they asked me to
+            remember. In the previous message, they told me to remember "SAPPHIRE".
+            They want me to reply with that word only.
+
+            '
+          type: reasoning_text
+        id: rs_901c51b01d304519
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_85e88269de35c8ea
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 107
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 50
+        output_tokens_details:
+          reasoning_tokens: 43
+        total_tokens: 157
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t11
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_01a17755-f3b7-7e60-817e-a508546e0ee9/items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember the secret word SAPPHIRE. Reply with only OK.
+          type: input_text
+        id: msg_01a17755-fa41-7270-a211-a9c019141115
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to remember the secret word "SAPPHIRE" and reply
+            with only "OK".
+
+            '
+          type: reasoning_text
+        id: rs_ab994a89d51b8508
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            OK'
+          type: output_text
+        id: msg_a4ce11d139ea2d15
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: What secret word did I ask you to remember? Reply with that word only.
+          type: input_text
+        id: msg_01a17756-05e6-7371-98d2-88e1bdb2500c
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user is asking me to recall the secret word they asked me to
+            remember. In the previous message, they told me to remember "SAPPHIRE".
+            They want me to reply with that word only.
+
+            '
+          type: reasoning_text
+        id: rs_901c51b01d304519
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_85e88269de35c8ea
+        role: assistant
+        status: completed
+        type: message
+      first_id: msg_01a17755-fa41-7270-a211-a9c019141115
+      has_more: false
+      last_id: msg_85e88269de35c8ea
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200

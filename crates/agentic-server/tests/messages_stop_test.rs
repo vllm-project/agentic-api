@@ -215,11 +215,16 @@ async fn messages_stop_requires_a_complete_matching_data_event() {
     ] {
         let events = http_open_body(format!("{}{suffix}", encode(&unfinished))).await;
         assert_eq!(events.last().unwrap()["type"], "error", "{suffix}");
+        let expected_error = if suffix.contains("{invalid}") {
+            "invalid JSON in upstream Messages stream"
+        } else {
+            "chunk timeout"
+        };
         assert!(
             events.last().unwrap()["error"]["message"]
                 .as_str()
                 .unwrap()
-                .contains("chunk timeout")
+                .contains(expected_error)
         );
         assert!(!events.iter().any(|event| event["type"] == "message_stop"));
     }
@@ -237,8 +242,8 @@ async fn messages_stop_preserves_errors_before_the_terminal() {
 }
 
 #[tokio::test]
-async fn messages_stop_preserves_clean_eof_compatibility() {
-    let expected = completed_message();
+async fn messages_stop_rejects_clean_eof_without_completion() {
+    let mut expected = completed_message();
     let mut input = expected.clone();
     input.pop();
     let body = encode(&input);
@@ -257,6 +262,11 @@ async fn messages_stop_preserves_clean_eof_compatibility() {
     .await;
     let (gateway_url, gateway) = common::spawn_gateway(common::test_state(&common::test_config(&url))).await;
     let gateway = Server(gateway);
+    // Neither the upstream terminal delta nor a synthetic stop can signal success.
+    expected.truncate(expected.len() - 2);
+    expected.push(json!({"type":"error", "error":{
+        "type":"api_error", "message":"upstream Messages stream ended before message_stop"
+    }}));
     assert_eq!(http_events(&gateway_url, &request()).await, expected);
     gateway.stop().await;
     upstream.stop().await;

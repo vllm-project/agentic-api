@@ -1,9 +1,9 @@
 //! Model-facing `web_search` arguments and provider-neutral argument helpers.
 //!
 //! Everything here is independent of a concrete search backend: parsing and
-//! validating what the model sent, the typed [`Freshness`] filter, and the
-//! [`DomainFilter`] post-filter for providers without server-side domain
-//! filtering.
+//! validating what the model sent, the typed [`Freshness`] filter, and result
+//! retention under the shared [`DomainFilter`] for providers without
+//! server-side domain filtering.
 
 use std::fmt;
 use std::str::FromStr;
@@ -12,6 +12,7 @@ use chrono::NaiveDate;
 use serde::Deserialize;
 
 use super::WebSearchResult;
+use crate::tool::domain_policy::DomainFilter;
 use crate::tool::handler::ToolError;
 
 pub(crate) const MAX_WEB_SEARCH_QUERIES: usize = 5;
@@ -107,6 +108,13 @@ impl TryFrom<RawWebSearchArguments> for WebSearchArguments {
     }
 }
 
+/// How many provider searches a `web_search` call asks for: the unit a search
+/// budget counts. Zero when the arguments do not parse, because the handler
+/// then fails before any provider request.
+pub(crate) fn requested_searches(arguments: &str) -> usize {
+    WebSearchArguments::from_json(arguments).map_or(0, |arguments| arguments.queries().len())
+}
+
 /// Recency filter accepted by `web_search`.
 ///
 /// The wire format is `day`, `week`, `month`, `year`, or an inclusive
@@ -130,11 +138,17 @@ impl FromStr for Freshness {
             "week" => Ok(Self::Week),
             "month" => Ok(Self::Month),
             "year" => Ok(Self::Year),
-            _ => parse_freshness_range(value).ok_or_else(|| {
-                ToolError::Config(
+            _ => match parse_freshness_range(value) {
+                Some(Self::Range { from, to }) if from > to => Err(ToolError::Config(format!(
+                    "web_search freshness range starts after it ends: {} is after {}",
+                    from.format(DATE_FORMAT),
+                    to.format(DATE_FORMAT)
+                ))),
+                Some(range) => Ok(range),
+                None => Err(ToolError::Config(
                     "web_search freshness must be day, week, month, year, or YYYY-MM-DDtoYYYY-MM-DD".to_owned(),
-                )
-            }),
+                )),
+            },
         }
     }
 }
@@ -204,76 +218,13 @@ pub(crate) fn clean_vec(values: Option<&[String]>) -> Option<Vec<String>> {
     (!cleaned.is_empty()).then_some(cleaned)
 }
 
-/// Provider-neutral domain post-filter for providers without server-side
-/// `include_domains` / `exclude_domains` support.
-///
-/// A host matches a domain when it equals the domain or ends with `.{domain}`
-/// (label boundary), compared case-insensitively after IDNA normalization. A
-/// URL without a parseable host cannot be checked, so it is rejected whenever
-/// any allowlist or blocklist is active (fail closed). You.com filters
-/// server-side, so this is not applied on that path; Brave Search applies it
-/// to every result section.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(crate) struct DomainFilter {
-    include: Vec<String>,
-    exclude: Vec<String>,
-}
-
-impl DomainFilter {
-    pub(crate) fn new(include: Option<&[String]>, exclude: Option<&[String]>) -> Self {
-        Self {
-            include: normalize_domains(include),
-            exclude: normalize_domains(exclude),
-        }
+/// Drops the results a declaration's domain filter refuses. A result without a
+/// parseable URL is dropped whenever a filter is active (fail closed); with no
+/// filter the results are untouched.
+pub(crate) fn retain_allowed_results(filter: &DomainFilter, results: &mut Vec<WebSearchResult>) {
+    if !filter.is_empty() {
+        results.retain(|result| filter.allows(&result.url));
     }
-
-    pub(crate) fn is_empty(&self) -> bool {
-        self.include.is_empty() && self.exclude.is_empty()
-    }
-
-    pub(crate) fn allows(&self, url: &str) -> bool {
-        let Some(host) = url_host(url) else {
-            return self.is_empty();
-        };
-        let matches = |domain: &String| host_matches_domain(&host, domain);
-        (self.include.is_empty() || self.include.iter().any(matches)) && !self.exclude.iter().any(matches)
-    }
-
-    pub(crate) fn retain(&self, results: &mut Vec<WebSearchResult>) {
-        if !self.is_empty() {
-            results.retain(|result| self.allows(&result.url));
-        }
-    }
-}
-
-fn normalize_domains(domains: Option<&[String]>) -> Vec<String> {
-    domains
-        .unwrap_or_default()
-        .iter()
-        .filter_map(|domain| normalize_domain(domain))
-        .collect()
-}
-
-/// Lowercases and IDNA-normalizes a configured domain. Entries that are not a
-/// valid host are kept verbatim (lowercased) so a typo fails closed instead of
-/// silently widening an allowlist.
-fn normalize_domain(domain: &str) -> Option<String> {
-    let trimmed = domain.trim().trim_end_matches('.');
-    if trimmed.is_empty() {
-        return None;
-    }
-    Some(url::Host::parse(trimmed).map_or_else(|_| trimmed.to_ascii_lowercase(), |host| host.to_string()))
-}
-
-fn url_host(url: &str) -> Option<String> {
-    url::Url::parse(url)
-        .ok()?
-        .host()
-        .map(|host| host.to_string().trim_end_matches('.').to_owned())
-}
-
-fn host_matches_domain(host: &str, domain: &str) -> bool {
-    host == domain || host.strip_suffix(domain).is_some_and(|prefix| prefix.ends_with('.'))
 }
 
 #[cfg(test)]
@@ -316,6 +267,25 @@ mod tests {
                 .to_string()
                 .starts_with("invalid tool config: web_search arguments must be valid JSON: ")
         );
+    }
+
+    #[test]
+    fn requested_searches_counts_what_the_handler_would_run() {
+        assert_eq!(requested_searches(r#"{"query":"one"}"#), 1);
+        assert_eq!(requested_searches(r#"{"queries":["a","b","c"]}"#), 3);
+        // `queries` wins over `query`, and blank entries are never searched.
+        assert_eq!(requested_searches(r#"{"query":"potato","queries":[" a ","","b"]}"#), 2);
+        assert_eq!(requested_searches(r#"{"query":"potato","queries":["  "]}"#), 1);
+        // Arguments that do not parse never reach a provider.
+        for rejected in [
+            r#"{"query":"  "}"#,
+            r#"{"queries":["1","2","3","4","5","6"]}"#,
+            r#"{"query":"q","freshness":"never"}"#,
+            "{not json",
+        ] {
+            assert!(WebSearchArguments::from_json(rejected).is_err(), "{rejected}");
+            assert_eq!(requested_searches(rejected), 0, "{rejected}");
+        }
     }
 
     #[test]
@@ -366,6 +336,26 @@ mod tests {
     }
 
     #[test]
+    fn freshness_rejects_a_range_that_ends_before_it_starts() {
+        let error = "2024-02-29to2024-01-05"
+            .parse::<Freshness>()
+            .expect_err("reversed range");
+        assert_eq!(
+            error.to_string(),
+            "invalid tool config: web_search freshness range starts after it ends: 2024-02-29 is after 2024-01-05"
+        );
+        let error = WebSearchArguments::from_json(r#"{"query":"q","freshness":"2024-02-29to2024-01-05"}"#).unwrap_err();
+        assert!(error.to_string().contains("starts after it ends"));
+
+        // A single-day range is inclusive on both ends and stays valid.
+        let day = NaiveDate::from_ymd_opt(2024, 2, 29).unwrap();
+        assert_eq!(
+            "2024-02-29to2024-02-29".parse::<Freshness>().unwrap(),
+            Freshness::Range { from: day, to: day }
+        );
+    }
+
+    #[test]
     fn arguments_parse_and_blank_freshness() {
         let args = WebSearchArguments::from_json(r#"{"query":"q","freshness":" week "}"#).unwrap();
         assert_eq!(args.freshness, Some(Freshness::Week));
@@ -390,75 +380,16 @@ mod tests {
     }
 
     #[test]
-    fn domain_filter_matches_on_label_boundary_case_insensitively() {
-        let filter = DomainFilter::new(Some(&["Example.COM.".to_owned()]), None);
-        assert!(filter.allows("https://example.com/a"));
-        assert!(filter.allows("https://EXAMPLE.com/a"));
-        assert!(filter.allows("https://docs.example.com./a"));
-        assert!(!filter.allows("https://notexample.com/a"));
-        assert!(!filter.allows("https://example.com.evil.net/a"));
-        assert!(!filter.allows("https://example.org/a"));
-    }
-
-    #[test]
-    fn domain_filter_excludes_after_including() {
-        let filter = DomainFilter::new(
-            Some(&["example.com".to_owned()]),
-            Some(&["internal.example.com".to_owned()]),
-        );
-        assert!(filter.allows("https://www.example.com/"));
-        assert!(!filter.allows("https://internal.example.com/"));
-        assert!(!filter.allows("https://a.internal.example.com/"));
-
-        let blocklist_only = DomainFilter::new(None, Some(&["example.com".to_owned()]));
-        assert!(blocklist_only.allows("https://example.org/"));
-        assert!(!blocklist_only.allows("https://sub.example.com/"));
-    }
-
-    #[test]
-    fn domain_filter_fails_closed_on_unparsable_urls() {
-        let unparsable = [
-            "not_a_valid_url",
-            "not a url",
-            "example.com/path",
-            "mailto:someone@example.com",
-        ];
-
-        let allowlist = DomainFilter::new(Some(&["example.com".to_owned()]), None);
-        let blocklist = DomainFilter::new(None, Some(&["example.com".to_owned()]));
-        for url in unparsable {
-            assert!(!allowlist.allows(url), "allowlist must reject {url:?}");
-            assert!(!blocklist.allows(url), "blocklist must reject {url:?}");
-        }
-
-        let unfiltered = DomainFilter::default();
-        for url in unparsable {
-            assert!(unfiltered.allows(url), "no active filter must pass {url:?}");
-        }
-    }
-
-    #[test]
-    fn domain_filter_normalizes_idna_and_fails_closed_on_invalid_entries() {
-        let idna = DomainFilter::new(Some(&["Bücher.example".to_owned()]), None);
-        assert!(idna.allows("https://shop.bücher.example/"));
-        assert!(idna.allows("https://xn--bcher-kva.example/"));
-
-        let invalid = DomainFilter::new(Some(&["https://example.com/path".to_owned()]), None);
-        assert!(!invalid.is_empty());
-        assert!(!invalid.allows("https://example.com/"));
-    }
-
-    #[test]
-    fn domain_filter_retain_is_a_no_op_when_empty() {
+    fn retaining_results_is_a_no_op_without_a_filter_and_fails_closed_with_one() {
         let mut results = vec![result("https://a.example/"), result("not a url")];
-        DomainFilter::default().retain(&mut results);
+        retain_allowed_results(&DomainFilter::default(), &mut results);
         assert_eq!(results.len(), 2);
 
-        DomainFilter::new(None, Some(&["b.example".to_owned()])).retain(&mut results);
+        retain_allowed_results(&DomainFilter::new(None, Some(&["b.example".to_owned()])), &mut results);
         assert_eq!(results.len(), 1, "blocklist drops the uncheckable result");
         assert_eq!(results[0].url, "https://a.example/");
 
-        DomainFilter::new(Some(&["a.example".to_owned()]), None).retain(&mut results);
+        retain_allowed_results(&DomainFilter::new(Some(&["a.example".to_owned()]), None), &mut results);
         assert_eq!(results.len(), 1);
     }
 }

@@ -3,6 +3,7 @@ name = "agentic-server-core"
 description = "Framework-agnostic core library for agentic-api"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 exclude = [
@@ -17,14 +18,25 @@ name = "agentic_core"
 [features]
 default = []
 openapi = ["dep:utoipa"]
+file-search-pdf = ["dep:lopdf"]
+# Opt-in embedded Eryx runtime. It is additionally operator-gated at startup;
+# default builds retain no Eryx dependency or code-interpreter registration.
+embedded-code-interpreter = ["dep:async-trait", "dep:eryx", "dep:nix"]
 
 [dependencies]
 utoipa = { workspace = true, optional = true }
+async-trait = { workspace = true, optional = true }
+eryx = { workspace = true, optional = true }
 
 async-stream.workspace = true
+base64 = "0.22"
+lopdf = { version = "0.44", default-features = false, optional = true }
+tiktoken-rs = "0.9.1"
 bytes.workspace = true
+ring = "0.17"
 dirs.workspace = true
 either.workspace = true
+encoding_rs = "0.8"
 futures.workspace = true
 indexmap.workspace = true
 http.workspace = true
@@ -40,9 +52,10 @@ rmcp = { workspace = true, features = [
 ] }
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 sse-stream.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["time"] }
+tokio = { workspace = true, features = ["net", "time", "fs", "io-util"] }
 tokio-util = { workspace = true, features = ["rt"] }
 tracing.workspace = true
 tracing-opentelemetry.workspace = true
@@ -52,7 +65,15 @@ sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "any", "migrate", 
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v7", "serde"] }
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+nix = { version = "0.31.3", default-features = false, features = ["socket", "user"], optional = true }
+
 [dev-dependencies]
+flate2 = "1.1"
+tempfile = "3"
 axum.workspace = true
 criterion = { workspace = true }
 # Span capture for execution-trace tests only; the library itself never
@@ -60,7 +81,7 @@ criterion = { workspace = true }
 opentelemetry_sdk = { workspace = true, features = ["testing"] }
 serde_yaml = "0.9"
 serde_yml = "0.0.12"
-tokio = { workspace = true, features = ["full"] }
+tokio = { workspace = true, features = ["full", "test-util"] }
 toml.workspace = true
 tracing-subscriber.workspace = true
 

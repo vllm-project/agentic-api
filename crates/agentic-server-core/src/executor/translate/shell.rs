@@ -7,8 +7,9 @@ use crate::executor::accumulator::AccumulatedFunctionCall;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway_accumulator::synthetic_event;
 use crate::tool::{ShellHandler, shell};
-use crate::types::io::{ShellCallAction, ShellCallStatus};
+use crate::types::io::{OutputItem, ShellCall, ShellCallAction, ShellCallLimit, ShellCallStatus};
 use serde_json::Value;
+use std::collections::HashMap;
 
 #[derive(Debug)]
 struct ShellCallState {
@@ -89,13 +90,19 @@ fn shell_added_frame(call: &AccumulatedFunctionCall<'_>) -> ExecutorResult<Event
         call.output_index,
         [(
             "item".to_owned(),
-            serde_json::json!({
-                "type": "shell_call",
-                "id": shell::public_item_id(&call.item.id),
-                "call_id": call.item.call_id,
-                "status": "in_progress",
-                "action": {"commands": [], "timeout_ms": null, "max_output_length": null}
-            }),
+            serde_json::to_value(OutputItem::ShellCall(ShellCall {
+                agent: call.item.agent.clone(),
+                id: Some(shell::public_item_id(&call.item.id)),
+                call_id: call.item.call_id.clone(),
+                status: Some(ShellCallStatus::InProgress),
+                action: ShellCallAction {
+                    commands: Vec::new(),
+                    timeout_ms: Some(ShellCallLimit::Null),
+                    max_output_length: Some(ShellCallLimit::Null),
+                    extra: HashMap::new(),
+                },
+                extra: HashMap::new(),
+            }))?,
         )],
     )
 }

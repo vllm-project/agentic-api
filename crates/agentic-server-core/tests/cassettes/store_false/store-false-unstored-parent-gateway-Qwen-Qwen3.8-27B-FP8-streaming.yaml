@@ -1,0 +1,367 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Remember the word ORCHID. Reply with exactly OK.
+      max_output_tokens: 2048
+      model: Qwen/Qwen3.8-27B-FP8
+      store: false
+      stream: true
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a17756-3586-7223-88fe-e72de93573b9","created_at":1793003500,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":2048,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":false,"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null,"error":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a17756-3586-7223-88fe-e72de93573b9","created_at":1793003500,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":2048,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":false,"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null,"error":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"rs_b6351d8ad4bb3976","summary":[],"type":"reasoning","content":[],"status":"in_progress"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":3,"output_index":0,"content_index":0,"delta":"The","item_id":"rs_b6351d8ad4bb3976"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":4,"output_index":0,"content_index":0,"delta":"
+      user","item_id":"rs_b6351d8ad4bb3976"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":5,"output_index":0,"content_index":0,"delta":"
+      wants","item_id":"rs_b6351d8ad4bb3976"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":6,"output_index":0,"content_index":0,"delta":"
+      me","item_id":"rs_b6351d8ad4bb3976"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":7,"output_index":0,"content_index":0,"delta":"
+      to","item_id":"rs_b6351d8ad4bb3976"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":8,"output_index":0,"content_index":0,"delta":"
+      remember","item_id":"rs_b6351d8ad4bb3976"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":9,"output_index":0,"content_index":0,"delta":"
+      the","item_id":"rs_b6351d8ad4bb3976"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":10,"output_index":0,"content_index":0,"delta":"
+      word","item_id":"rs_b6351d8ad4bb3976"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":11,"output_index":0,"content_index":0,"delta":"
+      \"","item_id":"rs_b6351d8ad4bb3976"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":12,"output_index":0,"content_index":0,"delta":"OR","item_id":"rs_b6351d8ad4bb3976"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":13,"output_index":0,"content_index":0,"delta":"CH","item_id":"rs_b6351d8ad4bb3976"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":14,"output_index":0,"content_index":0,"delta":"ID","item_id":"rs_b6351d8ad4bb3976"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":15,"output_index":0,"content_index":0,"delta":"\"","item_id":"rs_b6351d8ad4bb3976"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":16,"output_index":0,"content_index":0,"delta":"
+      and","item_id":"rs_b6351d8ad4bb3976"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":17,"output_index":0,"content_index":0,"delta":"
+      reply","item_id":"rs_b6351d8ad4bb3976"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":18,"output_index":0,"content_index":0,"delta":"
+      with","item_id":"rs_b6351d8ad4bb3976"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":19,"output_index":0,"content_index":0,"delta":"
+      exactly","item_id":"rs_b6351d8ad4bb3976"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":20,"output_index":0,"content_index":0,"delta":"
+      \"","item_id":"rs_b6351d8ad4bb3976"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":21,"output_index":0,"content_index":0,"delta":"OK","item_id":"rs_b6351d8ad4bb3976"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":22,"output_index":0,"content_index":0,"delta":"\".","item_id":"rs_b6351d8ad4bb3976"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":23,"output_index":0,"content_index":0,"delta":"\n","item_id":"rs_b6351d8ad4bb3976"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.done
+
+      '
+    - 'data: {"type":"response.reasoning_text.done","sequence_number":24,"output_index":0,"content_index":0,"item_id":"rs_b6351d8ad4bb3976","text":"The
+      user wants me to remember the word \"ORCHID\" and reply with exactly \"OK\".\n"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":25,"output_index":0,"item":{"id":"rs_b6351d8ad4bb3976","summary":[],"type":"reasoning","content":[{"text":"The
+      user wants me to remember the word \"ORCHID\" and reply with exactly \"OK\".\n","type":"reasoning_text"}],"status":"completed"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":26,"output_index":1,"item":{"id":"msg_a7ab4b4d6a498e46","content":[],"role":"assistant","status":"in_progress","type":"message"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","sequence_number":27,"output_index":1,"content_index":0,"item_id":"msg_a7ab4b4d6a498e46","part":{"annotations":[],"text":"","type":"output_text","logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":28,"output_index":1,"content_index":0,"delta":"\n\nOK","item_id":"msg_a7ab4b4d6a498e46","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","sequence_number":29,"output_index":1,"content_index":0,"item_id":"msg_a7ab4b4d6a498e46","logprobs":[],"text":"\n\nOK"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","sequence_number":30,"output_index":1,"content_index":0,"item_id":"msg_a7ab4b4d6a498e46","part":{"annotations":[],"text":"\n\nOK","type":"output_text","logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":31,"output_index":1,"item":{"id":"msg_a7ab4b4d6a498e46","content":[{"annotations":[],"text":"\n\nOK","type":"output_text","logprobs":[]}],"role":"assistant","status":"completed","type":"message"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","sequence_number":32,"response":{"id":"resp_01a17756-3586-7223-88fe-e72de93573b9","object":"response","created_at":1793003501,"model":"Qwen/Qwen3.8-27B-FP8","status":"completed","output":[{"type":"reasoning","id":"rs_b6351d8ad4bb3976","content":[{"type":"reasoning_text","text":"The
+      user wants me to remember the word \"ORCHID\" and reply with exactly \"OK\".\n"}],"summary":[],"status":"completed"},{"type":"message","id":"msg_a7ab4b4d6a498e46","role":"assistant","status":"completed","content":[{"type":"output_text","text":"\n\nOK","annotations":[]}]}],"usage":{"input_tokens":52,"output_tokens":25,"total_tokens":77,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens_details":{"reasoning_tokens":21}},"incomplete_details":null,"error":null,"previous_response_id":null,"instructions":null,"max_tool_calls":null,"service_tier":"auto","tools":[],"tool_choice":"auto","completed_at":1793003501,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":1.0,"reasoning":null,"max_output_tokens":2048,"store":false,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null}}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input: Say OK.
+      max_output_tokens: 2048
+      model: Qwen/Qwen3.8-27B-FP8
+      previous_response_id: resp_01a17756-3586-7223-88fe-e72de93573b9
+      store: false
+      stream: true
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: previous_response_not_found
+        message: Previous response with id 'resp_01a17756-3586-7223-88fe-e72de93573b9'
+          not found.
+        param: previous_response_id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400

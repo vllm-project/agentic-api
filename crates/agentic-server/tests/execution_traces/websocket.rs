@@ -99,6 +99,48 @@ async fn websocket_requests_are_new_traces_linked_to_session_with_queue_wait() {
     upstream.stop().await;
 }
 
+/// A WebSocket response's execution span is exported when the response
+/// finalizes. The connection may stay open long after, as Codex sessions do.
+#[tokio::test]
+async fn websocket_execution_span_exports_while_the_socket_stays_open() {
+    let _guard = trace_test().await;
+    let upstream = Server::start(axum::Router::new().route(
+        "/v1/responses",
+        axum::routing::post(|| async { ([("content-type", "text/event-stream")], format!("{CREATED}{COMPLETED}")) }),
+    ))
+    .await;
+    let gateway = gateway(&upstream.url).await;
+    let (mut socket, _) =
+        tokio_tungstenite::connect_async(format!("{}/v1/responses", gateway.url.replace("http:", "ws:")))
+            .await
+            .unwrap();
+    socket.send(create(true)).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let Message::Text(text) = socket.next().await.unwrap().unwrap() {
+                let event: serde_json::Value = serde_json::from_str(&text).unwrap();
+                assert_ne!(event["type"], "error", "{event}");
+                if event["type"] == "response.completed" {
+                    break;
+                }
+            }
+        }
+    })
+    .await
+    .unwrap();
+
+    // The socket is still open.
+    let spans = finished("agentic.execute", 1).await;
+    let execution = spans.iter().find(|span| span.name == "agentic.execute").unwrap();
+    assert_eq!(
+        attr(execution, "agentic.execution.outcome"),
+        Some(&Value::from("completed"))
+    );
+    socket.close(None).await.unwrap();
+    gateway.stop().await;
+    upstream.stop().await;
+}
+
 #[tokio::test]
 async fn websocket_disconnect_closes_active_and_queued_traces_without_tracing_rejected_frames() {
     let _guard = trace_test().await;

@@ -1,0 +1,378 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Check the demo weather snapshot for Paris. Meanwhile, list three essentials
+        for any city trip.
+      instructions: Handle this request yourself; do not start subagents. Start the
+        weather lookup and answer the independent question without waiting. Use the
+        demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      multi_agent:
+        enabled: true
+        max_concurrent_subagents: 1
+      parallel_tool_calls: false
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      openai-beta: responses_multi_agent=v1
+      user-agent: python-httpx/0.28.1
+      x-run-id: multi-agent-sequential/t1-start
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790837423
+      created_at: 1790837389
+      error: null
+      frequency_penalty: 0.0
+      id: resp_03ec442d47c10734006abe028d7f1c87d1898866dabfc24310
+      incomplete_details: null
+      instructions: Handle this request yourself; do not start subagents. Start the
+        weather lookup and answer the independent question without waiting. Use the
+        demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-6-astra
+      moderation: null
+      object: response
+      output:
+      - agent:
+          agent_name: /root
+        arguments: '{"city":"Paris"}'
+        async: true
+        call_id: call_Z7N4WBsQsfaSkDkZ3cqYffSY
+        id: fc_03ec442d47c10734006abe028f3c6c87d1ba7600b502fdb2af
+        name: get_weather
+        status: completed
+        type: function_call
+      - agent:
+          agent_name: /root
+        content:
+        - annotations: []
+          logprobs: []
+          text: 'Three essentials for any city trip:
+
+            - Comfortable walking shoes.
+
+            - A phone with offline maps and a portable charger.
+
+            - A small day bag for water, ID, and a payment method.
+
+
+            The Paris demo weather lookup is underway.'
+          type: output_text
+        id: msg_03ec442d47c10734006abe029061a887d18b996c6b1560335e
+        phase: commentary
+        role: assistant
+        status: completed
+        type: message
+      - agent:
+          agent_name: /root
+        content: []
+        encrypted_content: gAAAAABqvgKvcdzq8LXhsdFrwGc_iCsK12qvTkJ0BFtuAtAbPJNAlch8HsvdyUtD46dGaMdZpmj8IUJPuSLQ2VRYVhpdtf7NrwER0clhNij-MyQ07I5Yb_Crf2aDVLwOWPHBBY9DICg4za_Gtw_ZnvZR0glTRziGmla4HHgl-HFd0u5IPsVaVcn-OUKUA9jNo-qCKa51fotGhf1rC7gHW4jVROSkiK5i4HWeWLy2NuUv36Wo4tdfpdEDbZMy7PqXHZhmG10ofPgAJXHyLkjLjE3-Rwh-bOeeXCfDKutDU69vXjf8xkZQP8jogQNX4Skz3fZWdvsbHG8SYBt9HZ2KPhfXJun3zg0Kdm1nbfC0t__nKw0lKMJqERydOB9le4tj44Buz59tuZeNoHqBWZIxAUnaibmOEaTYpfG4vnYVyGj7BwVALXanhBKbT5OG8naLt8Roy-tFf2NGhuFnYz3ZE3LGeuh7O0a9F7BYGbPCDeKHd7qzeQT1cKu0h8ELX8BUmKMQcPmXFSnp2j3noHc1EAyDCMxOPIkjLbb4EPjtIWIPr-q98QuAJ6JNeVdS8HCDAa_cWUOOPHjslLtm4CY3RaqmpITXCAoseeF_337omDBSGtBrMZjm2JWv3m7uPZR7vD_9FlRbskxMxE8-1XF5WXqruG4qQF3LDNrSseWOI1VPRqaJufTP2by5GWjaJg2ysLnqQsgAYyxxi59dIz3St0MURuD0f4Y-VTCepJJrrw7_Q1DtRjW1ymGRAjuIVhPO2hC5j_pbe_U_tef2pMSqXJfr61aj03U4aWbXuSDtf-bzrN_dbaxE1wlvuIEhKUfq2Z1hNYRWpWL0Eo3Xd89tfKon6HpJ6TE1qHv3NI1wN4SwXeyayRIfYpVmiHNynP9Kx9HrDeZ4i8yyekXFx0Z4RE95-VTiKjp0a6O46vzIiwLBKrSlAFBDFAiIpajTOdmUVfdPH1fY6CWP9yh3OPwEuJq50vKLKW6XSDf-Y83OFGwyl2NKjN5o1yTMZfyQKHaS5TBeoyXUffjg2NeO4t2OmYOM8sYGZIlQO75o8YDmqxdhnoJ2nn3unjmVrY75Jql_vJ8HBwdoXJAHfJqFIBmdQY1fpbEH3lciqBK2oh27gCrxStJxEs-a45WwwdDRsnIvhOzMLTU3JNvp0zzSski6QIRLyLUfQamQeKfw2yIpCDaqn_oJDMSszx5x2ycrOTL4W7PUaaMn6dy1pItEsZZ5bkZVYs65jag9iJ7qERw9WwQcYu6T7cxlWAEyFA4CR4Ev5EoqSZ6UpI73vagyIT4dbPmbs2Z1aHsg9bPT76WDxriHKpquBwhx8mcTH7SCuZ3FVpV0dSX7dXkUOGyDfVNGeQlk9qy7CKGOIxSRe1BEGXTl41OIhutOwnLNVN-b_j_KwSZP3XQHeR55nUd1WBpvllvh6RqdN3cUGtZmg6unLO4kcMnpPXtSEWVWtVlkFL9thMEm5mwrK1jG11OcyBKf3Kj8QLfgXqosYBbjgRWsYNcXm4-1Uo67GbsQOWX5fUWMY_jfPKFvY4ID_K3L5RQH-EK5mRfLBQirQhxouuxYNEHAeO6bAG4KlDNtrH0hdig1hNTOA-5T_uGSaK8eTA485uL0n3MgaL3gu4Jmcr-gf2gvgvHaNsU7a7i3NZ4x9U9P-D0W8_kkACFCyIjU86XPYPNgdUB9spPkNAYvYf_C-vImFtHfXTxHGKcjGoBsBRA_-AsQ8wg3wB_nKBCegCtI1rytzol3VvqDcozWk-XDNH_imsGi_ADQ_GzfqsxQc9EchJockoWVeToUWBpgdJm2hjPrWMmwpAtJ-U-fa7M5ZOpHjYobyjotFF2aBK4UPnsNv_sp37TxV51VzJsbWYt8pNzmYa1gJjku5sDUn2u16HPnSqo6SgkZuWRYqa6J1gGeQndH5MiNW3YbtUoxMva6I4rRtJgOts52UAwZCDy5zoH6cERRj_X0QGCsb_FBqfEZahlCfXTj1Eg2220N_wztCUSPEL-E2e0sB3AUuOlalKUHS2KymISVc-EhDut_d-JkogVpw7kY7WoV-jS6tsoo4TnaM4Y--FBRzazVVoMNFisnyHVeiwIG4kSkthMm1aIJkfoIHwIHTxnVx5USwpkTH4kr91svsrRHCOkqds4c_L2w_WfMlkUt-AIZP2F7q3nyeNkJBNB8qacDHwYQ5f3n90IRKZY3O01pXg==
+        id: rs_03ec442d47c10734006abe02918b9487d195720bc907735af0
+        summary: []
+        type: reasoning
+      - action: wait_agent
+        agent:
+          agent_name: /root
+        arguments: '{"timeout_ms":10000}'
+        call_id: call_3YdejNEv5TBAnlyQGhgEMi3v
+        id: mac_03ec442d47c10734006abe0295da7c87d18c014ec70c39926d
+        type: multi_agent_call
+      - action: wait_agent
+        agent:
+          agent_name: /root
+        call_id: call_3YdejNEv5TBAnlyQGhgEMi3v
+        id: maco_03ec442d47c10734006abe029fef9087d1b70e21f81768d6a3
+        output:
+        - annotations: []
+          logprobs: []
+          text: '{"message": "Wait timed out.", "timed_out": true}'
+          type: output_text
+        type: multi_agent_call_output
+      - agent:
+          agent_name: /root
+        content: []
+        encrypted_content: gAAAAABqvgKvKtos2JZ9JRNhsnhCwvoa_XsKuG9ubJKbANrGWlmSgBOmNdr9bRiEK6ixOv_yhLCBG3ENbjp0AcLlMvkRSE1YG1SWqJRKTJzro4Ja02u515aCKfnfuz8tkxAqa70Fn3tbB88MWv68ShtXhT2i3zfceCHnEg27OHoQkiR5Y2lehQWauMHYgBIQdnu3Awad_8lfoX_hvF1I9yuK1PzEAooTSoAQNysqozu-tlAfU0_eCtouBVlfKonQtQ4hdYxNHIIiXgdrgfYKFk3waOvGdCw0O9aFnSEX8yxpXhAC0oXusvRal8s2960JU11ZK6WeJ-sY1funHJKUtSaP62CovD_cT6BrnLEyDPtYhd0wzQ5pe0COsHhiTEeaGE1Pr4JSFLpnHzOUyjZExH5keBqbWBuk5hhnTYKzaMOQ7cmU_b3SsxdJz0cOf--TX1F64H9MsuhxxOybnW7oe8GCXs4wsLQuX0M5ZHB06VlvTjzhq1lULK8s-xyvyLAi5XLU7fNwpc82HhhSkYn2Y1MRK3Nd9HubpAQ5NvZGhat1y2IW0Vnfek8h_ifEwisxy79rAIKgKXGmuYlW9Elo9IoGGYxlTUojM3xtuO8SZBkDYWopGF3kmbRbM5Jem2Ey5-uFXbn5dlGB7X5NkQAGnU5kkfb7YcGuYbomcoiHpAhhRpLC3lIJh5GOBREGPlIGJy2HgfHPM40tzh7XjcApeaR8S93fOS0ht8yTeaTWyr8QyxHxc2g1n_dL9XStzIsV3rSqN4BgwqQzJbxPlX1B2qHZwA3ZZWl8bOC4Lu8TdCx7qM3bFmcSZtkXr1mgXheEtY-Qa1aJM1qi1dqDnj4vhh6KDKLvzP1U5ZzdUjfnq8ux2dyo-tC2-iSrgkISVimuH2BBojglkh8DbWG-FpLa2oupADA9J46TA0cLgXShIU7fjfCEc3IfPb1vZsgEVkzAoJlkh_nF8qUAmjLIHvKGfX3ECc5_HgRVDxMo9XvtdcEfRzQGuJPLd-sJIV70vjqXCne_qMas7KKe5YLKUOkXObQJHnEikUafpbX69Po-Cpwqi1IYIAiaqmb4Ukt_mBABinRai1Rqwp8IDILFhYcqK_GStNSyV9xK56KYLZyC78GzFovaCwUa0GOQ_ArUVyCONd7XiGJgSe0KL_0rZ2zlVmg_lYyc-973-5QXuR4nTosn6sqKJ1sy3w8QZXrWhzMQJTRsbpfciZCgPJHlxJb-qSphYM6D96b-Hg==
+        id: rs_03ec442d47c10734006abe02a134a487d19337bd446c57ed31
+        summary: []
+        type: reasoning
+      - action: wait_agent
+        agent:
+          agent_name: /root
+        arguments: '{"timeout_ms":10000}'
+        call_id: call_OT53IR0VCN4L2i426TooSsEB
+        id: mac_03ec442d47c10734006abe02a1838887d1aad6cd02e3678063
+        type: multi_agent_call
+      - action: wait_agent
+        agent:
+          agent_name: /root
+        call_id: call_OT53IR0VCN4L2i426TooSsEB
+        id: maco_03ec442d47c10734006abe02abad1887d18a5c529416029668
+        output:
+        - annotations: []
+          logprobs: []
+          text: '{"message": "Wait timed out.", "timed_out": true}'
+          type: output_text
+        type: multi_agent_call_output
+      - agent:
+          agent_name: /root
+        content: []
+        encrypted_content: gAAAAABqvgKvrUC7DWKcK_vxfkNrulyJeA5LDKAb12cA0rKPFMAw-roFUE-Z20KvDtSxuiDANvOrKYI2BZR2XIY9GLiD135t7CSC8tOUcXL98dKlZjuaT_PxSUSoRTaZ3Uyka3yUC_m24EDu1yDo63rHlqJYKV2lohUeNg4mFpttmlPSg20XHte2Z55dmXw6zKsKLoQ9L93O7gDgDiAZk-EQgz7OmYaVQVUn4wltPvJOKsivbb4GA7ME4jHKvBcIICM8Eb-N1b_cn4EImQ1OASn0f4p72vJrfG6MBRe7f4yoRMkbvP9oOYVwPMkDDcAzxCNSVAOdS7p6qbHI-dKzC2PilTJeaCQSufYRNaooSyFKJEtTS6855xz_J9tJ_8l_G2usXryVug5U65yOTTWBhBgGpZrHCSC3m196-_wEDGhOnXgfYif6bZPiEr6a9q5VYWP4ZONVie839L1y9NH8e-9L_nPTRaocueaLlKHD3tGtqW-QimDP9ZLhe-_YiPb8wPx6UPiwsaUudLwL7RHg9JvY3UA_0KTuqf6YOylqenvCyL5-nrRAjlWNntzWlBnac2HuJH6A30TDDMqanC5RnZcRnczU51YbPMUJtD1cwIPVN5UwbiJfKTWd-poKwELVU6DxqMyizBCcPHXLP5yzbEzGK44mbmwj4mi2V6SKpAVOUg-qJ08nSIfU33_13kbtHdq_yJWN87tYnI0fZk4ACbs3ghGkSK7bMC_Md92FMfRe_WeoRIh9du2sPCT7k_rrKu50rTnq6-h9G8ldSv5wVqIkb5jmCr9dnbdrV64vO97yOEqyT-Kn3R8uDIYsqcRvSUdP5qUzffFV3rzw2ZM2JJNUzzBlIvZJT-PrtpSKWMIrYF1M46EycvzXAEsWCywtPyZ4iXzUDePof3Jk0CU4TOgufVsDJgfpl11TCt6vB-tbeeJj-NCtpHS95oKzX1Nl-NaostycP-3eyaZx3bGd79OMqwbln1B7Q7vy64-X2gBXlo2SlOx6-Iau8NbC5omZj8E8J0r3mtfd_hWLR3ndRRLBFsdOiFgJjYCtJI1jCW3Q_chB1VNJAYmriMP2fPkiDgR3jvfnkUfew_buqX9Ea2zQGxZR9jjtJH-07lgJfsuKd7DGx05enhIlOM8TjuPytUbW0YdNcDIkz0d-L59bYPWK5-mThtzIjlC3yAQaRh7O0z-io4e8rErmS_fz5alSI0pIOEAsDDrXC7PdeZCK7urA0uZ1m7K34am3cdnAvw1_zpD3pdWJh549xB7ovlVcG3C8iqnIJ_zWbiJi7t-qosOn54lj9qdeho0IYEiMwnaRYNMiWJYCboDj346Zk6U4s3X6is9TjvRxlJ7Cr3B_-sXBcLCG6b4qcQ==
+        id: rs_03ec442d47c10734006abe02acc26c87d1b536f750100c48d8
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root
+        content:
+        - annotations: []
+          logprobs: []
+          text: 'Three city-trip essentials: **comfortable walking shoes**, **a phone
+            with offline maps and a portable charger**, and **a small day bag for
+            water, ID, and payment**.
+
+
+            I’ve requested the Paris demo weather snapshot, but the result hasn’t
+            arrived yet.'
+          type: output_text
+        id: msg_03ec442d47c10734006abe02ad603087d1b973a59bf22b84b9
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 1614
+        input_tokens_details:
+          cache_write_tokens: 1270
+          cached_tokens: 0
+        output_tokens: 362
+        output_tokens_details:
+          reasoning_tokens: 30
+        total_tokens: 1976
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - call_id: call_Z7N4WBsQsfaSkDkZ3cqYffSY
+        output: '{"city":"Paris","temperature_c":22,"condition":"Clear","source":"demo
+          weather snapshot"}'
+        type: function_call_output
+      - content: What does the Paris demo weather snapshot say? Answer in one sentence.
+        role: user
+        type: message
+      instructions: Handle this request yourself; do not start subagents. Start the
+        weather lookup and answer the independent question without waiting. Use the
+        demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      multi_agent:
+        enabled: true
+        max_concurrent_subagents: 1
+      parallel_tool_calls: false
+      previous_response_id: resp_03ec442d47c10734006abe028d7f1c87d1898866dabfc24310
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      openai-beta: responses_multi_agent=v1
+      user-agent: python-httpx/0.28.1
+      x-run-id: multi-agent-sequential/t2-late-output
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790837426
+      created_at: 1790837424
+      error: null
+      frequency_penalty: 0.0
+      id: resp_03ec442d47c10734006abe02afead087d19fe1b2a83f1b8894
+      incomplete_details: null
+      instructions: Handle this request yourself; do not start subagents. Start the
+        weather lookup and answer the independent question without waiting. Use the
+        demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-6-astra
+      moderation: null
+      object: response
+      output:
+      - agent:
+          agent_name: /root
+        content:
+        - annotations: []
+          logprobs: []
+          text: The Paris demo weather snapshot shows clear skies and a temperature
+            of 22°C.
+          type: output_text
+        id: msg_03ec442d47c10734006abe02b165fc87d19e711f7e85154858
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_03ec442d47c10734006abe028d7f1c87d1898866dabfc24310
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 1740
+        input_tokens_details:
+          cache_write_tokens: 467
+          cached_tokens: 1259
+        output_tokens: 20
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 1760
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200

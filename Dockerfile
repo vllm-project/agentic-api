@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1.7
 
-ARG RUST_VERSION=1.96.0
+ARG RUST_VERSION=1.98.1
 ARG DEBIAN_VERSION=bookworm
-ARG CARGO_CHEF_VERSION=0.1.77
-ARG CARGO_CHEF_IMAGE_DIGEST=sha256:fa7281503a177bd5af6261f4041ca6b36d9f0de8d3090886c33cbd8e65b88ca9
+ARG CARGO_CHEF_VERSION=0.1.78
+ARG CARGO_CHEF_IMAGE_DIGEST=sha256:5a37e174ceb7ccbebd6d0024049e9308f4de399bbcabbc3c6c649c70486880d5
 ARG DEBIAN_IMAGE_DIGEST=sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818
 
 FROM lukemathwalker/cargo-chef:${CARGO_CHEF_VERSION}-rust-${RUST_VERSION}-${DEBIAN_VERSION}@${CARGO_CHEF_IMAGE_DIGEST} AS chef
@@ -20,12 +20,13 @@ RUN cargo chef prepare --recipe-path recipe.json
 FROM chef AS rust-build
 
 ARG CARGO_BUILD_JOBS=4
+ARG CARGO_FEATURES=""
 ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
 
 WORKDIR /workspace
 
 COPY --from=planner /workspace/recipe.json recipe.json
-RUN cargo chef cook --locked --release --recipe-path recipe.json
+RUN cargo chef cook --locked --release ${CARGO_FEATURES:+--features="$CARGO_FEATURES"} --recipe-path recipe.json
 
 RUN rm -rf crates
 COPY Cargo.toml Cargo.lock ./
@@ -36,7 +37,7 @@ RUN cargo clean \
       -p agentic-server \
       -p agentic-praxis \
       -p agentic-llm-d && \
-    cargo build --locked --release -p agentic-server -p agentic-llm-d && \
+    cargo build --locked --release -p agentic-server -p agentic-llm-d ${CARGO_FEATURES:+--features="$CARGO_FEATURES"} && \
     install -Dm755 -s target/release/agentic-server /out/agentic-server && \
     install -Dm755 -s target/release/agentic-llm-d /out/agentic-llm-d
 

@@ -1,0 +1,123 @@
+[three-turn-steer]
+Draft a detailed implementation plan for a task-tracking application. Include the data model, API, interface, milestones, and testing approach.
+
+[three-turn-steer-update-1]
+Change the scope to a prototype that one developer can build in two weeks. Remove team administration and reporting features. Include SCOPE_ORCHID in the revised plan.
+
+[three-turn-steer-update-2]
+Keep that reduced scope. Give me the final plan as five ordered milestones, each with a deliverable and acceptance criterion. Preserve SCOPE_ORCHID and include FINAL_IRIS.
+
+# MIXED-TOOLS — single agent; original parallel-tool prompt and follow-up
+
+[mixed-tools-steer]
+Do all three of these right now, in parallel, in this single turn -- do not wait for one before starting another: (1) call get_weather for "Tokyo", (2) call set_temperature_unit to set my preferred unit to "fahrenheit" for the rest of this conversation, and (3) search the web for the exact query "Tokyo weather today".
+
+[mixed-tools-steer-update-1]
+Keep my preferred unit as fahrenheit, but change the final answer to a short weather summary for someone planning a walk in Tokyo. Wait for the actual tool results and include MIXED_STEER_ORCHID.
+
+[mixed-tools-steer-update-2]
+Now report Tokyo's current temperature using the unit I just told you to prefer.
+
+# CLIENT-TOOLS — one agent, every call executed by the recorder's fixed output fixtures.
+# Dedicated client-tools-steer YAML; no multi_agent setting or hosted tools.
+# Reuses multi_agent/client_owned_tools.json, its local shell declaration, and
+# mixed_tool_outputs.py; discovery returns tool_search/returned_tools.json.
+# After each completed response with client calls: withhold outputs, steer once,
+# wait for response.steer.pending, then return all actual outputs together.
+# Each steering update has a distinct CLIENT_STEER_NNN marker. Missing search,
+# shell, custom or function pending obligations makes the recording inconclusive.
+[client-tools-steer]
+Complete these steps in order, waiting for each actual client tool result before continuing. First use tool_search to discover get_weather and travel.get_timezone for Paris. Then call the local shell with exactly this command: python3 -c 'print(sum(range(1, 11)))'. Then call agentic_raw_echo with exactly CUSTOM_CASSETTE_OK. Then use the discovered tools to get Paris weather and its time zone. Do not repeat completed calls. Finish with a concise summary of the actual shell, custom, weather and time-zone results and every verification marker requested during this task. Do not spawn agents.
+
+[client-tools-steer-update]
+Keep the remaining tool steps and use their actual results. Change the final answer to one short bullet per result. Preserve every earlier verification marker and include CLIENT_STEER_{index:03d}. This update is not a tool result: wait for the outstanding client output before continuing. Do not repeat completed calls.
+
+# SHARED CONTROL PROMPTS AND FUNCTION FIXTURE
+
+# Internal prerequisite for late-target/reconnect cases; not a separate recording.
+[baseline]
+Remember the project code BASE_SAPPHIRE. Reply with that code only.
+
+[plan-request]
+Draft a detailed project plan for a task-tracking app. Include at least 20 numbered tasks.
+
+[steer]
+Keep the scope to one developer and two weeks. Include the marker STEER_ORCHID in the updated plan.
+
+[function-request]
+Call get_project_status exactly once for task-tracker.
+
+[function-description]
+Get task-tracker project status.
+
+[function-output]
+Design is complete. Development has not started.
+
+# WEBSOCKET TIMING AND VALIDATION INPUTS
+
+[ws-instructions]
+Be concise. Preserve any requested verification marker verbatim.
+
+[ws-resume-instructions]
+Report project status and any previously requested verification markers.
+
+[ws-tool-instructions]
+Report the revised project plan. Include EXPLICIT_IRIS and requested markers.
+
+[ws-pending-second-steer]
+While the status tool output is still pending, narrow the scope further to a one-day prototype. Preserve the earlier requested marker and include PENDING_SECOND_IRIS.
+
+[ws-hosted-tool-running]
+Use code interpreter to execute exactly this Python code:
+import time
+time.sleep(12)
+print(sum(range(1, 101)))
+After execution, report the actual printed output. Do not calculate or simulate the output yourself.
+
+[ws-burst]
+{steer} Also include QUEUED_{index:03d}.
+
+[ws-extra-field]
+This extra field tests event validation.
+
+[ws-tool-output-invalid]
+OK
+
+# SUCCESSOR TIMING AND SETTINGS — fixture text; transport logic stays in websocket_recorder.py
+
+[old-parent-second-steer]
+Keep the reduced scope from the earlier update. Also include OLD_PARENT_SECOND_IRIS in the final answer.
+
+[settings-request]
+Explain a one-developer project plan for a task-tracking prototype in about eight steps. Do not call any tools. Follow the configured output format and preserve all requested markers.
+
+[settings-steer]
+Reduce the plan to a one-day prototype. Include SETTINGS_STEER_SAPPHIRE in the answer and preserve the marker required by the current instructions. Do not call any additional tools.
+
+[settings-parent-instructions]
+Be concise. Include PARENT_SETTINGS_ORCHID and every user-requested marker. When responding in JSON, put the markers in the markers array and the explanation in answer. Follow the user's tool request when one is explicitly given.
+
+[settings-explicit-instructions]
+Give a short plain-text answer. Include EXPLICIT_SETTINGS_IRIS and every user-requested marker. The earlier instruction marker is superseded; do not include PARENT_SETTINGS_ORCHID unless the user explicitly asks for it.
+
+# ADDITIONAL CLIENT-OUTPUT AND MEDIA FIXTURES
+
+[partial-tools-request]
+Call get_project_status and get_project_deadline exactly once each for task-tracker, in parallel, before answering. Wait for both actual outputs.
+
+[function-deadline-description]
+Get the planned prototype deadline for task-tracker.
+
+[function-deadline-output]
+The prototype deadline is Friday at 17:00.
+
+# VISION-STEERING — recorded separately with --suite vision; no other case needs image input.
+[ws-image-steer]
+Change the task: describe the colors on the left and right of the attached image. Include IMAGE_STEER_ORCHID in your answer.
+
+# INPUT/LIFECYCLE — ordered text messages; recorded with --suite non-vision.
+[ws-multiple-user-first]
+Replace the original planning task. The project codename is Harbor. Remember the verification token MULTI_USER_FIRST_ORCHID and include it in your final answer. The next user message supplies the deadline.
+
+[ws-multiple-user-second]
+Keep the project codename and verification token from the preceding user message. The deadline is Friday at 17:00. Include MULTI_USER_SECOND_IRIS as well. Reply with the codename, deadline, and both verification tokens in the same order as their user messages. Do not call any tools.

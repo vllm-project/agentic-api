@@ -9,24 +9,29 @@
 //!
 //! [`SlotMap`](super::slot::SlotMap) owns identity and lifecycle and dispatches
 //! here; nothing in this module resolves indexes or IDs.
+mod agent_message;
+mod shell;
+mod size;
+use agent_message::AgentMessageState;
+use shell::ShellCallState;
 
 use indexmap::IndexMap;
 
-pub(super) use super::active_text::StreamedPart;
+pub(super) use super::active_text::MessagePart;
 use super::active_text::{MessageState, ReasoningState};
 use super::completion::MergeDone;
-use crate::events::types::ShellCommandUpdate;
 use crate::events::{EventPayload, SSEItemType};
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::response_budget::{
-    ExecutorResponseBudget, RETAINED_CONTAINER_OVERHEAD_BYTES, RetainedAccount, RetainedSize,
-};
+use crate::executor::response_budget::{ExecutorResponseBudget, RetainedAccount, RetainedSize};
 use crate::types::event::MessageStatus;
 use crate::types::io::output::McpListTools;
 use crate::types::io::{
-    ApplyDone, CompactionItem, CustomToolCall, FunctionToolCall, McpCall, OutputItem, OutputMessage, ReasoningOutput,
-    ShellCall, ToolSearchCall, WebSearchCall,
+    ApplyDone, CodeInterpreterCall, CodeInterpreterCallStatus, CompactionItem, CustomToolCall, FileSearchCall,
+    FileSearchCallStatus, FunctionToolCall, McpCall, McpCallStatus, MultiAgentCall, MultiAgentCallOutput, OutputItem,
+    OutputMessage, ReasoningOutput, ReasoningStatus, ShellCall, ShellCallStatus, ToolSearchCall, WebSearchCall,
+    WebSearchCallStatus,
 };
+use crate::types::tools::ToolSearchStatus;
 
 pub(super) type Budget<'a> = Option<&'a ExecutorResponseBudget>;
 
@@ -116,104 +121,20 @@ impl RetainedSize for CustomToolCallState {
     }
 }
 
-#[derive(Clone)]
-pub(super) struct ShellCallState {
-    pub(super) item: ShellCall,
-    /// Per-command completion flags once the first command event arrives.
-    command_stream: Option<Vec<bool>>,
-    /// Text of the command currently streaming; moved into the item on done.
-    command: String,
-}
-
-impl ShellCallState {
-    fn new(item: ShellCall) -> Self {
-        Self {
-            item,
-            command_stream: None,
-            command: String::new(),
-        }
-    }
-
-    pub(super) fn has_unfinished_commands(&self) -> bool {
-        self.command_stream
-            .as_deref()
-            .is_some_and(|done| done.iter().any(|complete| !complete))
-    }
-
-    pub(super) fn tracks_commands(&self) -> bool {
-        self.command_stream.is_some()
-    }
-
-    fn apply(
-        &mut self,
-        payload: &EventPayload,
-        account: &mut RetainedAccount,
-        budget: Budget<'_>,
-    ) -> ExecutorResult<()> {
-        let EventPayload::ShellCallCommand {
-            command_index, update, ..
-        } = payload
-        else {
-            return Ok(());
-        };
-        let index = *command_index as usize;
-        let done = self.command_stream.as_deref().unwrap_or_default();
-        match update {
-            ShellCommandUpdate::Added(command) => {
-                if index != done.len() || self.item.action.commands.len() != done.len() || done.last() == Some(&false) {
-                    return Err(invalid("shell command added out of order"));
-                }
-                account.charge(budget, RETAINED_CONTAINER_OVERHEAD_BYTES + command.len())?;
-                self.item.action.commands.push(String::new());
-                self.command.clone_from(command);
-                self.command_stream.get_or_insert_with(Vec::new).push(false);
-                Ok(())
-            }
-            ShellCommandUpdate::Delta(delta) => {
-                if done.get(index) != Some(&false) {
-                    return Err(invalid("shell command delta has no active command"));
-                }
-                account.charge(budget, delta.len())?;
-                self.command.push_str(delta);
-                Ok(())
-            }
-            ShellCommandUpdate::Done(command) => {
-                if done.get(index) != Some(&false) || self.command != *command {
-                    return Err(invalid(
-                        "shell command done is repeated or contradicts streamed command",
-                    ));
-                }
-                account.grow(
-                    budget,
-                    self,
-                    |state| state.item.action.commands[index].len() + state.command.len(),
-                    |state| {
-                        state.item.apply_done(payload, &mut state.command);
-                        if let Some(done) = state.command_stream.as_mut() {
-                            done[index] = true;
-                        }
-                    },
-                )
-            }
-        }
-    }
-}
-
-impl RetainedSize for ShellCallState {
-    fn retained_bytes(&self) -> usize {
-        self.item.retained_bytes() + self.command.len()
-    }
-}
-
 /// Tracks a single output item currently being streamed.
 #[derive(Clone)]
 pub(super) enum ActiveItem {
+    MultiAgentCall { item: MultiAgentCall },
+    MultiAgentCallOutput { item: MultiAgentCallOutput },
+    AgentMessage(AgentMessageState),
     Message(MessageState),
     Reasoning(ReasoningState),
     FunctionCall(FunctionCallState),
     CustomToolCall(CustomToolCallState),
     ShellCall(ShellCallState),
+    CodeInterpreterCall { item: Option<CodeInterpreterCall> },
     ToolSearchCall { item: ToolSearchCall },
+    FileSearchCall { item: Option<FileSearchCall> },
     WebSearchCall { item: Option<WebSearchCall> },
     McpCall { item: McpCall },
     McpListTools { item: McpListTools },
@@ -228,27 +149,51 @@ impl std::fmt::Debug for ActiveItem {
 
 impl ActiveItem {
     pub(super) fn from_added(payload: &EventPayload) -> Option<Self> {
-        let EventPayload::OutputItemAdded { item_type, .. } = payload else {
+        let EventPayload::OutputItemAdded {
+            item_type,
+            initial_item,
+            ..
+        } = payload
+        else {
             return None;
         };
         Some(match item_type {
+            SSEItemType::MultiAgentCall => {
+                let Some(OutputItem::MultiAgentCall(item)) = initial_item.as_deref() else {
+                    return None;
+                };
+                Self::MultiAgentCall { item: item.clone() }
+            }
+            SSEItemType::MultiAgentCallOutput => {
+                let Some(OutputItem::MultiAgentCallOutput(item)) = initial_item.as_deref() else {
+                    return None;
+                };
+                Self::MultiAgentCallOutput { item: item.clone() }
+            }
+            SSEItemType::AgentMessage => {
+                let Some(OutputItem::AgentMessage(item)) = initial_item.as_deref() else {
+                    return None;
+                };
+                Self::AgentMessage(AgentMessageState::new(item.clone()))
+            }
             SSEItemType::ShellCall => Self::ShellCall(ShellCallState::new(ShellCall::try_from(payload).ok()?)),
             SSEItemType::Reasoning => Self::Reasoning(ReasoningState::new(ReasoningOutput::try_from(payload).ok()?)),
             SSEItemType::FunctionCall => Self::FunctionCall(FunctionCallState {
                 item: FunctionToolCall::try_from(payload).ok()?,
                 arguments: String::with_capacity(128),
             }),
+            SSEItemType::CodeInterpreterCall => Self::CodeInterpreterCall { item: None },
+            SSEItemType::FileSearchCall => Self::FileSearchCall { item: None },
             SSEItemType::ToolSearchCall => Self::ToolSearchCall {
                 item: ToolSearchCall::try_from(payload).ok()?,
             },
+            // Only the gateway produces search outputs; an upstream never streams one.
+            SSEItemType::ToolSearchOutput => return None,
             SSEItemType::CustomToolCall => Self::CustomToolCall(CustomToolCallState {
                 item: CustomToolCall::try_from(payload).ok()?,
                 input: String::with_capacity(256),
             }),
-            SSEItemType::Message => Self::Message(MessageState {
-                item: OutputMessage::try_from(payload).ok()?,
-                parts: IndexMap::new(),
-            }),
+            SSEItemType::Message => Self::Message(MessageState::new(OutputMessage::try_from(payload).ok()?)),
             SSEItemType::WebSearchCall => Self::WebSearchCall { item: None },
             SSEItemType::Compaction => Self::Compaction {
                 item: CompactionItem::try_from(payload).ok()?,
@@ -276,6 +221,8 @@ impl ActiveItem {
                 item,
                 arguments: String::new(),
             }),
+            OutputItem::CodeInterpreterCall(item) => Self::CodeInterpreterCall { item: Some(item) },
+            OutputItem::FileSearchCall(item) => Self::FileSearchCall { item: Some(item) },
             OutputItem::ToolSearchCall(item) => Self::ToolSearchCall { item },
             OutputItem::CustomToolCall(item) => Self::CustomToolCall(CustomToolCallState {
                 item,
@@ -285,7 +232,10 @@ impl ActiveItem {
             OutputItem::McpCall(item) => Self::McpCall { item },
             OutputItem::McpListTools(item) => Self::McpListTools { item },
             OutputItem::Compaction(item) => Self::Compaction { item },
-            OutputItem::Unknown => return None,
+            OutputItem::MultiAgentCall(item) => Self::MultiAgentCall { item },
+            OutputItem::MultiAgentCallOutput(item) => Self::MultiAgentCallOutput { item },
+            OutputItem::AgentMessage(item) => Self::AgentMessage(AgentMessageState::new(item)),
+            OutputItem::ToolSearchOutput(_) | OutputItem::Unknown => return None,
         })
     }
 
@@ -297,11 +247,16 @@ impl ActiveItem {
             Self::FunctionCall(state) => Some(&state.item.id),
             Self::CustomToolCall(state) => Some(&state.item.id),
             Self::ShellCall(state) => state.item.id.as_deref(),
+            Self::CodeInterpreterCall { item } => item.as_ref().map(|item| item.id.as_str()),
+            Self::FileSearchCall { item } => item.as_ref().map(|item| item.id.as_str()),
             Self::ToolSearchCall { item } => Some(&item.id),
             Self::WebSearchCall { item } => item.as_ref().map(|item| item.id.as_str()),
             Self::McpCall { item } => Some(&item.id),
             Self::McpListTools { item } => Some(&item.id),
             Self::Compaction { item } => item.id.as_deref(),
+            Self::MultiAgentCall { item } => Some(&item.id),
+            Self::MultiAgentCallOutput { item } => Some(&item.id),
+            Self::AgentMessage(state) => Some(&state.item.id),
         }
     }
 
@@ -310,6 +265,8 @@ impl ActiveItem {
             Self::Message(_) => SSEItemType::Message,
             Self::Reasoning(_) => SSEItemType::Reasoning,
             Self::FunctionCall(_) => SSEItemType::FunctionCall,
+            Self::CodeInterpreterCall { .. } => SSEItemType::CodeInterpreterCall,
+            Self::FileSearchCall { .. } => SSEItemType::FileSearchCall,
             Self::ToolSearchCall { .. } => SSEItemType::ToolSearchCall,
             Self::CustomToolCall(_) => SSEItemType::CustomToolCall,
             Self::ShellCall(_) => SSEItemType::ShellCall,
@@ -317,6 +274,9 @@ impl ActiveItem {
             Self::McpCall { .. } => SSEItemType::McpCall,
             Self::McpListTools { .. } => SSEItemType::McpListTools,
             Self::Compaction { .. } => SSEItemType::Compaction,
+            Self::MultiAgentCall { .. } => SSEItemType::MultiAgentCall,
+            Self::MultiAgentCallOutput { .. } => SSEItemType::MultiAgentCallOutput,
+            Self::AgentMessage(_) => SSEItemType::AgentMessage,
         }
     }
 
@@ -336,12 +296,17 @@ impl ActiveItem {
         budget: Budget<'_>,
     ) -> ExecutorResult<()> {
         match self {
+            Self::AgentMessage(state) => state.apply(payload, account, budget),
             Self::Message(state) => state.apply(payload, account, budget),
             Self::Reasoning(state) => state.apply(payload, account, budget),
             Self::FunctionCall(state) => state.apply(payload, account, budget),
             Self::CustomToolCall(state) => state.apply(payload, account, budget),
             Self::ShellCall(state) => state.apply(payload, account, budget),
-            Self::ToolSearchCall { .. }
+            Self::CodeInterpreterCall { .. }
+            | Self::FileSearchCall { .. }
+            | Self::MultiAgentCall { .. }
+            | Self::MultiAgentCallOutput { .. }
+            | Self::ToolSearchCall { .. }
             | Self::WebSearchCall { .. }
             | Self::McpCall { .. }
             | Self::McpListTools { .. }
@@ -349,10 +314,111 @@ impl ActiveItem {
         }
     }
 
+    /// Completion snapshots may fill in results, but cannot reassign identity
+    /// or contradict completed content parts. The returned proof distinguishes
+    /// authoritative completion from tolerated recovery: only the former can
+    /// close in-flight work before the upstream response itself terminates.
+    pub(super) fn validate_completion(
+        &self,
+        done: Option<&OutputItem>,
+        raw: &serde_json::Value,
+    ) -> ExecutorResult<bool> {
+        let text = |field| raw.get(field).is_some_and(serde_json::Value::is_string);
+        Ok(match (self, done) {
+            (Self::Message(state), Some(OutputItem::Message(done))) => {
+                state.validate_completion(done)?;
+                done.status == MessageStatus::Completed && raw.get("content").is_some_and(serde_json::Value::is_array)
+            }
+            (Self::FunctionCall(_), Some(OutputItem::FunctionCall(done))) => {
+                done.status == MessageStatus::Completed
+                    && text("status")
+                    && text("arguments")
+                    && !done.call_id.is_empty()
+                    && !done.name.is_empty()
+            }
+            (Self::CustomToolCall(_), Some(OutputItem::CustomToolCall(done))) => {
+                done.status.is_none_or(|status| status == MessageStatus::Completed)
+                    && text("input")
+                    && !done.call_id.is_empty()
+                    && !done.name.is_empty()
+            }
+            (Self::Reasoning(_), Some(OutputItem::Reasoning(done))) => {
+                done.status.is_none_or(|status| status != ReasoningStatus::InProgress)
+                    && (raw.get("content").is_some() || raw.get("summary").is_some() || text("encrypted_content"))
+            }
+            (Self::CodeInterpreterCall { .. }, Some(OutputItem::CodeInterpreterCall(done))) => matches!(
+                done.status,
+                CodeInterpreterCallStatus::Completed
+                    | CodeInterpreterCallStatus::Failed
+                    | CodeInterpreterCallStatus::Incomplete
+            ),
+            (Self::FileSearchCall { .. }, Some(OutputItem::FileSearchCall(done))) => {
+                matches!(
+                    done.status,
+                    FileSearchCallStatus::Completed | FileSearchCallStatus::Incomplete | FileSearchCallStatus::Failed
+                )
+            }
+            (Self::WebSearchCall { .. }, Some(OutputItem::WebSearchCall(done))) => {
+                matches!(
+                    done.status,
+                    WebSearchCallStatus::Completed | WebSearchCallStatus::Failed
+                )
+            }
+            (Self::ToolSearchCall { .. }, Some(OutputItem::ToolSearchCall(done))) => {
+                matches!(done.status, ToolSearchStatus::Completed | ToolSearchStatus::Incomplete)
+            }
+            (Self::McpCall { .. }, Some(OutputItem::McpCall(done))) => matches!(
+                done.status,
+                Some(McpCallStatus::Completed | McpCallStatus::Incomplete | McpCallStatus::Failed)
+            ),
+            (Self::McpListTools { .. }, Some(OutputItem::McpListTools(_))) => {
+                // This item has no modeled status; an extension cannot prove
+                // that hosted activity is finished. The tools field is required.
+                raw.get("status").is_none()
+            }
+            (Self::ShellCall(_), Some(OutputItem::ShellCall(done))) => {
+                done.status.is_none_or(|status| status != ShellCallStatus::InProgress)
+            }
+            (Self::Compaction { .. }, Some(OutputItem::Compaction(_))) => true,
+            (Self::MultiAgentCall { item }, Some(OutputItem::MultiAgentCall(done))) => {
+                if item.call_id != done.call_id || item.action != done.action || item.agent != done.agent {
+                    return Err(invalid(
+                        "collaboration call completion changes call_id, action, or attribution",
+                    ));
+                }
+                false
+            }
+            (Self::MultiAgentCallOutput { item }, Some(OutputItem::MultiAgentCallOutput(done))) => {
+                if item.call_id != done.call_id || item.action != done.action || item.agent != done.agent {
+                    return Err(invalid(
+                        "collaboration output completion changes call_id, action, or attribution",
+                    ));
+                }
+                false
+            }
+            (Self::AgentMessage(state), Some(OutputItem::AgentMessage(done))) => {
+                state.validate_completion(done)?;
+                false
+            }
+            (Self::MultiAgentCall { .. } | Self::MultiAgentCallOutput { .. } | Self::AgentMessage(_), _) => {
+                return Err(invalid("collaboration item requires a valid completion snapshot"));
+            }
+            _ => false,
+        })
+    }
+
     /// Merge an `output_item.done` payload with the same per-kind policy for a
     /// typed completed item (`MergeDone`) or a raw payload (`ApplyDone`).
     pub(super) fn merge_completion(&mut self, payload: &EventPayload, done_item: Option<&OutputItem>, item_id: &str) {
         match (self, done_item) {
+            (Self::MultiAgentCall { item }, Some(OutputItem::MultiAgentCall(done))) => item.clone_from(done),
+            (Self::MultiAgentCallOutput { item }, Some(OutputItem::MultiAgentCallOutput(done))) => {
+                item.clone_from(done);
+            }
+            (Self::AgentMessage(state), Some(OutputItem::AgentMessage(done))) => {
+                state.item.clone_from(done);
+                state.parts.clear();
+            }
             (Self::ShellCall(state), Some(OutputItem::ShellCall(done))) => state.item.merge_done(done, ()),
             (Self::Message(state), Some(OutputItem::Message(done))) => {
                 state.item.merge_done(done, &mut state.parts);
@@ -361,6 +427,10 @@ impl ActiveItem {
             (Self::FunctionCall(state), Some(OutputItem::FunctionCall(done))) => {
                 state.item.merge_done(done, &mut state.arguments);
             }
+            (Self::CodeInterpreterCall { item }, Some(OutputItem::CodeInterpreterCall(done))) => {
+                item.merge_done(done, item_id);
+            }
+            (Self::FileSearchCall { item }, Some(OutputItem::FileSearchCall(done))) => *item = Some(done.clone()),
             (Self::ToolSearchCall { item }, Some(OutputItem::ToolSearchCall(done))) => item.merge_done(done, ()),
             (Self::CustomToolCall(state), Some(OutputItem::CustomToolCall(done))) => {
                 state.item.merge_done(done, &mut state.input);
@@ -386,6 +456,8 @@ impl ActiveItem {
             Self::ShellCall(state) => OutputItem::ShellCall(state.item),
             Self::Reasoning(state) => OutputItem::Reasoning(state.item),
             Self::FunctionCall(state) => state.finalize(),
+            Self::CodeInterpreterCall { item } => OutputItem::CodeInterpreterCall(item?),
+            Self::FileSearchCall { item } => OutputItem::FileSearchCall(item?),
             Self::ToolSearchCall { item } => OutputItem::ToolSearchCall(item),
             Self::Message(state) => state.finalize(),
             Self::CustomToolCall(state) => state.finalize(),
@@ -393,28 +465,9 @@ impl ActiveItem {
             Self::McpCall { item } => OutputItem::McpCall(item),
             Self::McpListTools { item } => OutputItem::McpListTools(item),
             Self::Compaction { item } => OutputItem::Compaction(item),
+            Self::MultiAgentCall { item } => OutputItem::MultiAgentCall(item),
+            Self::MultiAgentCallOutput { item } => OutputItem::MultiAgentCallOutput(item),
+            Self::AgentMessage(state) => OutputItem::AgentMessage(state.item),
         })
-    }
-}
-
-/// Bytes an in-flight item retains: its typed item plus its streaming buffers.
-/// Measures the same fields as the completed item so reconciliation at
-/// completion charges only what streaming could not know in advance.
-impl RetainedSize for ActiveItem {
-    fn retained_bytes(&self) -> usize {
-        match self {
-            Self::Message(state) => state.retained_bytes(),
-            Self::Reasoning(state) => state.retained_bytes(),
-            Self::FunctionCall(state) => state.retained_bytes(),
-            Self::CustomToolCall(state) => state.retained_bytes(),
-            Self::ShellCall(state) => state.retained_bytes(),
-            Self::ToolSearchCall { item } => item.retained_bytes(),
-            Self::WebSearchCall { item } => item
-                .as_ref()
-                .map_or(RETAINED_CONTAINER_OVERHEAD_BYTES, RetainedSize::retained_bytes),
-            Self::McpCall { item } => item.retained_bytes(),
-            Self::McpListTools { item } => item.retained_bytes(),
-            Self::Compaction { item } => item.retained_bytes(),
-        }
     }
 }

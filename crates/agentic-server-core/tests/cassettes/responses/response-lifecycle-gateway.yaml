@@ -1,0 +1,785 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input:
+      - content: Reply with only SAPPHIRE.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792748270
+      created_at: 1792748270
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1681f-b0a6-7ed1-87d9-dcf12cf72e63
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to reply with only the word "SAPPHIRE."
+
+            '
+          type: reasoning_text
+        id: rs_8d45a4c7a23ddd16
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_93d50f85aaccf87a
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 47
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 24
+        output_tokens_details:
+          reasoning_tokens: 17
+        total_tokens: 71
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-b0a6-7ed1-87d9-dcf12cf72e63/input_items
+    query_params: {}
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a1681f-b2fb-7de2-b190-8cfd7bf663ea
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a1681f-b2fb-7de2-b190-8cfd7bf663ea
+      has_more: false
+      last_id: msg_01a1681f-b2fb-7de2-b190-8cfd7bf663ea
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input:
+      - content: Reply with only ORCHID.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      previous_response_id: resp_01a1681f-b0a6-7ed1-87d9-dcf12cf72e63
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792748270
+      created_at: 1792748270
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1681f-b326-7743-affc-287260336b36
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to reply with only the word "ORCHID."
+
+            '
+          type: reasoning_text
+        id: rs_80e43f4959d5c2f6
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            ORCHID'
+          type: output_text
+        id: msg_8da328936b6052e9
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_01a1681f-b0a6-7ed1-87d9-dcf12cf72e63
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 89
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 22
+        output_tokens_details:
+          reasoning_tokens: 16
+        total_tokens: 111
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-b326-7743-affc-287260336b36/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a1681f-b2fb-7de2-b190-8cfd7bf663ea
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to reply with only the word "SAPPHIRE."
+
+            '
+          type: reasoning_text
+        id: rs_8d45a4c7a23ddd16
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_93d50f85aaccf87a
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a1681f-b549-77f2-9c84-54ff09e5e399
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a1681f-b2fb-7de2-b190-8cfd7bf663ea
+      has_more: false
+      last_id: msg_01a1681f-b549-77f2-9c84-54ff09e5e399
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-b326-7743-affc-287260336b36/input_items
+    query_params:
+      limit: '1'
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a1681f-b2fb-7de2-b190-8cfd7bf663ea
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a1681f-b2fb-7de2-b190-8cfd7bf663ea
+      has_more: true
+      last_id: msg_01a1681f-b2fb-7de2-b190-8cfd7bf663ea
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-b326-7743-affc-287260336b36/input_items
+    query_params:
+      after: msg_01a1681f-b2fb-7de2-b190-8cfd7bf663ea
+      limit: '1'
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: 'The user wants me to reply with only the word "SAPPHIRE."
+
+            '
+          type: reasoning_text
+        id: rs_8d45a4c7a23ddd16
+        summary: []
+        type: reasoning
+      first_id: rs_8d45a4c7a23ddd16
+      has_more: true
+      last_id: rs_8d45a4c7a23ddd16
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-b326-7743-affc-287260336b36
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792748270
+      created_at: 1792748270
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1681f-b326-7743-affc-287260336b36
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to reply with only the word "ORCHID."
+
+            '
+          type: reasoning_text
+        id: rs_80e43f4959d5c2f6
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            ORCHID'
+          type: output_text
+        id: msg_8da328936b6052e9
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_01a1681f-b0a6-7ed1-87d9-dcf12cf72e63
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 89
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 22
+        output_tokens_details:
+          reasoning_tokens: 16
+        total_tokens: 111
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/responses/resp_01a1681f-b0a6-7ed1-87d9-dcf12cf72e63
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: resp_01a1681f-b0a6-7ed1-87d9-dcf12cf72e63
+      object: response.deleted
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-b0a6-7ed1-87d9-dcf12cf72e63
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: 'storage error: not found: Response with id ''resp_01a1681f-b0a6-7ed1-87d9-dcf12cf72e63'''
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t10
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-b0a6-7ed1-87d9-dcf12cf72e63/input_items
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: 'storage error: not found: Response with id ''resp_01a1681f-b0a6-7ed1-87d9-dcf12cf72e63'''
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t11
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-b326-7743-affc-287260336b36/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a1681f-b549-77f2-9c84-54ff09e5e399
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a1681f-b549-77f2-9c84-54ff09e5e399
+      has_more: false
+      last_id: msg_01a1681f-b549-77f2-9c84-54ff09e5e399
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t12
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-b326-7743-affc-287260336b36
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792748270
+      created_at: 1792748270
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1681f-b326-7743-affc-287260336b36
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to reply with only the word "ORCHID."
+
+            '
+          type: reasoning_text
+        id: rs_80e43f4959d5c2f6
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            ORCHID'
+          type: output_text
+        id: msg_8da328936b6052e9
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_01a1681f-b0a6-7ed1-87d9-dcf12cf72e63
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 89
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 22
+        output_tokens_details:
+          reasoning_tokens: 16
+        total_tokens: 111
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t13
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/responses/resp_01a1681f-b0a6-7ed1-87d9-dcf12cf72e63
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: 'storage error: not found: Response with id ''resp_01a1681f-b0a6-7ed1-87d9-dcf12cf72e63'''
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t14
+  request:
+    body:
+      input:
+      - content: What exact word did the first user message ask you to reply with?
+          Reply with only that word.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      previous_response_id: resp_01a1681f-b326-7743-affc-287260336b36
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792748272
+      created_at: 1792748272
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1681f-b783-7862-862d-fa186c5efad1
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user is asking what exact word the first user message asked me
+            to reply with. The first user message said "Reply with only ORCHID." So
+            the word is ORCHID. They want me to reply with only that word.
+
+            '
+          type: reasoning_text
+        id: rs_ae1b45109884f964
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            ORCHID'
+          type: output_text
+        id: msg_a1bfde998fcfe613
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_01a1681f-b326-7743-affc-287260336b36
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 100
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 55
+        output_tokens_details:
+          reasoning_tokens: 49
+        total_tokens: 155
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t15
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-b783-7862-862d-fa186c5efad1/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a1681f-b549-77f2-9c84-54ff09e5e399
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to reply with only the word "ORCHID."
+
+            '
+          type: reasoning_text
+        id: rs_80e43f4959d5c2f6
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            ORCHID'
+          type: output_text
+        id: msg_8da328936b6052e9
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: What exact word did the first user message ask you to reply with?
+            Reply with only that word.
+          type: input_text
+        id: msg_01a1681f-bc44-7452-8012-112e41706260
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a1681f-b549-77f2-9c84-54ff09e5e399
+      has_more: false
+      last_id: msg_01a1681f-bc44-7452-8012-112e41706260
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t16
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/responses/resp_01a1681f-b783-7862-862d-fa186c5efad1
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: resp_01a1681f-b783-7862-862d-fa186c5efad1
+      object: response.deleted
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t17
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/responses/resp_01a1681f-b326-7743-affc-287260336b36
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: resp_01a1681f-b326-7743-affc-287260336b36
+      object: response.deleted
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t18
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-b326-7743-affc-287260336b36/input_items
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: 'storage error: not found: Response with id ''resp_01a1681f-b326-7743-affc-287260336b36'''
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t19
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-b326-7743-affc-287260336b36
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: 'storage error: not found: Response with id ''resp_01a1681f-b326-7743-affc-287260336b36'''
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404

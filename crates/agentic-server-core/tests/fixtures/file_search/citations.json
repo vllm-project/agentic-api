@@ -1,0 +1,206 @@
+{
+  "files": [
+    {
+      "file_id": "file-abc123",
+      "filename": "climate.txt",
+      "text": "Climate evidence: greenhouse gases trap heat."
+    },
+    {
+      "file_id": "file-def456",
+      "filename": "oceans.txt",
+      "text": "Climate evidence: oceans absorb heat."
+    }
+  ],
+  "cases": [
+    {
+      "name": "ogx_inline_citation",
+      "query": "climate",
+      "deltas": [
+        "Global warming is caused by greenhouse gases ",
+        "【file-abc123】",
+        "."
+      ],
+      "annotations": [],
+      "expected_annotations": [
+        {
+          "type": "file_citation",
+          "file_id": "file-abc123",
+          "filename": "climate.txt",
+          "index": 45
+        }
+      ]
+    },
+    {
+      "name": "ogx_multiple_and_repeated_sources",
+      "query": "climate",
+      "deltas": [
+        "Climate evidence 【file-abc123】. ",
+        "Ocean evidence 【file-def456】. ",
+        "Repeat 【file-abc123】."
+      ],
+      "annotations": [],
+      "expected_annotations": [
+        {
+          "type": "file_citation",
+          "file_id": "file-abc123",
+          "filename": "climate.txt",
+          "index": 17
+        },
+        {
+          "type": "file_citation",
+          "file_id": "file-def456",
+          "filename": "oceans.txt",
+          "index": 47
+        },
+        {
+          "type": "file_citation",
+          "file_id": "file-abc123",
+          "filename": "climate.txt",
+          "index": 69
+        }
+      ]
+    },
+    {
+      "name": "ogx_split_marker_and_unicode_offsets",
+      "query": "climate",
+      "deltas": [
+        "🌊 café é 温暖 ",
+        "【file-",
+        "abc",
+        "123",
+        "】",
+        "."
+      ],
+      "annotations": [],
+      "expected_annotations": [
+        {
+          "type": "file_citation",
+          "file_id": "file-abc123",
+          "filename": "climate.txt",
+          "index": 13
+        }
+      ]
+    },
+    {
+      "name": "ogx_unknown_source_is_preserved",
+      "query": "climate",
+      "deltas": [
+        "Unknown source 【file-missing】."
+      ],
+      "annotations": [],
+      "expected_annotations": []
+    },
+    {
+      "name": "ogx_known_and_unknown_sources",
+      "query": "climate",
+      "deltas": [
+        "Known 【file-abc123】, ",
+        "unknown 【file-missing】."
+      ],
+      "annotations": [],
+      "expected_annotations": [
+        {
+          "type": "file_citation",
+          "file_id": "file-abc123",
+          "filename": "climate.txt",
+          "index": 6
+        }
+      ]
+    },
+    {
+      "name": "retrieval_without_explicit_citation",
+      "query": "climate",
+      "deltas": [
+        "Global warming is caused by greenhouse gases."
+      ],
+      "annotations": [],
+      "expected_annotations": []
+    },
+    {
+      "name": "unfinished_and_empty_markers",
+      "query": "climate",
+      "deltas": [
+        "Unclosed 【file-abc123; stray 】 and 【",
+        "】."
+      ],
+      "annotations": [],
+      "expected_annotations": []
+    },
+    {
+      "name": "no_retrieved_evidence",
+      "query": "unmatchedzzzz",
+      "deltas": [
+        "Unmatched evidence 【file-abc123】."
+      ],
+      "annotations": [],
+      "expected_annotations": []
+    },
+    {
+      "name": "existing_annotations_are_validated_and_deduplicated",
+      "query": "climate",
+      "deltas": [
+        "Cited 【file-abc123】."
+      ],
+      "annotations": [
+        {
+          "type": "url_citation",
+          "url": "https://example.org/climate",
+          "title": "Climate",
+          "start_index": 0,
+          "end_index": 5
+        },
+        {
+          "type": "future_citation",
+          "extra": {
+            "nested": true
+          }
+        },
+        {
+          "type": "file_citation",
+          "file_id": "file-abc123",
+          "filename": "wrong-name.txt",
+          "index": 6
+        },
+        {
+          "type": "file_citation",
+          "file_id": "file-abc123",
+          "filename": "climate.txt",
+          "index": 6
+        },
+        {
+          "type": "file_citation",
+          "file_id": "file-missing",
+          "filename": "unknown.txt",
+          "index": 0
+        },
+        {
+          "type": "file_citation",
+          "file_id": "file-abc123",
+          "filename": "climate.txt",
+          "index": 999
+        }
+      ],
+      "expected_annotations": [
+        {
+          "type": "url_citation",
+          "url": "https://example.org/climate",
+          "title": "Climate",
+          "start_index": 0,
+          "end_index": 5
+        },
+        {
+          "type": "future_citation",
+          "extra": {
+            "nested": true
+          }
+        },
+        {
+          "type": "file_citation",
+          "file_id": "file-abc123",
+          "filename": "climate.txt",
+          "index": 6
+        }
+      ]
+    }
+  ]
+}

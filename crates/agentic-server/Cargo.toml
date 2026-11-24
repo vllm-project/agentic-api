@@ -3,12 +3,18 @@ name = "agentic-server"
 description = "Standalone axum server for agentic-api"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
 [features]
 default = ["openapi"]
 openapi = ["agentic-core/openapi", "dep:utoipa", "dep:utoipa-axum", "dep:utoipa-swagger-ui"]
+file-search-pdf = ["agentic-core/file-search-pdf"]
+# Forward the opt-in Eryx interpreter capability to the core request boundary.
+# The operator must provision a matching runtime.cwasm while building and then
+# explicitly enable the executor at runtime.
+embedded-code-interpreter = ["agentic-core/embedded-code-interpreter"]
 # Package Linux wheels without a dependency on system OpenSSL libraries.
 vendored-openssl = ["reqwest/native-tls-vendored"]
 
@@ -17,7 +23,7 @@ utoipa = { workspace = true, optional = true }
 utoipa-axum = { workspace = true, optional = true }
 utoipa-swagger-ui = { workspace = true, optional = true }
 agentic-core.workspace = true
-axum.workspace = true
+axum = { workspace = true, features = ["multipart"] }
 bytes.workspace = true
 clap.workspace = true
 either.workspace = true
@@ -31,6 +37,7 @@ opentelemetry_sdk.workspace = true
 reqwest = { workspace = true, default-features = false, features = ["rustls-tls"] }
 serde.workspace = true
 serde_json.workspace = true
+subtle = "2.6"
 thiserror.workspace = true
 tempfile = "3"
 tokio.workspace = true
@@ -43,6 +50,7 @@ tracing-subscriber.workspace = true
 url.workspace = true
 
 [dev-dependencies]
+base64 = "0.22"
 bytes.workspace = true
 flate2 = "1"
 opentelemetry-proto = { version = "0.32", default-features = false, features = ["gen-tonic-messages", "trace", "metrics"] }
@@ -54,8 +62,9 @@ reqwest = { workspace = true, features = ["json", "stream"] }
 rand = "0.8"
 rsa = "0.9"
 serde_json.workspace = true
-sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "any", "sqlite"] }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "any", "migrate", "sqlite"] }
 serde_yml = "0.0.12"
+serde_yaml = "0.9"
 tokio = { workspace = true, features = ["test-util"] }
 tower.workspace = true
 tokio-tungstenite.workspace = true

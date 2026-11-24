@@ -1,0 +1,661 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Call get_job_status for job-382, then reply with just its status.
+      max_output_tokens: 2048
+      model: Qwen/Qwen3.8-27B-FP8
+      store: false
+      stream: false
+      tool_choice:
+        name: get_job_status
+        type: function
+      tools:
+      - description: Query the pipeline orchestrator for a job's current state, metadata,
+          and failure info.
+        name: get_job_status
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier, e.g. job-382
+              type: string
+          required:
+          - job_id
+          type: object
+        strict: true
+        type: function
+      - description: Fetch error logs and stack traces for a failed pipeline job.
+        name: get_error_logs
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier
+              type: string
+            max_entries:
+              description: Maximum log entries to return (default 50)
+              type: integer
+            severity:
+              description: Minimum severity filter
+              enum:
+              - WARN
+              - ERROR
+              - FATAL
+              - ALL
+              type: string
+          required:
+          - job_id
+          - severity
+          - max_entries
+          type: object
+        strict: true
+        type: function
+      - description: Search internal operations runbooks for troubleshooting procedures.
+        name: search_runbook
+        parameters:
+          additionalProperties: false
+          properties:
+            max_results:
+              description: Maximum results to return (default 5)
+              type: integer
+            query:
+              description: Natural language search query
+              type: string
+          required:
+          - query
+          - max_results
+          type: object
+        strict: true
+        type: function
+      - description: Execute a Python analysis script in a sandboxed environment for
+          log parsing or data inspection.
+        name: run_analysis
+        parameters:
+          additionalProperties: false
+          properties:
+            code:
+              description: Python code to execute
+              type: string
+            timeout_seconds:
+              description: Execution timeout (default 30)
+              type: integer
+          required:
+          - code
+          - timeout_seconds
+          type: object
+        strict: true
+        type: function
+      - description: Restart a failed pipeline job with optional configuration overrides.
+        name: restart_job
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier to restart
+              type: string
+            memory_override_gb:
+              description: Override memory limit in GB
+              type: integer
+            priority:
+              description: Queue priority
+              enum:
+              - low
+              - normal
+              - high
+              type: string
+            skip_completed_stages:
+              description: Skip stages that completed successfully (default true)
+              type: boolean
+          required:
+          - job_id
+          - memory_override_gb
+          - skip_completed_stages
+          - priority
+          type: object
+        strict: true
+        type: function
+      - description: Search the public web for technical documentation, blog posts,
+          and known issues.
+        name: web_search
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: Search query
+              type: string
+          required:
+          - query
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1793003480
+      created_at: 1793003480
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a17755-db65-74b2-a1ba-2e5ee25d7dd7
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 2048
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to call get_job_status for job-382 and reply with
+            just its status.
+
+            '
+          type: reasoning_text
+        id: rs_a323183b60cde422
+        summary: []
+        type: reasoning
+      - arguments: '{"job_id": "job-382"}'
+        call_id: chatcmpl-tool-967cf653dd9982c4
+        id: fc_837d295c4060f0fb
+        name: get_job_status
+        status: completed
+        type: function_call
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice:
+        name: get_job_status
+        type: function
+      tools:
+      - description: Query the pipeline orchestrator for a job's current state, metadata,
+          and failure info.
+        name: get_job_status
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier, e.g. job-382
+              type: string
+          required:
+          - job_id
+          type: object
+        strict: true
+        type: function
+      - description: Fetch error logs and stack traces for a failed pipeline job.
+        name: get_error_logs
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier
+              type: string
+            max_entries:
+              description: Maximum log entries to return (default 50)
+              type: integer
+            severity:
+              description: Minimum severity filter
+              enum:
+              - WARN
+              - ERROR
+              - FATAL
+              - ALL
+              type: string
+          required:
+          - job_id
+          - severity
+          - max_entries
+          type: object
+        strict: true
+        type: function
+      - description: Search internal operations runbooks for troubleshooting procedures.
+        name: search_runbook
+        parameters:
+          additionalProperties: false
+          properties:
+            max_results:
+              description: Maximum results to return (default 5)
+              type: integer
+            query:
+              description: Natural language search query
+              type: string
+          required:
+          - query
+          - max_results
+          type: object
+        strict: true
+        type: function
+      - description: Execute a Python analysis script in a sandboxed environment for
+          log parsing or data inspection.
+        name: run_analysis
+        parameters:
+          additionalProperties: false
+          properties:
+            code:
+              description: Python code to execute
+              type: string
+            timeout_seconds:
+              description: Execution timeout (default 30)
+              type: integer
+          required:
+          - code
+          - timeout_seconds
+          type: object
+        strict: true
+        type: function
+      - description: Restart a failed pipeline job with optional configuration overrides.
+        name: restart_job
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier to restart
+              type: string
+            memory_override_gb:
+              description: Override memory limit in GB
+              type: integer
+            priority:
+              description: Queue priority
+              enum:
+              - low
+              - normal
+              - high
+              type: string
+            skip_completed_stages:
+              description: Skip stages that completed successfully (default true)
+              type: boolean
+          required:
+          - job_id
+          - memory_override_gb
+          - skip_completed_stages
+          - priority
+          type: object
+        strict: true
+        type: function
+      - description: Search the public web for technical documentation, blog posts,
+          and known issues.
+        name: web_search
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: Search query
+              type: string
+          required:
+          - query
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 975
+        input_tokens_details:
+          cache_write_tokens: 784
+          cached_tokens: 0
+        output_tokens: 56
+        output_tokens_details:
+          reasoning_tokens: 23
+        total_tokens: 1031
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - content: Call get_job_status for job-382, then reply with just its status.
+        role: user
+      - content:
+        - text: 'The user wants me to call get_job_status for job-382 and reply with
+            just its status.
+
+            '
+          type: reasoning_text
+        id: rs_a323183b60cde422
+        summary: []
+        type: reasoning
+      - arguments: '{"job_id": "job-382"}'
+        call_id: chatcmpl-tool-967cf653dd9982c4
+        id: fc_837d295c4060f0fb
+        name: get_job_status
+        status: completed
+        type: function_call
+      - call_id: chatcmpl-tool-967cf653dd9982c4
+        output: '{"job_id": "job-382", "status": "failed", "error_type": "OutOfMemoryError",
+          "failed_at": "2024-01-15T03:22:11Z", "stage": "transform", "memory_used_gb":
+          31.2, "memory_limit_gb": 32, "pipeline": "etl-daily-ingest", "owner": "data-platform-team"}'
+        type: function_call_output
+      max_output_tokens: 2048
+      model: Qwen/Qwen3.8-27B-FP8
+      store: false
+      stream: false
+      tool_choice: none
+      tools:
+      - description: Query the pipeline orchestrator for a job's current state, metadata,
+          and failure info.
+        name: get_job_status
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier, e.g. job-382
+              type: string
+          required:
+          - job_id
+          type: object
+        strict: true
+        type: function
+      - description: Fetch error logs and stack traces for a failed pipeline job.
+        name: get_error_logs
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier
+              type: string
+            max_entries:
+              description: Maximum log entries to return (default 50)
+              type: integer
+            severity:
+              description: Minimum severity filter
+              enum:
+              - WARN
+              - ERROR
+              - FATAL
+              - ALL
+              type: string
+          required:
+          - job_id
+          - severity
+          - max_entries
+          type: object
+        strict: true
+        type: function
+      - description: Search internal operations runbooks for troubleshooting procedures.
+        name: search_runbook
+        parameters:
+          additionalProperties: false
+          properties:
+            max_results:
+              description: Maximum results to return (default 5)
+              type: integer
+            query:
+              description: Natural language search query
+              type: string
+          required:
+          - query
+          - max_results
+          type: object
+        strict: true
+        type: function
+      - description: Execute a Python analysis script in a sandboxed environment for
+          log parsing or data inspection.
+        name: run_analysis
+        parameters:
+          additionalProperties: false
+          properties:
+            code:
+              description: Python code to execute
+              type: string
+            timeout_seconds:
+              description: Execution timeout (default 30)
+              type: integer
+          required:
+          - code
+          - timeout_seconds
+          type: object
+        strict: true
+        type: function
+      - description: Restart a failed pipeline job with optional configuration overrides.
+        name: restart_job
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier to restart
+              type: string
+            memory_override_gb:
+              description: Override memory limit in GB
+              type: integer
+            priority:
+              description: Queue priority
+              enum:
+              - low
+              - normal
+              - high
+              type: string
+            skip_completed_stages:
+              description: Skip stages that completed successfully (default true)
+              type: boolean
+          required:
+          - job_id
+          - memory_override_gb
+          - skip_completed_stages
+          - priority
+          type: object
+        strict: true
+        type: function
+      - description: Search the public web for technical documentation, blog posts,
+          and known issues.
+        name: web_search
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: Search query
+              type: string
+          required:
+          - query
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1793003482
+      created_at: 1793003482
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a17755-ec47-7012-a56b-42c31b3038ab
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 2048
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user asked me to reply with just its status.
+
+            '
+          type: reasoning_text
+        id: rs_950fe3b0641fdb14
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            failed'
+          type: output_text
+        id: msg_b6962853ece78d24
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: none
+      tools:
+      - description: Query the pipeline orchestrator for a job's current state, metadata,
+          and failure info.
+        name: get_job_status
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier, e.g. job-382
+              type: string
+          required:
+          - job_id
+          type: object
+        strict: true
+        type: function
+      - description: Fetch error logs and stack traces for a failed pipeline job.
+        name: get_error_logs
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier
+              type: string
+            max_entries:
+              description: Maximum log entries to return (default 50)
+              type: integer
+            severity:
+              description: Minimum severity filter
+              enum:
+              - WARN
+              - ERROR
+              - FATAL
+              - ALL
+              type: string
+          required:
+          - job_id
+          - severity
+          - max_entries
+          type: object
+        strict: true
+        type: function
+      - description: Search internal operations runbooks for troubleshooting procedures.
+        name: search_runbook
+        parameters:
+          additionalProperties: false
+          properties:
+            max_results:
+              description: Maximum results to return (default 5)
+              type: integer
+            query:
+              description: Natural language search query
+              type: string
+          required:
+          - query
+          - max_results
+          type: object
+        strict: true
+        type: function
+      - description: Execute a Python analysis script in a sandboxed environment for
+          log parsing or data inspection.
+        name: run_analysis
+        parameters:
+          additionalProperties: false
+          properties:
+            code:
+              description: Python code to execute
+              type: string
+            timeout_seconds:
+              description: Execution timeout (default 30)
+              type: integer
+          required:
+          - code
+          - timeout_seconds
+          type: object
+        strict: true
+        type: function
+      - description: Restart a failed pipeline job with optional configuration overrides.
+        name: restart_job
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier to restart
+              type: string
+            memory_override_gb:
+              description: Override memory limit in GB
+              type: integer
+            priority:
+              description: Queue priority
+              enum:
+              - low
+              - normal
+              - high
+              type: string
+            skip_completed_stages:
+              description: Skip stages that completed successfully (default true)
+              type: boolean
+          required:
+          - job_id
+          - memory_override_gb
+          - skip_completed_stages
+          - priority
+          type: object
+        strict: true
+        type: function
+      - description: Search the public web for technical documentation, blog posts,
+          and known issues.
+        name: web_search
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: Search query
+              type: string
+          required:
+          - query
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 1144
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 784
+        output_tokens: 16
+        output_tokens_details:
+          reasoning_tokens: 12
+        total_tokens: 1160
+    headers:
+      content-type: application/json
+    status_code: 200

@@ -85,7 +85,15 @@ trait ToolTranslator: std::fmt::Debug + Send {
 trait HasTranslator: crate::tool::ToolHandler {
     type Translator: ToolTranslator;
 
-    fn new_translator() -> Self::Translator;
+    fn new_translator(execution: CallExecution) -> Self::Translator;
+}
+
+/// Whether a client call targets an async tool. Only function and custom tools, including
+/// namespace members, accept `async`; declarations reject it on the others.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CallExecution {
+    Sync,
+    Async,
 }
 
 fn ensure_function_call_size(arguments: &str) -> ExecutorResult<()> {

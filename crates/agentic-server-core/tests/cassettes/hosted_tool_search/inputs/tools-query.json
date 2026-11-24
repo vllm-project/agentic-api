@@ -1,0 +1,151 @@
+[
+  {
+    "type": "tool_search"
+  },
+  {
+    "type": "function",
+    "name": "get_weather",
+    "description": "Get the current weather for a city",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "city": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "city"
+      ],
+      "additionalProperties": false
+    },
+    "strict": true,
+    "defer_loading": true
+  },
+  {
+    "type": "function",
+    "name": "get_exchange_rate",
+    "description": "Get the exchange rate between two currencies",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "base": {
+          "type": "string"
+        },
+        "quote": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "base",
+        "quote"
+      ],
+      "additionalProperties": false
+    },
+    "strict": true,
+    "defer_loading": true
+  },
+  {
+    "type": "namespace",
+    "name": "travel",
+    "description": "Travel location tools",
+    "tools": [
+      {
+        "type": "function",
+        "name": "get_timezone",
+        "description": "Get the IANA time zone for a city",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "city"
+          ],
+          "additionalProperties": false
+        },
+        "strict": true,
+        "defer_loading": true
+      },
+      {
+        "type": "function",
+        "name": "get_coordinates",
+        "description": "Get latitude and longitude for a city",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "city"
+          ],
+          "additionalProperties": false
+        },
+        "strict": true,
+        "defer_loading": true
+      },
+      {
+        "type": "function",
+        "name": "calculate_distance",
+        "description": "Calculate the distance between two cities",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "origin": {
+              "type": "string"
+            },
+            "destination": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "origin",
+            "destination"
+          ],
+          "additionalProperties": false
+        },
+        "strict": true,
+        "defer_loading": true
+      },
+      {
+        "type": "function",
+        "name": "book_flight",
+        "description": "Reserve an airline seat between two airports",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "origin_airport": {
+              "type": "string"
+            },
+            "destination_airport": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "origin_airport",
+            "destination_airport"
+          ],
+          "additionalProperties": false
+        },
+        "strict": true,
+        "defer_loading": true
+      }
+    ]
+  },
+  {
+    "type": "mcp",
+    "server_label": "gitmcp_tiktoken",
+    "server_url": "https://gitmcp.io/openai/tiktoken",
+    "server_description": "Documentation and code search for the openai/tiktoken tokenizer repository.",
+    "allowed_tools": [
+      "fetch_tiktoken_documentation",
+      "search_tiktoken_documentation",
+      "search_tiktoken_code"
+    ],
+    "require_approval": "never",
+    "defer_loading": true
+  }
+]

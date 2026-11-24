@@ -1,10 +1,20 @@
 //! Response storage handler — owns all response store operations.
 
-use crate::storage::{InOutItem, ResponseData, ResponseMetadata, ResponseStore};
-use crate::types::io::OutputItem;
+use std::collections::HashSet;
+
+use crate::storage::{
+    ConversationSnapshot, ResponseCheckpoint, ResponseData, ResponseMetadata, ResponseStore, StorageError,
+};
+use crate::types::io::input::retain_window;
+use crate::types::io::{InOutItem, InputItem};
+use crate::types::io::{ItemOrder, ItemPage, ListItemsResponse};
+use crate::types::request_response::ResponsePayload;
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::request::RequestContext;
+
+/// The conflict for a response stored without a snapshot, such as a `store: false` session checkpoint.
+const NOT_RETRIEVABLE: &str = "stored response has no retrievable payload; create a new response with store=true";
 
 /// Handles all response store operations: lookup, rehydration, and persistence.
 #[derive(Clone, Debug)]
@@ -16,6 +26,94 @@ impl ResponseHandler {
     #[must_use]
     pub fn new(store: ResponseStore) -> Self {
         Self { store }
+    }
+
+    /// Retrieves the terminal payload of a response created with `store=true`.
+    ///
+    /// # Errors
+    /// Returns `ResponseNotFound` for missing IDs, a storage error for unavailable storage, and a conflict
+    /// for records stored without a snapshot, such as `store: false` session checkpoints.
+    pub async fn get_snapshot(&self, response_id: &str) -> ExecutorResult<ResponsePayload> {
+        self.store
+            .get_snapshot(response_id)
+            .await?
+            .ok_or_else(|| ExecutorError::Conflict(NOT_RETRIEVABLE.into()))
+    }
+
+    /// Deletes a stored response.
+    ///
+    /// # Errors
+    /// Returns an error if the response is missing or storage is unavailable.
+    pub async fn delete(&self, response_id: &str) -> ExecutorResult<()> {
+        self.store.delete(response_id).await.map_err(ExecutorError::Storage)
+    }
+
+    /// Resolve client references without overwriting the stored item with supplied content. An item ID may occur once
+    /// in the input and the `history` it continues together.
+    pub(crate) async fn resolve_input_items<'a>(
+        &self,
+        items: &mut [InOutItem],
+        history: impl Iterator<Item = &'a InputItem>,
+    ) -> ExecutorResult<()> {
+        InOutItem::admit_all(items, "input")?;
+        let mut seen = HashSet::new();
+        let repeated = items
+            .iter()
+            .filter_map(InOutItem::id)
+            .find(|id| !seen.insert((*id).to_owned()))
+            .or_else(|| history.filter_map(InputItem::id).find(|id| seen.contains(*id)));
+        if let Some(id) = repeated {
+            return Err(ExecutorError::UnsupportedValue {
+                param: Some("input".into()),
+                code: None,
+                message: format!(
+                    "Duplicate item found with id {id}. Remove duplicate items from your input and try again."
+                ),
+            });
+        }
+        let mut stored = self
+            .store
+            .get_input_items_by_id(&seen.into_iter().collect::<Vec<_>>())
+            .await?;
+        for item in items {
+            if let Some(stored) = item.id().and_then(|id| stored.remove(id)) {
+                *item = stored.into_replayed_input();
+            }
+        }
+        Ok(())
+    }
+
+    /// Lists stored context, excluding this response's own output.
+    ///
+    /// # Errors
+    /// Returns an error for invalid pagination, missing history, or a response
+    /// without a retrievable snapshot.
+    pub async fn list_input_items(&self, response_id: &str, page: ItemPage<'_>) -> ExecutorResult<ListItemsResponse> {
+        let mut items = self
+            .store
+            .get_input_items(response_id)
+            .await?
+            .ok_or_else(|| ExecutorError::Conflict(NOT_RETRIEVABLE.into()))?;
+        if page.order == ItemOrder::Desc {
+            items.reverse();
+        }
+        let start = match page.after.filter(|cursor| !cursor.is_empty()) {
+            Some(cursor) => {
+                // Match conversation pagination when a public ID occurs repeatedly.
+                items
+                    .iter()
+                    .rposition(|item| item.id() == Some(cursor))
+                    .ok_or_else(|| StorageError::ItemCursorNotFound { id: cursor.to_owned() })?
+                    + 1
+            }
+            None => 0,
+        };
+        let limit = page.limit.get();
+        let has_more = items.len() - start > limit;
+        Ok(ListItemsResponse::new(
+            items.into_iter().skip(start).take(limit).collect(),
+            has_more,
+        ))
     }
 
     /// Retrieves the stored response for `previous_response_id`.
@@ -31,122 +129,99 @@ impl ResponseHandler {
             .previous_response_id
             .as_deref()
             .ok_or_else(|| ExecutorError::InvalidRequest("previous_response_id is required for get".into()))?;
-        self.store.get(prev_id).await.map_err(ExecutorError::Storage)
-    }
-
-    /// Validates that the response for `previous_response_id` exists.
-    ///
-    /// Used in the `store=false` path where we only need to confirm the ID is
-    /// valid without loading any history.
-    ///
-    /// # Errors
-    /// Returns `ExecutorError` if `previous_response_id` is absent, the response
-    /// is not found, or the store is disabled.
-    pub async fn validate_exists(&self, ctx: &RequestContext) -> ExecutorResult<()> {
-        self.get(ctx).await.map(|_| ())
-    }
-
-    /// Loads all history items referenced by the previous response.
-    ///
-    /// Reads `previous_response_id` from `ctx.original_request`. Returns an empty
-    /// vec if there is no previous response.
-    ///
-    /// # Errors
-    /// Returns `ExecutorError` if the store is disabled or the database query fails.
-    pub async fn rehydrate(&self, ctx: &RequestContext) -> ExecutorResult<Vec<InOutItem>> {
-        let Some(prev_id) = ctx.original_request.previous_response_id.as_deref() else {
-            return Ok(vec![]);
-        };
-        self.store.rehydrate(prev_id).await.map_err(ExecutorError::Storage)
-    }
-
-    /// Completes response-scoped persistence and optional transient checkpoint retention.
-    ///
-    /// Takes `ctx` and `output_items` by value so fields can be moved directly
-    /// into [`ResponseMetadata`]. Normally only this turn's items are inserted;
-    /// promoting a transient parent to a stored child requires its full canonical
-    /// history because there are no durable parent item IDs to reference.
-    ///
-    /// # Errors
-    /// Returns `ExecutorError` if the store is disabled or the database operation fails.
-    pub async fn execute_turn(&self, mut ctx: RequestContext, output_items: Vec<OutputItem>) -> ExecutorResult<()> {
-        let metadata = ResponseMetadata {
-            model: std::mem::take(&mut ctx.enriched_request.model),
-            previous_response_id: ctx.original_request.previous_response_id.take(),
-            effective_tools: ctx.enriched_request.tools.take(),
-            tool_search_loaded_tools: None,
-            effective_tool_choice: ctx.enriched_request.tool_choice.take().unwrap_or_default(),
-            effective_instructions: ctx.enriched_request.instructions.take(),
-        };
-
-        self.execute_turn_with_metadata(ctx, output_items, metadata).await
-    }
-
-    /// Persists a response using metadata prepared by request-scoped tool behavior.
-    pub(crate) async fn execute_turn_with_metadata(
-        &self,
-        mut ctx: RequestContext,
-        output_items: Vec<OutputItem>,
-        metadata: ResponseMetadata,
-    ) -> ExecutorResult<()> {
-        let continuation = ctx.continuation.take();
-        let write_durable = continuation.is_none() || ctx.original_request.store;
-        let mut new_items = Vec::with_capacity(ctx.new_input_items.len() + output_items.len());
-        new_items.extend(ctx.new_input_items.into_iter().map(InOutItem::Input));
-        new_items.extend(
-            output_items
-                .into_iter()
-                .enumerate()
-                .filter(|(index, item)| {
-                    continuation
-                        .as_ref()
-                        .is_none_or(|lease| lease.retains_output(*index, item))
-                })
-                .map(|(_, item)| InOutItem::Output(item)),
-        );
-
-        let checkpoint = continuation
-            .as_ref()
-            .map(|lease| {
-                lease.checkpoint(
-                    ctx.response_id.clone(),
-                    ctx.conversation_id.clone(),
-                    &metadata,
-                    &new_items,
-                    write_durable,
-                )
-            })
-            .transpose()?;
-
-        // A stored child of a transient parent needs its complete canonical
-        // checkpoint, not a database reference to a response that was never stored.
-        let transient_parent = continuation
-            .as_ref()
-            .filter(|lease| lease.parent.as_ref().is_some_and(|parent| !parent.durable));
-        let previous_durable_id = if let Some(lease) = transient_parent {
-            if write_durable {
-                let mut full_items = lease.parent_items().cloned().map(InOutItem::Input).collect::<Vec<_>>();
-                full_items.append(&mut new_items);
-                new_items = full_items;
+        self.store.get(prev_id).await.map_err(|error| {
+            if error.is_not_found() {
+                StorageError::PreviousResponseNotFound { id: prev_id.to_owned() }.into()
+            } else {
+                ExecutorError::Storage(error)
             }
-            None
-        } else {
-            metadata.previous_response_id.as_deref()
-        };
+        })
+    }
 
-        let result = if write_durable {
-            self.store
-                .persist_with_conversation_id(
-                    &ctx.response_id,
-                    ctx.conversation_id.as_deref(),
-                    previous_durable_id,
-                    new_items,
-                    &metadata,
-                )
-                .await
-        } else {
-            Ok(())
+    /// Takes the history the turn continues and resolves the turn's input against it.
+    ///
+    /// The history is the `conversation` snapshot's, else the session's retained parent's, else the stored
+    /// `previous_response_id` chain's, loaded from storage; a turn with neither continues none and gets `None`. The
+    /// checkpoint's rows start at the latest compaction a turn produced, and its `history` holds the items, kept from
+    /// that compaction on for a session. A stored turn may not resend an item that history holds.
+    ///
+    /// # Errors
+    /// Returns [`StorageError::PreviousResponseNotFound`] for an unknown `previous_response_id` or, for an unstored
+    /// session turn, a parent the session does not retain; the duplicate-input error for a repeated item; or
+    /// `ExecutorError` if the store is disabled or the history or input is invalid.
+    pub async fn rehydrate(
+        &self,
+        ctx: &mut RequestContext,
+        conversation: Option<ConversationSnapshot>,
+    ) -> ExecutorResult<Option<ResponseCheckpoint>> {
+        // A session turn's parent: `Some(None)` when its session retains none yet.
+        let session = ctx.continuation.as_ref().map(|lease| lease.parent.as_deref());
+        let store = ctx.original_request.store;
+        let checkpoint = match (
+            conversation,
+            ctx.original_request.previous_response_id.as_deref(),
+            session,
+        ) {
+            (Some(ConversationSnapshot { items, mut checkpoint }), _, _) => {
+                checkpoint.continue_from_compaction(&items, &ctx.enriched_request);
+                checkpoint.history = InOutItem::into_input_items(items);
+                Some(checkpoint)
+            }
+            (None, Some(_), Some(Some(parent))) => Some(ResponseCheckpoint::clone(parent)),
+            (None, Some(prev_id), Some(None)) if !store => {
+                return Err(StorageError::PreviousResponseNotFound { id: prev_id.to_owned() }.into());
+            }
+            (None, Some(prev_id), session) => {
+                let (mut checkpoint, history) = self.store.rehydrate(prev_id).await.map_err(|error| {
+                    if error.is_not_found() {
+                        StorageError::PreviousResponseNotFound { id: prev_id.to_owned() }.into()
+                    } else {
+                        ExecutorError::Storage(error)
+                    }
+                })?;
+                checkpoint.continue_from_compaction(&history, &ctx.enriched_request);
+                let history = InOutItem::into_input_items(history);
+                checkpoint.history = if session.is_some() {
+                    retain_window(history)
+                } else {
+                    history
+                };
+                Some(checkpoint)
+            }
+            (None, None, _) => None,
         };
+        let history = checkpoint
+            .iter()
+            .filter(|_| store)
+            .flat_map(|checkpoint| &checkpoint.history);
+        self.resolve_input_items(&mut ctx.new_input_items, history).await?;
+        Ok(checkpoint)
+    }
+
+    /// Stores one response turn: its items, snapshot and metadata, extending the history rehydration captured in
+    /// `ctx.checkpoint`. Returns the turn's history rows.
+    ///
+    /// # Errors
+    /// [`ExecutorError::Conflict`] when a turn is already stored under this response's id, or `ExecutorError` if the
+    /// store is disabled or the database operation fails.
+    pub async fn persist(
+        &self,
+        ctx: &RequestContext,
+        items: Vec<InOutItem>,
+        snapshot: Option<&ResponsePayload>,
+        metadata: &ResponseMetadata,
+    ) -> ExecutorResult<Vec<String>> {
+        let result = self
+            .store
+            // A transient session parent has no stored history to extend.
+            .persist(
+                &ctx.response_id,
+                ctx.checkpoint.as_ref().filter(|checkpoint| checkpoint.durable),
+                items,
+                snapshot,
+                metadata,
+            )
+            .await;
         match result {
             Err(error) if error.is_unique_violation() => match self.store.get(&ctx.response_id).await {
                 Ok(_) => Err(ExecutorError::Conflict(format!(
@@ -156,13 +231,7 @@ impl ResponseHandler {
                 Err(not_found) if not_found.is_not_found() => Err(ExecutorError::Storage(error)),
                 Err(lookup_error) => Err(ExecutorError::Storage(lookup_error)),
             },
-            Err(error) => Err(ExecutorError::Storage(error)),
-            Ok(()) => {
-                if let Some((lease, checkpoint)) = continuation.zip(checkpoint) {
-                    lease.publish(checkpoint)?;
-                }
-                Ok(())
-            }
+            result => result.map_err(ExecutorError::Storage),
         }
     }
 }
@@ -181,34 +250,18 @@ mod tests {
         let req = RequestPayload {
             model: "test".into(),
             input: ResponsesInput::Text("hi".into()),
-            instructions: None,
-            previous_response_id: previous_response_id.map(str::to_string),
-            conversation_id: None,
-            tools: None,
-            tool_choice: None,
-            stream: false,
             store: true,
-            include: None,
-            reasoning: None,
-            text: None,
-            temperature: None,
-            top_p: None,
-            max_output_tokens: None,
-            ignore_eos: None,
-            truncation: None,
-            metadata: None,
-            parallel_tool_calls: None,
-            prompt_cache_key: None,
-            cache_salt: None,
-            context_management: None,
+            previous_response_id: previous_response_id.map(str::to_string),
+            ..Default::default()
         };
         RequestContext {
+            multi_agent_tree: None,
             enriched_request: req.clone(),
             original_request: req,
             new_input_items: vec![],
             response_id: "resp_test".into(),
             conversation_id: None,
-            conversation_version: None,
+            checkpoint: None,
             continuation: None,
         }
     }
@@ -220,27 +273,95 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_validate_exists_missing_prev_id_returns_error() {
-        let result = disabled_handler().validate_exists(&make_ctx(None)).await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_rehydrate_no_prev_id_returns_empty() {
-        let result = disabled_handler().rehydrate(&make_ctx(None)).await;
-        assert!(result.is_ok());
-        assert!(result.unwrap().is_empty());
+    async fn test_rehydrate_no_prev_id_returns_none() {
+        let result = disabled_handler().rehydrate(&mut make_ctx(None), None).await;
+        assert!(result.unwrap().is_none());
     }
 
     #[tokio::test]
     async fn test_rehydrate_disabled_store_returns_error() {
-        let result = disabled_handler().rehydrate(&make_ctx(Some("resp_prev"))).await;
+        let result = disabled_handler()
+            .rehydrate(&mut make_ctx(Some("resp_prev")), None)
+            .await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
-    async fn test_execute_turn_disabled_store_returns_error() {
-        let result = disabled_handler().execute_turn(make_ctx(None), vec![]).await;
+    async fn test_persist_disabled_store_returns_error() {
+        let result = disabled_handler()
+            .persist(&make_ctx(None), vec![], None, &ResponseMetadata::default())
+            .await;
         assert!(result.is_err());
+    }
+
+    /// A call and its output may share an ID prefix, so a reference resolves to the stored item whatever kind the
+    /// client named. The recorded `OpenAI` Responses and Conversations behavior does the same.
+    #[tokio::test]
+    async fn stored_reference_resolves_to_the_stored_item_kind() {
+        use crate::storage::create_pool_with_schema;
+        use serde_json::json;
+
+        let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await.unwrap();
+        let store = ResponseStore::new(pool);
+        let stored: Vec<InOutItem> = serde_json::from_value(json!([
+            {"type": "function_call", "id": "fc_call", "call_id": "call_seed", "name": "lookup", "arguments": "{}"},
+            {"type": "function_call_output", "id": "fc_output", "call_id": "call_seed", "output": "done"},
+            {"type": "shell_call_output", "id": "sho_output", "call_id": "call_shell", "output": []}
+        ]))
+        .unwrap();
+        store
+            .persist("resp_seed", None, stored, None, &ResponseMetadata::default())
+            .await
+            .unwrap();
+        let mut references: Vec<InOutItem> = serde_json::from_value(json!([
+            {"type": "function_call_output", "id": "fc_call", "call_id": "call_other", "output": "changed"},
+            {"type": "function_call", "id": "fc_output", "call_id": "call_other", "name": "other", "arguments": "{}"},
+            {"type": "shell_call", "id": "sho_output", "call_id": "call_other", "action": {"commands": ["pwd"]}}
+        ]))
+        .unwrap();
+        ResponseHandler::new(store)
+            .resolve_input_items(&mut references, std::iter::empty())
+            .await
+            .unwrap();
+        let resolved: Vec<_> = serde_json::to_value(&references)
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| (item["id"].clone(), item["type"].clone(), item["call_id"].clone()))
+            .collect();
+        assert_eq!(
+            resolved,
+            [
+                (json!("fc_call"), json!("function_call"), json!("call_seed")),
+                (json!("fc_output"), json!("function_call_output"), json!("call_seed")),
+                (json!("sho_output"), json!("shell_call_output"), json!("call_shell")),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn persisted_metadata_keeps_public_selector_after_inference_relaxation() {
+        use crate::storage::create_pool_with_schema;
+        use crate::types::io::ToolChoice;
+
+        let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await.unwrap();
+        let store = ResponseStore::new(pool);
+        let handler = ResponseHandler::new(store.clone());
+        let mut ctx = make_ctx(None);
+        ctx.enriched_request.tool_choice = Some(ToolChoice::Required);
+        ctx.relax_tool_choice();
+        assert_eq!(ctx.enriched_request.tool_choice, Some(ToolChoice::Auto));
+
+        let conversations = crate::executor::ConversationHandler::new(crate::storage::ConversationStore::disabled());
+        let exec =
+            crate::executor::ExecutionContext::new(conversations, handler, std::sync::Arc::default(), String::new());
+        let input_only = crate::executor::persist::TurnOutput::Empty;
+        crate::executor::persist::persist(ctx, input_only, None, &exec)
+            .await
+            .unwrap();
+
+        let stored = store.get("resp_test").await.unwrap();
+        assert_eq!(stored.metadata.effective_tool_choice, ToolChoice::Required);
     }
 }

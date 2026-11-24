@@ -1,4 +1,5 @@
-use std::future::Future;
+use std::future::{Future, IntoFuture};
+use std::net::SocketAddr;
 use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -9,27 +10,31 @@ use agentic_core::error::Error as CoreError;
 use agentic_core::executor::ExecutionContext;
 use agentic_core::proxy::ProxyState;
 use agentic_core::readiness::{llm_readiness_client, wait_llm_ready};
-use agentic_server::app::{AppState, ReadinessTracker, ServerConfig, WebSocketTracker, build_router_with_auth};
+use agentic_server::app::{
+    AppState, ReadinessTracker, ServerConfig, WebSocketTracker, build_router_with_auth, gateway_listener,
+};
 use agentic_server::auth::{OidcAuthError, OidcAuthenticator, OidcConfig};
-use agentic_server::model_capabilities::ModelCapabilities;
+use agentic_server::rate_limit::RateLimitConfig;
 use agentic_server::telemetry::TelemetryError;
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, task::JoinSet};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 const GATEWAY_DRAIN_TIMEOUT: Duration = Duration::from_secs(8);
+const FILE_BLOB_CLEANUP_INTERVAL: Duration = Duration::from_secs(30);
 
 /// Transport-level gateway settings resolved before the server starts.
 ///
 /// These are deliberately separate from [`Config`], which carries inference,
 /// storage, and tool concerns that core owns.
 pub struct GatewayOptions<'a> {
-    pub model_capabilities: ModelCapabilities,
     pub host: &'a str,
     pub port: u16,
     /// Ceiling on serialized inbound request bytes for HTTP bodies and
     /// WebSocket messages and frames.
     pub max_request_body_size: NonZeroUsize,
+    /// Per-caller request rate; `None` disables rate limiting.
+    pub rate_limit: Option<RateLimitConfig>,
     pub oidc: Option<OidcConfig>,
 }
 
@@ -55,9 +60,9 @@ async fn build_state(
     config: &Config,
     shutdown_token: CancellationToken,
     max_request_body_size: NonZeroUsize,
-    model_capabilities: ModelCapabilities,
 ) -> Result<AppState, ServerError> {
     let proxy_state = ProxyState::new(config.clone())?;
+    // The executor reads `config.max_request_body_size`; the transport keeps its own copy.
     let exec_ctx = Arc::new(ExecutionContext::from_config(config).await?);
 
     Ok(AppState {
@@ -71,7 +76,6 @@ async fn build_state(
         skip_llm_ready_check: config.skip_llm_ready_check,
         openai_api_key: config.openai_api_key.clone(),
         max_request_body_size,
-        model_capabilities: Arc::new(model_capabilities),
     })
 }
 
@@ -80,20 +84,82 @@ async fn serve_gateway(
     host: &str,
     port: u16,
     authenticator: Option<OidcAuthenticator>,
+    rate_limit: Option<RateLimitConfig>,
 ) -> Result<(), ServerError> {
     let addr = format!("{host}:{port}");
-    let server_config = ServerConfig::from_env();
+    let server_config = ServerConfig {
+        rate_limit,
+        ..ServerConfig::from_env()
+    };
     let shutdown_token = state.shutdown_token.clone();
     let websocket_tracker = state.websocket_tracker.clone();
+    let messages_threads = state.exec_ctx.messages_threads.clone();
+    let shutdown_on_error = shutdown_token.clone();
+    let cleanup_service = state.exec_ctx.file_handler.service().cloned();
     let router = build_router_with_auth(state, &server_config, authenticator);
     let listener = TcpListener::bind(&addr).await?;
+    let addr = listener.local_addr()?;
     info!("gateway listening on {addr}");
-    axum::serve(listener, router)
-        .with_graceful_shutdown(async move {
-            shutdown_token.cancelled().await;
-        })
-        .await?;
+    let mut cleanup_workers = JoinSet::new();
+    if let Some(service) = cleanup_service {
+        let cleanup_shutdown = shutdown_token.clone();
+        cleanup_workers.spawn(async move {
+            let mut interval = tokio::time::interval_at(
+                tokio::time::Instant::now() + FILE_BLOB_CLEANUP_INTERVAL,
+                FILE_BLOB_CLEANUP_INTERVAL,
+            );
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                tokio::select! {
+                    () = cleanup_shutdown.cancelled() => break,
+                    _ = interval.tick() => {
+                        if let Err(error) = service.reconcile_blob_cleanup().await {
+                            warn!(%error, "file blob reconciliation failed; will retry");
+                        }
+                    }
+                }
+            }
+        });
+    }
+    // Rate limiting tells callers apart by peer address when OIDC is off.
+    let server = axum::serve(
+        gateway_listener(listener),
+        router.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(async move {
+        shutdown_token.cancelled().await;
+    })
+    .into_future();
+    tokio::pin!(server);
+    let maintenance = async {
+        let mut expiry = tokio::time::interval(Duration::from_secs(10));
+        loop {
+            expiry.tick().await;
+            if let Err(error) = messages_threads.maintain().await {
+                tracing::error!(%error, "Messages thread maintenance failed");
+            }
+        }
+    };
+    let result = tokio::select! {
+        result = &mut server => result,
+        () = maintenance => Ok(()),
+    };
+    if result.is_err() {
+        shutdown_on_error.cancel();
+    }
+    // JoinSet aborts its tasks if this server future is dropped early. On a
+    // normal exit, abort and join the periodic worker before returning.
+    cleanup_workers.abort_all();
+    while let Some(joined) = cleanup_workers.join_next().await {
+        if let Err(error) = joined
+            && !error.is_cancelled()
+        {
+            warn!(%error, "file blob reconciliation worker failed");
+        }
+    }
     websocket_tracker.wait_until_idle().await;
+    messages_threads.shutdown().await;
+    result?;
     Ok(())
 }
 
@@ -102,9 +168,10 @@ async fn serve_gateway_until_signal(
     host: &str,
     port: u16,
     authenticator: Option<OidcAuthenticator>,
+    rate_limit: Option<RateLimitConfig>,
 ) -> Result<(), ServerError> {
     let shutdown_token = state.shutdown_token.clone();
-    let gateway = serve_gateway(state, host, port, authenticator);
+    let gateway = serve_gateway(state, host, port, authenticator, rate_limit);
     tokio::pin!(gateway);
 
     tokio::select! {
@@ -175,22 +242,16 @@ pub async fn run(config: Config, gateway: GatewayOptions<'_>) -> Result<(), Serv
         host,
         port,
         max_request_body_size,
+        rate_limit,
         oidc,
-        model_capabilities,
     } = gateway;
     let authenticator = match oidc {
         Some(oidc) => Some(OidcAuthenticator::discover(oidc).await?),
         None => None,
     };
     wait_until_llm_ready(&config).await?;
-    let state = build_state(
-        &config,
-        CancellationToken::new(),
-        max_request_body_size,
-        model_capabilities,
-    )
-    .await?;
-    serve_gateway_until_signal(state, host, port, authenticator).await
+    let state = build_state(&config, CancellationToken::new(), max_request_body_size).await?;
+    serve_gateway_until_signal(state, host, port, authenticator, rate_limit).await
 }
 
 /// Spawn vLLM as a subprocess and run the gateway in the foreground.
@@ -208,8 +269,8 @@ pub async fn run_with_llm(
         host,
         port,
         max_request_body_size,
+        rate_limit,
         oidc,
-        model_capabilities,
     } = gateway;
     let authenticator = match oidc {
         Some(oidc) => Some(OidcAuthenticator::discover(oidc).await?),
@@ -241,11 +302,11 @@ pub async fn run_with_llm(
             }
             state = async {
                 wait_until_llm_ready(&config).await?;
-                build_state(&config, shutdown_token.clone(), max_request_body_size, model_capabilities).await
+                build_state(&config, shutdown_token.clone(), max_request_body_size).await
             } => state?,
         };
 
-        let gateway = serve_gateway(state, host, port, authenticator);
+        let gateway = serve_gateway(state, host, port, authenticator, rate_limit);
         tokio::pin!(gateway);
 
         tokio::select! {

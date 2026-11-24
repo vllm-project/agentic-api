@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { ArrowRight, ArrowUpRight, GitBranch, Layers } from 'lucide-react';
 import { REPO } from '@/lib/site';
 
@@ -14,9 +15,9 @@ export function Ecosystem() {
         </p>
       </div>
       <div className="upstream-grid">
-        <a
+        <Link
           className="upstream-card"
-          href={`${REPO}/blob/main/docs/guides/sglang-upstream.md`}
+          href="/docs/latest/guides/sglang-upstream"
         >
           <div className="upstream-heading">
             <h3>SGLang</h3>
@@ -33,10 +34,10 @@ export function Ecosystem() {
           <span className="text-link">
             Setup and test coverage <ArrowUpRight size={15} />
           </span>
-        </a>
-        <a
+        </Link>
+        <Link
           className="upstream-card"
-          href={`${REPO}/blob/main/docs/guides/dynamo-upstream.md`}
+          href="/docs/latest/guides/dynamo-upstream"
         >
           <div className="upstream-heading">
             <h3>NVIDIA Dynamo</h3>
@@ -53,7 +54,7 @@ export function Ecosystem() {
           <span className="text-link">
             Setup and test coverage <ArrowUpRight size={15} />
           </span>
-        </a>
+        </Link>
       </div>
       <aside className="llmd-callout" aria-labelledby="llmd-title">
         <div className="llmd-copy">

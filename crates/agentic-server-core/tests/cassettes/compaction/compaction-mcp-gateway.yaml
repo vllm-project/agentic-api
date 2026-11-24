@@ -1,0 +1,1890 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Remember the word APRICOT. Do not call any tools. Reply only READY.
+      max_output_tokens: 4096
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794296211
+      created_at: 1794296211
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1c463-6037-7081-b04f-63dd317716c7
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - id: mcpl_01a1c463-6390-7851-8313-0b3c4ac5a304
+        server_label: microsoft_learn
+        tools:
+        - annotations:
+            read_only: true
+          description: 'Search official Microsoft/Azure documentation to find the
+            most relevant and trustworthy content for a user''s query. This tool returns
+            up to 10 high-quality content chunks (each max 500 tokens), extracted
+            from Microsoft Learn and other official sources. Each result includes
+            the article title, URL, and a self-contained content excerpt optimized
+            for fast retrieval and reasoning. Always use this tool to quickly ground
+            your answers in accurate, first-party Microsoft/Azure knowledge.
+
+
+            ## Follow-up Pattern
+
+            To ensure completeness, use microsoft_docs_fetch when high-value pages
+            are identified by search. The fetch tool complements search by providing
+            the full detail. This is a required step for comprehensive results.'
+          input_schema:
+            properties:
+              query:
+                default: null
+                description: a query or topic about Microsoft/Azure products, services,
+                  platforms, developer tools, frameworks, or APIs
+                type: string
+            type: object
+          name: microsoft_docs_search
+        type: mcp_list_tools
+      - content:
+        - text: 'The user is asking me to remember the word "APRICOT" and reply only
+            "READY" without calling any tools.
+
+            '
+          type: reasoning_text
+        id: rs_ab19ab02662dbccb
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            READY'
+          type: output_text
+        id: msg_9530a5f18e03abed
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 501
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 30
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 531
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - content: Remember the word APRICOT. Do not call any tools. Reply only READY.
+        role: user
+      - id: mcpl_01a1c463-6390-7851-8313-0b3c4ac5a304
+        server_label: microsoft_learn
+        tools:
+        - annotations:
+            read_only: true
+          description: 'Search official Microsoft/Azure documentation to find the
+            most relevant and trustworthy content for a user''s query. This tool returns
+            up to 10 high-quality content chunks (each max 500 tokens), extracted
+            from Microsoft Learn and other official sources. Each result includes
+            the article title, URL, and a self-contained content excerpt optimized
+            for fast retrieval and reasoning. Always use this tool to quickly ground
+            your answers in accurate, first-party Microsoft/Azure knowledge.
+
+
+            ## Follow-up Pattern
+
+            To ensure completeness, use microsoft_docs_fetch when high-value pages
+            are identified by search. The fetch tool complements search by providing
+            the full detail. This is a required step for comprehensive results.'
+          input_schema:
+            properties:
+              query:
+                default: null
+                description: a query or topic about Microsoft/Azure products, services,
+                  platforms, developer tools, frameworks, or APIs
+                type: string
+            type: object
+          name: microsoft_docs_search
+        type: mcp_list_tools
+      - content:
+        - text: 'The user is asking me to remember the word "APRICOT" and reply only
+            "READY" without calling any tools.
+
+            '
+          type: reasoning_text
+        id: rs_ab19ab02662dbccb
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            READY'
+          type: output_text
+        id: msg_9530a5f18e03abed
+        role: assistant
+        status: completed
+        type: message
+      model: Qwen/Qwen3.8-27B-FP8
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses/compact
+    query_params: {}
+  response:
+    body:
+      created_at: 1794296215
+      id: resp_01a1c463-672a-7cb0-a1bf-7845687bdee7
+      object: response.compaction
+      output:
+      - content:
+        - text: Remember the word APRICOT. Do not call any tools. Reply only READY.
+          type: input_text
+        id: msg_01a1c463-672d-71b2-90e5-7df38a1814e8
+        role: user
+        status: completed
+        type: message
+      - encrypted_content: '**CONTEXT CHECKPOINT SUMMARY**
+
+
+          **Active Memory:** The word **APRICOT** (user-requested recall item).
+
+
+          **Constraints:**
+
+          - No tools should be called (per initial instruction).
+
+
+          **Unresolved / Pending:**
+
+          - None. Awaiting next user instruction.
+
+
+          **Decisions Made:**
+
+          - None beyond acknowledging the recall request.
+
+
+          **Critical References:**
+
+          - None.'
+        id: cmp_01a1c463-76d0-7dd1-a7d9-8dbac54c69b0
+        type: compaction
+      service_tier: auto
+      usage:
+        input_tokens: 140
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 190
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 330
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input:
+      - content: Remember the word APRICOT. Do not call any tools. Reply only READY.
+        role: user
+      - id: mcpl_01a1c463-6390-7851-8313-0b3c4ac5a304
+        server_label: microsoft_learn
+        tools:
+        - annotations:
+            read_only: true
+          description: 'Search official Microsoft/Azure documentation to find the
+            most relevant and trustworthy content for a user''s query. This tool returns
+            up to 10 high-quality content chunks (each max 500 tokens), extracted
+            from Microsoft Learn and other official sources. Each result includes
+            the article title, URL, and a self-contained content excerpt optimized
+            for fast retrieval and reasoning. Always use this tool to quickly ground
+            your answers in accurate, first-party Microsoft/Azure knowledge.
+
+
+            ## Follow-up Pattern
+
+            To ensure completeness, use microsoft_docs_fetch when high-value pages
+            are identified by search. The fetch tool complements search by providing
+            the full detail. This is a required step for comprehensive results.'
+          input_schema:
+            properties:
+              query:
+                default: null
+                description: a query or topic about Microsoft/Azure products, services,
+                  platforms, developer tools, frameworks, or APIs
+                type: string
+            type: object
+          name: microsoft_docs_search
+        type: mcp_list_tools
+      - content:
+        - text: 'The user is asking me to remember the word "APRICOT" and reply only
+            "READY" without calling any tools.
+
+            '
+          type: reasoning_text
+        id: rs_ab19ab02662dbccb
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            READY'
+          type: output_text
+        id: msg_9530a5f18e03abed
+        role: assistant
+        status: completed
+        type: message
+      - content: What word did I ask you to remember? Reply with only that word, or
+          NONE if you cannot see it. Do not call any tools.
+        role: user
+      max_output_tokens: 4096
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794296216
+      created_at: 1794296216
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1c463-77d0-7680-abcd-faa3f5e73b4a
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user is asking me what word they asked me to remember. Looking
+            back at the conversation, they asked me to remember the word "APRICOT".
+
+            '
+          type: reasoning_text
+        id: rs_a0d5a53051087cfc
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            APRICOT'
+          type: output_text
+        id: msg_8ea22285d305871d
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 571
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 38
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 609
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body:
+      input:
+      - content:
+        - text: Remember the word APRICOT. Do not call any tools. Reply only READY.
+          type: input_text
+        id: msg_01a1c463-672d-71b2-90e5-7df38a1814e8
+        role: user
+        status: completed
+        type: message
+      - encrypted_content: '**CONTEXT CHECKPOINT SUMMARY**
+
+
+          **Active Memory:** The word **APRICOT** (user-requested recall item).
+
+
+          **Constraints:**
+
+          - No tools should be called (per initial instruction).
+
+
+          **Unresolved / Pending:**
+
+          - None. Awaiting next user instruction.
+
+
+          **Decisions Made:**
+
+          - None beyond acknowledging the recall request.
+
+
+          **Critical References:**
+
+          - None.'
+        id: cmp_01a1c463-76d0-7dd1-a7d9-8dbac54c69b0
+        type: compaction
+      - content: What word did I ask you to remember? Reply with only that word, or
+          NONE if you cannot see it. Do not call any tools.
+        role: user
+      max_output_tokens: 4096
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794296219
+      created_at: 1794296219
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1c463-7e4b-7253-b734-d94675682968
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - id: mcpl_01a1c463-811f-7d02-aa75-bf3c891d80ae
+        server_label: microsoft_learn
+        tools:
+        - annotations:
+            read_only: true
+          description: 'Search official Microsoft/Azure documentation to find the
+            most relevant and trustworthy content for a user''s query. This tool returns
+            up to 10 high-quality content chunks (each max 500 tokens), extracted
+            from Microsoft Learn and other official sources. Each result includes
+            the article title, URL, and a self-contained content excerpt optimized
+            for fast retrieval and reasoning. Always use this tool to quickly ground
+            your answers in accurate, first-party Microsoft/Azure knowledge.
+
+
+            ## Follow-up Pattern
+
+            To ensure completeness, use microsoft_docs_fetch when high-value pages
+            are identified by search. The fetch tool complements search by providing
+            the full detail. This is a required step for comprehensive results.'
+          input_schema:
+            properties:
+              query:
+                default: null
+                description: a query or topic about Microsoft/Azure products, services,
+                  platforms, developer tools, frameworks, or APIs
+                type: string
+            type: object
+          name: microsoft_docs_search
+        type: mcp_list_tools
+      - content:
+        - text: 'The user is asking me to recall the word they asked me to remember.
+            Looking at the conversation history, the user asked me to remember the
+            word "APRICOT". I should reply with only that word.
+
+            '
+          type: reasoning_text
+        id: rs_a02d7e680a411d6c
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            APRICOT'
+          type: output_text
+        id: msg_80a9afbc8f64bcf2
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 626
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 49
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 675
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      context_management:
+      - compact_threshold: 1000
+        type: compaction
+      input: Background notes for later. Background notes for later. Background notes
+        for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Background notes for later. Background notes for later. Background
+        notes for later. Remember the word APRICOT. Reply with only OK. Do not call
+        any tools.
+      max_output_tokens: 4096
+      model: Qwen/Qwen3.8-27B-FP8
+      previous_response_id: resp_01a1c463-6037-7081-b04f-63dd317716c7
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794296234
+      created_at: 1794296228
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1c463-8799-7c20-a93d-a90921622b33
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - encrypted_content: '{"summary":"**Context Checkpoint Summary**\n\n- **Task:**
+          User asked to remember the word **APRICOT** (stated twice across two messages).\n-
+          **Status:** Word noted. No other substantive tasks, decisions, or constraints
+          established.\n- **Unresolved work:** None identified beyond the above.\n-
+          **Notes:** The second message consisted largely of repeated filler text
+          (\"Background notes for later.\") with the APRICOT instruction appended
+          at the end. No actual background notes were provided.","retained":[{"type":"message","id":"msg_01a1c463-879b-7200-a16c-01e7bcd306fb","role":"user","status":"completed","content":[{"type":"input_text","text":"Remember
+          the word APRICOT. Do not call any tools. Reply only READY."}]},{"type":"message","id":"msg_01a1c463-879b-7200-a16c-01fec550eb10","role":"user","status":"completed","content":[{"type":"input_text","text":"Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Remember the word APRICOT.
+          Reply with only OK. Do not call any tools."}]}]}'
+        id: cmp_01a1c463-a30d-7b33-8f08-2daf24983651
+        type: compaction
+      - content:
+        - text: 'The user is asking me to remember the word "APRICOT" and reply only
+            "OK" without calling any tools. This is a simple instruction. I should
+            comply and reply with just "OK".
+
+            '
+          type: reasoning_text
+        id: rs_9cdf8a9033bc77c4
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            OK'
+          type: output_text
+        id: msg_886b13557dfffb8f
+        role: assistant
+        status: completed
+        type: message
+      - encrypted_content: '{"summary":"**Context Checkpoint Summary**\n\n- **Task:**
+          User asked to remember the word **APRICOT** (stated twice across two messages).\n-
+          **Status:** Word noted. No other substantive tasks, decisions, or constraints
+          established.\n- **Unresolved work:** None identified beyond the above.\n-
+          **Notes:** The second message consisted largely of repeated filler text
+          (\"Background notes for later.\") with the APRICOT instruction appended
+          at the end. No actual background notes were provided.","retained":[{"type":"message","id":"msg_01a1c463-aaf7-77f3-ad94-91325fe2c93b","role":"user","status":"completed","content":[{"type":"input_text","text":"Remember
+          the word APRICOT. Do not call any tools. Reply only READY."}]},{"type":"message","id":"msg_01a1c463-aaf7-77f3-ad94-914cb6a1e490","role":"user","status":"completed","content":[{"type":"input_text","text":"Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Remember the word APRICOT.
+          Reply with only OK. Do not call any tools."}]}]}'
+        id: cmp_01a1c463-c1d6-7630-aae8-368687a3a284
+        type: compaction
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_01a1c463-6037-7081-b04f-63dd317716c7
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 7834
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 578
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 8412
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body:
+      input:
+      - content: What word did I ask you to remember? Reply with only that word, or
+          NONE if you cannot see it. Do not call any tools.
+        role: user
+      max_output_tokens: 4096
+      model: Qwen/Qwen3.8-27B-FP8
+      previous_response_id: resp_01a1c463-8799-7c20-a93d-a90921622b33
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794296237
+      created_at: 1794296237
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1c463-c340-7cf0-89d4-b908e6990e99
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - id: mcpl_01a1c463-c646-72c0-ad14-ad56f202f7b4
+        server_label: microsoft_learn
+        tools:
+        - annotations:
+            read_only: true
+          description: 'Search official Microsoft/Azure documentation to find the
+            most relevant and trustworthy content for a user''s query. This tool returns
+            up to 10 high-quality content chunks (each max 500 tokens), extracted
+            from Microsoft Learn and other official sources. Each result includes
+            the article title, URL, and a self-contained content excerpt optimized
+            for fast retrieval and reasoning. Always use this tool to quickly ground
+            your answers in accurate, first-party Microsoft/Azure knowledge.
+
+
+            ## Follow-up Pattern
+
+            To ensure completeness, use microsoft_docs_fetch when high-value pages
+            are identified by search. The fetch tool complements search by providing
+            the full detail. This is a required step for comprehensive results.'
+          input_schema:
+            properties:
+              query:
+                default: null
+                description: a query or topic about Microsoft/Azure products, services,
+                  platforms, developer tools, frameworks, or APIs
+                type: string
+            type: object
+          name: microsoft_docs_search
+        type: mcp_list_tools
+      - content:
+        - text: 'The user is asking me what word they asked me to remember. Looking
+            back at the conversation, they asked me to remember the word APRICOT in
+            both of their messages.
+
+            '
+          type: reasoning_text
+        id: rs_a25808f972fe4264
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            APRICOT'
+          type: output_text
+        id: msg_8c3fd56b73e8dac6
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_01a1c463-8799-7c20-a93d-a90921622b33
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 2917
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 42
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 2959
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1c463-c340-7cf0-89d4-b908e6990e99/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - encrypted_content: '{"summary":"**Context Checkpoint Summary**\n\n- **Task:**
+          User asked to remember the word **APRICOT** (stated twice across two messages).\n-
+          **Status:** Word noted. No other substantive tasks, decisions, or constraints
+          established.\n- **Unresolved work:** None identified beyond the above.\n-
+          **Notes:** The second message consisted largely of repeated filler text
+          (\"Background notes for later.\") with the APRICOT instruction appended
+          at the end. No actual background notes were provided.","retained":[{"type":"message","id":"msg_01a1c463-aaf7-77f3-ad94-91325fe2c93b","role":"user","status":"completed","content":[{"type":"input_text","text":"Remember
+          the word APRICOT. Do not call any tools. Reply only READY."}]},{"type":"message","id":"msg_01a1c463-aaf7-77f3-ad94-914cb6a1e490","role":"user","status":"completed","content":[{"type":"input_text","text":"Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Background notes for later.
+          Background notes for later. Background notes for later. Background notes
+          for later. Background notes for later. Background notes for later. Background
+          notes for later. Background notes for later. Remember the word APRICOT.
+          Reply with only OK. Do not call any tools."}]}]}'
+        id: cmp_01a1c463-c1d6-7630-aae8-368687a3a284
+        type: compaction
+      - content:
+        - text: What word did I ask you to remember? Reply with only that word, or
+            NONE if you cannot see it. Do not call any tools.
+          type: input_text
+        id: msg_01a1c463-cde8-7063-883c-31f490e020a5
+        role: user
+        status: completed
+        type: message
+      first_id: cmp_01a1c463-c1d6-7630-aae8-368687a3a284
+      has_more: false
+      last_id: msg_01a1c463-cde8-7063-883c-31f490e020a5
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body:
+      input: Use microsoft_docs_fetch to read https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/responses
+        then say DONE. If that tool is unavailable, say UNAVAILABLE. Do not use microsoft_docs_search.
+      max_output_tokens: 4096
+      model: Qwen/Qwen3.8-27B-FP8
+      previous_response_id: resp_01a1c463-6037-7081-b04f-63dd317716c7
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        - microsoft_docs_fetch
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794296240
+      created_at: 1794296240
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1c463-d1d6-75f3-b637-835a6c36598d
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user is asking me to use a tool called "microsoft_docs_fetch"
+            to read a specific URL. Let me check my available tools. I only have "mcp__microsoft_learn__microsoft_docs_search"
+            available. There is no "microsoft_docs_fetch" tool in my available tools.
+            So I should say UNAVAILABLE.
+
+            '
+          type: reasoning_text
+        id: rs_8320d467706ea2ed
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            UNAVAILABLE'
+          type: output_text
+        id: msg_a317fe41a7e651cc
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_01a1c463-6037-7081-b04f-63dd317716c7
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools:
+      - allowed_tools:
+        - microsoft_docs_search
+        - microsoft_docs_fetch
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 588
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 71
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 659
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body:
+      input: Use microsoft_docs_fetch to read https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/responses
+        then say DONE. If that tool is unavailable, say UNAVAILABLE. Do not use microsoft_docs_search.
+      max_output_tokens: 4096
+      model: Qwen/Qwen3.8-27B-FP8
+      previous_response_id: resp_01a1c463-6037-7081-b04f-63dd317716c7
+      store: true
+      stream: false
+      tools:
+      - require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794296242
+      created_at: 1794296242
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1c463-da4d-70a1-b8ff-c784afb2897c
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user is asking me to use a tool called "microsoft_docs_fetch"
+            to read a specific URL. Let me check my available tools. I only have access
+            to "mcp__microsoft_learn__microsoft_docs_search". There is no "microsoft_docs_fetch"
+            tool available to me. So I should say UNAVAILABLE.
+
+            '
+          type: reasoning_text
+        id: rs_9c24d0f682a924e5
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            UNAVAILABLE'
+          type: output_text
+        id: msg_b3eda25dd5b919bf
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_01a1c463-6037-7081-b04f-63dd317716c7
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools:
+      - require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 588
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 70
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 658
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t10
+  request:
+    body:
+      input: Remember the word APRICOT. Do not call any tools. Reply only READY.
+      max_output_tokens: 4096
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - no_such_tool
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794296244
+      created_at: 1794296244
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1c463-e280-7c50-8bdb-13cab342889b
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - id: mcpl_01a1c463-e52e-77e1-bdd5-07406ffe6b98
+        server_label: microsoft_learn
+        tools: []
+        type: mcp_list_tools
+      - content:
+        - text: 'The user wants me to remember the word "APRICOT" and reply only "READY"
+            without calling any tools.
+
+            '
+          type: reasoning_text
+        id: rs_b11fd76385320e73
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            READY'
+          type: output_text
+        id: msg_af4e4fbb0df3cf22
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools:
+      - allowed_tools:
+        - no_such_tool
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 57
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 29
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 86
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t11
+  request:
+    body:
+      input: Remember the word APRICOT. Do not call any tools. Reply only READY.
+      max_output_tokens: 4096
+      model: Qwen/Qwen3.8-27B-FP8
+      previous_response_id: resp_01a1c463-e280-7c50-8bdb-13cab342889b
+      store: true
+      stream: false
+      tools:
+      - allowed_tools:
+        - no_such_tool
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1794296245
+      created_at: 1794296245
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1c463-ea95-73c3-9597-28867bcc333e
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user is asking me to remember the word "APRICOT" and reply only
+            "READY". This is a simple request - no tools needed, just a confirmation.
+
+            '
+          type: reasoning_text
+        id: rs_894bfbe5e5332f94
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            READY'
+          type: output_text
+        id: msg_94f5422e639c8d69
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_01a1c463-e280-7c50-8bdb-13cab342889b
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools:
+      - allowed_tools:
+        - no_such_tool
+        require_approval: never
+        server_label: microsoft_learn
+        server_url: https://learn.microsoft.com/api/mcp
+        type: mcp
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 114
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 39
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 153
+    headers:
+      content-type: application/json
+    status_code: 200

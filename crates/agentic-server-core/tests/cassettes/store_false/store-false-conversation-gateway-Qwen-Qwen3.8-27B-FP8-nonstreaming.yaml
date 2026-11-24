@@ -1,0 +1,191 @@
+turns:
+- filename: t1
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1793003472
+      id: conv_01a17755-c7e0-7af0-85d0-662ffda63469
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      conversation: conv_01a17755-c7e0-7af0-85d0-662ffda63469
+      input: Remember the word ORCHID. Reply with exactly OK.
+      model: Qwen/Qwen3.8-27B-FP8
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1793003473
+      conversation:
+        id: conv_01a17755-c7e0-7af0-85d0-662ffda63469
+      created_at: 1793003473
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a17755-c7e8-7ee2-9d5d-11d8d3ac3cee
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to remember the word "ORCHID" and reply with exactly
+            "OK".
+
+            '
+          type: reasoning_text
+        id: rs_bbab4db694ac9cd1
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            OK'
+          type: output_text
+        id: msg_a77c8b5a0ea13a4c
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 52
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 25
+        output_tokens_details:
+          reasoning_tokens: 21
+        total_tokens: 77
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      conversation: conv_01a17755-c7e0-7af0-85d0-662ffda63469
+      input: What word did I ask you to remember? Reply with that word only.
+      max_output_tokens: 2048
+      model: Qwen/Qwen3.8-27B-FP8
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1793003476
+      conversation:
+        id: conv_01a17755-c7e0-7af0-85d0-662ffda63469
+      created_at: 1793003476
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a17755-cfe2-7912-a734-1c1827e094cd
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 2048
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user is asking me what word they asked me to remember. Looking
+            at the conversation history, there is no previous message where the user
+            asked me to remember a word. This is the first message in our conversation.
+            I should let them know that no such word was provided.
+
+            '
+          type: reasoning_text
+        id: rs_af2a05536bbbf1eb
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            You haven''t asked me to remember any word in this conversation.'
+          type: output_text
+        id: msg_bb6f85582ba3f61d
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 55
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 72
+        output_tokens_details:
+          reasoning_tokens: 56
+        total_tokens: 127
+    headers:
+      content-type: application/json
+    status_code: 200

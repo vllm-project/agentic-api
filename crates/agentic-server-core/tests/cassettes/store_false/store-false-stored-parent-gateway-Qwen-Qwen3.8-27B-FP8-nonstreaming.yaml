@@ -1,0 +1,194 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Remember the word ORCHID. Reply with exactly OK.
+      max_output_tokens: 2048
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1793003463
+      created_at: 1793003463
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a17755-a2b7-7442-9aa4-e5f6f51b6296
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 2048
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to remember the word "ORCHID" and reply with exactly
+            "OK".
+
+            '
+          type: reasoning_text
+        id: rs_9756f2f8823fa673
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            OK'
+          type: output_text
+        id: msg_bbda9c24f0f02934
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 52
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 25
+        output_tokens_details:
+          reasoning_tokens: 21
+        total_tokens: 77
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input: What word did I ask you to remember? Reply with that word only.
+      max_output_tokens: 2048
+      model: Qwen/Qwen3.8-27B-FP8
+      previous_response_id: resp_01a17755-a2b7-7442-9aa4-e5f6f51b6296
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1793003466
+      created_at: 1793003466
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a17755-aae8-7763-981a-994de0a98278
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 2048
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user is asking me what word they asked me to remember. Earlier
+            in the conversation, they asked me to remember the word "ORCHID". I should
+            reply with just that word.
+
+            '
+          type: reasoning_text
+        id: rs_a5af510c9820aa35
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            ORCHID'
+          type: output_text
+        id: msg_81da9fa938094d2e
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_01a17755-a2b7-7442-9aa4-e5f6f51b6296
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 103
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 45
+        output_tokens_details:
+          reasoning_tokens: 39
+        total_tokens: 148
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input: Say OK.
+      max_output_tokens: 2048
+      model: Qwen/Qwen3.8-27B-FP8
+      previous_response_id: resp_01a17755-aae8-7763-981a-994de0a98278
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: previous_response_not_found
+        message: Previous response with id 'resp_01a17755-aae8-7763-981a-994de0a98278'
+          not found.
+        param: previous_response_id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400

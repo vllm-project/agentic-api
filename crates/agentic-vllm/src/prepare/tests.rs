@@ -1,5 +1,6 @@
 use agentic_core::types::request_response::RequestPayload;
 use serde_json::json;
+use std::collections::HashMap;
 use vllm_chat::{AssistantContentBlock, ChatMessage};
 
 use super::*;
@@ -19,7 +20,12 @@ fn request_projection_preserves_reasoning_tools_and_sampling() {
         ],
     }))
     .unwrap();
-    let chat = chat_request(request.to_upstream_request(true).unwrap(), "attempt_1", "test").unwrap();
+    let chat = chat_request(
+        request.to_upstream_request(true, &HashMap::default()).unwrap(),
+        "attempt_1",
+        "test",
+    )
+    .unwrap();
     assert_eq!(chat.request_id, "attempt_1");
     assert_eq!(chat.messages.len(), 4);
     assert!(matches!(&chat.messages[0], ChatMessage::System { .. }));
@@ -43,6 +49,10 @@ fn request_projection_preserves_reasoning_tools_and_sampling() {
 #[test]
 fn unsupported_requests_fail_before_engine_submission() {
     for fields in [
+        json!({"top_logprobs":1}),
+        json!({"service_tier":"priority"}),
+        json!({"prompt_cache_options":{}}),
+        json!({"unsupported_option":true}),
         json!({"include":["message.output_text.logprobs"]}),
         json!({"text":{"format":{"type":"json_object"}}}),
         json!({"reasoning":{"summary":"auto"}}),
@@ -56,7 +66,7 @@ fn unsupported_requests_fail_before_engine_submission() {
             .extend(fields.as_object().unwrap().clone());
         let request: RequestPayload = serde_json::from_value(request).unwrap();
         assert!(matches!(
-            chat_request(request.to_upstream_request(true).unwrap(), "attempt", "test"),
+            chat_request(request.to_upstream_request(true, &HashMap::default()).unwrap(), "attempt", "test"),
             Err(error) if matches!(*error, ExecutorError::InvalidRequest(_))
         ));
     }

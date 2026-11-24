@@ -1,0 +1,21 @@
+[
+  {
+    "type": "message",
+    "role": "user",
+    "content": [
+      {
+        "type": "input_text",
+        "text": "Remember the release codeword in the attached file for the next model."
+      },
+      {
+        "type": "input_text",
+        "text": "File: notes.txt\nDeployment checklist\n- Region: eu-west\n- Release codeword: PAPAYA-7\n- Owner: platform team\n"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "role": "user",
+    "content": "You are performing a CONTEXT CHECKPOINT COMPACTION. Create a concise handoff summary that preserves current progress, decisions, constraints, unresolved work, and critical references for the next model. Return only the summary."
+  }
+]

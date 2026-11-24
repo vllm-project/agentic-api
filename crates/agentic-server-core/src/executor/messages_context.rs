@@ -1,86 +1,100 @@
 //! Per-request context for the Anthropic Messages gateway tool loops.
 //!
-//! The Messages loops are a pass-through, not a transform: the client's request
-//! is forwarded to vLLM `/v1/messages` essentially untouched, and only `tools`
-//! and `stream`/`messages`/`tool_choice` are read or rewritten. That rules out a typed
-//! round-trip through [`MessagesRequest`] as the upstream body — `ContentBlock`
-//! carries a `#[serde(other)] Unknown` catch-all, and several block types model
-//! only the fields the gateway reads, so re-serializing would silently drop
-//! `cache_control`, `is_error`, and every unmodeled block (`image`,
-//! `redacted_thinking`, future provider extensions).
-//!
-//! This context retains the request data needed by the loop:
-//!
-//! * `raw` — the JSON body actually sent upstream. It
-//!   is the source of truth for `messages` and `system`, preserving unmodeled
-//!   history blocks and extension fields.
-//! * `typed` — only the client's `tools`, `stream`, and `model`, retained for
-//!   safe field access in routing and the loops. The parsed message history,
-//!   system prompt, and other fields are dropped before the loop begins.
-//! * `tool_choice` — the current typed selector. Fulfillment and transitions
-//!   use exhaustive enum matches; each transition updates the raw selector.
-//!
-//! The two are **not** kept byte-identical, and must not be confused: `typed` is
-//! what the client sent, `raw` is what the gateway sends upstream. They diverge
-//! wherever the gateway rewrites the body for upstream — today
-//! `normalize_native_web_search` rewriting a native `web_search_20250305`
-//! declaration into the ordinary function-tool shape vLLM accepts. Accordingly,
-//! only the fields the loops never mutate are exposed off `typed`
-//! ([`tools`](MessagesRequestContext::tools),
-//! [`stream`](MessagesRequestContext::stream),
-//! [`model`](MessagesRequestContext::model)); `messages` and `system` are
-//! deliberately unreachable through it, so a stale typed view can never be read
-//! back after a round is appended.
+//! The shared decoder validates one typed request from a single JSON tree. The
+//! raw projection retains exact extension shapes for pass-through and tool-loop
+//! normalization; the typed view owns admission, fingerprints, and durable history.
+//! After admission, only immutable routing fields remain in the typed loop view.
 
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::messages_request::{WebSearchBudget, normalize_native_web_search};
+use crate::executor::messages_request::{ServerToolBudgets, normalize_native_server_tools};
+use crate::executor::messages_server_tools::NativeServerTools;
+use crate::executor::messages_server_tools::replay::replay_server_tool_blocks;
+use crate::executor::messages_server_tools::sealing::MessagesResultKey;
+use crate::executor::messages_threads::{MessagesThreadTurn, ThreadRetention};
 use crate::types::messages::request::MessagesToolDeclarations;
 use crate::types::messages::{
-    GatewayToolMap, GatewayToolResult, MessagesRequest, MessagesToolChoice, ToolParam, has_gateway_tool,
+    GatewayToolMap, GatewayToolResult, MessagesRequest, MessagesToolChoice, ToolParam, UpstreamServerTools,
+    has_gateway_tool,
 };
 use crate::utils::common::serialize_to_string;
 
-/// A Messages request parsed together with the exact immutable body bytes it
-/// came from.
+/// A typed Messages request paired with its lossless raw projection.
 ///
-/// Private fields make independently pairing typed data and raw bytes
+/// Private fields make independently pairing typed data and raw data
 /// impossible through the public API. The handler uses the typed view for
 /// routing, then consumes this value to build a [`MessagesRequestContext`] only
 /// when the request needs the gateway tool loop.
 #[derive(Debug)]
-pub struct ParsedMessagesRequest<'a> {
-    typed: MessagesRequest,
-    body: &'a [u8],
+pub struct ParsedMessagesRequest {
+    pub(super) typed: MessagesRequest,
+    pub(super) raw: Value,
 }
 
-impl<'a> ParsedMessagesRequest<'a> {
-    /// Parse a Messages request while retaining the exact bytes it came from.
+impl ParsedMessagesRequest {
+    /// Decode the body once, deriving the typed view from the retained tree.
     ///
     /// # Errors
     /// Returns [`ExecutorError::JsonError`] if `body` is not a well-formed
     /// Messages request.
-    pub fn parse(body: &'a [u8]) -> ExecutorResult<Self> {
-        let typed = serde_json::from_slice(body).map_err(ExecutorError::JsonError)?;
-        Ok(Self { typed, body })
+    pub fn parse(body: &[u8]) -> ExecutorResult<Self> {
+        let raw = serde_json::from_slice(body).map_err(ExecutorError::JsonError)?;
+        let typed = MessagesRequest::deserialize(&raw).map_err(ExecutorError::JsonError)?;
+        Ok(Self { typed, raw })
     }
 
     /// Parse requests handled by the gateway; preserve the transparent proxy
-    /// contract for requests without gateway-executed tools.
+    /// contract for requests without threads or gateway-executed tools.
     ///
     /// # Errors
-    /// Returns the parse error if a gateway-tool request fails validation.
-    pub fn parse_for_gateway(body: &'a [u8], gateway_map: &GatewayToolMap) -> ExecutorResult<Option<Self>> {
+    /// Returns the parse error if a thread or gateway-tool request fails validation.
+    pub fn parse_for_gateway(
+        body: &[u8],
+        gateway_map: &GatewayToolMap,
+        upstream: &UpstreamServerTools,
+    ) -> ExecutorResult<Option<Self>> {
         match Self::parse(body) {
-            Ok(parsed) => Ok(has_gateway_tool(parsed.tools(), gateway_map).then_some(parsed)),
+            Ok(parsed) => {
+                Ok((parsed.is_thread() || has_gateway_tool(parsed.tools(), gateway_map, upstream)).then_some(parsed))
+            }
             Err(error) => {
-                let declares_gateway_tool = serde_json::from_slice::<MessagesToolDeclarations>(body)
-                    .is_ok_and(|request| has_gateway_tool(request.tools.as_ref(), gateway_map));
+                let declares_gateway_tool =
+                    serde_json::from_slice::<MessagesToolDeclarations>(body).is_ok_and(|request| {
+                        request.thread.is_some() || has_gateway_tool(request.tools.as_ref(), gateway_map, upstream)
+                    });
                 if declares_gateway_tool { Err(error) } else { Ok(None) }
             }
         }
+    }
+
+    /// Whether this request uses the locally implemented thread protocol.
+    #[must_use]
+    pub fn is_thread(&self) -> bool {
+        self.typed.thread.is_some()
+    }
+
+    /// Refresh only the fields changed by typed thread admission. Other provider
+    /// parameters keep their original raw representation for upstream forwarding.
+    pub(super) fn project_thread_history(&mut self) -> ExecutorResult<()> {
+        let object = self
+            .raw
+            .as_object_mut()
+            .ok_or_else(|| ExecutorError::InvalidRequest("expected Messages object".to_owned()))?;
+        object.remove("thread");
+        object.insert("messages".to_owned(), serde_json::to_value(&self.typed.messages)?);
+        if let Some(system) = self.typed.system.as_ref() {
+            object.insert("system".to_owned(), serde_json::to_value(system)?);
+        } else {
+            object.remove("system");
+        }
+        if let Some(tools) = self.typed.tools.as_ref() {
+            object.insert("tools".to_owned(), serde_json::to_value(tools)?);
+        } else {
+            object.remove("tools");
+        }
+        Ok(())
     }
 
     /// The tools declared by the client, before upstream normalization.
@@ -108,7 +122,11 @@ impl From<MessagesRequest> for MessagesTypedState {
         let MessagesRequest {
             model, tools, stream, ..
         } = request;
-        Self { model, tools, stream }
+        Self {
+            model,
+            tools: tools.into_option(),
+            stream,
+        }
     }
 }
 
@@ -116,6 +134,7 @@ impl From<MessagesRequest> for MessagesTypedState {
 /// loops need. See the module docs for why both exist.
 #[derive(Debug)]
 pub struct MessagesRequestContext {
+    pub(super) thread: Option<MessagesThreadTurn>,
     /// The only typed request fields needed after routing.
     typed: MessagesTypedState,
     /// Current upstream selection policy; updated together with `raw`.
@@ -123,29 +142,65 @@ pub struct MessagesRequestContext {
     /// The upstream body. Mutated by the loops; the source of truth for
     /// `messages` and `system`.
     raw: Value,
-    /// Request-wide native web-search budget, derived while normalizing `raw`.
-    web_search_budget: WebSearchBudget,
+    /// Request-wide native server-tool budgets, derived while normalizing `raw`.
+    budgets: ServerToolBudgets,
+    /// The native server tools the client declared, whose calls it is shown.
+    native: NativeServerTools,
+}
+
+/// Whether `text` mentions `url` as a whole URL rather than as the prefix of a
+/// longer one: the match must end where a URL ends — at the end of the text,
+/// before whitespace, a quote, or a bracket, or before sentence punctuation
+/// that is itself followed by one of those. A trailing slash is optional on
+/// either side, so a bare host matches its normalized form.
+fn mentions_url(text: &str, url: &str) -> bool {
+    let base = url.trim_end_matches('/');
+    if base.is_empty() {
+        return false;
+    }
+    text.match_indices(base)
+        .any(|(index, _)| url_ends_before(text[index + base.len()..].trim_start_matches('/')))
+}
+
+/// Whether a URL that stops right before `rest` is complete there.
+fn url_ends_before(rest: &str) -> bool {
+    let mut chars = rest.chars();
+    match chars.next() {
+        None => true,
+        Some(ch) if is_url_boundary(ch) => true,
+        Some('.' | ',' | ';' | ':' | '!' | '?') => chars.next().is_none_or(is_url_boundary),
+        Some(_) => false,
+    }
+}
+
+/// Characters that cannot continue a URL in prose or JSON.
+fn is_url_boundary(ch: char) -> bool {
+    ch.is_whitespace()
+        || matches!(
+            ch,
+            '"' | '\'' | '<' | '>' | '(' | ')' | '[' | ']' | '{' | '}' | '`' | '|' | '\\'
+        )
 }
 
 impl MessagesRequestContext {
     /// Build the context from a validated typed/raw request pair.
     ///
     /// Consuming [`ParsedMessagesRequest`] guarantees both views derive from the
-    /// same immutable input. Only the fields required after routing are retained
+    /// same decoded input. Only the fields required after routing are retained
     /// from the typed view; the owned message history and system prompt are
     /// dropped before this function returns.
     ///
-    /// Native web-search declarations are validated and normalized here, before
-    /// a streaming handler commits its HTTP status — an invalid declaration must
-    /// surface as an error response, not as a mid-stream event.
+    /// Native web search and web fetch declarations are validated and
+    /// normalized here, before a streaming handler commits its HTTP status — an
+    /// invalid declaration must surface as an error response, not as a
+    /// mid-stream event.
     ///
     /// # Errors
     /// Returns [`ExecutorError::JsonError`] if `body` is not valid JSON, or
     /// [`ExecutorError::InvalidRequest`] if it carries an unsupported or invalid
-    /// native web-search declaration.
-    pub fn new(parsed: ParsedMessagesRequest<'_>) -> ExecutorResult<Self> {
-        let raw = serde_json::from_slice(parsed.body).map_err(ExecutorError::JsonError)?;
-        Self::from_parts(parsed.typed, raw)
+    /// native web search or web fetch declaration.
+    pub fn new(parsed: ParsedMessagesRequest, upstream: &UpstreamServerTools) -> ExecutorResult<Self> {
+        Self::from_parts(parsed.typed, parsed.raw, upstream)
     }
 
     /// Build the context from a raw JSON body alone, deriving the typed view
@@ -157,20 +212,22 @@ impl MessagesRequestContext {
     /// # Errors
     /// Returns [`ExecutorError::JsonError`] if `raw` is not a well-formed
     /// Messages request, or [`ExecutorError::InvalidRequest`] if it carries an
-    /// unsupported or invalid native web-search declaration.
+    /// unsupported or invalid native web search or web fetch declaration.
     pub fn from_value(raw: Value) -> ExecutorResult<Self> {
         // Deserializing from the parsed tree avoids re-lexing the body text.
         let typed = MessagesRequest::deserialize(&raw).map_err(ExecutorError::JsonError)?;
-        Self::from_parts(typed, raw)
+        Self::from_parts(typed, raw, &UpstreamServerTools::default())
     }
 
-    fn from_parts(mut typed: MessagesRequest, mut raw: Value) -> ExecutorResult<Self> {
-        let web_search_budget = normalize_native_web_search(&mut raw)?;
+    fn from_parts(mut typed: MessagesRequest, mut raw: Value, upstream: &UpstreamServerTools) -> ExecutorResult<Self> {
+        let budgets = normalize_native_server_tools(&mut raw, upstream)?;
         Ok(Self {
+            thread: None,
             tool_choice: typed.tool_choice.take(),
+            native: NativeServerTools::from_declarations(typed.tools.as_ref(), upstream),
             typed: typed.into(),
             raw,
-            web_search_budget,
+            budgets,
         })
     }
 
@@ -196,6 +253,32 @@ impl MessagesRequestContext {
         &self.typed.model
     }
 
+    /// The native server tools the client declared.
+    pub(super) fn native_server_tools(&self) -> NativeServerTools {
+        self.native
+    }
+
+    /// Turn the gateway-made server tool blocks of earlier turns back into the
+    /// rounds the upstream saw, before the first round is sent.
+    ///
+    /// # Errors
+    /// Returns [`ExecutorError::InvalidRequest`] when such a block is
+    /// malformed, unpaired, or was modified.
+    pub(super) fn replay_server_tool_blocks(&mut self, key: &MessagesResultKey) -> ExecutorResult<()> {
+        replay_server_tool_blocks(&mut self.raw, key).map(drop)
+    }
+
+    pub(super) fn thread_message_id(&self) -> Option<&str> {
+        self.thread.as_ref().map(|turn| turn.message_id.as_str())
+    }
+
+    pub(super) async fn complete_thread(&mut self, content: &Value, retention: ThreadRetention) -> ExecutorResult<()> {
+        if let Some(turn) = self.thread.take() {
+            turn.complete(&self.raw["messages"], content, retention).await?;
+        }
+        Ok(())
+    }
+
     /// The body to POST upstream for the next round.
     ///
     /// # Errors
@@ -213,9 +296,50 @@ impl MessagesRequestContext {
         self.raw["stream"] = Value::Bool(streaming);
     }
 
-    /// Reserve up to `requested` native web searches, returning how many may run.
-    pub(super) fn reserve_searches(&mut self, requested: usize) -> usize {
-        self.web_search_budget.reserve(requested)
+    /// Admit one gateway call that would perform `searches` native web
+    /// searches. `max_uses` limits searches, so a batched call is charged for
+    /// every query and is refused whole when the budget cannot cover it.
+    pub(super) fn admit_searches(&mut self, searches: usize) -> bool {
+        self.budgets.searches.admit(searches)
+    }
+
+    /// Admit one gateway call that would perform `fetches` native web fetches
+    /// against the request-wide `web_fetch` `max_uses` budget.
+    pub(super) fn admit_fetches(&mut self, fetches: usize) -> bool {
+        self.budgets.fetches.admit(fetches)
+    }
+
+    /// Whether `url` appeared earlier in the conversation where a web fetch
+    /// may take it from: a user message, or a `tool_result` the client or the
+    /// gateway supplied (including hidden `web_search` and `web_fetch`
+    /// rounds). Assistant text and the system prompt are excluded, as
+    /// Anthropic documents, so the model cannot fetch a URL it produced
+    /// itself; the URL must appear whole ([`mentions_url`]).
+    pub(super) fn url_in_prior_context(&self, url: &str) -> bool {
+        let mentions = |text: &str| mentions_url(text, url);
+        let block_mentions = |block: &Value| match block.get("type").and_then(Value::as_str) {
+            Some("text") => block.get("text").and_then(Value::as_str).is_some_and(mentions),
+            Some("tool_result") => match block.get("content") {
+                Some(Value::String(text)) => mentions(text),
+                Some(Value::Array(blocks)) => blocks
+                    .iter()
+                    .filter(|inner| inner.get("type").and_then(Value::as_str) == Some("text"))
+                    .any(|inner| inner.get("text").and_then(Value::as_str).is_some_and(mentions)),
+                _ => false,
+            },
+            _ => false,
+        };
+        self.raw
+            .get("messages")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter(|message| message.get("role").and_then(Value::as_str) == Some("user"))
+            .any(|message| match message.get("content") {
+                Some(Value::String(text)) => mentions(text),
+                Some(Value::Array(blocks)) => blocks.iter().any(block_mentions),
+                _ => false,
+            })
     }
 
     /// Whether a finished round permits executing its gateway calls.
@@ -286,16 +410,14 @@ impl MessagesRequestContext {
             serde_json::to_value(tool_results).map_err(ExecutorError::JsonError)?,
         );
         messages.push(Value::Object(user));
-        if fulfilled_choice {
-            if let Some(choice) = &mut self.tool_choice {
-                match choice {
-                    MessagesToolChoice::Any(options) | MessagesToolChoice::Tool { options, .. } => {
-                        *choice = MessagesToolChoice::Auto(std::mem::take(options));
-                    }
-                    MessagesToolChoice::Auto(_) | MessagesToolChoice::None { .. } => {}
+        if fulfilled_choice && let Some(choice) = &mut self.tool_choice {
+            match choice {
+                MessagesToolChoice::Any(options) | MessagesToolChoice::Tool { options, .. } => {
+                    *choice = MessagesToolChoice::Auto(std::mem::take(options));
                 }
-                self.raw["tool_choice"] = serde_json::to_value(choice).map_err(ExecutorError::JsonError)?;
+                MessagesToolChoice::Auto(_) | MessagesToolChoice::None { .. } => {}
             }
+            self.raw["tool_choice"] = serde_json::to_value(choice).map_err(ExecutorError::JsonError)?;
         }
         Ok(())
     }
@@ -353,8 +475,8 @@ mod tests {
         // The typed view keeps the client's native declaration, which is what
         // the tool seam classifies on...
         let tools = ctx.tools().expect("tools");
-        assert_eq!(tools[0].name, "web_search");
-        assert_eq!(tools[0].type_.as_deref(), Some("web_search_20250305"));
+        assert_eq!(tools[0].name(), "web_search");
+        assert_eq!(tools[0].tool_type(), Some("web_search_20250305"));
         // ...while the raw body carries the function-tool shape vLLM accepts.
         assert_eq!(ctx.raw["tools"][0]["name"], "web_search");
         assert!(ctx.raw["tools"][0].get("type").is_none());
@@ -393,9 +515,128 @@ mod tests {
     #[test]
     fn budget_is_shared_across_rounds() {
         let mut ctx = MessagesRequestContext::from_value(request()).unwrap();
-        assert_eq!(ctx.reserve_searches(1), 1);
-        assert_eq!(ctx.reserve_searches(3), 1, "max_uses caps the request-wide total");
-        assert_eq!(ctx.reserve_searches(1), 0);
+        assert!(ctx.admit_searches(1));
+        assert!(
+            !ctx.admit_searches(3),
+            "a batch the budget cannot cover is refused whole"
+        );
+        assert!(
+            ctx.admit_searches(1),
+            "a refused call leaves the budget for one that fits"
+        );
+        assert!(!ctx.admit_searches(1), "max_uses caps the request-wide total");
+        assert!(ctx.admit_searches(0), "a call that performs no search is never charged");
+    }
+
+    #[test]
+    fn requests_without_max_uses_are_not_limited() {
+        let mut body = request();
+        body["tools"][0].as_object_mut().unwrap().remove("max_uses");
+        let mut ctx = MessagesRequestContext::from_value(body).unwrap();
+        for searches in [5, 5, 5] {
+            assert!(ctx.admit_searches(searches));
+        }
+    }
+
+    #[test]
+    fn fetch_budget_is_separate_and_charged_per_fetch() {
+        let mut body = request();
+        body["tools"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"type": "web_fetch_20250910", "name": "web_fetch", "max_uses": 1}));
+        let mut ctx = MessagesRequestContext::from_value(body).unwrap();
+        assert!(ctx.admit_fetches(1));
+        assert!(!ctx.admit_fetches(1), "max_uses caps fetches");
+        assert!(ctx.admit_fetches(0), "arguments without a url are never charged");
+        assert!(ctx.admit_searches(2), "the search budget is untouched");
+    }
+
+    #[test]
+    fn url_in_prior_context_reads_user_messages_and_tool_results_only() {
+        let body = json!({
+            "model": "m", "max_tokens": 8,
+            "system": "see https://system.example/only",
+            "messages": [
+                {"role": "user", "content": "read https://user.example/page please"},
+                {"role": "assistant", "content": [{"type": "text", "text": "I found https://assistant.example/made-up"}]},
+                {"role": "user", "content": [
+                    {"type": "text", "text": "and https://block.example/"},
+                    {"type": "tool_result", "tool_use_id": "t1", "content": "result mentions https://result.example/a"},
+                    {"type": "tool_result", "tool_use_id": "t2", "content": [{"type": "text", "text": "https://nested.example/b"}]}
+                ]}
+            ]
+        });
+        let mut ctx = MessagesRequestContext::from_value(body).unwrap();
+        for seen in [
+            "https://user.example/page",
+            "https://block.example/",
+            "https://block.example",
+            "https://result.example/a",
+            "https://nested.example/b",
+        ] {
+            assert!(ctx.url_in_prior_context(seen), "{seen}");
+        }
+        for unseen in [
+            "https://assistant.example/made-up",
+            "https://system.example/only",
+            "https://user.example/other",
+        ] {
+            assert!(!ctx.url_in_prior_context(unseen), "{unseen}");
+        }
+
+        // A hidden gateway round's results are user-role tool_results and count.
+        ctx.append_round(
+            &[json!({"type": "tool_use", "id": "s1", "name": "web_search", "input": {"query": "q"}})],
+            vec![GatewayToolResult::new(
+                "s1",
+                r#"{"results":{"web":[{"url":"https://search.example/hit"}]}}"#.to_owned(),
+                false,
+            )],
+        )
+        .unwrap();
+        assert!(ctx.url_in_prior_context("https://search.example/hit"));
+        // The model's own tool_use input never counts.
+        ctx.append_round(
+            &[json!({"type": "tool_use", "id": "f1", "name": "web_fetch", "input": {"url": "https://model.example/own"}})],
+            vec![GatewayToolResult::new("f1", "refused".to_owned(), true)],
+        )
+        .unwrap();
+        assert!(!ctx.url_in_prior_context("https://model.example/own"));
+    }
+
+    #[test]
+    fn url_in_prior_context_matches_whole_urls_only() {
+        let body = json!({
+            "model": "m", "max_tokens": 8,
+            "messages": [{"role": "user", "content": [
+                {"type": "text", "text": "Read https://a.example/docs/page. Then (https://b.example/x?q=1)."},
+                {"type": "text", "text": "Also \"https://c.example\" and [https://e.example/y]"},
+                {"type": "tool_result", "tool_use_id": "t1", "content": "{\"url\":\"https://d.example/hit\"}"}
+            ]}]
+        });
+        let ctx = MessagesRequestContext::from_value(body).unwrap();
+        for seen in [
+            "https://a.example/docs/page",
+            "https://a.example/docs/page/",
+            "https://b.example/x?q=1",
+            "https://c.example",
+            "https://c.example/",
+            "https://d.example/hit",
+            "https://e.example/y",
+        ] {
+            assert!(ctx.url_in_prior_context(seen), "{seen}");
+        }
+        for unseen in [
+            "https://a.example/docs",
+            "https://a.example/docs/pag",
+            "https://a.example/docs/page/sub",
+            "https://b.example/x",
+            "https://c.exam",
+            "https://d.example/hit/more",
+        ] {
+            assert!(!ctx.url_in_prior_context(unseen), "{unseen}");
+        }
     }
 
     #[test]
@@ -408,7 +649,7 @@ mod tests {
 
     #[test]
     fn unmodeled_blocks_and_cache_control_survive_in_the_raw_body() {
-        // The reason the raw view exists: a typed round-trip would drop these.
+        // The raw projection preserves the client body before loop normalization.
         let body = json!({
             "model": "m", "max_tokens": 8,
             "system": [{"type": "text", "text": "s", "cache_control": {"type": "ephemeral", "ttl": "1h"}}],
@@ -425,7 +666,7 @@ mod tests {
     fn parsed_request_builds_both_context_views_from_the_same_input() {
         let body = serde_json::to_vec(&request()).unwrap();
         let parsed = ParsedMessagesRequest::parse(&body).unwrap();
-        let ctx = MessagesRequestContext::new(parsed).unwrap();
+        let ctx = MessagesRequestContext::new(parsed, &UpstreamServerTools::default()).unwrap();
 
         assert_eq!(ctx.model(), "qwen3");
         assert_eq!(ctx.raw["messages"][0]["content"], "hi");
@@ -447,7 +688,7 @@ mod tests {
                 "tool_choice":{"type":"tool"}
             }))
             .unwrap();
-            let parsed = ParsedMessagesRequest::parse_for_gateway(&body, &map);
+            let parsed = ParsedMessagesRequest::parse_for_gateway(&body, &map, &UpstreamServerTools::default());
             if name == "client_echo" {
                 assert!(parsed.unwrap().is_none(), "proxy requests retain upstream validation");
             } else {
@@ -539,6 +780,54 @@ mod tests {
             let (_, results) = completed_search();
             ctx.append_round(&content, results).unwrap();
             assert_eq!(ctx.raw["tool_choice"], body["tool_choice"]);
+        }
+    }
+}
+
+#[cfg(test)]
+mod thread_routing_regressions {
+    use super::*;
+
+    #[test]
+    fn null_thread_preserves_the_proxy_routing_contract_on_a_typed_parse_failure() {
+        let mut request =
+            json!({"model":"m","max_tokens":1,"messages":[],"thread":null,"thinking":{"type":"future-provider-mode"}});
+        assert!(
+            ParsedMessagesRequest::parse_for_gateway(
+                &serde_json::to_vec(&request).unwrap(),
+                &GatewayToolMap::default(),
+                &UpstreamServerTools::default()
+            )
+            .unwrap()
+            .is_none()
+        );
+        request["thread"] = json!({"type":"invalid"});
+        assert!(
+            ParsedMessagesRequest::parse_for_gateway(
+                &serde_json::to_vec(&request).unwrap(),
+                &GatewayToolMap::default(),
+                &UpstreamServerTools::default()
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn ordinary_gateway_requests_preserve_supported_thinking_edit_forms() {
+        for edit in [
+            json!({"type":"clear_thinking_20251015"}),
+            json!({"type":"clear_thinking_20251015","keep":{"type":"thinking_turns","value":2}}),
+        ] {
+            let request = json!({"model":"m","max_tokens":1,"messages":[],"tools":[{"name":"web_search"}],"context_management":{"edits":[edit]}});
+            let parsed = ParsedMessagesRequest::parse_for_gateway(
+                &serde_json::to_vec(&request).unwrap(),
+                &GatewayToolMap::default(),
+                &UpstreamServerTools::default(),
+            )
+            .unwrap()
+            .unwrap();
+            let ctx = MessagesRequestContext::new(parsed, &UpstreamServerTools::default()).unwrap();
+            assert_eq!(ctx.raw["context_management"], request["context_management"]);
         }
     }
 }

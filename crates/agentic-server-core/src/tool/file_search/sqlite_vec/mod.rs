@@ -1,0 +1,322 @@
+//! SQLite vector index over the portable file-search metadata repository.
+//!
+//! Index rows are staged before metadata publication. Search joins them back to
+//! published chunks, so an interrupted publication cannot expose partial data.
+
+use std::{path::Path, str::FromStr, sync::Arc};
+
+use futures::future::BoxFuture;
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+use tokio_util::sync::CancellationToken;
+
+use super::provider::FileSearchRepository;
+use crate::{
+    storage::{
+        DbPool,
+        file_search::{
+            Collection, FilePublicationFailure, FileSearchStorage, PreparedAttachment, SQLITE_VEC_MAX_CORPUS_BYTES,
+            StoredVectorStore, UploadedFile, publish_attachment_sqlite, serialize_chunks_with_limit,
+            sqlite_vec_index::SqliteVecIndex, validate_capacity_with_limit,
+        },
+    },
+    types::file_search::{
+        FileObject, FileSearchError, ListParams, SearchMode, SearchRequest, SearchResult, VectorStoreFileObject,
+        VectorStoreObject,
+    },
+};
+
+const INDEX_IDENTITY: &str = "sqlite-vec:cosine-f32:v1";
+
+mod search;
+
+/// A `vec0` index backed by the same file-based SQLite database as metadata.
+/// The extension path is deployment-controlled and must name a trusted binary.
+pub struct SqliteVecRepository {
+    metadata: FileSearchStorage,
+    index: SqliteVecIndex,
+}
+
+impl SqliteVecRepository {
+    /// Opens sqlite-vec on a file-based SQLite database after its ordinary
+    /// migrations have completed. Other databases use another repository.
+    ///
+    /// # Errors
+    /// Returns an error for an invalid extension, unsupported database URL,
+    /// missing metadata schema, or failed SQLite connection.
+    pub async fn open(pool: Arc<DbPool>, extension_path: &Path) -> Result<Self, FileSearchError> {
+        let url = pool.connect_options().database_url.clone();
+        if url.scheme() != "sqlite"
+            || url.path().contains(":memory:")
+            || url.query_pairs().any(|(key, value)| key == "mode" && value == "memory")
+        {
+            return Err(FileSearchError::InvalidRequest(
+                "sqlite-vec requires a file-backed SQLite database".into(),
+            ));
+        }
+        let path = extension_path
+            .canonicalize()
+            .map_err(|error| FileSearchError::Repository(Box::new(error)))?;
+        if !path.is_file() {
+            return Err(FileSearchError::InvalidRequest(
+                "sqlite-vec extension path must name a regular file".into(),
+            ));
+        }
+        let options = SqliteConnectOptions::from_str(url.as_str())?
+            .extension(path.to_string_lossy().into_owned())
+            .foreign_keys(true);
+        let index = SqlitePoolOptions::new()
+            .max_connections(4)
+            .connect_with(options)
+            .await?;
+        let _: String = sqlx::query_scalar("SELECT vec_version()").fetch_one(&index).await?;
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM file_search_chunks")
+            .fetch_one(&index)
+            .await?;
+        let repository = Self {
+            metadata: FileSearchStorage::new(pool),
+            index: SqliteVecIndex::new(index),
+        };
+        repository.index.recover_orphans().await?;
+        Ok(repository)
+    }
+}
+
+impl FileSearchRepository for SqliteVecRepository {
+    fn index_identity(&self) -> Option<&str> {
+        Some(INDEX_IDENTITY)
+    }
+
+    fn upload_file_metadata<'a>(
+        &'a self,
+        file: &'a FileObject,
+        content_type: &'a str,
+        owner_token: &'a str,
+        cancelled: &'a CancellationToken,
+    ) -> BoxFuture<'a, Result<(), FilePublicationFailure>> {
+        Box::pin(self.metadata.upload(file, content_type, owner_token, cancelled))
+    }
+
+    fn file<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<UploadedFile, FileSearchError>> {
+        Box::pin(self.metadata.file(id))
+    }
+
+    fn file_object<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<FileObject, FileSearchError>> {
+        Box::pin(self.metadata.file_object(id))
+    }
+
+    fn store<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<StoredVectorStore, FileSearchError>> {
+        Box::pin(self.metadata.store(id))
+    }
+
+    fn store_object<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<VectorStoreObject, FileSearchError>> {
+        Box::pin(self.metadata.store_object(id))
+    }
+
+    fn create_store<'a>(
+        &'a self,
+        object: &'a VectorStoreObject,
+        embedding_identity: &'a str,
+        attachments: &'a [PreparedAttachment],
+    ) -> BoxFuture<'a, Result<(), FileSearchError>> {
+        Box::pin(async move {
+            let mut encoded = Vec::with_capacity(attachments.len());
+            let mut total_bytes = 0i64;
+            for attachment in attachments {
+                let chunks = serialize_chunks_with_limit(&attachment.chunks, SQLITE_VEC_MAX_CORPUS_BYTES).await?;
+                total_bytes = total_bytes.saturating_add(chunks.1);
+                validate_capacity_with_limit(total_bytes, 0, SQLITE_VEC_MAX_CORPUS_BYTES)?;
+                encoded.push(chunks);
+            }
+            let mut tx = self.index.pool().begin_with("BEGIN IMMEDIATE").await?;
+            sqlx::query("INSERT INTO file_search_stores (id, created_at, data, embedding_identity, embedding_dimensions) VALUES ($1, $2, $3, $4, 0)")
+                .bind(&object.id)
+                .bind(object.created_at)
+                .bind(serde_json::to_string(object)?)
+                .bind(embedding_identity)
+                .execute(&mut *tx)
+                .await?;
+            self.index.stage(&mut tx, &object.id, attachments).await?;
+            for (attachment, (chunks, storage_bytes)) in attachments.iter().zip(encoded) {
+                publish_attachment_sqlite(
+                    &mut tx,
+                    &object.id,
+                    embedding_identity,
+                    attachment,
+                    &chunks,
+                    storage_bytes,
+                )
+                .await?;
+            }
+            tx.commit().await?;
+            Ok(())
+        })
+    }
+
+    fn attach<'a>(
+        &'a self,
+        store_id: &'a str,
+        embedding_identity: &'a str,
+        attachment: &'a PreparedAttachment,
+    ) -> BoxFuture<'a, Result<(), FileSearchError>> {
+        Box::pin(async move {
+            let (chunks, storage_bytes) =
+                serialize_chunks_with_limit(&attachment.chunks, SQLITE_VEC_MAX_CORPUS_BYTES).await?;
+            let store = self.metadata.store(store_id).await?;
+            if store.embedding_identity != embedding_identity
+                || (store.embedding_dimensions != 0 && store.embedding_dimensions != attachment.dimensions)
+            {
+                return Err(FileSearchError::Conflict(
+                    "Vector store embedding configuration changed".into(),
+                ));
+            }
+            if self
+                .metadata
+                .attachment(store_id, &attachment.object.id)
+                .await?
+                .is_some()
+            {
+                return Err(FileSearchError::Conflict(
+                    "File is already attached to this vector store".into(),
+                ));
+            }
+            let mut tx = self.index.pool().begin_with("BEGIN IMMEDIATE").await?;
+            self.index
+                .stage(&mut tx, store_id, std::slice::from_ref(attachment))
+                .await?;
+            publish_attachment_sqlite(
+                &mut tx,
+                store_id,
+                embedding_identity,
+                attachment,
+                &chunks,
+                storage_bytes,
+            )
+            .await?;
+            tx.commit().await?;
+            Ok(())
+        })
+    }
+
+    fn attachment<'a>(
+        &'a self,
+        store_id: &'a str,
+        file_id: &'a str,
+    ) -> BoxFuture<'a, Result<Option<VectorStoreFileObject>, FileSearchError>> {
+        Box::pin(self.metadata.attachment(store_id, file_id))
+    }
+
+    fn delete<'a>(
+        &'a self,
+        collection: Collection,
+        id: &'a str,
+        store_id: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<(), FileSearchError>> {
+        Box::pin(async move {
+            self.metadata.delete(collection, id, store_id).await?;
+            // Metadata deletion is the visibility gate. Orphaned index rows are
+            // excluded by the search join even if cleanup is interrupted.
+            if let Err(error) = self.index.remove_index_rows(collection, id, store_id).await {
+                tracing::warn!(%error, %id, "sqlite-vec orphan cleanup failed");
+            }
+            Ok(())
+        })
+    }
+
+    fn stage_blob_cleanup<'a>(
+        &'a self,
+        id: &'a str,
+        owner_token: &'a str,
+        lease_expires_at: i64,
+    ) -> BoxFuture<'a, Result<(), FileSearchError>> {
+        Box::pin(self.metadata.stage_blob_cleanup(id, owner_token, lease_expires_at))
+    }
+
+    fn refresh_blob_cleanup<'a>(
+        &'a self,
+        id: &'a str,
+        owner_token: &'a str,
+        lease_expires_at: i64,
+    ) -> BoxFuture<'a, Result<bool, FileSearchError>> {
+        Box::pin(self.metadata.refresh_blob_cleanup(id, owner_token, lease_expires_at))
+    }
+
+    fn pending_blob_cleanup<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<Option<String>, FileSearchError>> {
+        Box::pin(self.metadata.pending_blob_cleanup(id))
+    }
+
+    fn complete_blob_cleanup<'a>(
+        &'a self,
+        id: &'a str,
+        owner_token: &'a str,
+    ) -> BoxFuture<'a, Result<(), FileSearchError>> {
+        Box::pin(self.metadata.complete_blob_cleanup(id, owner_token))
+    }
+
+    fn blob_cleanup_batch(&self, limit: i64, now: i64) -> BoxFuture<'_, Result<Vec<String>, FileSearchError>> {
+        Box::pin(self.metadata.blob_cleanup_batch(limit, now))
+    }
+
+    fn claim_blob_cleanup<'a>(
+        &'a self,
+        id: &'a str,
+        owner_token: &'a str,
+        now: i64,
+        lease_expires_at: i64,
+    ) -> BoxFuture<'a, Result<bool, FileSearchError>> {
+        Box::pin(self.metadata.claim_blob_cleanup(id, owner_token, now, lease_expires_at))
+    }
+
+    fn list_files<'a>(&'a self, params: &'a ListParams) -> BoxFuture<'a, Result<Vec<FileObject>, FileSearchError>> {
+        Box::pin(self.metadata.list(Collection::Files, None, params))
+    }
+
+    fn list_stores<'a>(
+        &'a self,
+        params: &'a ListParams,
+    ) -> BoxFuture<'a, Result<Vec<VectorStoreObject>, FileSearchError>> {
+        Box::pin(self.metadata.list_stores(params))
+    }
+
+    fn list_attachments<'a>(
+        &'a self,
+        store_id: &'a str,
+        params: &'a ListParams,
+    ) -> BoxFuture<'a, Result<Vec<VectorStoreFileObject>, FileSearchError>> {
+        Box::pin(self.metadata.list(Collection::Attachments, Some(store_id), params))
+    }
+
+    fn has_chunks<'a>(&'a self, store_ids: &'a [String]) -> BoxFuture<'a, Result<bool, FileSearchError>> {
+        Box::pin(self.metadata.has_chunks(store_ids))
+    }
+
+    fn search<'a>(
+        &'a self,
+        store_ids: &'a [String],
+        queries: &'a [String],
+        query_embeddings: &'a [Vec<f64>],
+        expected_dimensions: Option<usize>,
+        mode: SearchMode,
+        request: &'a SearchRequest,
+    ) -> BoxFuture<'a, Result<Vec<SearchResult>, FileSearchError>> {
+        Box::pin(async move {
+            if mode == SearchMode::Semantic {
+                self.semantic_search(store_ids, queries, query_embeddings, expected_dimensions, request)
+                    .await
+            } else {
+                super::provider::exact_search(
+                    &self.metadata,
+                    store_ids,
+                    queries,
+                    query_embeddings,
+                    request,
+                    super::provider::ExactSearchOptions {
+                        expected_dimensions,
+                        mode,
+                        max_bytes: SQLITE_VEC_MAX_CORPUS_BYTES,
+                    },
+                )
+                .await
+            }
+        })
+    }
+}

@@ -213,7 +213,7 @@ def run_python_source_install(repo: Path, temp: Path, expected_version: str) -> 
         ],
         capture_output=True,
         text=True,
-        timeout=300,
+        timeout=1200,
     )
     if install_package.returncode != 0:
         raise AssertionError(

@@ -1,57 +1,99 @@
+use std::num::NonZeroU64;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::config::{Config, ResponsesConfig, default_database_url};
+use super::messages_threads::MessagesThreadStore;
+use crate::config::{Config, ResponsesConfig, SqliteConfig, default_database_url};
 use crate::error::Error;
+use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway::GatewaySchedulerPolicy;
 use crate::executor::inference::direct::DirectInferenceBackend;
-use crate::executor::modes::{ConversationHandler, ResponseHandler};
+use crate::executor::messages_server_tools::sealing::{MessagesResultKey, process_result_key};
+use crate::executor::modes::{ConversationHandler, FileHandler, ResponseHandler};
+use crate::executor::multi_agent::ValidatedTreeCheckpoint;
+use crate::executor::session::ResponseContinuation;
+use crate::executor::telemetry::ExecutorMetrics;
 use crate::storage::backend::redact_database_urls;
+use crate::storage::schema::verify_persistence_ready;
 use crate::storage::{
-    ConversationStore, ConversationVersion, DatabaseBackend, ResponseStore, create_pool_with_schema_and_configs,
+    ConversationStore, DatabaseBackend, ResponseCheckpoint, ResponseStore, create_pool_with_schema_and_configs,
 };
-use crate::tool::{GatewayExecutorRegistration, GatewayExecutors};
-use crate::types::io::InputItem;
-use crate::types::messages::GatewayToolMap;
+use crate::tool::{GatewayExecutorRegistration, GatewayExecutors, file_search::FileSearchService};
+use crate::types::io::{InOutItem, ToolChoice};
+use crate::types::messages::{GatewayToolMap, UpstreamServerTools};
+use crate::types::model_capabilities::ModelCapabilities;
 use crate::types::request_response::{RequestPayload, ResponsePayload};
 
 /// Env var configuring client-tool → gateway-executor aliases for `/v1/messages`
 /// (e.g. `WebSearch=web_search`). Empty/unset means no aliases — client
 /// functions stay client-owned (the ownership doctrine's default).
 const GATEWAY_TOOL_ALIASES_ENV: &str = "MESSAGES_GATEWAY_TOOL_ALIASES";
+/// Env var naming native server tools the upstream runs itself; the constant
+/// is the typed policy's own so docs and parsing share one spelling.
+const UPSTREAM_SERVER_TOOLS_ENV: &str = crate::types::messages::UPSTREAM_SERVER_TOOLS_ENV;
 
 /// Context built by `rehydrate_conversation`, threaded through the execute pipeline.
 #[derive(Debug)]
 pub struct RequestContext {
-    /// Untouched original request from the client.
+    /// Private canonical tree for stored or connection-local continuation.
+    pub multi_agent_tree: Option<ValidatedTreeCheckpoint>,
+    /// Client request. Before relaxing the inference selector, an omitted `tool_choice`
+    /// is filled with its resolved value so public response metadata stays consistent.
     pub original_request: RequestPayload,
     /// Enriched request with rehydrated conversation history injected into `.input`.
     /// This is the request forwarded to the LLM.
     pub enriched_request: RequestPayload,
-    /// This turn's canonical input items for persistence, including built-in calls
-    /// and call outputs. Session execution also records each round's other output
-    /// items here in inference order; compaction can replace them with a new window.
-    pub new_input_items: Vec<InputItem>,
+    /// This turn's input items and model-facing file-search context for persistence. An in-turn compaction can replace
+    /// them with its window; persistence then appends the turn's public output.
+    pub new_input_items: Vec<InOutItem>,
     /// Our generated response ID (uuid7 with "resp_" prefix).
     pub response_id: String,
     /// Resolved conversation ID. `None` when `store=false` or non-conversational.
     pub conversation_id: Option<String>,
-    /// Conversation version captured with rehydrated history.
-    /// `None` for non-conversation and `previous_response_id` execution.
-    pub conversation_version: Option<ConversationVersion>,
+    /// The turn this request continues (a stored response, a conversation's latest turn, or a session parent), as
+    /// rehydration read it: its metadata and stored history, which persistence extends.
+    pub checkpoint: Option<ResponseCheckpoint>,
     /// Optional transient-session lease and canonical parent snapshot. Never serialized.
-    pub continuation: Option<super::session::ResponseContinuation>,
+    pub continuation: Option<ResponseContinuation>,
 }
 
 impl RequestContext {
-    /// Inject our `response_id` and `conversation_id` into a `ResponsePayload`
+    /// Submitted or inherited selector for public metadata and continuation settings.
+    /// The enriched selector is only a fallback before any inference override.
+    pub(super) fn public_tool_choice(&self) -> Option<&ToolChoice> {
+        self.original_request
+            .tool_choice
+            .as_ref()
+            .or(self.enriched_request.tool_choice.as_ref())
+    }
+
+    /// Allow a follow-up inference to finish after tool execution, retaining the
+    /// submitted or inherited selector on the public request.
+    pub(super) fn relax_tool_choice(&mut self) {
+        let tool_choice = self.enriched_request.tool_choice.replace(ToolChoice::Auto);
+        if self.original_request.tool_choice.is_none() {
+            self.original_request.tool_choice = tool_choice;
+        }
+    }
+
+    /// The request's `max_tool_calls` limit. Admission already rejected an
+    /// invalid value, so `None` means the request set no limit.
+    #[must_use]
+    pub fn max_tool_calls(&self) -> Option<NonZeroU64> {
+        self.original_request.max_tool_calls_limit().ok().flatten()
+    }
+
+    /// Inject our `response_id` and `conversation` into a `ResponsePayload`
     /// received from the LLM (which carries the upstream's own IDs).
     pub(crate) fn inject_ids(&self, payload: &mut ResponsePayload) {
         payload.id.clone_from(&self.response_id);
-        payload.conversation_id.clone_from(&self.conversation_id);
+        payload.conversation.clone_from(&self.conversation_id);
         payload
             .previous_response_id
             .clone_from(&self.original_request.previous_response_id);
+        payload.max_tool_calls = self.max_tool_calls().map(NonZeroU64::get);
+        payload.standard_fields.apply_request(&self.original_request);
+        payload.standard_fields.completed_at = (payload.status == "completed").then(crate::utils::common::utcnow_str);
     }
 }
 
@@ -62,6 +104,11 @@ impl RequestContext {
 /// rather than stored here, keeping this context purely shared and immutable.
 #[derive(Clone, Debug)]
 pub struct ExecutionContext {
+    /// The executor's file ingestion and retrieval handler, available when persistence is
+    /// configured. It owns the one file service, which the HTTP Files API routes share.
+    pub file_handler: FileHandler,
+    /// Ceiling on serialized inbound request bytes; resolved file content counts against it.
+    pub(crate) max_request_body_size: usize,
     pub conv_handler: ConversationHandler,
     pub resp_handler: ResponseHandler,
     pub client: Arc<reqwest::Client>,
@@ -69,10 +116,18 @@ pub struct ExecutionContext {
     /// Client-tool → gateway-executor aliases for the `/v1/messages` loop
     /// (e.g. Claude Code's `WebSearch` → `web_search`). Empty unless configured.
     pub messages_gateway_tools: GatewayToolMap,
+    /// Native server-tool versions the upstream runs itself; their
+    /// declarations and blocks pass through unchanged. Empty by default.
+    pub messages_upstream_server_tools: UpstreamServerTools,
+    /// The operator's key for search results returned to Messages clients;
+    /// without one, a key generated once per process is used.
+    messages_result_key: Option<Arc<MessagesResultKey>>,
+    /// Durable Anthropic message threads, independent of Responses objects.
+    pub messages_threads: MessagesThreadStore,
     /// Base URL for the LLM backend, e.g. `"http://localhost:8000"`.
     pub llm_base_url: String,
     /// Maximum wait for the next body chunk in a streaming request, including HTTP error bodies.
-    /// Applies after response headers arrive; `Duration::ZERO` disables the timeout.
+    /// Bounds sending/receiving response headers and each body chunk read; `Duration::ZERO` disables the timeout.
     /// Sourced from the `STREAMING_CHUNK_TIMEOUT_S` environment variable, defaulting to
     /// [`DEFAULT_STREAMING_TIMEOUT`] when unset or unparseable.
     pub streaming_timeout: Duration,
@@ -80,6 +135,10 @@ pub struct ExecutionContext {
     pub(crate) gateway_scheduler_policy: GatewaySchedulerPolicy,
     pub responses_config: ResponsesConfig,
     pub(crate) direct_inference: Option<Arc<dyn DirectInferenceBackend>>,
+    pub model_capabilities: ModelCapabilities,
+    /// Execution, stage, token, and timing instruments. Defaults to the
+    /// globally registered meter provider at construction time.
+    pub metrics: ExecutorMetrics,
     storage_pool: Option<Arc<crate::storage::DbPool>>,
 }
 
@@ -90,12 +149,7 @@ impl ExecutionContext {
         format!("{}/v1/responses", self.llm_base_url)
     }
 
-    /// Returns the full URL for the `/v1/conversations` endpoint.
-    #[must_use]
-    pub fn conversations_url(&self) -> String {
-        format!("{}/v1/conversations", self.llm_base_url)
-    }
-
+    /// Uses the supplied client unchanged; embedders must configure its connect timeout.
     #[must_use]
     pub fn new(
         conv_handler: ConversationHandler,
@@ -105,18 +159,33 @@ impl ExecutionContext {
     ) -> Self {
         let gateway_executors = GatewayExecutors::from_env(Arc::clone(&client));
         Self {
+            file_handler: FileHandler::default(),
+            max_request_body_size: DEFAULT_MAX_REQUEST_BODY_SIZE_BYTES,
             conv_handler,
             resp_handler,
             client,
             gateway_executors,
             messages_gateway_tools: messages_gateway_tools_from_env(),
+            messages_upstream_server_tools: messages_upstream_server_tools_from_env(),
+            messages_result_key: None,
+            messages_threads: MessagesThreadStore::default(),
             llm_base_url,
             streaming_timeout: streaming_timeout_from_env(),
             gateway_scheduler_policy: GatewaySchedulerPolicy::default(),
             responses_config: ResponsesConfig::default(),
             direct_inference: None,
+            model_capabilities: ModelCapabilities::default(),
+            metrics: ExecutorMetrics::from_global(),
             storage_pool: None,
         }
+    }
+
+    /// Record executor metrics with instruments from the embedding
+    /// application's meter instead of the global provider.
+    #[must_use]
+    pub fn with_metrics(mut self, metrics: ExecutorMetrics) -> Self {
+        self.metrics = metrics;
+        self
     }
 
     #[must_use]
@@ -133,10 +202,46 @@ impl ExecutionContext {
         self
     }
 
+    /// Use the same configured capabilities for request admission and catalog projection.
+    #[must_use]
+    pub fn with_model_capabilities(mut self, model_capabilities: ModelCapabilities) -> Self {
+        self.model_capabilities = model_capabilities;
+        self
+    }
+
     #[must_use]
     pub fn with_gateway_executor(mut self, executor: impl Into<GatewayExecutorRegistration>) -> Self {
         self.gateway_executors.insert(executor);
         self
+    }
+
+    /// Seal the search results returned to Messages clients with `key`, so they
+    /// stay readable across restarts and by every replica holding the same key.
+    #[must_use]
+    pub fn with_messages_result_key(mut self, key: MessagesResultKey) -> Self {
+        self.messages_result_key = Some(Arc::new(key));
+        self
+    }
+
+    /// List the native server-tool versions this context's upstream runs
+    /// itself, instead of the gateway. Used by tests and embedders; the server
+    /// loads the value from configuration in [`ExecutionContext::from_config`].
+    #[must_use]
+    pub fn with_messages_upstream_server_tools(mut self, upstream: UpstreamServerTools) -> Self {
+        self.messages_upstream_server_tools = upstream;
+        self
+    }
+
+    /// The key that seals and opens search results returned to Messages clients.
+    ///
+    /// # Errors
+    /// Returns an error when no key is configured and the system random number
+    /// generator cannot provide one.
+    pub fn messages_result_key(&self) -> ExecutorResult<&MessagesResultKey> {
+        match &self.messages_result_key {
+            Some(key) => Ok(key),
+            None => process_result_key().map_err(|error| ExecutorError::StreamError(error.to_string())),
+        }
     }
 
     /// Checks whether configured persistence can execute a bounded query.
@@ -145,7 +250,7 @@ impl ExecutionContext {
             return true;
         };
         matches!(
-            tokio::time::timeout(timeout, crate::storage::schema::verify_persistence_ready(pool.as_ref())).await,
+            tokio::time::timeout(timeout, verify_persistence_ready(pool.as_ref())).await,
             Ok(Ok(()))
         )
     }
@@ -174,19 +279,50 @@ impl ExecutionContext {
             .ok_or_else(|| Error::Config("default database URL was not resolved".to_owned()))?;
         let database_backend = DatabaseBackend::from_url(db_url)
             .map_err(|error| Error::Config(format!("invalid DATABASE_URL: {error}")))?;
-        let pool = create_pool_with_schema_and_configs(Some(db_url), cfg.sqlite, cfg.postgres)
+        // Only the default database in the Agentic API home is recreated when it holds data from an earlier release;
+        // a configured URL is never recreated, even one naming the same file.
+        let sqlite = SqliteConfig {
+            recreate_outdated_schema: default_db_url.is_some(),
+            ..cfg.sqlite
+        };
+        let pool = create_pool_with_schema_and_configs(Some(db_url), sqlite, cfg.postgres)
             .await
             .map_err(|error| database_open_error(database_backend, &error))?;
         crate::storage::schema::verify_persistence_writable(pool.as_ref())
             .await
             .map_err(|error| database_open_error(database_backend, &error))?;
+        let messages_threads = MessagesThreadStore::new(Arc::clone(&pool));
 
         let conv_handler = ConversationHandler::new(ConversationStore::new(pool.clone()));
         let resp_handler = ResponseHandler::new(ResponseStore::new(pool.clone()));
-        let client = Arc::new(reqwest::Client::new());
-        let gateway_executors = GatewayExecutors::from_config(Arc::clone(&client), &cfg.tools)
-            .map_err(|error| Error::Config(format!("failed to validate configured MCP server policies: {error}")))?;
+        let client = Arc::new(
+            reqwest::Client::builder()
+                .connect_timeout(Duration::from_secs(10))
+                .build()
+                .map_err(|error| Error::Config(format!("failed to build upstream HTTP client: {error}")))?,
+        );
+        let mut gateway_executors = GatewayExecutors::from_config(Arc::clone(&client), &cfg.tools)
+            .map_err(|error| Error::Config(format!("failed to validate configured gateway tool policies: {error}")))?;
+        let file_search =
+            FileSearchService::configured(Arc::clone(&pool), Arc::clone(&client), cfg.tools.file_search.clone())
+                .await
+                .map_err(|error| {
+                    tracing::error!(
+                        error = ?error,
+                        sqlite_vec_extension_path = ?cfg.tools.file_search.sqlite_vec_extension_path,
+                        "file search initialization failed"
+                    );
+                    Error::Config(error.public_message())
+                })?;
+        if let Err(error) = file_search.reconcile_blob_cleanup().await {
+            tracing::warn!(%error, "file blob reconciliation will retry while the gateway runs");
+        }
+        gateway_executors.insert(GatewayExecutorRegistration::FileSearch(Arc::new(
+            crate::tool::file_search::FileSearchHandler::new(file_search.clone()),
+        )));
         Ok(Self {
+            file_handler: FileHandler::new(file_search),
+            max_request_body_size: cfg.max_request_body_size,
             conv_handler,
             resp_handler,
             client,
@@ -197,15 +333,35 @@ impl ExecutionContext {
                 .or(cfg.tools.messages_gateway_tool_aliases.as_deref())
                 .map(GatewayToolMap::from_env_str)
                 .unwrap_or_default(),
+            messages_upstream_server_tools: {
+                let env_value = std::env::var(UPSTREAM_SERVER_TOOLS_ENV).ok();
+                let raw = env_value
+                    .as_deref()
+                    .or(cfg.tools.messages_upstream_server_tools.as_deref());
+                match raw {
+                    Some(raw) => UpstreamServerTools::parse(raw).map_err(Error::Config)?,
+                    None => UpstreamServerTools::default(),
+                }
+            },
+            messages_result_key: MessagesResultKey::from_env()
+                .map_err(|error| Error::Config(error.to_string()))?
+                .map(Arc::new),
             llm_base_url: cfg.llm_api_base.clone(),
+            messages_threads,
             streaming_timeout: streaming_timeout_from_env(),
             gateway_scheduler_policy: GatewaySchedulerPolicy::new(cfg.tools.max_concurrent_gateway_calls),
             responses_config: cfg.responses,
             direct_inference: None,
+            model_capabilities: cfg.model_capabilities.clone(),
+            metrics: ExecutorMetrics::from_global(),
             storage_pool: Some(pool),
         })
     }
 }
+
+/// Default ceiling on serialized inbound request bytes, used for resolved file content when the
+/// server does not supply its own limit.
+pub const DEFAULT_MAX_REQUEST_BODY_SIZE_BYTES: usize = 10 * 1024 * 1024;
 
 /// Default streaming chunk timeout when `STREAMING_CHUNK_TIMEOUT_S` is unset or
 /// unparseable. Generous to accommodate long-prefill / high-TTFT workloads.
@@ -260,12 +416,27 @@ fn messages_gateway_tools_from_env() -> GatewayToolMap {
         .unwrap_or_default()
 }
 
+/// Load the native server tools the upstream runs itself from the
+/// environment. A malformed value cannot keep an infallible context from
+/// constructing (tests, embedders); it is logged and ignored. The server's
+/// configuration-validating constructor parses the same value as an error.
+fn messages_upstream_server_tools_from_env() -> UpstreamServerTools {
+    match std::env::var(UPSTREAM_SERVER_TOOLS_ENV) {
+        Ok(raw) => UpstreamServerTools::parse(&raw).unwrap_or_else(|error| {
+            tracing::error!("{error}; running every native server tool in the gateway");
+            UpstreamServerTools::default()
+        }),
+        Err(_) => UpstreamServerTools::default(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
     use std::time::Duration;
 
     use super::{DEFAULT_STREAMING_TIMEOUT, ExecutionContext, database_open_error, parse_streaming_timeout};
+    use crate::executor::messages_threads::MessagesThreadStore;
     use crate::executor::{ConversationHandler, ResponseHandler};
     use crate::storage::{ConversationStore, DatabaseBackend, ResponseStore, create_pool_with_schema};
 
@@ -347,6 +518,7 @@ mod tests {
             Arc::new(reqwest::Client::new()),
             "http://localhost:8000".to_owned(),
         );
+        context.messages_threads = MessagesThreadStore::new(Arc::clone(&pool));
         context.storage_pool = Some(pool.clone());
 
         assert!(!context.storage_ready(Duration::from_millis(10)).await);
@@ -365,6 +537,7 @@ mod tests {
             Arc::new(reqwest::Client::new()),
             "http://localhost:8000".to_owned(),
         );
+        context.messages_threads = MessagesThreadStore::new(Arc::clone(&pool));
         context.storage_pool = Some(pool.clone());
         assert!(context.storage_ready(Duration::from_secs(1)).await);
 
@@ -387,6 +560,7 @@ mod tests {
             Arc::new(reqwest::Client::new()),
             "http://localhost:8000".to_owned(),
         );
+        context.messages_threads = MessagesThreadStore::new(Arc::clone(&pool));
         context.storage_pool = Some(pool.clone());
         assert!(context.storage_ready(Duration::from_secs(1)).await);
 

@@ -61,13 +61,23 @@ uv run mkdocs serve
 
 ## Pull Requests
 
-- Branch from `main`.
-- Write tests for new functionality.
-- Ensure all pre-commit hooks pass before pushing.
-- Sign off your commits (`git commit -s`).
-- Use the PR template, which includes two required sections:
-  - **Summary** -- a concise description of what the PR does and why.
-  - **Test Plan** -- how the changes were tested.
+The project ranks work by correctness against the OpenAI and Anthropic contracts, maintainability of the core, ease
+of contribution, and measured performance. The full standards are in
+[maintainer standards](.agents/skills/maintainer-standards/SKILL.md).
+
+- Branch from `main`, and keep at most three open pull requests at a time.
+- Fix problems that real clients hit or that a provider recording shows. PRs for improbable inputs found by scanning
+  code are closed.
+- Behavior changes need OpenAI or Anthropic and gateway recordings made with the recorders in
+  `crates/agentic-server-core/tests/cassettes/`. If you cannot record, say so; a maintainer records the reference.
+- Respect layer and module boundaries: put new code in the layer and module that own it, and do not reach past a
+  layer. Rehydration, engine execution, and persistence stay one path for every request; `ExecutionContext` and
+  `RequestContext` stay lean, so do not lift a lower module's data onto them or thread a new argument through every
+  signature; extend the types and conversions in `types/` instead of adding workarounds beside them. Open an RFC issue
+  before changing these contracts.
+- Ensure all pre-commit hooks pass before pushing, and sign off your commits (`git commit -s`).
+- Use the PR template: Summary, Changes by API, and Test Plan. Features, refactors, and changes to a specific layer
+  or module add a small Flow diagram, and a class diagram when a module or layer is added.
 
 ## Code Style
 

@@ -11,6 +11,550 @@ fn from_sse_lines(lines: impl IntoIterator<Item = String>, conversation_id: Opti
     ResponseAccumulator::from_sse_lines(lines, conversation_id).expect("valid SSE stream")
 }
 
+#[test]
+fn keepalive_passes_through_without_advancing_response_or_item_state() {
+    use serde_json::json;
+
+    let mut acc = ResponseAccumulator::with_validation("resp_test".to_owned(), None, Validation::Strict);
+    let mut translator = TranslationDispatcher::new(TranslationContext::default());
+    for event in [
+        json!({"type": "response.created", "response": {"id": "resp_test", "status": "in_progress"}}),
+        json!({"type": "response.in_progress", "response": {"id": "resp_test", "status": "in_progress"}}),
+    ] {
+        acc.process_line(SseLine::parse(&format!("data: {event}"))).unwrap();
+    }
+    let wire = json!({"type": "keepalive", "sequence_number": 2});
+    let translated =
+        RoundIngestion::translate_line(&mut acc, SseLine::parse(&format!("data: {wire}")), &mut translator)
+            .unwrap()
+            .unwrap();
+    assert_eq!(translated.frames.len(), 1);
+    assert_eq!(translated.frames[0].event_type, SSEEventType::Keepalive);
+    assert_eq!(serde_json::to_value(&translated.frames[0].wire).unwrap(), wire);
+    assert_eq!(acc.stream_lifecycle, StreamLifecycle::InProgress);
+    assert_eq!(acc.slots.len(), 0);
+    assert!(acc.output.is_empty());
+    assert!(acc.usage.is_none());
+
+    let terminal = json!({"type": "response.completed", "response": {
+        "id": "resp_test", "status": "completed", "output": []
+    }});
+    acc.process_line(SseLine::parse(&format!("data: {terminal}"))).unwrap();
+    assert!(acc.process_line(SseLine::parse(&format!("data: {wire}"))).is_err());
+}
+
+// Synthetic protocol examples; reference cassettes belong to integration tests.
+fn collaboration_items() -> [serde_json::Value; 3] {
+    use serde_json::json;
+    [
+        json!({"type": "multi_agent_call", "id": "mac_test", "call_id": "call_test", "action": "spawn_agent",
+            "arguments": "{ \"task_name\": \"review\", \"message\": \"opaque\" }", "agent": {"agent_name": "/root"}}),
+        json!({"type": "multi_agent_call_output", "id": "maco_test", "call_id": "call_test", "action": "spawn_agent",
+            "output": [{"type": "output_text", "text": "{\"task_name\":\"/root/review\"}", "annotations": [], "logprobs": []}],
+            "agent": {"agent_name": "/root"}}),
+        json!({"type": "agent_message", "id": "amsg_test", "author": "/root", "recipient": "/root/review",
+            "content": [{"type": "encrypted_content", "encrypted_content": "opaque"}],
+            "agent": {"agent_name": "/root/review"}}),
+    ]
+}
+
+fn collaboration_opening(mut item: serde_json::Value) -> serde_json::Value {
+    match item["type"].as_str().unwrap() {
+        "multi_agent_call" => item["arguments"] = serde_json::json!(""),
+        "multi_agent_call_output" => item["output"] = serde_json::json!([]),
+        "agent_message" => item["content"] = serde_json::json!([]),
+        _ => panic!("expected collaboration item"),
+    }
+    item
+}
+
+fn feed_collaboration_event(
+    acc: &mut ResponseAccumulator,
+    event: &serde_json::Value,
+) -> ExecutorResult<Option<EventFrame>> {
+    acc.process_line(SseLine::parse(&format!("data: {event}")))
+}
+
+fn collaboration_accumulator(validation: Validation) -> ResponseAccumulator {
+    use serde_json::json;
+    let mut acc = ResponseAccumulator::with_validation("resp_test".to_owned(), None, validation);
+    for kind in ["response.created", "response.in_progress"] {
+        feed_collaboration_event(
+            &mut acc,
+            &json!({"type": kind, "response": {"id": "resp_test", "status": "in_progress"}}),
+        )
+        .unwrap();
+    }
+    acc
+}
+
+#[test]
+fn forked_message_parts_preserve_role_metadata_and_public_order() {
+    use serde_json::json;
+
+    let items = [
+        json!({"type": "message", "id": "msg_child", "role": "user", "status": "completed",
+            "agent": {"agent_name": "/root/reviewer"}, "content": [{"type": "input_text", "text": "Review the change."}]}),
+        json!({"type": "message", "id": "msg_root", "role": "assistant", "phase": "final_answer", "status": "completed",
+            "agent": {"agent_name": "/root"}, "content": [{"type": "output_text", "text": "OK", "annotations": [],
+                "logprobs": [{"token": "OK", "bytes": [79, 75], "logprob": -0.1, "top_logprobs": []}]}]}),
+    ];
+    for validation in [Validation::Strict, Validation::Lenient] {
+        let mut acc = collaboration_accumulator(validation);
+        let mut translator = TranslationDispatcher::new(TranslationContext::default());
+        let mut events = Vec::new();
+        for (index, item) in items.iter().enumerate() {
+            let mut opening = item.clone();
+            opening["status"] = json!("in_progress");
+            opening["content"] = json!([]);
+            events.push(json!({"type": "response.output_item.added", "output_index": index,
+                "agent": item["agent"], "item": opening}));
+        }
+        events.push(
+            json!({"type": "response.output_text.delta", "output_index": 1, "item_id": "msg_root",
+            "content_index": 0, "delta": "OK", "agent": items[1]["agent"]}),
+        );
+        // User input is completed-only; the assistant completes first even though
+        // the user message has the earlier public index.
+        for index in [1, 0] {
+            events.push(json!({"type": "response.content_part.done", "output_index": index,
+                "item_id": items[index]["id"], "content_index": 0, "agent": items[index]["agent"], "part": items[index]["content"][0]}));
+            events.push(json!({"type": "response.output_item.done", "output_index": index,
+                "agent": items[index]["agent"], "item": items[index]}));
+        }
+        events.push(json!({"type": "response.completed", "response": {"id": "resp_test", "status": "completed", "output": items}}));
+        for event in events {
+            let result =
+                RoundIngestion::translate_line(&mut acc, SseLine::parse(&format!("data: {event}")), &mut translator)
+                    .unwrap()
+                    .unwrap();
+            let wire = serde_json::to_value(&result.frames[0].wire).unwrap();
+            if event["type"] == "response.completed" {
+                assert_eq!(wire["response"]["id"], event["response"]["id"]);
+                assert_eq!(wire["response"]["output"], event["response"]["output"]);
+            } else {
+                assert_eq!(wire, event);
+            }
+        }
+        assert_eq!(
+            serde_json::to_value(acc.finish("model", None, None).unwrap().output).unwrap(),
+            json!(items)
+        );
+    }
+}
+
+#[test]
+fn message_completed_parts_survive_lenient_finalization_without_item_done() {
+    use serde_json::json;
+    let mut acc = collaboration_accumulator(Validation::Lenient);
+    let mut item = json!({"type": "message", "id": "msg_child", "role": "user", "status": "in_progress",
+        "agent": {"agent_name": "/root/reviewer"}, "content": []});
+    feed_collaboration_event(
+        &mut acc,
+        &json!({"type": "response.output_item.added", "output_index": 0, "item": item}),
+    )
+    .unwrap();
+    let part = json!({"type": "input_text", "text": ""});
+    feed_collaboration_event(
+        &mut acc,
+        &json!({"type": "response.content_part.done", "output_index": 0,
+        "item_id": "msg_child", "content_index": 0, "part": part}),
+    )
+    .unwrap();
+    item["status"] = json!("completed");
+    item["content"] = json!([part]);
+    assert_eq!(
+        serde_json::to_value(acc.finish("model", None, None).unwrap().output).unwrap(),
+        json!([item])
+    );
+}
+
+#[test]
+fn message_completion_accepts_one_based_content_index_without_ignoring_conflicts() {
+    use serde_json::json;
+    let opening = json!({"type": "message", "id": "msg_1", "role": "assistant",
+        "status": "in_progress", "content": []});
+    let part = json!({"type": "output_text", "text": "HELLO", "annotations": [], "logprobs": null});
+    for validation in [Validation::Strict, Validation::Lenient] {
+        let mut acc = collaboration_accumulator(validation);
+        feed_collaboration_event(
+            &mut acc,
+            &json!({"type": "response.output_item.added", "output_index": 0, "item": opening}),
+        )
+        .unwrap();
+        feed_collaboration_event(
+            &mut acc,
+            &json!({"type": "response.content_part.done", "output_index": 0,
+                "item_id": "msg_1", "content_index": 1, "part": part}),
+        )
+        .unwrap();
+        let mut done = opening.clone();
+        done["status"] = json!("completed");
+        done["content"] = json!([part]);
+        feed_collaboration_event(
+            &mut acc,
+            &json!({"type": "response.output_item.done", "output_index": 0, "item": done}),
+        )
+        .unwrap();
+
+        let mut conflicting = collaboration_accumulator(validation);
+        feed_collaboration_event(
+            &mut conflicting,
+            &json!({"type": "response.output_item.added", "output_index": 0, "item": opening}),
+        )
+        .unwrap();
+        feed_collaboration_event(
+            &mut conflicting,
+            &json!({"type": "response.content_part.done", "output_index": 0,
+                "item_id": "msg_1", "content_index": 1, "part": part}),
+        )
+        .unwrap();
+        done["content"] = json!([{"type": "output_text", "text": "OTHER"}]);
+        assert!(
+            feed_collaboration_event(
+                &mut conflicting,
+                &json!({"type": "response.output_item.done", "output_index": 0, "item": done}),
+            )
+            .is_err()
+        );
+    }
+}
+
+#[test]
+fn message_completion_cannot_reassign_identity_or_rewrite_completed_parts() {
+    use serde_json::json;
+    let opening = json!({"type": "message", "id": "msg_child", "role": "assistant", "phase": "final_answer",
+        "status": "in_progress", "agent": {"agent_name": "/root/reviewer"}, "content": []});
+    let part = json!({"type": "output_text", "text": "OK", "annotations": [],
+        "logprobs": [{"token": "OK", "bytes": [79, 75], "logprob": -0.1, "top_logprobs": []}]});
+    for validation in [Validation::Strict, Validation::Lenient] {
+        for (field, value) in [
+            ("role", json!("user")),
+            ("phase", json!("commentary")),
+            ("agent", json!({"agent_name": "/root/other"})),
+            ("agent", json!(null)),
+            ("content", json!([])),
+            ("content", json!([{"type": "input_text", "text": "OK"}])),
+            (
+                "content",
+                json!([{"type": "output_text", "text": "OK", "annotations": []}]),
+            ),
+        ] {
+            let mut acc = collaboration_accumulator(validation);
+            feed_collaboration_event(
+                &mut acc,
+                &json!({"type": "response.output_item.added", "output_index": 0, "item": opening}),
+            )
+            .unwrap();
+            feed_collaboration_event(
+                &mut acc,
+                &json!({"type": "response.content_part.done", "output_index": 0,
+                "item_id": "msg_child", "content_index": 0, "part": part}),
+            )
+            .unwrap();
+            let mut done = opening.clone();
+            done["status"] = json!("completed");
+            done["content"] = json!([part]);
+            done[field] = value;
+            assert!(
+                feed_collaboration_event(
+                    &mut acc,
+                    &json!({"type": "response.output_item.done", "output_index": 0, "item": done})
+                )
+                .is_err(),
+                "{field}"
+            );
+        }
+        for kind in [
+            "response.content_part.done",
+            "response.output_text.delta",
+            "response.output_text.done",
+        ] {
+            let mut acc = collaboration_accumulator(validation);
+            feed_collaboration_event(
+                &mut acc,
+                &json!({"type": "response.output_item.added", "output_index": 0, "item": opening}),
+            )
+            .unwrap();
+            let mut event = json!({"type": "response.content_part.done", "output_index": 0, "item_id": "msg_child",
+                "content_index": 0, "part": part, "delta": "OK", "text": "OK"});
+            feed_collaboration_event(&mut acc, &event).unwrap();
+            event["type"] = json!(kind);
+            assert!(feed_collaboration_event(&mut acc, &event).is_err(), "{kind}");
+        }
+    }
+}
+
+#[test]
+fn event_attribution_is_stable_and_independent_of_discovery_item_attribution() {
+    use serde_json::json;
+    for validation in [Validation::Strict, Validation::Lenient] {
+        for change_agent in [false, true] {
+            let mut acc = collaboration_accumulator(validation);
+            let item = json!({"type": "mcp_list_tools", "id": "mcpl_test", "server_label": "docs", "tools": []});
+            feed_collaboration_event(
+                &mut acc,
+                &json!({"type": "response.output_item.added", "output_index": 0,
+                "agent": {"agent_name": "/root"}, "item": item}),
+            )
+            .unwrap();
+            let event = json!({"type": "response.output_item.done", "output_index": 0,
+                "agent": {"agent_name": if change_agent { "/root/child" } else { "/root" }}, "item": item});
+            let result = feed_collaboration_event(&mut acc, &event);
+            if change_agent {
+                assert!(result.is_err());
+            } else {
+                result.unwrap();
+                let done = acc.slots.get(OutputIndex::new(0)).unwrap().state.done_item().unwrap();
+                assert!(serde_json::to_value(done).unwrap().get("agent").is_none());
+            }
+        }
+    }
+}
+
+#[test]
+fn collaboration_snapshots_and_encrypted_parts_use_the_shared_ingestion_path() {
+    use serde_json::json;
+    for validation in [Validation::Strict, Validation::Lenient] {
+        let mut acc = collaboration_accumulator(validation);
+        let mut translator = TranslationDispatcher::new(TranslationContext::default());
+        let items = collaboration_items();
+        let mut events = Vec::new();
+        for (index, item) in items.iter().enumerate() {
+            events.push(json!({"type": "response.output_item.added", "output_index": index,
+                "agent": item["agent"], "item": collaboration_opening(item.clone())}));
+        }
+        // The encrypted part is complete without a corresponding part-added event.
+        events.push(
+            json!({"type": "response.content_part.done", "output_index": 2, "content_index": 0,
+            "item_id": "amsg_test", "agent": items[2]["agent"], "part": items[2]["content"][0]}),
+        );
+        for index in [0, 2, 1] {
+            events.push(json!({"type": "response.output_item.done", "output_index": index,
+                "agent": items[index]["agent"], "item": items[index]}));
+        }
+        events.push(json!({"type": "response.completed", "response": {"id": "resp_test", "status": "completed", "output": items}}));
+        for event in events {
+            let translated =
+                RoundIngestion::translate_line(&mut acc, SseLine::parse(&format!("data: {event}")), &mut translator)
+                    .unwrap()
+                    .unwrap();
+            assert_eq!(translated.frames.len(), 1);
+            let wire = serde_json::to_value(&translated.frames[0].wire).unwrap();
+            if event["type"] == "response.completed" {
+                assert_eq!(wire["response"]["id"], event["response"]["id"]);
+                assert_eq!(wire["response"]["output"], event["response"]["output"]);
+            } else {
+                assert_eq!(wire, event);
+            }
+        }
+        let response = acc.finish("model", None, None).unwrap();
+        assert_eq!(serde_json::to_value(&response.output).unwrap(), json!(items));
+        assert_eq!(items[0]["call_id"], items[1]["call_id"]);
+        assert!(
+            response
+                .output
+                .iter()
+                .all(|item| !item.requires_client_action(&crate::tool::ToolRegistry::default()))
+        );
+        let mut json_acc = ResponseAccumulator::with_validation("resp_test".into(), None, validation);
+        json_acc
+            .load_json_body(&json!({"id": "resp_test", "status": "completed", "output": items}).to_string())
+            .unwrap();
+        assert_eq!(serde_json::to_value(json_acc.output).unwrap(), json!(items));
+    }
+}
+
+#[test]
+fn collaboration_identity_and_completion_order_are_validated() {
+    use serde_json::json;
+    for validation in [Validation::Strict, Validation::Lenient] {
+        for item in collaboration_items() {
+            let opening = json!({"type": "response.output_item.added", "output_index": 0,
+                "item": collaboration_opening(item.clone())});
+            let done = json!({"type": "response.output_item.done", "output_index": 0, "item": item});
+            let mut acc = collaboration_accumulator(validation);
+            feed_collaboration_event(&mut acc, &opening).unwrap();
+            assert!(feed_collaboration_event(&mut acc, &opening).is_err());
+            feed_collaboration_event(&mut acc, &done).unwrap();
+            let repeated = feed_collaboration_event(&mut acc, &done);
+            match validation {
+                Validation::Strict => assert!(repeated.is_err()),
+                Validation::Lenient => assert!(repeated.unwrap().is_none()),
+            }
+            let mut conflicting = done.clone();
+            conflicting["item"]["agent"]["agent_name"] = json!("/root/other");
+            assert!(feed_collaboration_event(&mut acc, &conflicting).is_err());
+            for field in if item["type"] == "agent_message" {
+                &["id", "author", "recipient"][..]
+            } else {
+                &["id", "call_id", "action"][..]
+            } {
+                let mut acc = collaboration_accumulator(validation);
+                feed_collaboration_event(&mut acc, &opening).unwrap();
+                let mut changed = done.clone();
+                changed["item"][field] = json!(if *field == "action" { "list_agents" } else { "other" });
+                assert!(feed_collaboration_event(&mut acc, &changed).is_err(), "changed {field}");
+            }
+            let mut acc = collaboration_accumulator(validation);
+            feed_collaboration_event(&mut acc, &opening).unwrap();
+            let mut wrong_index = done.clone();
+            wrong_index["output_index"] = json!(1);
+            assert!(feed_collaboration_event(&mut acc, &wrong_index).is_err());
+            let mut wrong_kind = done.clone();
+            wrong_kind["item"]["type"] = json!("message");
+            assert!(feed_collaboration_event(&mut acc, &wrong_kind).is_err());
+            // Opening metadata alone cannot become a completed hosted operation at EOF.
+            assert!(acc.finish("model", None, None).is_err());
+            let mut acc = collaboration_accumulator(validation);
+            let orphan_done = feed_collaboration_event(&mut acc, &done);
+            match validation {
+                Validation::Strict => assert!(orphan_done.is_err()),
+                Validation::Lenient => {
+                    orphan_done.unwrap();
+                    assert_eq!(
+                        serde_json::to_value(acc.finish("model", None, None).unwrap().output).unwrap(),
+                        json!([item])
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn agent_message_completed_parts_reject_duplicates_and_conflicting_snapshots() {
+    use serde_json::json;
+    for validation in [Validation::Strict, Validation::Lenient] {
+        let item = collaboration_items()[2].clone();
+        let mut acc = collaboration_accumulator(validation);
+        feed_collaboration_event(
+            &mut acc,
+            &json!({"type": "response.output_item.added", "output_index": 0,
+            "item": collaboration_opening(item.clone())}),
+        )
+        .unwrap();
+        let part = json!({"type": "response.content_part.done", "output_index": 0, "content_index": 0,
+            "item_id": "amsg_test", "part": item["content"][0]});
+        for (field, value) in [("item_id", json!("other")), ("output_index", json!(1))] {
+            let mut changed = part.clone();
+            changed[field] = value;
+            assert!(feed_collaboration_event(&mut acc, &changed).is_err());
+        }
+        feed_collaboration_event(&mut acc, &part).unwrap();
+        assert!(feed_collaboration_event(&mut acc, &part).is_err());
+        let mut changed = item.clone();
+        changed["content"][0]["encrypted_content"] = json!("changed");
+        assert!(
+            feed_collaboration_event(
+                &mut acc,
+                &json!({"type": "response.output_item.done", "output_index": 0, "item": changed})
+            )
+            .is_err()
+        );
+        feed_collaboration_event(
+            &mut acc,
+            &json!({"type": "response.output_item.done", "output_index": 0, "item": item}),
+        )
+        .unwrap();
+        let late = feed_collaboration_event(&mut acc, &part);
+        match validation {
+            Validation::Strict => assert!(late.is_err()),
+            Validation::Lenient => assert!(late.unwrap().is_none()),
+        }
+    }
+}
+
+#[test]
+fn agent_message_parts_are_routed_by_owner_and_validate_completion() {
+    use serde_json::json;
+    for part in [
+        json!({"type":"input_text","text":"task"}),
+        json!({"type":"output_text","text":"answer","annotations":[],"logprobs":[]}),
+        json!({"type":"text","text":"text"}),
+        json!({"type":"summary_text","text":"summary"}),
+        json!({"type":"reasoning_text","text":"reasoning"}),
+        json!({"type":"refusal","refusal":"refused"}),
+        json!({"type":"input_image","image_url":"data:image/png;base64,AAAA","detail":"auto"}),
+        json!({"type":"computer_screenshot","file_id":"file_1","detail":"high"}),
+        json!({"type":"input_file","file_id":"file_1"}),
+        json!({"type":"encrypted_content","encrypted_content":"opaque"}),
+    ] {
+        for validation in [Validation::Strict, Validation::Lenient] {
+            let mut item = collaboration_items()[2].clone();
+            item["content"] = json!([part]);
+            let mut acc = collaboration_accumulator(validation);
+            feed_collaboration_event(
+                &mut acc,
+                &json!({"type":"response.output_item.added",
+                "output_index":0,"item":collaboration_opening(item.clone())}),
+            )
+            .unwrap();
+            let done = json!({"type":"response.content_part.done","output_index":0,
+                "item_id":item["id"],"content_index":0,"part":part});
+            let mut wrong_id = done.clone();
+            wrong_id["item_id"] = json!("other");
+            assert!(feed_collaboration_event(&mut acc, &wrong_id).is_err());
+            feed_collaboration_event(
+                &mut acc,
+                &json!({"type":"response.content_part.added",
+                "output_index":0,"item_id":item["id"],"content_index":0,"part":part}),
+            )
+            .unwrap();
+            feed_collaboration_event(&mut acc, &done).unwrap();
+            assert!(feed_collaboration_event(&mut acc, &done).is_err());
+            let mut conflict = item.clone();
+            conflict["content"] = json!([]);
+            assert!(
+                feed_collaboration_event(
+                    &mut acc,
+                    &json!({"type":"response.output_item.done",
+                "output_index":0,"item":conflict})
+                )
+                .is_err()
+            );
+            feed_collaboration_event(
+                &mut acc,
+                &json!({"type":"response.output_item.done",
+                "output_index":0,"item":item}),
+            )
+            .unwrap();
+            feed_collaboration_event(
+                &mut acc,
+                &json!({"type":"response.completed",
+                "response":{"id":"resp_test","status":"completed","output":[item]}}),
+            )
+            .unwrap();
+            assert_eq!(
+                serde_json::to_value(acc.finish("model", None, None).unwrap().output).unwrap(),
+                json!([item])
+            );
+        }
+    }
+}
+
+#[test]
+fn shared_content_events_cannot_target_a_function_call() {
+    use serde_json::json;
+    let mut acc = collaboration_accumulator(Validation::Strict);
+    feed_collaboration_event(
+        &mut acc,
+        &json!({"type":"response.output_item.added","output_index":0,
+        "item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"f","arguments":""}}),
+    )
+    .unwrap();
+    for event in ["response.content_part.added", "response.content_part.done"] {
+        assert!(
+            feed_collaboration_event(
+                &mut acc,
+                &json!({"type":event,"output_index":0,
+            "item_id":"fc_1","content_index":0,"part":{"type":"input_text","text":"x"}})
+            )
+            .is_err()
+        );
+    }
+}
+
 fn completed_item_late_event_cases() -> Vec<(serde_json::Value, Vec<serde_json::Value>)> {
     use serde_json::json;
 
@@ -142,6 +686,132 @@ fn lifecycle_accumulator(strict: bool) -> ResponseAccumulator {
         .expect("valid response lifecycle");
     }
     acc
+}
+
+#[test]
+fn native_code_interpreter_image_output_survives_json_and_stream_ingestion() {
+    use serde_json::json;
+
+    let done = json!({
+        "type": "code_interpreter_call",
+        "id": "ci_image",
+        "container_id": "cntr_image",
+        "code": "plot()",
+        "status": "completed",
+        "outputs": [{"type": "image", "url": "https://example.test/plot.png"}]
+    });
+    let body = json!({"id": "resp_1", "status": "completed", "output": [done.clone()]});
+    let from_json = ResponseAccumulator::from_json(&body.to_string(), None).expect("native JSON response");
+    assert_eq!(
+        serde_json::to_value(from_json.output).expect("serialize output"),
+        json!([done])
+    );
+
+    for strict in [false, true] {
+        let mut acc = lifecycle_accumulator(strict);
+        let added = json!({
+            "type": "code_interpreter_call",
+            "id": "ci_image",
+            "container_id": "cntr_image",
+            "code": "plot()",
+            "status": "in_progress",
+            "outputs": null
+        });
+        push_lifecycle_event(
+            &mut acc,
+            &json!({"type": "response.output_item.added", "output_index": 0, "item": added}),
+            strict,
+        )
+        .expect("native image call added");
+        push_lifecycle_event(
+            &mut acc,
+            &json!({"type": "response.output_item.done", "output_index": 0, "item": done}),
+            strict,
+        )
+        .expect("native image call completed");
+        acc.finalize_all().expect("finalize image call");
+        assert_eq!(
+            serde_json::to_value(acc.output).expect("serialize output"),
+            json!([done])
+        );
+    }
+}
+
+#[test]
+fn done_only_code_interpreter_call_accumulates_in_lenient_stream() {
+    use serde_json::json;
+
+    let done = json!({
+        "type": "code_interpreter_call",
+        "id": "ci_1",
+        "container_id": "cntr_1",
+        "code": "print(42)",
+        "status": "completed",
+        "outputs": [
+            {"type": "logs", "logs": "42\n"},
+            {"type": "image", "url": "https://example.test/plot.png"}
+        ]
+    });
+    let acc = from_sse_lines(
+        [
+            json!({"type": "response.output_item.done", "output_index": 0, "item": done.clone()}),
+            json!({"type": "response.completed", "response": {"id": "resp_1", "status": "completed"}}),
+        ]
+        .into_iter()
+        .map(|event| format!("data: {event}")),
+        None,
+    );
+
+    assert_eq!(
+        serde_json::to_value(acc.output).expect("serialize output"),
+        json!([done])
+    );
+}
+
+#[test]
+fn done_only_code_interpreter_stream_and_final_share_backfilled_id() {
+    use serde_json::json;
+
+    let mut acc = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut translator = TranslationDispatcher::new(TranslationContext::default());
+    let done = json!({
+        "type": "response.output_item.done",
+        "output_index": 0,
+        "item": {
+            "type": "code_interpreter_call",
+            "id": "",
+            "container_id": "cntr_1",
+            "code": "print(42)",
+            "status": "completed",
+            "outputs": [{"type": "logs", "logs": "42\n"}]
+        }
+    });
+    let translated =
+        RoundIngestion::translate_line(&mut acc, SseLine::parse(&format!("data: {done}")), &mut translator)
+            .expect("valid done-only event")
+            .expect("emitted done-only event");
+    let emitted_id = translated.frames[0].wire.rest["item"]["id"]
+        .as_str()
+        .expect("emitted item ID");
+    assert!(emitted_id.starts_with("ci_"));
+    assert!(!emitted_id.strip_prefix("ci_").expect("ci prefix").is_empty());
+    let emitted_id = emitted_id.to_owned();
+    let EventPayload::OutputItemDone { item_id, item, .. } = &translated.frames[0].payload else {
+        panic!("expected typed completed item");
+    };
+    assert_eq!(item_id, &emitted_id);
+    assert_eq!(item["id"], emitted_id);
+    assert!(
+        RoundIngestion::translate_line(&mut acc, SseLine::parse(&format!("data: {done}")), &mut translator)
+            .expect("identical done-only event is valid")
+            .is_none()
+    );
+
+    acc.finalize_all().expect("finalize done-only item");
+    let OutputItem::CodeInterpreterCall(call) = &acc.output[0] else {
+        panic!("expected code interpreter call");
+    };
+    assert_eq!(call.id, emitted_id);
 }
 
 #[test]
@@ -296,6 +966,179 @@ fn retained_slot_debug_omits_completed_payloads() {
 }
 
 #[test]
+fn steering_waits_for_every_started_item_and_preserves_completed_order() {
+    use serde_json::json;
+
+    for strict in [false, true] {
+        let mut acc = lifecycle_accumulator(strict);
+        assert!(!acc.finish_for_steering().unwrap());
+        let item = |index| {
+            json!({"type":"function_call", "id":format!("fc_{index}"),
+            "call_id":format!("call_{index}"), "name":"lookup", "arguments":"{}", "status":"completed"})
+        };
+        for index in [0, 1] {
+            push_lifecycle_event(
+                &mut acc,
+                &json!({"type":"response.output_item.added",
+                "output_index":index, "item":item(index)}),
+                strict,
+            )
+            .unwrap();
+        }
+        push_lifecycle_event(
+            &mut acc,
+            &json!({"type":"response.output_item.done",
+            "output_index":1, "item":item(1)}),
+            strict,
+        )
+        .unwrap();
+        assert!(!acc.finish_for_steering().unwrap(), "the other item is still running");
+        assert_eq!(acc.status, ResponseStatus::InProgress);
+        push_lifecycle_event(
+            &mut acc,
+            &json!({"type":"response.output_item.done",
+            "output_index":0, "item":item(0)}),
+            strict,
+        )
+        .unwrap();
+        assert!(acc.finish_for_steering().unwrap());
+        let payload = acc.finish("model", Some("parent"), None).unwrap();
+        assert_eq!(payload.status, "incomplete");
+        assert_eq!(payload.incomplete_details.unwrap().reason.as_deref(), Some("steered"));
+        assert_eq!(serde_json::to_value(payload.output).unwrap(), json!([item(0), item(1)]));
+        assert!(
+            payload.usage.is_none(),
+            "cutting a stream must not fabricate terminal usage"
+        );
+    }
+}
+
+#[test]
+fn steering_does_not_replace_an_upstream_terminal_or_accept_changed_call_ids() {
+    use serde_json::json;
+
+    let mut completed = lifecycle_accumulator(true);
+    push_lifecycle_event(
+        &mut completed,
+        &json!({"type":"response.completed", "response":{
+        "id":"resp_1", "status":"completed", "output":[]}}),
+        true,
+    )
+    .unwrap();
+    assert!(!completed.finish_for_steering().unwrap());
+    assert_eq!(completed.finish("model", None, None).unwrap().status, "completed");
+
+    let mut invalid = lifecycle_accumulator(true);
+    for (event_type, call_id) in [
+        ("response.output_item.added", "before"),
+        ("response.output_item.done", "after"),
+    ] {
+        push_lifecycle_event(
+            &mut invalid,
+            &json!({"type":event_type, "output_index":0, "item":{
+            "type":"function_call", "id":"fc_1", "call_id":call_id, "name":"lookup", "arguments":"{}",
+            "status":"completed"}}),
+            true,
+        )
+        .unwrap();
+    }
+    assert!(!invalid.finish_for_steering().unwrap());
+    assert!(invalid.ensure_steering_settled().is_err());
+}
+
+#[test]
+fn steering_does_not_treat_lenient_fallback_or_running_hosted_items_as_settled() {
+    use serde_json::json;
+
+    for (opening, done) in [
+        (
+            json!({"type":"function_call", "id":"fc_1", "call_id":"call_1", "name":"lookup",
+            "arguments":"{\"x\":", "status":"in_progress"}),
+            json!({"type":"function_call", "id":"fc_1", "call_id":"call_1", "name":"lookup", "status":"completed"}),
+        ),
+        (
+            json!({"type":"function_call", "id":"fc_1", "call_id":"call_1", "name":"lookup",
+            "arguments":"{\"x\":", "status":"in_progress"}),
+            json!({"type":"function_call", "id":"fc_1", "call_id":"call_1", "name":"lookup",
+            "arguments":"", "status":"completed"}),
+        ),
+        (
+            json!({"type":"custom_tool_call", "id":"ct_1", "call_id":"call_1", "name":"lookup",
+            "input":"unfinished", "status":"in_progress"}),
+            json!({"type":"custom_tool_call", "id":"ct_1", "call_id":"call_1", "name":"lookup",
+            "input":"", "status":"completed"}),
+        ),
+        (
+            json!({"type":"function_call", "id":"fc_1", "call_id":"call_1", "name":"lookup",
+            "arguments":"", "status":"in_progress"}),
+            json!({"type":"function_call", "id":"fc_1", "call_id":"call_1", "name":"lookup", "arguments":"{}"}),
+        ),
+        (
+            json!({"type":"code_interpreter_call", "id":"ci_1", "container_id":"container",
+            "code":"print(42)", "status":"in_progress", "outputs":[]}),
+            json!({"type":"code_interpreter_call", "id":"ci_1", "container_id":"container",
+            "code":"print(42)", "status":"in_progress", "outputs":[]}),
+        ),
+    ] {
+        let mut acc = lifecycle_accumulator(false);
+        push_lifecycle_event(
+            &mut acc,
+            &json!({"type":"response.output_item.added", "output_index":0, "item":opening}),
+            false,
+        )
+        .unwrap();
+        let delta = match opening["type"].as_str() {
+            Some("function_call") => Some(("response.function_call_arguments.delta", &opening["arguments"])),
+            Some("custom_tool_call") => Some(("response.custom_tool_call_input.delta", &opening["input"])),
+            _ => None,
+        };
+        if let Some((kind, delta)) = delta {
+            push_lifecycle_event(
+                &mut acc,
+                &json!({"type":kind, "output_index":0, "item_id":opening["id"], "delta":delta}),
+                false,
+            )
+            .unwrap();
+        }
+        push_lifecycle_event(
+            &mut acc,
+            &json!({"type":"response.output_item.done", "output_index":0, "item":done}),
+            false,
+        )
+        .unwrap();
+        assert!(!acc.finish_for_steering().unwrap(), "unsafe done snapshot: {done}");
+        assert!(acc.ensure_steering_settled().is_err());
+    }
+}
+
+#[test]
+fn steering_waits_for_natural_terminal_after_done_only_recovery() {
+    use serde_json::json;
+
+    let mut acc = lifecycle_accumulator(false);
+    push_lifecycle_event(
+        &mut acc,
+        &json!({"type":"response.output_item.done", "output_index":0, "item":{
+            "type":"function_call", "id":"fc_1", "call_id":"call_1", "name":"lookup",
+            "arguments":"{}", "status":"completed"}}),
+        false,
+    )
+    .unwrap();
+    assert!(!acc.finish_for_steering().unwrap());
+    assert!(acc.ensure_steering_settled().is_err());
+    push_lifecycle_event(
+        &mut acc,
+        &json!({"type":"response.completed", "response":{"id":"resp_1", "status":"completed"}}),
+        false,
+    )
+    .unwrap();
+    acc.ensure_steering_settled().unwrap();
+    let payload = acc.finish("model", None, None).unwrap();
+    assert_eq!(payload.status, "completed");
+    assert_eq!(payload.output.len(), 1);
+}
+
+#[test]
 fn test_accumulator_mark_incomplete() {
     let mut acc = ResponseAccumulator::new("resp_123".into(), None);
     acc.mark_incomplete("Stream interrupted");
@@ -325,7 +1168,7 @@ fn test_accumulator_finalize() {
     let payload = acc.finalize("gpt-4o", Some("resp_prev"), Some("be helpful"));
     assert_eq!(payload.id, "resp_123");
     assert_eq!(payload.model, "gpt-4o");
-    assert_eq!(payload.conversation_id, Some("conv_456".into()));
+    assert_eq!(payload.conversation, Some("conv_456".into()));
     assert_eq!(payload.previous_response_id, Some("resp_prev".into()));
     assert_eq!(payload.instructions, Some("be helpful".into()));
     assert_eq!(payload.status, ResponseStatus::InProgress.as_str());
@@ -355,7 +1198,7 @@ fn test_accumulator_text_delta_assigned_to_message() {
 
     if let OutputItem::Message(msg) = &acc.output[0] {
         assert_eq!(msg.content.len(), 1);
-        assert_eq!(msg.content[0].text, "Hello world");
+        assert_eq!(msg.content[0].text(), "Hello world");
     } else {
         panic!("expected OutputItem::Message");
     }
@@ -380,6 +1223,7 @@ fn test_process_event_response_created_sets_id() {
             id: "resp_new".into(),
             status: "in_progress".into(),
             usage: None,
+            service_tier: None,
         },
         wire: WireEvent::new("test"),
     };
@@ -396,6 +1240,7 @@ fn test_process_event_response_created_empty_id_no_overwrite() {
             id: String::new(),
             status: "in_progress".into(),
             usage: None,
+            service_tier: None,
         },
         wire: WireEvent::new("test"),
     };
@@ -412,6 +1257,7 @@ fn test_empty_id_response_created_allows_subsequent_created() {
             id: String::new(),
             status: "in_progress".into(),
             usage: None,
+            service_tier: None,
         },
         wire: WireEvent::new("test"),
     };
@@ -425,6 +1271,7 @@ fn test_empty_id_response_created_allows_subsequent_created() {
             id: "resp_real".into(),
             status: "in_progress".into(),
             usage: None,
+            service_tier: None,
         },
         wire: WireEvent::new("test"),
     };
@@ -440,7 +1287,7 @@ fn test_process_event_text_delta_accumulates() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
-            shell_call: None,
+            initial_item: None,
             item_id: "msg_1".into(),
             item_type: "message".into(),
             output_index: Some(0),
@@ -478,6 +1325,7 @@ fn test_process_event_text_delta_accumulates() {
             id: "resp_1".into(),
             status: "completed".into(),
             usage: None,
+            service_tier: None,
         },
         wire: WireEvent::new("test"),
     });
@@ -485,7 +1333,7 @@ fn test_process_event_text_delta_accumulates() {
     assert_eq!(acc.status, ResponseStatus::Completed);
     assert_eq!(acc.output.len(), 1);
     if let OutputItem::Message(msg) = &acc.output[0] {
-        assert_eq!(msg.content[0].text, "Hello world");
+        assert_eq!(msg.content[0].text(), "Hello world");
     } else {
         panic!("expected Message");
     }
@@ -725,7 +1573,7 @@ fn test_accumulator_uses_authoritative_done_item_with_item_id_fallback() {
     };
     assert_eq!(message.id, "msg_1");
     assert_eq!(message.content.len(), 1);
-    assert_eq!(message.content[0].text, "authoritative");
+    assert_eq!(message.content[0].text(), "authoritative");
 }
 
 #[test]
@@ -916,6 +1764,7 @@ fn test_process_event_completed_with_usage() {
                 total_tokens: 15,
                 ..Default::default()
             }),
+            service_tier: None,
         },
         wire: WireEvent::new("test"),
     };
@@ -923,6 +1772,41 @@ fn test_process_event_completed_with_usage() {
     assert_eq!(acc.status, ResponseStatus::Completed);
     assert!(acc.usage.is_some());
     assert_eq!(acc.usage.unwrap().total_tokens, 15);
+}
+
+#[test]
+fn terminal_service_tier_replaces_created_service_tier() {
+    let lines = vec![
+        r#"data: {"type":"response.created","response":{"id":"resp_1","status":"in_progress","service_tier":"auto"}}"#.to_owned(),
+        r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","service_tier":"default","usage":null}}"#.to_owned(),
+    ];
+
+    let payload = from_sse_lines(lines, None).finalize("test", None, None);
+    assert_eq!(payload.service_tier.as_deref(), Some("default"));
+
+    let lines = vec![
+        r#"data: {"type":"response.created","response":{"id":"resp_2","status":"in_progress","service_tier":"auto"}}"#
+            .to_owned(),
+        r#"data: {"type":"response.completed","response":{"id":"resp_2","status":"completed","usage":null}}"#
+            .to_owned(),
+    ];
+    let payload = from_sse_lines(lines, None).finalize("test", None, None);
+    assert!(payload.service_tier.is_none());
+}
+
+#[test]
+fn json_response_preserves_actual_service_tier() {
+    let body = serde_json::json!({
+        "id": "resp_1",
+        "status": "completed",
+        "output": [],
+        "service_tier": "flex"
+    });
+
+    let payload = ResponseAccumulator::from_json(&body.to_string(), None)
+        .expect("valid response")
+        .finalize("test", None, None);
+    assert_eq!(payload.service_tier.as_deref(), Some("flex"));
 }
 
 #[test]
@@ -934,6 +1818,7 @@ fn test_process_event_failed_sets_error_status() {
             id: "resp_1".into(),
             status: "failed".into(),
             usage: None,
+            service_tier: None,
         },
         wire: WireEvent::new("response.failed"),
     });
@@ -949,6 +1834,7 @@ fn test_process_event_incomplete_sets_incomplete_status() {
             id: "resp_1".into(),
             status: "incomplete".into(),
             usage: None,
+            service_tier: None,
         },
         wire: WireEvent::new("test"),
     });
@@ -996,7 +1882,7 @@ fn test_accumulator_reasoning_and_message_from_sse() {
 
     if let OutputItem::Message(msg) = &acc.output[1] {
         assert_eq!(msg.id, "msg_1");
-        assert_eq!(msg.content[0].text, "Hello");
+        assert_eq!(msg.content[0].text(), "Hello");
     } else {
         panic!("expected OutputItem::Message");
     }
@@ -1058,8 +1944,8 @@ fn reasoning_done_events_keep_part_index_order() {
     assert_eq!(
         reasoning.summary,
         [
-            serde_json::json!({"type": "summary_text", "text": "first summary"}),
-            serde_json::json!({"type": "summary_text", "text": "second summary"}),
+            crate::types::ReasoningSummaryContent::new("first summary"),
+            crate::types::ReasoningSummaryContent::new("second summary"),
         ]
     );
 }
@@ -1070,7 +1956,7 @@ fn completed_reasoning_preserves_done_fields_when_omitted() {
         r#"data: {"type":"response.output_item.added","output_index":0,"item":{"id":"rs_1","type":"reasoning"}}"#.to_owned(),
         r#"data: {"type":"response.reasoning_text.done","item_id":"rs_1","output_index":0,"content_index":0,"text":"completed content"}"#.to_owned(),
         r#"data: {"type":"response.reasoning_summary_text.done","item_id":"rs_1","output_index":0,"summary_index":0,"text":"completed summary"}"#.to_owned(),
-        r#"data: {"type":"response.output_item.done","output_index":0,"item":{"id":"rs_1","type":"reasoning","encrypted_content":{"token":"opaque"},"status":"completed"}}"#.to_owned(),
+        r#"data: {"type":"response.output_item.done","output_index":0,"item":{"id":"rs_1","type":"reasoning","encrypted_content":"opaque","status":"completed"}}"#.to_owned(),
         r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}"#.to_owned(),
     ];
 
@@ -1082,13 +1968,16 @@ fn completed_reasoning_preserves_done_fields_when_omitted() {
     assert_eq!(reasoning.content[0].text, "completed content");
     assert_eq!(
         reasoning.summary,
-        [serde_json::json!({"type": "summary_text", "text": "completed summary"})]
+        [crate::types::ReasoningSummaryContent::new("completed summary")]
     );
     assert_eq!(
-        reasoning.encrypted_content,
-        Some(serde_json::json!({"token": "opaque"}))
+        reasoning
+            .encrypted_content
+            .as_ref()
+            .map(crate::types::OpaqueReasoning::as_str),
+        Some("opaque")
     );
-    assert_eq!(reasoning.status.as_deref(), Some("completed"));
+    assert_eq!(reasoning.status, Some(crate::types::ReasoningStatus::Completed));
 }
 
 #[test]
@@ -1111,7 +2000,7 @@ fn completed_reasoning_null_and_empty_fields_are_authoritative_independently() {
         panic!("expected reasoning output");
     };
     assert!(content_null.content.is_empty());
-    assert_eq!(content_null.summary[0]["text"], "kept summary");
+    assert_eq!(content_null.summary[0].text, "kept summary");
 
     let summary_empty = from_sse_lines(summary_empty, None);
     let OutputItem::Reasoning(summary_empty) = &summary_empty.output[0] else {
@@ -1137,6 +2026,84 @@ fn streaming_and_nonstreaming_nullable_reasoning_fields_are_equivalent() {
         serde_json::to_value(&streaming.output).unwrap(),
         serde_json::to_value(&nonstreaming.output).unwrap()
     );
+}
+
+#[test]
+fn strict_ingestion_rejects_malformed_typed_reasoning_on_both_paths() {
+    for fields in [
+        serde_json::json!({"encrypted_content":{"ciphertext":"sensitive-state"}}),
+        serde_json::json!({"summary":[{"type":"reasoning_text","text":"not a summary"}]}),
+        serde_json::json!({"content":[{"type":"summary_text","text":"not plaintext reasoning"}]}),
+        serde_json::json!({"status":"complete"}),
+    ] {
+        let mut item = serde_json::json!({"id":"rs_1","type":"reasoning"});
+        item.as_object_mut()
+            .unwrap()
+            .extend(fields.as_object().unwrap().clone());
+        let mut stream = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Strict);
+        for event in [
+            serde_json::json!({"type":"response.created","response":{"id":"resp_1","status":"in_progress"}}),
+            serde_json::json!({"type":"response.in_progress","response":{"id":"resp_1","status":"in_progress"}}),
+            serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"id":"rs_1","type":"reasoning"}}),
+        ] {
+            stream.process_line(SseLine::parse(&format!("data: {event}"))).unwrap();
+        }
+        let done = serde_json::json!({"type":"response.output_item.done","output_index":0,"item":item});
+        let error = stream
+            .process_line(SseLine::parse(&format!("data: {done}")))
+            .unwrap_err();
+        assert!(!error.to_string().contains("sensitive-state"));
+
+        let mut json = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Strict);
+        let body = serde_json::json!({"id":"resp_1","status":"completed","output":[item]});
+        let error = json.load_json_body(&body.to_string()).unwrap_err();
+        assert!(!error.to_string().contains("sensitive-state"));
+    }
+}
+
+/// Reasoning the typed schema rejects is dropped by lenient JSON ingestion, keeps only the opened item in a
+/// stream, and fails strict ingestion without echoing opaque state.
+#[test]
+fn ingestion_rejects_reasoning_outside_the_typed_schema() {
+    let stream = |item: &serde_json::Value| {
+        [
+            serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"id":"rs_1","type":"reasoning"}}),
+            serde_json::json!({"type":"response.output_item.done","output_index":0,"item":item}),
+            serde_json::json!({"type":"response.completed","response":{"id":"resp_1","status":"completed"}}),
+        ]
+        .map(|event| format!("data: {event}"))
+    };
+    let json = |item: &serde_json::Value, validation| {
+        let mut acc = ResponseAccumulator::with_validation("resp_1".to_owned(), None, validation);
+        let body = serde_json::json!({"id":"resp_1","status":"completed","output":[item]});
+        acc.load_json_body(&body.to_string()).map(|()| acc.output)
+    };
+    for fields in [
+        serde_json::json!({"content": [{"type": "provider_text", "text": "untyped part"}]}),
+        serde_json::json!({"encrypted_content": {"ciphertext": "sensitive-state"}}),
+        serde_json::json!({"content": "not an array"}),
+        serde_json::json!({"content": [{"text": "part without a type"}]}),
+        serde_json::json!({"status": 5}),
+        serde_json::json!({"agent": "/root/worker"}),
+    ] {
+        let mut item = serde_json::json!({
+            "id": "rs_1", "type": "reasoning", "content": [{"type": "reasoning_text", "text": "from done"}]
+        });
+        item.as_object_mut()
+            .unwrap()
+            .extend(fields.as_object().unwrap().clone());
+        assert!(json(&item, Validation::Lenient).unwrap().is_empty(), "{fields}");
+        let error = json(&item, Validation::Strict).unwrap_err();
+        assert!(!error.to_string().contains("sensitive-state"), "{fields}");
+        let streamed = from_sse_lines(stream(&item), None);
+        assert_eq!(
+            serde_json::to_value(&streamed.output).unwrap(),
+            serde_json::json!([{
+                "type": "reasoning", "id": "rs_1", "content": [], "summary": [],
+            }]),
+            "{fields}"
+        );
+    }
 }
 
 #[test]
@@ -1171,7 +2138,7 @@ fn malformed_completed_reasoning_retains_done_fields() {
     };
 
     assert_eq!(reasoning.content[0].text, "completed content");
-    assert_eq!(reasoning.summary[0]["text"], "completed summary");
+    assert_eq!(reasoning.summary[0].text, "completed summary");
     assert!(reasoning.encrypted_content.is_none());
 }
 
@@ -1287,7 +2254,7 @@ fn test_function_call_accumulation_basic() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
-            shell_call: None,
+            initial_item: None,
             item_id: "fc_1".into(),
             item_type: "function_call".into(),
             output_index: Some(0),
@@ -1338,6 +2305,7 @@ fn test_function_call_accumulation_basic() {
             id: "resp_1".into(),
             status: "completed".into(),
             usage: None,
+            service_tier: None,
         },
         wire: WireEvent::new("test"),
     });
@@ -1363,7 +2331,7 @@ fn test_function_call_done_uses_deltas_when_arguments_empty() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
-            shell_call: None,
+            initial_item: None,
             item_id: "fc_1".into(),
             item_type: "function_call".into(),
             output_index: Some(0),
@@ -1413,7 +2381,7 @@ fn test_function_call_multiple_parallel() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
-            shell_call: None,
+            initial_item: None,
             item_id: "fc_1".into(),
             item_type: "function_call".into(),
             output_index: Some(0),
@@ -1438,7 +2406,7 @@ fn test_function_call_multiple_parallel() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
-            shell_call: None,
+            initial_item: None,
             item_id: "fc_2".into(),
             item_type: "function_call".into(),
             output_index: Some(1),
@@ -1466,6 +2434,7 @@ fn test_function_call_multiple_parallel() {
             id: "resp_1".into(),
             status: "completed".into(),
             usage: None,
+            service_tier: None,
         },
         wire: WireEvent::new("test"),
     });
@@ -1482,7 +2451,7 @@ fn test_function_call_interleaved_with_message() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
-            shell_call: None,
+            initial_item: None,
             item_id: "msg_1".into(),
             item_type: "message".into(),
             output_index: Some(0),
@@ -1506,7 +2475,7 @@ fn test_function_call_interleaved_with_message() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
-            shell_call: None,
+            initial_item: None,
             item_id: "fc_1".into(),
             item_type: "function_call".into(),
             output_index: Some(1),
@@ -1534,12 +2503,13 @@ fn test_function_call_interleaved_with_message() {
             id: "resp_1".into(),
             status: "completed".into(),
             usage: None,
+            service_tier: None,
         },
         wire: WireEvent::new("test"),
     });
 
     assert_eq!(acc.output.len(), 2);
-    assert!(matches!(&acc.output[0], OutputItem::Message(m) if m.content[0].text == "Let me check"));
+    assert!(matches!(&acc.output[0], OutputItem::Message(m) if m.content[0].text() == "Let me check"));
     assert!(matches!(&acc.output[1], OutputItem::FunctionCall(fc) if fc.name == "lookup"));
 }
 
@@ -1550,7 +2520,7 @@ fn test_function_call_done_updates_metadata() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
-            shell_call: None,
+            initial_item: None,
             item_id: "fc_1".into(),
             item_type: "function_call".into(),
             output_index: Some(0),
@@ -1646,7 +2616,7 @@ fn test_function_call_empty_item_id_generates_uuid() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
-            shell_call: None,
+            initial_item: None,
             item_id: String::new(),
             item_type: "function_call".into(),
             output_index: Some(0),
@@ -1704,7 +2674,7 @@ fn test_function_call_finalized_on_response_completed() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
-            shell_call: None,
+            initial_item: None,
             item_id: "fc_1".into(),
             item_type: "function_call".into(),
             output_index: Some(0),
@@ -1731,6 +2701,7 @@ fn test_function_call_finalized_on_response_completed() {
             id: "resp_1".into(),
             status: "completed".into(),
             usage: None,
+            service_tier: None,
         },
         wire: WireEvent::new("test"),
     });
@@ -1812,4 +2783,85 @@ fn test_reasoning_before_done_only_custom_tool_call_preserves_order() {
     assert_eq!(call.call_id, "call_1");
     assert_eq!(call.name, "raw_echo");
     assert_eq!(call.input, "hello");
+}
+
+#[test]
+fn file_search_lifecycle_preserves_typed_output() {
+    let call = serde_json::json!({"type":"file_search_call","id":"fs_1","status":"completed","queries":["policy"],"results":[]});
+    let mut acc = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Strict);
+    let frames = [
+        serde_json::json!({"type":"response.created","response":{"id":"resp_1","status":"in_progress"}}),
+        serde_json::json!({"type":"response.in_progress","response":{"id":"resp_1","status":"in_progress"}}),
+        serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"type":"file_search_call","id":"fs_1","status":"in_progress","queries":["policy"]}}),
+        serde_json::json!({"type":"response.file_search_call.in_progress","output_index":0,"item_id":"fs_1"}),
+        serde_json::json!({"type":"response.file_search_call.searching","output_index":0,"item_id":"fs_1"}),
+        serde_json::json!({"type":"response.file_search_call.completed","output_index":0,"item_id":"fs_1"}),
+        serde_json::json!({"type":"response.output_item.done","output_index":0,"item":call}),
+        serde_json::json!({"type":"response.completed","response":{"id":"resp_1","status":"completed"}}),
+    ];
+    for frame in frames {
+        acc.process_line(SseLine::parse(&format!("data: {frame}"))).unwrap();
+    }
+    let output = serde_json::to_value(acc.finalize("test", None, None).output).unwrap();
+    assert_eq!(output, serde_json::json!([call]));
+}
+
+#[test]
+fn file_search_incomplete_done_closes_the_item() {
+    let call = serde_json::json!({"type":"file_search_call","id":"fs_1","status":"incomplete","queries":["policy"]});
+    let mut acc = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Strict);
+    for frame in [
+        serde_json::json!({"type":"response.created","response":{"id":"resp_1","status":"in_progress"}}),
+        serde_json::json!({"type":"response.in_progress","response":{"id":"resp_1","status":"in_progress"}}),
+        serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"type":"file_search_call","id":"fs_1","status":"in_progress","queries":["policy"]}}),
+        serde_json::json!({"type":"response.file_search_call.in_progress","output_index":0,"item_id":"fs_1"}),
+        serde_json::json!({"type":"response.file_search_call.searching","output_index":0,"item_id":"fs_1"}),
+        serde_json::json!({"type":"response.output_item.done","output_index":0,"item":call}),
+        serde_json::json!({"type":"response.incomplete","response":{"id":"resp_1","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"}}}),
+    ] {
+        acc.process_line(SseLine::parse(&format!("data: {frame}"))).unwrap();
+    }
+    let output = serde_json::to_value(acc.finalize("test", None, None).output).unwrap();
+    assert_eq!(output, serde_json::json!([call]));
+}
+
+#[test]
+fn file_search_done_only_is_preserved_leniently_and_rejected_strictly() {
+    let call = serde_json::json!({"type":"file_search_call","id":"fs_1","status":"completed","queries":["policy"],"results":[]});
+    let lines = [
+        serde_json::json!({"type":"response.created","response":{"id":"resp_1","status":"in_progress"}}),
+        serde_json::json!({"type":"response.in_progress","response":{"id":"resp_1","status":"in_progress"}}),
+        serde_json::json!({"type":"response.output_item.done","output_index":0,"item":call}),
+        serde_json::json!({"type":"response.completed","response":{"id":"resp_1","status":"completed"}}),
+    ]
+    .map(|event| format!("data: {event}"));
+    let payload = from_sse_lines(lines.clone(), None).finalize("test", None, None);
+    assert_eq!(serde_json::to_value(payload.output).unwrap(), serde_json::json!([call]));
+
+    let mut strict = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Strict);
+    for line in &lines[..2] {
+        strict.process_line(SseLine::parse(line)).unwrap();
+    }
+    assert!(strict.process_line(SseLine::parse(&lines[2])).is_err());
+}
+
+#[test]
+fn file_search_progress_rejects_wrong_identity_and_completion_order() {
+    for invalid in [
+        serde_json::json!({"type":"response.file_search_call.searching","output_index":1,"item_id":"fs_1"}),
+        serde_json::json!({"type":"response.file_search_call.completed","output_index":0,"item_id":"other"}),
+    ] {
+        let mut acc = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Strict);
+        for frame in [
+            serde_json::json!({"type":"response.created","response":{"id":"resp_1","status":"in_progress"}}),
+            serde_json::json!({"type":"response.in_progress","response":{"id":"resp_1","status":"in_progress"}}),
+            serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"type":"file_search_call","id":"fs_1","status":"in_progress","queries":[]}}),
+        ] {
+            acc.process_line(SseLine::parse(&format!("data: {frame}"))).unwrap();
+        }
+        assert!(acc.process_line(SseLine::parse(&format!("data: {invalid}"))).is_err());
+    }
+    let mut acc = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Strict);
+    let event = r#"data: {"type":"response.file_search_call.completed","output_index":0,"item_id":"fs_1"}"#;
+    assert!(acc.process_line(SseLine::parse(event)).is_err());
 }

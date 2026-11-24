@@ -580,6 +580,44 @@ a:focus-visible {
 .section {
   padding-block: 90px;
 }
+.release-updates {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  gap: 48px;
+  padding-block: 52px;
+  border-bottom: 1px solid var(--border);
+}
+.release-updates h2 {
+  margin-top: 16px;
+  font-size: 32px;
+}
+.release-updates p,
+.release-highlights {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.7;
+}
+.release-highlights {
+  margin: 0;
+  padding-left: 20px;
+}
+.release-highlights li + li {
+  margin-top: 10px;
+}
+.release-highlights strong,
+.release-upgrade strong {
+  color: var(--foreground);
+}
+.release-upgrade {
+  margin: 20px 0 0;
+}
+@media (max-width: 760px) {
+  .release-updates {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+    padding-block: 36px;
+  }
+}
 .section-heading {
   display: flex;
   justify-content: space-between;
@@ -1487,6 +1525,32 @@ h2 {
 }
 .roadmap-body img {
   max-width: 100%;
+}
+.roadmap-body table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin-block: 24px 32px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.roadmap-body th,
+.roadmap-body td {
+  border: 1px solid var(--border);
+  padding: 9px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+.roadmap-body th {
+  color: var(--foreground);
+  background: light-dark(#edf2f7, #181d25);
+  font-weight: 600;
+}
+.roadmap-body blockquote {
+  border-left: 3px solid var(--brand-blue);
+  margin: 24px 0;
+  padding-left: 18px;
 }
 .community-visual {
   text-align: center;

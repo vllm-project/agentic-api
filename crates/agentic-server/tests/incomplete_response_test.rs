@@ -241,13 +241,20 @@ async fn check_delivery_and_restart(
     let response_id = response["id"].as_str().unwrap();
     assert_ne!(response_id, "resp_upstream");
 
-    // Persistence stores item history and effective settings, not terminal status
-    // or usage. Verify that accepted partial history really reaches later inference.
+    // Verify exact retrieval after restart, as well as continuation from partial history.
     let exec_ctx = Arc::new(ExecutionContext::from_config(&config).await.unwrap());
     let mut state = common::test_state(&config);
     state.exec_ctx = Arc::clone(&exec_ctx);
     let (gateway_url, gateway) = common::spawn_gateway(state).await;
     let _gateway_guard = AbortOnDrop(gateway.abort_handle());
+    let retrieved = client
+        .get(format!("{gateway_url}/v1/responses/{response_id}"))
+        .bearer_auth("test-key")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(retrieved.status(), http::StatusCode::OK);
+    assert_eq!(retrieved.json::<Value>().await.unwrap(), response);
     let followup = client
         .post(format!("{gateway_url}/v1/responses"))
         .json(

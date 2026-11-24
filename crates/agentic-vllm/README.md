@@ -54,12 +54,13 @@ attempt token on admission cancellation, timeout, stream error, or drop.
   tool choice, and cache salt. Omitted sampling values remain omitted for vLLM's
   own defaults. Metadata and prompt-cache hints remain orchestration hints.
 - Parsed text, reasoning, and function-call events; completed and incomplete
-  outcomes; engine usage converted once into core `ResponseUsage`.
+  outcomes; engine usage, including cache writes, converted once into core `ResponseUsage`.
 - The same executor handles JSON/SSE delivery, continuation, and compaction.
 
 Unsupported model/input/options fail before engine submission: multimodal input,
 opaque or summarized reasoning replay, structured output, requested logprobs,
-non-disabled truncation, and additional reasoning/text controls. Parser and tool
+non-disabled truncation, prompt-cache controls, non-default service tiers, upstream
+extension fields, and additional reasoning/text controls. Parser and tool
 support also depend on the loaded frontend/model. This profile does not establish
 Anthropic Messages parity, a gRPC adapter, distributed cache routing, or a native
 server/launcher command.

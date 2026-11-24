@@ -38,16 +38,16 @@ async fn gateway_requests_reach_the_collector_with_service_identity() {
     assert_eq!(health.status(), 200);
     let missing = client.get(format!("{gateway}/no-such-route")).send().await.unwrap();
     assert_eq!(missing.status(), 404);
-    // A request the proxy forwards upstream: the mock LLM has no such route, so
+    // An executor request reaches upstream: the mock LLM has no such route, so
     // the gateway relays its 404 — the span still carries the matched template.
-    let proxied = client
+    let response = client
         .post(format!("{gateway}/v1/responses"))
         .header("authorization", "Bearer test-key")
         .body(r#"{"model":"m","input":"hi","store":false}"#)
         .send()
         .await
         .unwrap();
-    assert!(proxied.status().is_client_error() || proxied.status().is_server_error());
+    assert!(response.status().is_client_error() || response.status().is_server_error());
 
     guard.shutdown(Duration::from_secs(5)).await.unwrap();
 
@@ -65,7 +65,15 @@ async fn gateway_requests_reach_the_collector_with_service_identity() {
     span_names.sort();
     assert_eq!(
         span_names,
-        ["GET", "GET /health", "POST /v1/responses", "agentic.execute"]
+        [
+            "GET",
+            "GET /health",
+            "POST /v1/responses",
+            "agentic.execute",
+            "agentic.inference_round",
+            "agentic.rehydrate",
+            "http.client.request"
+        ]
     );
 
     let metrics = stub.metric_exports().await;

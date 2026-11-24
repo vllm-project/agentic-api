@@ -76,6 +76,7 @@ fn enum_values(key: &str) -> Option<&'static [&'static str]> {
             "codex_namespace",
             "mcp",
             "web_search",
+            "web_fetch",
             "file_search",
             "code_interpreter",
         ],

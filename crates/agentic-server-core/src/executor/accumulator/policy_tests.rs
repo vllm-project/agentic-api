@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use super::*;
 use crate::executor::pipeline::RoundIngestion;
 use crate::executor::translate::TranslationContext;
@@ -46,7 +48,13 @@ fn malformed_data_is_rejected_or_skipped_without_affecting_translation() {
     for validation in [Validation::Strict, Validation::Lenient] {
         let mut acc = ResponseAccumulator::with_validation("resp_1".to_owned(), None, validation);
         let mut translator = TranslationDispatcher::new(TranslationContext::default());
-        for line in ["data:{", "data: null", "data: []", "data: {\"type\":3}"] {
+        for line in [
+            "data:{",
+            "data: null",
+            "data: []",
+            "data: {\"type\":3}",
+            r#"data: {"type":"response.output_text.delta","agent":{"agent_name":3}}"#,
+        ] {
             let result = RoundIngestion::translate_line(&mut acc, SseLine::parse(line), &mut translator);
             match validation {
                 Validation::Strict => assert!(result.unwrap_err().to_string().contains("malformed data frame")),

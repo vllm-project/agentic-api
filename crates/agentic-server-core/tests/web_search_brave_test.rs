@@ -13,8 +13,8 @@ use agentic_core::config::{WebSearchProviderConfig, WebSearchProviderKind};
 use agentic_core::tool::{GatewayExecutor, WebSearchHandler};
 use agentic_core::types::event::MessageStatus;
 use agentic_core::types::io::OutputItem;
-use agentic_core::types::io::output::{FunctionToolCall, WebSearchCallStatus};
-use agentic_core::types::tools::{WebSearchFilters, WebSearchToolParam};
+use agentic_core::types::io::output::{FunctionToolCall, GatewayCallStatus};
+use agentic_core::types::tools::{DomainFilters, WebSearchToolParam};
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode, Uri};
 use axum::response::IntoResponse;
@@ -151,6 +151,8 @@ fn mixed_response() -> serde_json::Value {
 
 fn call(arguments: &str) -> FunctionToolCall {
     FunctionToolCall {
+        async_execution: false,
+        agent: None,
         id: "fc_brave".to_owned(),
         call_id: "call_brave".to_owned(),
         name: "web_search".to_owned(),
@@ -210,7 +212,7 @@ async fn brave_handler_maps_web_and_news_results_and_public_sources() {
     );
 
     let public = handler
-        .public_output(&call(arguments), &output, WebSearchCallStatus::Completed, &params)
+        .public_output(&call(arguments), &output, GatewayCallStatus::Completed, &params)
         .expect("web_search_call public output");
     assert_eq!(
         serde_json::to_value(&public).unwrap(),
@@ -262,7 +264,7 @@ async fn brave_handler_returns_empty_sections_without_error() {
         .public_output(
             &call(r#"{"query":"nothing"}"#),
             &output,
-            WebSearchCallStatus::Completed,
+            GatewayCallStatus::Completed,
             &WebSearchToolParam::default(),
         )
         .unwrap();
@@ -284,7 +286,7 @@ async fn brave_handler_applies_domain_filters_client_side() {
     // Tool-level allowlist wins over the model's arguments and is enforced
     // locally: Brave never sees a domain parameter.
     let params = WebSearchToolParam {
-        filters: Some(WebSearchFilters {
+        filters: Some(DomainFilters {
             allowed_domains: Some(vec!["Example.com".to_owned()]),
             blocked_domains: None,
         }),

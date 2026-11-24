@@ -1,0 +1,631 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Call get_job_status for job-382, then reply with just its status.
+      max_output_tokens: 256
+      model: gpt-4o
+      store: false
+      stream: true
+      tool_choice:
+        name: get_job_status
+        type: function
+      tools:
+      - description: Query the pipeline orchestrator for a job's current state, metadata,
+          and failure info.
+        name: get_job_status
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier, e.g. job-382
+              type: string
+          required:
+          - job_id
+          type: object
+        strict: true
+        type: function
+      - description: Fetch error logs and stack traces for a failed pipeline job.
+        name: get_error_logs
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier
+              type: string
+            max_entries:
+              description: Maximum log entries to return (default 50)
+              type: integer
+            severity:
+              description: Minimum severity filter
+              enum:
+              - WARN
+              - ERROR
+              - FATAL
+              - ALL
+              type: string
+          required:
+          - job_id
+          - severity
+          - max_entries
+          type: object
+        strict: true
+        type: function
+      - description: Search internal operations runbooks for troubleshooting procedures.
+        name: search_runbook
+        parameters:
+          additionalProperties: false
+          properties:
+            max_results:
+              description: Maximum results to return (default 5)
+              type: integer
+            query:
+              description: Natural language search query
+              type: string
+          required:
+          - query
+          - max_results
+          type: object
+        strict: true
+        type: function
+      - description: Execute a Python analysis script in a sandboxed environment for
+          log parsing or data inspection.
+        name: run_analysis
+        parameters:
+          additionalProperties: false
+          properties:
+            code:
+              description: Python code to execute
+              type: string
+            timeout_seconds:
+              description: Execution timeout (default 30)
+              type: integer
+          required:
+          - code
+          - timeout_seconds
+          type: object
+        strict: true
+        type: function
+      - description: Restart a failed pipeline job with optional configuration overrides.
+        name: restart_job
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier to restart
+              type: string
+            memory_override_gb:
+              description: Override memory limit in GB
+              type: integer
+            priority:
+              description: Queue priority
+              enum:
+              - low
+              - normal
+              - high
+              type: string
+            skip_completed_stages:
+              description: Skip stages that completed successfully (default true)
+              type: boolean
+          required:
+          - job_id
+          - memory_override_gb
+          - skip_completed_stages
+          - priority
+          type: object
+        strict: true
+        type: function
+      - description: Search the public web for technical documentation, blog posts,
+          and known issues.
+        name: web_search
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: Search query
+              type: string
+          required:
+          - query
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_0e68d23377c9e566016ad869b0aacc87d091e312786ec94f32","object":"response","created_at":1792567728,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":256,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":false,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":{"type":"function","name":"get_job_status"},"tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Query
+      the pipeline orchestrator for a job''s current state, metadata, and failure
+      info.","name":"get_job_status","output_schema":null,"parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier, e.g. job-382"}},"required":["job_id"],"additionalProperties":false},"strict":true},{"type":"function","description":"Fetch
+      error logs and stack traces for a failed pipeline job.","name":"get_error_logs","output_schema":null,"parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier"},"severity":{"type":"string","enum":["WARN","ERROR","FATAL","ALL"],"description":"Minimum
+      severity filter"},"max_entries":{"type":"integer","description":"Maximum log
+      entries to return (default 50)"}},"required":["job_id","severity","max_entries"],"additionalProperties":false},"strict":true},{"type":"function","description":"Search
+      internal operations runbooks for troubleshooting procedures.","name":"search_runbook","output_schema":null,"parameters":{"type":"object","properties":{"query":{"type":"string","description":"Natural
+      language search query"},"max_results":{"type":"integer","description":"Maximum
+      results to return (default 5)"}},"required":["query","max_results"],"additionalProperties":false},"strict":true},{"type":"function","description":"Execute
+      a Python analysis script in a sandboxed environment for log parsing or data
+      inspection.","name":"run_analysis","output_schema":null,"parameters":{"type":"object","properties":{"code":{"type":"string","description":"Python
+      code to execute"},"timeout_seconds":{"type":"integer","description":"Execution
+      timeout (default 30)"}},"required":["code","timeout_seconds"],"additionalProperties":false},"strict":true},{"type":"function","description":"Restart
+      a failed pipeline job with optional configuration overrides.","name":"restart_job","output_schema":null,"parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier to restart"},"memory_override_gb":{"type":"integer","description":"Override
+      memory limit in GB"},"skip_completed_stages":{"type":"boolean","description":"Skip
+      stages that completed successfully (default true)"},"priority":{"type":"string","enum":["low","normal","high"],"description":"Queue
+      priority"}},"required":["job_id","memory_override_gb","skip_completed_stages","priority"],"additionalProperties":false},"strict":true},{"type":"function","description":"Search
+      the public web for technical documentation, blog posts, and known issues.","name":"web_search","output_schema":null,"parameters":{"type":"object","properties":{"query":{"type":"string","description":"Search
+      query"}},"required":["query"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_0e68d23377c9e566016ad869b0aacc87d091e312786ec94f32","object":"response","created_at":1792567728,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":256,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":false,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":{"type":"function","name":"get_job_status"},"tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Query
+      the pipeline orchestrator for a job''s current state, metadata, and failure
+      info.","name":"get_job_status","output_schema":null,"parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier, e.g. job-382"}},"required":["job_id"],"additionalProperties":false},"strict":true},{"type":"function","description":"Fetch
+      error logs and stack traces for a failed pipeline job.","name":"get_error_logs","output_schema":null,"parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier"},"severity":{"type":"string","enum":["WARN","ERROR","FATAL","ALL"],"description":"Minimum
+      severity filter"},"max_entries":{"type":"integer","description":"Maximum log
+      entries to return (default 50)"}},"required":["job_id","severity","max_entries"],"additionalProperties":false},"strict":true},{"type":"function","description":"Search
+      internal operations runbooks for troubleshooting procedures.","name":"search_runbook","output_schema":null,"parameters":{"type":"object","properties":{"query":{"type":"string","description":"Natural
+      language search query"},"max_results":{"type":"integer","description":"Maximum
+      results to return (default 5)"}},"required":["query","max_results"],"additionalProperties":false},"strict":true},{"type":"function","description":"Execute
+      a Python analysis script in a sandboxed environment for log parsing or data
+      inspection.","name":"run_analysis","output_schema":null,"parameters":{"type":"object","properties":{"code":{"type":"string","description":"Python
+      code to execute"},"timeout_seconds":{"type":"integer","description":"Execution
+      timeout (default 30)"}},"required":["code","timeout_seconds"],"additionalProperties":false},"strict":true},{"type":"function","description":"Restart
+      a failed pipeline job with optional configuration overrides.","name":"restart_job","output_schema":null,"parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier to restart"},"memory_override_gb":{"type":"integer","description":"Override
+      memory limit in GB"},"skip_completed_stages":{"type":"boolean","description":"Skip
+      stages that completed successfully (default true)"},"priority":{"type":"string","enum":["low","normal","high"],"description":"Queue
+      priority"}},"required":["job_id","memory_override_gb","skip_completed_stages","priority"],"additionalProperties":false},"strict":true},{"type":"function","description":"Search
+      the public web for technical documentation, blog posts, and known issues.","name":"web_search","output_schema":null,"parameters":{"type":"object","properties":{"query":{"type":"string","description":"Search
+      query"}},"required":["query"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"fc_0e68d23377c9e566016ad869b11adc87d0a4a58f55ecef1b25","type":"function_call","status":"in_progress","arguments":"","call_id":"call_1IZ5pQPA9nzSD0I91FfD2RCo","name":"get_job_status"},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"{\"","item_id":"fc_0e68d23377c9e566016ad869b11adc87d0a4a58f55ecef1b25","obfuscation":"hjZh8ul8v3IEYz","output_index":0,"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"job","item_id":"fc_0e68d23377c9e566016ad869b11adc87d0a4a58f55ecef1b25","obfuscation":"0jHHIz9WBB6UC","output_index":0,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"_id","item_id":"fc_0e68d23377c9e566016ad869b11adc87d0a4a58f55ecef1b25","obfuscation":"0be5wInmxmzmi","output_index":0,"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"\":\"","item_id":"fc_0e68d23377c9e566016ad869b11adc87d0a4a58f55ecef1b25","obfuscation":"n10FDt3lor0c3","output_index":0,"sequence_number":6}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"job","item_id":"fc_0e68d23377c9e566016ad869b11adc87d0a4a58f55ecef1b25","obfuscation":"kTFHQBnlyZOAC","output_index":0,"sequence_number":7}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"-","item_id":"fc_0e68d23377c9e566016ad869b11adc87d0a4a58f55ecef1b25","obfuscation":"yoB64wceviR7KWL","output_index":0,"sequence_number":8}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"382","item_id":"fc_0e68d23377c9e566016ad869b11adc87d0a4a58f55ecef1b25","obfuscation":"WTkN7ZoRByaYS","output_index":0,"sequence_number":9}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"\"}","item_id":"fc_0e68d23377c9e566016ad869b11adc87d0a4a58f55ecef1b25","obfuscation":"mj30UkmlID4DY4","output_index":0,"sequence_number":10}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.done
+
+      '
+    - 'data: {"type":"response.function_call_arguments.done","arguments":"{\"job_id\":\"job-382\"}","item_id":"fc_0e68d23377c9e566016ad869b11adc87d0a4a58f55ecef1b25","output_index":0,"sequence_number":11}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"fc_0e68d23377c9e566016ad869b11adc87d0a4a58f55ecef1b25","type":"function_call","status":"completed","arguments":"{\"job_id\":\"job-382\"}","call_id":"call_1IZ5pQPA9nzSD0I91FfD2RCo","name":"get_job_status"},"output_index":0,"sequence_number":12}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_0e68d23377c9e566016ad869b0aacc87d091e312786ec94f32","object":"response","created_at":1792567728,"status":"completed","access_programs":null,"background":false,"completed_at":1792567729,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":256,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[{"id":"fc_0e68d23377c9e566016ad869b11adc87d0a4a58f55ecef1b25","type":"function_call","status":"completed","arguments":"{\"job_id\":\"job-382\"}","call_id":"call_1IZ5pQPA9nzSD0I91FfD2RCo","name":"get_job_status"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":false,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":{"type":"function","name":"get_job_status"},"tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Query
+      the pipeline orchestrator for a job''s current state, metadata, and failure
+      info.","name":"get_job_status","output_schema":null,"parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier, e.g. job-382"}},"required":["job_id"],"additionalProperties":false},"strict":true},{"type":"function","description":"Fetch
+      error logs and stack traces for a failed pipeline job.","name":"get_error_logs","output_schema":null,"parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier"},"severity":{"type":"string","enum":["WARN","ERROR","FATAL","ALL"],"description":"Minimum
+      severity filter"},"max_entries":{"type":"integer","description":"Maximum log
+      entries to return (default 50)"}},"required":["job_id","severity","max_entries"],"additionalProperties":false},"strict":true},{"type":"function","description":"Search
+      internal operations runbooks for troubleshooting procedures.","name":"search_runbook","output_schema":null,"parameters":{"type":"object","properties":{"query":{"type":"string","description":"Natural
+      language search query"},"max_results":{"type":"integer","description":"Maximum
+      results to return (default 5)"}},"required":["query","max_results"],"additionalProperties":false},"strict":true},{"type":"function","description":"Execute
+      a Python analysis script in a sandboxed environment for log parsing or data
+      inspection.","name":"run_analysis","output_schema":null,"parameters":{"type":"object","properties":{"code":{"type":"string","description":"Python
+      code to execute"},"timeout_seconds":{"type":"integer","description":"Execution
+      timeout (default 30)"}},"required":["code","timeout_seconds"],"additionalProperties":false},"strict":true},{"type":"function","description":"Restart
+      a failed pipeline job with optional configuration overrides.","name":"restart_job","output_schema":null,"parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier to restart"},"memory_override_gb":{"type":"integer","description":"Override
+      memory limit in GB"},"skip_completed_stages":{"type":"boolean","description":"Skip
+      stages that completed successfully (default true)"},"priority":{"type":"string","enum":["low","normal","high"],"description":"Queue
+      priority"}},"required":["job_id","memory_override_gb","skip_completed_stages","priority"],"additionalProperties":false},"strict":true},{"type":"function","description":"Search
+      the public web for technical documentation, blog posts, and known issues.","name":"web_search","output_schema":null,"parameters":{"type":"object","properties":{"query":{"type":"string","description":"Search
+      query"}},"required":["query"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":362,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":0},"output_tokens":9,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":371},"user":null,"metadata":{}},"sequence_number":13}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - content: Call get_job_status for job-382, then reply with just its status.
+        role: user
+      - arguments: '{"job_id":"job-382"}'
+        call_id: call_1IZ5pQPA9nzSD0I91FfD2RCo
+        id: fc_0e68d23377c9e566016ad869b11adc87d0a4a58f55ecef1b25
+        name: get_job_status
+        status: completed
+        type: function_call
+      - call_id: call_1IZ5pQPA9nzSD0I91FfD2RCo
+        output: '{"job_id": "job-382", "status": "failed", "error_type": "OutOfMemoryError",
+          "failed_at": "2024-01-15T03:22:11Z", "stage": "transform", "memory_used_gb":
+          31.2, "memory_limit_gb": 32, "pipeline": "etl-daily-ingest", "owner": "data-platform-team"}'
+        type: function_call_output
+      max_output_tokens: 256
+      model: gpt-4o
+      store: false
+      stream: true
+      tool_choice: none
+      tools:
+      - description: Query the pipeline orchestrator for a job's current state, metadata,
+          and failure info.
+        name: get_job_status
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier, e.g. job-382
+              type: string
+          required:
+          - job_id
+          type: object
+        strict: true
+        type: function
+      - description: Fetch error logs and stack traces for a failed pipeline job.
+        name: get_error_logs
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier
+              type: string
+            max_entries:
+              description: Maximum log entries to return (default 50)
+              type: integer
+            severity:
+              description: Minimum severity filter
+              enum:
+              - WARN
+              - ERROR
+              - FATAL
+              - ALL
+              type: string
+          required:
+          - job_id
+          - severity
+          - max_entries
+          type: object
+        strict: true
+        type: function
+      - description: Search internal operations runbooks for troubleshooting procedures.
+        name: search_runbook
+        parameters:
+          additionalProperties: false
+          properties:
+            max_results:
+              description: Maximum results to return (default 5)
+              type: integer
+            query:
+              description: Natural language search query
+              type: string
+          required:
+          - query
+          - max_results
+          type: object
+        strict: true
+        type: function
+      - description: Execute a Python analysis script in a sandboxed environment for
+          log parsing or data inspection.
+        name: run_analysis
+        parameters:
+          additionalProperties: false
+          properties:
+            code:
+              description: Python code to execute
+              type: string
+            timeout_seconds:
+              description: Execution timeout (default 30)
+              type: integer
+          required:
+          - code
+          - timeout_seconds
+          type: object
+        strict: true
+        type: function
+      - description: Restart a failed pipeline job with optional configuration overrides.
+        name: restart_job
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier to restart
+              type: string
+            memory_override_gb:
+              description: Override memory limit in GB
+              type: integer
+            priority:
+              description: Queue priority
+              enum:
+              - low
+              - normal
+              - high
+              type: string
+            skip_completed_stages:
+              description: Skip stages that completed successfully (default true)
+              type: boolean
+          required:
+          - job_id
+          - memory_override_gb
+          - skip_completed_stages
+          - priority
+          type: object
+        strict: true
+        type: function
+      - description: Search the public web for technical documentation, blog posts,
+          and known issues.
+        name: web_search
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: Search query
+              type: string
+          required:
+          - query
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_0e68d23377c9e566016ad869b2e7ac87d0b6200a0d9771de26","object":"response","created_at":1792567730,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":256,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":false,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"none","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Query
+      the pipeline orchestrator for a job''s current state, metadata, and failure
+      info.","name":"get_job_status","output_schema":null,"parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier, e.g. job-382"}},"required":["job_id"],"additionalProperties":false},"strict":true},{"type":"function","description":"Fetch
+      error logs and stack traces for a failed pipeline job.","name":"get_error_logs","output_schema":null,"parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier"},"severity":{"type":"string","enum":["WARN","ERROR","FATAL","ALL"],"description":"Minimum
+      severity filter"},"max_entries":{"type":"integer","description":"Maximum log
+      entries to return (default 50)"}},"required":["job_id","severity","max_entries"],"additionalProperties":false},"strict":true},{"type":"function","description":"Search
+      internal operations runbooks for troubleshooting procedures.","name":"search_runbook","output_schema":null,"parameters":{"type":"object","properties":{"query":{"type":"string","description":"Natural
+      language search query"},"max_results":{"type":"integer","description":"Maximum
+      results to return (default 5)"}},"required":["query","max_results"],"additionalProperties":false},"strict":true},{"type":"function","description":"Execute
+      a Python analysis script in a sandboxed environment for log parsing or data
+      inspection.","name":"run_analysis","output_schema":null,"parameters":{"type":"object","properties":{"code":{"type":"string","description":"Python
+      code to execute"},"timeout_seconds":{"type":"integer","description":"Execution
+      timeout (default 30)"}},"required":["code","timeout_seconds"],"additionalProperties":false},"strict":true},{"type":"function","description":"Restart
+      a failed pipeline job with optional configuration overrides.","name":"restart_job","output_schema":null,"parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier to restart"},"memory_override_gb":{"type":"integer","description":"Override
+      memory limit in GB"},"skip_completed_stages":{"type":"boolean","description":"Skip
+      stages that completed successfully (default true)"},"priority":{"type":"string","enum":["low","normal","high"],"description":"Queue
+      priority"}},"required":["job_id","memory_override_gb","skip_completed_stages","priority"],"additionalProperties":false},"strict":true},{"type":"function","description":"Search
+      the public web for technical documentation, blog posts, and known issues.","name":"web_search","output_schema":null,"parameters":{"type":"object","properties":{"query":{"type":"string","description":"Search
+      query"}},"required":["query"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_0e68d23377c9e566016ad869b2e7ac87d0b6200a0d9771de26","object":"response","created_at":1792567730,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":256,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":false,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"none","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Query
+      the pipeline orchestrator for a job''s current state, metadata, and failure
+      info.","name":"get_job_status","output_schema":null,"parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier, e.g. job-382"}},"required":["job_id"],"additionalProperties":false},"strict":true},{"type":"function","description":"Fetch
+      error logs and stack traces for a failed pipeline job.","name":"get_error_logs","output_schema":null,"parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier"},"severity":{"type":"string","enum":["WARN","ERROR","FATAL","ALL"],"description":"Minimum
+      severity filter"},"max_entries":{"type":"integer","description":"Maximum log
+      entries to return (default 50)"}},"required":["job_id","severity","max_entries"],"additionalProperties":false},"strict":true},{"type":"function","description":"Search
+      internal operations runbooks for troubleshooting procedures.","name":"search_runbook","output_schema":null,"parameters":{"type":"object","properties":{"query":{"type":"string","description":"Natural
+      language search query"},"max_results":{"type":"integer","description":"Maximum
+      results to return (default 5)"}},"required":["query","max_results"],"additionalProperties":false},"strict":true},{"type":"function","description":"Execute
+      a Python analysis script in a sandboxed environment for log parsing or data
+      inspection.","name":"run_analysis","output_schema":null,"parameters":{"type":"object","properties":{"code":{"type":"string","description":"Python
+      code to execute"},"timeout_seconds":{"type":"integer","description":"Execution
+      timeout (default 30)"}},"required":["code","timeout_seconds"],"additionalProperties":false},"strict":true},{"type":"function","description":"Restart
+      a failed pipeline job with optional configuration overrides.","name":"restart_job","output_schema":null,"parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier to restart"},"memory_override_gb":{"type":"integer","description":"Override
+      memory limit in GB"},"skip_completed_stages":{"type":"boolean","description":"Skip
+      stages that completed successfully (default true)"},"priority":{"type":"string","enum":["low","normal","high"],"description":"Queue
+      priority"}},"required":["job_id","memory_override_gb","skip_completed_stages","priority"],"additionalProperties":false},"strict":true},{"type":"function","description":"Search
+      the public web for technical documentation, blog posts, and known issues.","name":"web_search","output_schema":null,"parameters":{"type":"object","properties":{"query":{"type":"string","description":"Search
+      query"}},"required":["query"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"msg_0e68d23377c9e566016ad869b3552487d092609249d2679006","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_0e68d23377c9e566016ad869b3552487d092609249d2679006","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"failed","item_id":"msg_0e68d23377c9e566016ad869b3552487d092609249d2679006","logprobs":[],"obfuscation":"uzHiPabWPp","output_index":0,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_0e68d23377c9e566016ad869b3552487d092609249d2679006","logprobs":[],"output_index":0,"sequence_number":5,"text":"failed"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_0e68d23377c9e566016ad869b3552487d092609249d2679006","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"failed"},"sequence_number":6}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"msg_0e68d23377c9e566016ad869b3552487d092609249d2679006","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"failed"}],"role":"assistant"},"output_index":0,"sequence_number":7}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_0e68d23377c9e566016ad869b2e7ac87d0b6200a0d9771de26","object":"response","created_at":1792567730,"status":"completed","access_programs":null,"background":false,"completed_at":1792567731,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":256,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[{"id":"msg_0e68d23377c9e566016ad869b3552487d092609249d2679006","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"failed"}],"role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":false,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"none","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Query
+      the pipeline orchestrator for a job''s current state, metadata, and failure
+      info.","name":"get_job_status","output_schema":null,"parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier, e.g. job-382"}},"required":["job_id"],"additionalProperties":false},"strict":true},{"type":"function","description":"Fetch
+      error logs and stack traces for a failed pipeline job.","name":"get_error_logs","output_schema":null,"parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier"},"severity":{"type":"string","enum":["WARN","ERROR","FATAL","ALL"],"description":"Minimum
+      severity filter"},"max_entries":{"type":"integer","description":"Maximum log
+      entries to return (default 50)"}},"required":["job_id","severity","max_entries"],"additionalProperties":false},"strict":true},{"type":"function","description":"Search
+      internal operations runbooks for troubleshooting procedures.","name":"search_runbook","output_schema":null,"parameters":{"type":"object","properties":{"query":{"type":"string","description":"Natural
+      language search query"},"max_results":{"type":"integer","description":"Maximum
+      results to return (default 5)"}},"required":["query","max_results"],"additionalProperties":false},"strict":true},{"type":"function","description":"Execute
+      a Python analysis script in a sandboxed environment for log parsing or data
+      inspection.","name":"run_analysis","output_schema":null,"parameters":{"type":"object","properties":{"code":{"type":"string","description":"Python
+      code to execute"},"timeout_seconds":{"type":"integer","description":"Execution
+      timeout (default 30)"}},"required":["code","timeout_seconds"],"additionalProperties":false},"strict":true},{"type":"function","description":"Restart
+      a failed pipeline job with optional configuration overrides.","name":"restart_job","output_schema":null,"parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier to restart"},"memory_override_gb":{"type":"integer","description":"Override
+      memory limit in GB"},"skip_completed_stages":{"type":"boolean","description":"Skip
+      stages that completed successfully (default true)"},"priority":{"type":"string","enum":["low","normal","high"],"description":"Queue
+      priority"}},"required":["job_id","memory_override_gb","skip_completed_stages","priority"],"additionalProperties":false},"strict":true},{"type":"function","description":"Search
+      the public web for technical documentation, blog posts, and known issues.","name":"web_search","output_schema":null,"parameters":{"type":"object","properties":{"query":{"type":"string","description":"Search
+      query"}},"required":["query"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":466,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":0},"output_tokens":2,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":468},"user":null,"metadata":{}},"sequence_number":8}
+
+      '
+    - '
+
+      '
+    status_code: 200

@@ -1,0 +1,4 @@
+Deployment checklist
+- Region: eu-west
+- Release codeword: PAPAYA-7
+- Owner: platform team

@@ -160,6 +160,7 @@ async fn native_blocks_and_calls_share_core_assembly_without_index_collisions_or
             (10, 4, 14)
         );
         assert_eq!(usage.input_tokens_details.cached_tokens, 7);
+        assert_eq!(usage.input_tokens_details.cache_write_tokens, Some(3));
         assert_eq!(usage.output_tokens_details.reasoning_tokens, 2);
         if status == "incomplete" {
             assert_eq!(

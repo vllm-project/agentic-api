@@ -107,9 +107,13 @@ nav:
     - Rust CLI (agentic): reference/rust-cli.md
     - Python Launcher (agentic-api): reference/python-cli.md
   - Guides:
+    - Quickstart: guides/quickstart.md
     - Python Installation: guides/python-installation.md
+    - Configuration: guides/configuration.md
+    - Web Search Providers: guides/web-search.md
+    - Messages Server Tools: guides/messages-server-tools.md
+    - Claude Code with self-hosted models: guides/harness-cli-testing.md
     - Responses Compaction: guides/responses-compaction.md
-    - Harness CLI Testing: guides/harness-cli-testing.md
     - Codex Desktop: guides/codex-desktop.md
     - NVIDIA Dynamo Upstream: guides/dynamo-upstream.md
     - SGLang Upstream: guides/sglang-upstream.md
@@ -125,9 +129,11 @@ nav:
     - llm-d Backend Mode: design/agentic-llm-d.md
     - Core Public API: design/core-public-api.md
     - Inference and Session Contracts: design/shared-responses-library.md
+    - Embedded Code Interpreter: design/embedded-code-interpreter.md
     - MCP Gateway Integration: design/mcp-gateway-integration.md
     - Messages Gateway Tool Classification: design/messages-gateway-tool-classification.md
     - OIDC Bearer Authentication: design/oidc-bearer-authentication.md
+    - Shell Tool: design/shell-tool.md
     - Tool Framework: design/tool-framework.md
   - Deploying:
     - Container: deploying/container.md

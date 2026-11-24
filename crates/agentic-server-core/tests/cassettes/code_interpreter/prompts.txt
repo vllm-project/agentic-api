@@ -1,0 +1,1 @@
+Use the python tool to calculate the sum of the squares of the integers from 1 through 10. The code must print exactly CODE_INTERPRETER_OK=385. After it runs, answer exactly CODE_INTERPRETER_OK=385.

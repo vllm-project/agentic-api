@@ -1,5 +1,11 @@
 use std::collections::HashMap;
 
+mod file_search;
+pub use file_search::FileSearchToolParam;
+
+use super::domain::DomainFilters;
+use super::mcp_approval::McpApprovalPolicy;
+pub use super::tool_search::{ToolSearchExecution, ToolSearchStatus, ToolSearchToolParam};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -145,9 +151,21 @@ pub struct FunctionToolParam {
     pub strict: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub defer_loading: Option<bool>,
+    /// `async: true` lets the model keep working after it emits a call; the client returns the
+    /// output later on the original `call_id`.
+    #[serde(default, rename = "async", skip_serializing_if = "Option::is_none")]
+    pub async_execution: Option<bool>,
     #[serde(default)]
     #[serde(flatten)]
     pub extra: HashMap<String, Value>,
+}
+
+impl FunctionToolParam {
+    /// Whether calls to this tool are async: the model continues without waiting for the output.
+    #[must_use]
+    pub fn is_async(&self) -> bool {
+        self.async_execution.unwrap_or(false)
+    }
 }
 
 /// Parameters for a freeform (`type: "custom"`) tool.
@@ -165,41 +183,21 @@ pub struct CustomToolParam {
     pub format: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub defer_loading: Option<bool>,
+    /// `async: true` lets the model keep working after it emits a call; the client returns the
+    /// output later on the original `call_id`.
+    #[serde(default, rename = "async", skip_serializing_if = "Option::is_none")]
+    pub async_execution: Option<bool>,
     #[serde(default)]
     #[serde(flatten)]
     pub extra: HashMap<String, Value>,
 }
 
-/// Only client-executed tool search is part of the public gateway contract.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[serde(rename_all = "snake_case")]
-pub enum ToolSearchExecution {
-    #[default]
-    Client,
-    // TODO: Support `Server` execution type for gateway built-in tool
-}
-
-/// Lifecycle status of a public tool-search call or output item.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[serde(rename_all = "snake_case")]
-pub enum ToolSearchStatus {
-    InProgress,
-    #[default]
-    Completed,
-    Incomplete,
-}
-
-/// Parameters for a client-executed tool-search declaration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct ToolSearchToolParam {
-    pub execution: ToolSearchExecution,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub parameters: Option<Value>,
+impl CustomToolParam {
+    /// Whether calls to this tool are async: the model continues without waiting for the output.
+    #[must_use]
+    pub fn is_async(&self) -> bool {
+        self.async_execution.unwrap_or(false)
+    }
 }
 
 /// Parameters for a gateway MCP built-in tool declaration.
@@ -218,9 +216,17 @@ pub struct McpToolParam {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allowed_tools: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub require_approval: Option<String>,
+    pub require_approval: Option<McpApprovalPolicy>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub defer_loading: Option<bool>,
+    /// `async` applies only to function and custom tools; captured so declaration validation can reject it.
+    #[serde(default, rename = "async", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi", schema(ignore))]
+    pub unsupported_async: Option<bool>,
+    /// Catalog text for a deferred server; hosted tool search returns it as the
+    /// description of the server's `mcp_<server_label>` namespace.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_description: Option<String>,
     /// Request-scoped `tools/list` results used by MCP normalization. This
     /// field is populated internally and ignored on the public request wire.
     #[serde(
@@ -231,6 +237,12 @@ pub struct McpToolParam {
     )]
     #[cfg_attr(feature = "openapi", schema(ignore))]
     pub(crate) discovered_tools: Vec<McpDiscoveredToolParam>,
+    /// For a server deferred behind hosted tool search, the discovered tools
+    /// loaded so far; upstream normalization exposes only these. `None` for a
+    /// server that is not deferred. Internal and never on the wire.
+    #[serde(skip)]
+    #[cfg_attr(feature = "openapi", schema(ignore))]
+    pub(crate) loaded_tool_names: Option<Vec<String>>,
 }
 
 /// Parameters for a discovered MCP (Model Context Protocol) server tool.
@@ -263,13 +275,6 @@ impl WebSearchContextSize {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct WebSearchFilters {
-    pub allowed_domains: Option<Vec<String>>,
-    pub blocked_domains: Option<Vec<String>>,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct WebSearchUserLocation {
     #[serde(rename = "type")]
     pub type_: Option<String>,
@@ -284,21 +289,44 @@ pub struct WebSearchUserLocation {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct WebSearchToolParam {
     pub search_context_size: Option<WebSearchContextSize>,
-    pub filters: Option<WebSearchFilters>,
+    pub filters: Option<DomainFilters>,
     pub user_location: Option<WebSearchUserLocation>,
+    /// `async` applies only to function and custom tools; captured so declaration validation can reject it.
+    #[serde(default, rename = "async", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi", schema(ignore))]
+    pub unsupported_async: Option<bool>,
 }
 
-/// Parameters for a file search tool.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// The only `OpenAI` container selector supported by the gateway.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct FileSearchToolParam {
-    pub vector_store_ids: Option<Vec<String>>,
+#[serde(deny_unknown_fields)]
+pub struct CodeInterpreterAutoContainer {
+    #[serde(rename = "type")]
+    pub kind: CodeInterpreterAutoContainerType,
 }
 
-/// Parameters for a code interpreter tool (no required fields).
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct CodeInterpreterToolParam {}
+#[serde(rename_all = "snake_case")]
+pub enum CodeInterpreterAutoContainerType {
+    Auto,
+}
+
+/// Parameters for the gateway-executed code interpreter built-in tool.
+///
+/// Accepts only the `OpenAI` auto-container declaration. The gateway selects
+/// the executor; clients cannot supply a container ID or runtime settings.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(deny_unknown_fields)]
+pub struct CodeInterpreterToolParam {
+    pub container: CodeInterpreterAutoContainer,
+    /// `async` applies only to function and custom tools; captured so declaration validation can reject it.
+    #[serde(default, rename = "async", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi", schema(ignore))]
+    pub unsupported_async: Option<bool>,
+}
 
 /// Parameters for the shell built-in tool.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -307,6 +335,10 @@ pub struct ShellToolParam {
     pub environment: ShellEnvironment,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allowed_callers: Option<Vec<String>>,
+    /// `async` applies only to function and custom tools; captured so declaration validation can reject it.
+    #[serde(default, rename = "async", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi", schema(ignore))]
+    pub unsupported_async: Option<bool>,
     #[serde(default, flatten)]
     pub extra: HashMap<String, Value>,
 }
@@ -400,6 +432,10 @@ pub struct CodexNamespaceToolParam {
     pub description: Option<String>,
     #[serde(default)]
     pub tools: Vec<CodexNamespaceMember>,
+    /// `async` belongs on member functions, not the namespace; captured so declaration validation can reject it.
+    #[serde(default, rename = "async", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi", schema(ignore))]
+    pub unsupported_async: Option<bool>,
     #[serde(default)]
     #[serde(flatten)]
     pub extra: HashMap<String, Value>,
@@ -418,9 +454,12 @@ pub enum CodexNamespaceMember {
 impl utoipa::PartialSchema for ResponsesTool {
     fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
         use utoipa::openapi::Ref;
-        use utoipa::openapi::schema::{AllOfBuilder, ObjectBuilder, SchemaType, Type};
+        use utoipa::openapi::schema::{AdditionalProperties, AllOfBuilder, ObjectBuilder, SchemaType, Type};
 
         fn tagged(type_value: &str, schema: &str) -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+            if let Some(schema) = file_search::tagged_schema(type_value) {
+                return schema;
+            }
             AllOfBuilder::new()
                 .item(
                     ObjectBuilder::new()
@@ -433,6 +472,23 @@ impl utoipa::PartialSchema for ResponsesTool {
                         .required("type"),
                 )
                 .item(Ref::from_schema_name(schema))
+                .into()
+        }
+
+        // Keep the tagged declaration in one closed object so its schema
+        // matches the serde tagged enum variant.
+        fn code_interpreter_tagged() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+            ObjectBuilder::new()
+                .property(
+                    "type",
+                    ObjectBuilder::new()
+                        .schema_type(SchemaType::new(Type::String))
+                        .enum_values(Some(["code_interpreter"])),
+                )
+                .property("container", Ref::from_schema_name("CodeInterpreterAutoContainer"))
+                .required("type")
+                .required("container")
+                .additional_properties(Some(AdditionalProperties::FreeForm(false)))
                 .into()
         }
 
@@ -461,7 +517,7 @@ impl utoipa::PartialSchema for ResponsesTool {
                     .item(Ref::from_schema_name("WebSearchToolParam")),
             )
             .item(tagged("file_search", "FileSearchToolParam"))
-            .item(tagged("code_interpreter", "CodeInterpreterToolParam"))
+            .item(code_interpreter_tagged())
             .item(tagged("shell", "ShellToolParam"))
             .item(tagged("namespace", "CodexNamespaceToolParam"))
             .item(tagged("custom", "CustomToolParam"))
@@ -538,6 +594,29 @@ impl ResponsesTool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn async_declarations_round_trip_as_typed_fields() {
+        for declaration in [
+            serde_json::json!({"type": "function", "name": "get_weather", "async": true}),
+            serde_json::json!({"type": "custom", "name": "echo", "async": true}),
+        ] {
+            let tool: ResponsesTool = serde_json::from_value(declaration.clone()).unwrap();
+            match &tool {
+                ResponsesTool::Function(param) => assert!(param.is_async() && !param.extra.contains_key("async")),
+                ResponsesTool::Custom(param) => assert!(param.is_async() && !param.extra.contains_key("async")),
+                other => panic!("unexpected declaration {other:?}"),
+            }
+            assert_eq!(serde_json::to_value(&tool).unwrap(), declaration, "echoed unchanged");
+        }
+
+        let ResponsesTool::Function(param) =
+            serde_json::from_value(serde_json::json!({"type": "function", "name": "get_weather"})).unwrap()
+        else {
+            panic!("function declaration");
+        };
+        assert!(!param.is_async(), "async defaults to false");
+    }
 
     #[test]
     fn non_empty_name_accepts_valid() {
@@ -664,15 +743,16 @@ mod tests {
         });
 
         let tool: ResponsesTool = serde_json::from_value(declaration.clone()).expect("valid tool-search declaration");
+        let normalized = crate::tool::ToolDeclaration::from(&tool);
 
         assert_eq!(tool.original_type(), Some("tool_search"));
-        assert_eq!(tool.tool_type(), Some(crate::tool::ToolType::ToolSearch));
+        assert_eq!(normalized.tool_type(), Some(crate::tool::ToolType::ToolSearch));
         assert!(
-            !tool.is_gateway_owned(),
+            !normalized.is_gateway_owned(),
             "client-executed tool search must bypass gateway dispatch"
         );
         assert_eq!(
-            serde_json::to_value(tool.to_function_tools()).unwrap(),
+            serde_json::to_value(normalized.to_function_tools()).unwrap(),
             serde_json::json!([{
                 "type": "function",
                 "name": "tool_search",
@@ -698,30 +778,35 @@ mod tests {
 
         let tool: ResponsesTool = serde_json::from_value(declaration.clone()).expect("valid minimal declaration");
 
-        tool.validate().expect("omitted optional fields are valid");
+        crate::tool::ToolDeclaration::from(&tool)
+            .validate()
+            .expect("omitted optional fields are valid");
         assert_eq!(serde_json::to_value(tool).expect("tool serializes"), declaration);
     }
 
     #[test]
-    fn responses_tool_search_declaration_rejects_invalid_wire_shapes() {
+    fn responses_tool_search_declaration_defaults_to_hosted_and_echoes_like_openai() {
         for declaration in [
-            serde_json::json!({
-                "type": "tool_search",
-                "description": "Missing execution",
-                "parameters": {"type": "object"}
-            }),
-            serde_json::json!({
-                "type": "tool_search",
-                "execution": "server",
-                "description": "Hosted execution is excluded",
-                "parameters": {"type": "object"}
-            }),
+            serde_json::json!({"type": "tool_search"}),
+            serde_json::json!({"type": "tool_search", "execution": "server"}),
+            serde_json::json!({"type": "tool_search", "description": null, "parameters": null}),
         ] {
-            assert!(
-                serde_json::from_value::<ResponsesTool>(declaration).is_err(),
-                "invalid tool-search wire shape must not fall back to an unknown tool"
+            let tool: ResponsesTool = serde_json::from_value(declaration).expect("hosted declaration");
+            let ResponsesTool::ToolSearch(param) = &tool else {
+                panic!("expected a tool-search declaration");
+            };
+            assert!(param.is_hosted());
+            // Recorded OpenAI echo: `execution` is dropped, the optional fields are null.
+            assert_eq!(
+                serde_json::to_value(&tool).expect("tool serializes"),
+                serde_json::json!({"type": "tool_search", "description": null, "parameters": null})
             );
         }
+        assert!(
+            serde_json::from_value::<ResponsesTool>(serde_json::json!({"type": "tool_search", "execution": "remote"}))
+                .is_err(),
+            "an unknown execution must not fall back to an unknown tool"
+        );
     }
 
     #[test]
@@ -735,7 +820,8 @@ mod tests {
 
         assert_eq!(serde_json::to_value(&tool).expect("tool serializes"), declaration);
         assert!(
-            tool.validate()
+            crate::tool::ToolDeclaration::from(&tool)
+                .validate()
                 .expect_err("private function lowering requires an object schema")
                 .to_string()
                 .contains("parameters must be a JSON object")
@@ -757,7 +843,8 @@ mod tests {
             }))
             .expect("structurally valid declaration");
 
-            tool.validate()
+            crate::tool::ToolDeclaration::from(&tool)
+                .validate()
                 .expect("typed public values are normalized only when building the private synthetic function");
         }
     }
@@ -828,11 +915,102 @@ mod tests {
     }
 
     #[test]
+    fn responses_tool_file_search_omits_absent_vector_store_ids() {
+        let tool: ResponsesTool = serde_json::from_value(serde_json::json!({"type": "file_search"})).unwrap();
+        assert_eq!(
+            serde_json::to_value(tool).unwrap(),
+            serde_json::json!({"type": "file_search"})
+        );
+    }
+
+    #[test]
+    fn file_search_preserves_typed_options_and_rejects_unsupported_fields() {
+        let wire = serde_json::json!({
+            "type": "file_search", "vector_store_ids": ["vs_1"], "max_num_results": 3,
+            "filters": {"type":"eq","key":"category","value":"policy"},
+            "ranking_options": {"ranker":"auto","score_threshold":0.4,"hybrid_search":null}
+        });
+        let tool: ResponsesTool = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(serde_json::to_value(tool).unwrap(), wire);
+        assert!(
+            serde_json::from_value::<ResponsesTool>(serde_json::json!({
+                "type":"file_search","vector_store_ids":["vs_1"],"rewrite_query":true
+            }))
+            .is_err()
+        );
+    }
+
+    #[test]
     fn responses_tool_code_interpreter_round_trips() {
-        let json = serde_json::json!({"type": "code_interpreter"});
-        let tool: ResponsesTool = serde_json::from_value(json).unwrap();
+        let declaration = serde_json::json!({"type": "code_interpreter", "container": {"type": "auto"}});
+        let tool: ResponsesTool = serde_json::from_value(declaration.clone()).unwrap();
         assert!(matches!(tool, ResponsesTool::CodeInterpreter(_)));
-        assert_eq!(serde_json::to_value(&tool).unwrap()["type"], "code_interpreter");
+        assert_eq!(serde_json::to_value(&tool).unwrap(), declaration);
+    }
+
+    #[test]
+    fn code_interpreter_openai_reference_declaration_parses() {
+        let tools: Vec<ResponsesTool> = serde_json::from_str(include_str!(
+            "../../../tests/cassettes/code_interpreter/openai_tools.json"
+        ))
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(&tools).unwrap(),
+            serde_json::json!([{"type": "code_interpreter", "container": {"type": "auto"}}])
+        );
+    }
+
+    #[test]
+    fn code_interpreter_declaration_rejects_unknown_fields() {
+        let error = serde_json::from_value::<ResponsesTool>(serde_json::json!({
+            "type": "code_interpreter",
+            "container": {"type": "auto"},
+            "misspelled_execution": "gateway"
+        }))
+        .expect_err("closed declaration must reject unknown fields");
+
+        assert!(error.to_string().contains("unknown field"));
+    }
+
+    #[test]
+    fn code_interpreter_declaration_rejects_client_container_settings() {
+        for declaration in [
+            serde_json::json!({"type": "code_interpreter", "container": "cntr_client"}),
+            serde_json::json!({"type": "code_interpreter", "container": "auto"}),
+            serde_json::json!({"type": "code_interpreter", "container": {"id": "cntr_client"}}),
+            serde_json::json!({"type": "code_interpreter", "container": {"type": "auto", "file_ids": ["file_1"]}}),
+            serde_json::json!({"type": "code_interpreter", "container": {"type": "auto", "memory_limit": "4g"}}),
+            serde_json::json!({"type": "code_interpreter", "container": {"type": "auto"}, "container_id": "cntr_client"}),
+            serde_json::json!({"type": "code_interpreter", "container": {"type": "auto"}, "container_reuse": "cntr_client"}),
+            serde_json::json!({"type": "code_interpreter", "container": {"type": "auto"}, "runtime": {"packages": ["untrusted"]}}),
+        ] {
+            assert!(
+                serde_json::from_value::<ResponsesTool>(declaration.clone()).is_err(),
+                "client container or runtime settings must not deserialize: {declaration}"
+            );
+        }
+    }
+
+    #[test]
+    fn code_interpreter_declaration_requires_auto_container() {
+        let missing = serde_json::from_value::<ResponsesTool>(serde_json::json!({
+            "type": "code_interpreter"
+        }))
+        .expect_err("container is required");
+        assert!(missing.to_string().contains("missing field `container`"));
+
+        for declaration in [
+            serde_json::json!({"type": "code_interpreter", "execution": "gateway"}),
+            serde_json::json!({"type": "code_interpreter", "execution": "client"}),
+            serde_json::json!({"type": "code_interpreter", "container": null}),
+            serde_json::json!({"type": "code_interpreter", "execution": null, "container": {"type": "auto"}}),
+            serde_json::json!({"type": "code_interpreter", "execution": "gateway", "container": {"type": "auto"}}),
+        ] {
+            assert!(
+                serde_json::from_value::<ResponsesTool>(declaration).is_err(),
+                "only the auto-container declaration is accepted"
+            );
+        }
     }
 
     #[test]

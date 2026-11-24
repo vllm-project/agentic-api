@@ -91,8 +91,10 @@ async fn infer(State(state): State<Upstream>, Json(request): Json<Value>) -> Res
         assert_eq!(result["tool_use_id"], history[history.len() - 2]["content"][0]["id"]);
         assert_eq!(result["is_error"], state.search_fails);
         let output = result["content"].as_str().unwrap();
+        // A failed native search reaches the model as its documented code's
+        // text, the same text a later turn replays.
         assert!(output.contains(if state.search_fails {
-            "tool execution failed"
+            "web_search is unavailable"
         } else {
             "SEARCH_PROOF_雪"
         }));
@@ -139,10 +141,22 @@ async fn infer(State(state): State<Upstream>, Json(request): Json<Value>) -> Res
 }
 
 fn assert_client_message(body: &str, stream: bool, client_owned: bool, expected_answer: &str, tool_stop_reason: &str) {
+    // The upstream's calls stay internal; the client sees each executed search
+    // as a server_tool_use block paired with its result.
+    let content = common::assembled_messages_content(body, stream);
+    let blocks = content.as_array().unwrap();
     assert!(
-        !body.contains("\"name\":\"web_search\""),
-        "gateway calls must remain hidden: {body}"
+        !blocks
+            .iter()
+            .any(|block| block["type"] == "tool_use" && block["name"] == "web_search"),
+        "gateway calls must not reach the client as tool_use: {body}"
     );
+    let calls = blocks.iter().filter(|block| block["type"] == "server_tool_use").count();
+    let results = blocks
+        .iter()
+        .filter(|block| block["type"] == "web_search_tool_result")
+        .count();
+    assert_eq!(calls, results, "every shown call has its result: {body}");
     let stop = if client_owned && tool_stop_reason == "end_turn" {
         "tool_use"
     } else if client_owned {
@@ -180,12 +194,13 @@ fn assert_client_message(body: &str, stream: bool, client_owned: bool, expected_
     } else {
         let message: Value = serde_json::from_str(body).unwrap();
         assert_eq!(message["stop_reason"], stop, "{body}");
+        let last = blocks.last().unwrap();
         if client_owned {
-            assert_eq!(message["content"].as_array().unwrap().len(), 1);
-            assert_eq!(message["content"][0]["name"], "client_echo");
-            assert_eq!(message["content"][0]["input"], json!({"query":"proof"}));
+            assert_eq!(blocks.len(), 2 * calls + 1, "{body}");
+            assert_eq!(last["name"], "client_echo");
+            assert_eq!(last["input"], json!({"query":"proof"}));
         } else {
-            assert_eq!(message["content"][0]["text"], expected_answer);
+            assert_eq!(last["text"], expected_answer);
         }
     }
 }
@@ -196,13 +211,13 @@ fn assert_upstream_rounds(rounds: &[Value], expected_request: &Value) {
         "first inference must retain the original selector"
     );
     let mut expected_choice = expected_request.get("tool_choice").cloned();
-    if let Some(choice) = &mut expected_choice {
-        if choice["type"] == "any" || choice["type"] == "tool" {
-            if choice["type"] == "tool" {
-                choice.as_object_mut().unwrap().remove("name");
-            }
-            choice["type"] = json!("auto");
+    if let Some(choice) = &mut expected_choice
+        && (choice["type"] == "any" || choice["type"] == "tool")
+    {
+        if choice["type"] == "tool" {
+            choice.as_object_mut().unwrap().remove("name");
         }
+        choice["type"] = json!("auto");
     }
     for round in &rounds[1..] {
         assert_eq!(round.get("tool_choice"), expected_choice.as_ref());
@@ -219,7 +234,7 @@ fn assert_upstream_rounds(rounds: &[Value], expected_request: &Value) {
 }
 
 async fn check_choice(choice: Option<Value>, stream: bool, search_fails: bool, wanted_searches: usize, mixed: bool) {
-    check_choice_with_stop(choice, stream, search_fails, wanted_searches, mixed, "tool_use").await;
+    check_choice_with_stop(choice, stream, search_fails, wanted_searches, mixed, "tool_use", None).await;
 }
 
 async fn check_choice_with_stop(
@@ -229,6 +244,7 @@ async fn check_choice_with_stop(
     wanted_searches: usize,
     mixed: bool,
     tool_stop_reason: &'static str,
+    provider_parameters: Option<Value>,
 ) {
     let upstream = Upstream {
         requests: Arc::default(),
@@ -268,6 +284,12 @@ async fn check_choice_with_stop(
                  {"name":"client_echo", "input_schema":{"type":"object"}}]});
     if let Some(choice) = &choice {
         request["tool_choice"] = choice.clone();
+    }
+    if let Some(parameters) = provider_parameters {
+        request
+            .as_object_mut()
+            .unwrap()
+            .extend(parameters.as_object().unwrap().clone());
     }
     let mut expected_request = request.clone();
     assert!(normalize_native_web_search_for_upstream(&mut expected_request).unwrap());
@@ -376,6 +398,7 @@ async fn named_choice_end_turn_executes_the_selected_gateway_call() {
             1,
             false,
             "end_turn",
+            None,
         )
         .await;
     }
@@ -392,6 +415,7 @@ async fn named_choice_end_turn_preserves_client_tool_ownership() {
                 1,
                 mixed,
                 "end_turn",
+                None,
             )
             .await;
         }
@@ -410,6 +434,7 @@ async fn client_tool_truncation_and_other_stops_are_preserved() {
                     1,
                     mixed,
                     reason,
+                    None,
                 )
                 .await;
             }
@@ -497,6 +522,27 @@ async fn fulfilled_choice_still_allows_another_search() {
             false,
             2,
             false,
+        )
+        .await;
+    }
+}
+
+#[tokio::test]
+async fn gateway_tools_preserve_future_thinking_and_cache_control_types() {
+    for stream in [false, true] {
+        check_choice_with_stop(
+            Some(json!({"type":"tool", "name":"web_search"})),
+            stream,
+            false,
+            1,
+            false,
+            "tool_use",
+            Some(json!({
+                "thinking":{"type":"provider_future", "options":{"value":null}},
+                "cache_control":{"type":"provider_future", "scope":"request"},
+                "system":[{"type":"text", "text":"preserve", "cache_control":{"type":"provider_future", "scope":"system"}}],
+                "messages":[{"role":"user", "content":[{"type":"text", "text":"Search for proof", "cache_control":{"type":"provider_future", "scope":"block"}}]}]
+            })),
         )
         .await;
     }

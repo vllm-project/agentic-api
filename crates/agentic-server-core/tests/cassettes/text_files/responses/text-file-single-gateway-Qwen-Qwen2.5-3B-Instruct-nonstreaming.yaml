@@ -1,0 +1,80 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input:
+      - content:
+        - text: What is the release codeword in the attached file? Reply with only
+            the codeword.
+          type: input_text
+        - file_data: data:text/plain;base64,RGVwbG95bWVudCBjaGVja2xpc3QKLSBSZWdpb246IGV1LXdlc3QKLSBSZWxlYXNlIGNvZGV3b3JkOiBQQVBBWUEtNwotIE93bmVyOiBwbGF0Zm9ybSB0ZWFtCg==
+          filename: notes.txt
+          type: input_file
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-3B-Instruct
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792570401
+      created_at: 1792570401
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a15d85-a1db-76f3-918e-b31d6819a316
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 64
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen2.5-3B-Instruct
+      object: response
+      output:
+      - content:
+        - annotations: []
+          text: PAPAYA-7
+          type: output_text
+        id: msg_9877b7b2576e7c5a
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 82
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 80
+        output_tokens: 7
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 89
+    headers:
+      content-type: application/json
+    status_code: 200

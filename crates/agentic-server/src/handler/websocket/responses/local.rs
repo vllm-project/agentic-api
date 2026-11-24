@@ -1,7 +1,9 @@
 //! Local completion of a non-generating WebSocket request.
 
 use agentic_core::ResponseUsage;
-use agentic_core::executor::{RequestContext, ResponseSession, persist_turn, rehydrate_in_session};
+use agentic_core::executor::{
+    RequestContext, ResponseSession, persist_turn, prepare_non_generating_turn, rehydrate_in_session,
+};
 use agentic_core::types::request_response::RequestPayload;
 use agentic_core::utils::common::utcnow_str;
 use serde_json::Value;
@@ -19,6 +21,7 @@ pub(super) async fn complete_without_inference(
     event_limit: WsEventLimit,
 ) -> Result<(), WsError> {
     let ctx = rehydrate_in_session(payload, &state.exec_ctx, session).await?;
+    let ctx = prepare_non_generating_turn(ctx, &state.exec_ctx)?;
     let created_at = utcnow_str();
     let created_event = empty_response_event(&ctx, created_at, "response.created", "in_progress", 0, None);
     let completed_event = empty_response_event(
@@ -38,13 +41,7 @@ pub(super) async fn complete_without_inference(
 
     #[cfg(debug_assertions)]
     state.websocket_tracker.pause_local_completion_after_rehydration().await;
-    persist_turn(
-        ctx,
-        Vec::new(),
-        &state.exec_ctx.conv_handler,
-        &state.exec_ctx.resp_handler,
-    )
-    .await?;
+    persist_turn(ctx, &state.exec_ctx).await?;
 
     outbound_tx.send(created_event).await.map_err(|_| WsError::SendFailed)?;
     outbound_tx.send(completed_event).await.map_err(|_| WsError::SendFailed)
@@ -58,7 +55,7 @@ fn empty_response_event(
     sequence_number: u32,
     usage: Option<ResponseUsage>,
 ) -> Value {
-    serde_json::json!({
+    let mut response = serde_json::json!({
         "type": event_type,
         "sequence_number": sequence_number,
         "response": {
@@ -72,8 +69,15 @@ fn empty_response_event(
             "incomplete_details": null,
             "error": null,
             "previous_response_id": &ctx.original_request.previous_response_id,
-            "conversation_id": &ctx.conversation_id,
             "instructions": &ctx.enriched_request.instructions,
+            "max_tool_calls": ctx.max_tool_calls(),
+            "prompt_cache_options": ctx.original_request.prompt_cache_options,
         },
-    })
+    });
+
+    if let Some(conversation_id) = &ctx.conversation_id {
+        response["response"]["conversation"] = serde_json::json!({"id": conversation_id});
+    }
+
+    response
 }

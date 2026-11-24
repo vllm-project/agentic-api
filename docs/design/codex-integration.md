@@ -47,9 +47,9 @@ The current integration supports the typed executor path:
 - WebSocket Responses execution uses the same typed executor path and restores namespace tool-call events before sending
   them to clients.
 
-Stateless `store=false` requests containing only ordinary `function` declarations remain byte-transparent raw proxy
-requests. Requests with continuation IDs or any non-function tool use the typed executor, where namespace and
-gateway-executed built-in tool normalization occurs.
+HTTP Responses requests, including `store=false` with ordinary function declarations, use the typed executor
+for input and tool normalization. Without state IDs, clients replay complete item history and the gateway does
+not read or write stored state.
 
 ---
 
@@ -143,7 +143,8 @@ Responses tool shapes and execution semantics, so it can be always on.
 | `custom` | Client-executed custom tool. Preserve its opaque format and forward it natively. |
 | `web_search_preview` | Gateway-executed built-in tool normalized to the web-search function tool. Without a usable provider, execution produces a failed tool result instead of returning the call for client execution. |
 | `mcp` | Gateway-executed built-in tool. Normalize discovered MCP tools to model-visible function tools, execute calls with request-scoped MCP bindings, and expose public `mcp_call` items. Streaming emits `response.output_item.added`, `response.mcp_call.in_progress`, `response.mcp_call_arguments.delta`/`.done`, `response.mcp_call.completed` or `.failed`, and `response.output_item.done`. |
-| `file_search`, `code_interpreter` | Accepted by the typed request parser but skipped during upstream normalization because no gateway handler is registered yet. |
+| `file_search` | Accepted by the typed request parser but skipped during upstream normalization because no gateway handler is registered yet. |
+| `code_interpreter` | Gateway-executed when the binary includes `embedded-code-interpreter` and the operator enables a ready Eryx runtime; otherwise the declaration is rejected before inference. |
 | Unknown tool | Recognized and skipped on the typed path; opaque fields are not preserved or executed. Eligible raw-proxy requests remain byte-transparent. |
 
 For response items:
@@ -154,6 +155,7 @@ For response items:
 | `custom_tool_call` | Preserve raw `input`; return it to Codex for local execution. |
 | `web_search_call` | Result from the gateway-executed web-search tool. |
 | `mcp_call` | Result from a gateway-executed MCP tool with `server_label`, discovered tool `name`, JSON-string `arguments`, and `status`; successful calls contain `output`, while failures contain a structured `mcp_tool_execution_error`. |
+| `code_interpreter_call` | Result from the opt-in gateway-executed Eryx tool, with the executed code, status, and bounded retained logs. |
 | Unknown output item | Recognized as an unknown unit variant on the typed path; opaque fields are not preserved or executed. |
 
 ---
@@ -367,6 +369,37 @@ writing text-only metadata:
 automatically. A persistent home does not: delete and regenerate any `model_catalog.json` written before this change
 (for example a directory pinned with `AGENTIC_CODEX_HOME`, or a hand-written `-c model_catalog_json=...` file), or
 Codex will keep reading the stale text-only entry.
+
+---
+
+## Reasoning Level Resolution
+
+Codex offers the reasoning effort levels its **local** model catalog lists. The gateway resolves
+`supported_reasoning_levels` for every served model:
+
+1. An explicit `[models."<served-model-id>"] supported_reasoning_levels` override in `~/.agentic-api/config.toml`.
+2. The default `["low", "medium", "high"]` for a model without an override.
+
+A configured list is advertised in the order it is written, so a model whose chat template accepts `low`, `high`, and
+`max` declares exactly those:
+
+```toml
+[models."zai-org/GLM-5.3-Flash"]
+supported_reasoning_levels = ["low", "high", "max"]
+```
+
+Levels use the shared effort vocabulary (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`). Each level's Codex-facing
+description comes from a fixed per-level table in `model_capabilities.rs`, not from configuration. An empty list, a
+repeated level, and an unknown level name are rejected at startup with the offending file and line.
+
+Explicit lists also constrain `reasoning.effort` on Responses requests for the same model. The fallback display list
+does not constrain requests. Core's `types/model_capabilities.rs` owns the shared settings and resolver; see
+[Responses capability policies](../api/index.md#model-capability-policies) for admission behavior.
+
+A launcher reads `input_modalities` and `supported_reasoning_levels` from the same gateway catalog response and writes
+them into the isolated catalog, so `agentic run codex` offers what the gateway advertises. A gateway that predates
+`supported_reasoning_levels` keeps working: the launcher writes the default levels. The isolated catalog's
+`default_reasoning_level` is `medium` when the advertised levels include it, otherwise the first advertised level.
 
 ---
 

@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'ROADMAP.md'
+      - 'docs/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'crates/agentic-cli-docs/**'
@@ -25,6 +26,7 @@ on:
     branches: [main]
     paths:
       - 'ROADMAP.md'
+      - 'docs/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'crates/agentic-cli-docs/**'
@@ -82,8 +84,11 @@ jobs:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
-          toolchain: 1.98.0
+          toolchain: 1.98.1
       - name: Test Rust CLI documentation generation
+        # Normal PR and main runs are covered by the Rust workspace tests.
+        # Keep this check for manual builds and reusable release calls.
+        if: github.event_name != 'pull_request' && github.event_name != 'push'
         working-directory: .
         run: cargo test --locked -p agentic-cli-docs
       - name: Test Python CLI documentation generation

@@ -1,0 +1,48 @@
+# Backend-neutral OpenTelemetry Collector for local gateway telemetry.
+#
+# Receives OTLP/HTTP from the gateway, prints every span and metric with the
+# debug exporter, and serves metrics for Prometheus-compatible scrapers.
+# Traces also go to Jaeger when started with `--profile jaeger`, which sets
+# AGENTIC_OTEL_TRACE_EXPORTERS (see docker-compose.yaml).
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 400
+    spike_limit_mib: 100
+  batch: {}
+
+exporters:
+  debug:
+    verbosity: detailed
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    # Copies resource attributes such as service.name onto every series.
+    resource_to_telemetry_conversion:
+      enabled: true
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: ${env:AGENTIC_OTEL_TRACE_EXPORTERS}
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug, prometheus]

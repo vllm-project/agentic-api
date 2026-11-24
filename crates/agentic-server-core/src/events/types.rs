@@ -1,104 +1,11 @@
+mod item;
+pub use item::SSEItemType;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::types::io::{OutputItem, ResponseUsage, ShellCall};
-
-/// The type of an output item received during streaming.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SSEItemType {
-    Reasoning,
-    FunctionCall,
-    ToolSearchCall,
-    CustomToolCall,
-    WebSearchCall,
-    McpCall,
-    McpListTools,
-    ShellCall,
-    Compaction,
-    Message,
-}
-
-impl SSEItemType {
-    #[must_use]
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Reasoning => "reasoning",
-            Self::FunctionCall => "function_call",
-            Self::ToolSearchCall => "tool_search_call",
-            Self::CustomToolCall => "custom_tool_call",
-            Self::WebSearchCall => "web_search_call",
-            Self::McpCall => "mcp_call",
-            Self::McpListTools => "mcp_list_tools",
-            Self::ShellCall => "shell_call",
-            Self::Compaction => "compaction",
-            Self::Message => "message",
-        }
-    }
-}
-
-impl From<&str> for SSEItemType {
-    fn from(s: &str) -> Self {
-        s.parse().unwrap_or(Self::Message)
-    }
-}
-
-impl std::str::FromStr for SSEItemType {
-    type Err = ();
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value {
-            "reasoning" => Ok(Self::Reasoning),
-            "function_call" => Ok(Self::FunctionCall),
-            "tool_search_call" => Ok(Self::ToolSearchCall),
-            "custom_tool_call" => Ok(Self::CustomToolCall),
-            "web_search_call" => Ok(Self::WebSearchCall),
-            "mcp_call" => Ok(Self::McpCall),
-            "mcp_list_tools" => Ok(Self::McpListTools),
-            "shell_call" => Ok(Self::ShellCall),
-            "compaction" => Ok(Self::Compaction),
-            "message" => Ok(Self::Message),
-            _ => Err(()),
-        }
-    }
-}
-
-impl TryFrom<&OutputItem> for SSEItemType {
-    type Error = ();
-
-    fn try_from(item: &OutputItem) -> Result<Self, Self::Error> {
-        match item {
-            OutputItem::Message(_) => Ok(Self::Message),
-            OutputItem::FunctionCall(_) => Ok(Self::FunctionCall),
-            OutputItem::ToolSearchCall(_) => Ok(Self::ToolSearchCall),
-            OutputItem::CustomToolCall(_) => Ok(Self::CustomToolCall),
-            OutputItem::WebSearchCall(_) => Ok(Self::WebSearchCall),
-            OutputItem::McpCall(_) => Ok(Self::McpCall),
-            OutputItem::McpListTools(_) => Ok(Self::McpListTools),
-            OutputItem::ShellCall(_) => Ok(Self::ShellCall),
-            OutputItem::Reasoning(_) => Ok(Self::Reasoning),
-            OutputItem::Compaction(_) => Ok(Self::Compaction),
-            OutputItem::Unknown => Err(()),
-        }
-    }
-}
-
-impl From<String> for SSEItemType {
-    fn from(s: String) -> Self {
-        Self::from(s.as_str())
-    }
-}
-
-impl PartialEq<str> for SSEItemType {
-    fn eq(&self, other: &str) -> bool {
-        self.as_str() == other
-    }
-}
-
-impl PartialEq<&str> for SSEItemType {
-    fn eq(&self, other: &&str) -> bool {
-        self.as_str() == *other
-    }
-}
+use crate::types::io::{AgentAttribution, AgentMessageContent, OutputItem, ResponseUsage};
+use crate::types::websocket::SteeringEvent;
 
 /// Classification of SSE event types from the Responses API.
 ///
@@ -113,6 +20,13 @@ pub enum SSEEventType {
     ResponseCompleted,
     ResponseFailed,
     ResponseIncomplete,
+    /// Response-level liveness, with no output-item or agent lifecycle transition.
+    Keepalive,
+
+    // Local steering controls; no response or output-item lifecycle transition.
+    ResponseSteerAccepted,
+    ResponseSteerPending,
+    ResponseSteerFailed,
 
     // Output item lifecycle
     OutputItemAdded,
@@ -142,11 +56,17 @@ pub enum SSEEventType {
     ReasoningSummaryTextDone,
 
     // Built-in tool calls
+    FileSearchCallInProgress,
     FileSearchCallSearching,
     FileSearchCallCompleted,
     WebSearchCallInProgress,
     WebSearchCallSearching,
     WebSearchCallCompleted,
+    CodeInterpreterCallInProgress,
+    CodeInterpreterCallCodeDelta,
+    CodeInterpreterCallCodeDone,
+    CodeInterpreterCallInterpreting,
+    CodeInterpreterCallCompleted,
     McpCallInProgress,
     McpCallArgumentsDelta,
     McpCallArgumentsDone,
@@ -160,6 +80,16 @@ pub enum SSEEventType {
     Other,
 }
 
+impl From<&SteeringEvent> for SSEEventType {
+    fn from(event: &SteeringEvent) -> Self {
+        match event {
+            SteeringEvent::Accepted { .. } => Self::ResponseSteerAccepted,
+            SteeringEvent::Pending { .. } => Self::ResponseSteerPending,
+            SteeringEvent::Failed { .. } => Self::ResponseSteerFailed,
+        }
+    }
+}
+
 impl From<&str> for SSEEventType {
     fn from(value: &str) -> Self {
         match value {
@@ -168,6 +98,10 @@ impl From<&str> for SSEEventType {
             "response.completed" | "response.done" => Self::ResponseCompleted,
             "response.failed" => Self::ResponseFailed,
             "response.incomplete" => Self::ResponseIncomplete,
+            "keepalive" => Self::Keepalive,
+            "response.steer.accepted" => Self::ResponseSteerAccepted,
+            "response.steer.pending" => Self::ResponseSteerPending,
+            "response.steer.failed" => Self::ResponseSteerFailed,
             "response.output_item.added" => Self::OutputItemAdded,
             "response.output_item.done" => Self::OutputItemDone,
             "response.output_text.delta" => Self::OutputTextDelta,
@@ -187,11 +121,17 @@ impl From<&str> for SSEEventType {
             "response.reasoning_part.done" => Self::ReasoningPartDone,
             "response.reasoning_summary_text.delta" => Self::ReasoningSummaryTextDelta,
             "response.reasoning_summary_text.done" => Self::ReasoningSummaryTextDone,
+            "response.file_search_call.in_progress" => Self::FileSearchCallInProgress,
             "response.file_search_call.searching" => Self::FileSearchCallSearching,
             "response.file_search_call.completed" => Self::FileSearchCallCompleted,
             "response.web_search_call.in_progress" => Self::WebSearchCallInProgress,
             "response.web_search_call.searching" => Self::WebSearchCallSearching,
             "response.web_search_call.completed" => Self::WebSearchCallCompleted,
+            "response.code_interpreter_call.in_progress" => Self::CodeInterpreterCallInProgress,
+            "response.code_interpreter_call_code.delta" => Self::CodeInterpreterCallCodeDelta,
+            "response.code_interpreter_call_code.done" => Self::CodeInterpreterCallCodeDone,
+            "response.code_interpreter_call.interpreting" => Self::CodeInterpreterCallInterpreting,
+            "response.code_interpreter_call.completed" => Self::CodeInterpreterCallCompleted,
             "response.mcp_call.in_progress" => SSEEventType::McpCallInProgress,
             "response.mcp_call_arguments.delta" => SSEEventType::McpCallArgumentsDelta,
             "response.mcp_call_arguments.done" => SSEEventType::McpCallArgumentsDone,
@@ -215,6 +155,10 @@ impl TryFrom<SSEEventType> for &'static str {
             SSEEventType::ResponseCompleted => Ok("response.completed"),
             SSEEventType::ResponseFailed => Ok("response.failed"),
             SSEEventType::ResponseIncomplete => Ok("response.incomplete"),
+            SSEEventType::Keepalive => Ok("keepalive"),
+            SSEEventType::ResponseSteerAccepted => Ok("response.steer.accepted"),
+            SSEEventType::ResponseSteerPending => Ok("response.steer.pending"),
+            SSEEventType::ResponseSteerFailed => Ok("response.steer.failed"),
             SSEEventType::OutputItemAdded => Ok("response.output_item.added"),
             SSEEventType::OutputItemDone => Ok("response.output_item.done"),
             SSEEventType::OutputTextDelta => Ok("response.output_text.delta"),
@@ -234,11 +178,17 @@ impl TryFrom<SSEEventType> for &'static str {
             SSEEventType::ReasoningPartDone => Ok("response.reasoning_part.done"),
             SSEEventType::ReasoningSummaryTextDelta => Ok("response.reasoning_summary_text.delta"),
             SSEEventType::ReasoningSummaryTextDone => Ok("response.reasoning_summary_text.done"),
+            SSEEventType::FileSearchCallInProgress => Ok("response.file_search_call.in_progress"),
             SSEEventType::FileSearchCallSearching => Ok("response.file_search_call.searching"),
             SSEEventType::FileSearchCallCompleted => Ok("response.file_search_call.completed"),
             SSEEventType::WebSearchCallInProgress => Ok("response.web_search_call.in_progress"),
             SSEEventType::WebSearchCallSearching => Ok("response.web_search_call.searching"),
             SSEEventType::WebSearchCallCompleted => Ok("response.web_search_call.completed"),
+            SSEEventType::CodeInterpreterCallInProgress => Ok("response.code_interpreter_call.in_progress"),
+            SSEEventType::CodeInterpreterCallCodeDelta => Ok("response.code_interpreter_call_code.delta"),
+            SSEEventType::CodeInterpreterCallCodeDone => Ok("response.code_interpreter_call_code.done"),
+            SSEEventType::CodeInterpreterCallInterpreting => Ok("response.code_interpreter_call.interpreting"),
+            SSEEventType::CodeInterpreterCallCompleted => Ok("response.code_interpreter_call.completed"),
             SSEEventType::McpCallInProgress => Ok("response.mcp_call.in_progress"),
             SSEEventType::McpCallArgumentsDelta => Ok("response.mcp_call_arguments.delta"),
             SSEEventType::McpCallArgumentsDone => Ok("response.mcp_call_arguments.done"),
@@ -264,6 +214,10 @@ pub struct WireEvent {
     pub sequence_number: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_index: Option<u64>,
+    /// Event attribution is independent of attribution on an embedded output item.
+    /// Omission never implies `/root` and must not fill in missing item attribution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentAttribution>,
     #[serde(flatten)]
     pub rest: Map<String, Value>,
 }
@@ -284,6 +238,7 @@ impl WireEvent {
             event_type: Some(event_type.into()),
             sequence_number: None,
             output_index: None,
+            agent: None,
             rest: Map::new(),
         }
     }
@@ -307,6 +262,7 @@ pub enum EventPayload {
         id: String,
         status: String,
         usage: Option<ResponseUsage>,
+        service_tier: Option<String>,
     },
 
     /// `response.output_item.added`
@@ -317,8 +273,9 @@ pub enum EventPayload {
         name: Option<String>,
         namespace: Option<String>,
         call_id: Option<String>,
-        /// Preserve the typed initial shell item before command events arrive.
-        shell_call: Option<Box<ShellCall>>,
+        /// Initial snapshot for message, shell, and collaboration items, whose fields are
+        /// needed before their incremental or completion events arrive.
+        initial_item: Option<Box<OutputItem>>,
     },
 
     /// `response.output_item.done`
@@ -327,6 +284,15 @@ pub enum EventPayload {
         item_type: SSEItemType,
         output_index: Option<u32>,
         item: Value,
+    },
+
+    /// A completed content part. The accumulator resolves its owning message or
+    /// `agent_message` by output index and item ID, not by the content part's type.
+    ContentPartDone {
+        item_id: String,
+        output_index: Option<u32>,
+        content_index: u32,
+        part: AgentMessageContent,
     },
 
     /// `response.output_text.delta`
@@ -437,6 +403,7 @@ impl EventFrame {
         match &self.payload {
             EventPayload::OutputItemAdded { output_index, .. }
             | EventPayload::OutputItemDone { output_index, .. }
+            | EventPayload::ContentPartDone { output_index, .. }
             | EventPayload::TextDelta { output_index, .. }
             | EventPayload::TextDone { output_index, .. }
             | EventPayload::FunctionCallArgsDelta { output_index, .. }
@@ -457,6 +424,7 @@ impl EventFrame {
         match &mut self.payload {
             EventPayload::OutputItemAdded { output_index, .. }
             | EventPayload::OutputItemDone { output_index, .. }
+            | EventPayload::ContentPartDone { output_index, .. }
             | EventPayload::TextDelta { output_index, .. }
             | EventPayload::TextDone { output_index, .. }
             | EventPayload::FunctionCallArgsDelta { output_index, .. }
@@ -476,16 +444,43 @@ impl EventFrame {
         }
     }
 
+    /// Keeps a completed item's typed and wire IDs aligned after ingestion backfills one.
+    pub(crate) fn set_done_item_id(&mut self, id: &str) {
+        let (EventPayload::OutputItemDone { item_id, item, .. }, Some(wire_item)) =
+            (&mut self.payload, self.wire.rest.get_mut("item"))
+        else {
+            return;
+        };
+        let (Some(item), Some(wire_item)) = (item.as_object_mut(), wire_item.as_object_mut()) else {
+            return;
+        };
+        item_id.clear();
+        item_id.push_str(id);
+        item.insert("id".to_owned(), Value::String(id.to_owned()));
+        wire_item.insert("id".to_owned(), Value::String(id.to_owned()));
+    }
+
     #[must_use]
-    pub fn synthetic(event_type: SSEEventType, rest: Map<String, Value>) -> Option<Self> {
+    pub fn synthetic(event_type: SSEEventType, mut rest: Map<String, Value>) -> Option<Self> {
         let event_type_name = <&str>::try_from(event_type).ok()?;
+        // Keep one representation of attribution even when a synthetic caller supplies
+        // it with the other wire fields. Invalid attribution cannot become an unowned event.
+        let agent: Option<AgentAttribution> = match rest.remove("agent") {
+            None | Some(Value::Null) => None,
+            Some(value) => Some(serde_json::from_value(value).ok()?),
+        };
+        let output_index = match rest.remove("output_index") {
+            None | Some(Value::Null) => None,
+            Some(value) => Some(value.as_u64()?),
+        };
         Some(Self {
             event_type,
             payload: EventPayload::None,
             wire: WireEvent {
                 event_type: Some(event_type_name.to_owned()),
                 sequence_number: None,
-                output_index: None,
+                output_index,
+                agent,
                 rest,
             },
         })
@@ -512,6 +507,8 @@ mod tests {
     #[test]
     fn sse_item_type_is_derived_from_typed_output_items() {
         let item = OutputItem::FunctionCall(FunctionToolCall {
+            async_execution: false,
+            agent: None,
             id: "fc_1".to_owned(),
             call_id: "call_1".to_owned(),
             name: "lookup".to_owned(),
@@ -532,6 +529,10 @@ mod tests {
             SSEEventType::ResponseCompleted,
             SSEEventType::ResponseFailed,
             SSEEventType::ResponseIncomplete,
+            SSEEventType::Keepalive,
+            SSEEventType::ResponseSteerAccepted,
+            SSEEventType::ResponseSteerPending,
+            SSEEventType::ResponseSteerFailed,
             SSEEventType::OutputItemAdded,
             SSEEventType::OutputItemDone,
             SSEEventType::OutputTextDelta,
@@ -551,11 +552,17 @@ mod tests {
             SSEEventType::ReasoningPartDone,
             SSEEventType::ReasoningSummaryTextDelta,
             SSEEventType::ReasoningSummaryTextDone,
+            SSEEventType::FileSearchCallInProgress,
             SSEEventType::FileSearchCallSearching,
             SSEEventType::FileSearchCallCompleted,
             SSEEventType::WebSearchCallInProgress,
             SSEEventType::WebSearchCallSearching,
             SSEEventType::WebSearchCallCompleted,
+            SSEEventType::CodeInterpreterCallInProgress,
+            SSEEventType::CodeInterpreterCallCodeDelta,
+            SSEEventType::CodeInterpreterCallCodeDone,
+            SSEEventType::CodeInterpreterCallInterpreting,
+            SSEEventType::CodeInterpreterCallCompleted,
             SSEEventType::McpCallInProgress,
             SSEEventType::McpCallArgumentsDelta,
             SSEEventType::McpCallArgumentsDone,

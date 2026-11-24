@@ -21,6 +21,7 @@ pub enum ToolChoice {
     None,
     Required,
     Shell,
+    FileSearch,
     Function {
         namespace: Option<String>,
         name: NonEmptyToolName,
@@ -32,14 +33,101 @@ pub enum ToolChoice {
         mode: AllowedToolsMode,
         tools: Vec<AllowedTool>,
     },
+    /// Forces a tool from one MCP server. Parsed so admission can reject it
+    /// with a typed `tool_choice` error; the gateway does not execute it.
+    Mcp {
+        server_label: String,
+        name: Option<NonEmptyToolName>,
+    },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+/// A named tool selector, or the built-in file-search selector with its canonical internal name.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AllowedTool {
-    #[serde(rename = "type")]
     pub type_: NonEmptyToolName,
     pub name: NonEmptyToolName,
+}
+
+impl Serialize for AllowedTool {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let built_in = self.type_.as_str() == "file_search";
+        if built_in && self.name.as_str() != "file_search" {
+            return Err(serde::ser::Error::custom(
+                "file_search selector has a noncanonical name",
+            ));
+        }
+        let mut map = serializer.serialize_map(Some(if built_in { 1 } else { 2 }))?;
+        map.serialize_entry("type", &self.type_)?;
+        if !built_in {
+            map.serialize_entry("name", &self.name)?;
+        }
+        map.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for AllowedTool {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Fields {
+            #[serde(rename = "type")]
+            type_: NonEmptyToolName,
+            name: Option<NonEmptyToolName>,
+        }
+        let fields = Fields::deserialize(deserializer)?;
+        let name = if fields.type_.as_str() == "file_search" {
+            if fields.name.is_some() {
+                return Err(de::Error::custom("file_search selector does not accept a name"));
+            }
+            file_search_name()
+        } else {
+            fields.name.ok_or_else(|| de::Error::missing_field("name"))?
+        };
+        Ok(Self {
+            type_: fields.type_,
+            name,
+        })
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl utoipa::PartialSchema for AllowedTool {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        use utoipa::openapi::{
+            ObjectBuilder, Ref,
+            schema::{OneOfBuilder, SchemaType, Type},
+        };
+        OneOfBuilder::new()
+            .item(
+                ObjectBuilder::new()
+                    .property(
+                        "type",
+                        ObjectBuilder::new()
+                            .schema_type(SchemaType::new(Type::String))
+                            .enum_values(Some(["file_search"])),
+                    )
+                    .required("type"),
+            )
+            .item(
+                ObjectBuilder::new()
+                    .property("type", Ref::from_schema_name("NonEmptyToolName"))
+                    .required("type")
+                    .property("name", Ref::from_schema_name("NonEmptyToolName"))
+                    .required("name"),
+            )
+            .into()
+    }
+}
+#[cfg(feature = "openapi")]
+impl utoipa::ToSchema for AllowedTool {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("AllowedTool")
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -66,6 +154,11 @@ impl utoipa::PartialSchema for ToolChoice {
             .item(str_type().enum_values(Some(["auto", "none", "required"])))
             .item(
                 ObjectBuilder::new()
+                    .property("type", str_type().enum_values(Some(["file_search", "shell"])))
+                    .required("type"),
+            )
+            .item(
+                ObjectBuilder::new()
                     .property("type", str_type().enum_values(Some(["function"])))
                     .required("type")
                     .property("name", name_ref())
@@ -87,6 +180,17 @@ impl utoipa::PartialSchema for ToolChoice {
                     .required("mode")
                     .property("tools", ArrayBuilder::new().items(Ref::from_schema_name("AllowedTool")))
                     .required("tools"),
+            )
+            .item(
+                ObjectBuilder::new()
+                    .description(Some(
+                        "Accepted for parsing but not supported: rejected with 400 unsupported_value.",
+                    ))
+                    .property("type", str_type().enum_values(Some(["mcp"])))
+                    .required("type")
+                    .property("server_label", str_type())
+                    .required("server_label")
+                    .property("name", name_ref()),
             )
             .item(
                 ObjectBuilder::new()
@@ -123,6 +227,11 @@ impl Serialize for ToolChoice {
                 map.serialize_entry("type", "shell")?;
                 map.end()
             }
+            Self::FileSearch => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("type", "file_search")?;
+                map.end()
+            }
             Self::Function { namespace, name } => {
                 let mut map = serializer.serialize_map(Some(2 + usize::from(namespace.is_some())))?;
                 map.serialize_entry("type", "function")?;
@@ -145,6 +254,15 @@ impl Serialize for ToolChoice {
                 map.serialize_entry("tools", tools)?;
                 map.end()
             }
+            Self::Mcp { server_label, name } => {
+                let mut map = serializer.serialize_map(Some(2 + usize::from(name.is_some())))?;
+                map.serialize_entry("type", "mcp")?;
+                map.serialize_entry("server_label", server_label)?;
+                if let Some(name) = name {
+                    map.serialize_entry("name", name.as_str())?;
+                }
+                map.end()
+            }
         }
     }
 }
@@ -160,14 +278,19 @@ impl<'de> Deserialize<'de> for ToolChoice {
                 "auto" => Ok(Self::Auto),
                 "none" => Ok(Self::None),
                 "required" => Ok(Self::Required),
-                other => Err(de::Error::unknown_variant(
-                    other,
-                    &["auto", "none", "required", "function", "custom"],
-                )),
+                // Only `auto`/`none`/`required` are valid string selectors; `function`
+                // and `custom` are object selectors and must not be advertised here.
+                other => Err(de::Error::unknown_variant(other, &["auto", "none", "required"])),
             },
             Value::Object(object) => {
                 if object.get("type").and_then(Value::as_str) == Some("shell") {
                     return Ok(Self::Shell);
+                }
+                if object.get("type").and_then(Value::as_str) == Some("file_search") {
+                    if object.len() != 1 {
+                        return Err(de::Error::custom("file_search selector accepts only type"));
+                    }
+                    return Ok(Self::FileSearch);
                 }
                 if object.get("type").and_then(Value::as_str) == Some("function") {
                     let namespace = object.get("namespace").and_then(Value::as_str).map(str::to_string);
@@ -202,6 +325,22 @@ impl<'de> Deserialize<'de> for ToolChoice {
                     return Ok(Self::AllowedTools { mode, tools });
                 }
 
+                if object.get("type").and_then(Value::as_str) == Some("mcp") {
+                    let server_label = object
+                        .get("server_label")
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| de::Error::missing_field("server_label"))?
+                        .to_owned();
+                    let name = match object.get("name") {
+                        None | Some(Value::Null) => None,
+                        Some(Value::String(name)) => {
+                            Some(NonEmptyToolName::try_from(name.as_str()).map_err(de::Error::custom)?)
+                        }
+                        Some(_) => return Err(de::Error::custom("MCP tool_choice name must be a string")),
+                    };
+                    return Ok(Self::Mcp { server_label, name });
+                }
+
                 if let Some(function) = object.get("function").and_then(Value::as_object) {
                     let namespace = function.get("namespace").and_then(Value::as_str).map(str::to_string);
                     let name = function
@@ -224,7 +363,23 @@ impl<'de> Deserialize<'de> for ToolChoice {
 }
 
 impl ToolChoice {
-    /// Converts client-facing custom-tool selectors to the function-tool shape
+    /// Whether the gateway can honor this selector; an MCP selector is parsed only to be rejected.
+    #[must_use]
+    pub const fn is_supported(&self) -> bool {
+        match self {
+            Self::Mcp { .. } => false,
+            Self::Auto
+            | Self::None
+            | Self::Required
+            | Self::Shell
+            | Self::FileSearch
+            | Self::Function { .. }
+            | Self::Custom { .. }
+            | Self::AllowedTools { .. } => true,
+        }
+    }
+
+    /// Converts client-facing custom, shell, and file-search selectors to the function-tool shape
     /// used by the normalized upstream tool declarations.
     ///
     /// # Panics
@@ -237,6 +392,10 @@ impl ToolChoice {
                 name: NonEmptyToolName::try_from(crate::tool::shell::SHELL_FUNCTION_NAME)
                     .expect("shell is a non-empty tool name"),
             },
+            Self::FileSearch => Self::Function {
+                namespace: None,
+                name: file_search_name(),
+            },
             Self::Custom { name } => Self::Function {
                 namespace: None,
                 name: name.clone(),
@@ -245,13 +404,23 @@ impl ToolChoice {
                 mode: *mode,
                 tools: tools.iter().cloned().map(normalize_allowed_tool).collect(),
             },
-            choice => choice.clone(),
+            // An MCP selector never reaches inference: admission rejects it.
+            choice @ (Self::Auto | Self::None | Self::Required | Self::Function { .. } | Self::Mcp { .. }) => {
+                choice.clone()
+            }
         }
     }
 }
 
+fn file_search_name() -> NonEmptyToolName {
+    NonEmptyToolName::try_from("file_search").expect("file_search is a non-empty tool name")
+}
+
 fn normalize_allowed_tool(mut tool: AllowedTool) -> AllowedTool {
-    if tool.type_.as_str() == "custom" {
+    if tool.type_.as_str() == "file_search" {
+        tool.name = file_search_name();
+    }
+    if matches!(tool.type_.as_str(), "custom" | "file_search") {
         tool.type_ = NonEmptyToolName::try_from("function").expect("function is a non-empty tool type");
     }
     tool
@@ -274,6 +443,8 @@ pub(crate) fn resolve_tools(
 }
 
 /// Returns the effective tool choice using the same precedence as [`resolve_tools`].
+/// An explicit tool list selects the request's own choice or its default, so
+/// inherited selectors cannot refer to tools that the request has removed.
 #[inline]
 pub(crate) fn resolve_tool_choice(
     request_choice: Option<&ToolChoice>,
@@ -292,6 +463,37 @@ mod tests {
     use super::*;
 
     #[test]
+    fn file_search_tool_choice_round_trips_and_normalizes() {
+        let public = serde_json::json!({"type":"file_search"});
+        let choice: ToolChoice = serde_json::from_value(public.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&choice).unwrap(), public);
+        assert_eq!(
+            serde_json::to_value(choice.normalized_for_upstream()).unwrap(),
+            serde_json::json!({"type":"function","name":"file_search"})
+        );
+    }
+
+    #[test]
+    fn file_search_allowed_selector_needs_no_name_and_normalizes() {
+        let public = serde_json::json!({"type":"allowed_tools","mode":"required","tools":[{"type":"file_search"},{"type":"function","name":"weather"}]});
+        let choice: ToolChoice = serde_json::from_value(public.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&choice).unwrap(), public);
+        assert_eq!(
+            serde_json::to_value(choice.normalized_for_upstream()).unwrap(),
+            serde_json::json!({"type":"allowed_tools","mode":"required","tools":[{"type":"function","name":"file_search"},{"type":"function","name":"weather"}]})
+        );
+    }
+
+    #[test]
+    fn file_search_allowed_selector_rejects_noncanonical_internal_name() {
+        let selector = AllowedTool {
+            type_: NonEmptyToolName::try_from("file_search").unwrap(),
+            name: NonEmptyToolName::try_from("other").unwrap(),
+        };
+        assert!(serde_json::to_value(selector).is_err());
+    }
+
+    #[test]
     fn function_tool_choice_rejects_empty_name() {
         assert!(
             serde_json::from_value::<ToolChoice>(serde_json::json!({
@@ -308,6 +510,45 @@ mod tests {
             }))
             .is_err()
         );
+    }
+
+    #[test]
+    fn mcp_tool_choice_round_trips_and_is_unsupported() {
+        for wire in [
+            serde_json::json!({"type": "mcp", "server_label": "docs"}),
+            serde_json::json!({"type": "mcp", "server_label": "docs", "name": "search"}),
+        ] {
+            let choice: ToolChoice = serde_json::from_value(wire.clone()).expect("MCP tool_choice parses");
+            assert_eq!(serde_json::to_value(&choice).expect("serialize"), wire);
+            assert!(!choice.is_supported());
+        }
+        assert!(serde_json::from_value::<ToolChoice>(serde_json::json!({"type": "mcp"})).is_err());
+        assert!(
+            serde_json::from_value::<ToolChoice>(serde_json::json!({"type": "mcp", "server_label": "docs", "name": 1}))
+                .is_err()
+        );
+        assert!(ToolChoice::Required.is_supported());
+    }
+
+    #[test]
+    fn unknown_string_tool_choice_lists_only_string_variants() {
+        for invalid in ["function", "custom", "nonsense"] {
+            let error = serde_json::from_value::<ToolChoice>(serde_json::json!(invalid))
+                .expect_err("string selector is not a valid tool_choice");
+            assert_eq!(
+                error.to_string(),
+                format!("unknown variant `{invalid}`, expected one of `auto`, `none`, `required`")
+            );
+        }
+
+        // The same names remain valid as object selectors; the corrected string-form
+        // error must not be read as rejecting them outright.
+        for object in [
+            serde_json::json!({"type": "function", "name": "get_weather"}),
+            serde_json::json!({"type": "custom", "name": "apply_patch"}),
+        ] {
+            serde_json::from_value::<ToolChoice>(object).expect("object selector is valid");
+        }
     }
 
     #[test]

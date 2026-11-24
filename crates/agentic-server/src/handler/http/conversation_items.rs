@@ -1,45 +1,18 @@
 //! HTTP transport for conversation item CRUD.
 
-use axum::extract::{Path, Query, Request, State};
+use axum::extract::{Path, RawQuery, Request, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use serde::Deserialize;
 
+use agentic_core::types::io::ItemInclude;
 #[cfg(feature = "openapi")]
-use agentic_core::types::ConversationResponse;
-use agentic_core::types::{CreateItemRequest, ItemResponse, ListItemsResponse};
+use agentic_core::types::{ConversationResponse, InOutItem};
+use agentic_core::types::{CreateItemRequest, ListItemsResponse};
 
 use super::super::common::{error_response, executor_error_response, extract_json, read_bytes};
 use super::conversations::{DEFAULT_TENANT_ID, conversation_response};
+use super::items::ListItemsQuery;
 use crate::app::AppState;
-
-/// Query parameters for listing conversation items.
-#[derive(Debug, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::IntoParams))]
-pub struct ListItemsQuery {
-    /// Maximum number of items to return (default: 20, max: 100).
-    #[serde(default = "default_limit")]
-    pub limit: i64,
-
-    /// Cursor for pagination (item ID to start after).
-    pub after: Option<String>,
-
-    /// Sort order for items (default: desc). Ascending order is oldest-first.
-    #[serde(default = "default_order")]
-    pub order: String,
-
-    /// Optional output expansion, encoded as `include[]=value` by `OpenAI` clients.
-    #[serde(alias = "include[]")]
-    pub include: Option<String>,
-}
-
-fn default_limit() -> i64 {
-    20
-}
-
-fn default_order() -> String {
-    "desc".to_string()
-}
 
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
@@ -100,32 +73,25 @@ pub async fn create_item(State(state): State<AppState>, Path(conversation_id): P
 pub async fn list_items(
     State(state): State<AppState>,
     Path(conversation_id): Path<String>,
-    Query(query): Query<ListItemsQuery>,
+    RawQuery(raw): RawQuery,
 ) -> Response {
-    // Validate limit parameter
-    if query.limit < 1 || query.limit > 100 {
+    let query = match ListItemsQuery::parse(raw.as_deref()) {
+        Ok(query) => query,
+        Err(error) => return *error,
+    };
+    // ItemLimit validates the upper bound; conversations also require a nonzero limit.
+    if query.limit.get() == 0 {
         return error_response(
             StatusCode::BAD_REQUEST,
             "invalid_request",
             "limit must be between 1 and 100",
         );
     }
-
-    // Validate order parameter
-    if query.order != "asc" && query.order != "desc" {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "invalid_request",
-            "order must be 'asc' or 'desc'",
-        );
-    }
-
     // Text output logprobs are already present in stored message items. Other
     // include expansions need their own data sources before they can be served.
     if query
         .include
-        .as_deref()
-        .is_some_and(|value| value != "message.output_text.logprobs")
+        .is_some_and(|include| include != ItemInclude::MessageOutputTextLogprobs)
     {
         return error_response(StatusCode::BAD_REQUEST, "invalid_request", "unsupported include value");
     }
@@ -133,13 +99,7 @@ pub async fn list_items(
     match state
         .exec_ctx
         .conv_handler
-        .list_items(
-            DEFAULT_TENANT_ID,
-            &conversation_id,
-            query.limit,
-            query.after.as_deref(),
-            &query.order,
-        )
+        .list_items(DEFAULT_TENANT_ID, &conversation_id, query.page())
         .await
     {
         Ok(response) => axum::Json(response).into_response(),
@@ -155,7 +115,7 @@ pub async fn list_items(
         ("item_id" = String, Path, description = "Item ID")
     ),
     responses(
-        (status = 200, description = "Item retrieved", body = ItemResponse),
+        (status = 200, description = "Item retrieved", body = InOutItem),
         (status = 404, description = "Item or conversation not found"),
     ),
     security(("bearer_auth" = [])),

@@ -1,0 +1,486 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Get the Paris demo weather and the Tokyo demo local time. Answer with
+        whatever is available.
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      parallel_tool_calls: true
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - description: Read the demo local time for a city.
+        name: get_local_time
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: parallel-mixed/t1-start
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790836774
+      created_at: 1790836772
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0901f4482b83c47f006abe002475bc87d1b5cbe55ca45f6908
+      incomplete_details: null
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-6-astra
+      moderation: null
+      object: response
+      output:
+      - arguments: '{"city":"Paris"}'
+        async: true
+        call_id: call_EQlGxOXBzaMDsdxgvsivj8ix
+        id: fc_0901f4482b83c47f006abe0026063c87d19918af900063b91b
+        name: get_weather
+        status: completed
+        type: function_call
+      - arguments: '{"city":"Tokyo"}'
+        call_id: call_R4ojy3XENFwmuzfDEQg5tA3q
+        id: fc_0901f4482b83c47f006abe0026064c87d184b5d4eb9862c1a1
+        name: get_local_time
+        status: completed
+        type: function_call
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - description: Read the demo local time for a city.
+        name: get_local_time
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 116
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 49
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 165
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - call_id: call_R4ojy3XENFwmuzfDEQg5tA3q
+        output: '{"city":"Tokyo","local_time":"18:30","source":"demo clock"}'
+        type: function_call_output
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      parallel_tool_calls: true
+      previous_response_id: resp_0901f4482b83c47f006abe002475bc87d1b5cbe55ca45f6908
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - description: Read the demo local time for a city.
+        name: get_local_time
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: parallel-mixed/t2-sync-output-only
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790836777
+      created_at: 1790836774
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0901f4482b83c47f006abe0026b1d487d18e54a49cb764295e
+      incomplete_details: null
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-6-astra
+      moderation: null
+      object: response
+      output:
+      - content: []
+        encrypted_content: gAAAAABqvgApuRGQ3QfEJnwziPjBO2EOeBmO8WhVV8Wg5ZKznCzAwP5cK8qf_skFxpqg6U2f8B2DtyQC33-KusPjYEXqVtZam5aroVxvLuG4te2UusWoYCoQawGBTP-Te8zuCypuMOilkrU_exw4D9soh_s-knwyYAojMUhwmYxuq-z3keU2-maWrR7j_RDXeGLvjPYkNImVJwmJO_yd8kt01P_yT7hIPQLbvyhfhPHIXM5zipq4LOYLkghWwJz7l8kF_fMVSFx9UOAA4Uiu0QbEJInE26Gmnqc7RxFO6qmvArcv9CENao8jdEmLto5uDSEAlTt2gj9GhPUmP0AY8O5RHhUig6JdjwnHsZUq66tHpJrvJ5R5hU-dgQ448b51JAPVPZzWBe8e0Lw36kw_a6oHq9Ky75GQyetj9zbbtTRgcyKkHsXg1ng5y42drZsFfzt9YMRyw7X1vJo_T--42lsd4WFY3xW-aOcsuQkcB5EZCntl3IuZ-SYiOTLGSbR-Z_WEgqqSiB4S_Vjcd4LPdNBICknYXECRMCOI9kSJTzLmGX3OGEV02qQuGWqQPzmUU7p3W89mHyBaldZjV1c5VVbLZjSTwoM6iJsc7CP0suim1lRYh_dGoj_JI6jw_mbM_s5r2t3U1OiGzHXq4hnQsA9A5kgvSqhY4fEhmds2F8Pyc5kf97o7Ywxxz2Lu-nObPMvWvFoCN9YyEy6mWNMLeiQDqYGp9wEw8cC6uQjZYLo5nW8S5QyYkL4t_3v5Xq-g_w2MhGmmKuTY_WxkMc6KFeYb2rNev59hpQ77_8_X1duRGCdfJCRVYZzQpchRFAIRyo1Cj5OvvN59ygdCaxN5GeGjzCzpxCVyYLZu48ZF42n6mYDoFvZax8TKrri9knRMK3SYbzo8h44CWI7W5wME-fOcXhKXzz9B86a_cl8YeSNweWqP7qRgbdamgQxvt_SuEj7x6b0swcgGfRCSiqxV6NuWVmGObYGi3BjyhHfQCSHGGNyXT5XjKNJ3RcY4p34uLuGotV0dzCfl40_QnpZr9ofLVjo7HfznH2-jPCSCFqt23lP8W9-jTiBI-nGacQCbqzeqpO8-0VO1kCp-QplR6OVvyjntKMmW6AP7gYpAzjT3TjII6u1NzE6V7J8pkyZlu3KM5Rf4hKQD97fCF5duY3HUkxpyL_IxXv9QavD7Yc_T8PQDODiPYLyT4HoGCC_gNJlFrJw38_lBQt-XeSiwF04Y6VoBxF4E4g==
+        id: rs_0901f4482b83c47f006abe0028721c87d1ae9fe1e08c81ca4d
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '- **Tokyo demo local time:** 18:30.
+
+            - **Paris demo weather:** Requested; the result hasn’t arrived yet.'
+          type: output_text
+        id: msg_0901f4482b83c47f006abe0028bee087d1ba21c4b3d0f98eba
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_0901f4482b83c47f006abe002475bc87d1b5cbe55ca45f6908
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - description: Read the demo local time for a city.
+        name: get_local_time
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 212
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 45
+        output_tokens_details:
+          reasoning_tokens: 12
+        total_tokens: 257
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input:
+      - call_id: call_EQlGxOXBzaMDsdxgvsivj8ix
+        output: '{"city":"Paris","temperature_c":22,"condition":"Clear","source":"demo
+          weather snapshot"}'
+        type: function_call_output
+      - content: What does the Paris demo weather snapshot say? Answer in one sentence.
+        role: user
+        type: message
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      parallel_tool_calls: true
+      previous_response_id: resp_0901f4482b83c47f006abe0026b1d487d18e54a49cb764295e
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - description: Read the demo local time for a city.
+        name: get_local_time
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: parallel-mixed/t3-late-async-output
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790836780
+      created_at: 1790836777
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0901f4482b83c47f006abe0029c5cc87d1bc928aad0a0dd16a
+      incomplete_details: null
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-6-astra
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: The Paris demo weather snapshot says it’s clear and 22°C.
+          type: output_text
+        id: msg_0901f4482b83c47f006abe002b74c087d1b0829c0fb2e68a21
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_0901f4482b83c47f006abe0026b1d487d18e54a49cb764295e
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - description: Read the demo local time for a city.
+        name: get_local_time
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 288
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 18
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 306
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200

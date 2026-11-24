@@ -1,0 +1,1187 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Call get_weather three times in parallel in this single turn, for "Tokyo",
+        "Paris", and "Cairo". Do not search the web.
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      model: gpt-5.6
+      parallel_tool_calls: true
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: web_search
+      - description: Get the current weather for a given city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              description: City name, e.g. Tokyo
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790857083
+      created_at: 1790857082
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0b6277d1340b1c82006abe4f7a9dc087d1a11fc7b5553f0604
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - arguments: '{"city":"Tokyo"}'
+        call_id: call_xsGKuWKh5tX8bo3w30aVXPoL
+        id: fc_0b6277d1340b1c82006abe4f7bc73c87d1bd912a7df05176ab
+        name: get_weather
+        status: completed
+        type: function_call
+      - arguments: '{"city":"Paris"}'
+        call_id: call_KtjIwmVTcwqAs7buGBscbPl8
+        id: fc_0b6277d1340b1c82006abe4f7bc74c87d1b185939ce30aa580
+        name: get_weather
+        status: completed
+        type: function_call
+      - arguments: '{"city":"Cairo"}'
+        call_id: call_WcrIyWZkYxaI3pP2iMturVyN
+        id: fc_0b6277d1340b1c82006abe4f7bc75487d1b1e3f5a15c62f57c
+        name: get_weather
+        status: completed
+        type: function_call
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Get the current weather for a given city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              description: City name, e.g. Tokyo
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - return_token_budget: default
+        search_content_types:
+        - text
+        search_context_size: medium
+        type: web_search
+        user_location:
+          city: null
+          country: US
+          region: null
+          timezone: null
+          type: approximate
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 4520
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 4452
+        output_tokens: 63
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 4583
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input: First run one web search for the exact query "capital of France". After
+        that search returns, call get_weather for the capital city it names.
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      model: gpt-5.6
+      parallel_tool_calls: false
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: web_search
+      - description: Get the current weather for a given city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              description: City name, e.g. Tokyo
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790857090
+      created_at: 1790857086
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0d0f27cc9f4902a5006abe4f7e04e087d1b6b8de1d629ff11c
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - action:
+          queries:
+          - capital of France
+          query: capital of France
+          type: search
+        id: ws_0d0f27cc9f4902a5006abe4f7ebfe087d18b0b32d7ffa56568
+        status: completed
+        type: web_search_call
+      - arguments: '{"city":"Paris"}'
+        call_id: call_EcWQyvOk7OTA8faT47aE3GO1
+        id: fc_0d0f27cc9f4902a5006abe4f82820487d1a979a3ce7eccbd28
+        name: get_weather
+        status: completed
+        type: function_call
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 1
+      tools:
+      - description: Get the current weather for a given city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              description: City name, e.g. Tokyo
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - return_token_budget: default
+        search_content_types:
+        - text
+        search_context_size: medium
+        type: web_search
+        user_location:
+          city: null
+          country: US
+          region: null
+          timezone: null
+          type: approximate
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 8893
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 4529
+        output_tokens: 44
+        output_tokens_details:
+          reasoning_tokens: 26
+        total_tokens: 8937
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input: 'Make four separate tool calls now: call get_weather for "Tokyo", call
+        get_weather for "Paris", and run two web searches for the exact queries "Tokyo
+        events this week" and "Paris events this week". Then summarize what you found.'
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      model: gpt-5.6
+      parallel_tool_calls: true
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: web_search
+      - description: Get the current weather for a given city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              description: City name, e.g. Tokyo
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790857094
+      created_at: 1790857093
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0c12a6225d49aab8006abe4f84fa0087d1b0c5201895cf187f
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - content: []
+        encrypted_content: gAAAAABqvk-G8bhPrN_KeBQuIGorEpGtxPP1vEcSZSvG2v0bUbWO0IsR-UQ4wHFioOwu-PL-Ni3WNOO076gzeOV3OPFjbezXLc-AS-d-Nlcak1axR3YHPSpGRdeuA3IDDNqHBN9tOUylW7a02gkwMplI7IZMuutfx0-Ql7io64EokfxP2ZzcFG0TRMICUUkOAfRct2ijfW_CXzb0p3EXesE-af3RHyRt9YFQd0p4W_7JjNE6WY7gjhdosITvbUrKTfs6Faslu1w8ynwOYqWYr38BzDOHnDAMDwe-iUmr7z9Wjvx95f3w3keRhvuZEJuJpbofRxMsfE4eePtD57hGGjBSHvHHkXM14nhcuHOUzC9lMtoCTkOf3vNS3dVMI0NiUcmZ0uZTpcc3m_-sewPBYFazCpyBZYbSRoS27CXa-cyoApQUJf4hGdPJvxTuXR8YF9h1sPdTez2DJy98JZiDZX6cv--RpCScsmBnUvT9EumLcBK3jksb7xPCLPjFNihydohD1iES90D1gQ2u5G__CQgV_BiLOOUjHdcN05_NsJGmiEVqXJh9tRywy_Mz_DDvOe1nLCUdz_w_ap5tjxlKgegjCx9StH7H1UEpeU7Y1jObaFHvpUWsVRhrwbhpSL562c3bXYuR_SAlqPoQsEX6wZcHLIFWErmzlfZOp6ZlQSfN8dGMpK88HWa5YnflgHRFkWUdxeAeaY__WN1N3fY4MqLPhqXjmo_e2IEtvymNm0-xFpADU7jxhcuP29Dfb956iOLGjg1XMoWXHlXcjc0otZqwoBHqrY1xTt5g9w7xm5j31_Nsv5_1HH_bJeKeEuvQ_nsuhpfuX-ffmTNrP3djQOg-EbVH913IqHUm_yTIQr1Z9fu9HPwP6krmUGQ3gL0sVP-okwpd4X3nJbxwyvWPyLbb7ELPtgbuIYgfRgQPgAuvb27jcZ4OFfQo1N-SrZpKDn-yMAMiv49p3iVBm0UZlsucg5e6E_hUyfTwf4rfAuGLhiEkaUiJQSYK4uEFU5ZW1xnaKlPyyJEBduPaLZke30iIoWFPrgq5ryrzKSMgLmTS7qEpk2nIq94SQoZ3-ev7YRLaXnEL_WGp4KZJ4lJlIROTLxar4R4DGOyjoaKJR-82ME44yfnUFoingNra4KVneGJmhNkVJL3xLzuUa3fKCrMKC4OiJwxhkeKl07hjYWdCs3YzUzn3mGdnW8s_USgQE3CBTsymfWv1aLkHtwhr57Jn9Lq9-R-dMORj5J6dHhIwEAkFwrrKOeInSqiXpZPRLlCBMvn8VELySBhhyoEscDbIvTzbod8iaNv3IjyTSqvoqk15rl9lgW9KxfZT7uHuu48ZKwgUgRamFwdARup2yyQNSofxM3OHmA==
+        id: rs_0c12a6225d49aab8006abe4f858f7087d1bc3512749cd75061
+        summary: []
+        type: reasoning
+      - arguments: '{"city":"Tokyo"}'
+        call_id: call_gwjbV9GG1Z4QvVWG0vXVpCNK
+        id: fc_0c12a6225d49aab8006abe4f862f7087d1b86187753c4cbbcd
+        name: get_weather
+        status: completed
+        type: function_call
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Get the current weather for a given city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              description: City name, e.g. Tokyo
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - return_token_budget: default
+        search_content_types:
+        - text
+        search_context_size: medium
+        type: web_search
+        user_location:
+          city: null
+          country: US
+          region: null
+          timezone: null
+          type: approximate
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 4539
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 4471
+        output_tokens: 51
+        output_tokens_details:
+          reasoning_tokens: 31
+        total_tokens: 4590
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body:
+      input:
+      - call_id: call_gwjbV9GG1Z4QvVWG0vXVpCNK
+        output: '{"city": "Tokyo", "temperature_c": 22, "condition": "Clear"}'
+        type: function_call_output
+      - content: Now run two more separate web searches, for the exact queries "Tokyo
+          museums" and "Paris museums", and summarize each in one sentence.
+        role: user
+        type: message
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      model: gpt-5.6
+      parallel_tool_calls: true
+      previous_response_id: resp_0c12a6225d49aab8006abe4f84fa0087d1b0c5201895cf187f
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: web_search
+      - description: Get the current weather for a given city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              description: City name, e.g. Tokyo
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790857102
+      created_at: 1790857095
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0c12a6225d49aab8006abe4f86f17c87d180b73cb4bd4f4220
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - content: []
+        encrypted_content: gAAAAABqvk-O6HbHBRaHsjNCacxxCXghjU8ih6lrdRvsjnurLBZLTl0viVEgzShdRmNzW6MEdkygrrrgYkwM27cXBbsjW-MOCl1F98b437sRd2GAyeEqxY5za073NitcUQeY1dUj-NLNQJCARrNKAQ8pCa7wbJZR8YwwERhOmbdRUKS0IRzuJl3kXdlhnqQ_WtGZ4H5QPRTB2hHd44xFtS-IFmQqvKSCK1QK6BTk6YIvtrcWMD2RVCW1RD7k-jmUc-WalCvyd3gA18c5v5EZOnsEWDX_UGkTJNnla5jtuzSBQ_u2mZBl5PX1xMF7XdzHmA8P81EXEl5nSm4bolSK2az2Blq2c5_IlZroUdX3TGHszpLQNiv2UD8K5oSaBxDwQ_j47AK2vSkkEn1VrunIzsVAYSo11ngMetZXz3XgC7aqghP2W627IfP02ctyD0-MrQcSL9xeaaAoOt1uLRYjcv4y1L0IqK1FCV-OhenY5G1PfD-1-NPlvTAqoqtIlvUzkrLkfcJrrmfwtFuOhkqyrTHtMPufylqjAemaKMu2r84E0vPLBiHYAyyhxYyIg7te5n2ui7GY_BgWdEAkdMqpjrlYBDqEkTlPwLmBniadnhsIM7g9uZVnK_p5R_ufIMpaWC8hyDJJ38JE9rtNPr9wIIsd3xLOpYV_pdQ8s1dg3wFNU5wtl2jIaBd-SdRKKXGZrolRPVIMQg0NBg_Elw-xfbLZmzOZkn4ftqjCjzXSClTFmkW2eDQV38bOzZYqtEgKK9J-uis4VaLCIs3pjB4qxuR6MMZUScAM5HYJ6DjanHz3M7m51U-vy36qsNZ7AYpH6s93bWSSdK8_rDtNU8MDcDztjn6yPfJWTjlcbXzuR9sZhqYMUpFwN_Hi8jeYzzz3Ayjaz7XCq_CgP1r-fPhtkfg-_hkVM3ZUdbuc62TNn4kZmZpRAM0m5nsapNuypozP9WSvkMIvLTkXj1wSr5i3Tm1Q9hekusiN5V5Jn1HFpRGnSXiVblrRUb8NaEddRl65ZGRHrOxibD9X-BbyqsKHTluFxtik3sQHlgX-ZWlvX9xqcaAKF5mcYZFM8s74G2O1E9NZcM6PS8mchAwLado0qBhbj8916OWxWDkf06qr0SkWFeegPgs4FuI80fSrzj4tpVEUw_Ajr5-sIo5KRqSHVHX7jeRUSwy5qiPZxkywJEuw0IvfgL1TTG1y788vW4eP9xhlG2VUoiZzpiwMhfGTnkN5SVM3ga8PtF24lBZ3qtjybW7SYCWL84G2GKWbG-xqci-VGYq0MTcSzRibZqF7aaXH0xzGU8sYRg==
+        id: rs_0c12a6225d49aab8006abe4f87a02887d1b149f492399f81e9
+        summary: []
+        type: reasoning
+      - action:
+          queries:
+          - Tokyo museums
+          query: Tokyo museums
+          type: search
+        id: ws_0c12a6225d49aab8006abe4f88300c87d1a37474104738f288
+        status: completed
+        type: web_search_call
+      - action:
+          queries:
+          - Paris museums
+          query: Paris museums
+          type: search
+        id: ws_0c12a6225d49aab8006abe4f8ba9d887d19bddaab740d505c0
+        status: searching
+        type: web_search_call
+      - content: []
+        encrypted_content: gAAAAABqvk-OQCP3k6yle6IabUtier4sRR5tWYpF15GBMjNX3LpHxbSwCA2kIRBbTfvyf5r05xAUq67CpixsuzN4ItMTpC-E8YYkzjA3-MceiMJC_v0lza0UTcjudhxz61En3YQH0ZJrXO835TsLvNYBLzyhxsrTg2y1a_LyIWbCAjKVaeIBCp5wGQsJGZrKroUdfT5trqGlDf0MZjxfThqtMzw65VbFf9AUUAeaAayZ-ZsQOYEIy0E_2arT9D-CHvPvz3Zv7PxW_deMFbQi2UhZ6g7IuQ5O6ocPOJN6fUXvbyASKUSHRNKBXRxw45yMJDquT1d0zQm6YY7Wf0ZbrMLUAL_Kkk8fgEhXnNJDb-M5uazGdr5OJbPaR9Z_6GwoACs-tE5-UhK2EtLzLWJhZnv89dI6NnMGvyHwZNJB1ivcHcjdlLx0bByTHdKMq1Nxdh19hJ81TMBv0mtBFfNaGwbiMtoXpxj5-70XB4xGpmMLt4VMrMjiU7nlpwruilgCD5ehHH7-ZD4Sx8tgH4Z7YDEBLDOVL8LtHy5YeAHhmKKV8s6BBrpiBsxevu9ljfN-HjJlfmqDrnSeEYEWRhabhbNKB85pGFQPZ8Tg-bW5CAOAMFaafg78CB4O1C4wLjbjzfCFw8vqcWmSm6Y1wuegh0k8jFskpXmgdRPuX9kUNBwKBbNRAkPiWAYb1TdPHhdzRQmtGIj2VtrwQb2zQU5LKr19RbthdefVIi-3N4zfuMWjLnBpnbYT5hPYysFUFa2eD8EQRUMw_vwyT6s8HFtxaZn7iPRvfTF_C6sSba6bwvfPtZObIG4i-rKFSXzElxE4VGv5cUAvsQV47TYn2PQR1SX__XkYJ-h6-JeSWZufJOs0Jw9qutx9qrpcHV2KTKcSLjsMumXBqKEhAtLLfm9YJ1GYaLVTvJNEENGk-VEMbOQHZQni2JDOQkMt9S1lCv5jqCoPp1WtgKbmmqv_t-g-A96GM2MtOKgEfJovApaaUE1pRDUAwUc6OoN5k9RmhT5h-k92caNTeOhNeWDT634SSHNGX7N5YF6ioVS6PZbetkJsdP8kcoZeQj98_dV2DwPUZykTHKP3E9797wVPFSPUEmd4hQgnf9NLEf4lxEG1_W7opoQTYTreVUzW_W-ne_LxXcvUSw-WiFbi1EUyQ3lQsKEnuyp2XcZfb4MLvbq1d8AXdZG_8O17uao45KVoAkzmYNOlI47zHP5eQLXZKtQGQdPSdPPux1j6634hPDesKE2pwXtV4zX8CM4Bx0t25IxmIrBsOup6eHFWPVujHuNOuoeLJV9_baPQ_WPUwYSpfcYn3xmusGhW4AwZc_qgV7u78Zu1xWSJdKRzeJpgcBnbYiLr2MZvs00JxHegrYgBC79rohFBU7_cl6jxbmiWYeAcxLNB74y8LnGPP1H8Af2luc9eNzb2B5cHCaZ7pZTNcxF8dU3xGAutONY=
+        id: rs_0c12a6225d49aab8006abe4f8c717887d1abe3853866bce1e9
+        summary: []
+        type: reasoning
+      - content:
+        - annotations:
+          - end_index: 267
+            start_index: 151
+            title: Art & Museums | The Official Tokyo Travel Guide, GO TOKYO
+            type: url_citation
+            url: https://www.gotokyo.org/en/see-and-do/arts-and-design/arts-and-museums/index.html?utm_source=openai
+          logprobs: []
+          text: "- **Tokyo:** Results highlight the Tokyo National Museum and Ueno\
+            \ Park’s cluster of major art, history, and science museums as strong\
+            \ starting points. ([gotokyo.org](https://www.gotokyo.org/en/see-and-do/arts-and-design/arts-and-museums/index.html?utm_source=openai))\
+            \  \n- **Paris:** I couldn’t complete this search because the web tool\
+            \ reached its call limit after the Tokyo query."
+          type: output_text
+        id: msg_0c12a6225d49aab8006abe4f8d3fa887d1902b69a94a584697
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_0c12a6225d49aab8006abe4f84fa0087d1b0c5201895cf187f
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 1
+      tools:
+      - description: Get the current weather for a given city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              description: City name, e.g. Tokyo
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - return_token_budget: default
+        search_content_types:
+        - text
+        search_context_size: medium
+        type: web_search
+        user_location:
+          city: null
+          country: US
+          region: null
+          timezone: null
+          type: approximate
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 9018
+        input_tokens_details:
+          cache_write_tokens: 113
+          cached_tokens: 4471
+        output_tokens: 172
+        output_tokens_details:
+          reasoning_tokens: 91
+        total_tokens: 9190
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      input: Use web search once to search for the exact query "potato", then answer
+        in one sentence.
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      model: gpt-5.6
+      parallel_tool_calls: false
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790857110
+      created_at: 1790857105
+      error: null
+      frequency_penalty: 0.0
+      id: resp_081039f72b23bb60006abe4f91158887d18c564481dc824410
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - action:
+          queries:
+          - potato
+          query: potato
+          type: search
+        id: ws_081039f72b23bb60006abe4f92353087d185b2eaec6361ec34
+        status: completed
+        type: web_search_call
+      - content:
+        - annotations:
+          - end_index: 140
+            start_index: 76
+            title: Potato - Solanum tuberosum | Kew
+            type: url_citation
+            url: https://www.kew.org/plants/potato?utm_source=openai
+          logprobs: []
+          text: A potato is a starchy underground tuber from the plant *Solanum tuberosum*.
+            ([kew.org](https://www.kew.org/plants/potato?utm_source=openai))
+          type: output_text
+        id: msg_081039f72b23bb60006abe4f95cdac87d1a27be3068b40b6d1
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 1
+      tools:
+      - return_token_budget: default
+        search_content_types:
+        - text
+        search_context_size: medium
+        type: web_search
+        user_location:
+          city: null
+          country: US
+          region: null
+          timezone: null
+          type: approximate
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 8732
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 4394
+        output_tokens: 62
+        output_tokens_details:
+          reasoning_tokens: 25
+        total_tokens: 8794
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body:
+      input: 'Run three separate web searches, one after another, each as its own
+        web_search call: first the exact query "potato nutrition facts", then "tomato
+        nutrition facts", then "carrot nutrition facts". Do not combine them into
+        one search. Then summarize each result in one sentence.'
+      max_output_tokens: 4096
+      model: gpt-5.6
+      parallel_tool_calls: false
+      previous_response_id: resp_081039f72b23bb60006abe4f91158887d18c564481dc824410
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790857124
+      created_at: 1790857112
+      error: null
+      frequency_penalty: 0.0
+      id: resp_081039f72b23bb60006abe4f984b3087d1acb6489c5a9addb7
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - content: []
+        encrypted_content: gAAAAABqvk-lX6U-M9J7Q0WwilSDWZosLPb0LMnEGpyLEzy3hJq2jRX6M8JivRWKke5VXkFeyoDjB4M5ICt4nyOD8uooTC01TIc2_D8ntpXUwFEbA3oqW5GQmujSZH4V9QXCEUgZ5isAqLXNC7ap8BIEvJyvk8M4pRT46hz-B7hKYONScC8XRsEfkcG2KcEfqONk3DcVvQzR9VpdURp861_AxU9NyONVMndaVBLCAla4DMAgja8wfOOLyQQoL4tzAEjAhDzumPFzao3BQ_dVBFJA7JOniubf4jXUKBB1Gydstt44BXqZufxx7y86m4a-B_GkcDviWRI9Kq00VKQZHjB1FBTEQozgfFDJEbXiLMi6u_h299pZgDC-by9M6wX1e1GnqjxHez6efMMF7oa3Vd6tcsEDKk9fW7P1DLAGNKIOZ2RhR7sEf8kk91YtJtSqB9CbZV8wzcyGPqXabxAndtI3J7tL124MbDrh9kx-1MnQtyo5Kysn0AkuMmRH43KRKWoL-gmtr6pqIETVicVGcz7UMgJMdWGlX-Y5hBQfafCz_eXAY0i7udfLJi-9vEGlJ-R0tAX9tY_iJgzUqUOh53pgd5KwtjZcU3l3u9pWZKZ50x5hGC2LhzCfzyRQdXMvvGQJHp_-tTMDTgcztVt9guE3Vceq5eafpq0jZaFXspmnW5kaJJwvsBFwArJ2gwXZAuIjF5WsRCmBBB9JjRA2NItRomQihEDATJcMruLPrqE_h3RSASRTwyJkI00Vb_08evQRiToxeBAYIbeR6_lAV0Px55UxZa0PT5qkGuLjQtTVlZP2M9SzTev9-5erYsVEEBLL04nANqcmXxa7XpIydIXWpPixym8y1je-7_VWRZuEQdb8zZ_RlMTg4JO3FV4fp0hx-jK-awvwRW8cDQM7SgNSvPts0i1zdYyPLIFCgwcoFWc2vm51xUmDFuJBIVrMJFx-JNnMHXqdx6AP7o-GRCfoDvVNOxcfvkZjCse5fPrQa6ljv12JyMW5ETpjo85Lsib1NnL4T2U7uGoCa5_iuOx4yaUW4WuSCZlqMfdwNBhuoHVWSeIOceMqvlQjyJEc4ltOXqMCqGj-ncrxsnmf0tbgiQUOCdF71PHKey-uFqXanf3gspwNH_4ehOXlyjYit-Bl78gOu4q9oDDQQOX7cm-QcRnVj-nU0Chzx7P5HIOQtYQRy19Jq93_U5ZuA96LhDvoeGWmBywDBXvRY7kbq0TvEwzde_Dpbwd_aVvMKcYww9Bqgf4SuZg=
+        id: rs_081039f72b23bb60006abe4f992bb087d181c8560cad39be14
+        summary: []
+        type: reasoning
+      - action:
+          queries:
+          - potato nutrition facts
+          query: potato nutrition facts
+          type: search
+        id: ws_081039f72b23bb60006abe4f996e3487d18c609708a0d17636
+        status: completed
+        type: web_search_call
+      - action:
+          queries:
+          - tomato nutrition facts
+          query: tomato nutrition facts
+          type: search
+        id: ws_081039f72b23bb60006abe4f9b905887d18ac5691fd04be732
+        status: completed
+        type: web_search_call
+      - action:
+          queries:
+          - carrot nutrition facts
+          query: carrot nutrition facts
+          type: search
+        id: ws_081039f72b23bb60006abe4f9f86fc87d19e018cde547a19ad
+        status: completed
+        type: web_search_call
+      - content:
+        - annotations:
+          - end_index: 262
+            start_index: 173
+            title: 'Potatoes 101: Nutrition Facts, Health Benefits, and Types'
+            type: url_citation
+            url: https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai
+          - end_index: 552
+            start_index: 424
+            title: A Breakdown of Tomato Nutrition
+            type: url_citation
+            url: https://www.verywellfit.com/tomatoes-nutrition-facts-calories-and-health-benefits-4119981?utm_source=openai
+          - end_index: 794
+            start_index: 716
+            title: Carrot Nutrition Facts, Calories, Carbs and Fiber | CaloriePilot
+            type: url_citation
+            url: https://caloriepilot.net/foods/carrot/?utm_source=openai
+          logprobs: []
+          text: '- **Potato:** A 100-gram serving of boiled potato with skin has about
+            87 calories, 20.1 grams of carbohydrates, 1.9 grams of protein, 1.8 grams
+            of fiber, and almost no fat. ([healthline.com](https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai))
+
+            - **Tomato:** One small raw tomato has about 16 calories, 3.5 grams of
+            carbohydrates, 0.8 grams of protein, and 0.2 grams of fat, while also
+            providing lycopene. ([verywellfit.com](https://www.verywellfit.com/tomatoes-nutrition-facts-calories-and-health-benefits-4119981?utm_source=openai))
+
+            - **Carrot:** A 100-gram serving of raw carrots has about 41 calories,
+            9.6 grams of carbohydrates, 2.8 grams of fiber, 0.9 grams of protein,
+            and 0.2 grams of fat. ([caloriepilot.net](https://caloriepilot.net/foods/carrot/?utm_source=openai))'
+          type: output_text
+        id: msg_081039f72b23bb60006abe4fa3c0bc87d1813703cd475453d2
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_081039f72b23bb60006abe4f91158887d18c564481dc824410
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 3
+      tools:
+      - return_token_budget: default
+        search_content_types:
+        - text
+        search_context_size: medium
+        type: web_search
+        user_location:
+          city: null
+          country: US
+          region: null
+          timezone: null
+          type: approximate
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 21073
+        input_tokens_details:
+          cache_write_tokens: 4189
+          cached_tokens: 4394
+        output_tokens: 297
+        output_tokens_details:
+          reasoning_tokens: 98
+        total_tokens: 21370
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body:
+      input: 'Run two separate web searches, one after another, each as its own web_search
+        call: first the exact query "potato nutrition facts", then "tomato nutrition
+        facts". Then summarize each result in one sentence.'
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      model: gpt-5.6
+      parallel_tool_calls: false
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790857133
+      created_at: 1790857127
+      error: null
+      frequency_penalty: 0.0
+      id: resp_065fff9913f0223a006abe4fa79aa087d184d3b4b8e20c51e5
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - action:
+          queries:
+          - potato nutrition facts
+          query: potato nutrition facts
+          type: search
+        id: ws_065fff9913f0223a006abe4fa84a2087d1ab2d1f0caa5aa24a
+        status: completed
+        type: web_search_call
+      - action:
+          queries:
+          - tomato nutrition facts
+          query: tomato nutrition facts
+          type: search
+        id: ws_065fff9913f0223a006abe4faabae887d1b3117120aa9d9115
+        status: searching
+        type: web_search_call
+      - content: []
+        encrypted_content: gAAAAABqvk-u2xrbg413FR21dEynNoG98uqx4wrviLZoQWXfRnIv1Jh3goPh4wUF3LTkEnHuFD7xdmefwLX6Oo7nttMeIIMzoLNt4lakXS9jHgTBD8K3Mq4Cq_8dz-qp3Z6DRaMg_KsmWm4f6ujUbPVcdmEuYPPLQ6k8kbgtAVwIcD6Vjt4VYRN5aNwKPLQFCsF9a3rg9yNHFA2uyfeOcyrAkse79qcd_iBs2wyW65ncbuuNUD2yiT2RIn3k3zzyErhRCMoQVfeU3IcNUC9zOuX8X9j5B3RssXSjQFNUU-BStpzra-ZhMz1xYzjxWmZ6Y5H6UZCXe1_KyONDmSOlqQ-NG05KCcAUUThLd7uj-yF5Yqmiv_AZfG6JtNbDHCOqcmN_w-YPWOE9DNayrN4strYIXVo9fm9ym5WD3dAx6VYgXA8YYdVIh9GbHYrufu5YR3dzHQ9ZL_RMDIZKOaXPZQnGNNj-6eOVAd0QCU6FEENUeZqiKu5ZhbL_e8ls8S45EXCn2ooH1HYQ6Qa4rTVrW88cxOoRJDOrxyp1cSCOHT9x-zVz1lp8jEeF6_q7GiyL6cYQzHk6WvJt97oekg9Wqb2iZGk1qZdHIoB6WvjLrbIleQGYdWcT_TX4-ECOgWM1Mf1pI4LZ4247JlESPBsm4lQ4o3CKA-p3ByQd3Xy43preSdosaFzO0bC8bmGbv78hxwNVgORBIjhhPTi8XuGpYNTQa0H6NSlmySAeaQ8xnLnzc4mj3sLqjrWOHFZO36RRNwdEnRlqg3cxd-yqdP46y5VESNOUoV8ooL1BVGZ-uQhsTNJeWRmEaSl0C0JwFap0_N4BLuH0VygQCWlWOQ46U12-cDGBULRHXg4wckxIcPkYeu3LW0AY9YbEwomGBW1NtYz1jjxKJWGwVkdSxITAPvePEJAVdh-Y5u8hvXnJaZ_RPV62Ztz11YeNldXNaK8SY0XGP15gAzG7TjkURPcQt9zVp1ebC-KsaLx6J11Ab_pgDC-yuQpjg8XWkVelGdizhhUdr6U2dmUQSgWDfMWrCQpTpGgH0y1p4lb9mwIAV-lIqoSMFYS8t6xWKV9c5FQF6sWzLa-05r0VEgo2CBnaI7hIENkEHc9hLmrE0gSsfjoe9ovPnNCXLAz0XhpfesMJqvC85OaH885WR8Pdmq8cNZAUd2Co7cygaqd4lXULYyDW8e4W26pvGT00EAyhMHWRnIvO20dYKPzUtOX6nFkebFTMDCwUW0t6U1lip9fbohiCMrWhGlHwmaF3a099-I-_-AQUM4l8GDlou7tvJ_ObcnP47VqMFWc-_Bhyg9Z47JL_oOZLgMbhpLdlbrPDR6TcKEWddINSFH9foLZjcnpaxJjJ-th-eVnw7igBvk6cLLN6dUHbxD8m-C0LLebhmrxM0Zsvtqtu7LhrscXifeUkQ6GUaqrI5dxq81ZUPcJ4SSDoMZdA-YHoXD84g6DQKNAktaOa2vRW896t
+        id: rs_065fff9913f0223a006abe4fab8e2887d1a4a0a2d935462907
+        summary: []
+        type: reasoning
+      - content:
+        - annotations:
+          - end_index: 283
+            start_index: 194
+            title: 'Potatoes 101: Nutrition Facts, Health Benefits, and Types'
+            type: url_citation
+            url: https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai
+          logprobs: []
+          text: '- **Potato:** Boiled potatoes with skin contain about 87 calories
+            per 100 grams and are mostly carbohydrates, while providing fiber, potassium,
+            vitamin C, and modest protein with almost no fat. ([healthline.com](https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai))
+
+            - **Tomato:** I couldn’t complete the second search because the web tool
+            reached its call limit after the first search.'
+          type: output_text
+        id: msg_065fff9913f0223a006abe4fac4f6887d1a8f990624aaac716
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 1
+      tools:
+      - return_token_budget: default
+        search_content_types:
+        - text
+        search_context_size: medium
+        type: web_search
+        user_location:
+          city: null
+          country: US
+          region: null
+          timezone: null
+          type: approximate
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 8498
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 4417
+        output_tokens: 158
+        output_tokens_details:
+          reasoning_tokens: 71
+        total_tokens: 8656
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body:
+      input: Now run one web search for the exact query "carrot nutrition facts" and
+        summarize it in one sentence.
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      model: gpt-5.6
+      parallel_tool_calls: false
+      previous_response_id: resp_065fff9913f0223a006abe4fa79aa087d184d3b4b8e20c51e5
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790857139
+      created_at: 1790857135
+      error: null
+      frequency_penalty: 0.0
+      id: resp_065fff9913f0223a006abe4faee74487d1844a3f17ece3b698
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - action:
+          queries:
+          - carrot nutrition facts
+          query: carrot nutrition facts
+          type: search
+        id: ws_065fff9913f0223a006abe4fafed8087d1989034d3e438cc2b
+        status: completed
+        type: web_search_call
+      - content:
+        - annotations:
+          - end_index: 275
+            start_index: 187
+            title: 'Carrots 101: Nutrition Facts and Health Benefits'
+            type: url_citation
+            url: https://www.healthline.com/nutrition/foods/carrots?utm_source=openai
+          logprobs: []
+          text: Raw carrots contain about **41 calories per 100 grams** and are rich
+            in beta-carotene (converted to vitamin A), while also providing carbohydrates,
+            fiber, and very little fat or protein. ([healthline.com](https://www.healthline.com/nutrition/foods/carrots?utm_source=openai))
+          type: output_text
+        id: msg_065fff9913f0223a006abe4fb2a99c87d183589b0b910a0972
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_065fff9913f0223a006abe4fa79aa087d184d3b4b8e20c51e5
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 1
+      tools:
+      - return_token_budget: default
+        search_content_types:
+        - text
+        search_context_size: medium
+        type: web_search
+        user_location:
+          city: null
+          country: US
+          region: null
+          timezone: null
+          type: approximate
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 12770
+        input_tokens_details:
+          cache_write_tokens: 4031
+          cached_tokens: 4417
+        output_tokens: 92
+        output_tokens_details:
+          reasoning_tokens: 27
+        total_tokens: 12862
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200

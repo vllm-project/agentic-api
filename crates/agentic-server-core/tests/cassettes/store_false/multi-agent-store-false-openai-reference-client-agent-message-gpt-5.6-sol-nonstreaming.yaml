@@ -1,0 +1,203 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input:
+      - content: 'Client agent message probe: spawn one subagent named token_checker.
+          Ask it to verify the secret test token from the client-supplied agent_message;
+          include that message in its assignment if necessary. Wait for the subagent''s
+          answer, then reply with only the token. If the message is unavailable, reply
+          with only NO_AGENT_MESSAGE.'
+        role: user
+      - agent:
+          agent_name: /root
+        author: /root
+        content:
+        - text: The secret test token is CLIENT_AGENT_MESSAGE_9f21.
+          type: input_text
+        recipient: /root
+        type: agent_message
+      max_output_tokens: 4096
+      model: gpt-5.6-sol
+      multi_agent:
+        enabled: true
+        max_concurrent_subagents: 3
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      openai-beta: responses_multi_agent=v1
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1793090698
+      created_at: 1793090688
+      error: null
+      frequency_penalty: 0.0
+      id: resp_00427d35ebfc0cdd016ae064804fac87d09b2b4009c0b4265c
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - agent:
+          agent_name: /root
+        content: []
+        encrypted_content: gAAAAABq4GSKm0HOIMcgI8yv8Z6HuQQYSRHYaM3vL206UsJYJCNlwA8v9cHS0OKaoVNaSHtskXTFDNkwK36vexmsuHQboIARhbc0JL_aFPykuPVYapLLpL2qf_R6CBtIUiwj6SPiXfIUmzKIXVZj3K2ULhRYFJZArLhrXfpRt_ryGGdJhYL3BfrylLSOm7JW4WyfNtiwCEzg4a9FdFpYdL9ZwKAaOBmMy5roqchPjxtacF_1O6F7akd6notlntzXaM5RdT4o9f1TQ7FDBnZar2JONA_zURaxwDNucJ9oll4CRVJtgdZgdNML2nnwpWGz6LeLi1UaCTVgDY3WFLjfIik6zuhwcAKryCCGAyWwyrsT0rGro4aGyjZu13bZ6_PrksVM5BjgMx8OUUIyL6P4y52ZgcaRsP_N1sZX2ZdQ5OKoUOGkM3bQzBCThkwqdRxSM9ef55mZIeQHwEYJR07BSJNRc_t7q0CAT34LAHgi4nIF2Hf78YBSomVc9mcjOkGZAMqZqHbHX_KE3PYBnhXFgCxL7QTk-HsKOFNYCGbou4qxYmKEp7EwOiksXkcqHrIXgZtWz7gW8XbBdIhwFV4xk5PVy2JFnCa3oJjk9IUBjhZQBE3X6Yf-cbsjL1Iin3PWpfl6i6ft1gfjn7r3OigBSSTKJ9kks9XO_chLhl9WZyMZULN7Jiqo-gNPsZppj5PIZ6o7y3dM7dly2PorNLN_nel32XRQdqUpC1bo0vm3MLEOeg31VawXBYR9oOdk0s5QQwOS98zxEJng6tz_8RHjUERbsywW0zlju2bqJmwix2zYhzPi_G5zyhiXkvtPb-MYIvzEts71rHzikRtTPjVTgbXohuaNZl13bnJpWGMY0r6jDuamSvpWipeFQEINcaLr5yRr99Qjzv21NlpllR7aPJmnn5ujVpBozIVRbh4RsWTNQyUtwJcsyHu4xPbxl6NECebk27gTvv8R4iVjDPZYTlqW0oprlToFl3wDgmI8GTxqelSZOD4FFfp4YTAAxCWd87TGrDe5X4ObOarcISgvq5GKOQ-oMso6XVVjOVyF9loQAK3FLmFIKfe8RYYH1OHaROqZ9rpx5iIqPkpW4kRGKERTs7lPP9epxIhcSEhcMiXVjRDqU09HXJ-pb1oNJAzAswhWTzXsWwUb8tTuTBEQagh7el5RATYzjcZZK6Oz4ASJjBDJiifDNsOQareUybK6mebi5ekApHJ4Q9D0oqhxAYE3GlNnV-z4xWbYgLZlr6-0k018hNVk5ppDHMqXx3QS58pCiPdn6yoK4x4RkZTHY6Cz-Kc8gG3ZINTmgdSQmfZ5lf8aJKSca0-BruOOTxdw_6sFEkcl7cLGWyGzygf5yltsh9d8sihxAR5xsCm_3QCJ7HH827nhsM4WmAeXv_45uScnPU675anDB2xFgr2YRrvdP7w-gl93JArugvvaYTukEwx22L4VOxy_6CTMtmAu_oYQl2tVONTO0fItvGSEDbSH9p9-cujKVSxj288kLRBKTGLeczdbkfK5pkLpUKs_CC3blED2icr9SqVY8oxbiemaWCZAYGFi9OloNrusBvpA_pY64cTSsv6mzP8hL9LXetg9v4ed0-8r0Mo72MdmMruFWk9BbWb5qaF8hBym3Foa2pQYIWNapYGSHn9M2o3AsDYZlekpJXHH4fTi1O_i1JIWeVml0rslOwlN1-8B0TkXh0f7virVv7VsFcqB6LqfXd7i816KTRgXaqv_gQGTgVpo6sqbu14Av89PN5lc6tnGIkaXou1LKlBD2Qn-Nevh0hupejlctA7vBa_ktrKkulgu9dKKhHQRu1xu7Ffiso9CLoUbDLkx-3GovWCD-6hRUYi08_uiQE_qMtJv7LfbHV6p05A0C2CHjN_CXxlxC6TWQdMVykmdiXD4ED_xwdufgxsZBDTjok3u9-ZiiN2McR8aFsYzb4OJaQ==
+        id: rs_00427d35ebfc0cdd016ae0648113dc87d0b14b3993fca50172
+        summary: []
+        type: reasoning
+      - action: spawn_agent
+        agent:
+          agent_name: /root
+        arguments: '{"task_name":"token_checker","fork_turns":"all","message":"gAAAAABq4GSCcuplIOJWvw5s6Awltfzm89iG-VbAQLgRWJzY1mmMQQ9TASceI17-jGfYmMOyUm7F8M5r5E3TTROQIGiboDN262neBP5fK6-u9Xv8IFx3vCxnSygmo-5sU866FpS6MiQ2sB0b3n1MwUhw0UE3hAcUf6iSd21m1O_DXgj8xhmholo_IWI0eFB3lKMIiZjLC0j4ZwbBDX94sgWQb_4AYlk2nY6LddZYwp8-T2jtb-BIhJJbncSMjhJFwjIY2a57VLZWK-HWCMju0qr2X_zyNzyPjSbhjLYisNJqmvrfn4e76h6YDmF9et3LnyYE2y4PDosiO74AIIAo5HSjukdSQTuF92IFy0GRNkO0ay9ecQRnHZakY-J7SKr4OIHOoIP6qvyCDTOt0C2th9SRjaGkPHX-S9XMfAmCvgEo9ep5ysK0ESQ="}'
+        call_id: call_Z3RNA0zpRfcCnIdWJolXgxlc
+        id: mac_00427d35ebfc0cdd016ae06481b78887d0b438461af00f0bf6
+        type: multi_agent_call
+      - agent:
+          agent_name: /root/token_checker
+        content:
+        - text: 'Client agent message probe: spawn one subagent named token_checker.
+            Ask it to verify the secret test token from the client-supplied agent_message;
+            include that message in its assignment if necessary. Wait for the subagent''s
+            answer, then reply with only the token. If the message is unavailable,
+            reply with only NO_AGENT_MESSAGE.'
+          type: input_text
+        id: msg_00427d35ebfc0cdd016ae0648256b487d08750f7640862e5cd
+        role: user
+        status: completed
+        type: message
+      - agent:
+          agent_name: /root/token_checker
+        author: /root
+        content:
+        - encrypted_content: gAAAAABq4GSC5gKQLVByRiIoePIcFMPbt3vr_4bK8mx0uyc09023iQKfb59XSOz7ZC7QRGWLoVMrpDG97YfrUbyX9OjRMgSDbK-e5iILlq7gIs6E0ok5yQ3vOfaCOAXgPYNAbK3SWz5E8Qt6aHt-_BnANVHRHkj8eJrJPlxDf9Z0VOPD1bF7Ql3CkMSiFpcKwBxJ71GbewcdMEo8lwaanQQ-5skWj-7ES3u2IW3bmMDi6L8Bu97-gKSS3jdlwnfNd8KKpZt3oWjf4_rku7rTzKy8Kfnid_8V3bmirAUaarryqCxbFE-Vk4yp6mxx9vEKSqOCQ1UsTmWMczKlDhaVEewzioKqLlX2Gl1ZkDs2XECBA5CvvK6muPUlpDfgBXRcXVdbfrEY7skv4xeQQN_ZQQW2E1kYiNmvy4q8_aVwWKVVker1pYC0MZObfrJk-EmTPoLt4ZvvO-qAOZLgjrF09BTU__gh_6zPM3aPWFhA5tFT6BnSl-_L9XQaB0dS1UCLAbRIQoI5eoBHV9cjFsR0sdJVWwVTfz1Y7g==
+          type: encrypted_content
+        id: amsg_00427d35ebfc0cdd016ae06482577087d0816dbd672fcc2648
+        recipient: /root/token_checker
+        type: agent_message
+      - action: spawn_agent
+        agent:
+          agent_name: /root
+        call_id: call_Z3RNA0zpRfcCnIdWJolXgxlc
+        id: maco_00427d35ebfc0cdd016ae06482614887d0adfa263d0e9a2130
+        output:
+        - annotations: []
+          logprobs: []
+          text: '{"task_name": "/root/token_checker"}'
+          type: output_text
+        type: multi_agent_call_output
+      - agent:
+          agent_name: /root/token_checker
+        content:
+        - annotations: []
+          logprobs: []
+          text: CLIENT_AGENT_MESSAGE_9f21
+          type: output_text
+        id: msg_00427d35ebfc0cdd016ae06482f10487d0ae528c75bf2e0264
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      - agent:
+          agent_name: /root
+        author: /root/token_checker
+        content:
+        - encrypted_content: gAAAAABq4GSD5-h80UM0JU0k7bUuA1dTlHmZhiLN93cwboffvSo7bVIsRuu1NGuWltgs_OnTH4PIDKd6kwq09HCiBnunSwr3tVDuB7NsROJvWo9ohvU5SUVc1iABQfUYt212VReAZkaqyUbL82auh1sBZKPm2ccjauq92BL1Lwdqq_G49nqFdIp5BtEo4ruHnWBbFPB5ZzPDA_2olS752kjFe7ozC9wr-eBPBxWUqUf8x9YiPGf7wXNnEUmc2ZBnaB_SZC7HlDAo
+          type: encrypted_content
+        id: amsg_00427d35ebfc0cdd016ae0648361d887d0ab7b2245416d8cf4
+        recipient: /root
+        type: agent_message
+      - action: wait_agent
+        agent:
+          agent_name: /root
+        arguments: '{"timeout_ms":3600000}'
+        call_id: call_idmdu2h9I3ynWBj3E9Gc98BZ
+        id: mac_00427d35ebfc0cdd016ae064845b2087d096f14d34e6d9a1e4
+        type: multi_agent_call
+      - action: wait_agent
+        agent:
+          agent_name: /root
+        call_id: call_idmdu2h9I3ynWBj3E9Gc98BZ
+        id: maco_00427d35ebfc0cdd016ae064847c0887d0b05c76fd96c9ca37
+        output:
+        - annotations: []
+          logprobs: []
+          text: '{"message": "Wait completed.", "timed_out": false}'
+          type: output_text
+        type: multi_agent_call_output
+      - agent:
+          agent_name: /root
+        content:
+        - annotations: []
+          logprobs: []
+          text: CLIENT_AGENT_MESSAGE_9f21
+          type: output_text
+        id: msg_00427d35ebfc0cdd016ae064859e3087d0817dac32bd34db4f
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 2653
+        input_tokens_details:
+          cache_write_tokens: 1162
+          cached_tokens: 0
+        output_tokens: 164
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 2817
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200

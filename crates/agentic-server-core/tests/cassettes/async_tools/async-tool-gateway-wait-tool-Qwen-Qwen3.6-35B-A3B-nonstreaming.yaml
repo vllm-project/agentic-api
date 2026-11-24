@@ -1,0 +1,365 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Look up the prices of WIDGET and GADGET, then tell me which one is cheaper.
+      instructions: Start each price lookup without waiting. Call wait_for_tasks only
+        when your next step needs pending results. Never invent prices.
+      max_output_tokens: 16384
+      model: Qwen/Qwen3.6-35B-A3B
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Look up a product price in the background. Choose a fresh task_handle
+          unique within this conversation, including completed tasks.
+        name: lookup_price
+        parameters:
+          additionalProperties: false
+          properties:
+            sku:
+              type: string
+            task_handle:
+              type: string
+          required:
+          - sku
+          - task_handle
+          type: object
+        strict: true
+        type: function
+      - description: Wait for selected tasks whose results you need. Pass a nonempty
+          list of distinct task_handles from your earlier async tool calls. Results
+          arrive on their original calls; this tool returns status only. Do not wait
+          again for results that have already arrived.
+        name: wait_for_tasks
+        parameters:
+          additionalProperties: false
+          properties:
+            task_handles:
+              items:
+                type: string
+              type: array
+          required:
+          - task_handles
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: wait-tool/t1-start
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1791453381
+      error: null
+      id: resp_01a11af1-2a41-7592-a7d5-e053b15637d9
+      incomplete_details: null
+      instructions: Start each price lookup without waiting. Call wait_for_tasks only
+        when your next step needs pending results. Never invent prices.
+      max_tool_calls: null
+      model: Qwen/Qwen3.6-35B-A3B
+      object: response
+      output:
+      - content:
+        - text: "The user wants to look up the prices of two products: \"WIDGET\"\
+            \ and \"GADGET\".\nI need to use the `lookup_price` function for each\
+            \ product.\nI will assign unique task handles to each lookup.\nLet's call\
+            \ `lookup_price` for \"WIDGET\" with task_handle \"widget_price_lookup\"\
+            .\nThen call `lookup_price` for \"GADGET\" with task_handle \"gadget_price_lookup\"\
+            .\nFinally, I will wait for the results using `wait_for_tasks` and compare\
+            \ them to answer the question.\nActually, the instructions say \"Start\
+            \ each price lookup without waiting. Call wait_for_tasks only when your\
+            \ next step needs pending results.\"\nSo I will initiate both lookups\
+            \ first.\n\nParameters:\nTask 1: sku=\"WIDGET\", task_handle=\"widget_price_1\"\
+            \nTask 2: sku=\"GADGET\", task_handle=\"gadget_price_1\"\nI'll make the\
+            \ calls. \nThen I will wait for them.\nLet's do it. \nWait, I should check\
+            \ the exact parameter names: `sku` and `task_handle`.\nBoth are strings.\n\
+            Proceed. \nCalling `lookup_price` twice. \nThen `wait_for_tasks`.\nThen\
+            \ answer.\nDone. \nLet's generate the tool calls. \nWait, I need to make\
+            \ sure the task_handles are unique within the conversation. I'll use \"\
+            widget_lookup\" and \"gadget_lookup\".\nProceed. \n`lookup_price(sku=\"\
+            WIDGET\", task_handle=\"widget_lookup\")`\n`lookup_price(sku=\"GADGET\"\
+            , task_handle=\"gadget_lookup\")`\nThen `wait_for_tasks(task_handles=[\"\
+            widget_lookup\", \"gadget_lookup\"])`\nI will output the tool calls now.\
+            \ \nWait, the prompt says \"Start each price lookup without waiting.\"\
+            \ So I will just call the tools.\nI'll do it. \n[Self-Correction/Verification]\n\
+            Check parameters: `sku` (string), `task_handle` (string). Correct.\nCheck\
+            \ instructions: \"Start each price lookup without waiting. Call wait_for_tasks\
+            \ only when your next step needs pending results.\" Correct.\nReady. \n\
+            Output matches tool calls. \nProceeds. \n*Self-Correction/Note during\
+            \ thought*: The user said \"WIDGET\" and \"GADGET\". I should use exactly\
+            \ those strings for sku.\nI will make the tool calls now. \n[Output Generation]\
+            \ -> Tool calls. \n[Wait for results] -> Tool call. \n[Final Answer] ->\
+            \ Text. \nEverything aligns. \nProceeding. \n`lookup_price(sku=\"WIDGET\"\
+            , task_handle=\"t1\")`\n`lookup_price(sku=\"GADGET\", task_handle=\"t2\"\
+            )`\n`wait_for_tasks(task_handles=[\"t1\", \"t2\"])` \nDone. \nWait, I\
+            \ need to format it correctly.\n```json\n{\"name\": \"lookup_price\",\
+            \ \"arguments\": {\"sku\": \"WIDGET\", \"task_handle\": \"t1\"}}\n{\"\
+            name\": \"lookup_price\", \"arguments\": {\"sku\": \"GADGET\", \"task_handle\"\
+            : \"t2\"}}\n{\"name\": \"wait_for_tasks\", \"arguments\": {\"task_handles\"\
+            : [\"t1\", \"t2\"]}}\n```\nActually, I can just output the tool calls\
+            \ directly.\nLet's do it. \nWait, I'll just call `lookup_price` twice\
+            \ first, then `wait_for_tasks`.\nOkay. \nProceeds. \n[Output Generation]\
+            \ -> calls to `lookup_price` for WIDGET and GADGET. Then `wait_for_tasks`.\n\
+            Done. \n*Self-Correction/Refinement*: The prompt says \"Start each price\
+            \ lookup without waiting. Call wait_for_tasks only when your next step\
+            \ needs pending results.\"\nSo I will call `lookup_price` for both, then\
+            \ immediately call `wait_for_tasks` to get the results.\nReady. \nProceeds.\
+            \ \n[Tool Calls]\nlookup_price(sku=\"WIDGET\", task_handle=\"widget_price\"\
+            )\nlookup_price(sku=\"GADGET\", task_handle=\"gadget_price\")\nwait_for_tasks(task_handles=[\"\
+            widget_price\", \"gadget_price\"])\nDone. \n*Output Generation* (matches\
+            \ the tool calls) -> done. \n*Wait for response* -> I will output the\
+            \ tool calls now. \n[Done] \n*Output Generation* (simulated)\n`lookup_price`\
+            \ for WIDGET\n`lookup_price` for GADGET\n`wait_for_tasks` for both\nProceeds.\
+            \ \n[Final Check]\nAll good. \nProceeds. \n[Output] -> Tool calls.\n"
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a11af1-3e5f-74d2-86a7-68feac2ff92d
+        summary: []
+        type: reasoning
+      - arguments: '{"sku": "WIDGET", "task_handle": "widget_price"}'
+        async: true
+        call_id: chatcmpl-tool-8c4013d5e481b0e4
+        id: fc_01a11af1-3ed5-7b00-8ba9-7096c4637140
+        name: lookup_price
+        status: completed
+        type: function_call
+      - arguments: '{"sku": "GADGET", "task_handle": "gadget_price"}'
+        async: true
+        call_id: chatcmpl-tool-837e97cfafa44149
+        id: fc_01a11af1-3ed7-7c83-b38b-f00d432cecd1
+        name: lookup_price
+        status: completed
+        type: function_call
+      - content:
+        - text: 'I have initiated the price lookups for both WIDGET and GADGET. Now
+            I need to wait for the results to arrive before I can compare them and
+            answer the user''s question. I will call wait_for_tasks with the corresponding
+            task handles.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a11af1-41a8-7420-86f2-d4175da38f9c
+        summary: []
+        type: reasoning
+      - arguments: '{"task_handles": ["widget_price", "gadget_price"]}'
+        call_id: chatcmpl-tool-aeb1abf759104836
+        id: fc_01a11af1-41b1-7f32-974d-1f8ba0fc7159
+        name: wait_for_tasks
+        status: completed
+        type: function_call
+      previous_response_id: null
+      service_tier: default
+      status: completed
+      tool_choice: auto
+      tools:
+      - async: true
+        description: Look up a product price in the background. Choose a fresh task_handle
+          unique within this conversation, including completed tasks.
+        name: lookup_price
+        parameters:
+          additionalProperties: false
+          properties:
+            sku:
+              type: string
+            task_handle:
+              type: string
+          required:
+          - sku
+          - task_handle
+          type: object
+        strict: true
+        type: function
+      - description: Wait for selected tasks whose results you need. Pass a nonempty
+          list of distinct task_handles from your earlier async tool calls. Results
+          arrive on their original calls; this tool returns status only. Do not wait
+          again for results that have already arrived.
+        name: wait_for_tasks
+        parameters:
+          additionalProperties: false
+          properties:
+            task_handles:
+              items:
+                type: string
+              type: array
+          required:
+          - task_handles
+          type: object
+        strict: true
+        type: function
+      usage:
+        input_tokens: 2156
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 1153
+        output_tokens_details:
+          reasoning_tokens: 1026
+        total_tokens: 3309
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - call_id: chatcmpl-tool-8c4013d5e481b0e4
+        output: '{"task_handle": "widget_price", "sku": "WIDGET", "price_cents": 1200,
+          "currency": "USD"}'
+        type: function_call_output
+      - call_id: chatcmpl-tool-837e97cfafa44149
+        output: '{"task_handle": "gadget_price", "sku": "GADGET", "price_cents": 1500,
+          "currency": "USD"}'
+        type: function_call_output
+      - call_id: chatcmpl-tool-aeb1abf759104836
+        output: '{"status": "completed", "completed_task_handles": ["widget_price",
+          "gadget_price"]}'
+        type: function_call_output
+      instructions: Start each price lookup without waiting. Call wait_for_tasks only
+        when your next step needs pending results. Never invent prices.
+      max_output_tokens: 16384
+      model: Qwen/Qwen3.6-35B-A3B
+      previous_response_id: resp_01a11af1-2a41-7592-a7d5-e053b15637d9
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Look up a product price in the background. Choose a fresh task_handle
+          unique within this conversation, including completed tasks.
+        name: lookup_price
+        parameters:
+          additionalProperties: false
+          properties:
+            sku:
+              type: string
+            task_handle:
+              type: string
+          required:
+          - sku
+          - task_handle
+          type: object
+        strict: true
+        type: function
+      - description: Wait for selected tasks whose results you need. Pass a nonempty
+          list of distinct task_handles from your earlier async tool calls. Results
+          arrive on their original calls; this tool returns status only. Do not wait
+          again for results that have already arrived.
+        name: wait_for_tasks
+        parameters:
+          additionalProperties: false
+          properties:
+            task_handles:
+              items:
+                type: string
+              type: array
+          required:
+          - task_handles
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: wait-tool/t2-deliver-results
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1791453382
+      error: null
+      id: resp_01a11af1-41f2-76d3-9edd-e7c2047bcd92
+      incomplete_details: null
+      instructions: Start each price lookup without waiting. Call wait_for_tasks only
+        when your next step needs pending results. Never invent prices.
+      max_tool_calls: null
+      model: Qwen/Qwen3.6-35B-A3B
+      object: response
+      output:
+      - content:
+        - text: "The price lookup results have arrived:\n- WIDGET: 1200 cents ($12.00)\n\
+            - GADGET: 1500 cents ($15.00)\n\nI need to compare them and tell the user\
+            \ which one is cheaper.\nWIDGET is $12.00 and GADGET is $15.00.\nTherefore,\
+            \ WIDGET is cheaper.\nI will state the prices and conclude which one is\
+            \ cheaper.\nDone. \nProceed to answer. \nNo further tool calls needed.\n"
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a11af1-4643-75b1-bbe7-c5380198754f
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            Based on the price lookups:
+
+            - **WIDGET**: $12.00
+
+            - **GADGET**: $15.00
+
+
+            The **WIDGET** is cheaper.'
+          type: output_text
+        id: msg_01a11af1-465a-7f40-824c-86f00be7e0ee
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: resp_01a11af1-2a41-7592-a7d5-e053b15637d9
+      service_tier: default
+      status: completed
+      tool_choice: auto
+      tools:
+      - async: true
+        description: Look up a product price in the background. Choose a fresh task_handle
+          unique within this conversation, including completed tasks.
+        name: lookup_price
+        parameters:
+          additionalProperties: false
+          properties:
+            sku:
+              type: string
+            task_handle:
+              type: string
+          required:
+          - sku
+          - task_handle
+          type: object
+        strict: true
+        type: function
+      - description: Wait for selected tasks whose results you need. Pass a nonempty
+          list of distinct task_handles from your earlier async tool calls. Results
+          arrive on their original calls; this tool returns status only. Do not wait
+          again for results that have already arrived.
+        name: wait_for_tasks
+        parameters:
+          additionalProperties: false
+          properties:
+            task_handles:
+              items:
+                type: string
+              type: array
+          required:
+          - task_handles
+          type: object
+        strict: true
+        type: function
+      usage:
+        input_tokens: 1749
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 162
+        output_tokens_details:
+          reasoning_tokens: 118
+        total_tokens: 1911
+    headers:
+      content-type: application/json
+    status_code: 200

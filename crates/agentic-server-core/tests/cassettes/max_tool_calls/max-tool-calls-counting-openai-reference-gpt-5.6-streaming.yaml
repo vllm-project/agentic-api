@@ -1,0 +1,2248 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Call get_weather three times in parallel in this single turn, for "Tokyo",
+        "Paris", and "Cairo". Do not search the web.
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      model: gpt-5.6
+      parallel_tool_calls: true
+      store: true
+      stream: true
+      tool_choice: auto
+      tools:
+      - type: web_search
+      - description: Get the current weather for a given city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              description: City name, e.g. Tokyo
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_0d755b27da406c04006abe4eedf31087d1ba44d2bbfebafcb4","object":"response","created_at":1790856942,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+      the current weather for a given city.","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string","description":"City
+      name, e.g. Tokyo"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_0d755b27da406c04006abe4eedf31087d1ba44d2bbfebafcb4","object":"response","created_at":1790856942,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+      the current weather for a given city.","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string","description":"City
+      name, e.g. Tokyo"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"fc_0d755b27da406c04006abe4eef08cc87d18bed86a828b80967","type":"function_call","status":"in_progress","arguments":"","call_id":"call_lbhKmMcskj9fO5oZLISOmXjf","name":"get_weather"},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"{\"city\":\"Tokyo\"}","item_id":"fc_0d755b27da406c04006abe4eef08cc87d18bed86a828b80967","obfuscation":"","output_index":0,"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.done
+
+      '
+    - 'data: {"type":"response.function_call_arguments.done","arguments":"{\"city\":\"Tokyo\"}","item_id":"fc_0d755b27da406c04006abe4eef08cc87d18bed86a828b80967","output_index":0,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"fc_0d755b27da406c04006abe4eef08cc87d18bed86a828b80967","type":"function_call","status":"completed","arguments":"{\"city\":\"Tokyo\"}","call_id":"call_lbhKmMcskj9fO5oZLISOmXjf","name":"get_weather"},"output_index":0,"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"fc_0d755b27da406c04006abe4eef08d887d1a3abf6c8bc94dc30","type":"function_call","status":"in_progress","arguments":"","call_id":"call_8hvYmtJo95qmQSUVJunBKiMW","name":"get_weather"},"output_index":1,"sequence_number":6}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"{\"city\":\"Paris\"}","item_id":"fc_0d755b27da406c04006abe4eef08d887d1a3abf6c8bc94dc30","obfuscation":"","output_index":1,"sequence_number":7}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.done
+
+      '
+    - 'data: {"type":"response.function_call_arguments.done","arguments":"{\"city\":\"Paris\"}","item_id":"fc_0d755b27da406c04006abe4eef08d887d1a3abf6c8bc94dc30","output_index":1,"sequence_number":8}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"fc_0d755b27da406c04006abe4eef08d887d1a3abf6c8bc94dc30","type":"function_call","status":"completed","arguments":"{\"city\":\"Paris\"}","call_id":"call_8hvYmtJo95qmQSUVJunBKiMW","name":"get_weather"},"output_index":1,"sequence_number":9}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"fc_0d755b27da406c04006abe4eef08e087d189bd69d77703c4df","type":"function_call","status":"in_progress","arguments":"","call_id":"call_pEyuvGeW9ieo7PDA0s6aUx0L","name":"get_weather"},"output_index":2,"sequence_number":10}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"{\"city\":\"Cairo\"}","item_id":"fc_0d755b27da406c04006abe4eef08e087d189bd69d77703c4df","obfuscation":"","output_index":2,"sequence_number":11}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.done
+
+      '
+    - 'data: {"type":"response.function_call_arguments.done","arguments":"{\"city\":\"Cairo\"}","item_id":"fc_0d755b27da406c04006abe4eef08e087d189bd69d77703c4df","output_index":2,"sequence_number":12}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"fc_0d755b27da406c04006abe4eef08e087d189bd69d77703c4df","type":"function_call","status":"completed","arguments":"{\"city\":\"Cairo\"}","call_id":"call_pEyuvGeW9ieo7PDA0s6aUx0L","name":"get_weather"},"output_index":2,"sequence_number":13}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_0d755b27da406c04006abe4eedf31087d1ba44d2bbfebafcb4","object":"response","created_at":1790856942,"status":"completed","access_programs":null,"background":false,"completed_at":1790856943,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[{"id":"fc_0d755b27da406c04006abe4eef08cc87d18bed86a828b80967","type":"function_call","status":"completed","arguments":"{\"city\":\"Tokyo\"}","call_id":"call_lbhKmMcskj9fO5oZLISOmXjf","name":"get_weather"},{"id":"fc_0d755b27da406c04006abe4eef08d887d1a3abf6c8bc94dc30","type":"function_call","status":"completed","arguments":"{\"city\":\"Paris\"}","call_id":"call_8hvYmtJo95qmQSUVJunBKiMW","name":"get_weather"},{"id":"fc_0d755b27da406c04006abe4eef08e087d189bd69d77703c4df","type":"function_call","status":"completed","arguments":"{\"city\":\"Cairo\"}","call_id":"call_pEyuvGeW9ieo7PDA0s6aUx0L","name":"get_weather"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+      the current weather for a given city.","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string","description":"City
+      name, e.g. Tokyo"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":4520,"input_tokens_details":{"cache_write_tokens":4452,"cached_tokens":0},"output_tokens":63,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":4583},"user":null,"metadata":{}},"sequence_number":14}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input: First run one web search for the exact query "capital of France". After
+        that search returns, call get_weather for the capital city it names.
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      model: gpt-5.6
+      parallel_tool_calls: false
+      store: true
+      stream: true
+      tool_choice: auto
+      tools:
+      - type: web_search
+      - description: Get the current weather for a given city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              description: City name, e.g. Tokyo
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_01be126476553b91006abe4ef114b887d19b8a6d0084777f15","object":"response","created_at":1790856945,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+      the current weather for a given city.","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string","description":"City
+      name, e.g. Tokyo"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_01be126476553b91006abe4ef114b887d19b8a6d0084777f15","object":"response","created_at":1790856945,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+      the current weather for a given city.","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string","description":"City
+      name, e.g. Tokyo"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"rs_01be126476553b91006abe4ef2044087d1b58d9f157840dbf0","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk7y2p9jlpVGip-zw9kBk4_4dT2L1o7MSBifsUxtjMMAN6bqWUivfLQ5JIi4fhXefbt_1LdJpThM8gQMaFKCwzj_UKEboF9qzmlQ1kY_AKXHvfUkMBOFkOII1hcWcnhbpkxMVjcuGzNMMEGGwN86mHPElpgCisShnRiIOGN7wHheZxxN5MV_0XyiAsAKVQTLe_9MjhWn8aW0WNyPmHzVmVCulA2Ado16PyYShyVcwXZaSc1_eoISBm3R2RwNqhwHXE_p5COXVU3DxTF30m5CHlH0CVq3bnCcXy83rwZrl5p2BX64feD4g7DiXAiXYeOUBumoHs_L2R0-WZLBSad8GTqhXu5r0UQlBdkQbwco64d9STmT4yjgalBjQ3r9hDUHXohGwmsYfRIjlc3XFSgFJPDAt0fmPHO5GUsYAOempN35TtRznIz-GlBh9dHw79ZilN_j50AUFLxzQ5KaG3nTlom2VFezr_vgz35E869AbWzWLUuBuCt-HA26gqZ-WwYXqHrYLhiXEM8iHI-u2p-sgm19UvSXJpgR4bk6hyeYay3GjByYTYiNCo858c5Yinf7QT58DgzX2Tragkbe_kKJKZ-REtraxBenzcSPcZcPt2FH9CLfc8ASxDw6GQVWm1HCrb46p3_9OjpfNbCC8FiLSlqsiOjnke6r4blX0Fk0sSJfdXVeIUMJ_-ympDTbZvJgIfplakeI60CTQukqzt6IJvDy-i9MLcbiQ0BSGo7G_m5Oi3WRpKF7rVbzGGVXI2ZXF_jgFQdlHdJtLUaiZjOm2m8WhYCitMi-NlO34YdIi8h_eaQrhUTGWUGff37BaYZfM15JXnrcbYanshiUG7ApSrSSo2RGry6nHhjOWPNFd2O5lcVzclwGozST3YEVcYfkCDn-uz8xUtlpvcAt5E2R8tutTiKYGpQxbKMiIyUE3zJy39B80JgEUtnG8xkbYDa4BNFlAcmkDNIZDLFpD0rBL68hA3PiHcW8EpML2jXK0tIHiE0XiKNZvFVtQKSzYxQ5JTvfalXXNki0Cnf9gXUA_g__vxvegKKaPNKEQ3ZnT9BbNWsPj4bXDCjanGFmBAlsrBSQCycn6n1bg5H5K_egbaUxFMzmScVwUlJJCaa2bmlncIBFldhSLQ_fsd287hXCVP9gMURTr5QJmL4pk_O1RE67Hg==","summary":[]},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"rs_01be126476553b91006abe4ef2044087d1b58d9f157840dbf0","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk7ywaUe92UdI_2pqKAhiy5-qxH-VA6D-oXjGkmbY02Hfbh6_pEXvxTNQuGlYTUaMXXftVlWhEvUSES5q-b2wJoesFjeBE4OKb1a09rFvLPKqdf79UkU9ljJS7HPgGwO6eH3ccWEuazZNVUSs7UE6t5FSM9PoBvKYwm69LvcZ1fSpSjz-m_ajLt8zJJOowf_AXIJAHkVxTkchctXMDUU5Lh_s8mpMvmNDAKUGTutgQ2NuntWLJOH4PYFljWCUVpEIvPskiwPenhMiG9oUOPpC5wquOth0kKg31kkzGEXPXAWjdcbSJrOknBdfKlG2GjAauSMRFcxi8lxUTjY97n607RTIkntIgMTrQSULnKnJLTzCKSDuTNrauroSzHusVQ5uinBOfpPhpVJ4ZzUQ0d89iNbD65T_cr_aP_nObrrjPjoisgFl82y1sR4FnD1lQp8FePezlQDuNsMAZ5EseTdEIhvElOhDSL4CyS7buPQclDZTIaq-a6Tzw6yHm9w0nGrFkKtq6h4-hBwo9W0x4hnl0dvqiB-zAKkhNVB3L9RIzTjMdazLMcWqQaLBUwBIryHsubNHerd_-WnQI3Ku_wWPx5XCpQZXkTApgJ3c06eM1vLFBPDG41xQpArAyoW_2hA758pDfRdbNuK2LgENQ3no-BVx9SN6QDw1IF92pd_Z8NRIXTYw4Vi0uV0aFGd_DZdIziJ4WHHGM0EMCh5iVfkZ0_HvpSOfmAo1Ifv8VcCntw4AH2GEUAUA-Zd48zBrsbUubZxJlF9iJ3V3R6elXxdSL62X-JPJjXBrOtFjZ34Em8xT79XHvcezGmFscoo9U7OElIKvBOFJG-ON32QZvft8C5t8G-ri93j6HStFTFtzBZCFtCwIMp8aLcbk8oHkP2-dti90xaqKKG-kzktAhol8EQlSrgRy4-s6hyyhS--dE3wzhKW1uhWl2MGmoYCSRbymWtKbHnhkBPjscG-wdkFR3G8kk-l95NYED6ah38Xr67ufqjjaAtPltC-SEhJjeeUTZ35LLeMsCpO12HZ2_1KJlw3g5fGbTH32GJSZ5D0ZJTa6gISKE9mrCygItBGqQwnBYLCTQ23wM5DmOIL4JGcKqXu5xgC78Izls-M6L3_DElcmnvMX-YkOynh7pKZu9m3E-z0sdSbwlTy0lXDO0HjVuqO1gGYjGbQm1N5jLw-kv7nfS--Qtor0AkTu9SEkvVflKLLV8XTvi9iAeFHt943Lg-NH7sGATWP0uuDnt1u-5_lnpIMRf62iN2AUP6Ib4R9ZImB","summary":[]},"output_index":0,"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"ws_01be126476553b91006abe4ef2778487d18b7652d55b78a325","type":"web_search_call","status":"in_progress"},"output_index":1,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.in_progress
+
+      '
+    - 'data: {"type":"response.web_search_call.in_progress","item_id":"ws_01be126476553b91006abe4ef2778487d18b7652d55b78a325","output_index":1,"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.searching
+
+      '
+    - 'data: {"type":"response.web_search_call.searching","item_id":"ws_01be126476553b91006abe4ef2778487d18b7652d55b78a325","output_index":1,"sequence_number":6}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.completed
+
+      '
+    - 'data: {"type":"response.web_search_call.completed","item_id":"ws_01be126476553b91006abe4ef2778487d18b7652d55b78a325","output_index":1,"sequence_number":7}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"ws_01be126476553b91006abe4ef2778487d18b7652d55b78a325","type":"web_search_call","status":"completed","action":{"type":"search","queries":["capital
+      of France"],"query":"capital of France"}},"output_index":1,"sequence_number":8}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"fc_01be126476553b91006abe4ef6c9c487d1b219250ff413b5cc","type":"function_call","status":"in_progress","arguments":"","call_id":"call_wwPskhBSMrtjVKeWA0pQTP5v","name":"get_weather"},"output_index":2,"sequence_number":9}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"{\"city\":\"Paris\"}","item_id":"fc_01be126476553b91006abe4ef6c9c487d1b219250ff413b5cc","obfuscation":"","output_index":2,"sequence_number":10}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.done
+
+      '
+    - 'data: {"type":"response.function_call_arguments.done","arguments":"{\"city\":\"Paris\"}","item_id":"fc_01be126476553b91006abe4ef6c9c487d1b219250ff413b5cc","output_index":2,"sequence_number":11}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"fc_01be126476553b91006abe4ef6c9c487d1b219250ff413b5cc","type":"function_call","status":"completed","arguments":"{\"city\":\"Paris\"}","call_id":"call_wwPskhBSMrtjVKeWA0pQTP5v","name":"get_weather"},"output_index":2,"sequence_number":12}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_01be126476553b91006abe4ef114b887d19b8a6d0084777f15","object":"response","created_at":1790856945,"status":"completed","access_programs":null,"background":false,"completed_at":1790856951,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[{"id":"rs_01be126476553b91006abe4ef2044087d1b58d9f157840dbf0","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk73dny9_utLqyGlWxc5fqdpygmYLrhNuXeFhEy5VwooJJi9X7n71NQGlaUqI7AjucbrmpunKnuPyinww9-_gz7w4XK4OKK_tUMPzTY2yGo27h8dcTA4Y2SN2H91eX_xh1KG8xkCH1_7GX4BuZLkPXqJnrPvuns3hnZvNyBjZha0fWW_SePRljS1YxVP_DICrmqkghIARBlkee21PZHg6E5sN33kVj-9XOIzKYj3Flj_C_CSv6Yy7Uay7NYKKBHSwhn6RA75skSvn13y6RsvtQxj5bzrsHZCKBSldTd5vlH52FYbIunapml4OS_Mtmmzy6ijkTkF2YVezQPdidP6Z-LJnrxH-bh9N51yCkdWtNj09TDJO49e8pgYPXqmtvew_SK_U5rEIM7QxJKvBGw8gdGArD-VEbLZYvHcr7Oy06efj6IsPvAfurWnIRcDEmI6dQFE2w8eITI_rK3ol2oOk-zlDLB0i4OoUJxwH8rDwr7LpUFNBm--LBqIrvPIcPlq-ZgDCc8DwbaNUSwjzX47cibw3zPT6Mvz8hOxlOUPllMYtT8UP7zPIL00xotBQVcPe4qIHMMjN7aS4iCKf_dYLRDBCjxZ_w1SM0Of749wPzv68J-BvK_3ZdG9s1FnD1b9hZ1kG1uO1biXiFQeAAW3DvLRAoGlMznguMwq_RmCxob5HuZ4VLykGhM17JAl2Rvpp4mlxlyf5RA5ul2dY2tN5-yq7ZbWn68ssabOjc8JZKy-dHJb5kM07us5ypMYkRF-ID4sw7Djma8kxTixdScXzuKSXfkgazRkxLrORADd2zpZL31GkyAWYDQttL1hszUECHyWqXBXSMdvMZWOHaiEWy17SA9UCqs2xIC_jpiB_R30sEzcmjB9XYmCBlUQCO3fX24m4zb5H8NC9xufjXVTecBUvIU6rBnJwjbzHZD4UwXNjNUtRuAx-WwYCHpZAcMdv57WQl-9vkesUuqryT6eWoBwFsZcVhFuun6UD1AmywNIppm-uqaikrgMVYDPk6WjFOnXT6c_juNILQ93e18xcdvsgDaN4nVvXapQ95vJYzbyybwJ-nxrXL1WphAhuMeTQ_1dFYY4CKgN5c9H1vtvjx78PJhKU1EEQkRCrzWCh3mmhgbtip6dH-Ohp4ybyIMTZ9R9iWMvzIJMiMgPu2QFxW2-mo7Pe_ukQUyHT0iAFgL8AzpthDl6817nost4fLxuYTbAen8IpUkFQUGbhvBG_2BfKTzZ4P1NfIJ7U_mewbY_PewWIDSKNg5fVY6Gxl8SPdUs","summary":[]},{"id":"ws_01be126476553b91006abe4ef2778487d18b7652d55b78a325","type":"web_search_call","status":"completed","action":{"type":"search","queries":["capital
+      of France"],"query":"capital of France"}},{"id":"fc_01be126476553b91006abe4ef6c9c487d1b219250ff413b5cc","type":"function_call","status":"completed","arguments":"{\"city\":\"Paris\"}","call_id":"call_wwPskhBSMrtjVKeWA0pQTP5v","name":"get_weather"}],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":1}},"tools":[{"type":"function","description":"Get
+      the current weather for a given city.","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string","description":"City
+      name, e.g. Tokyo"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":8902,"input_tokens_details":{"cache_write_tokens":4529,"cached_tokens":0},"output_tokens":65,"output_tokens_details":{"reasoning_tokens":47},"total_tokens":8967},"user":null,"metadata":{}},"sequence_number":13}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input: 'Make four separate tool calls now: call get_weather for "Tokyo", call
+        get_weather for "Paris", and run two web searches for the exact queries "Tokyo
+        events this week" and "Paris events this week". Then summarize what you found.'
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      model: gpt-5.6
+      parallel_tool_calls: true
+      store: true
+      stream: true
+      tool_choice: auto
+      tools:
+      - type: web_search
+      - description: Get the current weather for a given city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              description: City name, e.g. Tokyo
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_0838d2f06a962797006abe4ef9a86487d18fd230176919568c","object":"response","created_at":1790856953,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+      the current weather for a given city.","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string","description":"City
+      name, e.g. Tokyo"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_0838d2f06a962797006abe4ef9a86487d18fd230176919568c","object":"response","created_at":1790856953,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+      the current weather for a given city.","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string","description":"City
+      name, e.g. Tokyo"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"rs_0838d2f06a962797006abe4efa4f7c87d1a359d1f8d2baa860","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk76jtndxgLRc0SwyVLowHl8pU--NdLtK6B-PCDSPRbDW6GlMJxhexNWAjPwuvdnr1haw88t7DNNYtjE23IPR_QqudiEMfpMPyPqCnZeQ7F8v_UTdjqVVwzLTvlG38dhqIKIguyOaTWG_uVRssTCZpcgZw9o6TEhESQXIZdR8bvDDixPyGneoi8Jl1lqeON1S0Tx-kU3_6DlKfEUgAuboYn2jSpp1Z9U5vOhp7tQPIpWKxDsS7N4BcrT_USsacAjVP7hDQ6bvg94Dvq4zmnxRdBqs5dviCNFoUDwvP6c-lj26b5oaf3pDVqvn61msJa1WQnxqmkhEiDlYktsH7YaJsAhgzkDjGdiLbu5b6NeWfHud2jmXm6IMlbdYGpHCTOXxJAWLwBRw9zF9uUkp9hgmFgNpMD85nM1U2kh52Q9fC5q1LrAyJhb2tP4z79LAe3OKyypdBQ__OPKjPXlENbjs05FZ3i-rjtYJFWdmdqyo7Xqk2aqW8YQUbM2UftfU1VtK-Rv9pFJYrkYGG54C3GGhspU1pAb30s4KgfFYwcRyu_cwVktU_fcXZgRxf5EJTD5UYTG15cPUpKbkSlUhZ-gJjoTfxe0tmbc4f2k2qN5z7a899ZlwPr9j2ZXfX79Fo1NSVz1-m6I-lbMPVH3yquFjkGlqAtS9qcKw9M2MJEynIO1oa5KTnkm40A-pFC4yjneYZgY3kK35HSAYuOuZ0dp_RwX-IVbW5CaI6OeP0gR7LhpIR9hrwVRUIkg5vOxKbzw4DZ2fvHy56yA9UpUps6wpMvPjqAXbSr9xvuQQMrCBacKnjS1eAEuan-gm4CPbt0rrTMn-6X8qnygU6FWUyflLqFD1d8kCM0VBAaVV_6DJKCDFNCFUxMqBZ70l-1DWCKfQ3ntZQrj9F8SNGAYFaRSLA4JfGqOC5W8Knkdi5JqQ9JtVbPtqqMMt9tVLf4vxQwDwlIgS44ADZxM7Mz-214wS5NoMrvA9lHIkMLCLvfNtBb0zjxd7xkEfbD4UmjjBtkA5736NlZIX9k88fItbTnAGk9l5ryRexra9v6TPm_A6StgL6RaHVVUXl1Rf7GDhiwf1gUYgIeey7eZWk0DdhXmlgeZX9PlsxKQ7_cykBuY_uskd-dsIjQMeWo-7Wh97Sihbyq20415OFgJNP9sMwtSuGRg7w==","summary":[]},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"rs_0838d2f06a962797006abe4efa4f7c87d1a359d1f8d2baa860","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk766IQkWhywI_yIAPBS49snDooMNuUaOHPRszN5FnPpA5gLA24tHNfOGjL_wFN9kmD8BF0qkRYzzR_ArPWxo2hqR7Jpc0fmHExv6aKoPGYWTRyZ8GpC9hLilnXjtlc4-576zkJSlkrnclSbawxE_CFdZGQMjH_tALGkIxFmswg1QNK8CC1WhljUOhXqm6FCjGSHMFlcTEE0XVhzQbZaIe223lfqjVzMIAHOw_AsoDIZi-C5f-uaCpDXm9x9uQ0fKLKevJNnRM-Llr44IJvBxKUCq4RrsKVrGe7iBX2mxYOQxxJu4ijRoIvSMraMiWNl00_KZ3rKQmnL7zhSy6sRq5YoXE0KsGxfQh0zq5JNM4bzo-iFzgH0iWWozicLvc9NTdVeSkq-rPvELEihuni2eQ9w16PmdHhUP7JIiB9EVbMotagg_nZxHxgpsVllZCCgdcE4_HjOCo3fisC_1urFFGtDMyamamBF5s061o1szVyNz8qr6QMX8MhyFfGNYgCX9uYg6cLIb05h3XtL_2c6LTyWSuHgEuPhdhaPZSdKypgIfHWVNdlOreZliVllIjqzd07jOM4RfUKUzcdfHF-gjvWIQGlGKem3Rk5P2G_Q4oztCo7b08vQB3B8qCzSyBTXS5-Llqyxo8rU5PZMy2wdSaNvx50ITCwTGTbxpexhm_V5BNnYoO9ldn4jqqmuaZGE1kUGAvxQAIZm09zzCaKTAA3uttig-aOleSzk6v5AfSvF5R5_IuKTzqwi9QTjB1AyjPK23sfQNrajhW2hS_DoBv4Tyh5320GbfG6GnPs9taR4NN6AbwDy-h82YJufge0oDtfywso5KPABKAmd-Z0HP_PvyxzHBK5elHCQ5AyquaAbdgDc0dDeZNB77lvaUAwuaQ2A55l8XMB9-koRgdCQotbsg9f4JWkCRjmrVXzqaCaR00Q2nHAGloLa2lgIhqieUMfoVtusRG_Up9JiLhMTsiDAEFe-xZS-VwsNXuRW7ER6eTr5nnjTqV7LvUrbZaXp--xXFC3xAAefzPiTfVyb-F25H51cJBGvV4GVTccrcknVLhZXrFPaKUKK4AQVwCQUelWHVApq8hNGeiOqXx8klJ422rCcqQ9-M-oJTp4JoOVUxZfrNfxHgRFZ7n1EkMZdLhAI6MBrKA5Vnr_ZObaduUEggaKwlY4cWpqm2VoAUnrssw4SVARcldywJTRQm5or_MN3bFxNXyNt4b2lO-PQNPmreOwvNs0VRLtC-_DOV5yM_WpiOfdVDga9C8VoVPO87hG6YCHbMCVX_4UI7aPqYaY-Yf4y1QIrHTQDGbGRQEzJP3PBf3u3tBdVhym-j8093s2MvuMhnOexsDPmlVo739ugcg==","summary":[]},"output_index":0,"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"fc_0838d2f06a962797006abe4efafda487d1911c53f882e029d8","type":"function_call","status":"in_progress","arguments":"","call_id":"call_cokyREG7nZ1nDr3Xdhn1uDdn","name":"get_weather"},"output_index":1,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"{\"","item_id":"fc_0838d2f06a962797006abe4efafda487d1911c53f882e029d8","obfuscation":"o29DLGI66XtM8Z","output_index":1,"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"city","item_id":"fc_0838d2f06a962797006abe4efafda487d1911c53f882e029d8","obfuscation":"uSpIceXAW0Vi","output_index":1,"sequence_number":6}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"\":\"","item_id":"fc_0838d2f06a962797006abe4efafda487d1911c53f882e029d8","obfuscation":"Or5NrP0cJHrFx","output_index":1,"sequence_number":7}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"Tokyo","item_id":"fc_0838d2f06a962797006abe4efafda487d1911c53f882e029d8","obfuscation":"zeigkrxWgHB","output_index":1,"sequence_number":8}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"\"}","item_id":"fc_0838d2f06a962797006abe4efafda487d1911c53f882e029d8","obfuscation":"j6c8Hy6wcQ48Kw","output_index":1,"sequence_number":9}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.done
+
+      '
+    - 'data: {"type":"response.function_call_arguments.done","arguments":"{\"city\":\"Tokyo\"}","item_id":"fc_0838d2f06a962797006abe4efafda487d1911c53f882e029d8","output_index":1,"sequence_number":10}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"fc_0838d2f06a962797006abe4efafda487d1911c53f882e029d8","type":"function_call","status":"completed","arguments":"{\"city\":\"Tokyo\"}","call_id":"call_cokyREG7nZ1nDr3Xdhn1uDdn","name":"get_weather"},"output_index":1,"sequence_number":11}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_0838d2f06a962797006abe4ef9a86487d18fd230176919568c","object":"response","created_at":1790856953,"status":"completed","access_programs":null,"background":false,"completed_at":1790856955,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[{"id":"rs_0838d2f06a962797006abe4efa4f7c87d1a359d1f8d2baa860","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk776OGChCYW4KiW3j0tNx4l7ppRrb8laRMTX12W4pBHE8oCoBQ5zDpxpt1ja-3cS7JpDY8bxSapHV5kNRZRnw3aS1qjqB2T74Yn7t67CBKAqk4o_KLy7okjDmXy9StsAeb8mw5rQzCAznVLVScIfjRfr9nUc447fgztLqktR3KpEWMXNwmJ0epJzvQXTBSDmiM7GlZIBu6buB-_07lSFs5zbWFMj_qV80cosooDIadm1uQKkuNC1y2WtrKkyTyaAiIpq4WDpJQys1DVf9hxCjLyipHHNEPQPqO8ZT7-xh2HppR-5hTLYL80dYg2Hc5LfIcJc1vE5JExM98HXttK3OItnOSNdJPOD2RPkKmSLhcep7IqGR9l89hOqKf_V0qMcPr80q2yeJeF8GYoQKunWXrV80cWG6xmM0qyZJVMiAndqotpCj8moVMSf5mFxQtLzUqH-gQnBPSQAZLNX3QbfjYZJuYjAbDx65j2KGUdYau9c0YxETY--59hn2_00IEhHld3xna1J818WdrIdMzSwK6OGlGjeCHeAuDr7hK-zJKIv9W5A6ikI2kKdjhaziMVB-XMksmWZ1QURo93-K7SRpYYJ_JPSk5_iuO7mvTqXzzEjZQtOyRDt6zTKo1FsQ9846U8RRQBaMZrfmhh6hcrciBAjx8VYg1BnlY6kEdHmUl67Tl0zbSGivUeVOUp7Fdi_AmFbooThiNB_ml7VIJgsGI_7XPR2A9IemdgwKOQc_Cd4yF1bkdgdys1ysE4LDjBH21jasUIeRa1AmrA6q85BaX_1sCXBM_ITbgozYR8nMf_r5fBNLTxfEKNl9Cuj4f-U2Vl2hvm2MvcX-WKUazcNK-_EaJVKV1Z5fOn7SjADaqmWUueRNtDbyibkViUnCxSdvc8keBe4a6WIFn2rf2vyGJzc-HI-Vo7LxjZxXZzXWfxzD3OESfBYvWZ0a_Qo-z0JXIqRNWqEkOnAeaAcdHh4txKccq4efKNPCR7RhxWEo_QIH_m7wqg9SgAAlYoYeWgx56wUKIn-YxyvppFmEplJNtdjw672UVd_juU1rZuBYQKek0YdgWhvSgUmCG95tCwcRGtvy85rnvrh6TLkKgdifZvyFRmJPhaiPL9fbclbEp9dn6MtbP4wa2SR0Sc-9klPGOw-0QhcyRRnyAIOHO9yDZLa726QUFU_gA0Fx2Jggejtk2XUAMUuQeB4MF_bpywhMXzyYM_21EwQNgXRpWLUdyikKQUjxEgMYUDzCyYUI9Nwqi_ciAycz2GkJjy3QH57I_PSegQU7wDcWm8hv7IByFGH0sw-3CRU6mZdc0Bb890fycdBVQSqwezACVqtbMipKcKqkLm-ZromQC3UmV99t7PCg==","summary":[]},{"id":"fc_0838d2f06a962797006abe4efafda487d1911c53f882e029d8","type":"function_call","status":"completed","arguments":"{\"city\":\"Tokyo\"}","call_id":"call_cokyREG7nZ1nDr3Xdhn1uDdn","name":"get_weather"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+      the current weather for a given city.","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string","description":"City
+      name, e.g. Tokyo"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":4539,"input_tokens_details":{"cache_write_tokens":53,"cached_tokens":4418},"output_tokens":51,"output_tokens_details":{"reasoning_tokens":31},"total_tokens":4590},"user":null,"metadata":{}},"sequence_number":12}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t4
+  request:
+    body:
+      input:
+      - call_id: call_cokyREG7nZ1nDr3Xdhn1uDdn
+        output: '{"city": "Tokyo", "temperature_c": 22, "condition": "Clear"}'
+        type: function_call_output
+      - content: Now run two more separate web searches, for the exact queries "Tokyo
+          museums" and "Paris museums", and summarize each in one sentence.
+        role: user
+        type: message
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      model: gpt-5.6
+      parallel_tool_calls: true
+      previous_response_id: resp_0838d2f06a962797006abe4ef9a86487d18fd230176919568c
+      store: true
+      stream: true
+      tool_choice: auto
+      tools:
+      - type: web_search
+      - description: Get the current weather for a given city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              description: City name, e.g. Tokyo
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_0838d2f06a962797006abe4efbcba087d19cade166296b80f3","object":"response","created_at":1790856955,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_0838d2f06a962797006abe4ef9a86487d18fd230176919568c","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+      the current weather for a given city.","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string","description":"City
+      name, e.g. Tokyo"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_0838d2f06a962797006abe4efbcba087d19cade166296b80f3","object":"response","created_at":1790856955,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_0838d2f06a962797006abe4ef9a86487d18fd230176919568c","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+      the current weather for a given city.","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string","description":"City
+      name, e.g. Tokyo"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"rs_0838d2f06a962797006abe4efd234c87d1aff9a398dc6dafd9","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk79Q-J3PnkJfNx0WMwSGHQGZbA8IHC7vxGcveXO5KkXOIM7ZDCKZnsPgYN2HuEsEY5iqZmz0g_nsrOYuKZevFKVDXBiR6wYJpoRs5MYteHcLRbyAfP7lC-_qu6h073C5D-e9WP3mKUCrDAOvIDPTrTpF2VGyjK6GCrK2kL-BIyXqXMGmWZgnyTDc9NFlcDMvLQZEQz0ZPSAP2fS3um8h7dRmFilv7JRprpR2v0ciKsigjDG4xLegGqSKaMD45lrtJJiAvqr1Wy6NYCT87FUyJYzbOD7H-CyPGc7pf_WAZ2zDSVbe7ErpgYnWZEhD6BESqZLCOtGHwUYAfA9NpIuCKEx9XXLRE3wIzOuFV3HqBqaZccpd4xBN0uY3Lsn7uTW2Q9nTZtxfHs__SasXnxFwxjtd9kRN-I6ojy-lLTicuw_ubydCxp7BiQ7YFeZGJ7CtTr-zUFKoTuoixkLDgMUmMxlnJlwbhTZwvhXDgXEpsj23hcJr4CisneGKaiDWisQQpPZdMz4uRSAt8yTmBd4884n-pgxwqOc_46rUs7JtGRvfeX2_Ldgh8WzjKnh5CRxPGc1cMM41Ugomn8hAFFAk_yIUNdiwMRVqNUKnt7uLI8d4btwnCNkVXzv6MB3xj3Mr-aNGC8HyyWQb_IWsRG-15Zu25dJwRnsorTzbLfNKCSW84mbkz74GEVXpAw7yK9kqZLtO8SMD10U_3EK8nrjywgShtoq2x61jdow0nOLw1ULK5Ik3Q2C-Lj5PTddYFCQ4xkQhSqJkDdV5GYSkorZVuuj09uKbagDAK7VKS6t_oDRwiwtWlEDXDeh8iAliWI0E0nKCi_7y47oq3AOeoYucJtfqrxZ7v16BYdgUQu9YnEhI82ocKru9bGWp5M6q8FE7dWfXne7lJLSB3HGWshrb6qb-qIJryM8oQUqHXQyrQ9I_5Zw5n1j5fcknZVJV-yjUJ8d2prdK7sxlZPiFGhbLPyLJIfaD89QN8gZOgg7aJCImYSEs-BrGxY_z-0BNi83E-Wj8M2nvlma6zKljCQ4wyD54KwPR5ww-z8p5f9nJFFYd4gxptf_aX05Goff6Ad94zrKwtaXNtIops2iiHqpwXmIXkSoGbsRrLVbM1A0wk__Kk38qE0ft_JW-nEJ33jUQyWd_IWngevYVKLXrNz01Tlc5g==","summary":[]},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"rs_0838d2f06a962797006abe4efd234c87d1aff9a398dc6dafd9","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk79kIr5aM8_-LOIMDZ5h8Nz_ZPSXN-KwbRAKDNHrraGQg5bHD9pHqmt0PaUWxqyEnzKOiINtweWNROAbDqvgEbSVjrmxpdbFl-h1doo0sTiEpnJhNl5-h4z82Tltm6jhBdsesrmgDoYlVcXNc5L-WqNhs8mISwYVUwshT3o0IGI2D2CUo20obT9sf45yBUzr4OYFD5rI7RxPjsu4_fGveQaXo1Pane0jfx1dg6XtRzdDaY6fqhe15pIce5sVUmnA_Fmn9TKalmHEZ5E02eYyYe5fp5o6kdjtfaW--6_8n-8EH4soCI9i9Ehp5kbk34Eqf7hkEQ-6ac6y3VP8kKb3LPqyLzk-z-a7KlL-v-AyRd0AAZet_5kTSXCK3s_9M_3FqJYCzQ4TVWYPd4wgIEgRezgEI_0xam6W-_4c1VfuZcoDWuoTc2NA1FhVv84Gy6VUozR_bjB12Ueear9UM5imYY-4PGZJ5skOgzcWo57kK0J0ISfcDh9o62EyQT6CdHmXlMGOdCqVnpsQoUrhOg1aGTiIc3FbvTMcPmpcjS-5HekEQa1kMNQr2jzZZR2CL7BtONK5uLdMJOdAQQuVpCy9JKhI_KfAvrNZ885FdALu0MFy6RrNgG0xfz64wHMg0OW1o9X-AzVUFb6Z1vyOzww8UdHFPa-NirFL1V0dupLXOQ5PVY2fYp0EAnNV2adUruKf54NdCSPC2nxyRphs09dRWwntK0NBvuxEGSul-jZirR4h4U_rsZXoo4m2QUh3UFxbZUluk_cDUKmaFw6pGew-rBOiuj53Xrjq8o9j6pAphXy1jEfkWaV0yu57aVKulSehfuR-YY_lQns19Cxf0B1Sg4y2mn0JuFLHGnIkARhIVmwv1dHTnNnQYMsM4LATn8jxj71x7wNdomcXw-JScXvvA7_xT86rBLaY8IwjDE_XPHQFtjf_-ow4bwPOlsJojqIrbzDKIuVJDYPYi13Ber5mCPOQ2ECUgxPiAOEP45ft9Y9AV1Dc0gLKPRsMCkFp8S8HhBlxwrEYBOPyc6Oid7uOdYFaU2r8Zih6ZVXXfxlkar3FjznHhoqi8mdSa26O8VaXie_zlyAhsApoyGjV6uog25U9PeCNtZOUNp2FEqoRlG_w3eJpCaFddpUBvW_yygLod4RN0oo4upTE2muS5DAETN-yeFzwOXIHMu6SQOh8HgPlg6veWRJUyPr0qFxMk-tUglLf-eVAhHJAW0fEfZVZZZ_SA_ZILxzvOZNPx6g_lO5jhSyLJkuoqx9jmOBcJUM6VCEMJUCRpNl_UP79oBHNvqaDjggftGJLXKv-hxjdwi24b2Km1EikcjbxZ-GHU_cCsHR","summary":[]},"output_index":0,"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"ws_0838d2f06a962797006abe4efd92d487d1a0580e9b796c8bf7","type":"web_search_call","status":"in_progress"},"output_index":1,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.in_progress
+
+      '
+    - 'data: {"type":"response.web_search_call.in_progress","item_id":"ws_0838d2f06a962797006abe4efd92d487d1a0580e9b796c8bf7","output_index":1,"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.searching
+
+      '
+    - 'data: {"type":"response.web_search_call.searching","item_id":"ws_0838d2f06a962797006abe4efd92d487d1a0580e9b796c8bf7","output_index":1,"sequence_number":6}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.completed
+
+      '
+    - 'data: {"type":"response.web_search_call.completed","item_id":"ws_0838d2f06a962797006abe4efd92d487d1a0580e9b796c8bf7","output_index":1,"sequence_number":7}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"ws_0838d2f06a962797006abe4efd92d487d1a0580e9b796c8bf7","type":"web_search_call","status":"completed","action":{"type":"search","queries":["Tokyo
+      museums"],"query":"Tokyo museums"}},"output_index":1,"sequence_number":8}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"ws_0838d2f06a962797006abe4f0146cc87d1bdb1cca2f123f776","type":"web_search_call","status":"in_progress"},"output_index":2,"sequence_number":9}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.in_progress
+
+      '
+    - 'data: {"type":"response.web_search_call.in_progress","item_id":"ws_0838d2f06a962797006abe4f0146cc87d1bdb1cca2f123f776","output_index":2,"sequence_number":10}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.searching
+
+      '
+    - 'data: {"type":"response.web_search_call.searching","item_id":"ws_0838d2f06a962797006abe4f0146cc87d1bdb1cca2f123f776","output_index":2,"sequence_number":11}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"ws_0838d2f06a962797006abe4f0146cc87d1bdb1cca2f123f776","type":"web_search_call","status":"searching","action":{"type":"search","queries":["Paris
+      museums"],"query":"Paris museums"}},"output_index":2,"sequence_number":12}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"rs_0838d2f06a962797006abe4f021c2c87d18846839db764dadc","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk8CTjkbsiYDES7pVQwe6cVFEc2TArG7TuYe0gBoHbn2EvYrVf50TipnoKjiOMrhQk9YeDZ9CwTkv0cPbw-VR-oQuebuvtD-jigJm5Zgka64HkLPhVq6fF9SRgY22c78X8fqazPSPA7j7lNv71jsXZ1o7bdmMZUC5RxoroF0BEsLzWOiLgfpE8IcR5Vjwy40o6whMRzRhtrzxdlpyUnS6fNAA3IGzamX_8fEJW9jGrT4sB_vTpvKZlQ-v1jKilM_TR4NtQQPgtzJaMHrL84UC3g6qhm5By7wKQ-YF_m5J7l9gF5CDCFdioFui_Ku3KjiCWS1Ei0ZE1nQM50lFQyjp0zAt34ygENwc9AW9IVeh6_NvW5li9LbqnoOahFxan7pfrPWQy0CoL1GL71lF5Mi5U7RCJiDaMmc8y3Qd2lWXT-K67ddxQ_txxSEEPh4zwFcYfs87bRUDUbuzZE1dJmdSjPs6yCI2nj75wgSHvCnwkH2_PRk-WAhR_ZfOktOTegSr6dk78zAQASgPcYkCFmhFOJ3FRNhNBWbpAWcfxBZpktIc5bCAE5LGV-LfLHgZA5jWVhWEMtiAMZD_uvfiuyX77bZPK2_bv-oLyBXO0QyOInSS6XOZbHRgNBUcLbgMJPEb7x766ZrKdh0ckStn-nltVc-Eqykcptmy1AC1ftj-_8F6D_2iLqGZjvj_f5Qunvf6aK4k02p3eMrGj2C7ddu9btXWzG--8ZeBIsq-e5TItLtAOtLfOQ5nnQsoMFSwpLjq6eICluA5uX6pQWuYqAUPI36XJCpJx-WHDV5irxU5Ixn5PIoeguvK-Iv-C4ieehkav5ziDiZtKoAONKNJWKA-gHAOpIoFwOBhWWPgA3mC5EHle19Hte-_DiAHguwF9mZcfDxx-DgBXxW30i4F6gojSmHDaV2F6ZoE57vPlevr6kzPNR1g-q73sKOb5d5zTqicqp1wHsLED2KKeK_ihIz2t3Wi_d1aWcALB8g7Lze_dre-W6Wh3LKil0v3OYjmgBeXT2la_lHthdpKG4Z-ymKLAOabmQo-gX3PNTy5MwFKa6uydXM0FBF0DOlFVJnR4P5jt-DHpbTS9il2a17v-P2aUzpUDKwv9EEakY2TDKHKBVwGSBOEQgeTiaWhSM_38lx4j2fJWz-PpmYdH3MxFTWiwNgFw==","summary":[]},"output_index":3,"sequence_number":13}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"rs_0838d2f06a962797006abe4f021c2c87d18846839db764dadc","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk8DAWe93Xs5So-rx1xeN-E0gVXQD_YJXW8Jno-GcAeUe2MIY2Xznj5tWDjbIQRWg08vvbuVmyZnZxxsTp4Rd2EDbsVbJcjVmlnNJCq0SJSo4RZcnk5idZOE-NQLw9qvXVwoOXIBr2k8uiPSVU84j9zhqX-OFNdpnZUCwszQy6pMMpGP7amRM4dfQIVOB4QKenXc6-chR1EtR23NlvjScwBhaJzWAiv1LlvcAOvNQDiS4FwY40BBRFbPyYZDUTlqczGImdxrnpdBYD5NZpGXTCtkpiWDQEyNzRl47C1saC9pVmSKHEMbZABAiddkf5KvuCA1zTQ9JJ1tVpv8rB_DCx-sF77o8wpjJ1ByhWgq__sh4gARDXqYLUvZim9UwdyHD-rpOgdAOgKGMqXk4gg5Kk7zSb77IjiSKYQEqSrGw5fEcwIarZBg8o3ailLvzqTkpNGj6b8DjMADqlSdk-fSwwTj5hetGdNmGI2GoyNlHO5HDAUo8iTiEew-0VdoyRc1SpHFQ3NmptDqZTUmzM6sqi5kNtdwI-F31EJUS1ONdSAmBVElgiaZkNeLDvspbOjwRbxU2t2q-ybsPqOs23ixpFFSCjICN6E0-snVURi7ITt6CktzEa5Y78KKeiHGmk-H7SJmX9mr3ZX4T096LGJYXmkkaZPx6UsSMLOg1oMhLwzCKnKffNQkUI5nVoJqIHAHLPRmslSLgpD9kPVGdC8kh5DAfdhj40opBmQIIIgFOLKxFrd3QrJetASwD4aFRZ6LmKJzzrrpZKA7cfTmSGexAIr6yyNovyvYr8ImqMCtuTLFI-axCMBJsMvSXeRsU-oPjNbGw3fm2PnGn86Yh_fqW-oazjymsO9WBuEA58Gc41pSnW_SxjdtTk-ZE255q_YGNe0l4gIgJXW_DZtyNOJlHAOWDZ3kRjtd3i_yMv4ms1VF1fPWFmLUWdxU2tyPFjtOhpUBEbWj7yueE7u91-HkJT3U1bodtNzTHddCDucsDmsVRzkmDzwd08AlsFD9FwtyS3BDc9Fb40Vpg8Kw0rxmIUpmdqZl9yt84fGq2lgSDYRJ_q7yQsUM4ny0WTP8TSVfuKj4J6RN9_MM0Dj7wzdql2t3qyVMCFfa1mhpUasrllH_SvPdAIHOgjoZWhYtQ2mgeU0e-LmGPFFZaoc_kY47RH4d7mrByd1g5NR2uwiITx-wEwTc4-1MrCw6_Ywu1IbHogxMBzhHjn4z6_Aau3TZ-Swzk82QOkmB9e-SWI8YqwEs9NkuE0SJXhN-Lm61xcv36nj3C8vaY-TJWe4hl1ahsgo1XDupyRczZCo8zmRGl1gsoUymnL_lopbDdN3_nonykmrkJiK7Y0UvS0dXKRZVmQfLSk_NXbzmMA7UmewjxoT4b-UXdDRorAgRa6UADThdBQv33pIKiE1d8gg4iLs-A2UrxcJfWOkk9rHVrbz6WAhliC1EbvkhTuk_ehSvOfI4uvxzD710_jDmiDSs3vY_hHj6uspC8dgd51CZ9kRw1N9NTCQD_eO1wuVydxfCQgTCIOPmQZTfYtJ47DeQQQ6OVAq4lRwglXHWUMkkY5S8ykpbwbdPjsld4epfHPvRtJMUIULe","summary":[]},"output_index":3,"sequence_number":14}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"msg_0838d2f06a962797006abe4f033ee887d1a132a2d3c82af282","type":"message","status":"in_progress","content":[],"phase":"final_answer","role":"assistant"},"output_index":4,"sequence_number":15}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_0838d2f06a962797006abe4f033ee887d1a132a2d3c82af282","output_index":4,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":16}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"- **Tokyo
+      museums:** Search results highlight Tokyo National Museum and","item_id":"msg_0838d2f06a962797006abe4f033ee887d1a132a2d3c82af282","logprobs":[],"obfuscation":"lrwgbgvVI","output_index":4,"sequence_number":17}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" Ueno
+      Park’s concentration of major art","item_id":"msg_0838d2f06a962797006abe4f033ee887d1a132a2d3c82af282","logprobs":[],"obfuscation":"86p7XnsAf","output_index":4,"sequence_number":18}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":", history,
+      and science","item_id":"msg_0838d2f06a962797006abe4f033ee887d1a132a2d3c82af282","logprobs":[],"obfuscation":"IBFge9g8Te","output_index":4,"sequence_number":19}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" museums.","item_id":"msg_0838d2f06a962797006abe4f033ee887d1a132a2d3c82af282","logprobs":[],"obfuscation":"U769b9h","output_index":4,"sequence_number":20}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" ([gotokyo.org](https://www.gotokyo.org/en/see-and-do/arts-and-design/arts-and-museums/index.html?utm_source=openai)","item_id":"msg_0838d2f06a962797006abe4f033ee887d1a132a2d3c82af282","logprobs":[],"obfuscation":"Egh1fFBU0baj","output_index":4,"sequence_number":21}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":")  ","item_id":"msg_0838d2f06a962797006abe4f033ee887d1a132a2d3c82af282","logprobs":[],"obfuscation":"puenmv7z8uNbc","output_index":4,"sequence_number":22}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.annotation.added
+
+      '
+    - 'data: {"type":"response.output_text.annotation.added","annotation":{"type":"url_citation","end_index":258,"start_index":142,"title":"Art
+      & Museums | The Official Tokyo Travel Guide, GO TOKYO","url":"https://www.gotokyo.org/en/see-and-do/arts-and-design/arts-and-museums/index.html?utm_source=openai"},"annotation_index":0,"content_index":0,"item_id":"msg_0838d2f06a962797006abe4f033ee887d1a132a2d3c82af282","output_index":4,"sequence_number":23}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"\n- **Paris
+      museums","item_id":"msg_0838d2f06a962797006abe4f033ee887d1a132a2d3c82af282","logprobs":[],"obfuscation":"T2AtcX3y4WiCdx","output_index":4,"sequence_number":24}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":":** The
+      separate search","item_id":"msg_0838d2f06a962797006abe4f033ee887d1a132a2d3c82af282","logprobs":[],"obfuscation":"Rq6izAzPL","output_index":4,"sequence_number":25}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" was
+      attempted, but the","item_id":"msg_0838d2f06a962797006abe4f033ee887d1a132a2d3c82af282","logprobs":[],"obfuscation":"KSwz98VV2","output_index":4,"sequence_number":26}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" web
+      tool rejected it because the tool-call","item_id":"msg_0838d2f06a962797006abe4f033ee887d1a132a2d3c82af282","logprobs":[],"obfuscation":"dok9y","output_index":4,"sequence_number":27}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" limit
+      had","item_id":"msg_0838d2f06a962797006abe4f033ee887d1a132a2d3c82af282","logprobs":[],"obfuscation":"t5sw0i","output_index":4,"sequence_number":28}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" been
+      reached, so no Paris results were returned","item_id":"msg_0838d2f06a962797006abe4f033ee887d1a132a2d3c82af282","logprobs":[],"obfuscation":"","output_index":4,"sequence_number":29}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":".","item_id":"msg_0838d2f06a962797006abe4f033ee887d1a132a2d3c82af282","logprobs":[],"obfuscation":"wAK4zMMbzpa82Up","output_index":4,"sequence_number":30}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_0838d2f06a962797006abe4f033ee887d1a132a2d3c82af282","logprobs":[],"output_index":4,"sequence_number":31,"text":"-
+      **Tokyo museums:** Search results highlight Tokyo National Museum and Ueno Park’s
+      concentration of major art, history, and science museums. ([gotokyo.org](https://www.gotokyo.org/en/see-and-do/arts-and-design/arts-and-museums/index.html?utm_source=openai))  \n-
+      **Paris museums:** The separate search was attempted, but the web tool rejected
+      it because the tool-call limit had been reached, so no Paris results were returned."}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_0838d2f06a962797006abe4f033ee887d1a132a2d3c82af282","output_index":4,"part":{"type":"output_text","annotations":[{"type":"url_citation","end_index":258,"start_index":142,"title":"Art
+      & Museums | The Official Tokyo Travel Guide, GO TOKYO","url":"https://www.gotokyo.org/en/see-and-do/arts-and-design/arts-and-museums/index.html?utm_source=openai"}],"logprobs":[],"text":"-
+      **Tokyo museums:** Search results highlight Tokyo National Museum and Ueno Park’s
+      concentration of major art, history, and science museums. ([gotokyo.org](https://www.gotokyo.org/en/see-and-do/arts-and-design/arts-and-museums/index.html?utm_source=openai))  \n-
+      **Paris museums:** The separate search was attempted, but the web tool rejected
+      it because the tool-call limit had been reached, so no Paris results were returned."},"sequence_number":32}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"msg_0838d2f06a962797006abe4f033ee887d1a132a2d3c82af282","type":"message","status":"completed","content":[{"type":"output_text","annotations":[{"type":"url_citation","end_index":258,"start_index":142,"title":"Art
+      & Museums | The Official Tokyo Travel Guide, GO TOKYO","url":"https://www.gotokyo.org/en/see-and-do/arts-and-design/arts-and-museums/index.html?utm_source=openai"}],"logprobs":[],"text":"-
+      **Tokyo museums:** Search results highlight Tokyo National Museum and Ueno Park’s
+      concentration of major art, history, and science museums. ([gotokyo.org](https://www.gotokyo.org/en/see-and-do/arts-and-design/arts-and-museums/index.html?utm_source=openai))  \n-
+      **Paris museums:** The separate search was attempted, but the web tool rejected
+      it because the tool-call limit had been reached, so no Paris results were returned."}],"phase":"final_answer","role":"assistant"},"output_index":4,"sequence_number":33}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_0838d2f06a962797006abe4efbcba087d19cade166296b80f3","object":"response","created_at":1790856955,"status":"completed","access_programs":null,"background":false,"completed_at":1790856964,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[{"id":"rs_0838d2f06a962797006abe4efd234c87d1aff9a398dc6dafd9","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk8EBa104mwS3y5kP_IJ0ThM-tUUu1xBbVSCWrz08OBVHSeAC6WTUazpF89c8kN1LNK2jyKCSMzZdxWvT-4k1d6pcImyK8vfQKaNDAUxk_KFgEzwD37rPQRIqVI1kxTVj6-_oMeNNB8cu-rgW5vdAUBo_zLNg8YB5cWprcmYTTQmOZ_OUXEuzV8Vk7f18cqvMZodTIRljCvffv6UYkfs84e05YaVN-nu_yxTRGpHVuyX-VTTlS3PeARVl6kwvcqZbCYmpW_OyySHYYZEbuW1RxROtGZolhlezS8hhCkbCMq5p3fnISPoT4rSiloIJsrRpaPvSqyYvAZywQuqmcI5UyJVCnyjmd_igHoss5o7Ber_4wNUCfeOWdvh40h_mOSmgZU_-eF_ZEEjhEqI9C8NeUrRIKxAC4J3Enm5EAWcJwr9Xt9gqUzscj0Qo9sAQD0DcwcqCMvAlfOg3UeeYpcTigNw-yG0jBTwMeVHAwXjVVvjtHda29aJHOqT8eGNKaGxDVIGKP6sY6sm8Su5SKKzAAP27Xjch5xLsq_uSlcuV0F1dMwtCl5JC3vQ5_ybGh7ndwfWbu2wBmdIoSmQbUrJj_0aX0gmCnmfIfuuqJ0HwAaCllUtEKGVxEeQAUFUuyXgP6xQmee724hTQc28BU9n95POJ2bgu11w0Ehs0h29jkT5LlIOpterIiy3jiLnTyMnAT01yoSa7zKijXF6ncHGKazDZDWEPmGXoFqA-4lnq7qOEUEGhQjC2ZcKE6dblGHefPaKBzfqh6JS8p6123wLnPnWEDip8BkjJR_AFkh796Dn-lYjsV3Z6SP7z2xOxSrvvD-huV_nYjfhNlz_hXTG6vfoDf7Vly_9PCE-5ez63E-91ACeA8MRpvPuVi3x2hQF5xJZYy-lKZxLSbU3HWgUdaFgPhtehi2h2znauuDPJM_jDigsf7GRKxSUKG8x3lfO2lrHNbPQk4zWgcaSlzE-eqmqD__Oede4Pl0mRfxg0tXYWKTnVC0vOJrBKOM2tMmrP5kY382kyUYi8r3mq7oXfvwMT4DcP_qCEzO7KHBfsnEiEKtt3vi8XRUIdMDOFHU-2Ikzc7Ab6LgaDjKn5AxOYTl6YNWFi6YH8uB9Ge1JDw7UlbK1jKcURKl8BLXOSShtzcqdXzdvYffsEkx6QE9Ud5skUr-MQpTEVv-RCkqWHRWJ2NgEihDZn55AZAncklFlwPIT-JBpd_rFo-Jo61GyKdwsY1DvzUiwrbPZpR2qoLHv6WnqvXnSoev5mDlzpcdUiE6iMoKqT2p-lIbRPeJ0Q-dG13kj4xuERwAZ6jN-5ydpnvcMCBU-uGCwrZmGwoUz3udD","summary":[]},{"id":"ws_0838d2f06a962797006abe4efd92d487d1a0580e9b796c8bf7","type":"web_search_call","status":"completed","action":{"type":"search","queries":["Tokyo
+      museums"],"query":"Tokyo museums"}},{"id":"ws_0838d2f06a962797006abe4f0146cc87d1bdb1cca2f123f776","type":"web_search_call","status":"searching","action":{"type":"search","queries":["Paris
+      museums"],"query":"Paris museums"}},{"id":"rs_0838d2f06a962797006abe4f021c2c87d18846839db764dadc","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk8ESu03yMf-nQF4mHraLWr-Ei2za2Fx5q-dSLKyaYVUVzdHYcYIcoT9DVyigzGWnV1C20oVGwCvjH-EeARvUY0t2ZAKuqifb9nFmpAGT8WODvARAVjUSnnkICMgCXIJ_1PULqS8_u9UFsO_Kv6KPOGv32y4rc-dyVm5qHac9hht6IkBdFLMc6-iH7fidq4yJQqlRSOqQ-Wwrx_KkeA2i6E--wWILYzf76eRBCDzX_UDotT3fNxXxmZ0LaQWqE8_GR0TBVjmVKc0HQpAQeF85jCO6RgL_nD3l85lyu_ab7CYLZFY8tnJg5pKHQbgir82O8i1rbuEgJqqV4Zm4rk2SXPv2-AbyUHpO9_RdvCdYOKLxwlAAaCqlJZp0Oy81CTARo4bu_hwxVvB40K-2LCJt5PZ3K2qBWkvW432gjLnIfMf2LTMpsM4mZU46Nads4cr8uTkNFSTMWOw_7lytFVvU8N8DPSuRsCPxhY088_pdUd04mnzPtJUZUUpnTgA_JMY9a679uvHNM6BmkQKEqGTIPPzaLiDiPudR29reJmoJ_rxr5N2XePwMQTtsTPDL_8gAzzuXgbv-UW3gP4LetnUs373Nm9GCGomFHLlbaqjRh0ictBJKtCApjtUEX4s429_aEKfMu-NjE364azQEAbpGWHup8vuFqsQVCBRywsG2idu0qbzKWaoc4_SoXPJeo1nntEsT6WP8K1enRtk20sTVN316KQDx736KSx9wblhN3u9yuInyXLji4S2g_z8f5IepTWxdPwsKG_rYPCM7xmjKhmvuE2JIFpstPHGfw2sACd3S2DN9X5aKhrJJKSII4E-46H0lhdmtfFt7Sk70dPKQ9zUdcA2RFhVS9DqR5HDnkJXC9SRDhIkE3cqQ1SoTPyXgkU1r9mMEJbNKsJAwh2bL7q0RuZvcVsMSBQjrlJHbSMaGxEjfjE23-wpehoVoXTz3i5GTrHynOy8hyGCOmGG4ZE9X_bYHtK94UJbJJtRt-34_LXviaj4vIgApMa7ClnxeM34gbIlqUeCnZShqAaNraDz4bM9T-F1tFtZ7Z1hHHzuqHxE7EGqdTRlOReY2uIwwy9RcMJrLpMXMaszfw5e6eUAnrrEVQnJjMdUtAkwJQvl6iccsOjkR5xa37Wfk3Snho0J3Z7zf9I7YnXrtoAaiDYSKOC8xp4PbE9FqC-88SMAxNPcDxSTf9eg5jtNLUzBLeQUT7Xe2EfFVmiNtVZhlQMV7_yYQedDBiYKS_uwMRxNhnDMoqRpTTPitq8H0Jng74lQcqQtQuvyLXUl3iTM08T9QmSSRLsIzAHjKexgIWZ-VgSBwfGARAEX_YEa15H_EJtAO2olZCf3Lqzmf_gJKVlybAShlfabrd3gKy5OknQGhZ7GDY_3xnwbZyiBhrON1KdOUKOdJFgvM9CeooIQnT-Uxx9-Xmn4xmnNG0Mol2ZjLeha5YcJIb94ANhZLRtJLDYEuSoV_hndqK9H-TTBvF0BaNQoPRU7eNYFesZoqMOjY6WMmp-XREx4usn0VpECiRFYm7uH5pxKcQ7y-R7VMON3wYyx-KABfPfd6GYzvicRcAtbFh7L1OBtBai0g9_9t_Ap","summary":[]},{"id":"msg_0838d2f06a962797006abe4f033ee887d1a132a2d3c82af282","type":"message","status":"completed","content":[{"type":"output_text","annotations":[{"type":"url_citation","end_index":258,"start_index":142,"title":"Art
+      & Museums | The Official Tokyo Travel Guide, GO TOKYO","url":"https://www.gotokyo.org/en/see-and-do/arts-and-design/arts-and-museums/index.html?utm_source=openai"}],"logprobs":[],"text":"-
+      **Tokyo museums:** Search results highlight Tokyo National Museum and Ueno Park’s
+      concentration of major art, history, and science museums. ([gotokyo.org](https://www.gotokyo.org/en/see-and-do/arts-and-design/arts-and-museums/index.html?utm_source=openai))  \n-
+      **Paris museums:** The separate search was attempted, but the web tool rejected
+      it because the tool-call limit had been reached, so no Paris results were returned."}],"phase":"final_answer","role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_0838d2f06a962797006abe4ef9a86487d18fd230176919568c","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":1}},"tools":[{"type":"function","description":"Get
+      the current weather for a given city.","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string","description":"City
+      name, e.g. Tokyo"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":8979,"input_tokens_details":{"cache_write_tokens":113,"cached_tokens":4471},"output_tokens":213,"output_tokens_details":{"reasoning_tokens":118},"total_tokens":9192},"user":null,"metadata":{}},"sequence_number":34}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      input: Use web search once to search for the exact query "potato", then answer
+        in one sentence.
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      model: gpt-5.6
+      parallel_tool_calls: false
+      store: true
+      stream: true
+      tool_choice: auto
+      tools:
+      - type: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_036d091e6f2d9b69006abe4f0712fc87d1b45d6cd42fca2faf","object":"response","created_at":1790856967,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_036d091e6f2d9b69006abe4f0712fc87d1b45d6cd42fca2faf","object":"response","created_at":1790856967,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"rs_036d091e6f2d9b69006abe4f08de1887d1acc1c27c91ba1655","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk8IMb9TaynsbjdcocajbB6-fLLL3pdxr7Dq4tuVfW55AC-a3DDj7sDxuDL4edrSUQ-MpEXrj6XFbX2xyqhFBVXqDfhVueIq33c6EkIyAcMLKHfD4C9-TkQXoRw1Ie2m2UzcyOVAwv68x9E7LS1xZL2r5wl7tQwpccbgkUGjQclKXGMRe8EMKX7l5O2FQcOl6YIaZ6UJC6NjmFgX1EbodAXJrKxzqYSOKrUkoP5KHI_71HysDfokzgBWQ0h59PJoqX3JgKL2BrgjckPPI0n9A_6Vq104iSwgdqzWaZzZt9aVBUZLo8nLGpp8OE0j4acIZNIbPGuaTYA8O22KyMeIdW56IKSepbfhIbh0fCL2OkY-i4FK4eJQsl2BsZMxTJ_NVEJipazEjA3BHV-wD85bYcMyIZ2f28SG1a91k3G-j_0We6NiHLW9rRLLDtTgpJ-9QRACICPVHyl97PxP8SHJg22k4kij3fYFnD8AA4y6KQi-sleObOrZ5VQia6XdS_0APbX3WUcqy_pnWxkLGYTehSx4I3BQCup6ZsAjH1dYDpEeTDiHqUDg98Cv8fwpgmfxBMN0VHW6uc5qJlKQvx5rPNwi18XoYpn_wjnOpkBCtV9ylJf7G4zw5uJwKyA0GmV1SlgLKuKy6sNHYwQmBAUIyZUplk-vRgulufN8dHCK3AUUQv8Kf2GkbHDMCsMIndqWGpPlyg5o05h8V54YKeQiRYz97n91GsMFM-HDsq2qTcDX3Ixjb84J7XWdCkoljVRcU6PXpOWw529OdKFcN3-6dXl4be9-mjRKZp8_nl_P4_D9CI1tXsRWX5xF-7Gwajw02xX03sWYwFZmgKZYWe-XOemx5TIFg9O71Rq6ygZB5fKFek1aHGVIyHOB89U12CAx3EWcD5_7J59mAgOsdHplxZ32hIU5UYUzSxO3eifSR_-ejO76KAs3rlyW4jjWTZ8ZrZAKcYSV0R6O8CnXQMWnmsCoS7FYnMzdzt_u3ezwg78_1j98M7DlJMX6cUho-6Y8W4QmjKWNNOXJjfCzhJrvtcBTksa3Zs9hpDnG4ZOg4ihLna7NwOmr-8jbmcYL8g3aR0ts0VP0_1w1MNcjOVu4k5prw7qNDaH1V5kEHvt1QXI94pP6_Cw6FgkdNFZ29kungOYyrNBehc0O0XuY5fSGLGqDCw==","summary":[]},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"rs_036d091e6f2d9b69006abe4f08de1887d1acc1c27c91ba1655","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk8J73OnhevrhyJ8KJwsLppaXTSUS5JcqBKz-j7f_AK6Q0USR2E2KEKttqecSVlasPgcij71DIziBTwkR6OrWHPjj4VPZRytpRRNiX5BjQVKK8GPc7NiC4E-c8OtxJHWVgZoCGv4fA1zJa3t4eMhgx8s2jxSp9dbOhn_31asY-iHTJ3C01Geos4RUYBPeHib12HZ_ZCqMsWH4AUoID1jggqM4VWDnZbFiGK8W63I25Kx7asivvtVhNgSxvA4xFphdeMsAqeTmkB5fnV6rtTQ7WnFkbKxLNUKISXnfPYwyDXxocMq8h4x-4TeUDSkEdTu0HL1T4mKxEDoRL3sPA9mXMN1osaRE38C1dLbK1GnXJYPH7abHVrDnj-NGVkUBfcN8PYUIE8cSInUPYq1Nm4yXafAt_FguODuVqRmMzPHcCZ35UEv1QvO28yZdJZe2NIh8qVdCPf5MQi9Xd0m2qgsEGkbXLumEDEuCTzaJ2rNRdfI8CGKj6-rOly76LXFKsFlChUr6dVvAcuBC7Y6YIN7Of9iewNaFN11I3vZwahxeoNUc5jwTeRe5oUZf06xBIQsA03yXkTwgJWjdRwiumP6xQ_CLDNU3zfdeJ3vUPcaAKtXC3JWMCd_Wyz2aRvHRbrASp9zfzcDKg-j4NTsCQCVpGeU8fWosqAexwGepa28gU-00B8BYJeGa5B-Am__lUWg2N7P4ubfiIA0UB0Kqut4P5cHxf8UGK-81w_zbOWvtYrOGZvyP4vcXCIQfZ09NiXRr9fSAM4khfcGfy3D8qTZxt676WjQUxNxp9TSUg_QFxi14CgZCrc3Vgzx19npwFEpyGlZYS3cEF5rJTtaqOH6Dkt_XH24J2bgu9-5VZReQCHOO36QOmcUhge3FTWuqTf_RDJLfC-CSFaUDXIadDLOZSEF221GAWYuwddqaj6jYAXMruuWny6sNKiCpSi5dEPH1vteTeFTviY8Y2Q0o87rNo7Ln-5SToowO_EcjvCQWcR9_Oprse3-5zF4sPn9ORmIs1qC-QLf_m6_FNHoWJ2oiAznmuf6pftNNR4Q9S0OjY6JdxHrz-VMcYGXGxOVnJ-bgz0pIfrIFSBXOljro4jC61c8BIs0CL5nxDZsye1LYNvRDflpCk4HSmJXcyg90pXClqQBA0YWEtxpL2IAS5_Jc_Co6kOIehgxMF15viD5FojuLSOwjppZ9xJRphUni7CjB-JD-dtHlJYoGSvRYeZDOEPQG-WMXw_HYsxpH3nVaEfyjnE=","summary":[]},"output_index":0,"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"ws_036d091e6f2d9b69006abe4f0920d087d1ae09c7ebddade9dc","type":"web_search_call","status":"in_progress"},"output_index":1,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.in_progress
+
+      '
+    - 'data: {"type":"response.web_search_call.in_progress","item_id":"ws_036d091e6f2d9b69006abe4f0920d087d1ae09c7ebddade9dc","output_index":1,"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.searching
+
+      '
+    - 'data: {"type":"response.web_search_call.searching","item_id":"ws_036d091e6f2d9b69006abe4f0920d087d1ae09c7ebddade9dc","output_index":1,"sequence_number":6}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.completed
+
+      '
+    - 'data: {"type":"response.web_search_call.completed","item_id":"ws_036d091e6f2d9b69006abe4f0920d087d1ae09c7ebddade9dc","output_index":1,"sequence_number":7}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"ws_036d091e6f2d9b69006abe4f0920d087d1ae09c7ebddade9dc","type":"web_search_call","status":"completed","action":{"type":"search","queries":["potato"],"query":"potato"}},"output_index":1,"sequence_number":8}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"msg_036d091e6f2d9b69006abe4f0d9b3c87d1be39d22241deb10e","type":"message","status":"in_progress","content":[],"phase":"final_answer","role":"assistant"},"output_index":2,"sequence_number":9}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_036d091e6f2d9b69006abe4f0d9b3c87d1be39d22241deb10e","output_index":2,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":10}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"A potato
+      is a round, edible tuber commonly boiled,","item_id":"msg_036d091e6f2d9b69006abe4f0d9b3c87d1be39d22241deb10e","logprobs":[],"obfuscation":"sXjBuOeaJY18A3","output_index":2,"sequence_number":11}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" baked,
+      roasted, mashed, or fried.","item_id":"msg_036d091e6f2d9b69006abe4f0d9b3c87d1be39d22241deb10e","logprobs":[],"obfuscation":"NyDapQBBJphXid","output_index":2,"sequence_number":12}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" ([dictionary.cambridge.org](https://dictionary.cambridge.org/us/dictionary/english/potato?utm_source=openai))","item_id":"msg_036d091e6f2d9b69006abe4f0d9b3c87d1be39d22241deb10e","logprobs":[],"obfuscation":"cM","output_index":2,"sequence_number":13}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.annotation.added
+
+      '
+    - 'data: {"type":"response.output_text.annotation.added","annotation":{"type":"url_citation","end_index":194,"start_index":85,"title":"POTATO
+      | definition in the Cambridge English Dictionary","url":"https://dictionary.cambridge.org/us/dictionary/english/potato?utm_source=openai"},"annotation_index":0,"content_index":0,"item_id":"msg_036d091e6f2d9b69006abe4f0d9b3c87d1be39d22241deb10e","output_index":2,"sequence_number":14}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_036d091e6f2d9b69006abe4f0d9b3c87d1be39d22241deb10e","logprobs":[],"output_index":2,"sequence_number":15,"text":"A
+      potato is a round, edible tuber commonly boiled, baked, roasted, mashed, or
+      fried. ([dictionary.cambridge.org](https://dictionary.cambridge.org/us/dictionary/english/potato?utm_source=openai))"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_036d091e6f2d9b69006abe4f0d9b3c87d1be39d22241deb10e","output_index":2,"part":{"type":"output_text","annotations":[{"type":"url_citation","end_index":194,"start_index":85,"title":"POTATO
+      | definition in the Cambridge English Dictionary","url":"https://dictionary.cambridge.org/us/dictionary/english/potato?utm_source=openai"}],"logprobs":[],"text":"A
+      potato is a round, edible tuber commonly boiled, baked, roasted, mashed, or
+      fried. ([dictionary.cambridge.org](https://dictionary.cambridge.org/us/dictionary/english/potato?utm_source=openai))"},"sequence_number":16}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"msg_036d091e6f2d9b69006abe4f0d9b3c87d1be39d22241deb10e","type":"message","status":"completed","content":[{"type":"output_text","annotations":[{"type":"url_citation","end_index":194,"start_index":85,"title":"POTATO
+      | definition in the Cambridge English Dictionary","url":"https://dictionary.cambridge.org/us/dictionary/english/potato?utm_source=openai"}],"logprobs":[],"text":"A
+      potato is a round, edible tuber commonly boiled, baked, roasted, mashed, or
+      fried. ([dictionary.cambridge.org](https://dictionary.cambridge.org/us/dictionary/english/potato?utm_source=openai))"}],"phase":"final_answer","role":"assistant"},"output_index":2,"sequence_number":17}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_036d091e6f2d9b69006abe4f0712fc87d1b45d6cd42fca2faf","object":"response","created_at":1790856967,"status":"completed","access_programs":null,"background":false,"completed_at":1790856973,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[{"id":"rs_036d091e6f2d9b69006abe4f08de1887d1acc1c27c91ba1655","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk8NkXky-gthYnihwe11e5qibO3uTRj_CnuQMKp2sgXCByIF_uox7WjOHnQaLsYrVW81_0r6Sd_p1QG_JBP0-JjJR47oQq8JXevHtCseJxsfP1hHsvTn-q5Bwh5CTxAsuhXMnjjwZhxxNNma8O2qNxrP5SiSU4Qabc3eMNinruqfXK3leeHQFNRb-PDCI6OyTqoGdkPtrnOa1Co0Wn6TklykMOdmvGePdweuDo7b4Io3oEYUSi-pCStSpv8qjFLMHT4MLAtKGzlvnQZ_Q2Ix1153La97d2Vpix5NhkRGppjE7hBz53ovM0m_MGg7_zm93Vwys22atmCHiEW6yOtnrHFV7sYdNhqsrgdCKjWrMbw9aAfUa8k9y63Pnw3FIGrJWEUSyw2g5-stBP2LlVMr-Cz4ciBRLpJATlETCb9VpBpuSie0tydkr5x-dcPCIyMKwCYzuBBAbKfh7mI_uTuUDAE3kqPsWj4loC6DxfDYqjAfLiKY-tHPXXw6S7GeeWq6VE9gPyoN1G2VN7a6x0bIj2WzGcrVelXFkAQb9WXvmCiAoRDWW94CCh4actlY8Fc8_kuEI7d1v_9Ils9W_DMtS-tk1XLCL7Cf0mAzoze9CcUKiGDTaLIkXxHZupSYreRlNE6vC6WeqOirW4aSs60K3WJR-xx8y7jMX6XwQl0NI5diilM3VjY60niGZU5ZUVFeVLnUf38IySOOzb_WaQ26s0xIPjp3w1uJFdp_wxhc42FwPRtKybHamNM9Dxzu9K77CZgBBFkgYWPBv5kGX1vNgWcElZm7vYJcSu2gmbDNw0eBWl5dx9T8SnwNezuEsAUj5J9m0QRFIIDTdpLT-DxNSfyMEltjKVBTqYBtN6YF1zSpWL4gMYgPzT20Skebyb1OW0XfOjeW6VnFjABqyP43BPo_wEcl6s4RlEq6ugTaoSji9aJWFsDGaZwK2t-AbWZDLJCMSe6RDx2-UzcI_hLls7Z3YNkP6Ae_4lcUrSasdQ_5JcqZ2bqIHgmYZeIqqqN0PAN7JtqltWkBFW9RZT-8rnYhtK43_vdtovLENaOexcQ0_xd_n_ge583kzptKl-pkT1aTjGfTi69ETbUOOTvVFbV77gVucccuJNbXJjwyGUrMKAZ4kGwg2Hz3pWr7KZ-s2likvPKG6Wir9ecHx8QxMF9ukMTk5u9N4a0xmk5WwCMcP1yqyMc_Ovng7F94JOOYNbZErV4TXbYKt2DxAKvlLZfjG3Ax4Ex4m6Evuzno4sXAVVw=","summary":[]},{"id":"ws_036d091e6f2d9b69006abe4f0920d087d1ae09c7ebddade9dc","type":"web_search_call","status":"completed","action":{"type":"search","queries":["potato"],"query":"potato"}},{"id":"msg_036d091e6f2d9b69006abe4f0d9b3c87d1be39d22241deb10e","type":"message","status":"completed","content":[{"type":"output_text","annotations":[{"type":"url_citation","end_index":194,"start_index":85,"title":"POTATO
+      | definition in the Cambridge English Dictionary","url":"https://dictionary.cambridge.org/us/dictionary/english/potato?utm_source=openai"}],"logprobs":[],"text":"A
+      potato is a round, edible tuber commonly boiled, baked, roasted, mashed, or
+      fried. ([dictionary.cambridge.org](https://dictionary.cambridge.org/us/dictionary/english/potato?utm_source=openai))"}],"phase":"final_answer","role":"assistant"}],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":1}},"tools":[{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":8803,"input_tokens_details":{"cache_write_tokens":24,"cached_tokens":4370},"output_tokens":81,"output_tokens_details":{"reasoning_tokens":42},"total_tokens":8884},"user":null,"metadata":{}},"sequence_number":18}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t6
+  request:
+    body:
+      input: 'Run three separate web searches, one after another, each as its own
+        web_search call: first the exact query "potato nutrition facts", then "tomato
+        nutrition facts", then "carrot nutrition facts". Do not combine them into
+        one search. Then summarize each result in one sentence.'
+      max_output_tokens: 4096
+      model: gpt-5.6
+      parallel_tool_calls: false
+      previous_response_id: resp_036d091e6f2d9b69006abe4f0712fc87d1b45d6cd42fca2faf
+      store: true
+      stream: true
+      tool_choice: auto
+      tools:
+      - type: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_036d091e6f2d9b69006abe4f0f182087d18bd223509ac38935","object":"response","created_at":1790856975,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":"resp_036d091e6f2d9b69006abe4f0712fc87d1b45d6cd42fca2faf","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_036d091e6f2d9b69006abe4f0f182087d18bd223509ac38935","object":"response","created_at":1790856975,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":"resp_036d091e6f2d9b69006abe4f0712fc87d1b45d6cd42fca2faf","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"rs_036d091e6f2d9b69006abe4f101d0487d1b02cb0a81d7b213f","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk8QHSX-MHJ1-_DRkm33L6Bu9BjiCBkt1XS2EUTiDHND6TFIMCtQNfKT5-CVxIChakfG8ZAeKD8AxqxvzG-lXDRNqGCh85wfZidprQdehFOvav4gloCzJoUN9SeTPWMSNcAmbYU6x94JEd9VcUiuKh7m5WmMSGA7ggeyc2NUtwahCYjCNWmZFzaExs2S-Gb-136Olw3wkgar90qJmgrEg2gqJaITym7PCpBcsDRsl0R6_VZN6Xsq_RUTOR6WW9yYfY1nleK3PSBPkEEhf2KzTMxSVcNv1k2Y0Ng4rM7ayroswGvriVX1lzgZRW5SCc3wfCjv6nz8zQGNdnMP4nphiZBL5caoWZEOSsARAp9xr3n4MuIx8PDbb84kIjJkxKQvtD2rXMEvGNIhzpghC8ZjMITDDql4RsJC1ITGOMUVX22k0NIFBCVcsVqSgZJy2GwDOCFjMsjxf8BT0S39psM1z1mizsN4unrsE-0FCkDwfBL-bjdzNHO-9xx_V99s9hzwHc3R2v5EvguTdn6TT5vTRBIr6VA33vpXtsmwXDd2DZ6VcraPHvtGNnoSLivlyx2QxG2vx-9HSVRBq7-HwYOtzkQOFELZ-jG-WWYQ5SFOvb4loD1JbW2qf_SSkyyQ9RmH1h-56JGcmZ5rDyOoUsR7yJdgJo_kaoMCP9l_bSIwE2jz4sBWPAC2xkKK7ebNg8TtnJP807Ya2lE9u93cR7u7LIJCxSXzgZCo9wTk4mWKWHvDHBBCVW1yBVIFQSLNqiKQyv9oMXNDjZs7USd5NBQcgvL2TAhwkpfXPuMEHsBIBU3aesVIdLqSr4vlfifPjGnkiiPsfcVKatdM4fG_HHCH_VAdVoaZMSCPH0SpNd2T9cLKQ7C6rXyEJdQaXSEi_ajdH9h6Ks2bR_MaFOjrZLQinu_ko0mrCC3uLmXMugRGupqbwFr9U5FBtkM1IZrauuzzgQewsc6vC6EZcheEQG805hrvjvzwyKvFT7s1Xx1WzJeiDSwj7LgPrrCVahL0lvfRcE2xTJTMsJuumfN9Br5Q5ByB1aAUmWgA0JlNulX7GG97aDa7Xw-_dGrBGXmB0kiDQO9fP4HufbihiQVgWPgCnTouCCD6gdF_qP65dfPK-hdhKIauBa1F4u9xoq12-PeiUBo0CiUQC1P4kQ3qIu2HLnzWbw==","summary":[]},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"rs_036d091e6f2d9b69006abe4f101d0487d1b02cb0a81d7b213f","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk8QGR7hGm9pVIFth_-I8jgv-gycbhpbeo9vUGOcGYgtyYKgIhUs_wpF5k2EQDiqwg6DwqEKCbA-sFvme7Sfc1i0LJ7jY_wMAkUI_NnjiaZijit_ltlTphU_sVRx0Sp1lu4AVwozFsX9uXTmDei7rG5r-UUoj4KfYZzi4jyrEzSpoaVyLABe5RmZzqHNsavMCr1Br3yGv09FSPTVj6P3_GaxzEDbnZjkLU5p-3HjZGp_rwPfvZSEd4xdksaSmF0cEDPjsWKXFmmrzgKmc7caB1_GNMt_tz-FrOBg5oly7OsYZQw9pVjbS6Nb7Lt92WCouGGU87LAnm9zfK6Xum9XUdhPhbVpnwBSZknUHIlYNva_I7TeOET4reytanwdbzZlgXMnUxFpLQufFP6Srj1D1ATxMFi2ek79jm0iC2-xzYstTX0Z56VIuVcoRUY4CLyQcHar5yhpnfLibPPs-0FmChtpy-6Vk_JBDJct4ZWKgTV7GTLA1Z9LiWABiAsBpBwhrKCIrkda6ShEjBpen3CxoTwKjWBk1IY0GXL3yUrlefnDXFKqKGVkcRBzdc0e3Qq9HgRnOaPTgP4m8fA30tX3K8Up1rIpvSj6WlisRWGm4a2fnjffN2PkbYqSW_TKU92u3xqOS9BYDK_Kb9k9eK5AGDiduArM0Xqp8PpKy9YiKkL2_kSm-XDxXR2Qt_lgvdhm8FbRr337MYCmrkMOxJxjAM56tIK4kdTvz3b1noZLgyd94SK8yHPac2OhqS669Rap-kcibLDOrJXI2Alol0M05g1QFFxfNNsxCD_qjKqhwjbgjrFkJKC2xkQVi65nbRfLRw8iESluR3tohmFKpSgtkUiMYBGX3uj8TD5Voyiu-3WA9uqFshXTangfmvIw5HDe3DYZQpQ8x5o3RokTc-3SLLK7dMmyrXR3vv_JjQ2ZCApbG_G8lNbDtQPLwixJcy0z69LQocbfm9L2E4zQyxSE3zcRpy8zSb39pRPdBc_og9aM98eXoYUTj_NkX2shdSm8jDdCQ2-bsgstBgJepYemjt8igOmSBkOXhaRlc8kXVm22t4vJbw6QfNVTWhh-b_OM0DyGOCv8kukt71rFocSholfGrL7sslBsYAJnvbZjYWqg6XmYq8u3oXSkl85Q6eJ-fdi1j1glxknzty2su2LvDB4cEkoIL-IgnCdnK728cboZ0M0WuqYjE3Ph4WtjtpHGOYvlTCNBcFoDzFds5RntI7M9AFrEAISrourHH7cebtWkRmGLPINVWmuzXrPvX7XkiMKuKi42afS2UnQKwhxtN9yC0KYW-VXCHFNL8hBewa6UhxIZ_-BxdCwYtHllVnTsbJ1fPcvEMHvgTojdcUP5goPFr5ZkLu9CeBLGufEiI4tVuJEOuizoZKsy63xLBEzmTNYRcLR-PVIfdM6lOOzChde8hg==","summary":[]},"output_index":0,"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"ws_036d091e6f2d9b69006abe4f10a23c87d1a62d337e42ce9b6e","type":"web_search_call","status":"in_progress"},"output_index":1,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.in_progress
+
+      '
+    - 'data: {"type":"response.web_search_call.in_progress","item_id":"ws_036d091e6f2d9b69006abe4f10a23c87d1a62d337e42ce9b6e","output_index":1,"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.searching
+
+      '
+    - 'data: {"type":"response.web_search_call.searching","item_id":"ws_036d091e6f2d9b69006abe4f10a23c87d1a62d337e42ce9b6e","output_index":1,"sequence_number":6}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.completed
+
+      '
+    - 'data: {"type":"response.web_search_call.completed","item_id":"ws_036d091e6f2d9b69006abe4f10a23c87d1a62d337e42ce9b6e","output_index":1,"sequence_number":7}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"ws_036d091e6f2d9b69006abe4f10a23c87d1a62d337e42ce9b6e","type":"web_search_call","status":"completed","action":{"type":"search","queries":["potato
+      nutrition facts"],"query":"potato nutrition facts"}},"output_index":1,"sequence_number":8}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"ws_036d091e6f2d9b69006abe4f1333f487d19a229fe674c1fff3","type":"web_search_call","status":"in_progress"},"output_index":2,"sequence_number":9}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.in_progress
+
+      '
+    - 'data: {"type":"response.web_search_call.in_progress","item_id":"ws_036d091e6f2d9b69006abe4f1333f487d19a229fe674c1fff3","output_index":2,"sequence_number":10}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.searching
+
+      '
+    - 'data: {"type":"response.web_search_call.searching","item_id":"ws_036d091e6f2d9b69006abe4f1333f487d19a229fe674c1fff3","output_index":2,"sequence_number":11}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.completed
+
+      '
+    - 'data: {"type":"response.web_search_call.completed","item_id":"ws_036d091e6f2d9b69006abe4f1333f487d19a229fe674c1fff3","output_index":2,"sequence_number":12}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"ws_036d091e6f2d9b69006abe4f1333f487d19a229fe674c1fff3","type":"web_search_call","status":"completed","action":{"type":"search","queries":["tomato
+      nutrition facts"],"query":"tomato nutrition facts"}},"output_index":2,"sequence_number":13}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"ws_036d091e6f2d9b69006abe4f17951887d1bac7987f2f9f2e21","type":"web_search_call","status":"in_progress"},"output_index":3,"sequence_number":14}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.in_progress
+
+      '
+    - 'data: {"type":"response.web_search_call.in_progress","item_id":"ws_036d091e6f2d9b69006abe4f17951887d1bac7987f2f9f2e21","output_index":3,"sequence_number":15}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.searching
+
+      '
+    - 'data: {"type":"response.web_search_call.searching","item_id":"ws_036d091e6f2d9b69006abe4f17951887d1bac7987f2f9f2e21","output_index":3,"sequence_number":16}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.completed
+
+      '
+    - 'data: {"type":"response.web_search_call.completed","item_id":"ws_036d091e6f2d9b69006abe4f17951887d1bac7987f2f9f2e21","output_index":3,"sequence_number":17}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"ws_036d091e6f2d9b69006abe4f17951887d1bac7987f2f9f2e21","type":"web_search_call","status":"completed","action":{"type":"search","queries":["carrot
+      nutrition facts"],"query":"carrot nutrition facts"}},"output_index":3,"sequence_number":18}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"msg_036d091e6f2d9b69006abe4f1cf43087d1bc4e22fb9556d2f6","type":"message","status":"in_progress","content":[],"phase":"final_answer","role":"assistant"},"output_index":4,"sequence_number":19}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_036d091e6f2d9b69006abe4f1cf43087d1bc4e22fb9556d2f6","output_index":4,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":20}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"- **Potato:**
+      A 100-gram serving of","item_id":"msg_036d091e6f2d9b69006abe4f1cf43087d1bc4e22fb9556d2f6","logprobs":[],"obfuscation":"efAU58kZaEkz6","output_index":4,"sequence_number":21}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" boiled
+      potato with skin has about 87 calories, 20.1 grams of","item_id":"msg_036d091e6f2d9b69006abe4f1cf43087d1bc4e22fb9556d2f6","logprobs":[],"obfuscation":"XTB","output_index":4,"sequence_number":22}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" carbohydrates,
+      1.9 grams of protein, 1.8 grams of fiber, and minimal fat. ","item_id":"msg_036d091e6f2d9b69006abe4f1cf43087d1bc4e22fb9556d2f6","logprobs":[],"obfuscation":"3E7KN","output_index":4,"sequence_number":23}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"([healthline.com](https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai))  \n-
+      **Tomato:** One small raw tomato has about 16 calories, 3.5 grams of","item_id":"msg_036d091e6f2d9b69006abe4f1cf43087d1bc4e22fb9556d2f6","logprobs":[],"obfuscation":"SLlvU3XDdLNuC9","output_index":4,"sequence_number":24}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.annotation.added
+
+      '
+    - 'data: {"type":"response.output_text.annotation.added","annotation":{"type":"url_citation","end_index":260,"start_index":171,"title":"Potatoes
+      101: Nutrition Facts, Health Benefits, and Types","url":"https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai"},"annotation_index":0,"content_index":0,"item_id":"msg_036d091e6f2d9b69006abe4f1cf43087d1bc4e22fb9556d2f6","output_index":4,"sequence_number":25}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" carbohydrates,
+      0.8 grams of protein, and 0.2 grams of fat, and tomatoes are a notable source
+      of lycopene","item_id":"msg_036d091e6f2d9b69006abe4f1cf43087d1bc4e22fb9556d2f6","logprobs":[],"obfuscation":"vs8v86l","output_index":4,"sequence_number":26}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":". ([nutritional-density.com](https://www.nutritional-density.com/foods/tomato?utm_source=openai))  \n-
+      **Carrot","item_id":"msg_036d091e6f2d9b69006abe4f1cf43087d1bc4e22fb9556d2f6","logprobs":[],"obfuscation":"8I","output_index":4,"sequence_number":27}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.annotation.added
+
+      '
+    - 'data: {"type":"response.output_text.annotation.added","annotation":{"type":"url_citation","end_index":535,"start_index":440,"title":"Tomato
+      Nutrition Facts | Nutritional Density","url":"https://www.nutritional-density.com/foods/tomato?utm_source=openai"},"annotation_index":1,"content_index":0,"item_id":"msg_036d091e6f2d9b69006abe4f1cf43087d1bc4e22fb9556d2f6","output_index":4,"sequence_number":28}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":":** Raw
+      carrots provide about 41 calories, 9.6 grams of","item_id":"msg_036d091e6f2d9b69006abe4f1cf43087d1bc4e22fb9556d2f6","logprobs":[],"obfuscation":"nlDHJl7pb","output_index":4,"sequence_number":29}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" carbohydrates,
+      and 2.8 grams of fiber per 100 grams and are especially rich in vitamin A. ","item_id":"msg_036d091e6f2d9b69006abe4f1cf43087d1bc4e22fb9556d2f6","logprobs":[],"obfuscation":"G75AL","output_index":4,"sequence_number":30}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"([caloriepilot.net](https://caloriepilot.net/foods/carrot/?utm_source=openai))","item_id":"msg_036d091e6f2d9b69006abe4f1cf43087d1bc4e22fb9556d2f6","logprobs":[],"obfuscation":"2j","output_index":4,"sequence_number":31}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.annotation.added
+
+      '
+    - 'data: {"type":"response.output_text.annotation.added","annotation":{"type":"url_citation","end_index":772,"start_index":694,"title":"Carrot
+      Nutrition Facts, Calories, Carbs and Fiber | CaloriePilot","url":"https://caloriepilot.net/foods/carrot/?utm_source=openai"},"annotation_index":2,"content_index":0,"item_id":"msg_036d091e6f2d9b69006abe4f1cf43087d1bc4e22fb9556d2f6","output_index":4,"sequence_number":32}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_036d091e6f2d9b69006abe4f1cf43087d1bc4e22fb9556d2f6","logprobs":[],"output_index":4,"sequence_number":33,"text":"-
+      **Potato:** A 100-gram serving of boiled potato with skin has about 87 calories,
+      20.1 grams of carbohydrates, 1.9 grams of protein, 1.8 grams of fiber, and minimal
+      fat. ([healthline.com](https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai))  \n-
+      **Tomato:** One small raw tomato has about 16 calories, 3.5 grams of carbohydrates,
+      0.8 grams of protein, and 0.2 grams of fat, and tomatoes are a notable source
+      of lycopene. ([nutritional-density.com](https://www.nutritional-density.com/foods/tomato?utm_source=openai))  \n-
+      **Carrot:** Raw carrots provide about 41 calories, 9.6 grams of carbohydrates,
+      and 2.8 grams of fiber per 100 grams and are especially rich in vitamin A. ([caloriepilot.net](https://caloriepilot.net/foods/carrot/?utm_source=openai))"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_036d091e6f2d9b69006abe4f1cf43087d1bc4e22fb9556d2f6","output_index":4,"part":{"type":"output_text","annotations":[{"type":"url_citation","end_index":260,"start_index":171,"title":"Potatoes
+      101: Nutrition Facts, Health Benefits, and Types","url":"https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai"},{"type":"url_citation","end_index":535,"start_index":440,"title":"Tomato
+      Nutrition Facts | Nutritional Density","url":"https://www.nutritional-density.com/foods/tomato?utm_source=openai"},{"type":"url_citation","end_index":772,"start_index":694,"title":"Carrot
+      Nutrition Facts, Calories, Carbs and Fiber | CaloriePilot","url":"https://caloriepilot.net/foods/carrot/?utm_source=openai"}],"logprobs":[],"text":"-
+      **Potato:** A 100-gram serving of boiled potato with skin has about 87 calories,
+      20.1 grams of carbohydrates, 1.9 grams of protein, 1.8 grams of fiber, and minimal
+      fat. ([healthline.com](https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai))  \n-
+      **Tomato:** One small raw tomato has about 16 calories, 3.5 grams of carbohydrates,
+      0.8 grams of protein, and 0.2 grams of fat, and tomatoes are a notable source
+      of lycopene. ([nutritional-density.com](https://www.nutritional-density.com/foods/tomato?utm_source=openai))  \n-
+      **Carrot:** Raw carrots provide about 41 calories, 9.6 grams of carbohydrates,
+      and 2.8 grams of fiber per 100 grams and are especially rich in vitamin A. ([caloriepilot.net](https://caloriepilot.net/foods/carrot/?utm_source=openai))"},"sequence_number":34}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"msg_036d091e6f2d9b69006abe4f1cf43087d1bc4e22fb9556d2f6","type":"message","status":"completed","content":[{"type":"output_text","annotations":[{"type":"url_citation","end_index":260,"start_index":171,"title":"Potatoes
+      101: Nutrition Facts, Health Benefits, and Types","url":"https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai"},{"type":"url_citation","end_index":535,"start_index":440,"title":"Tomato
+      Nutrition Facts | Nutritional Density","url":"https://www.nutritional-density.com/foods/tomato?utm_source=openai"},{"type":"url_citation","end_index":772,"start_index":694,"title":"Carrot
+      Nutrition Facts, Calories, Carbs and Fiber | CaloriePilot","url":"https://caloriepilot.net/foods/carrot/?utm_source=openai"}],"logprobs":[],"text":"-
+      **Potato:** A 100-gram serving of boiled potato with skin has about 87 calories,
+      20.1 grams of carbohydrates, 1.9 grams of protein, 1.8 grams of fiber, and minimal
+      fat. ([healthline.com](https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai))  \n-
+      **Tomato:** One small raw tomato has about 16 calories, 3.5 grams of carbohydrates,
+      0.8 grams of protein, and 0.2 grams of fat, and tomatoes are a notable source
+      of lycopene. ([nutritional-density.com](https://www.nutritional-density.com/foods/tomato?utm_source=openai))  \n-
+      **Carrot:** Raw carrots provide about 41 calories, 9.6 grams of carbohydrates,
+      and 2.8 grams of fiber per 100 grams and are especially rich in vitamin A. ([caloriepilot.net](https://caloriepilot.net/foods/carrot/?utm_source=openai))"}],"phase":"final_answer","role":"assistant"},"output_index":4,"sequence_number":35}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_036d091e6f2d9b69006abe4f0f182087d18bd223509ac38935","object":"response","created_at":1790856975,"status":"completed","access_programs":null,"background":false,"completed_at":1790856989,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[{"id":"rs_036d091e6f2d9b69006abe4f101d0487d1b02cb0a81d7b213f","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk8dsfxW7P4z-qEV0rvKjOBQnoX5N1UdnLNSTcs5qqCVoq7R5bfQAxM1h1_CWfyjYFaWq7eGKQyvKDIUyLJfv8tAMc1-ZjLFWemSzEiJMsfa_qWds41aR4inJ_-3U3uHSGNqadl1ofKIhnSoUAGyAgjhYaxC5iBCXy0SgwqvXx376WXxuQ704Y1OnK5O5gAQOjTju48YlKGeKlxW5SnvSWAIYHzThdoMdcqLvRfN4a9Js21Z9_JEt1QbzH-5i0_SX9NbP2h3xAUrZg_nfQg5u7FgrR1MiuOBcvP451tOpxzFtHaSbDfQi5Awyi4WH7-_GuE-Oq7wsb4DtjBuhyUw5swFtepbF60kzpF9XJ7pKzcZZXqnOo99uCZ-Y-TIBjr9jMP0KvzHHSY_9fuvhGjwTSxiIO2mtaQb8suWQKeWHxmubUS1uuHoC5j6dxvdytxXmmDE2wcstAQVjqHQYl2g9g97j9vZ0smGnsATBTdPE1x6eQE2l1bIO8y_Zx-neVS5r5E7llZazhLvf4XrYXYR2_2FejedYu6f6CO4lfSMvH_DMszK4zhe8IUZcbzcn7kUJuIflebzV-4f9UvWmigF9si5zuJBfM6nFal5N2KZ2XdsYgA1k52KEAvZFVqkY2CPrVLV0gcv_DNxhaVFi-2vI06V1Jm-6vaB6BSKHjAXPQuXu98cs0PNYVWE19q0uOybXSvjGV6Cc4EcPmieY8Or-XCqrR-thP-unSETGsRWcFtzEkCXnoAcU6su3RYd9GsYzXk-WnLdWRqGIkSVaZ3zeMbl5D_f92vV4WO59MuzPQPGX2WSKJEpjeTtpvBVmP0zZ3o-e05_ugmEq_kE7wPaGtf0kIMLGk6KfpRO9uyEThFLRpa4YTdZRyfubRpLG_m2mskUpaZxFetLC_xQ6u9pN-KEI9rzowZEFuWxV78o5TkHxxTgCWbxz-GrJ6DPLkiwRa9hc01ksaAQBFS68wiVKHadVDKryIYih5ocj489p9Zk3yYqUYLjuTZ8HqQp1-GRapWXNWJlFO3mLCdA1BhLb8IaNkvEOqyTiqk2xLmDk9sS95VVYhFF5Ei65HFvZ6oVHnPj9Wc1cQswbS2iTvKy7xG0JqTZGjbWB_Jfy0yrKuN9JH70Xf4w49EtKWKeEatVXVo9spTjHVtnXEUC6CG-nxftbDu2g3rzhNz7BTTLh-boSkCD66pcWD8xe3vMRKuD4Y_OALVXcii6Se8nphaUU1Gi_k3_YXhrtDbxs-2U4LV2SmbgvqqtR1IZiWIM9JVDh26PikfyrdchpHfplueYoDmFHZ14ukp5UNlx7IW_FpqYjezL06V4LVEcCph_07JB8h6bBG1ViVqhA88f35pjNtkOYWA6Ei-xj-ZA9QZBZFbLYRf8ANOyldWjmgW4Rv4zlX0ccarRcfXuDPqk4BDn78vlHg==","summary":[]},{"id":"ws_036d091e6f2d9b69006abe4f10a23c87d1a62d337e42ce9b6e","type":"web_search_call","status":"completed","action":{"type":"search","queries":["potato
+      nutrition facts"],"query":"potato nutrition facts"}},{"id":"ws_036d091e6f2d9b69006abe4f1333f487d19a229fe674c1fff3","type":"web_search_call","status":"completed","action":{"type":"search","queries":["tomato
+      nutrition facts"],"query":"tomato nutrition facts"}},{"id":"ws_036d091e6f2d9b69006abe4f17951887d1bac7987f2f9f2e21","type":"web_search_call","status":"completed","action":{"type":"search","queries":["carrot
+      nutrition facts"],"query":"carrot nutrition facts"}},{"id":"msg_036d091e6f2d9b69006abe4f1cf43087d1bc4e22fb9556d2f6","type":"message","status":"completed","content":[{"type":"output_text","annotations":[{"type":"url_citation","end_index":260,"start_index":171,"title":"Potatoes
+      101: Nutrition Facts, Health Benefits, and Types","url":"https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai"},{"type":"url_citation","end_index":535,"start_index":440,"title":"Tomato
+      Nutrition Facts | Nutritional Density","url":"https://www.nutritional-density.com/foods/tomato?utm_source=openai"},{"type":"url_citation","end_index":772,"start_index":694,"title":"Carrot
+      Nutrition Facts, Calories, Carbs and Fiber | CaloriePilot","url":"https://caloriepilot.net/foods/carrot/?utm_source=openai"}],"logprobs":[],"text":"-
+      **Potato:** A 100-gram serving of boiled potato with skin has about 87 calories,
+      20.1 grams of carbohydrates, 1.9 grams of protein, 1.8 grams of fiber, and minimal
+      fat. ([healthline.com](https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai))  \n-
+      **Tomato:** One small raw tomato has about 16 calories, 3.5 grams of carbohydrates,
+      0.8 grams of protein, and 0.2 grams of fat, and tomatoes are a notable source
+      of lycopene. ([nutritional-density.com](https://www.nutritional-density.com/foods/tomato?utm_source=openai))  \n-
+      **Carrot:** Raw carrots provide about 41 calories, 9.6 grams of carbohydrates,
+      and 2.8 grams of fiber per 100 grams and are especially rich in vitamin A. ([caloriepilot.net](https://caloriepilot.net/foods/carrot/?utm_source=openai))"}],"phase":"final_answer","role":"assistant"}],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":"resp_036d091e6f2d9b69006abe4f0712fc87d1b45d6cd42fca2faf","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":3}},"tools":[{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":21141,"input_tokens_details":{"cache_write_tokens":4274,"cached_tokens":4394},"output_tokens":329,"output_tokens_details":{"reasoning_tokens":125},"total_tokens":21470},"user":null,"metadata":{}},"sequence_number":36}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t7
+  request:
+    body:
+      input: 'Run two separate web searches, one after another, each as its own web_search
+        call: first the exact query "potato nutrition facts", then "tomato nutrition
+        facts". Then summarize each result in one sentence.'
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      model: gpt-5.6
+      parallel_tool_calls: false
+      store: true
+      stream: true
+      tool_choice: auto
+      tools:
+      - type: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_0dfca7ff7effde07006abe4f20810887d1b1bdcec665e8f858","object":"response","created_at":1790856992,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_0dfca7ff7effde07006abe4f20810887d1b1bdcec665e8f858","object":"response","created_at":1790856992,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"rs_0dfca7ff7effde07006abe4f21720487d1a16d5034b7714fe1","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk8hYFUhvmPFx1fscOx4PY4E1aaVJcm5_4uLbd4TqHvValSqoN1-wapG44Gi94YRtWeVtt0gR3qbag8IaHegrWN3lRgbTZmlrc0CNU1so_-LKsZs9x1iAFKX6kdXs02oKSBhAriWmH6plzZosILZx61jefB7N-gCodhPgtUUOHZPqmnLA3l8lQrdktKFYJo7oCbWMuP8noAfaPs0k6zo5_TzrkKhsvr8h81tg7Ytp6Pk3Y8jHx1uV4cLhE4sp8O5RKNHT1v_Ip8_fcJd70e1xOeoQu8O06fNhbRjlJZ66_chfxhXd0ao2_R3vVqREK7aU3vPXjauyJscWqROyGdBsMlXd4UTDIXcmXfAyYPIzoIfU82gmE84I95MKmVSizJxVGDlsy6zkA3ReVHWXat9qNXdqIZKQugdHrLjGmddzIOjcyiAD9YDUF42XbsHdSUwkd2FDilbXc6pVNNIZxFN_d7dCzCpNu4beFzj3DoTDKnzQpIVLNdcXmqA1NafgGRMtrGnemiaKVScleXrMsKMWiNKEOAw_UHrXzLZI9D3ru6yyUS6EMnuzUj68PLfZUCZxYxNZqdw8a5Uv_7Eu9WILNREizHbHqlyzDtQk9XwTB_zhuvh4F7GJfRfTb5IA9-jemo1CItmFccsTld2QKdw8LJv0DDS6mS67utE-Pa_yDudSkJLi-2u6h_TGVXtmC3VzfpdvaJ_XbYF0xZCHgTnGm7vFGYam6Ralbn88cMs8ipploGqorE8dTiWRXYI4zktSu8b67bw2BC9ePM5UzG3NOwHmvYipwS1kyMLWWN3rVP_e-yfVO_ZVaDKGFWjw2zV0s7_cgp8BjIm8Z2sMW7VP41GjsOEFN54oGuAmVzE0T3Jb42JS-lkerzIc4mFYoeNc1w5IabkXQ2LNoYZ6U1ewlfnm9jDKocUb3M-tfZrYSEix2Ihk1N0rWxcQY1Rh0A10iu61q_SqKwmAd4gf06PLT6OqmK9ldxroYBmR2hRJEXZflGXt6oKjKTUrsx8mCTFzYW5uG-MkLOzmpeE5i1NiPvMWUnGiYG_jAPzlIm7DZn26xMhgKn76Nudjlk--LF-1Rj79nvhjUgJ-RJ8_oucMPO9CNNK80LOlI7PTUSROqPBeDR-LmG9fpxLsaZzaROJVpSY5Xf7M3RcEkMqvZ-3yX0MzQ==","summary":[]},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"rs_0dfca7ff7effde07006abe4f21720487d1a16d5034b7714fe1","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk8iXcLab9vVR0Vpa9k1ztuKYikqKwZYU9IJwh5kvaY-5R0OjZQIVe4rpj6Sd_GVaz6zldWylfI0T_AcIHt9_KagZh17Mmd2sYV18bWApauqbZsFzRWmjNz9AvyfJgfCEnuBFahSmOgQkeHMo3VoJEMLyRhuxuF_hbmMIHb3QR7N4FtJVNc38CnC1ByfWvbj26Smy_rMm8ZHblgEPC1ESI70DGrB9ZPh9ptEexp3GcBTryIaxO0yKudQePvRFfbSnIAxQpVitZoFrgdDWdt9XQwyh1rwQ8G8DrK7mL9vXiIxSryQaD37hEL4qapM37rdH2NmgGWFj3AXJQaoJJfownH1fL-8OEWZeFKurIV0kC0soN9JHmpQyJYqkF7_MU1BmWhw6ZJBT8O-5BjR7pjTnxbKJtz9GPdREh0FCeCUyK7ESVBtXlbgfYvJWAUBCHTh10_DYXX56VuOf2S8U7_vECJ-mdhlN-2u0EM4-ZlWPMx1xsfZQ3wQuItvBmh2KJULVT3YuA3ZPjBJo57MFbebnGVq2ouhtCaNZOWuCqFYAJQzfJd6U5OmrlVxtAdkaU-8lVFVJXnIYmO14aPW5KvHNQZMKvYu0_AG3wR-8cB6ZzhxUURLFVN7QXFs7L9f2jSOzJfPNrUPn_85a0LxgqaNK9uVdc2B9uZbR1zjNKDggARwgCpUssxgWw7iha8xe_KKXJ1f-bMn8jty75rWZLi80EP-KyhYtMY3LHQYNudc5A9cmdNm4pPzFD-K4hyzLCcshvC_9wmmhvf2efiXcc5vNhXt0LqROyR-EoxvmJKI6kM5sEPcMy3XBolADbPkG5Sv93pIerpZC74Ofgc_WGDTLGs-2TSBVmVKsJi1x9uu2WBsWN3atounaAj5gposy24TBJ1gFAOfinUkrB3cJEhiBnhMkdCx2OcoeWH9ix1XdJzPKQMiWI_AJ4zCcArQuUpP13h90DkGgRBQbi-ZbIVXw66MOw7ycK8pg6BVrW7QqDt3Dmkt_1HS4l6Q6Gp1_0ndsNe9aqBWgPPzCEzr40qoMtyeKEz1r8eltGU7Nsj6CgCG2-HtvtDhX5vlBN-jk0qI7jRnKUKTO2nwbvxFTALU2fqYAnL0jrpuO7zrEY8yhjp00dil04YPJ_fcdTkhus290gO-LxSq-aCzfJIPO9KzvSLR57EaTNNcGdIlhAneL1E7WjbDpVHw1gvt5RckuVYnXalo7SA_m5IRZqnHNAWpNaeRkebCJiuP-3MseUokEn5vu2TjVYUz1Fh_TGTc4sa_EwUUECd5HZgRzV07MnZ7D0IVC4LMiYrlU2_sERbLDkMX0H8=","summary":[]},"output_index":0,"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"ws_0dfca7ff7effde07006abe4f2206f487d1a381324d4b8490f6","type":"web_search_call","status":"in_progress"},"output_index":1,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.in_progress
+
+      '
+    - 'data: {"type":"response.web_search_call.in_progress","item_id":"ws_0dfca7ff7effde07006abe4f2206f487d1a381324d4b8490f6","output_index":1,"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.searching
+
+      '
+    - 'data: {"type":"response.web_search_call.searching","item_id":"ws_0dfca7ff7effde07006abe4f2206f487d1a381324d4b8490f6","output_index":1,"sequence_number":6}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.completed
+
+      '
+    - 'data: {"type":"response.web_search_call.completed","item_id":"ws_0dfca7ff7effde07006abe4f2206f487d1a381324d4b8490f6","output_index":1,"sequence_number":7}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"ws_0dfca7ff7effde07006abe4f2206f487d1a381324d4b8490f6","type":"web_search_call","status":"completed","action":{"type":"search","queries":["potato
+      nutrition facts"],"query":"potato nutrition facts"}},"output_index":1,"sequence_number":8}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"ws_0dfca7ff7effde07006abe4f23f57c87d1897fe03e6f1f3e3a","type":"web_search_call","status":"in_progress"},"output_index":2,"sequence_number":9}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.in_progress
+
+      '
+    - 'data: {"type":"response.web_search_call.in_progress","item_id":"ws_0dfca7ff7effde07006abe4f23f57c87d1897fe03e6f1f3e3a","output_index":2,"sequence_number":10}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.searching
+
+      '
+    - 'data: {"type":"response.web_search_call.searching","item_id":"ws_0dfca7ff7effde07006abe4f23f57c87d1897fe03e6f1f3e3a","output_index":2,"sequence_number":11}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"ws_0dfca7ff7effde07006abe4f23f57c87d1897fe03e6f1f3e3a","type":"web_search_call","status":"searching","action":{"type":"search","queries":["tomato
+      nutrition facts"],"query":"tomato nutrition facts"}},"output_index":2,"sequence_number":12}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"rs_0dfca7ff7effde07006abe4f24c67887d1b90fc410d9c7db33","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk8k6qax54B_VRqvXZNXLS8ew6jkW-NVtjb-8escod4BEZ_sAYZNR37ymwKLvXVY6lFDg7yqCKXmu1GY-EJk3kefbaYJ17a8Z_-4lcenkrLOp9SPg04y2tHqeyzLC21TPIsM5xiIQBL3CLwpI94_ORVJa7VsGBEOILmob2b1RI6QdfHtxuIrPYIgwDMlHZWZszl8Ww_QQAPiLORbFhHl9gLm3xPQ0JFxtZRQMS9XaPF_dPlmxxs_KqI28ScALpoGH37ICHW14AnuLSBoizzcjVmdbg1R4x8Ofx5dd19a7UmM71lK56XNHn6CWptNbYJ-jAAJBcDHDNBG2PDH3N0uqw81PXXyNpNej2ErY6hd0Kupe6dZXayVwwnQiNoBa-LBpmqAD1_Ugnv75C0v8IBI4cINyf4V7Fe1dsgeE533Q8GYGATkItkKBjDVFOIJJgNiZsL1OKGUH292Xds6i7bF9jXQe9wSCKFiHiGQe7AQviX3A3IK0Eve_3zGE5cHguh9sne1awVmKSEHygwSmVe8a07TXWbu-tEUZmUyUvtkk_KS7DgC_3jQMMy2gQ8Il53h3NN6cyNpMWAnSqFawZRBTWlfdD8Rgkrb1MPfC4ZsJTXhNSC8V0A8RidS6XQKsiZ2eK14WS9yOJPhGiz-AQtL-ZbPL0Jo3wFspo18RBqTkeZUSFH2MJ4oGSJugcmJ37V5C1izyLsPsUanBuP7MvDtP1YjVORswdF89G5lXM0U4dL-ye3wBek8FxAdbWOpoRuZU3zzdaU8_fe5lsqvZMm9XcUPDYxJ1Th4rLYCzTn4mcsl92uo8iFlSuA8USMsq6bw5_As3upuQOHIDEEd50tvAG_HmwxQArdmtkM0h5UtYMsADN8CEsqejGfYbmoqmytQc-qegn6R6Ki5--OrVikbVRWuHxa0xMgkeQ5kpMeAV0lKmBIdhfFs1_WWm20Q3WwHNZPsO85j76HIOBUeloufM058L9RDHP_NKLtV-CtL5cf_LYgh2Z-z3A5Qm5obcPo6K6fmLGxwPeLqGeme05_jOjAKCIuzUV_VIfIQrw_HH32wkISlu7OiGPovdRoh5M7_aXKj2VC6nh4jNfxZU2uwdIPjnsdh_nWYeJlN8hZrGX1vqVV1QeO4expQIHluOnOImzTquQohljHwi4zUf2MMA5L1Bg==","summary":[]},"output_index":3,"sequence_number":13}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"rs_0dfca7ff7effde07006abe4f24c67887d1b90fc410d9c7db33","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk8l3x8OkLlDFoJL6iRWHDKIc_IgQ-ll1f647Eb3LyKO5k6X13OVHmtN54zg76o-pTKZbAoltKIfwTKxkyH7ghYoIc1i_jwcCgXeuyf7LffyYDa7jfVI1LkeNI2q-orzOI_UqDNFSg4Jh9h8w62eM7OJNC6ZMbhnuio5F32M9tYiPxbK9d89WvSDjj_d6Vy-tFFktaVzikmrw6cTQtdhvF2u7uHjF3SkhMgOyd6CqxKx7wagDwZ3hHscIh8_Yhf2zpqFMv0IYGyqITCjFBzaiXecMs5GUDJFBhYwRDkRCUpvwaMqq_ySKYwg3dlVMmDHF9aBH4TUWJ_K0I9EZNqOGaRj3GyitjwXmZhVFIu5D-Sg-47PGunlMlTX7gMm5agTSGrdtcgWBmvpftmtMGphBQ3fxc38YLwBKGEhvSAue28KRmfFkHAfu3z1Yg6onQ_npaczjDdjrP-A0OIc2u_qiu1v9uvHSjCmgf_QCOrOURZ4hgUfXUd8CbdUsA3vD2D3vMzhhXtb7JQJzjpTl4-bSPXPX4U9vthE9pdbaROwt_a2Rnkkn0J6reaMMuG9zjOSlXY6BfL8dTQjNtLT2fDiZ1BYDczG6RyNysb6k21pTrf2b2ez4eEynJVdPR8N_JG2Z-J2lUaRop88i9jGt8iGyP1eGFtc5iGyX4T53SHjeUqHSSUXXwkO2O08ajFEdApAi8ihkuMbWcKQa5OPfRhAMb7vFRmnyqjzAhf_DmCAV3wBDVUZqVtkBJOHAWTJ8Qi9R2zHYnfV4jG6LWIrzc5hnEtTPFmKLCTIZ7UzOEiRk5y4WdI3HFggRhoH-obihefJdnoFiTPqcThw6p-KxyH9IWvjSCve5XXdP5OJqBfmyaA_6pg7zx054GeNolLX4BG1TK4cGsGyGXng01h4ThdnKqKNUqCkGtu6mH89xeuKmZlgDmXcMBCJ1Z2-1prFHvpbhy24zZPSZHaudSl0iTEIzFyYelUo6usj2nvg6qc0AozTcZgAje--Vrow1EfqxpsEvcETG3OePyBb-0UeohsnaAD9W8QmSukDUnsMqkfeuGZjgmZQPPR2XTBj4eISaseDe3LFgnr71Q78gq0ILP-TrtHfu3uUqhIzsDp_ac7PuhGj4wHAvgPIL-mdHKiCSCTbDmDBEuT8h0VGbdjHeM36Ix0RsamKMiLhSoCnq7EDdtM8b-d1yGCOZtJbEAGVBXDcgn3QJ4C-lL8HGszZhRWXCCcdkx6GL7iO8WTTR_eEBErvzFA_3HzYTw2TOYnrCGJJ43sGjOkbjRWBgLiErzHOQCbdVdVJJmiPLIIFrj99BQE-QcpG6brvHWqnJsY76bwThQLvghVWad0E4BfgHE0g5MzZzJ3AMRtlIrDZi2Mku3KaRz6bJbjyLJrAaKHuXzc75rp8vGmpTudU6ISAs1XizzAvyiOqydSZfzaNmi9jmCnJ6NuoV8_j2nXvi5CbJ-hYMG1BWmlRwTDpmxf-HipKUVmbSIfagEYgmV4otdLwxCx3QJLBZSszKgQQqAXGgmMKasm8XwCExIc86-hU-Vs0rD7XU_iM2aqwEXhedJBcicTFnBl8fk846gMezLUcVxHopM8O9E8nPM6jhWQsyIk4TXVBTZnWoKiRl62_D-agv-qBy5te4mtLzJq2le9lUGmeevqTYiBKBivJFPJ2xqpHmFIeRJJjSb0hx3MqK9LYldC6ujyrRjst0i_ccmlTWuIHWye42KG6yza4Jn8ksy-v0UKVmg==","summary":[]},"output_index":3,"sequence_number":14}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","type":"message","status":"in_progress","content":[],"phase":"final_answer","role":"assistant"},"output_index":4,"sequence_number":15}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","output_index":4,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":16}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"- **Pot","item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","logprobs":[],"obfuscation":"srIiWwaNe","output_index":4,"sequence_number":17}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"ato:**
+      Boiled potatoes","item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","logprobs":[],"obfuscation":"liIXH2zxC5","output_index":4,"sequence_number":18}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" with
+      skin provide about 87 calories","item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","logprobs":[],"obfuscation":"AaVNprbC4jG4","output_index":4,"sequence_number":19}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":", 20","item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","logprobs":[],"obfuscation":"6EKMS060donq","output_index":4,"sequence_number":20}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":".1","item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","logprobs":[],"obfuscation":"PH4h2HAw1B5VnI","output_index":4,"sequence_number":21}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" g","item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","logprobs":[],"obfuscation":"axeqojdec4Kqg8","output_index":4,"sequence_number":22}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" carbohydrates,
+      1.","item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","logprobs":[],"obfuscation":"KFjrApwTgF0VRR","output_index":4,"sequence_number":23}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"9 g protein,
+      1.8","item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","logprobs":[],"obfuscation":"","output_index":4,"sequence_number":24}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" g fiber,
+      and 0.1","item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","logprobs":[],"obfuscation":"rJtG5WUMsqRd7rS","output_index":4,"sequence_number":25}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" g fat
+      per 100 g,","item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","logprobs":[],"obfuscation":"O5N7RK5iSzcP33Y","output_index":4,"sequence_number":26}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" plus
+      potassium and vitamin C.","item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","logprobs":[],"obfuscation":"1H","output_index":4,"sequence_number":27}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" ","item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","logprobs":[],"obfuscation":"Uw1mc5DntfWAdEe","output_index":4,"sequence_number":28}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"([healthline.com](https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai))\n-","item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","logprobs":[],"obfuscation":"RkIGi","output_index":4,"sequence_number":29}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.annotation.added
+
+      '
+    - 'data: {"type":"response.output_text.annotation.added","annotation":{"type":"url_citation","end_index":261,"start_index":172,"title":"Potatoes
+      101: Nutrition Facts, Health Benefits, and Types","url":"https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai"},"annotation_index":0,"content_index":0,"item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","output_index":4,"sequence_number":30}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" **Tomato:**","item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","logprobs":[],"obfuscation":"t9Bo","output_index":4,"sequence_number":31}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" I","item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","logprobs":[],"obfuscation":"yriJAp7nWgunds","output_index":4,"sequence_number":32}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" couldn’t
+      run the second search because the","item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","logprobs":[],"obfuscation":"nEBTh","output_index":4,"sequence_number":33}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" web
+      tool","item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","logprobs":[],"obfuscation":"UtzHD5V","output_index":4,"sequence_number":34}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" reached
+      its one-call limit, so no","item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","logprobs":[],"obfuscation":"2iTc3JulOr4hVY","output_index":4,"sequence_number":35}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" tomato","item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","logprobs":[],"obfuscation":"ccdEsJiiq","output_index":4,"sequence_number":36}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" result
+      was","item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","logprobs":[],"obfuscation":"b33GO","output_index":4,"sequence_number":37}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" retrieved.","item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","logprobs":[],"obfuscation":"sfyBo","output_index":4,"sequence_number":38}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","logprobs":[],"output_index":4,"sequence_number":39,"text":"-
+      **Potato:** Boiled potatoes with skin provide about 87 calories, 20.1 g carbohydrates,
+      1.9 g protein, 1.8 g fiber, and 0.1 g fat per 100 g, plus potassium and vitamin
+      C. ([healthline.com](https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai))\n-
+      **Tomato:** I couldn’t run the second search because the web tool reached its
+      one-call limit, so no tomato result was retrieved."}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","output_index":4,"part":{"type":"output_text","annotations":[{"type":"url_citation","end_index":261,"start_index":172,"title":"Potatoes
+      101: Nutrition Facts, Health Benefits, and Types","url":"https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai"}],"logprobs":[],"text":"-
+      **Potato:** Boiled potatoes with skin provide about 87 calories, 20.1 g carbohydrates,
+      1.9 g protein, 1.8 g fiber, and 0.1 g fat per 100 g, plus potassium and vitamin
+      C. ([healthline.com](https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai))\n-
+      **Tomato:** I couldn’t run the second search because the web tool reached its
+      one-call limit, so no tomato result was retrieved."},"sequence_number":40}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","type":"message","status":"completed","content":[{"type":"output_text","annotations":[{"type":"url_citation","end_index":261,"start_index":172,"title":"Potatoes
+      101: Nutrition Facts, Health Benefits, and Types","url":"https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai"}],"logprobs":[],"text":"-
+      **Potato:** Boiled potatoes with skin provide about 87 calories, 20.1 g carbohydrates,
+      1.9 g protein, 1.8 g fiber, and 0.1 g fat per 100 g, plus potassium and vitamin
+      C. ([healthline.com](https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai))\n-
+      **Tomato:** I couldn’t run the second search because the web tool reached its
+      one-call limit, so no tomato result was retrieved."}],"phase":"final_answer","role":"assistant"},"output_index":4,"sequence_number":41}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_0dfca7ff7effde07006abe4f20810887d1b1bdcec665e8f858","object":"response","created_at":1790856992,"status":"completed","access_programs":null,"background":false,"completed_at":1790856999,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[{"id":"rs_0dfca7ff7effde07006abe4f21720487d1a16d5034b7714fe1","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk8nDr4jBIFyiUdg6e9HAtI1MVij70c2XZBF3Ek_FnrMXezrkx_YMyVTae6H_NaxMktN17O59_3UG9ROlzx_RsS3lJr0ilqKqS41h378MKzl3bF6ztVKXgx5C9Di30kt20QEsMNXjl4wHmHKwvrMRFsk-mbbhvW5S-EnD9MoJhgVZsKgiTih7dDJS_sNeRsn2xfy0EHQeoAlLJiwGDzjo1YhSo1SefNa3BJj-MxtnRzEHufbtI88v-Um1hA0IktfyuzcAijprkD5UOv3XUPL1S0sZLSiMYNVXrePJyghd2O3MVGejoxrl3umc8DoowgokKqOLrVcevbq657EpjI1YXfHqgx8L6HCSej1ZacALxB437E3znpM3hkQJBDYrozP-gcOS6GVbm_TTFWBM4mJB2iDILNo8TJxcRoOGu7ikEPwvzR5Do163D3gKZU8JUx29CBjAUI5YY2h5JDieIIbFI9Vh05HaB6vNE7Jf__D_JOKg2_bi8QMbrtqcJUjSxhCJgPG-Jmtcc4t4gSwG32O6Zy-AS9lcNueuoaheMm-lqB_4n1AQcvk9DXYE0zXttKtuosznT3yETQUmyuZAQGV5syfwFTOdD_Ea9TP7vabl8Ta5DZHnH1MjlnNz23zxqdIsjNP6c26FQmXaAZG3XlkBR43HnGGKt-mkgUxyhF5uHwMQjU6sz4f4VcGqNEsnzetkRLs7h5myL3Q-Me6m4xWymUhvfXoso7tIyaEW24FA0bQ8ZwVuTWyPVAsSwO_1Jr1gexvfXf7G_FRXA79PXgJQOw_MQ7HFgXjFpT-WB6os7dT4PVY_Cc9KDz9pLkC67KWJGL3k8GS3II-ZVuyum3lBcERuMqbS3o5CgrGcokhh7Sd-I03n_B5TSFYAJUZY3yp-HDG00ODIvEuhP7n3lAScO7YXbux0HXus4FmlSuNpii_ES8V-Y6SZltpCh-AukesvPdWWUUoiw6k-qAKhlTomMDTlnsJvxpr6mG3nOoMPj-a4-gsZkWeSxBtroL7oyBA8erprI3VB389-l35vggwsHNkJFMsvO5sdVNRTdfBKO9hVHytOdHh4E8xO4lvi6dVwaGLbPPHQHD3tJmlLZvAKxUNgy4K6Ivs3FpEMxEMrcRrv9nH5TdS3mr77VktjP7hOs5DXK0RSEkJcDKljPNLYBPvJOSaatw1963rCdMpK6jAzWJ7Q9lzwu_-zltSlXqMRC2WNJWYjpoak85ApgcpUSwHUBtyEOeGTCOfZeHEKSG3hGuJ8R4t_vyOf-8NEOUqH44ov6DyOBG3LPfyTbPMkwRvoaA2_lBVJC-h2oZQRzdjgFY=","summary":[]},{"id":"ws_0dfca7ff7effde07006abe4f2206f487d1a381324d4b8490f6","type":"web_search_call","status":"completed","action":{"type":"search","queries":["potato
+      nutrition facts"],"query":"potato nutrition facts"}},{"id":"ws_0dfca7ff7effde07006abe4f23f57c87d1897fe03e6f1f3e3a","type":"web_search_call","status":"searching","action":{"type":"search","queries":["tomato
+      nutrition facts"],"query":"tomato nutrition facts"}},{"id":"rs_0dfca7ff7effde07006abe4f24c67887d1b90fc410d9c7db33","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk8nylRqHM_EkMDWKCSjgLdctvEs7ya4OKIlk037Jl6L2x5sWNSsdsi4hiK0kwFL1Vx4NbVXZaVcyZtTfBr6-XvGF8fl4s0unUTaPyQqpMPVObeKNahs9c85PaurR3BGsslMD5sBQ-V5u1JLFnWG6MdPAWNivmb7lJiL-vXqRhN9O_DOrKUJmX8fONX26gBrAl9jcAUUnuH032QvuCVpfuWHALtAT5zPJlkHbByEe7CdRFz0u2hKwfMlfXNsf-wK4Ucc6HhiHHRXCaLgYTzeyjtJT1oeGky1PDvS0C5N2YaIa-JKfx2--6VnLeMvXvKVfo0C9tnSE6RBsGcJxfGUSHGHkGkp-_otCjThMGh_dkGjNUb3KC4detZivNo4TqHM1rHGy2f2YeHO8vuZFHxooFN8VbCfwXR_WmGCIT_zRaYrGga4TlgQoz0b2WknBDBgjQswPDz9QEXsE-zyyMvd0PikN5n-hG4BYThAUEr3Dlwvs1McIyoT4GK322-RW4kxLQOFtWNy13F7TVzSuy6WdKCVOXwDRWSR2RN4_rjtU3eelA-43DQ0tXVyFnwf9I2KjLMuVnRpkRdi53E0o7rxpqYhwZ5CjHY1-NThXwOcJpRcaOcDk4MhYt0XsEcdm--dOukBmeUP5lpNW2tHIzWvVBiF4FfpPodGmD4Pmdv-Sz9AHM9Y6K_zYusqz1SiDp-2K9565PNmwUoUV6wyRQRuSUunkLdmF2p0GuFHSm-BD0ITvIN38BW1Nrs9UpVRQhE8dwkEjGR8tGLjYue5YkAw5pN6BGlpLe0mIih-TZGyjhieaiGSSeX69CMq7O1aJwX5TX1Yl8hiYevdpHVdWgJReIFmCm3hphYO-9vPxo2uSzThmEUrUn72OiJzqaXj8RsFPVbG7TUvDI9RTjpGiKw8o-IcWBK14x8miSHnNGjI-pR4Lky-kzUzwrspQLfGqX0eZaMN5w7mYQTbJwfoZzyo9G0Ql8rXSPReXAowVi3WhTZnK0n57nPbih5LG-ELlwtcLNSw2Nz8u1BQ50RUC4yatz87MR5rHathveS_Mu_WIQPTknAwXOGQdiu0GNOcXlW8S_v1ohKI6nWpmZXK6XpwWLc-7IkwNel-dufJv4VE1lCsuWiE1Dh6j_kTENqaGkEpxFeLr6HPyVOrv8ZIZr4dO4FGLMgsIL0JEZJ7dhB2LrnhOVZ0I95nujKfUJaU0b-SRiZfe67OQszRDm_9FZbIi68FgKkw5f630eYMR0QmQayN9pICHAS1cK_mnO-MBDBf1ReLq43O58kSkfgftF6xjixLTHI1kvlJDYzpe_QVhR11tE22sJSyn6VrBSxV0jzKgYEVnG4N0rQuGyeUhQmxlnVM36fZnEkaHEGqrvcSE71fc8adUPY2cdlo4TGQpRO0GUOg97lojGwNkGQrIgJaT6YOpFnKlsjybl9tVjsrF_GZ48dcIcOVVSl_8PARBGrow6HlmWVdYrhgRlR-ejnhAFEG5mUNUHb-q_V1wsFm3QFOypcLE15gU7g_dkX5eQG1s7pDGGT3nx5946BZZL-Az4QXZWCnmY7Xnn_fyHsn0McLhlUVjLAoaCC6AfZdCcHmWqemNZbkMmyjYZ8iQl8_Ec1Si9Kj26QcCe5_vUnnk-6edtUezoioskeI_svvTQlyhzJLXmq9smJH4WhQUAN5qd9DJORnB8GCti8wBRgWhPmUy4JsqpYUJSxIQJoYm7N45f28QKgAsmCIUJHrwJrnWtW6lQ==","summary":[]},{"id":"msg_0dfca7ff7effde07006abe4f25ef9087d1b30df87439305160","type":"message","status":"completed","content":[{"type":"output_text","annotations":[{"type":"url_citation","end_index":261,"start_index":172,"title":"Potatoes
+      101: Nutrition Facts, Health Benefits, and Types","url":"https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai"}],"logprobs":[],"text":"-
+      **Potato:** Boiled potatoes with skin provide about 87 calories, 20.1 g carbohydrates,
+      1.9 g protein, 1.8 g fiber, and 0.1 g fat per 100 g, plus potassium and vitamin
+      C. ([healthline.com](https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai))\n-
+      **Tomato:** I couldn’t run the second search because the web tool reached its
+      one-call limit, so no tomato result was retrieved."}],"phase":"final_answer","role":"assistant"}],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":1}},"tools":[{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":8495,"input_tokens_details":{"cache_write_tokens":47,"cached_tokens":4370},"output_tokens":241,"output_tokens_details":{"reasoning_tokens":136},"total_tokens":8736},"user":null,"metadata":{}},"sequence_number":42}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t8
+  request:
+    body:
+      input: Now run one web search for the exact query "carrot nutrition facts" and
+        summarize it in one sentence.
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      model: gpt-5.6
+      parallel_tool_calls: false
+      previous_response_id: resp_0dfca7ff7effde07006abe4f20810887d1b1bdcec665e8f858
+      store: true
+      stream: true
+      tool_choice: auto
+      tools:
+      - type: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_0dfca7ff7effde07006abe4f28538487d19549a89e69483360","object":"response","created_at":1790857000,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":"resp_0dfca7ff7effde07006abe4f20810887d1b1bdcec665e8f858","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_0dfca7ff7effde07006abe4f28538487d19549a89e69483360","object":"response","created_at":1790857000,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":"resp_0dfca7ff7effde07006abe4f20810887d1b1bdcec665e8f858","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"rs_0dfca7ff7effde07006abe4f29323c87d1bc90fef8537ed775","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk8ppTe0LOnh1RHFF5SJlo4ewR1SXbuJTKJfPCFBZDFMJvNPnrWm2xV3jA9dOJq7bdvrf_i-ZE6rv-RJLgHfaUAL9mnslS53Go_9aOUwNmIE8M8sLCJwdmZViQ-Af8h05LN_wYyjJx9nWodsQETGJMflaIUFkZt62c2XvH7sAEUAvYBuV9CRuiqPY3rFHRSx2hwH_5h4SNFnMxoQsdRlXZ5uL7ZNUir06JpOFp-4ixvuTtkj3ZzNcxpJyg6B422ghnimvGrR9Jn0ubi8ttRopKjQ8cQKUfjo4T327OFhz3X7TdoRYv1QNk_plhggyQcg7uwkB2tdFIvoVLUHaHkaAVRH9rUTrOo3-plbFiGHpl5SB2id-lZQ89DKD1XykOSIaOmbPQI1ILVj5JicNwCTE8OcG5QFeBG6JQLQPb3F0Tus6KxkL89El42G8woZ81qLN3Zv4lcTZaByDK4JwEYostOUuAYQlxKf_AO4620QyaIU5PDv5d7XJ-8kClmEUNoWzXAErwjnGZoByuwtNNfm033ribhdi7fK_mJ6u79UmMnXZrdAVZsTZnSANxEhPz5Mzm3myKF6HEDXe7CVByT97yGzD37f4yqFQkI4m_hWGTOvawEXh3UZzzl_Aoo86Sa08fWskJsuMm78vcSVZrICXEBvhvHQ9B1sOxzagOrg3EfUPoKjsvR0ZU-Q7gXM0HHSFnt9t_YKg--5OBMrAnODPFcnIRi4vT779SUs6S5Ik6CPVhk5wO5spqtnPiXtW0GczUAKuiIIUV1LNStIIRBxJxGfofehIj1pTZymzkDpJ2j5997uHXlLaBHxRmcprXpPnzPmrGY2xm04LrHJc0N8boCRrJZmRCEnXEr5FrqZEFZC72L-1aHGA8e0VMwXUL-1QA_tVR08i2aX-zyQRjiaY9K1YDgVWT8mwhNnJ8CDeQpj2phuo3rP7Zz5JlnsQlD3pwi1IH4FAz8I2sIhZmS4_ulVPd7pluoc4Z-vvoKs9jJRX-9zMbMI6bp9gT0SxAIW6aq3xvAQ5358r37b2uEsA7YoKrxe8WvlhfYiG-pxTKgcf0mlY_n1q3JvS197mclfcTBJYfmsW8_REQox7kmvJsEgMAIN1ZUc-frMdZEj1HhxCZfKj_-3FlqQmCRn9uTU6f7fIkswswPD3c76dmODdSVeMw==","summary":[]},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"rs_0dfca7ff7effde07006abe4f29323c87d1bc90fef8537ed775","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk8pla9rh6X4JTmX0Hx_mrl_K8ZKmil0W5qsXV2PXkRhI4G8VHMUEUoMxyqswSDMRcunFPXdkUYjpMo8THUM77Dm9WtKOtpeWWB41dm9hfqmh7elQAvL2gH78d1eXpJFBnkBD70hJ0QeTTDbQfk6JqxfiyU-__wl48l_r7Waf7YCYqeJZacwgaOSqmgx4xt54LDhcra85GPIjMkeFkQD4Q9G_8zuDrGWH3KD6ZTgExile2jmvdqKGb3aiQn9DXC5mDzgIDNNfwvnT8ua_fWRaIwY9FZ37JDvh7iLP1wZ_A0OBpHTD1N3E8ee47RSh0AwTrHKkyVDhglNJon9LPsD7okCDdrFSmB6avSpdz5eZlxe6Ejh1MtPgXgx9xpuPJUXkOcZdETqUK-dUNYIPxc5k_wvAtBcupNz58ccTDghAa6Ah2faBG4PKmm5iKGxwjQjiykxFrrqex85-mLuVR4dZodZC-pB_d7b_8C3nVaEjMuGnr5At9dGn0jDAxIcX9wGEBGuwY9rj-XnCBcNmzLYdOdWi4-969D1x0lU558mpdqoStloFj7DBjPyqVidyVLKNspcygXhQeCqIkLAgT7-oRR0fBpbVv79me_KNzCODW2hbTcQzzur-cYVLAHxL4YLPWVZNXgTjd_Hh7d51uac80eCkYLMmunlpNrQWAIPFXZjRm0ODhrqjNhrpZ2iA6K2v7cPqESIji1M1MCn1x4gpqYvQf2WbX1QCDUBpeGHC5-b0Wf2Reodz-KQGq5jj8IzODAgGNCYeqaVNt_vvIZ5I1vjC4e_m_Tr5PQFq_2EGOZxSNVS3RIQSuHyrM1KG9qiZhhBYq8ovNaIVCjIbg1CY3I8BOIrnRhCKxOtOX7O01tpK3DuS6iAlOLuV6CJRUW7TzsKFLMbrgMivKuRn33_QLui1r8L_e5xzJ5HGRqZrQQ12bVoad5f6HoD3mXA79CoIHsV6seO4FMxWjPqfQOVUDd5AX8-iX0R4Q-QCWQIt6yW2LI-_GJ-c3q0DQd5dqJe-Jv8zPZHDh1qmnBTZcRMoC19kCxnLpiUA3dpCmV9GukoxvRkoeGNAMRcvEvzeL7KL59ycOskaGPn9KRZmofkWqk-9cI2uL6AJeTkP9pKSVXWqiaL9h7AzjdK2L7kQ6TE7Y9pFg1_StT4HaC_B-cosqMep-1rMwjrFHuBbLZC7sOaGmL5uSIZ_obUh_pckC062X-W","summary":[]},"output_index":0,"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"ws_0dfca7ff7effde07006abe4f29869c87d1b8b812067e03d68d","type":"web_search_call","status":"in_progress"},"output_index":1,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.in_progress
+
+      '
+    - 'data: {"type":"response.web_search_call.in_progress","item_id":"ws_0dfca7ff7effde07006abe4f29869c87d1b8b812067e03d68d","output_index":1,"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.searching
+
+      '
+    - 'data: {"type":"response.web_search_call.searching","item_id":"ws_0dfca7ff7effde07006abe4f29869c87d1b8b812067e03d68d","output_index":1,"sequence_number":6}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.completed
+
+      '
+    - 'data: {"type":"response.web_search_call.completed","item_id":"ws_0dfca7ff7effde07006abe4f29869c87d1b8b812067e03d68d","output_index":1,"sequence_number":7}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"ws_0dfca7ff7effde07006abe4f29869c87d1b8b812067e03d68d","type":"web_search_call","status":"completed","action":{"type":"search","queries":["carrot
+      nutrition facts"],"query":"carrot nutrition facts"}},"output_index":1,"sequence_number":8}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"msg_0dfca7ff7effde07006abe4f2c597c87d189e5826ee0686128","type":"message","status":"in_progress","content":[],"phase":"final_answer","role":"assistant"},"output_index":2,"sequence_number":9}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_0dfca7ff7effde07006abe4f2c597c87d189e5826ee0686128","output_index":2,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":10}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"Raw carrots
+      contain","item_id":"msg_0dfca7ff7effde07006abe4f2c597c87d189e5826ee0686128","logprobs":[],"obfuscation":"KCQGUvhEd8Nda","output_index":2,"sequence_number":11}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" about
+      41 calories, 9.6 g carbohydrates","item_id":"msg_0dfca7ff7effde07006abe4f2c597c87d189e5826ee0686128","logprobs":[],"obfuscation":"ntk6G0yhm","output_index":2,"sequence_number":12}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":", 2.8
+      g fiber, 0.9 g protein, and 0.2 g fat per 100 g","item_id":"msg_0dfca7ff7effde07006abe4f2c597c87d189e5826ee0686128","logprobs":[],"obfuscation":"h7MIrIm1qNg","output_index":2,"sequence_number":13}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" and
+      are especially rich in beta-carotene, which the body converts to vitamin A.
+      ","item_id":"msg_0dfca7ff7effde07006abe4f2c597c87d189e5826ee0686128","logprobs":[],"obfuscation":"WwIfFHe3lWHoiEd","output_index":2,"sequence_number":14}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"([healthline.com](https://www.healthline.com/nutrition/foods/carrots?utm_source=openai))","item_id":"msg_0dfca7ff7effde07006abe4f2c597c87d189e5826ee0686128","logprobs":[],"obfuscation":"dgc601T0","output_index":2,"sequence_number":15}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.annotation.added
+
+      '
+    - 'data: {"type":"response.output_text.annotation.added","annotation":{"type":"url_citation","end_index":280,"start_index":192,"title":"Carrots
+      101: Nutrition Facts and Health Benefits","url":"https://www.healthline.com/nutrition/foods/carrots?utm_source=openai"},"annotation_index":0,"content_index":0,"item_id":"msg_0dfca7ff7effde07006abe4f2c597c87d189e5826ee0686128","output_index":2,"sequence_number":16}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_0dfca7ff7effde07006abe4f2c597c87d189e5826ee0686128","logprobs":[],"output_index":2,"sequence_number":17,"text":"Raw
+      carrots contain about 41 calories, 9.6 g carbohydrates, 2.8 g fiber, 0.9 g protein,
+      and 0.2 g fat per 100 g and are especially rich in beta-carotene, which the
+      body converts to vitamin A. ([healthline.com](https://www.healthline.com/nutrition/foods/carrots?utm_source=openai))"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_0dfca7ff7effde07006abe4f2c597c87d189e5826ee0686128","output_index":2,"part":{"type":"output_text","annotations":[{"type":"url_citation","end_index":280,"start_index":192,"title":"Carrots
+      101: Nutrition Facts and Health Benefits","url":"https://www.healthline.com/nutrition/foods/carrots?utm_source=openai"}],"logprobs":[],"text":"Raw
+      carrots contain about 41 calories, 9.6 g carbohydrates, 2.8 g fiber, 0.9 g protein,
+      and 0.2 g fat per 100 g and are especially rich in beta-carotene, which the
+      body converts to vitamin A. ([healthline.com](https://www.healthline.com/nutrition/foods/carrots?utm_source=openai))"},"sequence_number":18}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"msg_0dfca7ff7effde07006abe4f2c597c87d189e5826ee0686128","type":"message","status":"completed","content":[{"type":"output_text","annotations":[{"type":"url_citation","end_index":280,"start_index":192,"title":"Carrots
+      101: Nutrition Facts and Health Benefits","url":"https://www.healthline.com/nutrition/foods/carrots?utm_source=openai"}],"logprobs":[],"text":"Raw
+      carrots contain about 41 calories, 9.6 g carbohydrates, 2.8 g fiber, 0.9 g protein,
+      and 0.2 g fat per 100 g and are especially rich in beta-carotene, which the
+      body converts to vitamin A. ([healthline.com](https://www.healthline.com/nutrition/foods/carrots?utm_source=openai))"}],"phase":"final_answer","role":"assistant"},"output_index":2,"sequence_number":19}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_0dfca7ff7effde07006abe4f28538487d19549a89e69483360","object":"response","created_at":1790857000,"status":"completed","access_programs":null,"background":false,"completed_at":1790857004,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[{"id":"rs_0dfca7ff7effde07006abe4f29323c87d1bc90fef8537ed775","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvk8sqkGTnZY1Kc6rPSYh9x56B6e24OwHmM6fsC2eehtyK4c91aj1jZpyx4Lh0_-fEwklI0jKz-fQswoHUL3c1BcLLmz85AQGNcQdpMP_xopDC9jYr3qjtzf-tPHhz5qugZ9ndneaNhsHZB15JOr0sqNuGlyGMaOL7HDre9E3yDB3X_sYCFA86zeflF3yh96IysrNOOlciriltxODCagdrImgLcBZ2iqhhk5Q2LSU-hxy_30NRHTUOuwXLN0FUbbiXBrE0kwTrd3vUUZo-9FrBKhquEdyj4mTZmGViB8ZfIZ9E80GwERnplG1rjMKYhFoRDDXbQFXlzmdeLKg_fD_4z0fEm85SvcEN19GePxdeRnWsZYpjUN5FocU4MxwFjseARMB25RrbGaawCqqUMDpBKNTxUcvjOwDjTKi5lx-fEc8OVOqepunXY3O3lz9Zzz6XjxM_Bq1cN6Mf1ZteoELm4o1GxDSgHQczbAcxgPF79SXLi7HfrpHOgUP8Tw6mbwm1DDtFTp5nZTOmNrYDY9kePx235ojs00bsytQbNS192my0qO7hMb8Xw-V_jtyg0FLS8z38xmBb8o2TyAME8NDXSubIzNZ20aeVsDglHJdiwXLGwcbOb8hnFNmrC0ccy-89qO8j57egFrkvzsmYoSc-PbU_Oh3BJP9onLjv9fHzCh1H71TkNXTaq2WxsvAxaqbWDb-TvT52HHSpR9J1yE1Tv5WlJgSWmT2LdoTyth_slVgUIzMc5dOjD8M71yRFTHIfMdpSaaKQIxLOrKFteR54NQPAHCJWabysCwUlPSqulfPX9br1zyMldilvXnuFptpEDhfkF2mfWZSOyrzxD9F592R7edLdj0YrprvKZ49r0Fg1Mvr7CCHtxMJ7u5YJxm1HnHTwleYmyB5O0kJgi9xYobakq-F3NQISfCWHKQy7sLlMzFW-arHie9NxboPOOeenBDCa0yqtClscZstsQGXMiuUJ6HYkD0mTs9dV_LvY76eOc56c3DLRWc0JHDNHxqas9yE96lVnq9mzO4PneSILemsqC2z3Gj4DDJb1X0V_n076SxuDMyQIUUiUbmhsTNKmXp6YYS0Pyz1WNozWhovjSfQipWTVY8_v-PRp4yiUf6dlBRng7LK4uW1gU1qVypEcVbVvbsyw3ErZiVpwd2YWqjQ1XSesWxuI1zniNiL8yT0EriW1RUtYS0c9vLujpv12j-u","summary":[]},{"id":"ws_0dfca7ff7effde07006abe4f29869c87d1b8b812067e03d68d","type":"web_search_call","status":"completed","action":{"type":"search","queries":["carrot
+      nutrition facts"],"query":"carrot nutrition facts"}},{"id":"msg_0dfca7ff7effde07006abe4f2c597c87d189e5826ee0686128","type":"message","status":"completed","content":[{"type":"output_text","annotations":[{"type":"url_citation","end_index":280,"start_index":192,"title":"Carrots
+      101: Nutrition Facts and Health Benefits","url":"https://www.healthline.com/nutrition/foods/carrots?utm_source=openai"}],"logprobs":[],"text":"Raw
+      carrots contain about 41 calories, 9.6 g carbohydrates, 2.8 g fiber, 0.9 g protein,
+      and 0.2 g fat per 100 g and are especially rich in beta-carotene, which the
+      body converts to vitamin A. ([healthline.com](https://www.healthline.com/nutrition/foods/carrots?utm_source=openai))"}],"phase":"final_answer","role":"assistant"}],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":"resp_0dfca7ff7effde07006abe4f20810887d1b1bdcec665e8f858","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":1}},"tools":[{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":12804,"input_tokens_details":{"cache_write_tokens":4086,"cached_tokens":4417},"output_tokens":122,"output_tokens_details":{"reasoning_tokens":39},"total_tokens":12926},"user":null,"metadata":{}},"sequence_number":20}
+
+      '
+    - '
+
+      '
+    status_code: 200

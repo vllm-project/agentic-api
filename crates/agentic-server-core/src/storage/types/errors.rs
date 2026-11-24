@@ -15,6 +15,18 @@ pub enum StorageError {
     #[error("not found: {resource_type} with id '{id}'")]
     NotFound { resource_type: String, id: String },
 
+    /// Retrieval cannot find a durably stored response.
+    #[error("Response with id '{id}' not found.")]
+    ResponseNotFound { id: String },
+
+    /// Continuation cannot resolve the requested response checkpoint.
+    #[error("Previous response with id '{id}' not found.")]
+    PreviousResponseNotFound { id: String },
+
+    /// Rehydration cannot find a referenced conversation.
+    #[error("Conversation with id '{id}' not found.")]
+    ConversationNotFound { id: String },
+
     /// A pagination cursor no longer identifies an item in the conversation.
     #[error("No item found with id '{id}'")]
     ItemCursorNotFound { id: String },
@@ -22,6 +34,22 @@ pub enum StorageError {
     /// A conversation item did not have its required sequence number.
     #[error("invalid conversation sequence for conversation '{conversation_id}' item '{item_id}'")]
     InvalidConversationSequence { conversation_id: String, item_id: String },
+
+    /// A referenced history item is missing or cannot be decoded.
+    ///
+    /// Never include the stored payload in this error: it may contain opaque state.
+    #[error("stored history item '{item_id}' is missing or invalid")]
+    InvalidHistoryItem { item_id: String },
+
+    /// Stored response history references cannot be decoded without losing context.
+    #[error("stored response '{response_id}' has invalid history references")]
+    InvalidResponseHistory { response_id: String },
+
+    /// Stored response metadata is invalid, or its captured response is missing.
+    ///
+    /// Deliberately omit the JSON parser error: its message can contain stored secrets.
+    #[error("stored response '{response_id}' has missing or invalid metadata")]
+    InvalidResponseMetadata { response_id: String },
 
     /// A conversation changed after its version was read.
     #[error("conversation changed while the response was being generated")]
@@ -46,13 +74,9 @@ pub enum StorageError {
     #[error("Item already in conversation")]
     ItemAlreadyInConversation,
 
-    /// A supplied conversation item ID does not match its item type.
-    #[error("Invalid '{param}': '{id}'. Expected an ID that begins with '{prefix}'.")]
-    InvalidItemId {
-        param: String,
-        id: String,
-        prefix: &'static str,
-    },
+    /// Two incoming items reuse the same stored item.
+    #[error("The item was modified or deleted while it was being added. Please retry your request.")]
+    ItemConflict,
 
     /// Serialization or deserialization of data failed.
     ///
@@ -74,7 +98,14 @@ impl StorageError {
     /// Returns `true` if this error is "not found".
     #[must_use]
     pub fn is_not_found(&self) -> bool {
-        matches!(self, Self::NotFound { .. } | Self::ItemCursorNotFound { .. })
+        matches!(
+            self,
+            Self::NotFound { .. }
+                | Self::ResponseNotFound { .. }
+                | Self::PreviousResponseNotFound { .. }
+                | Self::ConversationNotFound { .. }
+                | Self::ItemCursorNotFound { .. }
+        )
     }
 
     /// Returns `true` if this error is "not configured".
@@ -103,6 +134,10 @@ impl StorageError {
     pub fn not_found_details(&self) -> Option<(String, String)> {
         match self {
             Self::NotFound { resource_type, id } => Some((resource_type.clone(), id.clone())),
+            Self::ResponseNotFound { id } | Self::PreviousResponseNotFound { id } => {
+                Some(("Response".to_owned(), id.clone()))
+            }
+            Self::ConversationNotFound { id } => Some(("Conversation".to_owned(), id.clone())),
             _ => None,
         }
     }
@@ -116,10 +151,7 @@ impl StorageError {
     /// Returns `true` if this error is a validation error.
     #[must_use]
     pub fn is_validation(&self) -> bool {
-        matches!(
-            self,
-            Self::Validation(_) | Self::InvalidItemId { .. } | Self::ItemAlreadyInConversation
-        )
+        matches!(self, Self::Validation(_) | Self::ItemAlreadyInConversation)
     }
 }
 

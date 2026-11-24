@@ -2,6 +2,7 @@
 
 pub mod conversation;
 pub mod item;
+pub(crate) mod message_thread;
 pub mod response;
 
 pub use conversation::Conversation;

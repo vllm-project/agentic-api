@@ -1,16 +1,18 @@
 //! Semantic event identities and lifecycle validation errors.
 
 use super::slot::{ItemIdentity, OutputIndex};
-use crate::events::{EventFrame, EventPayload, ValidatedFrame, expected_item_type};
+use crate::events::{EventFrame, EventPayload, SSEEventType, ValidatedFrame, expected_item_type};
 use crate::executor::error::ExecutorError;
 use crate::types::io::OutputItem;
 
 pub(super) fn output_item_call_id(item: &OutputItem) -> Option<&str> {
     match item {
         OutputItem::FunctionCall(call) => Some(&call.call_id),
-        OutputItem::ToolSearchCall(call) => Some(&call.call_id),
+        OutputItem::ToolSearchCall(call) => call.call_id.as_deref(),
         OutputItem::CustomToolCall(call) => Some(&call.call_id),
         OutputItem::ShellCall(call) => Some(&call.call_id),
+        OutputItem::MultiAgentCall(call) => Some(&call.call_id),
+        OutputItem::MultiAgentCallOutput(output) => Some(&output.call_id),
         _ => None,
     }
 }
@@ -40,15 +42,25 @@ pub(super) fn item_identity<'a>(
             index: Some(OutputIndex::new(item.output_index)),
             item_id: (!item.item_id.is_empty()).then_some(item.item_id),
             item_type: item.item_type,
+            event_agent: frame.wire.agent.as_ref(),
         });
     }
     let (item_id, item_type) = match &frame.payload {
         EventPayload::OutputItemAdded { item_id, item_type, .. }
-        | EventPayload::OutputItemDone { item_id, item_type, .. } => (item_id.as_str(), *item_type),
+        | EventPayload::OutputItemDone { item_id, item_type, .. } => (item_id.as_str(), Some(*item_type)),
         payload => {
-            let item_type = expected_item_type(frame.event_type)?;
+            let item_type = expected_item_type(frame);
+            if item_type.is_none()
+                && !matches!(
+                    frame.event_type,
+                    SSEEventType::ContentPartAdded | SSEEventType::ContentPartDone
+                )
+            {
+                return None;
+            }
             let item_id = match payload {
-                EventPayload::TextDelta { item_id, .. }
+                EventPayload::ContentPartDone { item_id, .. }
+                | EventPayload::TextDelta { item_id, .. }
                 | EventPayload::TextDone { item_id, .. }
                 | EventPayload::FunctionCallArgsDelta { item_id, .. }
                 | EventPayload::FunctionCallArgsDone { item_id, .. }
@@ -72,5 +84,25 @@ pub(super) fn item_identity<'a>(
         index: frame.output_index().map(OutputIndex::new),
         item_id: (!item_id.is_empty()).then_some(item_id),
         item_type,
+        event_agent: frame.wire.agent.as_ref(),
     })
+}
+
+#[derive(Debug, Default)]
+pub(super) struct CallIdObservation {
+    first: Option<String>,
+    pub(super) changed: bool,
+}
+
+impl CallIdObservation {
+    pub(super) fn observe(&mut self, call_id: Option<&str>) {
+        let Some(call_id) = call_id.filter(|call_id| !call_id.is_empty()) else {
+            return;
+        };
+        match self.first.as_deref() {
+            Some(first) if first != call_id => self.changed = true,
+            None => self.first = Some(call_id.to_owned()),
+            Some(_) => {}
+        }
+    }
 }

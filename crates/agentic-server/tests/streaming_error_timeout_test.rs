@@ -175,7 +175,7 @@ async fn response_recovery(transport: Transport) {
         .build()
         .unwrap();
     let request = json!({"model":"test-model", "input":"failed input", "store":true, "stream":true});
-    let error = match transport {
+    match transport {
         Transport::Http => {
             let response = client
                 .post(format!("{gateway_url}/v1/responses"))
@@ -183,20 +183,11 @@ async fn response_recovery(transport: Transport) {
                 .send()
                 .await
                 .unwrap();
-            assert_eq!(response.status(), StatusCode::OK);
-            let body = response
-                .text()
-                .await
-                .expect("a stalled error must terminate the Responses stream");
-            assert!(body.ends_with("data: [DONE]\n\n"));
-            let events: Vec<Value> = body
-                .lines()
-                .filter_map(|line| line.strip_prefix("data: "))
-                .filter(|data| *data != "[DONE]")
-                .map(|data| serde_json::from_str(data).unwrap())
-                .collect();
-            assert_eq!(events.len(), 1);
-            events[0].clone()
+            assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+            assert_eq!(response.headers()["retry-after"], "7");
+            assert_eq!(response.headers()["x-request-id"], "req_stalled");
+            assert_eq!(response.headers()["content-type"], "text/plain");
+            assert!(response.bytes().await.unwrap().is_empty());
         }
         Transport::WebSocket => {
             let (mut socket, _) = connect_async(format!("{}/v1/responses", gateway_url.replace("http:", "ws:")))
@@ -216,12 +207,11 @@ async fn response_recovery(transport: Transport) {
             };
             let error: Value = serde_json::from_str(&text).unwrap();
             assert_eq!(error["stream_id"], "stalled-request");
+            assert_eq!(error["type"], "error");
+            assert_eq!(error["status"], 429);
             socket.close(None).await.unwrap();
-            error
         }
-    };
-    assert_eq!(error["type"], "error");
-    assert_eq!(error["status"], 429);
+    }
     wait_for_body_drop(&dropped).await;
     assert_eq!(requests.lock().await.len(), 1, "no inference retry after an HTTP error");
     let pool = context.storage_pool().unwrap();

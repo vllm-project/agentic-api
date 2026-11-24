@@ -3,139 +3,190 @@
 //! Writes the completed response and output items to storage, routing to the
 //! appropriate handler based on whether the turn belongs to a conversation.
 
-use std::collections::HashMap;
-
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::modes::{ConversationHandler, ResponseHandler};
+use crate::executor::multi_agent::ValidatedTreeCheckpoint;
 use crate::executor::prepare::prepare_request_tools;
 use crate::executor::request::{ExecutionContext, RequestContext};
-use crate::storage::{InOutItem, ResponseMetadata};
+use crate::executor::session::ResponseContinuation;
+use crate::executor::telemetry::metrics::Stage;
+use crate::storage::{ResponseMetadata, StorageError};
 use crate::tool::{ToolSearchMetadata, ToolSearchState};
 use crate::types::event::ResponseStatus;
-use crate::types::io::{InputItem, OutputItem};
+use crate::types::io::InOutItem;
+use crate::types::io::OutputItem;
 use crate::types::request_response::ResponsePayload;
 use tracing::error;
 
-#[must_use]
-pub(crate) fn should_persist(ctx: &RequestContext) -> bool {
-    ctx.continuation.is_some()
-        || ctx.original_request.store
-        || ctx.original_request.previous_response_id.is_some()
-        || ctx.original_request.conversation_id.is_some()
+/// What a finished turn stores beside its input items.
+pub(crate) enum TurnOutput<'a> {
+    /// A generated response: its public output, and its snapshot when the request is stored.
+    Response(&'a ResponsePayload),
+    /// A turn that generated no output, such as an empty session turn.
+    Empty,
+    /// A standalone compaction's window: stored whatever `store` says, so `previous_response_id` can continue it.
+    Compaction,
 }
 
-pub(crate) async fn persist_if_needed(
-    payload: ResponsePayload,
+/// Decides whether a completed turn reaches the storage handlers.
+///
+/// A `store: false` request leaves no durable row, including when it reads a
+/// stored parent or explicit conversation. Response-scoped session continuations
+/// still reach their handler to publish a connection-local checkpoint. Explicit
+/// conversations do not publish those checkpoints or append unstored turns.
+fn should_persist(ctx: &RequestContext) -> bool {
+    ctx.original_request.store || (ctx.continuation.is_some() && ctx.original_request.conversation.is_none())
+}
+
+/// Persists one finished turn: the only path from a turn to the storage handlers. A turn that is not stored, or a
+/// response that did not complete, is returned unstored; only a write that reached storage is timed as the
+/// `persist` stage.
+///
+/// # Errors
+/// For a generated response, [`ExecutorError::Conflict`] and [`ExecutorError::PayloadTooLarge`] as they are and any
+/// other failure logged and returned as [`ExecutorError::Persistence`]; for any other turn, the failure as it is.
+pub(crate) async fn persist(
     ctx: RequestContext,
+    output: TurnOutput<'_>,
     tool_search_metadata: Option<ToolSearchMetadata>,
-    conv_handler: ConversationHandler,
-    resp_handler: ResponseHandler,
+    exec_ctx: &ExecutionContext,
 ) -> ExecutorResult<()> {
-    if should_persist(&ctx) {
-        match persist_prepared_response(payload, ctx, tool_search_metadata, conv_handler, resp_handler).await {
-            Err(error @ (ExecutorError::Conflict(_) | ExecutorError::PayloadTooLarge(_))) => Err(error),
-            Err(source) => {
-                error!(error = ?source, "failed to persist response");
-                Err(ExecutorError::Persistence(Box::new(source)))
-            }
-            Ok(()) => Ok(()),
+    if !matches!(output, TurnOutput::Compaction) && !should_persist(&ctx) {
+        return Ok(());
+    }
+    if let TurnOutput::Response(payload) = output
+        && (payload.id.is_empty()
+            || !matches!(
+                payload.status.parse::<ResponseStatus>().unwrap_or_default(),
+                ResponseStatus::Completed | ResponseStatus::Incomplete
+            ))
+    {
+        return Ok(());
+    }
+    let compaction = matches!(output, TurnOutput::Compaction);
+    let generated = matches!(output, TurnOutput::Response(_));
+    let timer = exec_ctx.metrics.stage(Stage::Persist);
+    let persisted = Box::pin(write_turn(ctx, output, tool_search_metadata, exec_ctx)).await;
+    match &persisted {
+        // Without storage nothing was written, so there is no stage to time.
+        Err(ExecutorError::Storage(StorageError::NotConfigured)) => timer.discard(),
+        result => timer.finish_result(result),
+    }
+    match persisted {
+        // A compaction still returns its window without storage; only continuing it later needs a store.
+        Err(ExecutorError::Storage(StorageError::NotConfigured)) if compaction => Ok(()),
+        // A turn that generated nothing reports the failure to its caller as it is, such as a parent that is gone.
+        Err(error) if !generated => Err(error),
+        Err(error @ (ExecutorError::Conflict(_) | ExecutorError::PayloadTooLarge(_))) => Err(error),
+        Err(source) => {
+            error!(error = ?source, "failed to persist response");
+            Err(ExecutorError::Persistence(Box::new(source)))
         }
-    } else {
-        Ok(())
+        Ok(()) => Ok(()),
     }
 }
 
-/// Step 3 — Persist the completed response to storage.
-///
-/// Skipped if [`ResponseStatus`] is not `Completed`/`Incomplete` or `payload.id` is empty.
-/// Routes explicit `conversation_id` requests to [`ConversationHandler`] and
-/// all other requests, including `previous_response_id` continuations, to [`ResponseHandler`].
+/// Persists a turn that generated no output, such as an empty session turn, after preparing its tools.
 ///
 /// # Errors
-/// Returns [`ExecutorError`] if the storage operation fails.
-pub async fn persist_response(
-    payload: ResponsePayload,
-    ctx: RequestContext,
-    conv_handler: ConversationHandler,
-    resp_handler: ResponseHandler,
-) -> ExecutorResult<()> {
-    // Use typed enum — no hardcoded status strings.
-    if !matches!(
-        payload.status.parse::<ResponseStatus>().unwrap_or_default(),
-        ResponseStatus::Completed | ResponseStatus::Incomplete
-    ) || payload.id.is_empty()
-    {
+/// As [`persist`], or an error preparing the request's tools.
+pub async fn persist_turn(ctx: RequestContext, exec_ctx: &ExecutionContext) -> ExecutorResult<()> {
+    if !should_persist(&ctx) {
         return Ok(());
     }
-
-    let (ctx, tool_search_state) = prepare_request_tools(ctx, &conv_handler, &resp_handler).await?;
+    let (ctx, tool_search_state) = prepare_request_tools(ctx)?;
     let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);
-    persist_prepared_turn(ctx, tool_search_metadata, payload.output, &conv_handler, &resp_handler).await
-}
-
-async fn persist_prepared_response(
-    payload: ResponsePayload,
-    ctx: RequestContext,
-    tool_search_metadata: Option<ToolSearchMetadata>,
-    conv_handler: ConversationHandler,
-    resp_handler: ResponseHandler,
-) -> ExecutorResult<()> {
-    if !matches!(
-        payload.status.parse::<ResponseStatus>().unwrap_or_default(),
-        ResponseStatus::Completed | ResponseStatus::Incomplete
-    ) || payload.id.is_empty()
-    {
-        return Ok(());
-    }
-
-    persist_prepared_turn(ctx, tool_search_metadata, payload.output, &conv_handler, &resp_handler).await
-}
-
-/// Persists one completed turn with the handler selected by its explicit conversation discriminator.
-///
-/// # Errors
-/// Returns [`ExecutorError`] if the selected storage operation fails.
-pub async fn persist_turn(
-    ctx: RequestContext,
-    output_items: Vec<OutputItem>,
-    conv_handler: &ConversationHandler,
-    resp_handler: &ResponseHandler,
-) -> ExecutorResult<()> {
-    let (ctx, tool_search_state) = prepare_request_tools(ctx, conv_handler, resp_handler).await?;
-    let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);
-    persist_prepared_turn(ctx, tool_search_metadata, output_items, conv_handler, resp_handler).await
+    persist(ctx, TurnOutput::Empty, tool_search_metadata, exec_ctx).await
 }
 
 #[tracing::instrument(name = "agentic.persist", skip_all, fields(
-    agentic.persist.destination = if ctx.original_request.conversation_id.is_some() { "conversation" } else { "response" }
+    agentic.persist.destination = if ctx.original_request.conversation.is_some() { "conversation" } else { "response" }
 ))]
-pub(crate) async fn persist_prepared_turn(
+async fn write_turn(
     mut ctx: RequestContext,
+    output: TurnOutput<'_>,
     tool_search_metadata: Option<ToolSearchMetadata>,
-    output_items: Vec<OutputItem>,
-    conv_handler: &ConversationHandler,
-    resp_handler: &ResponseHandler,
+    exec_ctx: &ExecutionContext,
 ) -> ExecutorResult<()> {
-    let mut metadata = ResponseMetadata {
-        model: std::mem::take(&mut ctx.enriched_request.model),
-        previous_response_id: ctx.original_request.previous_response_id.take(),
-        effective_tools: ctx.enriched_request.tools.take(),
-        tool_search_loaded_tools: None,
-        effective_tool_choice: ctx.enriched_request.tool_choice.take().unwrap_or_default(),
-        effective_instructions: ctx.enriched_request.instructions.take(),
+    let metadata = prepare_metadata(&mut ctx, tool_search_metadata);
+    let (output_items, snapshot) = match output {
+        TurnOutput::Response(payload) => (payload.output.as_slice(), ctx.original_request.store.then_some(payload)),
+        TurnOutput::Empty | TurnOutput::Compaction => (&[][..], None),
     };
-    if let Some(tool_search_metadata) = tool_search_metadata {
-        metadata.effective_tools = tool_search_metadata.effective_tools;
-        metadata.tool_search_loaded_tools = Some(tool_search_metadata.loaded_tools);
+    // A standalone compaction stores the window it built.
+    if !matches!(output, TurnOutput::Compaction) {
+        ctx.new_input_items = InOutItem::filter_for_compaction(std::mem::take(&mut ctx.new_input_items));
     }
-    if ctx.original_request.conversation_id.is_some() {
-        conv_handler
-            .execute_turn_with_metadata(ctx, output_items, metadata)
-            .await
+    if ctx.original_request.conversation.is_some() {
+        let items = turn_items(&mut ctx, output_items, None);
+        return exec_ctx.conv_handler.persist(&ctx, items, snapshot, &metadata).await;
+    }
+
+    // A session turn publishes a connection-local checkpoint; it is durable only when the request is stored.
+    let continuation = ctx.continuation.take();
+    let durable = continuation.is_none() || ctx.original_request.store;
+    let mut items = turn_items(&mut ctx, output_items, continuation.as_ref());
+    let checkpoint = continuation
+        .as_ref()
+        .map(|lease| lease.checkpoint(ctx.response_id.clone(), &metadata, &items, durable))
+        .transpose()?;
+    let transient_parent = continuation
+        .as_ref()
+        .filter(|lease| lease.parent.as_ref().is_some_and(|parent| !parent.durable));
+    // A stored child of a transient parent stores the parent's full history: there is no stored parent to extend.
+    if let Some(lease) = transient_parent
+        && durable
+    {
+        items.splice(0..0, lease.parent_items().cloned().map(InOutItem::Input));
+    }
+    let history_item_ids = if durable {
+        exec_ctx.resp_handler.persist(&ctx, items, snapshot, &metadata).await?
     } else {
-        resp_handler
-            .execute_turn_with_metadata(ctx, output_items, metadata)
-            .await
+        Vec::new()
+    };
+    if let Some((lease, checkpoint)) = continuation.zip(checkpoint) {
+        lease.publish(checkpoint.with_history_item_ids(history_item_ids))?;
+    }
+    Ok(())
+}
+
+/// The turn's own history: its input items, then its public output, less any output an in-turn session
+/// compaction already absorbed ([`ResponseContinuation::retains_output`]).
+fn turn_items(
+    ctx: &mut RequestContext,
+    output_items: &[OutputItem],
+    continuation: Option<&ResponseContinuation>,
+) -> Vec<InOutItem> {
+    let mut items = std::mem::take(&mut ctx.new_input_items);
+    items.extend(
+        output_items
+            .iter()
+            .enumerate()
+            .filter(|(index, item)| continuation.is_none_or(|lease| lease.retains_output(*index, item)))
+            .map(|(_, item)| InOutItem::Output(item.clone())),
+    );
+    items
+}
+
+/// The metadata this turn stores for its continuation: the effective settings, the tool-search state, and the
+/// multi-agent tree, moved out of the request context.
+fn prepare_metadata(ctx: &mut RequestContext, tool_search_metadata: Option<ToolSearchMetadata>) -> ResponseMetadata {
+    let (effective_tools, tool_search_loaded_tools) = match tool_search_metadata {
+        Some(tool_search) => (tool_search.effective_tools, Some(tool_search.loaded_tools)),
+        None => (ctx.enriched_request.tools.take(), None),
+    };
+    ResponseMetadata {
+        multi_agent_tree: ctx.multi_agent_tree.take().map(ValidatedTreeCheckpoint::into_snapshot),
+        model: std::mem::take(&mut ctx.enriched_request.model),
+        previous_response_id: ctx.original_request.previous_response_id.clone(),
+        effective_tools,
+        tool_search_loaded_tools,
+        effective_tool_choice: ctx
+            .original_request
+            .tool_choice
+            .take()
+            .or_else(|| ctx.enriched_request.tool_choice.take())
+            .unwrap_or_default(),
+        effective_instructions: ctx.enriched_request.instructions.take(),
     }
 }
 
@@ -146,7 +197,7 @@ pub(crate) async fn persist_prepared_turn(
 /// [`ExecutorError::InvalidRequest`] for unusable IDs or an unfinished response,
 /// [`ExecutorError::Conflict`] for an id already stored, or a storage error.
 pub async fn commit(
-    ctx: RequestContext,
+    mut ctx: RequestContext,
     payload: ResponsePayload,
     exec_ctx: &ExecutionContext,
 ) -> ExecutorResult<ResponsePayload> {
@@ -164,98 +215,19 @@ pub async fn commit(
             payload.status
         )));
     }
-    if matches!(status, ResponseStatus::Completed | ResponseStatus::Incomplete) {
-        validate_output_call_ids(&ctx, &payload.output, &exec_ctx.resp_handler).await?;
+    if matches!(status, ResponseStatus::Completed | ResponseStatus::Incomplete)
+        && ctx.checkpoint.is_none()
+        && ctx.continuation.is_none()
+        && ctx.original_request.previous_response_id.is_some()
+    {
+        // A split context omits the checkpoint. Load the parent with its history, so the turn's history starts where
+        // rehydration starts it: at the latest compaction a turn produced. Only storage keeps the history items.
+        if let Some(mut checkpoint) = exec_ctx.resp_handler.rehydrate(&mut ctx, None).await? {
+            checkpoint.history = Vec::new();
+            ctx.checkpoint = Some(checkpoint);
+        }
     }
 
-    persist_if_needed(
-        payload.clone(),
-        ctx,
-        None,
-        exec_ctx.conv_handler.clone(),
-        exec_ctx.resp_handler.clone(),
-    )
-    .await?;
+    Box::pin(persist(ctx, TurnOutput::Response(&payload), None, exec_ctx)).await?;
     Ok(payload)
-}
-
-async fn validate_output_call_ids(
-    ctx: &RequestContext,
-    output_items: &[OutputItem],
-    resp_handler: &ResponseHandler,
-) -> ExecutorResult<()> {
-    let mut call_ids = HashMap::new();
-    for (index, item) in output_items.iter().enumerate() {
-        let (item_type, call_id) = match item {
-            OutputItem::FunctionCall(call) => ("function_call", call.call_id.as_str()),
-            OutputItem::ToolSearchCall(call) => ("tool_search_call", call.call_id.as_str()),
-            OutputItem::CustomToolCall(call) => ("custom_tool_call", call.call_id.as_str()),
-            OutputItem::ShellCall(call) => ("shell_call", call.call_id.as_str()),
-            _ => continue,
-        };
-        if call_id.is_empty() {
-            return Err(ExecutorError::InvalidRequest(format!(
-                "upstream response output[{index}] {item_type} has no valid 'call_id'"
-            )));
-        }
-        if let Some((first_index, _)) = call_ids.insert(call_id, (index, item_type)) {
-            return Err(ExecutorError::InvalidRequest(format!(
-                "upstream response output[{index}] {item_type} repeats 'call_id' from output[{first_index}]"
-            )));
-        }
-    }
-    if call_ids.is_empty() {
-        return Ok(());
-    }
-
-    if ctx.continuation.is_some() {
-        // Rehydration already combined the pinned parent with normalized input.
-        // Validate that effective window, excluding calls superseded by compaction.
-        return validate_history_call_ids(ctx.enriched_request.input.model_items().map(input_call_id), &call_ids);
-    }
-    let history = resp_handler.rehydrate(ctx).await?;
-    validate_history_call_ids(history.iter().map(stored_call_id), &call_ids)?;
-    for (input_index, item) in ctx.new_input_items.iter().enumerate() {
-        if let Some((output_index, item_type)) = input_call_id(item).and_then(|call_id| call_ids.get(call_id)) {
-            return Err(ExecutorError::InvalidRequest(format!(
-                "upstream response output[{output_index}] {item_type} repeats 'call_id' from request input[{input_index}]"
-            )));
-        }
-    }
-    Ok(())
-}
-
-fn validate_history_call_ids<'a>(
-    history: impl Iterator<Item = Option<&'a str>>,
-    call_ids: &HashMap<&str, (usize, &str)>,
-) -> ExecutorResult<()> {
-    for (history_index, call_id) in history.enumerate() {
-        if let Some((output_index, item_type)) = call_id.and_then(|id| call_ids.get(id)) {
-            return Err(ExecutorError::InvalidRequest(format!(
-                "upstream response output[{output_index}] {item_type} repeats 'call_id' from continued history item[{history_index}]"
-            )));
-        }
-    }
-    Ok(())
-}
-
-fn stored_call_id(item: &InOutItem) -> Option<&str> {
-    match item {
-        InOutItem::Input(item) => input_call_id(item),
-        InOutItem::Output(OutputItem::FunctionCall(call)) => Some(&call.call_id),
-        InOutItem::Output(OutputItem::ToolSearchCall(call)) => Some(&call.call_id),
-        InOutItem::Output(OutputItem::CustomToolCall(call)) => Some(&call.call_id),
-        InOutItem::Output(OutputItem::ShellCall(call)) => Some(&call.call_id),
-        InOutItem::Output(_) => None,
-    }
-}
-
-fn input_call_id(item: &InputItem) -> Option<&str> {
-    match item {
-        InputItem::FunctionCall(call) => Some(&call.call_id),
-        InputItem::ToolSearchCall(call) => Some(&call.call_id),
-        InputItem::CustomToolCall(call) => Some(&call.call_id),
-        InputItem::ShellCall(call) => Some(&call.call_id),
-        _ => None,
-    }
 }

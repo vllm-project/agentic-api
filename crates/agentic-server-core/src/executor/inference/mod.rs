@@ -6,8 +6,8 @@ pub mod http;
 use futures::Stream;
 use std::pin::Pin;
 
-pub use http::{call_inference, call_inference_limited};
-pub(super) use http::{fetch_response_json_limited, fetch_response_json_with_headers, response_lines, send_request};
+pub(crate) use http::UpstreamHeaders;
+pub(super) use http::{fetch_response_json, response_lines, send_request};
 
 /// SSE stream of raw lines sent to the client (`data: …\n\n` per event).
 pub type BoxStream = Pin<Box<dyn Stream<Item = String> + Send>>;

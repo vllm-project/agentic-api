@@ -9,21 +9,14 @@ use vllm_chat::{AssistantContentBlock, AssistantToolCall, ChatContent, ChatConte
 
 use super::unsupported;
 
-pub(super) fn convert(input: &ResponsesInput, instructions: Option<&str>) -> Result<Vec<ChatMessage>> {
+pub(super) fn convert(input: ResponsesInput, instructions: Option<&str>) -> Result<Vec<ChatMessage>> {
     let mut messages = Vec::new();
     if let Some(instructions) = instructions {
         messages.push(ChatMessage::system(instructions));
     }
-    let items = match input {
-        ResponsesInput::Items(items) => items,
-        ResponsesInput::Text(text) => {
-            messages.push(ChatMessage::user(text.as_str()));
-            return Ok(messages);
-        }
-    };
     let mut assistant = Vec::new();
-    for item in items {
-        match item {
+    for item in Vec::<InputItem>::from(input) {
+        match &item {
             InputItem::Message(message) if message.role == "assistant" => match &message.content {
                 InputMessageContent::Text(text) => assistant.push(AssistantContentBlock::Text { text: text.clone() }),
                 InputMessageContent::Parts(parts) => {
@@ -55,8 +48,6 @@ pub(super) fn convert(input: &ResponsesInput, instructions: Option<&str>) -> Res
                 }
             }
             InputItem::FunctionCall(call) => assistant.push(function_call(call)?),
-            InputItem::CustomToolCall(call) => assistant.push(function_call(&call.clone().into())?),
-            InputItem::ShellCall(call) => assistant.push(function_call(&call.clone().into())?),
             other => {
                 flush_assistant(&mut messages, &mut assistant);
                 messages.push(match other {
@@ -70,8 +61,6 @@ pub(super) fn convert(input: &ResponsesInput, instructions: Option<&str>) -> Res
                         }
                     }
                     InputItem::FunctionCallOutput(output) => tool_output(output)?,
-                    InputItem::CustomToolCallOutput(output) => tool_output(&output.clone().into())?,
-                    InputItem::ShellCallOutput(output) => tool_output(&output.clone().into())?,
                     _ => return Err(unsupported("unresolved or unsupported history item").into()),
                 });
             }

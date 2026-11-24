@@ -2,6 +2,14 @@
 
 Instructions for AI coding agents working on this repository.
 
+## Before coding or reviewing
+
+Read [`.agents/skills/agentic-api-engineering/SKILL.md`](.agents/skills/agentic-api-engineering/SKILL.md) before implementing,
+refactoring, fixing, or reviewing code. It defines repository-wide discovery, reuse of existing typed extension
+points, Rust design and Clippy expectations, provider documentation/parity evidence, and the recorder/test workflow.
+Apply its shared preparation once. For Rust changes, use the bundled
+[Rust skill](.agents/skills/rust-skills/SKILL.md); use the focused review skills where relevant.
+
 ## Project Overview
 
 This repository is Rust-first under the `vllm-project` GitHub organization.
@@ -27,10 +35,12 @@ This repository is Rust-first under the `vllm-project` GitHub organization.
 ├── TERMINOLOGY.md              # Normative project vocabulary
 ├── crates/agentic-server/       # Axum binary, transport handlers, and configuration
 ├── crates/agentic-server-core/  # Protocol types, execution, tools, and persistence
+├── crates/agentic-llm-d/        # Split-execution state backend for the llm-d coordinator
+├── crates/agentic-cli-docs/     # Build-time generator for the CLI reference docs
 ├── crates/agentic-praxis/       # Praxis integration
 ├── python/agentic_api/          # Python distribution, diagnostics, and launcher
 ├── tests/python/                # Python package and CLI tests
-├── skills/                      # Repository-specific agent review workflows
+├── .agents/skills/              # Engineering, Rust, and focused review skills
 ├── pyproject.toml               # Python wheel build metadata
 ├── Cargo.toml                    # Workspace manifest and shared dependencies/lints
 └── docs/                         # Documentation (MkDocs)
@@ -106,7 +116,8 @@ uv run mkdocs serve
 - Maximum line length: 120 characters (configured in `rustfmt.toml`).
 - `unsafe` code is forbidden (`unsafe_code = "forbid"` in `Cargo.toml`).
 - Clippy `all` lints are denied; `pedantic` lints are warnings.
-- Minimum supported Rust version (MSRV): 1.85.
+- Minimum supported Rust version (MSRV): 1.98.1, declared as `rust-version` in `Cargo.toml` and checked by the
+  `msrv` CI job. Keep `msrv` in `clippy.toml` equal to it.
 
 ### The agentic-server and core design architecture
 
@@ -142,8 +153,18 @@ into synchronous ingestion [#243](https://github.com/vllm-project/agentic-api/is
   semantic event or output-item kind. Test invalid lifecycle order, identifier/index mismatch, duplicate completion,
   terminal finalization, slow consumers, and disconnects when the changed boundary can encounter them.
 
-Use [`skills/executor-architecture-review/SKILL.md`](skills/executor-architecture-review/SKILL.md) for a focused,
+Use [`.agents/skills/executor-architecture-review/SKILL.md`](.agents/skills/executor-architecture-review/SKILL.md) for a focused,
 read-only boundary review while planning or reviewing these changes.
+
+#### Storage change rules
+
+Read [What a turn persists](ARCHITECTURE.md#what-a-turn-persists) and
+[Schema, migrations, and where data goes](ARCHITECTURE.md#schema-migrations-and-where-data-goes) before changing
+the schema, a migration, or what is persisted. Stored history holds client-facing items only; model-facing shapes are
+built at the one lowering point for each request and are never stored. Model SQL stays portable across SQLite and PostgreSQL; backend
+differences belong in `storage/pool.rs` and `storage/schema.rs`. Keep `responses.metadata` to what a continuation
+needs, and give data read by another path its own column. Use
+[`.agents/skills/storage-schema-change/SKILL.md`](.agents/skills/storage-schema-change/SKILL.md) as the checklist.
 
 ## Rust Best Practices
 
@@ -177,8 +198,7 @@ read-only boundary review while planning or reviewing these changes.
 
 ## Pull Requests
 
-- Target the `main` branch.
-- Include two sections in the PR description:
-  - **Summary** -- what the PR does and why.
-  - **Test Plan** -- how the changes were verified.
+- Target the `main` branch and follow the pull request requirements in the
+  [maintainer standards](.agents/skills/maintainer-standards/SKILL.md), including the open-PR limit and the
+  [PR description](.agents/skills/maintainer-standards/references/pr-description.md) format.
 - Ensure all pre-commit hooks pass before opening the PR.

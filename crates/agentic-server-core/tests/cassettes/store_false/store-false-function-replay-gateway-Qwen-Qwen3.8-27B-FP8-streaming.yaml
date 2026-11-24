@@ -1,0 +1,1044 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Call get_job_status for job-382, then reply with just its status.
+      max_output_tokens: 2048
+      model: Qwen/Qwen3.8-27B-FP8
+      store: false
+      stream: true
+      tool_choice:
+        name: get_job_status
+        type: function
+      tools:
+      - description: Query the pipeline orchestrator for a job's current state, metadata,
+          and failure info.
+        name: get_job_status
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier, e.g. job-382
+              type: string
+          required:
+          - job_id
+          type: object
+        strict: true
+        type: function
+      - description: Fetch error logs and stack traces for a failed pipeline job.
+        name: get_error_logs
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier
+              type: string
+            max_entries:
+              description: Maximum log entries to return (default 50)
+              type: integer
+            severity:
+              description: Minimum severity filter
+              enum:
+              - WARN
+              - ERROR
+              - FATAL
+              - ALL
+              type: string
+          required:
+          - job_id
+          - severity
+          - max_entries
+          type: object
+        strict: true
+        type: function
+      - description: Search internal operations runbooks for troubleshooting procedures.
+        name: search_runbook
+        parameters:
+          additionalProperties: false
+          properties:
+            max_results:
+              description: Maximum results to return (default 5)
+              type: integer
+            query:
+              description: Natural language search query
+              type: string
+          required:
+          - query
+          - max_results
+          type: object
+        strict: true
+        type: function
+      - description: Execute a Python analysis script in a sandboxed environment for
+          log parsing or data inspection.
+        name: run_analysis
+        parameters:
+          additionalProperties: false
+          properties:
+            code:
+              description: Python code to execute
+              type: string
+            timeout_seconds:
+              description: Execution timeout (default 30)
+              type: integer
+          required:
+          - code
+          - timeout_seconds
+          type: object
+        strict: true
+        type: function
+      - description: Restart a failed pipeline job with optional configuration overrides.
+        name: restart_job
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier to restart
+              type: string
+            memory_override_gb:
+              description: Override memory limit in GB
+              type: integer
+            priority:
+              description: Queue priority
+              enum:
+              - low
+              - normal
+              - high
+              type: string
+            skip_completed_stages:
+              description: Skip stages that completed successfully (default true)
+              type: boolean
+          required:
+          - job_id
+          - memory_override_gb
+          - skip_completed_stages
+          - priority
+          type: object
+        strict: true
+        type: function
+      - description: Search the public web for technical documentation, blog posts,
+          and known issues.
+        name: web_search
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: Search query
+              type: string
+          required:
+          - query
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a17756-57c0-7a40-80f1-a80a64f1aa85","created_at":1793003509,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":{"type":"function","name":"get_job_status"},"tools":[{"type":"function","name":"get_job_status","description":"Query
+      the pipeline orchestrator for a job''s current state, metadata, and failure
+      info.","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier, e.g. job-382"}},"required":["job_id"],"additionalProperties":false},"strict":true},{"type":"function","name":"get_error_logs","description":"Fetch
+      error logs and stack traces for a failed pipeline job.","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier"},"severity":{"type":"string","enum":["WARN","ERROR","FATAL","ALL"],"description":"Minimum
+      severity filter"},"max_entries":{"type":"integer","description":"Maximum log
+      entries to return (default 50)"}},"required":["job_id","severity","max_entries"],"additionalProperties":false},"strict":true},{"type":"function","name":"search_runbook","description":"Search
+      internal operations runbooks for troubleshooting procedures.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Natural
+      language search query"},"max_results":{"type":"integer","description":"Maximum
+      results to return (default 5)"}},"required":["query","max_results"],"additionalProperties":false},"strict":true},{"type":"function","name":"run_analysis","description":"Execute
+      a Python analysis script in a sandboxed environment for log parsing or data
+      inspection.","parameters":{"type":"object","properties":{"code":{"type":"string","description":"Python
+      code to execute"},"timeout_seconds":{"type":"integer","description":"Execution
+      timeout (default 30)"}},"required":["code","timeout_seconds"],"additionalProperties":false},"strict":true},{"type":"function","name":"restart_job","description":"Restart
+      a failed pipeline job with optional configuration overrides.","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier to restart"},"memory_override_gb":{"type":"integer","description":"Override
+      memory limit in GB"},"skip_completed_stages":{"type":"boolean","description":"Skip
+      stages that completed successfully (default true)"},"priority":{"type":"string","enum":["low","normal","high"],"description":"Queue
+      priority"}},"required":["job_id","memory_override_gb","skip_completed_stages","priority"],"additionalProperties":false},"strict":true},{"type":"function","name":"web_search","description":"Search
+      the public web for technical documentation, blog posts, and known issues.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Search
+      query"}},"required":["query"],"additionalProperties":false},"strict":true}],"top_p":1.0,"background":false,"max_output_tokens":2048,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":false,"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null,"error":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a17756-57c0-7a40-80f1-a80a64f1aa85","created_at":1793003509,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":{"type":"function","name":"get_job_status"},"tools":[{"type":"function","name":"get_job_status","description":"Query
+      the pipeline orchestrator for a job''s current state, metadata, and failure
+      info.","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier, e.g. job-382"}},"required":["job_id"],"additionalProperties":false},"strict":true},{"type":"function","name":"get_error_logs","description":"Fetch
+      error logs and stack traces for a failed pipeline job.","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier"},"severity":{"type":"string","enum":["WARN","ERROR","FATAL","ALL"],"description":"Minimum
+      severity filter"},"max_entries":{"type":"integer","description":"Maximum log
+      entries to return (default 50)"}},"required":["job_id","severity","max_entries"],"additionalProperties":false},"strict":true},{"type":"function","name":"search_runbook","description":"Search
+      internal operations runbooks for troubleshooting procedures.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Natural
+      language search query"},"max_results":{"type":"integer","description":"Maximum
+      results to return (default 5)"}},"required":["query","max_results"],"additionalProperties":false},"strict":true},{"type":"function","name":"run_analysis","description":"Execute
+      a Python analysis script in a sandboxed environment for log parsing or data
+      inspection.","parameters":{"type":"object","properties":{"code":{"type":"string","description":"Python
+      code to execute"},"timeout_seconds":{"type":"integer","description":"Execution
+      timeout (default 30)"}},"required":["code","timeout_seconds"],"additionalProperties":false},"strict":true},{"type":"function","name":"restart_job","description":"Restart
+      a failed pipeline job with optional configuration overrides.","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier to restart"},"memory_override_gb":{"type":"integer","description":"Override
+      memory limit in GB"},"skip_completed_stages":{"type":"boolean","description":"Skip
+      stages that completed successfully (default true)"},"priority":{"type":"string","enum":["low","normal","high"],"description":"Queue
+      priority"}},"required":["job_id","memory_override_gb","skip_completed_stages","priority"],"additionalProperties":false},"strict":true},{"type":"function","name":"web_search","description":"Search
+      the public web for technical documentation, blog posts, and known issues.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Search
+      query"}},"required":["query"],"additionalProperties":false},"strict":true}],"top_p":1.0,"background":false,"max_output_tokens":2048,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":false,"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null,"error":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"rs_9923a141980a4652","summary":[],"type":"reasoning","content":[],"status":"in_progress"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":3,"output_index":0,"content_index":0,"delta":"The","item_id":"rs_9923a141980a4652"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":4,"output_index":0,"content_index":0,"delta":"
+      user","item_id":"rs_9923a141980a4652"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":5,"output_index":0,"content_index":0,"delta":"
+      wants","item_id":"rs_9923a141980a4652"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":6,"output_index":0,"content_index":0,"delta":"
+      me","item_id":"rs_9923a141980a4652"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":7,"output_index":0,"content_index":0,"delta":"
+      to","item_id":"rs_9923a141980a4652"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":8,"output_index":0,"content_index":0,"delta":"
+      call","item_id":"rs_9923a141980a4652"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":9,"output_index":0,"content_index":0,"delta":"
+      get","item_id":"rs_9923a141980a4652"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":10,"output_index":0,"content_index":0,"delta":"_job","item_id":"rs_9923a141980a4652"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":11,"output_index":0,"content_index":0,"delta":"_status","item_id":"rs_9923a141980a4652"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":12,"output_index":0,"content_index":0,"delta":"
+      for","item_id":"rs_9923a141980a4652"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":13,"output_index":0,"content_index":0,"delta":"
+      job","item_id":"rs_9923a141980a4652"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":14,"output_index":0,"content_index":0,"delta":"-","item_id":"rs_9923a141980a4652"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":15,"output_index":0,"content_index":0,"delta":"3","item_id":"rs_9923a141980a4652"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":16,"output_index":0,"content_index":0,"delta":"8","item_id":"rs_9923a141980a4652"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":17,"output_index":0,"content_index":0,"delta":"2","item_id":"rs_9923a141980a4652"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":18,"output_index":0,"content_index":0,"delta":"
+      and","item_id":"rs_9923a141980a4652"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":19,"output_index":0,"content_index":0,"delta":"
+      reply","item_id":"rs_9923a141980a4652"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":20,"output_index":0,"content_index":0,"delta":"
+      with","item_id":"rs_9923a141980a4652"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":21,"output_index":0,"content_index":0,"delta":"
+      just","item_id":"rs_9923a141980a4652"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":22,"output_index":0,"content_index":0,"delta":"
+      its","item_id":"rs_9923a141980a4652"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":23,"output_index":0,"content_index":0,"delta":"
+      status","item_id":"rs_9923a141980a4652"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":24,"output_index":0,"content_index":0,"delta":".","item_id":"rs_9923a141980a4652"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":25,"output_index":0,"content_index":0,"delta":"\n","item_id":"rs_9923a141980a4652"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.done
+
+      '
+    - 'data: {"type":"response.reasoning_text.done","sequence_number":26,"output_index":0,"content_index":0,"item_id":"rs_9923a141980a4652","text":"The
+      user wants me to call get_job_status for job-382 and reply with just its status.\n"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":27,"output_index":0,"item":{"id":"rs_9923a141980a4652","summary":[],"type":"reasoning","content":[{"text":"The
+      user wants me to call get_job_status for job-382 and reply with just its status.\n","type":"reasoning_text"}],"status":"completed"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":28,"output_index":1,"item":{"arguments":"","call_id":"chatcmpl-tool-8f386bf248d63fcb","name":"get_job_status","type":"function_call","id":"fc_924332f5264417ab","async":null,"caller":null,"namespace":null,"status":"in_progress"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":29,"output_index":1,"delta":"{\"job_id\":
+      \"","item_id":"fc_924332f5264417ab"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":30,"output_index":1,"delta":"job","item_id":"fc_924332f5264417ab"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":31,"output_index":1,"delta":"-","item_id":"fc_924332f5264417ab"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":32,"output_index":1,"delta":"3","item_id":"fc_924332f5264417ab"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":33,"output_index":1,"delta":"8","item_id":"fc_924332f5264417ab"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":34,"output_index":1,"delta":"2","item_id":"fc_924332f5264417ab"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":35,"output_index":1,"delta":"\"}","item_id":"fc_924332f5264417ab"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.done
+
+      '
+    - 'data: {"type":"response.function_call_arguments.done","sequence_number":36,"output_index":1,"arguments":"{\"job_id\":
+      \"job-382\"}","item_id":"fc_924332f5264417ab","name":"get_job_status"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":37,"output_index":1,"item":{"arguments":"{\"job_id\":
+      \"job-382\"}","call_id":"chatcmpl-tool-8f386bf248d63fcb","name":"get_job_status","type":"function_call","id":"fc_924332f5264417ab","async":null,"caller":null,"namespace":null,"status":"completed"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","sequence_number":38,"response":{"id":"resp_01a17756-57c0-7a40-80f1-a80a64f1aa85","object":"response","created_at":1793003510,"model":"Qwen/Qwen3.8-27B-FP8","status":"completed","output":[{"type":"reasoning","id":"rs_9923a141980a4652","content":[{"type":"reasoning_text","text":"The
+      user wants me to call get_job_status for job-382 and reply with just its status.\n"}],"summary":[],"status":"completed"},{"type":"function_call","id":"fc_924332f5264417ab","call_id":"chatcmpl-tool-8f386bf248d63fcb","name":"get_job_status","arguments":"{\"job_id\":
+      \"job-382\"}","status":"completed"}],"usage":{"input_tokens":975,"output_tokens":56,"total_tokens":1031,"input_tokens_details":{"cached_tokens":784,"cache_write_tokens":0},"output_tokens_details":{"reasoning_tokens":23}},"incomplete_details":null,"error":null,"previous_response_id":null,"instructions":null,"max_tool_calls":null,"service_tier":"auto","tools":[{"type":"function","name":"get_job_status","description":"Query
+      the pipeline orchestrator for a job''s current state, metadata, and failure
+      info.","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier, e.g. job-382"}},"required":["job_id"],"additionalProperties":false},"strict":true},{"type":"function","name":"get_error_logs","description":"Fetch
+      error logs and stack traces for a failed pipeline job.","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier"},"severity":{"type":"string","enum":["WARN","ERROR","FATAL","ALL"],"description":"Minimum
+      severity filter"},"max_entries":{"type":"integer","description":"Maximum log
+      entries to return (default 50)"}},"required":["job_id","severity","max_entries"],"additionalProperties":false},"strict":true},{"type":"function","name":"search_runbook","description":"Search
+      internal operations runbooks for troubleshooting procedures.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Natural
+      language search query"},"max_results":{"type":"integer","description":"Maximum
+      results to return (default 5)"}},"required":["query","max_results"],"additionalProperties":false},"strict":true},{"type":"function","name":"run_analysis","description":"Execute
+      a Python analysis script in a sandboxed environment for log parsing or data
+      inspection.","parameters":{"type":"object","properties":{"code":{"type":"string","description":"Python
+      code to execute"},"timeout_seconds":{"type":"integer","description":"Execution
+      timeout (default 30)"}},"required":["code","timeout_seconds"],"additionalProperties":false},"strict":true},{"type":"function","name":"restart_job","description":"Restart
+      a failed pipeline job with optional configuration overrides.","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier to restart"},"memory_override_gb":{"type":"integer","description":"Override
+      memory limit in GB"},"skip_completed_stages":{"type":"boolean","description":"Skip
+      stages that completed successfully (default true)"},"priority":{"type":"string","enum":["low","normal","high"],"description":"Queue
+      priority"}},"required":["job_id","memory_override_gb","skip_completed_stages","priority"],"additionalProperties":false},"strict":true},{"type":"function","name":"web_search","description":"Search
+      the public web for technical documentation, blog posts, and known issues.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Search
+      query"}},"required":["query"],"additionalProperties":false},"strict":true}],"tool_choice":{"type":"function","name":"get_job_status"},"completed_at":1793003510,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":1.0,"reasoning":null,"max_output_tokens":2048,"store":false,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null}}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - content: Call get_job_status for job-382, then reply with just its status.
+        role: user
+      - content:
+        - text: 'The user wants me to call get_job_status for job-382 and reply with
+            just its status.
+
+            '
+          type: reasoning_text
+        id: rs_9923a141980a4652
+        status: completed
+        summary: []
+        type: reasoning
+      - arguments: '{"job_id": "job-382"}'
+        call_id: chatcmpl-tool-8f386bf248d63fcb
+        id: fc_924332f5264417ab
+        name: get_job_status
+        status: completed
+        type: function_call
+      - call_id: chatcmpl-tool-8f386bf248d63fcb
+        output: '{"job_id": "job-382", "status": "failed", "error_type": "OutOfMemoryError",
+          "failed_at": "2024-01-15T03:22:11Z", "stage": "transform", "memory_used_gb":
+          31.2, "memory_limit_gb": 32, "pipeline": "etl-daily-ingest", "owner": "data-platform-team"}'
+        type: function_call_output
+      max_output_tokens: 2048
+      model: Qwen/Qwen3.8-27B-FP8
+      store: false
+      stream: true
+      tool_choice: none
+      tools:
+      - description: Query the pipeline orchestrator for a job's current state, metadata,
+          and failure info.
+        name: get_job_status
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier, e.g. job-382
+              type: string
+          required:
+          - job_id
+          type: object
+        strict: true
+        type: function
+      - description: Fetch error logs and stack traces for a failed pipeline job.
+        name: get_error_logs
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier
+              type: string
+            max_entries:
+              description: Maximum log entries to return (default 50)
+              type: integer
+            severity:
+              description: Minimum severity filter
+              enum:
+              - WARN
+              - ERROR
+              - FATAL
+              - ALL
+              type: string
+          required:
+          - job_id
+          - severity
+          - max_entries
+          type: object
+        strict: true
+        type: function
+      - description: Search internal operations runbooks for troubleshooting procedures.
+        name: search_runbook
+        parameters:
+          additionalProperties: false
+          properties:
+            max_results:
+              description: Maximum results to return (default 5)
+              type: integer
+            query:
+              description: Natural language search query
+              type: string
+          required:
+          - query
+          - max_results
+          type: object
+        strict: true
+        type: function
+      - description: Execute a Python analysis script in a sandboxed environment for
+          log parsing or data inspection.
+        name: run_analysis
+        parameters:
+          additionalProperties: false
+          properties:
+            code:
+              description: Python code to execute
+              type: string
+            timeout_seconds:
+              description: Execution timeout (default 30)
+              type: integer
+          required:
+          - code
+          - timeout_seconds
+          type: object
+        strict: true
+        type: function
+      - description: Restart a failed pipeline job with optional configuration overrides.
+        name: restart_job
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier to restart
+              type: string
+            memory_override_gb:
+              description: Override memory limit in GB
+              type: integer
+            priority:
+              description: Queue priority
+              enum:
+              - low
+              - normal
+              - high
+              type: string
+            skip_completed_stages:
+              description: Skip stages that completed successfully (default true)
+              type: boolean
+          required:
+          - job_id
+          - memory_override_gb
+          - skip_completed_stages
+          - priority
+          type: object
+        strict: true
+        type: function
+      - description: Search the public web for technical documentation, blog posts,
+          and known issues.
+        name: web_search
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: Search query
+              type: string
+          required:
+          - query
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a17756-6279-77a2-80b7-d3f5fd5d70b1","created_at":1793003512,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"none","tools":[{"type":"function","name":"get_job_status","description":"Query
+      the pipeline orchestrator for a job''s current state, metadata, and failure
+      info.","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier, e.g. job-382"}},"required":["job_id"],"additionalProperties":false},"strict":true},{"type":"function","name":"get_error_logs","description":"Fetch
+      error logs and stack traces for a failed pipeline job.","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier"},"severity":{"type":"string","enum":["WARN","ERROR","FATAL","ALL"],"description":"Minimum
+      severity filter"},"max_entries":{"type":"integer","description":"Maximum log
+      entries to return (default 50)"}},"required":["job_id","severity","max_entries"],"additionalProperties":false},"strict":true},{"type":"function","name":"search_runbook","description":"Search
+      internal operations runbooks for troubleshooting procedures.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Natural
+      language search query"},"max_results":{"type":"integer","description":"Maximum
+      results to return (default 5)"}},"required":["query","max_results"],"additionalProperties":false},"strict":true},{"type":"function","name":"run_analysis","description":"Execute
+      a Python analysis script in a sandboxed environment for log parsing or data
+      inspection.","parameters":{"type":"object","properties":{"code":{"type":"string","description":"Python
+      code to execute"},"timeout_seconds":{"type":"integer","description":"Execution
+      timeout (default 30)"}},"required":["code","timeout_seconds"],"additionalProperties":false},"strict":true},{"type":"function","name":"restart_job","description":"Restart
+      a failed pipeline job with optional configuration overrides.","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier to restart"},"memory_override_gb":{"type":"integer","description":"Override
+      memory limit in GB"},"skip_completed_stages":{"type":"boolean","description":"Skip
+      stages that completed successfully (default true)"},"priority":{"type":"string","enum":["low","normal","high"],"description":"Queue
+      priority"}},"required":["job_id","memory_override_gb","skip_completed_stages","priority"],"additionalProperties":false},"strict":true},{"type":"function","name":"web_search","description":"Search
+      the public web for technical documentation, blog posts, and known issues.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Search
+      query"}},"required":["query"],"additionalProperties":false},"strict":true}],"top_p":1.0,"background":false,"max_output_tokens":2048,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":false,"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null,"error":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a17756-6279-77a2-80b7-d3f5fd5d70b1","created_at":1793003512,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"none","tools":[{"type":"function","name":"get_job_status","description":"Query
+      the pipeline orchestrator for a job''s current state, metadata, and failure
+      info.","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier, e.g. job-382"}},"required":["job_id"],"additionalProperties":false},"strict":true},{"type":"function","name":"get_error_logs","description":"Fetch
+      error logs and stack traces for a failed pipeline job.","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier"},"severity":{"type":"string","enum":["WARN","ERROR","FATAL","ALL"],"description":"Minimum
+      severity filter"},"max_entries":{"type":"integer","description":"Maximum log
+      entries to return (default 50)"}},"required":["job_id","severity","max_entries"],"additionalProperties":false},"strict":true},{"type":"function","name":"search_runbook","description":"Search
+      internal operations runbooks for troubleshooting procedures.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Natural
+      language search query"},"max_results":{"type":"integer","description":"Maximum
+      results to return (default 5)"}},"required":["query","max_results"],"additionalProperties":false},"strict":true},{"type":"function","name":"run_analysis","description":"Execute
+      a Python analysis script in a sandboxed environment for log parsing or data
+      inspection.","parameters":{"type":"object","properties":{"code":{"type":"string","description":"Python
+      code to execute"},"timeout_seconds":{"type":"integer","description":"Execution
+      timeout (default 30)"}},"required":["code","timeout_seconds"],"additionalProperties":false},"strict":true},{"type":"function","name":"restart_job","description":"Restart
+      a failed pipeline job with optional configuration overrides.","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier to restart"},"memory_override_gb":{"type":"integer","description":"Override
+      memory limit in GB"},"skip_completed_stages":{"type":"boolean","description":"Skip
+      stages that completed successfully (default true)"},"priority":{"type":"string","enum":["low","normal","high"],"description":"Queue
+      priority"}},"required":["job_id","memory_override_gb","skip_completed_stages","priority"],"additionalProperties":false},"strict":true},{"type":"function","name":"web_search","description":"Search
+      the public web for technical documentation, blog posts, and known issues.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Search
+      query"}},"required":["query"],"additionalProperties":false},"strict":true}],"top_p":1.0,"background":false,"max_output_tokens":2048,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":false,"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null,"error":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"rs_b5bd08cee494a4e3","summary":[],"type":"reasoning","content":[],"status":"in_progress"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":3,"output_index":0,"content_index":0,"delta":"The","item_id":"rs_b5bd08cee494a4e3"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":4,"output_index":0,"content_index":0,"delta":"
+      user","item_id":"rs_b5bd08cee494a4e3"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":5,"output_index":0,"content_index":0,"delta":"
+      asked","item_id":"rs_b5bd08cee494a4e3"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":6,"output_index":0,"content_index":0,"delta":"
+      me","item_id":"rs_b5bd08cee494a4e3"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":7,"output_index":0,"content_index":0,"delta":"
+      to","item_id":"rs_b5bd08cee494a4e3"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":8,"output_index":0,"content_index":0,"delta":"
+      reply","item_id":"rs_b5bd08cee494a4e3"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":9,"output_index":0,"content_index":0,"delta":"
+      with","item_id":"rs_b5bd08cee494a4e3"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":10,"output_index":0,"content_index":0,"delta":"
+      just","item_id":"rs_b5bd08cee494a4e3"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":11,"output_index":0,"content_index":0,"delta":"
+      the","item_id":"rs_b5bd08cee494a4e3"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":12,"output_index":0,"content_index":0,"delta":"
+      status","item_id":"rs_b5bd08cee494a4e3"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":13,"output_index":0,"content_index":0,"delta":".","item_id":"rs_b5bd08cee494a4e3"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":14,"output_index":0,"content_index":0,"delta":"\n","item_id":"rs_b5bd08cee494a4e3"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.done
+
+      '
+    - 'data: {"type":"response.reasoning_text.done","sequence_number":15,"output_index":0,"content_index":0,"item_id":"rs_b5bd08cee494a4e3","text":"The
+      user asked me to reply with just the status.\n"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":16,"output_index":0,"item":{"id":"rs_b5bd08cee494a4e3","summary":[],"type":"reasoning","content":[{"text":"The
+      user asked me to reply with just the status.\n","type":"reasoning_text"}],"status":"completed"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":17,"output_index":1,"item":{"id":"msg_97136d44528533fd","content":[],"role":"assistant","status":"in_progress","type":"message"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","sequence_number":18,"output_index":1,"content_index":0,"item_id":"msg_97136d44528533fd","part":{"annotations":[],"text":"","type":"output_text","logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":19,"output_index":1,"content_index":0,"delta":"\n\nfailed","item_id":"msg_97136d44528533fd","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","sequence_number":20,"output_index":1,"content_index":0,"item_id":"msg_97136d44528533fd","logprobs":[],"text":"\n\nfailed"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","sequence_number":21,"output_index":1,"content_index":0,"item_id":"msg_97136d44528533fd","part":{"annotations":[],"text":"\n\nfailed","type":"output_text","logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":22,"output_index":1,"item":{"id":"msg_97136d44528533fd","content":[{"annotations":[],"text":"\n\nfailed","type":"output_text","logprobs":[]}],"role":"assistant","status":"completed","type":"message"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","sequence_number":23,"response":{"id":"resp_01a17756-6279-77a2-80b7-d3f5fd5d70b1","object":"response","created_at":1793003512,"model":"Qwen/Qwen3.8-27B-FP8","status":"completed","output":[{"type":"reasoning","id":"rs_b5bd08cee494a4e3","content":[{"type":"reasoning_text","text":"The
+      user asked me to reply with just the status.\n"}],"summary":[],"status":"completed"},{"type":"message","id":"msg_97136d44528533fd","role":"assistant","status":"completed","content":[{"type":"output_text","text":"\n\nfailed","annotations":[]}]}],"usage":{"input_tokens":1144,"output_tokens":16,"total_tokens":1160,"input_tokens_details":{"cached_tokens":784,"cache_write_tokens":0},"output_tokens_details":{"reasoning_tokens":12}},"incomplete_details":null,"error":null,"previous_response_id":null,"instructions":null,"max_tool_calls":null,"service_tier":"auto","tools":[{"type":"function","name":"get_job_status","description":"Query
+      the pipeline orchestrator for a job''s current state, metadata, and failure
+      info.","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier, e.g. job-382"}},"required":["job_id"],"additionalProperties":false},"strict":true},{"type":"function","name":"get_error_logs","description":"Fetch
+      error logs and stack traces for a failed pipeline job.","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier"},"severity":{"type":"string","enum":["WARN","ERROR","FATAL","ALL"],"description":"Minimum
+      severity filter"},"max_entries":{"type":"integer","description":"Maximum log
+      entries to return (default 50)"}},"required":["job_id","severity","max_entries"],"additionalProperties":false},"strict":true},{"type":"function","name":"search_runbook","description":"Search
+      internal operations runbooks for troubleshooting procedures.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Natural
+      language search query"},"max_results":{"type":"integer","description":"Maximum
+      results to return (default 5)"}},"required":["query","max_results"],"additionalProperties":false},"strict":true},{"type":"function","name":"run_analysis","description":"Execute
+      a Python analysis script in a sandboxed environment for log parsing or data
+      inspection.","parameters":{"type":"object","properties":{"code":{"type":"string","description":"Python
+      code to execute"},"timeout_seconds":{"type":"integer","description":"Execution
+      timeout (default 30)"}},"required":["code","timeout_seconds"],"additionalProperties":false},"strict":true},{"type":"function","name":"restart_job","description":"Restart
+      a failed pipeline job with optional configuration overrides.","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+      job identifier to restart"},"memory_override_gb":{"type":"integer","description":"Override
+      memory limit in GB"},"skip_completed_stages":{"type":"boolean","description":"Skip
+      stages that completed successfully (default true)"},"priority":{"type":"string","enum":["low","normal","high"],"description":"Queue
+      priority"}},"required":["job_id","memory_override_gb","skip_completed_stages","priority"],"additionalProperties":false},"strict":true},{"type":"function","name":"web_search","description":"Search
+      the public web for technical documentation, blog posts, and known issues.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Search
+      query"}},"required":["query"],"additionalProperties":false},"strict":true}],"tool_choice":"none","completed_at":1793003512,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":1.0,"reasoning":null,"max_output_tokens":2048,"store":false,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null}}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200

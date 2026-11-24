@@ -16,6 +16,10 @@
 //! passes through from the final round untouched. A single-round turn is
 //! returned exactly as the upstream sent it, while a final round that omits
 //! `usage` after hidden rounds still reports those rounds' counters.
+//!
+//! `usage.server_tool_use` counts the server tool uses of the turn: those the
+//! upstream reported in any round plus the native server tool calls the gateway
+//! ran for the client.
 
 use serde_json::{Map, Value};
 
@@ -29,6 +33,36 @@ const COUNTERS: [&str; 4] = [
 
 type Counters = [Option<u64>; COUNTERS.len()];
 
+/// Fallback responses are delivered but cannot seed another thread turn.
+pub(super) fn has_fallback(usage: Option<&Value>) -> bool {
+    usage
+        .and_then(|usage| usage["iterations"].as_array())
+        .is_some_and(|iterations| {
+            iterations
+                .iter()
+                .any(|iteration| iteration["type"] == "fallback_message")
+        })
+}
+
+/// The `usage.server_tool_use` counters.
+const SERVER_TOOL_COUNTERS: [&str; 2] = ["web_search_requests", "web_fetch_requests"];
+
+type ServerToolCounters = [Option<u64>; SERVER_TOOL_COUNTERS.len()];
+
+/// Server tool uses the gateway performed for the client, reported in
+/// `usage.server_tool_use`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct ServerToolUses {
+    pub(super) web_search_requests: u64,
+    pub(super) web_fetch_requests: u64,
+}
+
+impl ServerToolUses {
+    fn counters(self) -> [u64; SERVER_TOOL_COUNTERS.len()] {
+        [self.web_search_requests, self.web_fetch_requests]
+    }
+}
+
 /// Saturating per-counter totals across the rounds committed so far.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) struct MessagesUsageTotals {
@@ -38,6 +72,12 @@ pub(super) struct MessagesUsageTotals {
     rounds: usize,
     /// The counters the current round reported most recently.
     round: Counters,
+    /// Upstream-reported server tool counters of every committed round.
+    server_committed: ServerToolCounters,
+    /// The server tool counters the current round reported most recently.
+    server_round: ServerToolCounters,
+    /// Native server tool calls the gateway ran for the client.
+    gateway: ServerToolUses,
 }
 
 impl MessagesUsageTotals {
@@ -53,15 +93,39 @@ impl MessagesUsageTotals {
                 *current = Some(value);
             }
         }
+        let server = usage.get("server_tool_use").and_then(Value::as_object);
+        for (current, name) in self.server_round.iter_mut().zip(SERVER_TOOL_COUNTERS) {
+            if let Some(value) = server.and_then(|server| server.get(name)).and_then(Value::as_u64) {
+                *current = Some(value);
+            }
+        }
+    }
+
+    /// Count the server tool uses of native calls the gateway ran.
+    pub(super) fn add_server_tool_uses(&mut self, uses: ServerToolUses) {
+        self.gateway.web_search_requests = self
+            .gateway
+            .web_search_requests
+            .saturating_add(uses.web_search_requests);
+        self.gateway.web_fetch_requests = self.gateway.web_fetch_requests.saturating_add(uses.web_fetch_requests);
+    }
+
+    /// The current round's prompt and completion token counts, for metrics.
+    /// The prompt count includes cache reads and writes, which Anthropic
+    /// reports apart from `input_tokens`; a count no counter reported is `None`.
+    pub(super) fn round_tokens(&self) -> (Option<u64>, Option<u64>) {
+        let [input, output, cache_creation, cache_read] = self.round;
+        let prompt = [input, cache_creation, cache_read]
+            .into_iter()
+            .flatten()
+            .reduce(u64::saturating_add);
+        (prompt, output)
     }
 
     /// Add the current round to the totals and start the next one.
     pub(super) fn commit(&mut self) {
-        for (total, value) in self.committed.iter_mut().zip(std::mem::take(&mut self.round)) {
-            if let Some(value) = value {
-                *total = Some(total.unwrap_or(0).saturating_add(value));
-            }
-        }
+        add_counters(&mut self.committed, std::mem::take(&mut self.round));
+        add_counters(&mut self.server_committed, std::mem::take(&mut self.server_round));
         self.rounds += 1;
     }
 
@@ -79,9 +143,48 @@ impl MessagesUsageTotals {
     /// dropped; any other unrecognised `usage` shape is left as it is.
     pub(super) fn finish(&mut self, carrier: &mut Value) {
         self.record(carrier.get("usage"));
-        if self.rounds < 2 || self.committed.iter().all(Option::is_none) {
+        let (counters, server_totals) = self.combined_totals();
+        if self.rounds < 2 || (counters.iter().all(Option::is_none) && server_totals.is_none()) {
             return;
         }
+        Self::write_totals(carrier, counters, server_totals);
+    }
+
+    /// Report the usage observed so far on an error path, without fabricating a
+    /// terminal round. The failing round's own `usage` (if any) is overlaid onto
+    /// the current round, but nothing is committed: the counters written to the
+    /// carrier are the saturating totals of the committed rounds plus that
+    /// current round. The error envelope itself marks the turn as incomplete, so
+    /// no extra wire field is needed to signal that these totals are partial.
+    /// A counter absent everywhere stays absent; nothing is invented.
+    pub(super) fn finish_partial(&mut self, carrier: &mut Value) {
+        self.observe(carrier.get("usage"));
+        let (counters, server_totals) = self.combined_totals();
+        if counters.iter().all(Option::is_none) && server_totals.is_none() {
+            return;
+        }
+        Self::write_totals(carrier, counters, server_totals);
+    }
+
+    /// Totals across the committed rounds plus the current (not yet committed)
+    /// round, including the gateway's native server-tool calls.
+    fn combined_totals(&self) -> (Counters, Option<ServerToolCounters>) {
+        let mut counters = self.committed;
+        add_counters(&mut counters, self.round);
+        let mut server = self.server_committed;
+        add_counters(&mut server, self.server_round);
+        for (total, uses) in server.iter_mut().zip(self.gateway.counters()) {
+            if uses > 0 {
+                *total = Some(total.unwrap_or(0).saturating_add(uses));
+            }
+        }
+        let server = server.iter().any(Option::is_some).then_some(server);
+        (counters, server)
+    }
+
+    /// Insert the given totals into the carrier's `usage` object, preserving any
+    /// non-counter fields the final round reported.
+    fn write_totals(carrier: &mut Value, counters: Counters, server_totals: Option<ServerToolCounters>) {
         let Some(fields) = carrier.as_object_mut() else {
             return;
         };
@@ -92,10 +195,33 @@ impl MessagesUsageTotals {
         let Some(usage) = usage.as_object_mut() else {
             return;
         };
-        for (total, name) in self.committed.iter().zip(COUNTERS) {
-            if let Some(total) = total {
-                usage.insert(name.to_owned(), Value::from(*total));
+        insert_counters(usage, &counters, &COUNTERS);
+        if let Some(server_totals) = server_totals {
+            let server = usage
+                .entry("server_tool_use")
+                .or_insert_with(|| Value::Object(Map::new()));
+            if !server.is_object() {
+                *server = Value::Object(Map::new());
             }
+            if let Some(server) = server.as_object_mut() {
+                insert_counters(server, &server_totals, &SERVER_TOOL_COUNTERS);
+            }
+        }
+    }
+}
+
+fn add_counters<const N: usize>(totals: &mut [Option<u64>; N], round: [Option<u64>; N]) {
+    for (total, value) in totals.iter_mut().zip(round) {
+        if let Some(value) = value {
+            *total = Some(total.unwrap_or(0).saturating_add(value));
+        }
+    }
+}
+
+fn insert_counters(object: &mut Map<String, Value>, totals: &[Option<u64>], names: &[&str]) {
+    for (total, name) in totals.iter().zip(names) {
+        if let Some(total) = total {
+            object.insert((*name).to_owned(), Value::from(*total));
         }
     }
 }
@@ -226,6 +352,49 @@ mod tests {
     }
 
     #[test]
+    fn server_tool_use_counts_upstream_reports_and_gateway_calls() {
+        let mut totals = recorded(&[
+            json!({"input_tokens": 1, "server_tool_use": {"web_search_requests": 0}}),
+            json!({"input_tokens": 1, "server_tool_use": {"web_search_requests": 2, "web_fetch_requests": 1}}),
+        ]);
+        totals.add_server_tool_uses(ServerToolUses {
+            web_search_requests: 3,
+            web_fetch_requests: 0,
+        });
+        totals.add_server_tool_uses(ServerToolUses {
+            web_search_requests: 1,
+            web_fetch_requests: 2,
+        });
+        let mut message =
+            json!({"usage": {"input_tokens": 1, "server_tool_use": {"web_search_requests": 0, "other": "kept"}}});
+        totals.finish(&mut message);
+        assert_eq!(
+            message["usage"],
+            json!({"input_tokens": 3, "server_tool_use": {
+                "web_search_requests": 6, "other": "kept", "web_fetch_requests": 3
+            }})
+        );
+
+        // Gateway calls alone create the object; an unused counter stays absent.
+        let mut totals = recorded(&[json!({"output_tokens": 1})]);
+        totals.add_server_tool_uses(ServerToolUses {
+            web_search_requests: 0,
+            web_fetch_requests: 1,
+        });
+        let mut message = json!({"usage": {"output_tokens": 2}});
+        totals.finish(&mut message);
+        assert_eq!(
+            message["usage"],
+            json!({"output_tokens": 3, "server_tool_use": {"web_fetch_requests": 1}})
+        );
+
+        // No server tool use anywhere: nothing is added.
+        let mut message = json!({"usage": {"output_tokens": 2}});
+        recorded(&[json!({"output_tokens": 1})]).finish(&mut message);
+        assert_eq!(message["usage"], json!({"output_tokens": 3}));
+    }
+
+    #[test]
     fn an_unrecognised_final_usage_shape_is_left_alone() {
         let mut message = json!({"usage": "opaque"});
         recorded(&[json!({"input_tokens": 10})]).finish(&mut message);
@@ -233,5 +402,66 @@ mod tests {
         let mut event = json!("not an object");
         recorded(&[json!({"input_tokens": 10})]).finish(&mut event);
         assert_eq!(event, json!("not an object"));
+    }
+
+    #[test]
+    fn partial_usage_reports_committed_rounds_without_fabricating_a_terminal_round() {
+        let mut totals = recorded(&[json!({"input_tokens": 10, "output_tokens": 4})]);
+        // A failing round whose own usage is absent: only the committed round
+        // contributes, and nothing is committed by the partial report.
+        let mut error = json!({"type": "error", "error": {"type": "overloaded_error"}});
+        totals.finish_partial(&mut error);
+        assert_eq!(error["usage"], json!({"input_tokens": 10, "output_tokens": 4}));
+        assert_eq!(error["type"], "error", "the error envelope is preserved");
+        // The partial report did not consume the current round.
+        let mut final_message = json!({"usage": {"input_tokens": 2, "output_tokens": 1}});
+        totals.finish(&mut final_message);
+        assert_eq!(
+            final_message["usage"],
+            json!({"input_tokens": 12, "output_tokens": 5}),
+            "committed rounds are still counted once after a partial report"
+        );
+    }
+
+    #[test]
+    fn partial_usage_folds_in_the_failing_rounds_own_usage() {
+        let mut totals = recorded(&[json!({"input_tokens": 10, "output_tokens": 4})]);
+        let mut error = json!({
+            "type": "error",
+            "usage": {"input_tokens": 3, "output_tokens": 1, "cache_read_input_tokens": 5}
+        });
+        totals.finish_partial(&mut error);
+        assert_eq!(
+            error["usage"],
+            json!({"input_tokens": 13, "output_tokens": 5, "cache_read_input_tokens": 5})
+        );
+    }
+
+    #[test]
+    fn partial_usage_includes_gateway_server_tool_calls() {
+        let mut totals = recorded(&[json!({"input_tokens": 10})]);
+        totals.add_server_tool_uses(ServerToolUses {
+            web_search_requests: 2,
+            web_fetch_requests: 1,
+        });
+        let mut error = json!({"type": "error"});
+        totals.finish_partial(&mut error);
+        assert_eq!(
+            error["usage"],
+            json!({"input_tokens": 10, "server_tool_use": {
+                "web_search_requests": 2, "web_fetch_requests": 1
+            }})
+        );
+    }
+
+    #[test]
+    fn partial_usage_invents_nothing_when_no_round_reported_a_counter() {
+        let mut error = json!({"type": "error", "error": {"type": "overloaded_error"}});
+        MessagesUsageTotals::default().finish_partial(&mut error);
+        assert_eq!(
+            error,
+            json!({"type": "error", "error": {"type": "overloaded_error"}}),
+            "no counters anywhere: the error body is left untouched"
+        );
     }
 }

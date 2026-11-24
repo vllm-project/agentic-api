@@ -205,6 +205,34 @@ class ReplayServerTests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "requested model"):
             replay.validate_responses_capture(records, QWEN_MODEL)
 
+    def test_responses_capture_checks_the_requested_reasoning_effort(self) -> None:
+        records = [
+            {
+                "kind": "responses_transport",
+                "body": {"path": "/v1/responses", "headers": {}},
+            },
+            {
+                "kind": "responses",
+                "body": {
+                    "model": QWEN_MODEL,
+                    "stream": True,
+                    "input": "HELLO",
+                    "reasoning": {"effort": "low", "summary": "auto"},
+                },
+            },
+        ]
+
+        replay.validate_responses_capture(records, QWEN_MODEL, expected_reasoning_effort="low")
+
+        for replacement in [{"effort": "medium"}, {}, None]:
+            with self.subTest(replacement=replacement), self.assertRaises(AssertionError):
+                changed = copy.deepcopy(records)
+                if replacement is None:
+                    changed[1]["body"].pop("reasoning")
+                else:
+                    changed[1]["body"]["reasoning"] = replacement
+                replay.validate_responses_capture(changed, QWEN_MODEL, expected_reasoning_effort="low")
+
     def image_records(self, images=None):
         if images is None:
             images = [REPOSITORY_ROOT / "crates/agentic-server-core/tests/cassettes/images/inputs/red-blue-64.png"]
@@ -265,6 +293,13 @@ class ReplayServerTests(unittest.TestCase):
             self.assertEqual(replay.parse_args().expect_image, [Path("image.png")])
         with patch.object(sys, "argv", base + ["--expect-no-images"]):
             self.assertTrue(replay.parse_args().expect_no_images)
+
+    def test_capture_cli_accepts_a_reasoning_effort_assertion(self) -> None:
+        base = ["replay", "assert-capture", "--api", "responses", "--capture", "capture.jsonl", "--model", QWEN_MODEL]
+        with patch.object(sys, "argv", base + ["--expect-reasoning-effort", "max"]):
+            self.assertEqual(replay.parse_args().expect_reasoning_effort, "max")
+        with patch.object(sys, "argv", base):
+            self.assertIsNone(replay.parse_args().expect_reasoning_effort)
 
     def test_responses_route_replays_recorded_stream_and_captures_request(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

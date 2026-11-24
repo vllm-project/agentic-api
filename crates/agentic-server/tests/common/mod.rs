@@ -1,12 +1,15 @@
 pub mod otlp_stub;
 
+use agentic_core::types::model_capabilities::ModelCapabilities;
 use std::num::NonZeroUsize;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::Router;
 use axum::response::IntoResponse;
 use axum::routing::get;
 use http::StatusCode;
+use serde_json::Value;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
@@ -15,6 +18,8 @@ use agentic_core::executor::{ConversationHandler, ExecutionContext, ResponseHand
 use agentic_core::proxy::ProxyState;
 use agentic_core::readiness::llm_readiness_client;
 use agentic_core::storage::{ConversationStore, ResponseStore};
+use agentic_core::storage::{ResponseMetadata, StoreResult};
+use agentic_core::types::io::InOutItem;
 use agentic_server::app::{
     AppState, DEFAULT_MAX_REQUEST_BODY_SIZE, ReadinessTracker, ServerConfig, WebSocketTracker, build_router,
 };
@@ -29,8 +34,10 @@ pub fn test_config(llm_url: &str) -> Config {
         db_url: None,
         postgres: agentic_core::config::PostgresConfig::default(),
         sqlite: agentic_core::config::SqliteConfig::default(),
+        max_request_body_size: agentic_core::executor::DEFAULT_MAX_REQUEST_BODY_SIZE_BYTES,
         tools: agentic_core::config::ToolRuntimeConfig::default(),
         responses: agentic_core::config::ResponsesConfig::default(),
+        model_capabilities: ModelCapabilities::default(),
     }
 }
 
@@ -49,7 +56,8 @@ pub fn test_state_with_max_request_body_size(config: &Config, max_request_body_s
         Arc::new(reqwest::Client::new()),
         config.llm_api_base.clone(),
     )
-    .with_responses_config(config.responses);
+    .with_responses_config(config.responses)
+    .with_model_capabilities(config.model_capabilities.clone());
     let exec_ctx = Arc::new(exec_ctx);
     let proxy_state = ProxyState::new(config.clone()).expect("proxy state");
     AppState {
@@ -62,7 +70,6 @@ pub fn test_state_with_max_request_body_size(config: &Config, max_request_body_s
         llm_api_base: config.llm_api_base.clone(),
         skip_llm_ready_check: config.skip_llm_ready_check,
         openai_api_key: config.openai_api_key.clone(),
-        model_capabilities: std::sync::Arc::default(),
         max_request_body_size,
     }
 }
@@ -84,4 +91,222 @@ pub async fn spawn_gateway(state: AppState) -> (String, tokio::task::JoinHandle<
     let addr = listener.local_addr().unwrap();
     let handle = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
     (format!("http://{addr}"), handle)
+}
+
+/// The recorder capture for a client request that declares a built-in, a function, and a
+/// custom tool. The capture records the gateway's response before declaration restoration,
+/// which is the behavior the replay tests assert against.
+#[allow(dead_code)]
+pub fn load_mixed_gateway_capture(streaming: bool) -> Value {
+    let mode = if streaming { "streaming" } else { "nonstreaming" };
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
+        "../agentic-server-core/tests/cassettes/parallel_tool_calls/\
+         parallel-mixed-gateway-Qwen-Qwen3.5-35B-A3B-FP8-{mode}.yaml"
+    ));
+    serde_yml::from_str(&std::fs::read_to_string(&path).expect("mixed capture should be readable"))
+        .expect("mixed capture should be YAML")
+}
+
+/// The first client turn the capture recorded, replayed unchanged.
+#[allow(dead_code)]
+pub fn mixed_capture_client_request(capture: &Value) -> Value {
+    capture["turns"][0]["request"]["body"].clone()
+}
+
+/// The declarations the client submitted, as the capture records them in that turn.
+#[allow(dead_code)]
+pub fn mixed_capture_public_tools(capture: &Value) -> Value {
+    capture["turns"][0]["request"]["body"]["tools"].clone()
+}
+
+/// The gateway response the capture recorded, served as synthetic upstream inference: a JSON
+/// body for a blocking request, an SSE stream for a streaming one.
+#[allow(dead_code)]
+pub fn mixed_capture_upstream_fixture(capture: &Value) -> String {
+    let response = &capture["turns"][0]["response"];
+    if let Some(body) = response["body"].as_object() {
+        return serde_json::to_string(body).expect("recorded body serializes");
+    }
+    let frames = response["sse"].as_array().expect("recorded SSE frames");
+    let mut body = frames
+        .iter()
+        .map(|frame| frame.as_str().expect("SSE frame is text").to_owned())
+        .collect::<String>();
+    if !body.contains("data: [DONE]") {
+        body.push_str("data: [DONE]\n\n");
+    }
+    body
+}
+
+/// Asserts one client-facing `response` object reports the submitted declarations, not the
+/// lowered `web_search` function schema the model server echoed. Explicit nulls a
+/// declaration carries on the wire are not part of the comparison.
+#[allow(dead_code)]
+pub fn assert_public_mixed_tools(response: &Value, public_tools: &Value, context: &str) {
+    assert_eq!(
+        strip_nulls(&response["tools"]),
+        strip_nulls(public_tools),
+        "{context} tools"
+    );
+    assert!(
+        !response["tools"].to_string().contains("\"name\":\"web_search\""),
+        "the internal web_search function schema must not reach the client: {context}"
+    );
+}
+
+#[allow(dead_code)]
+fn strip_nulls(value: &Value) -> Value {
+    match value {
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .filter(|(_, value)| !value.is_null())
+                .map(|(key, value)| (key.clone(), strip_nulls(value)))
+                .collect(),
+        ),
+        Value::Array(items) => Value::Array(items.iter().map(strip_nulls).collect()),
+        other => other.clone(),
+    }
+}
+
+/// Asserts the upstream still receives one lowered function schema per declaration.
+#[allow(dead_code)]
+pub fn assert_lowered_mixed_upstream(body: &Value) {
+    let tools = body["tools"].as_array().expect("upstream tools");
+    let names: Vec<&str> = tools.iter().filter_map(|tool| tool["name"].as_str()).collect();
+    assert_eq!(names, ["web_search", "get_weather", "set_temperature_unit"]);
+    assert!(
+        tools.iter().all(|tool| tool["type"] == "function"),
+        "every declaration reaches inference as a function schema"
+    );
+}
+
+/// Asserts the replayed response carries the same public output items the capture recorded,
+/// so restoring the declarations leaves tool execution and output calls unchanged.
+#[allow(dead_code)]
+pub fn assert_recorded_mixed_output_kinds(response: &Value, capture: &Value, context: &str) {
+    assert_eq!(
+        output_kinds(&response["output"]),
+        output_kinds(&recorded_terminal_output(capture)),
+        "{context} output item kinds"
+    );
+}
+
+#[allow(dead_code)]
+fn output_kinds(output: &Value) -> Vec<String> {
+    output
+        .as_array()
+        .expect("response output is an array")
+        .iter()
+        .filter_map(|item| item["type"].as_str())
+        .filter(|kind| *kind != "reasoning")
+        .map(str::to_owned)
+        .collect()
+}
+
+/// The terminal gateway response the capture recorded, from its body or its last SSE event.
+#[allow(dead_code)]
+fn recorded_terminal_output(capture: &Value) -> Value {
+    let response = &capture["turns"][0]["response"];
+    if let Some(output) = response["body"].get("output") {
+        return output.clone();
+    }
+    let frames = response["sse"].as_array().expect("recorded SSE frames");
+    frames
+        .iter()
+        .filter_map(|frame| frame.as_str())
+        .flat_map(|frame| frame.lines())
+        .filter_map(|line| line.strip_prefix("data: "))
+        .filter_map(|data| serde_json::from_str::<Value>(data).ok())
+        .find(|event| event["type"] == "response.completed")
+        .map(|event| event["response"]["output"].clone())
+        .expect("recorded capture completes with output")
+}
+
+/// The content blocks of a Messages response as a client assembles them: the
+/// message's `content` for JSON, or every block rebuilt from its stream events.
+#[allow(dead_code)]
+pub fn assembled_messages_content(body: &str, stream: bool) -> Value {
+    if !stream {
+        let message: Value = serde_json::from_str(body).expect("JSON message");
+        return message["content"].clone();
+    }
+    let mut blocks: Vec<Value> = Vec::new();
+    let mut inputs: std::collections::BTreeMap<usize, String> = std::collections::BTreeMap::new();
+    let events = body
+        .lines()
+        .filter_map(|line| line.strip_prefix("data: "))
+        .filter_map(|data| serde_json::from_str::<Value>(data).ok());
+    for event in events {
+        let Some(index) = event["index"].as_u64().map(|index| usize::try_from(index).unwrap()) else {
+            continue;
+        };
+        match event["type"].as_str() {
+            Some("content_block_start") => {
+                assert_eq!(index, blocks.len(), "contiguous block indices: {body}");
+                blocks.push(event["content_block"].clone());
+            }
+            Some("content_block_delta") if event["delta"]["type"] == "text_delta" => {
+                let text = format!(
+                    "{}{}",
+                    blocks[index]["text"].as_str().unwrap_or_default(),
+                    event["delta"]["text"].as_str().unwrap_or_default()
+                );
+                blocks[index]["text"] = Value::String(text);
+            }
+            Some("content_block_delta") if event["delta"]["type"] == "input_json_delta" => inputs
+                .entry(index)
+                .or_default()
+                .push_str(event["delta"]["partial_json"].as_str().unwrap_or_default()),
+            _ => {}
+        }
+    }
+    for (index, input) in inputs {
+        blocks[index]["input"] = serde_json::from_str(&input).expect("complete input JSON");
+    }
+    Value::Array(blocks)
+}
+
+/// Each block's type with the call id it carries, and for a server tool result
+/// its error code or result count: a compact view of the turn a client sees.
+#[allow(dead_code)]
+pub fn shown_blocks(content: &Value) -> Vec<String> {
+    content
+        .as_array()
+        .expect("content array")
+        .iter()
+        .map(|block| {
+            let kind = block["type"].as_str().unwrap_or_default();
+            match kind {
+                "server_tool_use" => format!("{kind} {}", block["id"].as_str().unwrap_or_default()),
+                "web_search_tool_result" | "web_fetch_tool_result" => {
+                    let outcome = block["content"]["error_code"].as_str().map_or_else(
+                        || {
+                            block["content"]
+                                .as_array()
+                                .map_or_else(|| "page".to_owned(), |results| format!("{} results", results.len()))
+                        },
+                        str::to_owned,
+                    );
+                    format!("{kind} {} {outcome}", block["tool_use_id"].as_str().unwrap_or_default())
+                }
+                "text" => format!("text {}", block["text"].as_str().unwrap_or_default()),
+                other => other.to_owned(),
+            }
+        })
+        .collect()
+}
+
+/// Persist a turn without a response snapshot.
+#[allow(dead_code)]
+pub async fn persist_turn(
+    store: &ConversationStore,
+    conversation_id: &str,
+    response_id: &str,
+    items: Vec<InOutItem>,
+    metadata: &ResponseMetadata,
+) -> StoreResult<()> {
+    let checkpoint = store.rehydrate(conversation_id).await?.checkpoint;
+    store
+        .persist(conversation_id, &checkpoint, response_id, items, None, metadata)
+        .await
 }

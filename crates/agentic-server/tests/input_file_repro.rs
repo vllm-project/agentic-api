@@ -1,21 +1,25 @@
-//! Message-file preservation and rejection across typed Responses entry points.
+//! Message-file preservation, text inlining, and rejection across typed Responses entry points.
 //! All inference is intercepted by a loopback mock; no external model is used.
 
 #[allow(dead_code)]
 mod common;
 
+use agentic_core::types::conversations::ConversationMetadata;
+use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::sync::Arc;
 use std::time::Duration;
 
 use agentic_core::executor::{ConversationHandler, ExecutionContext, ResponseHandler};
 use agentic_core::storage::pool::DbPool;
-use agentic_core::storage::{ConversationStore, InOutItem, ResponseMetadata, ResponseStore, create_pool_with_schema};
+use agentic_core::storage::{ConversationStore, ResponseMetadata, ResponseStore, create_pool_with_schema};
 use agentic_core::types::RequestPayload;
+use agentic_core::types::io::InOutItem;
 use axum::Router;
 use axum::body::Bytes;
 use axum::response::IntoResponse;
 use axum::routing::post;
+use common::persist_turn;
 use futures::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
@@ -179,27 +183,30 @@ impl Fixture {
     async fn seed_file_history(&self, conversation: bool) -> Value {
         let response_id = "resp_file_history";
         let metadata = ResponseMetadata {
+            multi_agent_tree: None,
             model: "test-model".to_owned(),
             ..Default::default()
         };
         let placeholder = InOutItem::Input(
             serde_json::from_value(json!({
-                "role":"user", "content":"placeholder"
+                "type":"message", "role":"user", "content":"placeholder"
             }))
             .expect("placeholder message"),
         );
         let response_store = ResponseStore::new(Arc::clone(&self.pool));
         let reference = if conversation {
             let store = ConversationStore::new(Arc::clone(&self.pool));
-            let data = store.create().await.expect("create conversation");
-            store
-                .persist(&data.conversation_id, response_id, None, vec![placeholder], &metadata)
+            let data = store
+                .create("default_tenant", &ConversationMetadata::new(), &[])
+                .await
+                .expect("create conversation");
+            persist_turn(&store, &data.conversation_id, response_id, vec![placeholder], &metadata)
                 .await
                 .expect("persist conversation fixture");
             json!({"conversation_id":data.conversation_id})
         } else {
             response_store
-                .persist(response_id, None, vec![placeholder], &metadata)
+                .persist(response_id, None, vec![placeholder], None, &metadata)
                 .await
                 .expect("persist response fixture");
             json!({"previous_response_id":response_id})
@@ -227,7 +234,7 @@ impl Fixture {
         reference
     }
 
-    async fn assert_rejected(&self, path: &str, payload: Value) {
+    async fn assert_rejected(&self, path: &str, payload: Value) -> String {
         let before = self.row_counts().await;
         let (status, body) = self.post(path, payload).await;
         assert_eq!(status, reqwest::StatusCode::BAD_REQUEST, "{body}");
@@ -237,6 +244,21 @@ impl Fixture {
             "unsupported message file reached inference"
         );
         assert_eq!(self.row_counts().await, before, "rejected input was persisted");
+        body["error"]["message"].as_str().unwrap().to_owned()
+    }
+
+    /// Every message `input_file` part in the stored items, as persisted.
+    async fn stored_files(&self) -> Vec<Value> {
+        let rows: Vec<String> = sqlx::query_scalar("SELECT data FROM items")
+            .fetch_all(self.pool.as_ref())
+            .await
+            .expect("stored items");
+        rows.iter()
+            .map(|row| serde_json::from_str::<Value>(row).unwrap())
+            .filter_map(|item| item["content"].as_array().cloned())
+            .flatten()
+            .filter(|part| part["type"] == "input_file")
+            .collect()
     }
 }
 
@@ -244,7 +266,7 @@ fn assert_file_error(body: &Value) {
     assert_eq!(body["error"]["type"], "invalid_request_error", "{body}");
     let message = body["error"]["message"].as_str().expect("error message");
     assert!(
-        message.contains("input_file") && message.contains("not supported"),
+        message.contains("input_file") && (message.contains("not supported") || message.contains("gateway file store")),
         "{message}"
     );
     assert!(
@@ -255,6 +277,26 @@ fn assert_file_error(body: &Value) {
 
 fn file_part() -> Value {
     json!({"type":"input_file", "file_url":"https://example.invalid/document.pdf", "filename":"document.pdf"})
+}
+
+const NOTES_TEXT: &str = "File: notes.txt\nhello from notes";
+
+fn text_file_part() -> Value {
+    json!({"type":"input_file", "file_data":"data:text/plain;base64,aGVsbG8gZnJvbSBub3Rlcw==", "filename":"notes.txt"})
+}
+
+/// The model-facing message for `user_input(&text_file_part())`.
+fn inlined_content() -> Value {
+    json!([{"type":"input_text", "text":"Summarize this document"}, {"type":"input_text", "text":NOTES_TEXT}])
+}
+
+fn assert_inlined(request: &Value) {
+    assert_eq!(request["input"][0]["content"], inlined_content(), "{request}");
+    let encoded = request.to_string();
+    assert!(
+        !encoded.contains("file_data") && !encoded.contains("input_file"),
+        "the model must receive text, not the file part: {encoded}"
+    );
 }
 
 fn user_input(part: &Value) -> Value {
@@ -375,25 +417,14 @@ async fn websocket_rejects_user_file_before_inference() {
 }
 
 #[tokio::test]
-async fn control_raw_proxy_preserves_exact_file_request_bytes() {
+async fn stateless_http_json_rejects_file_input_before_inference() {
     let fixture = Fixture::new().await;
-    let raw = format!(
-        "{{\n  \"model\":\"test-model\", \"store\":false, \"input\": {}\n}}",
-        user_input(&file_part())
-    );
-    let response = fixture
-        .client
-        .post(format!("{}/v1/responses", fixture.url))
-        .header("content-type", "application/json")
-        .body(raw.clone())
-        .send()
-        .await
-        .expect("raw HTTP response");
-    assert_eq!(response.status(), reqwest::StatusCode::OK);
-    let _ = response.bytes().await.expect("consume response");
-    let captured = fixture.requests.lock().await;
-    assert_eq!(captured.len(), 1);
-    assert_eq!(captured[0], raw.as_bytes());
+    fixture
+        .assert_rejected(
+            "/v1/responses",
+            json!({"model":"test-model", "store":false, "stream":false, "input":user_input(&file_part())}),
+        )
+        .await;
 }
 
 #[tokio::test]
@@ -603,22 +634,38 @@ async fn conversation_file_is_rejected_by_websocket_prewarm() {
     assert_history_ws_rejected(true, false).await;
 }
 
-#[test]
-fn composed_upstream_request_cannot_bypass_file_validation() {
+#[tokio::test]
+async fn composed_upstream_request_cannot_bypass_file_validation() {
     use agentic_core::executor::{RequestContext, upstream_request};
     let request: RequestPayload =
         serde_json::from_value(json!({"model":"test-model", "input":user_input(&file_part())})).unwrap();
+    for stream in [false, true] {
+        let error = request
+            .to_upstream_request(stream, &HashMap::default())
+            .expect_err("typed construction validates input");
+        assert!(error.to_string().contains("input[0].content[1]"));
+        assert!(error.to_string().contains("input_file"));
+    }
     let ctx = RequestContext {
+        multi_agent_tree: None,
         original_request: request.clone(),
         enriched_request: request,
         new_input_items: Vec::new(),
         response_id: "resp_composed".to_owned(),
         conversation_id: None,
-        conversation_version: None,
+        checkpoint: None,
         continuation: None,
     };
+    let exec_ctx = ExecutionContext::new(
+        ConversationHandler::new(ConversationStore::disabled()),
+        ResponseHandler::new(ResponseStore::disabled()),
+        Arc::new(reqwest::Client::new()),
+        "http://localhost:8000".to_owned(),
+    );
     for stream in [false, true] {
-        let error = upstream_request(&ctx, stream).expect_err("direct typed upstream preparation must reject files");
+        let error = upstream_request(&exec_ctx, &ctx, stream, None, None)
+            .await
+            .expect_err("direct typed upstream preparation must reject files");
         assert_eq!(error.http_status().as_u16(), 400);
         assert!(error.error_message().contains("input_file"));
     }
@@ -634,25 +681,14 @@ async fn control_text_prewarm_still_persists_without_inference() {
 }
 
 #[tokio::test]
-async fn control_streaming_raw_proxy_preserves_exact_file_request_bytes() {
+async fn stateless_http_sse_rejects_file_input_before_inference() {
     let fixture = Fixture::new().await;
-    let raw = format!(
-        "{{\n  \"model\":\"test-model\", \"store\":false, \"stream\":true, \"input\": {}\n}}",
-        user_input(&file_part())
-    );
-    let response = fixture
-        .client
-        .post(format!("{}/v1/responses", fixture.url))
-        .header("content-type", "application/json")
-        .body(raw.clone())
-        .send()
-        .await
-        .expect("proxy response");
-    assert_eq!(response.status(), reqwest::StatusCode::OK);
-    let _ = response.bytes().await.expect("consume proxy stream");
-    let captured = fixture.requests.lock().await;
-    assert_eq!(captured.len(), 1);
-    assert_eq!(captured[0], raw.as_bytes());
+    fixture
+        .assert_rejected(
+            "/v1/responses",
+            json!({"model":"test-model", "store":false, "stream":true, "input":user_input(&file_part())}),
+        )
+        .await;
 }
 
 #[tokio::test]
@@ -679,4 +715,292 @@ async fn control_custom_tool_output_file_is_preserved() {
         .find(|item| item["type"] == "function_call_output")
         .expect("normalized tool output");
     assert_eq!(output["output"], json!([file]));
+}
+
+#[tokio::test]
+async fn typed_http_inlines_text_file_and_stores_the_original() {
+    let fixture = Fixture::new().await;
+    let (status, body) = fixture
+        .post(
+            "/v1/responses",
+            json!({"model":"test-model", "store":true, "input":user_input(&text_file_part())}),
+        )
+        .await;
+    assert_eq!(status, reqwest::StatusCode::OK, "{body}");
+    let captured = fixture.captured().await;
+    assert_eq!(captured.len(), 1);
+    assert_inlined(&captured[0]);
+    assert_eq!(fixture.stored_files().await, vec![text_file_part()]);
+}
+
+#[tokio::test]
+async fn typed_http_inlines_raw_base64_with_text_filename() {
+    let fixture = Fixture::new().await;
+    let file = json!({"type":"input_file", "file_data":"YTogMQ==", "filename":"config.yaml"});
+    let (status, body) = fixture
+        .post(
+            "/v1/responses",
+            json!({"model":"test-model", "store":true, "input":user_input(&file)}),
+        )
+        .await;
+    assert_eq!(status, reqwest::StatusCode::OK, "{body}");
+    let captured = fixture.captured().await;
+    assert_eq!(
+        captured[0]["input"][0]["content"][1],
+        json!({"type":"input_text", "text":"File: config.yaml\na: 1"})
+    );
+    assert_eq!(fixture.stored_files().await, vec![file]);
+}
+
+#[tokio::test]
+async fn streaming_http_inlines_text_file() {
+    let fixture = Fixture::new().await;
+    let (status, _) = fixture
+        .post(
+            "/v1/responses",
+            json!({"model":"test-model", "store":true, "stream":true, "input":user_input(&text_file_part())}),
+        )
+        .await;
+    assert_eq!(status, reqwest::StatusCode::OK);
+    let captured = fixture.captured().await;
+    assert_eq!(captured.len(), 1);
+    assert_inlined(&captured[0]);
+}
+
+#[tokio::test]
+async fn previous_response_text_file_is_reinlined_on_continuation() {
+    let fixture = Fixture::new().await;
+    let (status, first) = fixture
+        .post(
+            "/v1/responses",
+            json!({"model":"test-model", "store":true, "input":user_input(&text_file_part())}),
+        )
+        .await;
+    assert_eq!(status, reqwest::StatusCode::OK, "{first}");
+    let (status, body) = fixture
+        .post(
+            "/v1/responses",
+            json!({"model":"test-model", "store":true, "input":"continue", "previous_response_id":first["id"]}),
+        )
+        .await;
+    assert_eq!(status, reqwest::StatusCode::OK, "{body}");
+    let captured = fixture.captured().await;
+    assert_eq!(captured.len(), 2);
+    assert_inlined(&captured[1]);
+    assert_eq!(fixture.stored_files().await, vec![text_file_part()]);
+}
+
+#[tokio::test]
+async fn websocket_inlines_text_file() {
+    let fixture = Fixture::new().await;
+    let terminal = fixture
+        .ws(json!({"model":"test-model", "store":true, "input":user_input(&text_file_part())}))
+        .await;
+    assert_eq!(terminal["type"], "response.completed", "{terminal}");
+    let captured = fixture.captured().await;
+    assert_eq!(captured.len(), 1);
+    assert_inlined(&captured[0]);
+    assert_eq!(fixture.stored_files().await, vec![text_file_part()]);
+}
+
+#[tokio::test]
+async fn stateless_mixed_text_and_pdf_files_are_rejected_before_inference() {
+    let pdf = json!({"type":"input_file", "file_data":"data:application/pdf;base64,JVBERi0=", "filename":"a.pdf"});
+    let input = json!([{"role":"user", "content":[{"type":"input_text", "text":"Compare these"},
+        text_file_part(), pdf]}]);
+    for stream in [false, true] {
+        let fixture = Fixture::new().await;
+        fixture
+            .assert_rejected(
+                "/v1/responses",
+                json!({"model":"test-model", "store":false, "stream":stream, "input":input}),
+            )
+            .await;
+    }
+}
+
+#[tokio::test]
+async fn stateless_text_file_is_inlined_and_keeps_provider_fields_without_persistence() {
+    for stream in [false, true] {
+        let fixture = Fixture::new().await;
+        let (status, body) = fixture
+            .post(
+                "/v1/responses",
+                json!({"model":"test-model", "store":false, "stream":stream,
+                    "input":user_input(&text_file_part()),
+                    "chat_template_kwargs":{"enable_thinking":false}}),
+            )
+            .await;
+        assert_eq!(status, reqwest::StatusCode::OK, "{body}");
+        let captured = fixture.captured().await;
+        assert_eq!(captured.len(), 1);
+        assert_inlined(&captured[0]);
+        assert_eq!(captured[0]["store"], false);
+        assert_eq!(captured[0]["chat_template_kwargs"], json!({"enable_thinking":false}));
+        assert_eq!(fixture.row_counts().await, (0, 0), "store:false must not persist");
+    }
+}
+
+#[tokio::test]
+async fn automatic_compaction_summarizes_inlined_text_and_keeps_the_original() {
+    let fixture = Fixture::new().await;
+    let (status, body) = fixture
+        .post(
+            "/v1/responses",
+            json!({"model":"test-model", "store":true, "input":user_input(&text_file_part()),
+                "context_management":[{"type":"compaction", "compact_threshold":1}]}),
+        )
+        .await;
+    assert_eq!(status, reqwest::StatusCode::OK, "{body}");
+    let captured = fixture.captured().await;
+    assert_eq!(
+        captured.len(),
+        3,
+        "summary, answer, and summary-after-the-answer requests: {captured:?}"
+    );
+    for request in &captured {
+        let encoded = request.to_string();
+        assert!(encoded.contains("hello from notes"), "{encoded}");
+        assert!(
+            !encoded.contains("file_data") && !encoded.contains("input_file"),
+            "{encoded}"
+        );
+    }
+    assert_inlined(&captured[0]);
+    assert_eq!(fixture.stored_files().await, vec![text_file_part()]);
+}
+
+#[tokio::test]
+async fn explicit_compact_inlines_text_file_and_returns_the_original() {
+    let fixture = Fixture::new().await;
+    let (status, body) = fixture
+        .post(
+            "/v1/responses/compact",
+            json!({"model":"test-model", "input":[{"role":"user", "content":[text_file_part()]}]}),
+        )
+        .await;
+    assert_eq!(status, reqwest::StatusCode::OK, "{body}");
+    let captured = fixture.captured().await;
+    assert_eq!(captured.len(), 1);
+    let summary_request = captured[0].to_string();
+    assert!(summary_request.contains("hello from notes"), "{summary_request}");
+    assert!(!summary_request.contains("file_data"), "{summary_request}");
+    let returned: Vec<&Value> = body["output"]
+        .as_array()
+        .expect("compacted window")
+        .iter()
+        .filter_map(|item| item["content"].as_array())
+        .flatten()
+        .filter(|part| part["type"] == "input_file")
+        .collect();
+    assert_eq!(returned, vec![&text_file_part()], "{body}");
+}
+
+#[tokio::test]
+async fn unsupported_message_files_are_rejected_with_specific_reasons() {
+    let fixture = Fixture::new().await;
+    let cases = [
+        (
+            json!({"type":"input_file", "file_id":"file_test"}),
+            "input_file with file_id requires the gateway file store",
+        ),
+        (file_part(), "input_file with file_url is not supported"),
+        (
+            json!({"type":"input_file", "filename":"notes.txt"}),
+            "input_file without file_data is not supported",
+        ),
+        (
+            json!({"type":"input_file", "file_data":"data:application/pdf;base64,JVBERi0=", "filename":"a.pdf"}),
+            "only UTF-8 text files",
+        ),
+        (
+            json!({"type":"input_file", "file_data":"JVBERi0=", "filename":"report.pdf"}),
+            "only UTF-8 text files",
+        ),
+        (
+            json!({"type":"input_file", "file_data":"data:text/plain,hello"}),
+            "data URLs must be base64-encoded",
+        ),
+        (
+            json!({"type":"input_file", "file_data":"data:text/plain;base64,@@@@"}),
+            "it is not valid base64",
+        ),
+        (
+            json!({"type":"input_file", "file_data":"data:text/plain;base64,aOls"}),
+            "the decoded file is not valid UTF-8 text",
+        ),
+    ];
+    for (part, reason) in cases {
+        let message = fixture
+            .assert_rejected(
+                "/v1/responses",
+                json!({"model":"test-model", "store":true, "input":user_input(&part)}),
+            )
+            .await;
+        assert!(message.contains("input[0].content[1]: "), "{message}");
+        assert!(message.contains(reason), "{part}: {message}");
+    }
+}
+
+#[tokio::test]
+async fn file_breakpoint_survives_text_inlining_and_durable_continuation() {
+    for transport in ["json", "sse", "websocket"] {
+        let fixture = Fixture::new().await;
+        let file = json!({"type":"input_file", "filename":"notes.txt",
+            "file_data":"data:text/plain;base64,aGk=",
+            "prompt_cache_breakpoint":{"mode":"explicit"}});
+        let payload = json!({"model":"test-model", "store":true, "input":user_input(&file),
+            "stream":transport == "sse"});
+        let parent = if transport == "websocket" {
+            let terminal = fixture.ws(payload).await;
+            assert_eq!(terminal["type"], "response.completed", "{terminal}");
+            terminal["response"].clone()
+        } else {
+            let (status, body) = fixture.post("/v1/responses", payload).await;
+            assert_eq!(status, reqwest::StatusCode::OK, "{body}");
+            if transport == "sse" {
+                body["raw"]
+                    .as_str()
+                    .unwrap()
+                    .lines()
+                    .filter_map(|line| line.strip_prefix("data: "))
+                    .filter_map(|data| serde_json::from_str::<Value>(data).ok())
+                    .find(|event| event["type"] == "response.completed")
+                    .expect("completed SSE response")["response"]
+                    .clone()
+            } else {
+                body
+            }
+        };
+        assert_eq!(fixture.stored_files().await, vec![file.clone()], "{transport}");
+        let (status, body) = fixture
+            .post(
+                "/v1/responses",
+                json!({"model":"test-model",
+            "store":false,"previous_response_id":parent["id"],"input":"continue"}),
+            )
+            .await;
+        assert_eq!(status, reqwest::StatusCode::OK, "{body}");
+        assert_eq!(
+            fixture.stored_files().await,
+            vec![file],
+            "history must remain input_file"
+        );
+        let captured = fixture.captured().await;
+        assert_eq!(captured.len(), 2, "{transport}");
+        for request in &captured {
+            let content = &request["input"][0]["content"];
+            assert_eq!(
+                content[0],
+                json!({"type":"input_text","text":"Summarize this document"})
+            );
+            assert_eq!(content[1]["type"], "input_text", "{request}");
+            assert_eq!(content[1]["text"], "File: notes.txt\nhi", "{request}");
+            assert_eq!(
+                content[1]["prompt_cache_breakpoint"],
+                json!({"mode":"explicit"}),
+                "{transport}: model-facing file lost its breakpoint: {request}"
+            );
+        }
+    }
 }

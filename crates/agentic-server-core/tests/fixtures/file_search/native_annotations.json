@@ -1,0 +1,85 @@
+{
+  "response": {
+    "id": "resp_native",
+    "object": "response",
+    "created_at": 0,
+    "model": "test-model",
+    "status": "completed",
+    "output": [
+      {
+        "type": "message",
+        "id": "msg_native",
+        "role": "assistant",
+        "status": "completed",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "Climate notes.",
+            "logprobs": [],
+            "annotations": [
+              {
+                "type": "file_citation",
+                "file_id": "file_native",
+                "filename": "climate.txt",
+                "index": 13
+              },
+              {
+                "type": "url_citation",
+                "url": "https://example.org/climate",
+                "title": "Climate",
+                "start_index": 0,
+                "end_index": 7
+              },
+              {
+                "type": "future_citation",
+                "extra": {
+                  "nested": true
+                }
+              }
+            ]
+          },
+          {
+            "type": "output_text",
+            "text": "Download the evidence.",
+            "logprobs": [],
+            "annotations": [
+              {
+                "type": "container_file_citation",
+                "container_id": "cntr_native",
+                "file_id": "file_artifact",
+                "filename": "evidence.csv",
+                "start_index": 0,
+                "end_index": 22
+              },
+              {
+                "type": "file_path",
+                "file_id": "file_artifact",
+                "index": 0
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "events": [
+    {"type": "response.created", "response": {"id": "resp_native", "status": "in_progress", "output": []}, "sequence_number": 0},
+    {"type": "response.in_progress", "response": {"id": "resp_native", "status": "in_progress", "output": []}, "sequence_number": 1},
+    {"type": "response.output_item.added", "output_index": 0, "item": {"type": "message", "id": "msg_native", "role": "assistant", "status": "in_progress", "content": []}, "sequence_number": 2},
+    {"type": "response.content_part.added", "output_index": 0, "content_index": 0, "item_id": "msg_native", "part": {"type": "output_text", "text": "", "annotations": [], "logprobs": []}, "sequence_number": 3},
+    {"type": "response.output_text.delta", "output_index": 0, "content_index": 0, "item_id": "msg_native", "delta": "Climate notes.", "sequence_number": 4},
+    {"type": "response.output_text.annotation.added", "output_index": 0, "content_index": 0, "item_id": "msg_native", "annotation_index": 0, "annotation": {"type": "file_citation", "file_id": "file_native", "filename": "climate.txt", "index": 13}, "sequence_number": 5},
+    {"type": "response.output_text.annotation.added", "output_index": 0, "content_index": 0, "item_id": "msg_native", "annotation_index": 1, "annotation": {"type": "url_citation", "url": "https://example.org/climate", "title": "Climate", "start_index": 0, "end_index": 7}, "sequence_number": 6},
+    {"type": "response.output_text.annotation.added", "output_index": 0, "content_index": 0, "item_id": "msg_native", "annotation_index": 2, "annotation": {"type": "future_citation", "extra": {"nested": true}}, "sequence_number": 7},
+    {"type": "response.output_text.done", "output_index": 0, "content_index": 0, "item_id": "msg_native", "text": "Climate notes.", "sequence_number": 8},
+    {"type": "response.content_part.done", "output_index": 0, "content_index": 0, "item_id": "msg_native", "part": {"type": "output_text", "text": "Climate notes.", "logprobs": [], "annotations": [{"type": "file_citation", "file_id": "file_native", "filename": "climate.txt", "index": 13}, {"type": "url_citation", "url": "https://example.org/climate", "title": "Climate", "start_index": 0, "end_index": 7}, {"type": "future_citation", "extra": {"nested": true}}]}, "sequence_number": 9},
+    {"type": "response.content_part.added", "output_index": 0, "content_index": 1, "item_id": "msg_native", "part": {"type": "output_text", "text": "", "annotations": [], "logprobs": []}, "sequence_number": 10},
+    {"type": "response.output_text.delta", "output_index": 0, "content_index": 1, "item_id": "msg_native", "delta": "Download the evidence.", "sequence_number": 11},
+    {"type": "response.output_text.annotation.added", "output_index": 0, "content_index": 1, "item_id": "msg_native", "annotation_index": 0, "annotation": {"type": "container_file_citation", "container_id": "cntr_native", "file_id": "file_artifact", "filename": "evidence.csv", "start_index": 0, "end_index": 22}, "sequence_number": 12},
+    {"type": "response.output_text.annotation.added", "output_index": 0, "content_index": 1, "item_id": "msg_native", "annotation_index": 1, "annotation": {"type": "file_path", "file_id": "file_artifact", "index": 0}, "sequence_number": 13},
+    {"type": "response.output_text.done", "output_index": 0, "content_index": 1, "item_id": "msg_native", "text": "Download the evidence.", "sequence_number": 14},
+    {"type": "response.content_part.done", "output_index": 0, "content_index": 1, "item_id": "msg_native", "part": {"type": "output_text", "text": "Download the evidence.", "logprobs": [], "annotations": [{"type": "container_file_citation", "container_id": "cntr_native", "file_id": "file_artifact", "filename": "evidence.csv", "start_index": 0, "end_index": 22}, {"type": "file_path", "file_id": "file_artifact", "index": 0}]}, "sequence_number": 15},
+    {"type": "response.output_item.done", "output_index": 0, "item": {"type": "message", "id": "msg_native", "role": "assistant", "status": "completed", "content": [{"type": "output_text", "text": "Climate notes.", "logprobs": [], "annotations": [{"type": "file_citation", "file_id": "file_native", "filename": "climate.txt", "index": 13}, {"type": "url_citation", "url": "https://example.org/climate", "title": "Climate", "start_index": 0, "end_index": 7}, {"type": "future_citation", "extra": {"nested": true}}]}, {"type": "output_text", "text": "Download the evidence.", "logprobs": [], "annotations": [{"type": "container_file_citation", "container_id": "cntr_native", "file_id": "file_artifact", "filename": "evidence.csv", "start_index": 0, "end_index": 22}, {"type": "file_path", "file_id": "file_artifact", "index": 0}]}]}, "sequence_number": 16},
+    {"type": "response.completed", "response": {"id": "resp_native", "object": "response", "created_at": 0, "model": "test-model", "status": "completed", "output": [{"type": "message", "id": "msg_native", "role": "assistant", "status": "completed", "content": [{"type": "output_text", "text": "Climate notes.", "logprobs": [], "annotations": [{"type": "file_citation", "file_id": "file_native", "filename": "climate.txt", "index": 13}, {"type": "url_citation", "url": "https://example.org/climate", "title": "Climate", "start_index": 0, "end_index": 7}, {"type": "future_citation", "extra": {"nested": true}}]}, {"type": "output_text", "text": "Download the evidence.", "logprobs": [], "annotations": [{"type": "container_file_citation", "container_id": "cntr_native", "file_id": "file_artifact", "filename": "evidence.csv", "start_index": 0, "end_index": 22}, {"type": "file_path", "file_id": "file_artifact", "index": 0}]}]}]}, "sequence_number": 17}
+  ]
+}

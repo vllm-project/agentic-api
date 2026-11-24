@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agentic API Rust"
+  short_description: "Typed Rust design with repository-specific rules"
+  default_prompt: "Use $rust-skills to assess the Rust design and implementation of this agentic-api change."

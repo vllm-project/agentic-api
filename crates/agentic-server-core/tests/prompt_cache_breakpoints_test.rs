@@ -1,0 +1,75 @@
+//! Pin content-boundary preservation across canonical and model-facing representations.
+use std::collections::HashMap;
+
+use agentic_core::types::RequestPayload;
+use agentic_core::types::file_search::FileObject;
+use agentic_core::types::io::ResponsesInput;
+use agentic_core::types::io::input::ResolvedFiles;
+use serde_json::{Value, json};
+
+#[test]
+fn breakpoints_survive_image_defaults_and_custom_tool_normalization() {
+    let parts = json!([
+        {"type":"input_text","text":"prefix","prompt_cache_breakpoint":{"mode":"explicit"}},
+        {"type":"input_image","image_url":"data:image/png;base64,AQ==",
+            "prompt_cache_breakpoint":{"mode":"explicit"}},
+        {"type":"input_text","text":"unmarked suffix"}
+    ]);
+    let object = FileObject {
+        id: "file_test".to_owned(),
+        object: "file".to_owned(),
+        bytes: 9,
+        created_at: 0,
+        filename: "notes.txt".to_owned(),
+        purpose: "assistants".to_owned(),
+        status: "processed".to_owned(),
+    };
+    let files = ResolvedFiles::from([("file_test".to_owned(), (object, b"tool file".to_vec()))]);
+    for output_kind in ["function_call_output", "custom_tool_call_output"] {
+        let output = json!([
+            {"type":"input_text","text":"tool prefix","prompt_cache_breakpoint":{"mode":"explicit"}},
+            {"type":"input_image","image_url":"data:image/png;base64,AQ==","detail":"auto",
+                "prompt_cache_breakpoint":{"mode":"explicit"}},
+            {"type":"input_file","file_id":"file_test","prompt_cache_breakpoint":{"mode":"explicit"}}
+        ]);
+        let request: RequestPayload = serde_json::from_value(json!({"model":"test",
+            "input":[{"type":"message","role":"user","content":parts},
+                {"type":output_kind,"call_id":"call_test","output":output}],
+            "prompt_cache_options":{"mode":"explicit","ttl":"30m"}}))
+        .unwrap();
+        let canonical = serde_json::to_value(&request.input).unwrap();
+        let upstream = serde_json::to_value(request.to_upstream_request(false, &files).unwrap()).unwrap();
+        let mut model_parts = parts.clone();
+        model_parts[1]["detail"] = json!("auto");
+        assert_eq!(upstream["input"][0]["content"], model_parts);
+        assert_eq!(upstream["input"][1]["type"], "function_call_output");
+        let mut lowered_output = output.clone();
+        lowered_output[2] = json!({"type":"input_text","text":"File: notes.txt\ntool file",
+            "prompt_cache_breakpoint":{"mode":"explicit"}});
+        assert_eq!(upstream["input"][1]["output"], lowered_output);
+        assert_eq!(upstream["prompt_cache_options"], json!({"mode":"explicit","ttl":"30m"}));
+        // Constructing the model view does not mutate the content stored as canonical history.
+        assert_eq!(serde_json::to_value(&request.input).unwrap(), canonical);
+        assert_eq!(canonical[0]["content"], parts);
+        let stored: ResponsesInput = serde_json::from_value(canonical.clone()).unwrap();
+        let stored_items = serde_json::to_value(stored.into_canonical_items()).unwrap();
+        assert_eq!(stored_items[0], canonical[0]);
+        assert_eq!(stored_items[1]["status"], "completed");
+        assert_eq!(stored_items[1]["output"], canonical[1]["output"]);
+    }
+}
+
+#[test]
+fn explicit_mode_without_breakpoints_does_not_create_boundaries_or_implicit_mode() {
+    let request: RequestPayload = serde_json::from_value(json!({"model":"test",
+        "input":[{"role":"user","content":[{"type":"input_text","text":"no boundary"}]}],
+        "prompt_cache_options":{"mode":"explicit"}}))
+    .unwrap();
+    let upstream: Value =
+        serde_json::to_value(request.to_upstream_request(false, &HashMap::default()).unwrap()).unwrap();
+    assert_eq!(upstream["prompt_cache_options"], json!({"mode":"explicit"}));
+    assert_eq!(
+        upstream["input"][0]["content"],
+        json!([{"type":"input_text","text":"no boundary"}])
+    );
+}

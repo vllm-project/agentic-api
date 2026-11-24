@@ -1,3 +1,5 @@
+use std::fmt::Write as _;
+
 use chrono::Utc;
 use uuid::Uuid;
 
@@ -9,6 +11,23 @@ pub fn uuid7_str(prefix: &str) -> String {
 #[must_use]
 pub fn utcnow_str() -> i64 {
     Utc::now().timestamp()
+}
+
+/// `bytes` as lowercase hex, two digits per byte.
+#[must_use]
+pub fn lowercase_hex(bytes: &[u8]) -> String {
+    let mut hex = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        let _ = write!(hex, "{byte:02x}");
+    }
+    hex
+}
+
+/// A stable 64-bit FNV-1a hash, for names that must not change across processes.
+pub(crate) fn stable_name_hash(value: &str) -> u64 {
+    value.as_bytes().iter().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+        (hash ^ u64::from(*byte)).wrapping_mul(0x0000_0100_0000_01b3)
+    })
 }
 
 /// Serialize any type to JSON string.
@@ -177,6 +196,33 @@ pub fn deserialize_from_value_or_custom_default<T: serde::de::DeserializeOwned, 
 #[must_use]
 pub fn deserialize_from_value_opt<T: serde::de::DeserializeOwned>(value: serde_json::Value) -> Option<T> {
     serde_json::from_value(value).ok()
+}
+
+/// Deserializes a JSON array that may be `null` or absent into a `Vec`, treating both as empty.
+///
+/// # Errors
+///
+/// Returns the deserializer's error when the value is neither `null` nor an array of `T`.
+pub fn deserialize_nullable_vec<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
+{
+    <Option<Vec<T>> as serde::Deserialize>::deserialize(deserializer).map(Option::unwrap_or_default)
+}
+
+/// Serde `deserialize_with` helper: deserializes an explicit JSON `null` as the field's default
+/// instead of failing. Pair it with `#[serde(default)]` so an absent field also defaults.
+///
+/// # Errors
+///
+/// Returns the deserializer's error when the value is neither `null` nor a valid `T`.
+pub fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Default + serde::Deserialize<'de>,
+{
+    <Option<T> as serde::Deserialize>::deserialize(deserializer).map(Option::unwrap_or_default)
 }
 
 /// Serialize any type to JSON bytes, returning an empty `Vec` on error.

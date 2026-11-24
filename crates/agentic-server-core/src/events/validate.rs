@@ -2,7 +2,7 @@ use serde::Deserialize;
 use serde_json::{Map, Value};
 use thiserror::Error;
 
-use super::{EventFrame, SSEEventType, SSEItemType};
+use super::{EventFrame, EventPayload, SSEEventType, SSEItemType};
 use crate::types::io::OutputItem;
 
 #[derive(Debug, Error)]
@@ -18,7 +18,8 @@ pub(crate) struct ValidatedFrame<'a> {
 pub(crate) struct ValidatedItem<'a> {
     pub(crate) item_id: &'a str,
     pub(crate) output_index: u32,
-    pub(crate) item_type: SSEItemType,
+    /// None for shared content events whose owner is resolved by the accumulator.
+    pub(crate) item_type: Option<SSEItemType>,
     pub(crate) done_item: Option<OutputItem>,
 }
 
@@ -46,16 +47,31 @@ pub(crate) fn validate_frame(frame: &EventFrame) -> Result<ValidatedFrame<'_>, E
         SSEEventType::OutputItemDone => {
             validate_output_item(frame, event_name, true).map(|item| ValidatedFrame { item: Some(item) })
         }
-        SSEEventType::Other => Ok(ValidatedFrame { item: None }),
+        SSEEventType::Keepalive
+        | SSEEventType::ResponseSteerAccepted
+        | SSEEventType::ResponseSteerPending
+        | SSEEventType::ResponseSteerFailed
+        | SSEEventType::Other => Ok(ValidatedFrame { item: None }),
         event_type => {
             let output_index = required_output_index(frame, event_name)?;
             let item_id = validate_event_item_id(frame, event_name)?;
             validate_event_fields(&frame.wire.rest, event_type, event_name)?;
-            let item_type = expected_item_type(event_type).ok_or_else(|| {
-                invalid(format!(
+            if event_type == SSEEventType::ContentPartDone
+                && !matches!(frame.payload, EventPayload::ContentPartDone { .. })
+            {
+                return Err(invalid("invalid completed content part"));
+            }
+            let item_type = expected_item_type(frame);
+            if item_type.is_none()
+                && !matches!(
+                    event_type,
+                    SSEEventType::ContentPartAdded | SSEEventType::ContentPartDone
+                )
+            {
+                return Err(invalid(format!(
                     "upstream output item type for event '{event_name}' is unsupported"
-                ))
-            })?;
+                )));
+            }
             Ok(ValidatedFrame {
                 item: Some(ValidatedItem {
                     item_id,
@@ -68,12 +84,9 @@ pub(crate) fn validate_frame(frame: &EventFrame) -> Result<ValidatedFrame<'_>, E
     }
 }
 
-pub(crate) fn expected_item_type(event_type: SSEEventType) -> Option<SSEItemType> {
-    match event_type {
-        SSEEventType::OutputTextDelta
-        | SSEEventType::OutputTextDone
-        | SSEEventType::ContentPartAdded
-        | SSEEventType::ContentPartDone => Some(SSEItemType::Message),
+pub(crate) fn expected_item_type(frame: &EventFrame) -> Option<SSEItemType> {
+    match frame.event_type {
+        SSEEventType::OutputTextDelta | SSEEventType::OutputTextDone => Some(SSEItemType::Message),
         SSEEventType::FunctionCallArgumentsDelta | SSEEventType::FunctionCallArgumentsDone => {
             Some(SSEItemType::FunctionCall)
         }
@@ -89,9 +102,17 @@ pub(crate) fn expected_item_type(event_type: SSEEventType) -> Option<SSEItemType
         | SSEEventType::ReasoningPartDone
         | SSEEventType::ReasoningSummaryTextDelta
         | SSEEventType::ReasoningSummaryTextDone => Some(SSEItemType::Reasoning),
+        SSEEventType::FileSearchCallInProgress
+        | SSEEventType::FileSearchCallSearching
+        | SSEEventType::FileSearchCallCompleted => Some(SSEItemType::FileSearchCall),
         SSEEventType::WebSearchCallInProgress
         | SSEEventType::WebSearchCallSearching
         | SSEEventType::WebSearchCallCompleted => Some(SSEItemType::WebSearchCall),
+        SSEEventType::CodeInterpreterCallInProgress
+        | SSEEventType::CodeInterpreterCallCodeDelta
+        | SSEEventType::CodeInterpreterCallCodeDone
+        | SSEEventType::CodeInterpreterCallInterpreting
+        | SSEEventType::CodeInterpreterCallCompleted => Some(SSEItemType::CodeInterpreterCall),
         SSEEventType::McpCallInProgress
         | SSEEventType::McpCallArgumentsDelta
         | SSEEventType::McpCallArgumentsDone
@@ -100,15 +121,19 @@ pub(crate) fn expected_item_type(event_type: SSEEventType) -> Option<SSEItemType
         SSEEventType::McpListToolsInProgress
         | SSEEventType::McpListToolsCompleted
         | SSEEventType::McpListToolsFailed => Some(SSEItemType::McpListTools),
-        SSEEventType::ResponseCreated
+        SSEEventType::ContentPartAdded
+        | SSEEventType::ContentPartDone
+        | SSEEventType::ResponseCreated
         | SSEEventType::ResponseInProgress
         | SSEEventType::ResponseCompleted
         | SSEEventType::ResponseFailed
         | SSEEventType::ResponseIncomplete
+        | SSEEventType::ResponseSteerAccepted
+        | SSEEventType::ResponseSteerPending
+        | SSEEventType::ResponseSteerFailed
         | SSEEventType::OutputItemAdded
         | SSEEventType::OutputItemDone
-        | SSEEventType::FileSearchCallSearching
-        | SSEEventType::FileSearchCallCompleted
+        | SSEEventType::Keepalive
         | SSEEventType::Other => None,
     }
 }
@@ -130,31 +155,60 @@ pub(crate) fn output_item_identity<'a>(
     Ok((item_id, item_type))
 }
 
-pub(crate) fn ensure_supported_output_item_type(item_type: &str) -> Result<(), EventError> {
-    if item_type.parse::<SSEItemType>().is_ok() {
-        return Ok(());
+/// The status of an upstream response object.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum UpstreamStatus {
+    InProgress,
+    Completed,
+    Failed,
+    Incomplete,
+}
+
+/// What strict ingestion requires of an upstream response object, in a complete body or a `response.*` event.
+#[derive(Debug, Deserialize)]
+pub(crate) struct UpstreamResponse {
+    /// Missing reads as empty, which [`UpstreamResponse::decode`] rejects with the field's name.
+    #[serde(default)]
+    id: String,
+    pub(crate) status: UpstreamStatus,
+    /// Decoded only so that a `service_tier` that is not a string or null is rejected.
+    #[serde(default, rename = "service_tier")]
+    _service_tier: Option<String>,
+}
+
+impl UpstreamResponse {
+    /// Decodes the response object; `id` must be non-empty.
+    pub(crate) fn decode(response: &Value) -> Result<Self, EventError> {
+        let decoded =
+            Self::deserialize(response).map_err(|error| invalid(format!("upstream response is invalid: {error}")))?;
+        if decoded.id.is_empty() {
+            return Err(missing_field("upstream response", "id"));
+        }
+        Ok(decoded)
     }
-    Err(invalid(format!(
-        "upstream output item type '{item_type}' is unsupported"
-    )))
 }
 
 fn validate_response_event(frame: &EventFrame, event_name: &str) -> Result<(), EventError> {
-    let response = required_object(&frame.wire.rest, "response", event_name)?;
-    required_str(response, "id", "upstream response")?;
-    let status = required_str(response, "status", "upstream response")?;
-    let expected_status = match frame.event_type {
-        SSEEventType::ResponseCreated | SSEEventType::ResponseInProgress => "in_progress",
-        SSEEventType::ResponseCompleted => "completed",
-        SSEEventType::ResponseFailed => "failed",
-        SSEEventType::ResponseIncomplete => "incomplete",
+    let response = frame
+        .wire
+        .rest
+        .get("response")
+        .filter(|response| response.is_object())
+        .ok_or_else(|| missing_field(event_name, "response"))?;
+    let status = UpstreamResponse::decode(response)?.status;
+    let expected = match frame.event_type {
+        SSEEventType::ResponseCreated | SSEEventType::ResponseInProgress => UpstreamStatus::InProgress,
+        SSEEventType::ResponseCompleted => UpstreamStatus::Completed,
+        SSEEventType::ResponseFailed => UpstreamStatus::Failed,
+        SSEEventType::ResponseIncomplete => UpstreamStatus::Incomplete,
         _ => return Ok(()),
     };
-    if status == expected_status {
+    if status == expected {
         return Ok(());
     }
     Err(invalid(format!(
-        "upstream stream event '{event_name}' has status '{status}', expected '{expected_status}'"
+        "upstream stream event '{event_name}' has status {status:?}, expected {expected:?}"
     )))
 }
 
@@ -167,10 +221,21 @@ fn validate_output_item<'a>(
     let item = required_object(&frame.wire.rest, "item", event_name)?;
     let (item_id, item_type) = output_item_identity(item, "output item")?;
     if !complete {
+        if item_type.is_collaboration()
+            && !matches!(
+                &frame.payload,
+                EventPayload::OutputItemAdded {
+                    initial_item: Some(_),
+                    ..
+                }
+            )
+        {
+            return Err(invalid("collaboration item has an invalid opening snapshot"));
+        }
         return Ok(ValidatedItem {
             item_id,
             output_index,
-            item_type,
+            item_type: Some(item_type),
             done_item: None,
         });
     }
@@ -190,7 +255,7 @@ fn validate_output_item<'a>(
     Ok(ValidatedItem {
         item_id,
         output_index,
-        item_type,
+        item_type: Some(item_type),
         done_item: Some(output),
     })
 }
@@ -242,11 +307,13 @@ fn validate_event_fields(
         | SSEEventType::ShellCallCommandDelta
         | SSEEventType::ReasoningTextDelta
         | SSEEventType::ReasoningSummaryTextDelta
-        | SSEEventType::McpCallArgumentsDelta => Some("delta"),
+        | SSEEventType::McpCallArgumentsDelta
+        | SSEEventType::CodeInterpreterCallCodeDelta => Some("delta"),
         SSEEventType::OutputTextDone | SSEEventType::ReasoningTextDone | SSEEventType::ReasoningSummaryTextDone => {
             Some("text")
         }
         SSEEventType::FunctionCallArgumentsDone | SSEEventType::McpCallArgumentsDone => Some("arguments"),
+        SSEEventType::CodeInterpreterCallCodeDone => Some("code"),
         SSEEventType::CustomToolCallInputDone => Some("input"),
         SSEEventType::ShellCallCommandAdded | SSEEventType::ShellCallCommandDone => Some("command"),
         SSEEventType::ContentPartAdded
@@ -261,19 +328,27 @@ fn validate_event_fields(
         | SSEEventType::ResponseCompleted
         | SSEEventType::ResponseFailed
         | SSEEventType::ResponseIncomplete
+        | SSEEventType::ResponseSteerAccepted
+        | SSEEventType::ResponseSteerPending
+        | SSEEventType::ResponseSteerFailed
         | SSEEventType::OutputItemAdded
         | SSEEventType::OutputItemDone
+        | SSEEventType::FileSearchCallInProgress
         | SSEEventType::FileSearchCallSearching
         | SSEEventType::FileSearchCallCompleted
         | SSEEventType::WebSearchCallInProgress
         | SSEEventType::WebSearchCallSearching
         | SSEEventType::WebSearchCallCompleted
+        | SSEEventType::CodeInterpreterCallInProgress
+        | SSEEventType::CodeInterpreterCallInterpreting
+        | SSEEventType::CodeInterpreterCallCompleted
         | SSEEventType::McpCallInProgress
         | SSEEventType::McpCallCompleted
         | SSEEventType::McpCallFailed
         | SSEEventType::McpListToolsInProgress
         | SSEEventType::McpListToolsCompleted
         | SSEEventType::McpListToolsFailed
+        | SSEEventType::Keepalive
         | SSEEventType::Other => None,
     };
     if let Some(field) = required {
@@ -337,7 +412,38 @@ mod tests {
     use serde_json::json;
 
     use super::validate_frame;
-    use crate::events::normalize_sse_line;
+    use crate::events::{EventPayload, SSEEventType, normalize_sse_line};
+
+    #[test]
+    fn steering_controls_have_no_output_item_lifecycle() {
+        let descriptor = json!({"id": "steer_test", "previous_response_id": "resp_test"});
+        for (event, expected_type) in [
+            (
+                json!({"type": "response.steer.accepted", "steer": descriptor}),
+                SSEEventType::ResponseSteerAccepted,
+            ),
+            (
+                json!({"type": "response.steer.pending", "steer": descriptor,
+                "reason": "waiting_for_required_input",
+                "required_input": [{"type": "function_call_output", "call_id": "call_test", "name": "get_weather"}]}),
+                SSEEventType::ResponseSteerPending,
+            ),
+            (
+                json!({"type": "response.steer.failed",
+                "steer": {"id": "steer_test", "previous_response_id": "resp_test", "input": "Keep the revised scope."},
+                "error": {"type": "invalid_request_error", "code": "successor_creation_failed", "message": "Failed."}}),
+                SSEEventType::ResponseSteerFailed,
+            ),
+        ] {
+            let frame = normalize_sse_line(&format!("data: {event}")).unwrap();
+            assert_eq!(frame.event_type, expected_type);
+            assert!(matches!(frame.payload, EventPayload::None));
+            assert!(frame.wire.output_index.is_none());
+            assert_eq!(frame.wire.rest["steer"], event["steer"]);
+            assert!(validate_frame(&frame).unwrap().item.is_none());
+            assert_eq!(super::expected_item_type(&frame), None);
+        }
+    }
 
     #[test]
     fn only_native_shell_command_events_allow_omitted_item_id() {
