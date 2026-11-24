@@ -25,20 +25,20 @@ use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 
-use super::args::{WebSearchArguments, clean_string, clean_vec, retain_allowed_results, validate_count};
+use super::args::{
+    SearchArgument, SearchScope, WebSearchArguments, clean_string, log_ignored_arguments, retain_allowed_results,
+};
+use super::provider::{ProviderSettings, failure_from_status};
 use super::{
-    ApiKey, WebSearchProvider, WebSearchProviderMetadata, WebSearchProviderResponse, WebSearchResult, clean_base_url,
-    null_as_default, read_response_limited,
+    ApiKey, WebSearchProvider, WebSearchProviderMetadata, WebSearchProviderResponse, WebSearchResult, null_as_default,
+    read_response_limited,
 };
 use crate::config::WebSearchProviderKind;
 use crate::tool::domain_policy::DomainFilter;
 use crate::tool::handler::ToolError;
-use crate::types::tools::{WebSearchContextSize, WebSearchToolParam};
-
-pub(crate) const KEENABLE_API_KEY: &str = WebSearchProviderKind::Keenable.default_api_key_env();
+use crate::types::tools::WebSearchToolParam;
 
 /// Largest `max_results` Keenable accepts per request.
 pub(crate) const KEENABLE_MAX_RESULTS: u8 = 20;
@@ -66,18 +66,12 @@ impl KeenableSearchProvider {
         base_url: Option<String>,
         max_concurrent_requests: NonZeroUsize,
     ) -> Self {
-        let api_key = api_key
-            .map(|value| value.trim().to_owned())
-            .filter(|value| !value.is_empty())
-            .map(ApiKey);
-        let base_url = base_url
-            .and_then(|value| clean_base_url(&value))
-            .or_else(|| WebSearchProviderKind::Keenable.default_base_url().map(str::to_owned))
-            .unwrap_or_default();
+        let ProviderSettings { api_key, base_url } =
+            ProviderSettings::from_values(WebSearchProviderKind::Keenable, api_key, base_url);
         Self {
             client,
             api_key,
-            base_url,
+            base_url: base_url.unwrap_or_default(),
             max_concurrent_requests,
         }
     }
@@ -119,7 +113,7 @@ impl WebSearchProvider for KeenableSearchProvider {
 
             let status = resp.status();
             if !status.is_success() {
-                return Err(failure_from_status(resp).await);
+                return Err(failure_from_status(resp, WebSearchProviderKind::Keenable, &[]).await);
             }
 
             let response_text = read_response_limited(resp, WebSearchProviderKind::Keenable).await?;
@@ -131,41 +125,6 @@ impl WebSearchProvider for KeenableSearchProvider {
 
     fn max_concurrent_requests(&self) -> Option<NonZeroUsize> {
         Some(self.max_concurrent_requests)
-    }
-}
-
-/// Maps a non-2xx Keenable response to an actionable, credential-free error.
-///
-/// `401`/`403` name the key variable without echoing the upstream body; `429`
-/// is reported without retrying (a retry loop would blur the gateway tool
-/// timeout) and carries the upstream `Retry-After` so the caller can back off.
-async fn failure_from_status(resp: reqwest::Response) -> ToolError {
-    let status = resp.status();
-    match status {
-        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => ToolError::Execution(format!(
-            "Keenable rejected the request ({status}); check {KEENABLE_API_KEY}"
-        )),
-        StatusCode::TOO_MANY_REQUESTS => {
-            let retry_after = resp
-                .headers()
-                .get("retry-after")
-                .and_then(|value| value.to_str().ok())
-                .map(str::trim)
-                .filter(|value| !value.is_empty());
-            let hint = retry_after.map_or_else(
-                || "; no Retry-After header was provided".to_owned(),
-                |value| format!("; retry after {value}"),
-            );
-            ToolError::Execution(format!(
-                "Keenable rate limited the request ({status}); the gateway does not retry{hint}"
-            ))
-        }
-        _ => {
-            let body = read_response_limited(resp, WebSearchProviderKind::Keenable)
-                .await
-                .unwrap_or_default();
-            ToolError::Execution(format!("Keenable search returned {status}: {body}"))
-        }
     }
 }
 
@@ -191,84 +150,30 @@ impl KeenableSearchRequest {
         args: &WebSearchArguments,
         config: &WebSearchToolParam,
     ) -> Result<Self, ToolError> {
-        let max_results = args
-            .count
-            .or_else(|| {
-                config
-                    .search_context_size
-                    .map(WebSearchContextSize::default_count)
-                    .map(u16::from)
-            })
-            .map(validate_count)
-            .transpose()?
-            .map(clamp_max_results);
-        let config_domains = config
-            .filters
-            .as_ref()
-            .and_then(|filters| clean_vec(filters.allowed_domains.as_deref()));
-        let config_blocked_domains = config
-            .filters
-            .as_ref()
-            .and_then(|filters| clean_vec(filters.blocked_domains.as_deref()));
-        let include_domains = config_domains.or_else(|| args.include_domains.clone());
-        let exclude_domains = config_blocked_domains.or_else(|| args.exclude_domains.clone());
-        if include_domains.is_some() && (exclude_domains.is_some() || args.boost_domains.is_some()) {
-            return Err(ToolError::Config(
-                "include_domains cannot be combined with exclude_domains or boost_domains".to_owned(),
-            ));
-        }
-        log_ignored_arguments(args, config);
-        let domain_filter = DomainFilter::new(include_domains.as_deref(), exclude_domains.as_deref());
-
+        let scope = SearchScope::from_args_and_config(args, config, Some(KEENABLE_MAX_RESULTS))?;
+        log_ignored_arguments(WebSearchProviderKind::Keenable, args, config, IGNORED_ARGUMENTS);
         Ok(Self {
             body: KeenableSearchBody {
                 query: query.trim().to_owned(),
-                max_results,
+                max_results: scope.count,
             },
-            domain_filter,
+            domain_filter: scope.domain_filter(),
         })
-    }
-}
-
-/// Keenable accepts at most [`KEENABLE_MAX_RESULTS`] results; the model cannot
-/// know provider limits, so a larger request is clamped rather than rejected.
-fn clamp_max_results(count: u8) -> u8 {
-    if count > KEENABLE_MAX_RESULTS {
-        tracing::debug!(
-            requested = count,
-            max = KEENABLE_MAX_RESULTS,
-            "clamped web_search count to Keenable maximum"
-        );
-        KEENABLE_MAX_RESULTS
-    } else {
-        count
     }
 }
 
 /// Arguments without a Keenable request parameter. Domain filters are not
 /// listed: they are applied client-side.
-fn log_ignored_arguments(args: &WebSearchArguments, config: &WebSearchToolParam) {
-    let config_country = config
-        .user_location
-        .as_ref()
-        .is_some_and(|location| clean_string(location.country.as_deref()).is_some());
-    let ignored: Vec<&str> = [
-        ("country", config_country || args.country.is_some()),
-        ("language", args.language.is_some()),
-        ("safesearch", args.safesearch.is_some()),
-        ("freshness", args.freshness.is_some()),
-        ("livecrawl", args.livecrawl.is_some()),
-        ("livecrawl_formats", args.livecrawl_formats.is_some()),
-        ("crawl_timeout", args.crawl_timeout.is_some()),
-        ("boost_domains", args.boost_domains.is_some()),
-    ]
-    .into_iter()
-    .filter_map(|(name, present)| present.then_some(name))
-    .collect();
-    if !ignored.is_empty() {
-        tracing::debug!(arguments = ?ignored, "ignored web_search arguments without a Keenable equivalent");
-    }
-}
+const IGNORED_ARGUMENTS: &[SearchArgument] = &[
+    SearchArgument::Country,
+    SearchArgument::Language,
+    SearchArgument::Safesearch,
+    SearchArgument::Freshness,
+    SearchArgument::Livecrawl,
+    SearchArgument::LivecrawlFormats,
+    SearchArgument::CrawlTimeout,
+    SearchArgument::BoostDomains,
+];
 
 /// Keenable's search envelope. Only `results` is modeled; unknown keys are
 /// ignored so upstream additions never break the provider.

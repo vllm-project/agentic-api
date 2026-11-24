@@ -1,7 +1,9 @@
 //! Model-facing `web_search` arguments and provider-neutral argument helpers.
 //!
 //! Everything here is independent of a concrete search backend: parsing and
-//! validating what the model sent, the typed [`Freshness`] filter, and result
+//! validating what the model sent, the typed [`Freshness`] filter, the result
+//! count and domain lists every provider request starts from
+//! ([`SearchScope`]), the log of arguments a provider drops, and result
 //! retention under the shared [`DomainFilter`] for providers without
 //! server-side domain filtering.
 
@@ -12,8 +14,10 @@ use chrono::NaiveDate;
 use serde::Deserialize;
 
 use super::WebSearchResult;
+use crate::config::WebSearchProviderKind;
 use crate::tool::domain_policy::DomainFilter;
 use crate::tool::handler::ToolError;
+use crate::types::tools::{WebSearchContextSize, WebSearchToolParam};
 
 pub(crate) const MAX_WEB_SEARCH_QUERIES: usize = 5;
 
@@ -218,6 +222,155 @@ pub(crate) fn clean_vec(values: Option<&[String]>) -> Option<Vec<String>> {
     (!cleaned.is_empty()).then_some(cleaned)
 }
 
+/// The result count and domain lists a provider request is built from, derived
+/// the same way for every provider.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct SearchScope {
+    pub(crate) count: Option<u8>,
+    pub(crate) include_domains: Option<Vec<String>>,
+    pub(crate) exclude_domains: Option<Vec<String>>,
+}
+
+impl SearchScope {
+    /// `count` falls back to the default of the tool's `search_context_size`,
+    /// must be within 1..=100, and is then clamped to `max_count`: the model
+    /// cannot know provider limits, so a larger request is clamped rather than
+    /// rejected. Domain filters in the tool configuration win over the model's
+    /// lists, and an allowlist cannot be combined with a blocklist or
+    /// `boost_domains`.
+    pub(crate) fn from_args_and_config(
+        args: &WebSearchArguments,
+        config: &WebSearchToolParam,
+        max_count: Option<u8>,
+    ) -> Result<Self, ToolError> {
+        let count = args
+            .count
+            .or_else(|| {
+                config
+                    .search_context_size
+                    .map(WebSearchContextSize::default_count)
+                    .map(u16::from)
+            })
+            .map(validate_count)
+            .transpose()?
+            .map(|count| clamp_count(count, max_count));
+        let config_domains = config
+            .filters
+            .as_ref()
+            .and_then(|filters| clean_vec(filters.allowed_domains.as_deref()));
+        let config_blocked_domains = config
+            .filters
+            .as_ref()
+            .and_then(|filters| clean_vec(filters.blocked_domains.as_deref()));
+        let include_domains = config_domains.or_else(|| args.include_domains.clone());
+        let exclude_domains = config_blocked_domains.or_else(|| args.exclude_domains.clone());
+        if include_domains.is_some() && (exclude_domains.is_some() || args.boost_domains.is_some()) {
+            return Err(ToolError::Config(
+                "include_domains cannot be combined with exclude_domains or boost_domains".to_owned(),
+            ));
+        }
+        Ok(Self {
+            count,
+            include_domains,
+            exclude_domains,
+        })
+    }
+
+    /// The client-side filter for these domain lists.
+    pub(crate) fn domain_filter(&self) -> DomainFilter {
+        DomainFilter::new(self.include_domains.as_deref(), self.exclude_domains.as_deref())
+    }
+}
+
+fn clamp_count(count: u8, max_count: Option<u8>) -> u8 {
+    match max_count {
+        Some(max) if count > max => {
+            tracing::debug!(
+                requested = count,
+                max,
+                "clamped web_search count to the provider maximum"
+            );
+            max
+        }
+        _ => count,
+    }
+}
+
+/// A `web_search` argument that some providers have no parameter for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SearchArgument {
+    Country,
+    Language,
+    Safesearch,
+    Freshness,
+    Livecrawl,
+    LivecrawlFormats,
+    CrawlTimeout,
+    BoostDomains,
+}
+
+impl SearchArgument {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Country => "country",
+            Self::Language => "language",
+            Self::Safesearch => "safesearch",
+            Self::Freshness => "freshness",
+            Self::Livecrawl => "livecrawl",
+            Self::LivecrawlFormats => "livecrawl_formats",
+            Self::CrawlTimeout => "crawl_timeout",
+            Self::BoostDomains => "boost_domains",
+        }
+    }
+
+    /// Whether the model or, for `country`, the tool's `user_location` set it.
+    fn is_set(self, args: &WebSearchArguments, config: &WebSearchToolParam) -> bool {
+        match self {
+            Self::Country => {
+                args.country.is_some()
+                    || config
+                        .user_location
+                        .as_ref()
+                        .is_some_and(|location| clean_string(location.country.as_deref()).is_some())
+            }
+            Self::Language => args.language.is_some(),
+            Self::Safesearch => args.safesearch.is_some(),
+            Self::Freshness => args.freshness.is_some(),
+            Self::Livecrawl => args.livecrawl.is_some(),
+            Self::LivecrawlFormats => args.livecrawl_formats.is_some(),
+            Self::CrawlTimeout => args.crawl_timeout.is_some(),
+            Self::BoostDomains => args.boost_domains.is_some(),
+        }
+    }
+}
+
+/// The `unsupported` arguments that are set, in the order given.
+fn ignored_arguments(
+    args: &WebSearchArguments,
+    config: &WebSearchToolParam,
+    unsupported: &[SearchArgument],
+) -> Vec<&'static str> {
+    unsupported
+        .iter()
+        .filter(|argument| argument.is_set(args, config))
+        .map(|argument| argument.name())
+        .collect()
+}
+
+/// Logs the `unsupported` arguments the provider drops because it has no
+/// parameter for them.
+pub(crate) fn log_ignored_arguments(
+    provider: WebSearchProviderKind,
+    args: &WebSearchArguments,
+    config: &WebSearchToolParam,
+    unsupported: &[SearchArgument],
+) {
+    let ignored = ignored_arguments(args, config, unsupported);
+    if !ignored.is_empty() {
+        tracing::debug!(arguments = ?ignored, "ignored web_search arguments without a {provider} equivalent");
+    }
+}
+
 /// Drops the results a declaration's domain filter refuses. A result without a
 /// parseable URL is dropped whenever a filter is active (fail closed); with no
 /// filter the results are untouched.
@@ -230,6 +383,7 @@ pub(crate) fn retain_allowed_results(filter: &DomainFilter, results: &mut Vec<We
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::tools::{DomainFilters, WebSearchUserLocation};
 
     fn result(url: &str) -> WebSearchResult {
         WebSearchResult {
@@ -377,6 +531,165 @@ mod tests {
                 "invalid tool config: web_search count must be between 1 and 100"
             );
         }
+    }
+
+    fn scope(json: &str, config: &WebSearchToolParam, max_count: Option<u8>) -> Result<SearchScope, ToolError> {
+        SearchScope::from_args_and_config(&WebSearchArguments::from_json(json).unwrap(), config, max_count)
+    }
+
+    #[test]
+    fn scope_count_defaults_from_context_size_then_validates_and_clamps() {
+        let default = WebSearchToolParam::default();
+        assert_eq!(
+            scope(r#"{"query":"q"}"#, &default, Some(20)).unwrap(),
+            SearchScope::default()
+        );
+        assert_eq!(
+            scope(r#"{"query":"q","count":50}"#, &default, Some(20)).unwrap().count,
+            Some(20)
+        );
+        assert_eq!(
+            scope(r#"{"query":"q","count":20}"#, &default, Some(20)).unwrap().count,
+            Some(20)
+        );
+        assert_eq!(
+            scope(r#"{"query":"q","count":100}"#, &default, None).unwrap().count,
+            Some(100)
+        );
+
+        let high = WebSearchToolParam {
+            search_context_size: Some(WebSearchContextSize::High),
+            ..WebSearchToolParam::default()
+        };
+        assert_eq!(
+            scope(r#"{"query":"q"}"#, &high, Some(20)).unwrap().count,
+            Some(WebSearchContextSize::High.default_count())
+        );
+        assert_eq!(
+            scope(r#"{"query":"q","count":4}"#, &high, Some(20)).unwrap().count,
+            Some(4)
+        );
+
+        for count in [0, 101] {
+            let error = scope(&format!(r#"{{"query":"q","count":{count}}}"#), &default, Some(20)).unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                "invalid tool config: web_search count must be between 1 and 100"
+            );
+        }
+    }
+
+    #[test]
+    fn scope_prefers_tool_config_domains_and_rejects_conflicting_lists() {
+        let config = WebSearchToolParam {
+            filters: Some(DomainFilters {
+                allowed_domains: Some(vec![" rust-lang.org ".to_owned(), String::new()]),
+                blocked_domains: Some(vec!["  ".to_owned()]),
+            }),
+            ..WebSearchToolParam::default()
+        };
+        let error = scope(
+            r#"{"query":"q","include_domains":["example.com"],"exclude_domains":["spam.example"]}"#,
+            &config,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "invalid tool config: include_domains cannot be combined with exclude_domains or boost_domains",
+            "a blank config blocklist falls back to the model's list"
+        );
+
+        let scoped = scope(r#"{"query":"q","include_domains":["example.com"]}"#, &config, None).unwrap();
+        assert_eq!(scoped.include_domains, Some(vec!["rust-lang.org".to_owned()]));
+        assert_eq!(scoped.exclude_domains, None);
+        let filter = scoped.domain_filter();
+        assert!(filter.allows("https://doc.rust-lang.org/book"));
+        assert!(!filter.allows("https://example.com/"));
+    }
+
+    #[test]
+    fn scope_rejects_an_allowlist_with_boost_domains() {
+        let error = scope(
+            r#"{"query":"q","include_domains":["a.com"],"boost_domains":["b.com"]}"#,
+            &WebSearchToolParam::default(),
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "invalid tool config: include_domains cannot be combined with exclude_domains or boost_domains"
+        );
+
+        let scoped = scope(
+            r#"{"query":"q","exclude_domains":["b.com"]}"#,
+            &WebSearchToolParam::default(),
+            None,
+        )
+        .unwrap();
+        assert_eq!(scoped.exclude_domains, Some(vec!["b.com".to_owned()]));
+        assert!(!scoped.domain_filter().allows("https://b.com/x"));
+    }
+
+    #[test]
+    fn ignored_arguments_lists_only_the_set_ones_in_the_given_order() {
+        use SearchArgument::{
+            BoostDomains, Country, CrawlTimeout, Freshness, Language, Livecrawl, LivecrawlFormats, Safesearch,
+        };
+
+        let all = [
+            Country,
+            Language,
+            Safesearch,
+            Freshness,
+            Livecrawl,
+            LivecrawlFormats,
+            CrawlTimeout,
+            BoostDomains,
+        ];
+        let args = WebSearchArguments::from_json(
+            r#"{"query":"q","country":"us","language":"en","safesearch":"off","freshness":"day","livecrawl":"web",
+                "livecrawl_formats":["markdown"],"crawl_timeout":5,"boost_domains":["a.com"]}"#,
+        )
+        .unwrap();
+        let config = WebSearchToolParam::default();
+        assert_eq!(
+            ignored_arguments(&args, &config, &all),
+            [
+                "country",
+                "language",
+                "safesearch",
+                "freshness",
+                "livecrawl",
+                "livecrawl_formats",
+                "crawl_timeout",
+                "boost_domains"
+            ]
+        );
+        assert_eq!(
+            ignored_arguments(&args, &config, &[BoostDomains, Country]),
+            ["boost_domains", "country"]
+        );
+
+        let bare = WebSearchArguments::from_json(r#"{"query":"q"}"#).unwrap();
+        assert!(ignored_arguments(&bare, &config, &all).is_empty());
+
+        let located = WebSearchToolParam {
+            user_location: Some(WebSearchUserLocation {
+                country: Some("gb".to_owned()),
+                ..WebSearchUserLocation::default()
+            }),
+            ..WebSearchToolParam::default()
+        };
+        assert_eq!(ignored_arguments(&bare, &located, &all), ["country"]);
+        let blank = WebSearchToolParam {
+            user_location: Some(WebSearchUserLocation {
+                country: Some("  ".to_owned()),
+                ..WebSearchUserLocation::default()
+            }),
+            ..WebSearchToolParam::default()
+        };
+        assert!(ignored_arguments(&bare, &blank, &all).is_empty());
     }
 
     #[test]

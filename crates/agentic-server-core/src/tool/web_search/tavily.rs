@@ -26,18 +26,21 @@ use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 
-use super::args::{Freshness, WebSearchArguments, clean_string, clean_vec, retain_allowed_results, validate_count};
+use super::args::{
+    Freshness, SearchArgument, SearchScope, WebSearchArguments, clean_string, log_ignored_arguments,
+    retain_allowed_results,
+};
+use super::provider::{BillingStatus, ProviderSettings, failure_from_status};
 use super::{
-    ApiKey, WebSearchProvider, WebSearchProviderMetadata, WebSearchProviderResponse, WebSearchResult, clean_base_url,
-    null_as_default, read_response_limited,
+    ApiKey, WebSearchProvider, WebSearchProviderMetadata, WebSearchProviderResponse, WebSearchResult, null_as_default,
+    read_response_limited,
 };
 use crate::config::WebSearchProviderKind;
 use crate::tool::domain_policy::DomainFilter;
 use crate::tool::handler::ToolError;
-use crate::types::tools::{WebSearchContextSize, WebSearchToolParam};
+use crate::types::tools::WebSearchToolParam;
 
 pub(crate) const TAVILY_API_KEY: &str = WebSearchProviderKind::Tavily.default_api_key_env();
 
@@ -50,8 +53,17 @@ const DATE_FORMAT: &str = "%Y-%m-%d";
 const SEARCH_DEPTH: &str = "basic";
 const TOPIC: &str = "general";
 /// Tavily's plan-limit statuses, outside the IANA registry.
-const PLAN_LIMIT_EXCEEDED: u16 = 432;
-const PAYG_LIMIT_EXCEEDED: u16 = 433;
+const BILLING_STATUSES: &[BillingStatus] = &[
+    BillingStatus {
+        code: 432,
+        meaning: PLAN_LIMIT_EXCEEDED,
+    },
+    BillingStatus {
+        code: 433,
+        meaning: PLAN_LIMIT_EXCEEDED,
+    },
+];
+const PLAN_LIMIT_EXCEEDED: &str = "the plan usage limit was exceeded";
 
 #[derive(Debug, Clone)]
 pub(crate) struct TavilySearchProvider {
@@ -71,18 +83,12 @@ impl TavilySearchProvider {
         base_url: Option<String>,
         max_concurrent_requests: NonZeroUsize,
     ) -> Self {
-        let api_key = api_key
-            .map(|value| value.trim().to_owned())
-            .filter(|value| !value.is_empty())
-            .map(ApiKey);
-        let base_url = base_url
-            .and_then(|value| clean_base_url(&value))
-            .or_else(|| WebSearchProviderKind::Tavily.default_base_url().map(str::to_owned))
-            .unwrap_or_default();
+        let ProviderSettings { api_key, base_url } =
+            ProviderSettings::from_values(WebSearchProviderKind::Tavily, api_key, base_url);
         Self {
             client,
             api_key,
-            base_url,
+            base_url: base_url.unwrap_or_default(),
             max_concurrent_requests,
         }
     }
@@ -116,7 +122,7 @@ impl WebSearchProvider for TavilySearchProvider {
 
             let status = resp.status();
             if !status.is_success() {
-                return Err(failure_from_status(resp).await);
+                return Err(failure_from_status(resp, WebSearchProviderKind::Tavily, BILLING_STATUSES).await);
             }
 
             let response_text = read_response_limited(resp, WebSearchProviderKind::Tavily).await?;
@@ -128,46 +134,6 @@ impl WebSearchProvider for TavilySearchProvider {
 
     fn max_concurrent_requests(&self) -> Option<NonZeroUsize> {
         Some(self.max_concurrent_requests)
-    }
-}
-
-/// Maps a non-2xx Tavily response to an actionable, credential-free error.
-///
-/// `401`/`403` name the key variable without echoing the upstream body; `429`
-/// is reported without retrying (a retry loop would blur the gateway tool
-/// timeout) and carries the upstream `Retry-After` so the caller can back
-/// off; Tavily's `432`/`433` plan-limit statuses are reported without retrying.
-async fn failure_from_status(resp: reqwest::Response) -> ToolError {
-    let status = resp.status();
-    match status {
-        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => ToolError::Execution(format!(
-            "Tavily rejected the API key ({status}); check {TAVILY_API_KEY}"
-        )),
-        StatusCode::TOO_MANY_REQUESTS => {
-            let retry_after = resp
-                .headers()
-                .get("retry-after")
-                .and_then(|value| value.to_str().ok())
-                .map(str::trim)
-                .filter(|value| !value.is_empty());
-            let hint = retry_after.map_or_else(
-                || "; no Retry-After header was provided".to_owned(),
-                |value| format!("; retry after {value}"),
-            );
-            ToolError::Execution(format!(
-                "Tavily rate limited the request ({status}); the gateway does not retry{hint}"
-            ))
-        }
-        _ if matches!(status.as_u16(), PLAN_LIMIT_EXCEEDED | PAYG_LIMIT_EXCEEDED) => ToolError::Execution(format!(
-            "Tavily reported the plan usage limit was exceeded ({}); the gateway does not retry",
-            status.as_u16()
-        )),
-        _ => {
-            let body = read_response_limited(resp, WebSearchProviderKind::Tavily)
-                .await
-                .unwrap_or_default();
-            ToolError::Execution(format!("Tavily search returned {status}: {body}"))
-        }
     }
 }
 
@@ -225,48 +191,23 @@ impl TavilySearchRequest {
         args: &WebSearchArguments,
         config: &WebSearchToolParam,
     ) -> Result<Self, ToolError> {
-        let max_results = args
-            .count
-            .or_else(|| {
-                config
-                    .search_context_size
-                    .map(WebSearchContextSize::default_count)
-                    .map(u16::from)
-            })
-            .map(validate_count)
-            .transpose()?
-            .map(clamp_max_results);
-        let config_domains = config
-            .filters
-            .as_ref()
-            .and_then(|filters| clean_vec(filters.allowed_domains.as_deref()));
-        let config_blocked_domains = config
-            .filters
-            .as_ref()
-            .and_then(|filters| clean_vec(filters.blocked_domains.as_deref()));
-        let include_domains = config_domains.or_else(|| args.include_domains.clone());
-        let exclude_domains = config_blocked_domains.or_else(|| args.exclude_domains.clone());
-        if include_domains.is_some() && (exclude_domains.is_some() || args.boost_domains.is_some()) {
-            return Err(ToolError::Config(
-                "include_domains cannot be combined with exclude_domains or boost_domains".to_owned(),
-            ));
-        }
-        log_ignored_arguments(args, config);
+        let scope = SearchScope::from_args_and_config(args, config, Some(TAVILY_MAX_RESULTS))?;
+        log_ignored_arguments(WebSearchProviderKind::Tavily, args, config, IGNORED_ARGUMENTS);
         let (time_range, start_date, end_date) = args.freshness.map(tavily_freshness).unwrap_or_default();
         let filter_by_published_date = args.freshness.is_some();
-        let domain_filter = DomainFilter::new(include_domains.as_deref(), exclude_domains.as_deref());
+        let domain_filter = scope.domain_filter();
 
         Ok(Self {
             body: TavilySearchBody {
                 query: query.trim().to_owned(),
                 search_depth: SEARCH_DEPTH,
                 topic: TOPIC,
-                max_results,
+                max_results: scope.count,
                 time_range,
                 start_date,
                 end_date,
-                include_domains: include_domains.unwrap_or_default(),
-                exclude_domains: exclude_domains.unwrap_or_default(),
+                include_domains: scope.include_domains.unwrap_or_default(),
+                exclude_domains: scope.exclude_domains.unwrap_or_default(),
                 language: args.language.as_deref().map(tavily_language),
                 safe_search: args.safesearch.as_deref().map(tavily_safe_search),
                 include_published_date: true,
@@ -277,44 +218,17 @@ impl TavilySearchRequest {
     }
 }
 
-/// Tavily accepts at most [`TAVILY_MAX_RESULTS`] results; the model cannot
-/// know provider limits, so a larger request is clamped rather than rejected.
-fn clamp_max_results(count: u8) -> u8 {
-    if count > TAVILY_MAX_RESULTS {
-        tracing::debug!(
-            requested = count,
-            max = TAVILY_MAX_RESULTS,
-            "clamped web_search count to Tavily maximum"
-        );
-        TAVILY_MAX_RESULTS
-    } else {
-        count
-    }
-}
-
 /// `country` is dropped because Tavily expects full lowercase country names
 /// rather than the ISO 3166-1 codes the tool contract carries; You.com-specific
 /// arguments have no Tavily equivalent and are dropped; `boost_domains` has no
 /// filtering semantics, so it is dropped too.
-fn log_ignored_arguments(args: &WebSearchArguments, config: &WebSearchToolParam) {
-    let config_country = config
-        .user_location
-        .as_ref()
-        .is_some_and(|location| clean_string(location.country.as_deref()).is_some());
-    let ignored: Vec<&str> = [
-        ("country", config_country || args.country.is_some()),
-        ("livecrawl", args.livecrawl.is_some()),
-        ("livecrawl_formats", args.livecrawl_formats.is_some()),
-        ("crawl_timeout", args.crawl_timeout.is_some()),
-        ("boost_domains", args.boost_domains.is_some()),
-    ]
-    .into_iter()
-    .filter_map(|(name, present)| present.then_some(name))
-    .collect();
-    if !ignored.is_empty() {
-        tracing::debug!(arguments = ?ignored, "ignored web_search arguments without a Tavily equivalent");
-    }
-}
+const IGNORED_ARGUMENTS: &[SearchArgument] = &[
+    SearchArgument::Country,
+    SearchArgument::Livecrawl,
+    SearchArgument::LivecrawlFormats,
+    SearchArgument::CrawlTimeout,
+    SearchArgument::BoostDomains,
+];
 
 /// Renders the typed freshness filter as Tavily's `time_range` or as an
 /// explicit `start_date` / `end_date` pair.
@@ -419,7 +333,7 @@ impl TavilySearchResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::tools::{DomainFilters, WebSearchUserLocation};
+    use crate::types::tools::{DomainFilters, WebSearchContextSize, WebSearchUserLocation};
 
     fn build_provider(api_key: Option<&str>, base_url: Option<&str>) -> TavilySearchProvider {
         TavilySearchProvider::from_values(

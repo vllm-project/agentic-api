@@ -9,14 +9,15 @@ use std::sync::Arc;
 
 use serde::Deserialize;
 
-use super::args::{Freshness, WebSearchArguments, clean_string, clean_vec, validate_count};
+use super::args::{Freshness, SearchScope, WebSearchArguments, clean_string};
+use super::provider::ProviderSettings;
 use super::{
     ApiKey, WebSearchProvider, WebSearchProviderMetadata, WebSearchProviderResponse, WebSearchResult, clean_base_url,
     null_as_default, read_response_limited,
 };
 use crate::config::WebSearchProviderKind;
 use crate::tool::handler::ToolError;
-use crate::types::tools::{WebSearchContextSize, WebSearchToolParam};
+use crate::types::tools::WebSearchToolParam;
 
 pub(crate) const YOU_API_KEY: &str = WebSearchProviderKind::You.default_api_key_env();
 pub(crate) const YOU_API_BASE_URL: &str = "YOU_API_BASE_URL";
@@ -32,11 +33,8 @@ impl YouSearchProvider {
     /// Builds a provider from optional environment-style values: a blank key
     /// or base URL counts as unset and fails at execution time.
     pub(crate) fn from_values(client: Arc<reqwest::Client>, api_key: Option<String>, base_url: Option<String>) -> Self {
-        let api_key = api_key
-            .map(|value| value.trim().to_owned())
-            .filter(|value| !value.is_empty())
-            .map(ApiKey);
-        let base_url = base_url.and_then(|value| clean_base_url(&value));
+        let ProviderSettings { api_key, base_url } =
+            ProviderSettings::from_values(WebSearchProviderKind::You, api_key, base_url);
         Self {
             client,
             api_key,
@@ -158,33 +156,8 @@ impl YouSearchRequest {
         args: &WebSearchArguments,
         config: &WebSearchToolParam,
     ) -> Result<Self, ToolError> {
-        let count = args
-            .count
-            .or_else(|| {
-                config
-                    .search_context_size
-                    .map(WebSearchContextSize::default_count)
-                    .map(u16::from)
-            })
-            .map(validate_count)
-            .transpose()?;
+        let scope = SearchScope::from_args_and_config(args, config, None)?;
         let crawl_timeout = args.crawl_timeout.map(validate_crawl_timeout).transpose()?;
-        let config_domains = config
-            .filters
-            .as_ref()
-            .and_then(|filters| clean_vec(filters.allowed_domains.as_deref()));
-        let config_blocked_domains = config
-            .filters
-            .as_ref()
-            .and_then(|filters| clean_vec(filters.blocked_domains.as_deref()));
-        let include_domains = config_domains.or_else(|| args.include_domains.clone());
-        let exclude_domains = config_blocked_domains.or_else(|| args.exclude_domains.clone());
-        let boost_domains = args.boost_domains.clone();
-        if include_domains.is_some() && (exclude_domains.is_some() || boost_domains.is_some()) {
-            return Err(ToolError::Config(
-                "include_domains cannot be combined with exclude_domains or boost_domains".to_owned(),
-            ));
-        }
         let country = config
             .user_location
             .as_ref()
@@ -194,7 +167,7 @@ impl YouSearchRequest {
 
         Ok(Self {
             query: query.trim().to_owned(),
-            count,
+            count: scope.count,
             freshness: args.freshness,
             country,
             language: args.language.clone(),
@@ -202,9 +175,9 @@ impl YouSearchRequest {
             livecrawl: args.livecrawl.clone(),
             livecrawl_formats: args.livecrawl_formats.clone(),
             crawl_timeout,
-            include_domains,
-            exclude_domains,
-            boost_domains,
+            include_domains: scope.include_domains,
+            exclude_domains: scope.exclude_domains,
+            boost_domains: args.boost_domains.clone(),
         })
     }
 }
@@ -267,7 +240,7 @@ impl YouSearchResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::tools::{DomainFilters, WebSearchUserLocation};
+    use crate::types::tools::{DomainFilters, WebSearchContextSize, WebSearchUserLocation};
 
     fn args(json: &str) -> WebSearchArguments {
         WebSearchArguments::from_json(json).unwrap()

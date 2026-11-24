@@ -33,15 +33,19 @@ use std::sync::Arc;
 use reqwest::StatusCode;
 use serde::Deserialize;
 
-use super::args::{Freshness, WebSearchArguments, clean_string, clean_vec, retain_allowed_results, validate_count};
+use super::args::{
+    Freshness, SearchArgument, SearchScope, WebSearchArguments, clean_string, log_ignored_arguments,
+    retain_allowed_results,
+};
+use super::provider::ProviderSettings;
 use super::{
-    ApiKey, WebSearchProvider, WebSearchProviderMetadata, WebSearchProviderResponse, WebSearchResult, clean_base_url,
-    null_as_default, read_response_limited,
+    ApiKey, WebSearchProvider, WebSearchProviderMetadata, WebSearchProviderResponse, WebSearchResult, null_as_default,
+    read_response_limited,
 };
 use crate::config::WebSearchProviderKind;
 use crate::tool::domain_policy::DomainFilter;
 use crate::tool::handler::ToolError;
-use crate::types::tools::{WebSearchContextSize, WebSearchToolParam};
+use crate::types::tools::WebSearchToolParam;
 
 mod transport;
 
@@ -74,13 +78,12 @@ impl SearxngSearchProvider {
         base_url: Option<String>,
         max_concurrent_requests: NonZeroUsize,
     ) -> Self {
+        let ProviderSettings { api_key, base_url } =
+            ProviderSettings::from_values(WebSearchProviderKind::Searxng, api_key, base_url);
         Self {
             client: Arc::new(redirect_free_client()),
-            api_key: api_key
-                .map(|value| value.trim().to_owned())
-                .filter(|value| !value.is_empty())
-                .map(ApiKey),
-            base_url: base_url.and_then(|value| clean_base_url(&value)),
+            api_key,
+            base_url,
             max_concurrent_requests,
         }
     }
@@ -234,40 +237,16 @@ impl SearxngSearchRequest {
         args: &WebSearchArguments,
         config: &WebSearchToolParam,
     ) -> Result<Self, ToolError> {
-        let count = args
-            .count
-            .or_else(|| {
-                config
-                    .search_context_size
-                    .map(WebSearchContextSize::default_count)
-                    .map(u16::from)
-            })
-            .map(validate_count)
-            .transpose()?;
-        let config_domains = config
-            .filters
-            .as_ref()
-            .and_then(|filters| clean_vec(filters.allowed_domains.as_deref()));
-        let config_blocked_domains = config
-            .filters
-            .as_ref()
-            .and_then(|filters| clean_vec(filters.blocked_domains.as_deref()));
-        let include_domains = config_domains.or_else(|| args.include_domains.clone());
-        let exclude_domains = config_blocked_domains.or_else(|| args.exclude_domains.clone());
-        if include_domains.is_some() && (exclude_domains.is_some() || args.boost_domains.is_some()) {
-            return Err(ToolError::Config(
-                "include_domains cannot be combined with exclude_domains or boost_domains".to_owned(),
-            ));
-        }
-        log_ignored_arguments(args, config);
+        let scope = SearchScope::from_args_and_config(args, config, None)?;
+        log_ignored_arguments(WebSearchProviderKind::Searxng, args, config, IGNORED_ARGUMENTS);
 
         Ok(Self {
             query: query.trim().to_owned(),
-            count,
+            count: scope.count,
             time_range: args.freshness.and_then(searxng_time_range),
             language: args.language.as_deref().and_then(searxng_language),
             safesearch: args.safesearch.as_deref().and_then(searxng_safesearch),
-            domain_filter: DomainFilter::new(include_domains.as_deref(), exclude_domains.as_deref()),
+            domain_filter: scope.domain_filter(),
         })
     }
 }
@@ -275,26 +254,13 @@ impl SearxngSearchRequest {
 /// Arguments without a SearXNG equivalent are dropped: the You.com-specific
 /// crawl controls, `boost_domains` (no filtering semantics), and `country`
 /// (SearXNG localizes through `language` only).
-fn log_ignored_arguments(args: &WebSearchArguments, config: &WebSearchToolParam) {
-    let country = args.country.is_some()
-        || config
-            .user_location
-            .as_ref()
-            .is_some_and(|location| clean_string(location.country.as_deref()).is_some());
-    let ignored: Vec<&str> = [
-        ("livecrawl", args.livecrawl.is_some()),
-        ("livecrawl_formats", args.livecrawl_formats.is_some()),
-        ("crawl_timeout", args.crawl_timeout.is_some()),
-        ("boost_domains", args.boost_domains.is_some()),
-        ("country", country),
-    ]
-    .into_iter()
-    .filter_map(|(name, present)| present.then_some(name))
-    .collect();
-    if !ignored.is_empty() {
-        tracing::debug!(arguments = ?ignored, "ignored web_search arguments without a SearXNG equivalent");
-    }
-}
+const IGNORED_ARGUMENTS: &[SearchArgument] = &[
+    SearchArgument::Livecrawl,
+    SearchArgument::LivecrawlFormats,
+    SearchArgument::CrawlTimeout,
+    SearchArgument::BoostDomains,
+    SearchArgument::Country,
+];
 
 /// Renders the typed freshness filter as SearXNG's `time_range`. SearXNG has no
 /// date-range filter, so a range is dropped rather than approximated.
@@ -443,7 +409,7 @@ impl SearxngSearchResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::tools::{DomainFilters, WebSearchUserLocation};
+    use crate::types::tools::{DomainFilters, WebSearchContextSize, WebSearchUserLocation};
 
     fn build_provider(api_key: Option<&str>, base_url: Option<&str>) -> SearxngSearchProvider {
         SearxngSearchProvider::from_values(
