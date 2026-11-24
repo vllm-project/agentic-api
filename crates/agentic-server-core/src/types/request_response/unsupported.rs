@@ -24,6 +24,9 @@ pub const TOOL_CHOICE_PARAM: &str = "tool_choice";
 const PREVIOUS_INPUT_MESSAGES_PARAM: &str = "previous_input_messages";
 /// vLLM extension that returns the rendered upstream messages in the response.
 const ENABLE_RESPONSE_MESSAGES_PARAM: &str = "enable_response_messages";
+/// Responses Programmatic Tool Calling declaration. Its execution ownership is not
+/// established yet, so the gateway rejects it instead of forwarding it unexamined.
+const PROGRAMMATIC_TOOL_CALLING_PARAM: &str = "programmatic_tool_calling";
 
 /// A request member recognized only to be rejected: any JSON value
 /// deserializes, and none of it is retained.
@@ -130,6 +133,10 @@ pub enum UnsupportedParameterError {
     PreviousInputMessages,
     #[error("enable_response_messages is not supported; the gateway does not return upstream input or output messages")]
     EnableResponseMessages,
+    #[error(
+        "programmatic_tool_calling is not supported; the gateway does not yet define execution ownership for programmatic calls"
+    )]
+    ProgrammaticToolCalling,
 }
 
 impl UnsupportedParameterError {
@@ -150,6 +157,7 @@ impl UnsupportedParameterError {
             Self::PromptCacheOptions => "prompt_cache_options",
             Self::PreviousInputMessages => PREVIOUS_INPUT_MESSAGES_PARAM,
             Self::EnableResponseMessages => ENABLE_RESPONSE_MESSAGES_PARAM,
+            Self::ProgrammaticToolCalling => PROGRAMMATIC_TOOL_CALLING_PARAM,
         }
     }
 
@@ -171,7 +179,8 @@ impl UnsupportedParameterError {
             Self::PromptTemplate
             | Self::PromptCacheOptions
             | Self::PreviousInputMessages
-            | Self::EnableResponseMessages => "unsupported_parameter",
+            | Self::EnableResponseMessages
+            | Self::ProgrammaticToolCalling => "unsupported_parameter",
         }
     }
 }
@@ -196,6 +205,13 @@ impl RequestPayload {
             .is_some_and(|value| !matches!(value, Value::Null | Value::Bool(false)))
         {
             return Err(UnsupportedParameterError::EnableResponseMessages);
+        }
+        if self
+            .extra
+            .get(PROGRAMMATIC_TOOL_CALLING_PARAM)
+            .is_some_and(|value| !value.is_null())
+        {
+            return Err(UnsupportedParameterError::ProgrammaticToolCalling);
         }
         Ok(())
     }
