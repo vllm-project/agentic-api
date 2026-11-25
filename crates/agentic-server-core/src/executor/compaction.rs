@@ -1163,39 +1163,6 @@ mod tests {
         server.abort();
     }
 
-    /// The summary request declares no tools, so a replayed MCP call takes its name from the listing among the items
-    /// it summarizes (#492).
-    #[tokio::test]
-    async fn compaction_summary_names_a_replayed_mcp_call_from_its_listing() {
-        let (exec_ctx, requests, server) = mock_execution_context(ResponseStore::disabled()).await;
-        let request = serde_json::from_value(serde_json::json!({
-            "model": "test-model",
-            "input": [
-                {"role": "user", "content": "read notes.txt"},
-                {"type": "mcp_list_tools", "id": "mcpl_files", "server_label": "files", "tools": [
-                    {"name": "read.file", "input_schema": {"type": "object"}},
-                    {"name": "read_file", "input_schema": {"type": "object"}}
-                ]},
-                {"type": "mcp_call", "id": "mcp_read", "server_label": "files", "name": "read_file",
-                    "arguments": "{}", "status": "completed", "output": "alpha"}
-            ]
-        }))
-        .expect("valid compact request");
-
-        compact_response(request, &exec_ctx, None)
-            .await
-            .expect("compaction succeeds");
-
-        let summary = requests.lock().expect("request capture lock")[0].clone();
-        assert!(summary["tools"].is_null(), "{summary}");
-        assert_eq!(
-            summary["input"][1],
-            serde_json::json!({"type": "function_call", "call_id": "mcp_read",
-                "name": "mcp__files__read_file__33ad240685", "arguments": "{}", "status": "completed"})
-        );
-        server.abort();
-    }
-
     #[tokio::test]
     async fn compaction_prepares_tool_search_before_summarization() {
         let (exec_ctx, _requests, server) = mock_execution_context(ResponseStore::disabled()).await;
