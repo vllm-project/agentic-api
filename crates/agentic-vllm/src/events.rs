@@ -116,32 +116,7 @@ impl EventAdapter {
                     self.response_frame(SSEEventType::ResponseInProgress)?,
                 ]);
             }
-            ChatEvent::BlockStart { index, kind } => {
-                let index = self.output_index(SourceIndex::Block(index))?;
-                let item = text_item(
-                    self.item_id(kind, index),
-                    kind,
-                    String::new(),
-                    MessageStatus::InProgress,
-                )?;
-                let mut frames = vec![item_frame(SSEEventType::OutputItemAdded, index, &item)?];
-                if kind == AssistantBlockKind::Text {
-                    frames.push(content_frame(
-                        SSEEventType::ContentPartAdded,
-                        index,
-                        self.item_id(kind, index),
-                        String::new(),
-                    )?);
-                } else if kind == AssistantBlockKind::Reasoning {
-                    frames.push(reasoning_part_frame(
-                        SSEEventType::ReasoningPartAdded,
-                        index,
-                        self.item_id(kind, index),
-                        String::new(),
-                    )?);
-                }
-                return Ok(frames);
-            }
+            ChatEvent::BlockStart { index, kind } => return self.block_start(index, kind),
             ChatEvent::BlockDelta { index, kind, delta, .. } => {
                 let index = self.output_index(SourceIndex::Block(index))?;
                 let event_type = match kind {
@@ -153,32 +128,7 @@ impl EventAdapter {
                 };
                 delta_frame(event_type, index, self.item_id(kind, index), delta, true)?
             }
-            ChatEvent::BlockEnd { index, block } => {
-                let index = self.output_index(SourceIndex::Block(index))?;
-                let kind = block.kind();
-                let text = match block {
-                    AssistantContentBlock::Text { text } | AssistantContentBlock::Reasoning { text } => text,
-                    AssistantContentBlock::ToolCall(_) => {
-                        return Err(protocol_error("tool call ended as a text block").into());
-                    }
-                };
-                let id = self.item_id(kind, index);
-                let mut frames = vec![text_done_frame(kind, index, id.clone(), text.clone())?];
-                frames.push(match kind {
-                    AssistantBlockKind::Text => {
-                        content_frame(SSEEventType::ContentPartDone, index, id.clone(), text.clone())?
-                    }
-                    AssistantBlockKind::Reasoning => {
-                        reasoning_part_frame(SSEEventType::ReasoningPartDone, index, id.clone(), text.clone())?
-                    }
-                    AssistantBlockKind::ToolCall => {
-                        return Err(protocol_error("tool call ended as a text block").into());
-                    }
-                });
-                let item = text_item(id, kind, text, MessageStatus::Completed)?;
-                frames.push(item_frame(SSEEventType::OutputItemDone, index, &item)?);
-                return Ok(frames);
-            }
+            ChatEvent::BlockEnd { index, block } => return self.block_end(index, block),
             ChatEvent::ToolCallStart { index, id, name } => {
                 let index = self.output_index(SourceIndex::Tool(index))?;
                 let item = self.function_item(index, id, name, String::new(), MessageStatus::InProgress);
@@ -235,6 +185,58 @@ impl EventAdapter {
             }
         };
         Ok(vec![frame])
+    }
+
+    fn block_start(&mut self, index: usize, kind: AssistantBlockKind) -> Result<Vec<EventFrame>> {
+        let index = self.output_index(SourceIndex::Block(index))?;
+        let item = text_item(
+            self.item_id(kind, index),
+            kind,
+            String::new(),
+            MessageStatus::InProgress,
+        )?;
+        let mut frames = vec![item_frame(SSEEventType::OutputItemAdded, index, &item)?];
+        if kind == AssistantBlockKind::Text {
+            frames.push(content_frame(
+                SSEEventType::ContentPartAdded,
+                index,
+                self.item_id(kind, index),
+                String::new(),
+            )?);
+        } else if kind == AssistantBlockKind::Reasoning {
+            frames.push(reasoning_part_frame(
+                SSEEventType::ReasoningPartAdded,
+                index,
+                self.item_id(kind, index),
+                String::new(),
+            )?);
+        }
+        Ok(frames)
+    }
+
+    fn block_end(&mut self, index: usize, block: AssistantContentBlock) -> Result<Vec<EventFrame>> {
+        let index = self.output_index(SourceIndex::Block(index))?;
+        let kind = block.kind();
+        let text = match block {
+            AssistantContentBlock::Text { text } | AssistantContentBlock::Reasoning { text } => text,
+            AssistantContentBlock::ToolCall(_) => {
+                return Err(protocol_error("tool call ended as a text block").into());
+            }
+        };
+        let id = self.item_id(kind, index);
+        let mut frames = vec![text_done_frame(kind, index, id.clone(), text.clone())?];
+        frames.push(match kind {
+            AssistantBlockKind::Text => content_frame(SSEEventType::ContentPartDone, index, id.clone(), text.clone())?,
+            AssistantBlockKind::Reasoning => {
+                reasoning_part_frame(SSEEventType::ReasoningPartDone, index, id.clone(), text.clone())?
+            }
+            AssistantBlockKind::ToolCall => {
+                return Err(protocol_error("tool call ended as a text block").into());
+            }
+        });
+        let item = text_item(id, kind, text, MessageStatus::Completed)?;
+        frames.push(item_frame(SSEEventType::OutputItemDone, index, &item)?);
+        Ok(frames)
     }
 
     fn response_frame(&self, event_type: SSEEventType) -> Result<EventFrame> {
