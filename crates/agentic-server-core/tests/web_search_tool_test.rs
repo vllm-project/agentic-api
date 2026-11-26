@@ -1842,6 +1842,89 @@ async fn execute_relaxes_forced_tool_choice_after_web_search_result() {
     assert!(request_bodies[1].get("tool_choice").is_none());
 }
 
+#[tokio::test]
+async fn execute_normalizes_forced_web_search_selector_and_releases_after_search() {
+    let (you_url, mut captured_you, _you_handle) = spawn_mock_you().await;
+    let llm = support::MockServer::start_deque(vec![
+        web_search_function_call_response(),
+        support::text_response("Use async carefully."),
+    ])
+    .await;
+    let exec_ctx = build_exec_ctx(llm.url(), you_url).await;
+    let web_search: ResponsesTool = serde_json::from_value(serde_json::json!({"type": "web_search_preview"})).unwrap();
+    let selector: ToolChoice = serde_json::from_value(serde_json::json!({"type": "web_search"})).unwrap();
+    let payload = RequestPayload {
+        tools: Some(vec![web_search]),
+        tool_choice: Some(selector),
+        ..base_payload(ResponsesInput::Text("look up rust async".to_owned()))
+    };
+
+    let result = ExecuteRequest::new(payload, Arc::clone(&exec_ctx)).run().await.unwrap();
+    assert!(matches!(result, Either::Left(_)));
+    captured_you.recv().await.expect("mock You.com should receive request");
+
+    let request_bodies = llm.request_bodies().await;
+    assert_eq!(request_bodies.len(), 2);
+    assert_eq!(
+        request_bodies[0]["tool_choice"],
+        serde_json::json!({"type": "function", "name": "web_search"}),
+        "the public selector must normalize to the built-in function selector"
+    );
+    assert!(
+        request_bodies[1].get("tool_choice").is_none(),
+        "follow-up inference must be free to answer"
+    );
+}
+
+#[tokio::test]
+async fn forced_web_search_selector_rejects_missing_declaration_before_inference() {
+    let (you_url, _captured_you, _you_handle) = spawn_mock_you().await;
+    let llm = support::MockServer::start_deque(vec![]).await;
+    let exec_ctx = build_exec_ctx(llm.url(), you_url).await;
+    let selector: ToolChoice = serde_json::from_value(serde_json::json!({"type": "web_search"})).unwrap();
+    let payload = RequestPayload {
+        tool_choice: Some(selector),
+        ..base_payload(ResponsesInput::Text("look up rust async".to_owned()))
+    };
+
+    let error = ExecuteRequest::new(payload, Arc::clone(&exec_ctx))
+        .run()
+        .await
+        .err()
+        .expect("missing declaration should fail before inference");
+    assert_eq!(error.http_status().as_u16(), 400);
+    assert!(error.error_message().contains("requires a declared web_search tool"));
+    assert!(llm.request_bodies().await.is_empty());
+}
+
+#[tokio::test]
+async fn forced_web_search_selector_rejects_client_function_shadowing() {
+    let (you_url, _captured_you, _you_handle) = spawn_mock_you().await;
+    let llm = support::MockServer::start_deque(vec![]).await;
+    let exec_ctx = build_exec_ctx(llm.url(), you_url).await;
+    let client_function: ResponsesTool = serde_json::from_value(serde_json::json!({
+        "type": "function",
+        "name": "web_search",
+        "parameters": {"type": "object", "properties": {"query": {"type": "string"}}}
+    }))
+    .unwrap();
+    let selector: ToolChoice = serde_json::from_value(serde_json::json!({"type": "web_search"})).unwrap();
+    let payload = RequestPayload {
+        tools: Some(vec![client_function]),
+        tool_choice: Some(selector),
+        ..base_payload(ResponsesInput::Text("look up rust async".to_owned()))
+    };
+
+    let error = ExecuteRequest::new(payload, Arc::clone(&exec_ctx))
+        .run()
+        .await
+        .err()
+        .expect("a client function must not satisfy the built-in selector");
+    assert_eq!(error.http_status().as_u16(), 400);
+    assert!(error.error_message().contains("requires a declared web_search tool"));
+    assert!(llm.request_bodies().await.is_empty());
+}
+
 fn base_payload(input: ResponsesInput) -> RequestPayload {
     RequestPayload {
         model: "test-model".into(),

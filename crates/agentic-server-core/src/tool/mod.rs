@@ -41,3 +41,30 @@ pub use tool_search::{ToolSearchHandler, ToolSearchState};
 pub use web_fetch::WebFetchHandler;
 pub use web_search::WebSearchHandler;
 pub use web_search::searxng::{SEARXNG_BASE_URL_HINT, validate_searxng_base_url};
+
+/// Validate a `web_search` `tool_choice` against the effective declarations.
+///
+/// A client function named `web_search` is a [`ToolDeclaration::Function`], not
+/// a built-in, so forcing the `web_search` selector against it would return a
+/// client `function_call` instead of running gateway search. Mirrors the
+/// `file_search` declaration check and lives here rather than in the already
+/// large `web_search` module to stay within the production-line limit.
+pub(crate) fn validate_web_search_tool_choice(
+    declarations: Option<&[ToolDeclaration]>,
+    choice: &crate::types::io::ToolChoice,
+) -> Result<(), ToolError> {
+    use crate::types::io::ToolChoice;
+    let selected = match choice {
+        ToolChoice::WebSearch => true,
+        ToolChoice::AllowedTools { tools, .. } => tools.iter().any(|tool| tool.type_.as_str() == "web_search"),
+        _ => false,
+    };
+    if selected
+        && !declarations.is_some_and(|tools| tools.iter().any(|tool| matches!(tool, ToolDeclaration::WebSearch(_))))
+    {
+        return Err(ToolError::Config(
+            "web_search tool_choice requires a declared web_search tool".to_owned(),
+        ));
+    }
+    Ok(())
+}
