@@ -348,6 +348,28 @@ Those selectors trust the whole matching ingress controller, not one Ingress obj
 controller, use admission policy and RBAC to prevent untrusted routes from selecting this Service, or deploy a dedicated
 controller. Prefer mTLS or workload identity between the boundary and gateway when controller tenancy is not exclusive.
 
+### Exposing the Service through a NodePort or L4 load balancer
+
+The base Service is a `ClusterIP`, so it is not reachable from outside the cluster. An environment overlay can change
+it to a `NodePort` (or put a bare L4 load balancer in front of the node ports), but the base default-deny NetworkPolicy
+still applies. A rule that selects only source pods, such as `podSelector: {}`, is not enough for this exposure path:
+with `externalTrafficPolicy: Cluster`, kube-proxy SNATs NodePort traffic so its source is the **node IP**, not a pod IP.
+The symptom is confusing — a pod on the same node as the gateway can reach `<nodeIP>:<nodePort>` (the source is that
+node itself), while the same URL times out from another node or from outside the cluster, even though the Service and
+its allocated port look correct.
+
+For a dev/test deployment that accepts traffic on the gateway port from anywhere, copy
+`network-policy-nodeport.example.yaml` into the overlay alongside the base policy. It adds an ingress rule that allows
+TCP 9000 from all sources; keep the base default-deny policy in place. If the gateway must be reachable only from known
+networks, list those client CIDRs under `from` instead and use `externalTrafficPolicy: Local` to preserve the client
+source IP, accepting the availability trade-off that only nodes with a gateway pod can serve traffic. In either case,
+put an authenticated boundary in front of the gateway before allowing untrusted callers. Exposing the Service directly
+lets anonymous callers spend the upstream credential and read or write unscoped stored state.
+
+Because nodePort values are unique across the whole cluster, an administrator-assigned port can already be in use by
+another Service. `kubectl apply` then fails with `provided port is already allocated`; either keep an unused port or
+let Kubernetes allocate one by omitting `nodePort`.
+
 The portable base does not restrict egress because the DNS resolver, managed PostgreSQL addresses, ports, and external
 inference destinations are environment-specific. Add a default-deny egress policy and explicit DNS, database, and
 inference allowances in the production overlay when the cluster's network plugin can express those destinations.
