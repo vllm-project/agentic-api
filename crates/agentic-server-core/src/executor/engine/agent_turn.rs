@@ -320,8 +320,7 @@ impl<'a> AgentTurn<'a> {
     /// Compacts the model input once it passes the compaction threshold, and presents the compaction item at
     /// `output_offset` of the public output.
     async fn compact(&mut self, output_offset: usize) -> ExecutorResult<Option<(OutputItem, ResponseUsage)>> {
-        let auth = self.pipeline.upstream_headers().cloned();
-        let Some((item, usage)) = maybe_compact_context(&mut self.pipeline.request, self.exec_ctx, auth).await? else {
+        let Some((item, usage)) = maybe_compact_context(self.pipeline, self.exec_ctx).await? else {
             return Ok(None);
         };
         let item = OutputItem::Compaction(item);

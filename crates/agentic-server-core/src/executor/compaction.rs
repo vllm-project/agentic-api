@@ -197,11 +197,12 @@ pub(crate) async fn summarize_items(
 /// # Errors
 ///
 /// Propagates inference errors from the summarization request.
-pub(crate) async fn maybe_compact_context(
-    ctx: &mut RequestContext,
+pub(super) async fn maybe_compact_context(
+    agent: &mut AgentPipeline,
     exec_ctx: &ExecutionContext,
-    auth: Option<Arc<UpstreamHeaders>>,
 ) -> ExecutorResult<Option<(CompactionItem, ResponseUsage)>> {
+    let auth = agent.upstream_headers().cloned();
+    let ctx = &mut agent.request;
     let Some(threshold) = ctx.enriched_request.compact_threshold() else {
         return Ok(None);
     };
@@ -330,6 +331,8 @@ mod tests {
     use axum::routing::post;
 
     use crate::executor::modes::{ConversationHandler, ResponseHandler};
+    use crate::executor::pipeline::AgentPipeline;
+    use crate::executor::relay::StreamRelay;
     use crate::executor::request::{ExecutionContext, RequestContext};
     use crate::storage::{ConversationStore, ResponseMetadata, ResponseStore, create_pool_with_schema};
     use crate::types::ServiceTier;
@@ -936,10 +939,15 @@ mod tests {
         let image_estimate = estimate_input_tokens(&large_image_input);
         let threshold = image_estimate.saturating_add(100);
         let (exec_ctx, requests, server) = mock_execution_context(ResponseStore::disabled()).await;
-        let mut image_context = context_with_threshold(large_image_input, threshold);
+        let mut image_context = AgentPipeline::new(
+            context_with_threshold(large_image_input, threshold),
+            None,
+            StreamRelay::detached(),
+            None,
+        );
 
         assert!(
-            maybe_compact_context(&mut image_context, &exec_ctx, None)
+            maybe_compact_context(&mut image_context, &exec_ctx)
                 .await
                 .expect("image-only threshold check succeeds")
                 .is_none()
@@ -962,12 +970,14 @@ mod tests {
         text_context.enriched_request.prompt_cache_retention =
             Some(crate::types::request_response::PromptCacheRetention::TwentyFourHours);
 
+        let mut text_context = AgentPipeline::new(text_context, None, StreamRelay::detached(), None);
         assert!(
-            maybe_compact_context(&mut text_context, &exec_ctx, None)
+            maybe_compact_context(&mut text_context, &exec_ctx)
                 .await
                 .expect("long text compacts")
                 .is_some()
         );
+        let text_context = text_context.request;
         let projected = text_context.enriched_request.input.model_input();
         let ResponsesInput::Items(compacted) = projected.as_ref() else {
             panic!("compaction should produce item input");
@@ -1026,7 +1036,9 @@ mod tests {
         let options = serde_json::from_value(serde_json::json!({"mode":"explicit","ttl":"30m"})).unwrap();
         let mut ctx = context_with_threshold(ResponsesInput::from(vec![user_message(&"context ".repeat(100))]), 1);
         ctx.enriched_request.prompt_cache_options = Some(options);
-        assert!(maybe_compact_context(&mut ctx, &exec, None).await.unwrap().is_some());
+        let mut agent = AgentPipeline::new(ctx, None, StreamRelay::detached(), None);
+        assert!(maybe_compact_context(&mut agent, &exec).await.unwrap().is_some());
+        let mut ctx = agent.request;
         assert_eq!(ctx.enriched_request.prompt_cache_options, Some(options));
         let plan = CompactionPlan::prepare_explicit(
             &AgentIdentity::root(),

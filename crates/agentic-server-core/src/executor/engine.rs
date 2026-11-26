@@ -183,13 +183,13 @@ async fn run_compaction_trigger(
     agent: &mut AgentPipeline,
     exec_ctx: &ExecutionContext,
 ) -> ExecutorResult<ResponsePayload> {
-    let auth = agent.upstream_headers().cloned();
-    let ctx = &mut agent.request;
-    let model = ctx.enriched_request.model.clone();
-    let instructions = ctx.enriched_request.instructions.clone();
-    let (compaction, usage, service_tier) = if ctx.enriched_request.multi_agent_enabled() {
-        MultiAgentRun::compact_root(ctx, exec_ctx, auth).await?
+    let model = agent.request.enriched_request.model.clone();
+    let instructions = agent.request.enriched_request.instructions.clone();
+    let (compaction, usage, service_tier) = if agent.request.enriched_request.multi_agent_enabled() {
+        MultiAgentRun::compact_root(agent, exec_ctx).await?
     } else {
+        let auth = agent.upstream_headers().cloned();
+        let ctx = &mut agent.request;
         // As with automatic compaction, the compaction item carries its window, and the turn keeps the items it was sent.
         let input = std::mem::take(&mut ctx.enriched_request.input);
         let window = summarize_items(
@@ -202,6 +202,7 @@ async fn run_compaction_trigger(
         .await?;
         window.into_carrying_item()?
     };
+    let ctx = &mut agent.request;
     let mut payload = ctx.response_shell(model, "completed");
     payload.output = vec![OutputItem::Compaction(compaction)];
     payload.usage = Some(usage);
