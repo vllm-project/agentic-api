@@ -265,8 +265,7 @@ impl ServerConfig {
         // A lone `*` is the conventional spelling for "allow any origin". It
         // cannot be passed to `AllowOrigin::list` (tower-http panics on it), so
         // keep it as the single sentinel and route it to `AllowOrigin::any`.
-        let allow_origin = if self.cors_allowed_origins.is_empty()
-            || self.cors_allowed_origins.iter().any(|o| o == "*")
+        let allow_origin = if self.cors_allowed_origins.is_empty() || self.cors_allowed_origins.iter().any(|o| o == "*")
         {
             AllowOrigin::any()
         } else {
