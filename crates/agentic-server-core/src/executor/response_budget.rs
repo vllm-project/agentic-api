@@ -14,6 +14,8 @@ mod reasoning;
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
+#[cfg(test)]
+use std::sync::atomic::Ordering;
 
 use serde_json::Value;
 
@@ -62,7 +64,7 @@ impl ExecutorResponseBudget {
 
     #[cfg(test)]
     pub(super) fn used(&self) -> usize {
-        self.used.load(std::sync::atomic::Ordering::Acquire)
+        self.used.load(Ordering::Acquire)
     }
 
     pub(super) fn consume(&self, bytes: usize) -> ExecutorResult<()> {

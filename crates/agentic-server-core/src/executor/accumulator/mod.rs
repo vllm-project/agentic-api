@@ -98,7 +98,6 @@ impl AccumulatedFunctionCall<'_> {
 pub struct ResponseAccumulator {
     validation: Validation,
     response_id: String,
-    conversation_id: Option<String>,
     output: Vec<OutputItem>,
     usage: Option<ResponseUsage>,
     service_tier: Option<String>,
@@ -115,15 +114,12 @@ pub struct ResponseAccumulator {
 }
 
 impl ResponseAccumulator {
-    pub(super) fn with_validation(
-        response_id: String,
-        conversation_id: Option<String>,
-        validation: Validation,
-    ) -> Self {
+    /// An accumulator with no identity: the upstream response supplies its ID, and the request
+    /// context stamps the public identity afterwards (`RequestContext::inject_ids`).
+    pub(super) fn with_validation(validation: Validation) -> Self {
         Self {
             validation,
-            response_id,
-            conversation_id,
+            response_id: String::new(),
             output: Vec::new(),
             usage: None,
             service_tier: None,
@@ -139,10 +135,9 @@ impl ResponseAccumulator {
         }
     }
 
-    /// An executor round's accumulator. It starts with no identity: the upstream response
-    /// supplies its ID, and the request context stamps the public identity afterwards.
+    /// An executor round's accumulator, with the response's retained-size budget.
     pub(super) fn with_validation_and_budget(validation: Validation, budget: Option<ExecutorResponseBudget>) -> Self {
-        let mut acc = Self::with_validation(String::new(), None, validation);
+        let mut acc = Self::with_validation(validation);
         acc.budget = budget;
         acc
     }

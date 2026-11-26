@@ -11,7 +11,7 @@ use crate::executor::gateway_accumulator::{
 };
 use crate::executor::inference::UpstreamHeaders;
 use crate::executor::inference::{BoxStream, DONE_MARKER};
-use crate::executor::item_lifecycle::{ListToolsStatus, list_tools_status_frame};
+use crate::executor::item_lifecycle::item_status_frame;
 use crate::executor::multi_agent::RunControlReceiver;
 use crate::executor::persist::{TurnOutput, persist};
 use crate::executor::pipeline::AgentPipeline;
@@ -200,8 +200,8 @@ fn mcp_list_tools_failed_chunk(
                 serialize_to_value(&item).map_err(ExecutorError::JsonError)?,
             )],
         )?,
-        list_tools_status_frame(&listing.id, 0, ListToolsStatus::InProgress)?,
-        list_tools_status_frame(&listing.id, 0, ListToolsStatus::Failed)?,
+        item_status_frame(SSEEventType::McpListToolsInProgress, 0, &listing.id)?,
+        item_status_frame(SSEEventType::McpListToolsFailed, 0, &listing.id)?,
         executor_error_frame(error),
         terminal_response_frame(&failed)?,
     ];

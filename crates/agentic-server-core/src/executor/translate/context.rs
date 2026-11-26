@@ -32,24 +32,6 @@ pub(in crate::executor) struct TranslationContext {
     response_fields: StandardResponseFields,
 }
 
-/// Who executes a model call, from the round's tool classification.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum CallOwner {
-    Client(ClientTool),
-    Gateway,
-}
-
-/// The tool types a client executes; every other type is gateway-owned
-/// (see [`ToolType::is_gateway_owned`]).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum ClientTool {
-    Function,
-    CodexNamespace,
-    Custom,
-    Shell,
-    ToolSearch,
-}
-
 /// The changes that turn a model function call into its public form.
 struct FunctionCallRewrite<'a> {
     /// A client function call gets the public `fc_` id.
@@ -289,7 +271,7 @@ impl TranslationContext {
     /// Whether `name` is the client-executed search the client must resolve,
     /// as opposed to a hosted search the gateway runs.
     pub(super) fn is_client_tool_search(&self, name: &str) -> bool {
-        matches!(self.call_owner(name), CallOwner::Client(ClientTool::ToolSearch))
+        self.tool_type(name) == ToolType::ToolSearch && self.is_client_call(name)
     }
 
     pub(super) fn is_withheld_function(&self, name: &str) -> bool {
@@ -297,32 +279,13 @@ impl TranslationContext {
     }
 
     fn is_client_function(&self, name: &str) -> bool {
-        matches!(
-            self.call_owner(name),
-            CallOwner::Client(ClientTool::Function | ClientTool::CodexNamespace)
-        )
+        matches!(self.tool_type(name), ToolType::Function | ToolType::CodexNamespace) && self.is_client_call(name)
     }
 
-    /// Who executes a call to `name`: the gateway for collaboration actions, gateway tool types and
-    /// tools this request runs itself; otherwise the client, with the call's tool type.
-    pub(super) fn call_owner(&self, name: &str) -> CallOwner {
-        if self.is_collaboration(name) || self.is_gateway_owned(name) {
-            return CallOwner::Gateway;
-        }
-        CallOwner::Client(match self.tool_type(name) {
-            ToolType::Function => ClientTool::Function,
-            ToolType::CodexNamespace => ClientTool::CodexNamespace,
-            ToolType::Custom => ClientTool::Custom,
-            ToolType::Shell => ClientTool::Shell,
-            ToolType::ToolSearch => ClientTool::ToolSearch,
-            ToolType::Mcp
-            | ToolType::WebSearch
-            | ToolType::WebFetch
-            | ToolType::FileSearch
-            | ToolType::CodeInterpreter => {
-                return CallOwner::Gateway;
-            }
-        })
+    /// Whether the client executes a call to `name`. The gateway executes collaboration actions,
+    /// gateway tool types, and the tools this request runs itself (a hosted search, gateway shell).
+    pub(super) fn is_client_call(&self, name: &str) -> bool {
+        !self.is_collaboration(name) && !self.is_gateway_owned(name) && !self.tool_type(name).is_gateway_owned()
     }
 
     pub(super) fn tool_search_is_active(&self) -> bool {

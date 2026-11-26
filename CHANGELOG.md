@@ -61,6 +61,10 @@ All notable changes to Agentic API are documented here.
   only numbers events and deduplicates response start events, and the stream relay rebases an upstream frame's
   `output_index` onto its round before presenting it. Embedders that rebased through it add the offset to
   `wire.output_index` themselves (#549).
+- `agentic_core`: `ResponseAccumulator::from_json(body)` and `finalize(model, instructions)` no longer take a
+  conversation id or `previous_response_id`, and the payload they produce carries neither: the executor stamps
+  the response's public identity. Embedders that passed them set `conversation` and `previous_response_id` on the
+  returned `ResponsePayload` (#549).
 
 ### Fixed
 

@@ -13,7 +13,7 @@ use super::{GatewayCallResult, GatewayEventPlan, GatewayPublicOutputSource, Gate
 use crate::events::{EventFrame, EventPayload, SSEEventType};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway_accumulator::{synthetic_event, synthetic_event_at};
-use crate::executor::item_lifecycle::{ListToolsStatus, item_done_frame, list_tools_status_frame};
+use crate::executor::item_lifecycle::{item_done_frame, item_status_frame, list_tools_finished_event};
 use crate::executor::relay::{Release, StreamRelay};
 use crate::executor::request::RequestContext;
 use crate::executor::response_budget::ExecutorResponseBudget;
@@ -25,15 +25,6 @@ use crate::utils::common::{deserialize_from_value, serialize_to_value};
 
 fn output_item_value(item: &OutputItem) -> ExecutorResult<serde_json::Value> {
     serde_json::to_value(item).map_err(ExecutorError::JsonError)
-}
-
-/// A status event that names the gateway item `item_id` at `output_index`.
-fn item_id_event(event_type: SSEEventType, output_index: u32, item_id: &str) -> ExecutorResult<EventFrame> {
-    synthetic_event_at(
-        event_type,
-        u64::from(output_index),
-        [("item_id".to_owned(), serde_json::json!(item_id))],
-    )
 }
 
 fn code_interpreter_event_frame(event: &CodeInterpreterCallStreamEvent) -> ExecutorResult<EventFrame> {
@@ -118,7 +109,7 @@ async fn emit_file_search_start_events(
         SSEEventType::FileSearchCallInProgress,
         SSEEventType::FileSearchCallSearching,
     ] {
-        let mut event = item_id_event(event_type, output_index, &call.id)?;
+        let mut event = item_status_frame(event_type, u64::from(output_index), &call.id)?;
         relay.emit_local(&mut event).await?;
     }
     Ok(())
@@ -186,13 +177,16 @@ pub(in crate::executor) async fn emit_gateway_start_events<'a>(
                     SSEEventType::WebSearchCallInProgress,
                     SSEEventType::WebSearchCallSearching,
                 ] {
-                    let mut event = item_id_event(event_type, plan.output_index, &web_search_call.id)?;
+                    let mut event = item_status_frame(event_type, u64::from(plan.output_index), &web_search_call.id)?;
                     relay.emit_local(&mut event).await?;
                 }
             }
             OutputItem::McpCall(mcp_call) => {
-                let mut in_progress_event =
-                    item_id_event(SSEEventType::McpCallInProgress, plan.output_index, &mcp_call.id)?;
+                let mut in_progress_event = item_status_frame(
+                    SSEEventType::McpCallInProgress,
+                    u64::from(plan.output_index),
+                    &mcp_call.id,
+                )?;
                 relay.emit_local(&mut in_progress_event).await?;
                 let arguments = plan.arguments.as_deref().unwrap_or_default();
                 for (event_type, field) in [
@@ -211,10 +205,10 @@ pub(in crate::executor) async fn emit_gateway_start_events<'a>(
                 }
             }
             OutputItem::McpListTools(list_tools) => {
-                let mut in_progress_event = list_tools_status_frame(
-                    &list_tools.id,
+                let mut in_progress_event = item_status_frame(
+                    SSEEventType::McpListToolsInProgress,
                     u64::from(plan.output_index),
-                    ListToolsStatus::InProgress,
+                    &list_tools.id,
                 )?;
                 relay.emit_local(&mut in_progress_event).await?;
             }
@@ -267,10 +261,9 @@ pub(in crate::executor) async fn emit_gateway_completed_events<'a, T: GatewayPub
                 },
                 mcp_call.id.as_str(),
             )),
-            OutputItem::McpListTools(list_tools) => Some((
-                ListToolsStatus::finished(list_tools).event_type(),
-                list_tools.id.as_str(),
-            )),
+            OutputItem::McpListTools(list_tools) => {
+                Some((list_tools_finished_event(list_tools), list_tools.id.as_str()))
+            }
             // A hosted search has only the generic added/done events.
             OutputItem::CodeInterpreterCall(_)
             | OutputItem::Compaction(_)

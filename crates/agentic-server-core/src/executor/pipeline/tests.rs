@@ -2,6 +2,9 @@ use std::collections::{HashMap, HashSet};
 
 use super::*;
 use crate::events::SseLine;
+use crate::executor::pipeline::test_support::ingest_lenient;
+use crate::executor::request::RequestContext;
+use crate::executor::upstream::tests::request_context;
 use crate::tool::ToolType;
 use crate::types::io::OutputItem;
 use serde_json::{Value, json};
@@ -22,8 +25,8 @@ fn pipeline(validation: Validation, tools: &[(&str, ToolType)]) -> RoundIngestio
 }
 
 /// The request whose identity `inject_ids` stamps on these rounds' payloads.
-fn request_identity() -> crate::executor::request::RequestContext {
-    let mut request = crate::executor::upstream::tests::request_context();
+fn request_identity() -> RequestContext {
+    let mut request = request_context();
     "resp_1".clone_into(&mut request.response_id);
     request.conversation_id = Some("conv_1".to_owned());
     request.original_request.previous_response_id = Some("resp_previous".to_owned());
@@ -266,8 +269,7 @@ fn sentinel_sequence_stream_preserves_terminal_usage_and_text() {
         event["sequence_number"] = (-1).into();
         format!("data: {event}")
     });
-    let payload = crate::executor::pipeline::test_support::ingest_lenient(lines, "test-model")
-        .expect("sentinel frames remain valid");
+    let payload = ingest_lenient(lines, "test-model").expect("sentinel frames remain valid");
     assert_eq!(payload.status, "completed");
     assert_eq!(payload.output.len(), 1);
     assert!(matches!(&payload.output[0], OutputItem::Message(message) if message.id == "msg_1"));

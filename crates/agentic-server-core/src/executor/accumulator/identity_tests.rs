@@ -17,7 +17,7 @@ fn accumulator(strict: bool) -> ResponseAccumulator {
     } else {
         Validation::Lenient
     };
-    let mut acc = ResponseAccumulator::with_validation("resp_1".to_owned(), None, validation);
+    let mut acc = ResponseAccumulator::with_validation(validation);
     for event_type in ["response.created", "response.in_progress"] {
         push(
             &mut acc,

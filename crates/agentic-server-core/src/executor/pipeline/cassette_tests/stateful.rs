@@ -441,14 +441,14 @@ fn test_all_stateful_cassettes_parse_without_error() {
                 .as_ref()
                 .unwrap_or_else(|| panic!("{filename} turn {i} must have body"));
             let body_str = serde_json::to_string(body).unwrap();
-            let result = ResponseAccumulator::from_json(&body_str, None);
+            let result = ResponseAccumulator::from_json(&body_str);
             assert!(
                 result.is_ok(),
                 "{filename} turn {} failed to parse: {:?}",
                 i + 1,
                 result.err()
             );
-            let payload = result.unwrap().finalize("gpt-4o", None, None);
+            let payload = result.unwrap().finalize("gpt-4o", None);
             assert_eq!(
                 payload.status,
                 "completed",

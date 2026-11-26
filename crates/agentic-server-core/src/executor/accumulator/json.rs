@@ -52,12 +52,12 @@ impl ResponseAccumulator {
     ///
     /// # Errors
     /// Returns `ExecutorError::ParseError` if JSON parsing fails or required fields are missing.
-    pub fn from_json(body: &str, conversation_id: Option<&str>) -> ExecutorResult<Self> {
-        Self::read_json(body, conversation_id.map(str::to_owned), Validation::Lenient)
+    pub fn from_json(body: &str) -> ExecutorResult<Self> {
+        Self::read_json(body, Validation::Lenient)
     }
 
     pub(in crate::executor) fn load_json_body(&mut self, body: &str) -> ExecutorResult<()> {
-        let acc = Self::read_json(body, self.conversation_id.clone(), self.validation)?;
+        let acc = Self::read_json(body, self.validation)?;
         let retained = retained_response_parts_bytes(
             &acc.response_id,
             &acc.output,
@@ -74,7 +74,7 @@ impl ResponseAccumulator {
         Ok(())
     }
 
-    fn read_json(body: &str, conversation_id: Option<String>, validation: Validation) -> ExecutorResult<Self> {
+    fn read_json(body: &str, validation: Validation) -> ExecutorResult<Self> {
         let mut json: serde_json::Value = deserialize_from_str(body).map_err(ExecutorError::JsonError)?;
         if validation == Validation::Strict {
             ensure_strict_response(&json)?;
@@ -107,7 +107,6 @@ impl ResponseAccumulator {
         Ok(Self {
             validation,
             response_id,
-            conversation_id,
             output,
             usage,
             service_tier,

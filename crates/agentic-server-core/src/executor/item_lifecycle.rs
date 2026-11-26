@@ -39,40 +39,24 @@ pub(super) fn item_done_frame(item: &OutputItem, output_index: u64) -> ExecutorR
     )
 }
 
-/// A status event in an MCP tool listing's public lifecycle.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum ListToolsStatus {
-    InProgress,
-    Completed,
-    Failed,
-}
-
-impl ListToolsStatus {
-    /// The status that ends `list`'s lifecycle: failed when the listing carries an error.
-    pub(super) const fn finished(list: &McpListTools) -> Self {
-        if list.error.is_some() {
-            Self::Failed
-        } else {
-            Self::Completed
-        }
-    }
-
-    pub(super) const fn event_type(self) -> SSEEventType {
-        match self {
-            Self::InProgress => SSEEventType::McpListToolsInProgress,
-            Self::Completed => SSEEventType::McpListToolsCompleted,
-            Self::Failed => SSEEventType::McpListToolsFailed,
-        }
+/// The event that ends `list`'s public lifecycle: `mcp_list_tools.failed` when the listing carries an
+/// error, otherwise `mcp_list_tools.completed`.
+pub(super) const fn list_tools_finished_event(list: &McpListTools) -> SSEEventType {
+    if list.error.is_some() {
+        SSEEventType::McpListToolsFailed
+    } else {
+        SSEEventType::McpListToolsCompleted
     }
 }
 
-/// `mcp_list_tools.in_progress`, `.completed` or `.failed` for the listing `list_id` at `output_index`.
-pub(super) fn list_tools_status_frame(
-    list_id: &str,
+/// A status event of type `event_type` that names the item `item_id` at `output_index`, such as
+/// `mcp_list_tools.in_progress` or `web_search_call.searching`.
+pub(super) fn item_status_frame(
+    event_type: SSEEventType,
     output_index: u64,
-    status: ListToolsStatus,
+    item_id: &str,
 ) -> ExecutorResult<EventFrame> {
-    synthetic_event_at(status.event_type(), output_index, [string("item_id", list_id)])
+    synthetic_event_at(event_type, output_index, [string("item_id", item_id)])
 }
 
 /// What streams between `output_item.added` and `output_item.done`.
@@ -204,11 +188,9 @@ impl Step<'_> {
                 vec![("item".to_owned(), lifecycle.started_item(item)?)],
             ),
             Self::ListToolsInProgress(item_id) => {
-                list_tools_status_frame(item_id, output_index, ListToolsStatus::InProgress)
+                item_status_frame(SSEEventType::McpListToolsInProgress, output_index, item_id)
             }
-            Self::ListToolsFinished(list) => {
-                list_tools_status_frame(&list.id, output_index, ListToolsStatus::finished(list))
-            }
+            Self::ListToolsFinished(list) => item_status_frame(list_tools_finished_event(list), output_index, &list.id),
             Self::PartAdded(at) => at_index(
                 SSEEventType::ContentPartAdded,
                 at.fields(("part".to_owned(), to_value(&started_part(at.part))?)),

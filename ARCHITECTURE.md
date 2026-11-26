@@ -1292,9 +1292,9 @@ each frame lazily from the completed item and decides per item kind, through an
 exhaustive match, what streams between `output_item.added` and `output_item.done`.
 The relay attributes and presents those frames. Gateway-call lifecycles
 (`gateway/lifecycle.rs`) and the failed-listing stream (`engine/streaming.rs`) build their
-`output_item.done` and MCP list-tools status frames with the same builders
-(`item_done_frame`, `list_tools_status_frame`), so a listing that carries an error ends with
-`response.mcp_list_tools.failed` on every path.
+`output_item.done` and in-progress status frames with the same builders (`item_done_frame`,
+`item_status_frame`), and `list_tools_finished_event` picks a listing's final event on every path, so a
+listing that carries an error ends with `response.mcp_list_tools.failed`.
 
 **Recorded contract checks.** `tests/multi_agent_contract_test.rs` loads independently
 recorded OpenAI and gateway YAML for review, proposals, mixed tools and client-executed
@@ -1489,9 +1489,10 @@ depend on SSE or executor types. `TranslationContext` is an owned snapshot of th
 registry facts and request metadata needed for classification and restoration. It
 provides each round's tool classification and owns final restoration of public tool
 declarations, custom/namespace shapes, tool choice, and tool-search metadata.
-`TranslationContext::call_owner` is the one client-or-gateway decision the dispatcher and
-the classification predicates read. A function call's public form (its `fc_` ID, `async`
-marker, namespace member name, and a deferred function's self-namespace) is decided once,
+`TranslationContext::is_client_call` is the one client-or-gateway decision the dispatcher and
+the classification predicates read; the dispatcher then routes a client call by its `ToolType`.
+A function call's public form (its `fc_` ID, `async` marker, namespace member name, and a
+deferred function's self-namespace) is decided once,
 on the model-visible name, by `function_call_rewrite`; `normalize_output_item` applies it
 to typed output and `normalize_wire_item` to provider JSON (`item` frames and snapshot
 `output`), so the stream and the final response cannot disagree. Upstream tool-search

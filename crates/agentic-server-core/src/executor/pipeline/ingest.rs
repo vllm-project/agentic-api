@@ -96,7 +96,7 @@ impl RoundIngestion {
         instructions: Option<&str>,
     ) -> ExecutorResult<ResponsePayload> {
         let mut payload = match self.body_kind {
-            BodyKind::Json => self.accumulator.finalize(model, None, instructions),
+            BodyKind::Json => self.accumulator.finalize(model, instructions),
             BodyKind::Empty | BodyKind::Stream => self.accumulator.finish(model, instructions)?,
         };
         let outcome = self.translator.finish()?;

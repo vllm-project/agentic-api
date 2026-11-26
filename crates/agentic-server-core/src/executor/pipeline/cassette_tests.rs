@@ -148,8 +148,8 @@ fn process_completed_response_object_from_sse(
         .find(|value| value.get("status").and_then(serde_json::Value::as_str) == Some("completed"))
         .unwrap_or_else(|| panic!("turn {} must contain a completed response object", turn_idx + 1));
     let body = serde_json::to_string(&response).unwrap();
-    let acc = ResponseAccumulator::from_json(&body, None).unwrap();
-    let payload = acc.finalize(model, None, None);
+    let acc = ResponseAccumulator::from_json(&body).unwrap();
+    let payload = acc.finalize(model, None);
     assert_eq!(payload.status, "completed");
     payload.output
 }
@@ -206,8 +206,8 @@ fn process_nonstreaming_turn(cassette: &TurnCassette, turn_idx: usize, model: &s
         .as_ref()
         .unwrap_or_else(|| panic!("turn {} must have response body", turn_idx + 1));
     let body_str = serde_json::to_string(body).unwrap();
-    let acc = ResponseAccumulator::from_json(&body_str, None).unwrap();
-    let payload = acc.finalize(model, None, None);
+    let acc = ResponseAccumulator::from_json(&body_str).unwrap();
+    let payload = acc.finalize(model, None);
     assert_eq!(payload.status, "completed");
     payload.output
 }
