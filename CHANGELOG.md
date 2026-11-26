@@ -50,6 +50,13 @@ All notable changes to Agentic API are documented here.
   `tests/cassettes/mcp/mcp-approval-*`.
   `agentic_core`: `McpToolParam::require_approval` is `Option<McpApprovalPolicy>` instead of `Option<String>`.
 
+### Testing
+
+- Recorded OpenAI's handling of the `store: false` replays of hosted call items that the existing scenarios do not
+  cover: an inline `code_interpreter_call`, and the `mcp_call`, `web_search_call` and `code_interpreter_call` items
+  of a stored response sent back by `id`, as returned and as `item_reference` (`STORE_FALSE_SUITE=hosted-calls`,
+  with a characterization test; follow-up to #492).
+
 ## [0.10.0] - 2026-11-09
 
 ### Upgrade notes

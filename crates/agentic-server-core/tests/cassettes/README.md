@@ -605,7 +605,7 @@ These files use `sessions`, not the HTTP `turns` schema or synthesized SSE.
 |--------|-----------|---------|
 | `record_multi_agent_cassettes.sh` | Five delegated scenarios over HTTP JSON/SSE or persistent duplex WebSocket | OpenAI and gateway |
 | `record_text_only_cassettes.sh` | 10 text-only cassettes (responses + conv modes, streaming + non-streaming) | OpenAI (`OPENAI_API_KEY`) |
-| `record_store_false_cassettes.sh` | Six HTTP scenarios per provider in JSON/SSE; `STORE_FALSE_SUITE=multi-agent` replays mixed tools against the selected provider | OpenAI and gateway |
+| `record_store_false_cassettes.sh` | Six HTTP scenarios per provider in JSON/SSE; `STORE_FALSE_SUITE=multi-agent` replays mixed tools against the selected provider; `STORE_FALSE_SUITE=hosted-calls` replays hosted call items inline and by `id` | OpenAI and gateway |
 | `record_conversations_api_cassettes.sh` | 20 Conversation Items API cassettes: four history scenarios in both transports, one non-streaming edge-case sequence, and one concurrent-writes sequence, each for both providers | OpenAI and gateway |
 | `record_reasoning_cassettes.sh` | Matching explicit-reasoning cassettes (streaming + non-streaming) | gateway and OpenAI reference; optional direct vLLM |
 | `record_tool_call_cassettes.sh` | 8 tool-call cassettes (4 tool_choice modes x streaming + non-streaming) | vLLM |
@@ -798,6 +798,18 @@ agents, web/MCP activity, and client shell outputs across both providers in JSON
 Its dependency replay normalizes the MCP initialization client's string version, which changes with the
 gateway release. It still compares the client name, protocol version, capabilities, and tool arguments;
 missing or invalid client versions remain mismatches. The captured YAML is retained unchanged.
+
+`STORE_FALSE_SUITE=hosted-calls` records the hosted call replays that the scenarios above and the hosted tool-search
+and multi-agent ones leave out, as one JSON cassette,
+`store-false-hosted-calls-PROVIDER-MODEL-nonstreaming.yaml` (`OPENAI_MODEL`, default `gpt-5.6-sol`). Turns 1-2 run
+the code-interpreter prompt with `store: false` and send its items back inline. Then, for an `mcp_call` (the gitmcp
+tiktoken server of `hosted_tool_search/inputs/`, declared directly), a `web_search_call` and a
+`code_interpreter_call`: a stored turn, then its output items sent back with `store: false`, as returned with their
+ids and as `item_reference` items, each followed by a question answered with `tool_choice: "none"`.
+`replayed_calls_characterization_test.rs` checks each request's status, `store`, declared tools, and the item types
+sent and returned, and that the by-`id` replays name the stored items. The gateway set needs MCP access to
+`gitmcp.io`, a web-search provider and the code-interpreter runtime. The gateway has no `item_reference` input type,
+so it refuses the `item_reference` replays (turns 5, 8 and 11).
 
 ### Reasoning (gateway and OpenAI)
 
