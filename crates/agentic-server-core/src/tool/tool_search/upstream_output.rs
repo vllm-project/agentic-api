@@ -15,12 +15,18 @@ use crate::types::io::output::FunctionToolCall;
 use crate::types::tools::ToolSearchStatus;
 use crate::utils::common::deserialize_from_str;
 
+/// Validates a complete JSON body's search calls and withheld-function calls. `is_client_search` is
+/// the round's classification of a function call as the client's search, shared with the streamed
+/// paths; a hosted search is the gateway's own call and is not checked here.
 pub(crate) fn validate_blocking_response(
     body: &str,
-    tool_search_enabled: bool,
+    is_client_search: impl Fn(&str) -> bool,
     withheld_function_names: &HashSet<String>,
 ) -> Result<(), ToolError> {
-    if !tool_search_enabled && withheld_function_names.is_empty() && !might_contain_tool_search_wire(body) {
+    if withheld_function_names.is_empty()
+        && !is_client_search(TOOL_SEARCH_NAME)
+        && !might_contain_tool_search_wire(body)
+    {
         return Ok(());
     }
     let value: Value = match deserialize_from_str(body) {
@@ -46,9 +52,7 @@ pub(crate) fn validate_blocking_response(
                 let call = rules.native_call(item)?;
                 rules.ensure_finished(call.status == ToolSearchStatus::Completed)?;
             }
-            Some("function_call")
-                if tool_search_enabled && item.get("name").and_then(Value::as_str) == Some(TOOL_SEARCH_NAME) =>
-            {
+            Some("function_call") if item.get("name").and_then(Value::as_str).is_some_and(&is_client_search) => {
                 let call = rules.synthetic_call(item)?;
                 rules.ensure_finished(call.status == MessageStatus::Completed)?;
             }

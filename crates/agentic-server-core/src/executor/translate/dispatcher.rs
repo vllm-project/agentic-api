@@ -152,7 +152,7 @@ impl TranslationDispatcher {
     pub(in crate::executor) fn validate_json_body(&self, body: &str) -> ExecutorResult<()> {
         tool_search::validate_blocking_response(
             body,
-            self.context.tool_search_is_active(),
+            |name| self.context.is_client_tool_search(name),
             self.context.withheld_function_names(),
         )?;
         Ok(())

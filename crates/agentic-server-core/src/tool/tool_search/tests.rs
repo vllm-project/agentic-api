@@ -8,6 +8,11 @@ use crate::utils::common::serialize_to_value;
 use super::*;
 use crate::tool::catalog::hosted_mcp_member;
 
+/// The round's classification of a function call as the client's search, as the executor makes it.
+fn client_search(state: &ToolSearchState) -> impl Fn(&str) -> bool + '_ {
+    move |name| state.is_active() && !state.is_hosted() && name == TOOL_SEARCH_NAME
+}
+
 fn param(value: Value) -> ToolSearchToolParam {
     let ResponsesTool::ToolSearch(param) = serde_json::from_value(value).expect("valid tool_search declaration") else {
         panic!("expected tool_search");
@@ -19,7 +24,7 @@ fn assert_invalid_blocking_search(state: &ToolSearchState, case: &str, item: &Va
     let body = json!({"status": "completed", "output": [item]}).to_string();
     assert!(
         matches!(
-            validate_blocking_response(&body, state.is_active(), state.withheld_function_names()),
+            validate_blocking_response(&body, client_search(state), state.withheld_function_names()),
             Err(ToolError::InvalidUpstreamToolSearch)
         ),
         "{case}"
@@ -308,7 +313,7 @@ fn prepared_state_validates_blocking_search_without_changing_inactive_functions(
 
     for item in [&native, &synthetic] {
         let body = json!({"status": "completed", "output": [item]}).to_string();
-        validate_blocking_response(&body, state.is_active(), state.withheld_function_names())
+        validate_blocking_response(&body, client_search(&state), state.withheld_function_names())
             .expect("native and synthetic array arguments are valid");
     }
     let malformed = [
@@ -365,7 +370,7 @@ fn prepared_state_validates_blocking_search_without_changing_inactive_functions(
         }]
     })
     .to_string();
-    validate_blocking_response(&partial, state.is_active(), state.withheld_function_names())
+    validate_blocking_response(&partial, client_search(&state), state.withheld_function_names())
         .expect("unfinished search placeholder is allowed on an incomplete response");
 
     let ordinary = json!({
@@ -373,7 +378,7 @@ fn prepared_state_validates_blocking_search_without_changing_inactive_functions(
         "output": [{"type": "function_call", "name": "tool_search", "arguments": "{}"}]
     })
     .to_string();
-    validate_blocking_response(&ordinary, false, &HashSet::new())
+    validate_blocking_response(&ordinary, |_| false, &HashSet::new())
         .expect("inactive ordinary function keeps generic compatibility defaults");
 }
 

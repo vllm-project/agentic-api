@@ -1497,8 +1497,10 @@ on the model-visible name, by `function_call_rewrite`; `normalize_output_item` a
 to typed output and `normalize_wire_item` to provider JSON (`item` frames and snapshot
 `output`), so the stream and the final response cannot disagree. Upstream tool-search
 output is checked by one `SearchOutputRules`: the JSON and SSE entry points use its strict
-parse, unique `call_id`, and finished-call rule, each with its own classification, and the
-typed output uses its `call_id` check before projecting calls by the round's status.
+parse, unique `call_id`, and finished-call rule, and the typed output uses its `call_id` check
+before projecting calls by the round's status. All three apply it to the calls
+`is_client_tool_search` classifies as the client's search; a hosted search is the gateway's
+own call.
 Nonempty provider message IDs without the public `msg` prefix receive `msg_` during
 translation. Message events and final JSON/SSE snapshots use the same public ID;
 ingestion retains the provider's original identity for lifecycle validation, and

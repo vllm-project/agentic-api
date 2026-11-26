@@ -6,6 +6,7 @@ use crate::executor::pipeline::test_support::ingest_lenient;
 use crate::executor::request::RequestContext;
 use crate::executor::upstream::tests::request_context;
 use crate::tool::ToolType;
+use crate::tool::handler::ToolError;
 use crate::types::io::OutputItem;
 use serde_json::{Value, json};
 
@@ -276,4 +277,65 @@ fn sentinel_sequence_stream_preserves_terminal_usage_and_text() {
     let serialized = serde_json::to_value(&payload).unwrap();
     assert_eq!(serialized["output"][0]["content"][0]["text"], "GLOBE");
     assert_eq!(serialized["usage"]["total_tokens"], 18);
+}
+
+/// A hosted search is the gateway's own call, so neither transport holds it to the client search's
+/// rules; a client search is held to them on both.
+#[test]
+fn json_and_stream_classify_a_search_call_the_same_way() {
+    let search = |call_id: &str, status: &str| {
+        json!({
+            "type": "function_call",
+            "id": format!("fc_{call_id}"),
+            "call_id": call_id,
+            "name": "tool_search",
+            "arguments": "{}",
+            "status": status
+        })
+    };
+    let outputs = [
+        ("unfinished call", vec![search("call_1", "in_progress")]),
+        (
+            "repeated call_id",
+            vec![search("call_1", "completed"), search("call_1", "completed")],
+        ),
+    ];
+    for (case, output) in outputs {
+        let response = json!({"id": "resp_1", "object": "response", "status": "completed", "output": output});
+        for hosted in [true, false] {
+            let context = || {
+                let context = TranslationContext::new(
+                    HashMap::from([("tool_search".to_owned(), ToolType::ToolSearch)]),
+                    HashSet::new(),
+                    true,
+                );
+                if hosted {
+                    context.with_gateway_owned_names(HashSet::from(["tool_search".to_owned()]))
+                } else {
+                    context
+                }
+            };
+
+            let json_body =
+                RoundIngestion::new(Validation::Lenient, context(), None).load_json_body(&response.to_string());
+            let mut stream = RoundIngestion::new(Validation::Lenient, context(), None);
+            let streamed = stream
+                .push(SseLine::parse(&format!(
+                    "data: {}",
+                    json!({"type": "response.completed", "response": response})
+                )))
+                .map(|_| ());
+
+            for (transport, result) in [("JSON body", json_body), ("stream", streamed)] {
+                if hosted {
+                    assert!(result.is_ok(), "{case}, {transport}, hosted search: {result:?}");
+                } else {
+                    assert!(
+                        matches!(result, Err(ExecutorError::Tool(ToolError::InvalidUpstreamToolSearch))),
+                        "{case}, {transport}, client search: {result:?}"
+                    );
+                }
+            }
+        }
+    }
 }

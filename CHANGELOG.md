@@ -76,6 +76,9 @@ All notable changes to Agentic API are documented here.
   listing, as a single-agent response does, instead of `response.mcp_list_tools.completed` (#549).
 - Function calls in the `output` of an upstream `response.*` snapshot event take their public id and `async` marker
   from the same rules as the final output, decided on the model-visible name before the namespace is restored (#549).
+- A non-streaming upstream response that holds a hosted `tool_search` call is no longer rejected for that call's
+  shape, `call_id`, or unfinished status. A hosted search is the gateway's own call, as it already was for a
+  streamed response; a client-executed search's shape, `call_id`, and status are checked on both (#549).
 
 ### Testing
 
