@@ -190,3 +190,41 @@ fn invalid_native_usage_and_engine_failures_cannot_become_successful_responses()
         );
     }
 }
+
+#[test]
+fn native_event_stream_contains_complete_part_and_call_lifecycles() {
+    let mut adapter = EventAdapter::new("resp", "attempt", "test");
+    let frames: Vec<_> = sample_events(FinishReason::Stop(None))
+        .into_iter()
+        .flat_map(|event| adapter.convert(event).unwrap())
+        .collect();
+    let types: Vec<_> = frames.iter().map(|frame| frame.event_type).collect();
+    assert_eq!(
+        types,
+        [
+            SSEEventType::ResponseCreated,
+            SSEEventType::ResponseInProgress,
+            SSEEventType::OutputItemAdded,
+            SSEEventType::ReasoningPartAdded,
+            SSEEventType::ReasoningTextDelta,
+            SSEEventType::ReasoningTextDone,
+            SSEEventType::ReasoningPartDone,
+            SSEEventType::OutputItemDone,
+            SSEEventType::OutputItemAdded,
+            SSEEventType::ContentPartAdded,
+            SSEEventType::OutputTextDelta,
+            SSEEventType::OutputTextDone,
+            SSEEventType::ContentPartDone,
+            SSEEventType::OutputItemDone,
+            SSEEventType::OutputItemAdded,
+            SSEEventType::FunctionCallArgumentsDelta,
+            SSEEventType::FunctionCallArgumentsDone,
+            SSEEventType::OutputItemDone,
+            SSEEventType::ResponseCompleted,
+        ]
+    );
+    assert_eq!(frames[9].wire.rest["part"]["type"], "output_text");
+    assert_eq!(frames[9].wire.rest["part"]["text"], "");
+    assert_eq!(frames[12].wire.rest["part"]["text"], "answer");
+    assert_eq!(frames[16].wire.rest["arguments"], "{}");
+}

@@ -12,8 +12,8 @@ use agentic_core::executor::error::ExecutorError;
 use agentic_core::executor::inference::direct::{EventStream, GenerationControl};
 use agentic_core::types::event::MessageStatus;
 use agentic_core::types::io::{
-    FunctionToolCall, InputTokenDetails, OutputItem, OutputMessage, OutputTextContent, OutputTokenDetails,
-    ReasoningOutput, ReasoningStatus, ReasoningTextContent, ResponseUsage,
+    FunctionToolCall, InputTokenDetails, OutputItem, OutputMessage, OutputMessageContent, OutputTextContent,
+    OutputTokenDetails, ReasoningOutput, ReasoningStatus, ReasoningTextContent, ResponseUsage,
 };
 use agentic_core::types::request_response::{IncompleteDetails, ResponsePayload, StandardResponseFields};
 use agentic_core::utils::common::{serialize_to_value, utcnow_str};
@@ -124,7 +124,23 @@ impl EventAdapter {
                     String::new(),
                     MessageStatus::InProgress,
                 )?;
-                item_frame(SSEEventType::OutputItemAdded, index, &item)?
+                let mut frames = vec![item_frame(SSEEventType::OutputItemAdded, index, &item)?];
+                if kind == AssistantBlockKind::Text {
+                    frames.push(content_frame(
+                        SSEEventType::ContentPartAdded,
+                        index,
+                        self.item_id(kind, index),
+                        String::new(),
+                    )?);
+                } else if kind == AssistantBlockKind::Reasoning {
+                    frames.push(reasoning_part_frame(
+                        SSEEventType::ReasoningPartAdded,
+                        index,
+                        self.item_id(kind, index),
+                        String::new(),
+                    )?);
+                }
+                return Ok(frames);
             }
             ChatEvent::BlockDelta { index, kind, delta, .. } => {
                 let index = self.output_index(SourceIndex::Block(index))?;
@@ -146,8 +162,22 @@ impl EventAdapter {
                         return Err(protocol_error("tool call ended as a text block").into());
                     }
                 };
-                let item = text_item(self.item_id(kind, index), kind, text, MessageStatus::Completed)?;
-                item_frame(SSEEventType::OutputItemDone, index, &item)?
+                let id = self.item_id(kind, index);
+                let mut frames = vec![text_done_frame(kind, index, id.clone(), text.clone())?];
+                frames.push(match kind {
+                    AssistantBlockKind::Text => {
+                        content_frame(SSEEventType::ContentPartDone, index, id.clone(), text.clone())?
+                    }
+                    AssistantBlockKind::Reasoning => {
+                        reasoning_part_frame(SSEEventType::ReasoningPartDone, index, id.clone(), text.clone())?
+                    }
+                    AssistantBlockKind::ToolCall => {
+                        return Err(protocol_error("tool call ended as a text block").into());
+                    }
+                });
+                let item = text_item(id, kind, text, MessageStatus::Completed)?;
+                frames.push(item_frame(SSEEventType::OutputItemDone, index, &item)?);
+                return Ok(frames);
             }
             ChatEvent::ToolCallStart { index, id, name } => {
                 let index = self.output_index(SourceIndex::Tool(index))?;
@@ -166,8 +196,21 @@ impl EventAdapter {
             }
             ChatEvent::ToolCallEnd { index, call } => {
                 let index = self.output_index(SourceIndex::Tool(index))?;
+                let mut wire = wire(SSEEventType::FunctionCallArgumentsDone)?;
+                wire.output_index = Some(u64::from(index));
+                wire.rest.insert(
+                    "item_id".to_owned(),
+                    Value::String(self.item_id(AssistantBlockKind::ToolCall, index)),
+                );
+                wire.rest.insert("name".to_owned(), Value::String(call.name.clone()));
+                wire.rest
+                    .insert("arguments".to_owned(), Value::String(call.arguments.clone()));
+                let arguments_done = EventFrame::try_from(wire).map_err(ExecutorError::from)?;
                 let item = self.function_item(index, call.id, call.name, call.arguments, MessageStatus::Completed);
-                item_frame(SSEEventType::OutputItemDone, index, &item)?
+                return Ok(vec![
+                    arguments_done,
+                    item_frame(SSEEventType::OutputItemDone, index, &item)?,
+                ]);
             }
             ChatEvent::LogprobsDelta { logprobs: None, .. } => return Ok(Vec::new()),
             ChatEvent::LogprobsDelta { .. } => return Err(protocol_error("unexpected direct logprobs output").into()),
@@ -276,6 +319,45 @@ fn delta_frame(
     if content {
         wire.rest.insert("content_index".to_owned(), json!(0));
     }
+    Ok(EventFrame::try_from(wire).map_err(ExecutorError::from)?)
+}
+
+fn content_frame(event_type: SSEEventType, index: u32, item_id: String, text: String) -> Result<EventFrame> {
+    let mut wire = wire(event_type)?;
+    wire.output_index = Some(u64::from(index));
+    wire.rest.insert("item_id".to_owned(), Value::String(item_id));
+    wire.rest.insert("content_index".to_owned(), json!(0));
+    wire.rest.insert(
+        "part".to_owned(),
+        serialize_to_value(&OutputMessageContent::OutputText(OutputTextContent::new(text)))
+            .map_err(ExecutorError::from)?,
+    );
+    Ok(EventFrame::try_from(wire).map_err(ExecutorError::from)?)
+}
+
+fn reasoning_part_frame(event_type: SSEEventType, index: u32, item_id: String, text: String) -> Result<EventFrame> {
+    let mut wire = wire(event_type)?;
+    wire.output_index = Some(u64::from(index));
+    wire.rest.insert("item_id".to_owned(), Value::String(item_id));
+    wire.rest.insert("content_index".to_owned(), json!(0));
+    wire.rest.insert(
+        "part".to_owned(),
+        serialize_to_value(&ReasoningTextContent::new(text)).map_err(ExecutorError::from)?,
+    );
+    Ok(EventFrame::try_from(wire).map_err(ExecutorError::from)?)
+}
+
+fn text_done_frame(kind: AssistantBlockKind, index: u32, item_id: String, text: String) -> Result<EventFrame> {
+    let event_type = match kind {
+        AssistantBlockKind::Text => SSEEventType::OutputTextDone,
+        AssistantBlockKind::Reasoning => SSEEventType::ReasoningTextDone,
+        AssistantBlockKind::ToolCall => return Err(protocol_error("tool call emitted as a text block").into()),
+    };
+    let mut wire = wire(event_type)?;
+    wire.output_index = Some(u64::from(index));
+    wire.rest.insert("item_id".to_owned(), Value::String(item_id));
+    wire.rest.insert("content_index".to_owned(), json!(0));
+    wire.rest.insert("text".to_owned(), Value::String(text));
     Ok(EventFrame::try_from(wire).map_err(ExecutorError::from)?)
 }
 
