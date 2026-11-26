@@ -496,11 +496,6 @@ impl RetainedSize for OutputItem {
     }
 }
 
-#[cfg(test)]
-pub(in crate::executor) fn retained_output_item_bytes(item: &OutputItem) -> usize {
-    item.retained_bytes()
-}
-
 pub(in crate::executor) fn retained_response_parts_bytes(
     response_id: &str,
     output: &[OutputItem],
@@ -652,7 +647,7 @@ mod tests {
         });
 
         assert_eq!(
-            retained_output_item_bytes(&call),
+            call.retained_bytes(),
             RETAINED_CONTAINER_OVERHEAD_BYTES * 4
                 + "ci_1".len()
                 + "cntr_1".len()
@@ -783,7 +778,7 @@ mod tests {
         });
         // `query` mirrors the first entry of `queries` and is retained separately.
         assert_eq!(
-            retained_output_item_bytes(&ws_search),
+            ws_search.retained_bytes(),
             RETAINED_CONTAINER_OVERHEAD_BYTES * 3
                 + "search".len()
                 + "ws_1".len()
@@ -800,7 +795,7 @@ mod tests {
             }),
         });
         assert_eq!(
-            retained_output_item_bytes(&ws_open),
+            ws_open.retained_bytes(),
             RETAINED_CONTAINER_OVERHEAD_BYTES + "ws_2".len() + "https://example.com".len()
         );
 
@@ -816,7 +811,7 @@ mod tests {
             error: Some(McpCallError::Text("error_msg".to_owned())),
         });
         assert_eq!(
-            retained_output_item_bytes(&mcp_call),
+            mcp_call.retained_bytes(),
             RETAINED_CONTAINER_OVERHEAD_BYTES
                 + "mcp_1".len()
                 + "srv".len()
@@ -838,7 +833,7 @@ mod tests {
             }],
             error: Some("list_err".to_owned()),
         });
-        assert!(retained_output_item_bytes(&mcp_list) > RETAINED_CONTAINER_OVERHEAD_BYTES + "list_1".len());
+        assert!(mcp_list.retained_bytes() > RETAINED_CONTAINER_OVERHEAD_BYTES + "list_1".len());
 
         let reasoning = OutputItem::Reasoning(ReasoningOutput {
             agent: None,
@@ -849,7 +844,7 @@ mod tests {
             encrypted_content: Some(OpaqueReasoning::try_from("encrypted_blob".to_owned()).unwrap()),
         });
         assert_eq!(
-            retained_output_item_bytes(&reasoning),
+            reasoning.retained_bytes(),
             RETAINED_CONTAINER_OVERHEAD_BYTES
                 + "rs_1".len()
                 + "encrypted_blob".len()
@@ -866,7 +861,7 @@ mod tests {
         let mut message = OutputMessage::new("msg_1", crate::types::event::MessageStatus::Completed);
         message.content = vec![part.into()];
         assert_eq!(
-            retained_output_item_bytes(&OutputItem::Message(message)),
+            OutputItem::Message(message).retained_bytes(),
             RETAINED_CONTAINER_OVERHEAD_BYTES
                 + "msg_1".len()
                 + "assistant".len()
@@ -883,7 +878,7 @@ mod tests {
             encrypted_content: "x".repeat(1000),
         });
         assert_eq!(
-            retained_output_item_bytes(&compaction),
+            compaction.retained_bytes(),
             RETAINED_CONTAINER_OVERHEAD_BYTES + "cmp_1".len() + 1000
         );
 
@@ -898,7 +893,7 @@ mod tests {
         });
         assert!(nested.retained_bytes() >= 300);
         assert_eq!(
-            retained_output_item_bytes(&tool_search),
+            tool_search.retained_bytes(),
             RETAINED_CONTAINER_OVERHEAD_BYTES + "ts_1".len() + "call_1".len() + nested.retained_bytes()
         );
     }

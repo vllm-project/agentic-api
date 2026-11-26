@@ -76,6 +76,9 @@ impl AgentPipeline {
     pub(super) fn is_streaming(&self) -> bool {
         self.relay.is_live()
     }
+    pub(super) fn relay(&self) -> &StreamRelay {
+        &self.relay
+    }
     pub(super) fn relay_mut(&mut self) -> &mut StreamRelay {
         &mut self.relay
     }
@@ -266,4 +269,8 @@ impl AgentPipeline {
 }
 
 #[cfg(test)]
+mod cassette_tests;
+#[cfg(test)]
 mod driver_tests;
+#[cfg(test)]
+pub(super) mod test_support;

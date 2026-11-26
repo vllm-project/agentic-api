@@ -6,7 +6,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use agentic_core::events::{EventPayload, SSEItemType, normalize_sse_line};
-use agentic_core::executor::accumulator::ResponseAccumulator;
 use agentic_core::executor::request::RequestContext;
 use agentic_core::executor::{UpstreamBody, decode_upstream};
 use agentic_core::types::io::{OutputAnnotation, OutputItem, OutputMessageContent};
@@ -179,47 +178,6 @@ async fn strict_relay_decoder_accepts_data_lines_without_a_space() {
         .await
         .map(|(payload, _)| payload)
         .expect("SSE data fields may omit the optional space after the colon");
-}
-
-#[tokio::test]
-async fn completed_terminal_details_are_preserved_by_both_ingestion_paths() {
-    let error = json!({"code": "upstream_error", "message": "Provider supplied terminal details"});
-    let lines = [
-        json!({"type": "response.created", "response": {"id": "resp_upstream", "status": "in_progress"}}),
-        json!({"type": "response.in_progress", "response": {"id": "resp_upstream", "status": "in_progress"}}),
-        json!({
-            "type": "response.completed",
-            "response": {
-                "id": "resp_upstream",
-                "status": "completed",
-                "output": [],
-                "error": error.clone(),
-                "incomplete_details": {"reason": "upstream_error"}
-            }
-        }),
-    ]
-    .map(|event| format!("data: {event}"));
-
-    let strict = decode_upstream(request_context(), UpstreamBody::Sse(&lines.join("\n")))
-        .await
-        .map(|(payload, _)| payload)
-        .expect("valid completed stream");
-    let lenient = ResponseAccumulator::from_sse_lines(lines, None)
-        .expect("valid completed stream")
-        .finalize("test-model", None, None);
-
-    for (policy, payload) in [("strict", strict), ("lenient", lenient)] {
-        assert_eq!(payload.status, "completed", "{policy}");
-        assert_eq!(payload.error.as_ref(), Some(&error), "{policy}");
-        assert_eq!(
-            payload
-                .incomplete_details
-                .as_ref()
-                .and_then(|details| details.reason.as_deref()),
-            Some("upstream_error"),
-            "{policy}"
-        );
-    }
 }
 
 #[tokio::test]

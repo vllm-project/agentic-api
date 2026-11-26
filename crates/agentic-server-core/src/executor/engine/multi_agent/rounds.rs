@@ -199,7 +199,7 @@ impl MultiAgentRun {
                     .expect("failed task has an owner")
                     .compacting = false;
                 self.interrupted.remove(&turn);
-                if turn.agent.is_root() || pipeline.relay_mut().has_live_agent_items(&turn.agent) {
+                if turn.agent.is_root() || pipeline.relay().has_live_agent_items(&turn.agent) {
                     return Err(error);
                 }
                 self.settle_turn(&turn, &AgentCompletion::Failed(error.to_string()))

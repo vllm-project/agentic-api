@@ -52,6 +52,11 @@ All notable changes to Agentic API are documented here.
 - `agentic_core`: one `executor::rehydrate(request, exec_ctx, session)` replaces `rehydrate_conversation` and
   `rehydrate_in_session` (#549). Pass `None` for a turn outside a session, or `Some(&session)` for a session turn,
   which begins there for the request's `previous_response_id`. `RequestPayload::multi_agent_enabled` is added.
+- `agentic_core`: `ResponseAccumulator::new`, `from_sse_lines`, `from_stream`, and `mark_incomplete`, and
+  `GatewayStreamAccumulator::process_sse_line` are removed (#549); no request path called them. Decode a complete
+  upstream body with `executor::decode_upstream(ctx, UpstreamBody::Sse(..))` (or `UpstreamBody::Json`), which validates
+  the stream strictly where the removed helpers skipped malformed frames. To stamp a relayed line, normalize it with
+  `events::normalize_sse_line` and pass the frame to `GatewayStreamAccumulator::process_event`.
 
 ### Fixed
 

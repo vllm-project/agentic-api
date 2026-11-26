@@ -1,6 +1,7 @@
 use super::*;
 use crate::executor::relay::RelayLimits;
 use crate::executor::upstream::tests::request_context;
+use crate::executor::upstream::{UpstreamBody, decode_upstream};
 use crate::tool::ToolType;
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
@@ -363,4 +364,54 @@ fn prepared_search_state_survives_rounds_and_is_taken_once_for_persistence() {
     assert_eq!(metadata.effective_tools.unwrap().len(), 3);
     assert!(agent.tool_search_state().is_none());
     assert!(agent.take_tool_search_metadata().is_none());
+}
+
+#[tokio::test]
+async fn completed_terminal_details_are_preserved_by_both_ingestion_paths() {
+    let error = json!({"code": "upstream_error", "message": "Provider supplied terminal details"});
+    let lines = [
+        json!({"type": "response.created", "response": {"id": "resp_upstream", "status": "in_progress"}}),
+        json!({"type": "response.in_progress", "response": {"id": "resp_upstream", "status": "in_progress"}}),
+        json!({
+            "type": "response.completed",
+            "response": {
+                "id": "resp_upstream",
+                "status": "completed",
+                "output": [],
+                "error": error.clone(),
+                "incomplete_details": {"reason": "upstream_error"}
+            }
+        }),
+    ]
+    .map(|event| format!("data: {event}"));
+
+    let strict = decode_upstream(request_context(), UpstreamBody::Sse(&lines.join("\n")))
+        .await
+        .map(|(payload, _)| payload)
+        .expect("valid completed stream");
+    let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached(), None);
+    let lenient = agent
+        .run_with_stream_body(
+            futures::stream::iter(lines.map(Ok)),
+            Validation::Lenient,
+            TranslationContext::default(),
+            &ToolRegistry::default(),
+            0,
+            None,
+        )
+        .await
+        .expect("valid completed stream");
+
+    for (policy, payload) in [("strict", strict), ("lenient", lenient)] {
+        assert_eq!(payload.status, "completed", "{policy}");
+        assert_eq!(payload.error.as_ref(), Some(&error), "{policy}");
+        assert_eq!(
+            payload
+                .incomplete_details
+                .as_ref()
+                .and_then(|details| details.reason.as_deref()),
+            Some("upstream_error"),
+            "{policy}"
+        );
+    }
 }

@@ -1,15 +1,17 @@
-//! Cassette-driven integration tests: feed real vLLM SSE recordings through
-//! the full accumulator pipeline (normalize → `process_event` → finalize) and
-//! verify the resulting output items match expected values.
+//! Cassette-driven tests: feed real vLLM SSE recordings through the lenient
+//! ingestion round the engine runs for live upstream streams (normalize →
+//! validate → assemble → translate → finish) and verify the resulting output
+//! items match expected values.
 //!
 //! Tests cover both the legacy `events/` cassettes (flat SSE list) and the
 //! newer `tool_calls/` cassettes from PR #60 (multi-turn `turns` format).
 
 use serde::Deserialize;
 
-use agentic_core::executor::accumulator::ResponseAccumulator;
-use agentic_core::types::event::MessageStatus;
-use agentic_core::types::io::{CustomToolCall, FunctionToolCall, OutputItem, WebSearchCall};
+use super::test_support::ingest_lenient;
+use crate::executor::accumulator::ResponseAccumulator;
+use crate::types::event::MessageStatus;
+use crate::types::io::{CustomToolCall, FunctionToolCall, OutputItem, WebSearchCall};
 
 const CASSETTE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/cassettes/events");
 const TOOL_CALLS_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/cassettes/tool_calls");
@@ -21,10 +23,6 @@ const WEB_SEARCH_GATEWAY_MODEL: &str = "Qwen/Qwen3.5-35B-A3B-FP8";
 const WEB_SEARCH_GATEWAY_MODEL_SLUG: &str = "Qwen-Qwen3.5-35B-A3B-FP8";
 const WEB_SEARCH_OPENAI_MODEL: &str = "gpt-5.6";
 const WEB_SEARCH_OPENAI_MODEL_SLUG: &str = "gpt-5.6";
-
-fn from_sse_lines(lines: impl IntoIterator<Item = String>, conversation_id: Option<&str>) -> ResponseAccumulator {
-    ResponseAccumulator::from_sse_lines(lines, conversation_id).expect("valid cassette SSE stream")
-}
 
 // --- Legacy event cassette format ---
 
@@ -163,8 +161,7 @@ fn process_codex_streaming_turn(cassette: &TurnCassette, turn_idx: usize, model:
         "Codex cassette turn {} must have SSE data lines",
         turn_idx + 1
     );
-    let acc = from_sse_lines(data_lines, None);
-    let payload = acc.finalize(model, None, None);
+    let payload = ingest_lenient(data_lines, None, model).expect("valid cassette SSE stream");
     assert_eq!(payload.status, "completed");
     payload.output
 }
@@ -222,8 +219,7 @@ fn process_streaming_turn(cassette: &TurnCassette, turn_idx: usize, model: &str)
         "streaming turn {} must have SSE data lines",
         turn_idx + 1
     );
-    let acc = from_sse_lines(data_lines, None);
-    let payload = acc.finalize(model, None, None);
+    let payload = ingest_lenient(data_lines, None, model).expect("valid cassette SSE stream");
     assert_eq!(payload.status, "completed");
     payload.output
 }
@@ -265,23 +261,10 @@ fn get_first_fc_arguments(output: &[OutputItem]) -> String {
         .expect("output must contain at least one function call")
 }
 
-#[path = "accumulator_cassette/legacy.rs"]
-mod legacy;
-
-#[path = "accumulator_cassette/tool_calls.rs"]
-mod tool_calls;
-
-#[path = "accumulator_cassette/reasoning.rs"]
-mod reasoning;
-
-#[path = "accumulator_cassette/codex.rs"]
 mod codex;
-
-#[path = "accumulator_cassette/web_search.rs"]
-mod web_search;
-
-#[path = "accumulator_cassette/custom_tools.rs"]
 mod custom_tools;
-
-#[path = "accumulator_cassette/stateful.rs"]
+mod legacy;
+mod reasoning;
 mod stateful;
+mod tool_calls;
+mod web_search;
