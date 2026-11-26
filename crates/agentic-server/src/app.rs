@@ -218,6 +218,19 @@ impl Drop for WebSocketGuard {
     }
 }
 
+/// Parse the comma-separated `CORS_ALLOWED_ORIGINS` value.
+///
+/// `*` is kept verbatim as a sentinel so [`ServerConfig::cors_layer`] can map it
+/// to `AllowOrigin::any()`; passing it to `AllowOrigin::list` panics.
+fn parse_cors_allowed_origins(value: &str) -> Vec<String> {
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|origin| !origin.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
 /// Server-level configuration read from environment variables.
 pub struct ServerConfig {
     pub cors_allowed_origins: Vec<String>,
@@ -234,13 +247,8 @@ impl ServerConfig {
     pub fn from_env() -> Self {
         let cors_allowed_origins = std::env::var("CORS_ALLOWED_ORIGINS")
             .ok()
-            .map(|s| {
-                s.split(',')
-                    .map(str::trim)
-                    .filter(|o| !o.is_empty())
-                    .map(str::to_owned)
-                    .collect::<Vec<_>>()
-            })
+            .as_deref()
+            .map(parse_cors_allowed_origins)
             .unwrap_or_default();
         #[cfg(feature = "openapi")]
         let enable_openapi_docs =
@@ -254,7 +262,12 @@ impl ServerConfig {
     }
 
     fn cors_layer(&self) -> CorsLayer {
-        let allow_origin = if self.cors_allowed_origins.is_empty() {
+        // A lone `*` is the conventional spelling for "allow any origin". It
+        // cannot be passed to `AllowOrigin::list` (tower-http panics on it), so
+        // keep it as the single sentinel and route it to `AllowOrigin::any`.
+        let allow_origin = if self.cors_allowed_origins.is_empty()
+            || self.cors_allowed_origins.iter().any(|o| o == "*")
+        {
             AllowOrigin::any()
         } else {
             let origins: Vec<HeaderValue> = self
@@ -419,4 +432,51 @@ pub fn build_router_with_auth(
             track_request,
         ))
         .with_state(state)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cors_allowed_origins_parser_splits_trims_and_drops_empty_entries() {
+        assert_eq!(
+            parse_cors_allowed_origins(" https://a.example , http://b.example ,, "),
+            ["https://a.example", "http://b.example"]
+        );
+        assert!(parse_cors_allowed_origins("").is_empty());
+    }
+
+    #[test]
+    fn cors_allowed_origins_parser_preserves_wildcard_sentinel() {
+        assert_eq!(parse_cors_allowed_origins("*"), ["*"]);
+        assert_eq!(
+            parse_cors_allowed_origins(" *, https://a.example "),
+            ["*", "https://a.example"]
+        );
+    }
+
+    /// A wildcard origin must not reach `AllowOrigin::list`, which panics on it.
+    /// Building the layer is enough to catch the regression without a server.
+    #[test]
+    fn cors_layer_accepts_wildcard_without_panicking() {
+        let config = ServerConfig {
+            cors_allowed_origins: parse_cors_allowed_origins("*"),
+            rate_limit: None,
+            #[cfg(feature = "openapi")]
+            enable_openapi_docs: false,
+        };
+        let _layer = config.cors_layer();
+    }
+
+    #[test]
+    fn cors_layer_accepts_explicit_origins() {
+        let config = ServerConfig {
+            cors_allowed_origins: parse_cors_allowed_origins("https://a.example,https://b.example"),
+            rate_limit: None,
+            #[cfg(feature = "openapi")]
+            enable_openapi_docs: false,
+        };
+        let _layer = config.cors_layer();
+    }
 }
