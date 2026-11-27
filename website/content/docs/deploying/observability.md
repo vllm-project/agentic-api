@@ -544,15 +544,33 @@ data:
 As with any ConfigMap change, restart the Deployment before the new variables
 take effect (`kubectl -n <namespace> rollout restart deployment/agentic-api`).
 The gateway logs an `HttpClient.ExportSucceeded` event when spans and metrics
-reach the collector; a collector that is down surfaces as exporter warnings
-under the default `RUST_LOG`.
+reach the collector, but the pinned `opentelemetry-otlp` 0.32 exporter emits it
+at `DEBUG`. The default filter — and the `RUST_LOG` explicitly set in the
+shipped Kubernetes ConfigMap — hides both that success event and exporter
+warnings. To verify export from the pod, set a filter that keeps SDK/exporter
+diagnostics, for example:
+
+```yaml
+  RUST_LOG: "agentic_server=info,agentic_core=info,opentelemetry_sdk=warn,opentelemetry-otlp=debug"
+```
+
+Apply the same filter to a temporary debugging ConfigMap or pod override, then
+watch the logs for `HttpClient.ExportSucceeded` and exporter warnings. Return
+to the normal `RUST_LOG` once verification is complete.
 
 By default the EDOT gateway collector routes OTLP data into Elasticsearch data
 streams named `.ds-traces-generic.otel-default-*`,
 `.ds-metrics-generic.otel-default-*`, and `.ds-logs-generic.otel-default-*`.
-These are **generic OTLP** data streams, not the APM-style `traces-apm-*`
-indices. In Kibana, query the generic OTLP data views by `service.name` and
-`deployment.environment` rather than expecting the data under an APM service.
-If your collector is configured with an `elasticapm` or other exporter, the
-same spans may also be available through that pipeline; check the collector's
-configured exporters before assuming an index name.
+These are **generic OTLP** data streams, not the APM-style `traces-apm-*` indices.
+The index names alone do not decide whether a service appears in Kibana APM:
+native `*.otel-*` data streams can populate APM Services and Service Map. The
+`elasticapm` processor and connector are the enrichment/aggregation components
+required for the full APM experience; the Elasticsearch exporter still writes
+OTel-native data. See the [default pipeline requirements](https://www.elastic.co/docs/reference/edot-collector/config/default-config-standalone).
+If APM views are empty, verify the collector pipeline rather than adding a
+second exporter.
+
+As an additional verification path, open **Discover** in Kibana and query the
+generic OTLP data views by `service.name` and `deployment.environment` to
+confirm traces and metrics actually arrived; see the
+[Kibana verification steps](https://www.elastic.co/docs/solutions/observability/get-started/opentelemetry/use-cases/upstream-collector#verify-data-in-kibana).
