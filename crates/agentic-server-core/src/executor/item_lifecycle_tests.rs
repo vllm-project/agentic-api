@@ -6,7 +6,7 @@ fn item(value: Value) -> OutputItem {
     serde_json::from_value(value).expect("output item")
 }
 
-fn frames(item: &OutputItem, output_index: usize) -> Vec<Value> {
+fn frames(item: &OutputItem, output_index: u64) -> Vec<Value> {
     materialized_item_frames(item, output_index)
         .map(|frame| serialize_to_value(&frame.expect("frame").wire).expect("wire event"))
         .collect()

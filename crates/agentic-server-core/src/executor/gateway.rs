@@ -1853,7 +1853,7 @@ mod tests {
         let data_lines = chunks
             .iter()
             .filter_map(|chunk| chunk.lines().find(|line| line.starts_with("data: ")).map(str::to_owned));
-        let response = ingest_lenient_to_eof(data_lines, None, "test-model").expect("valid SSE stream");
+        let response = ingest_lenient_to_eof(data_lines, "test-model").expect("valid SSE stream");
         assert_eq!(response.output.len(), 1);
         assert!(matches!(response.output[0], OutputItem::Compaction(_)));
     }

@@ -57,6 +57,14 @@ All notable changes to Agentic API are documented here.
   upstream body with `executor::decode_upstream(ctx, UpstreamBody::Sse(..))` (or `UpstreamBody::Json`), which validates
   the stream strictly where the removed helpers skipped malformed frames. To stamp a relayed line, normalize it with
   `events::normalize_sse_line` and pass the frame to `GatewayStreamAccumulator::process_event`.
+- `agentic_core`: `GatewayStreamAccumulator::process_event` no longer takes an `output_offset`: the accumulator
+  only numbers events and deduplicates response start events, and the stream relay rebases an upstream frame's
+  `output_index` onto its round before presenting it. Embedders that rebased through it add the offset to
+  `wire.output_index` themselves (#549).
+- `agentic_core`: `ResponseAccumulator::from_json(body)` and `finalize(model, instructions)` no longer take a
+  conversation id or `previous_response_id`, and the payload they produce carries neither: the executor stamps
+  the response's public identity. Embedders that passed them set `conversation` and `previous_response_id` on the
+  returned `ResponsePayload` (#549).
 
 ### Fixed
 
@@ -64,6 +72,13 @@ All notable changes to Agentic API are documented here.
   `completed_at` time; it is `null` until the response completes, as on every other response (#549).
 - Multi-agent automatic compaction counts a compaction item that carries its window as that window, as
   single-agent compaction does, so an agent that continues a compacted history compacts at the same threshold (#549).
+- A multi-agent response whose MCP server failed to list its tools streams `response.mcp_list_tools.failed` for that
+  listing, as a single-agent response does, instead of `response.mcp_list_tools.completed` (#549).
+- Function calls in the `output` of an upstream `response.*` snapshot event take their public id and `async` marker
+  from the same rules as the final output, decided on the model-visible name before the namespace is restored (#549).
+- A non-streaming upstream response that holds a hosted `tool_search` call is no longer rejected for that call's
+  shape, `call_id`, or unfinished status. A hosted search is the gateway's own call, as it already was for a
+  streamed response; a client-executed search's shape, `call_id`, and status are checked on both (#549).
 
 ### Testing
 

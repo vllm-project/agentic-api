@@ -1,4 +1,5 @@
 use std::fmt::Write as _;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use chrono::Utc;
 use uuid::Uuid;
@@ -229,4 +230,13 @@ where
 #[must_use]
 pub fn serialize_to_vec_or_default<T: serde::Serialize>(value: &T) -> Vec<u8> {
     serde_json::to_vec(value).unwrap_or_default()
+}
+
+/// Adds `bytes` to `used` when the total stays within `limit`; `false` leaves `used` unchanged.
+/// Each byte budget built on it keeps its own release rule and capacity error.
+pub(crate) fn try_add_within(used: &AtomicUsize, bytes: usize, limit: usize) -> bool {
+    used.fetch_update(Ordering::AcqRel, Ordering::Acquire, |used| {
+        used.checked_add(bytes).filter(|total| *total <= limit)
+    })
+    .is_ok()
 }

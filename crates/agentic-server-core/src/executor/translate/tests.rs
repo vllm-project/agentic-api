@@ -62,7 +62,7 @@ async fn bare_provider_message_ids_remain_replayable_across_json_and_sse() {
                 store: false,
                 ..RequestPayload::default()
             });
-            let mut round = RoundIngestion::new("resp_test".into(), None, Validation::Strict, context, None);
+            let mut round = RoundIngestion::new(Validation::Strict, context, None);
             let mut frames = Vec::new();
             if stream {
                 let mut events = Vec::<Value>::new();
@@ -98,7 +98,7 @@ async fn bare_provider_message_ids_remain_replayable_across_json_and_sse() {
             } else {
                 round.load_json_body(&payload.to_string()).unwrap();
             }
-            let response = round.finish("test", None, None).unwrap();
+            let response = round.finish("test", None).unwrap();
             assert_eq!(response.output[0].id(), Some(public.as_str()));
             assert_eq!(response.output[1].id(), Some("msg_existing"));
             assert_eq!(response.output[2].id(), Some("fc_existing"));
@@ -142,7 +142,7 @@ async fn bare_provider_function_ids_are_public_without_changing_call_identity() 
                 } else {
                     HashSet::new()
                 });
-            let mut round = RoundIngestion::new("resp_test".into(), None, Validation::Strict, context, None);
+            let mut round = RoundIngestion::new(Validation::Strict, context, None);
             let mut deltas = 0;
             if stream {
                 let mut events: Vec<Value> = upstream_events(&payload)
@@ -184,7 +184,7 @@ async fn bare_provider_function_ids_are_public_without_changing_call_identity() 
             } else {
                 round.load_json_body(&payload.to_string()).unwrap();
             }
-            let response = round.finish("test", None, None).unwrap();
+            let response = round.finish("test", None).unwrap();
             assert_eq!(response.output[0].id(), Some(public.as_str()));
             assert_eq!(response.output[1].id(), Some("fc_existing"));
             let OutputItem::FunctionCall(call) = &response.output[0] else {
@@ -222,7 +222,7 @@ fn public_function_id_normalization_keeps_other_tool_projection_ids() {
             search_item_id(raw),
         ),
     ] {
-        let mut accumulator = ResponseAccumulator::with_validation("resp_1".into(), None, Validation::Lenient);
+        let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
         let context = test_context(HashMap::from([(name.into(), kind)]));
         let mut translator = TranslationDispatcher::new(context);
         for mut event in function_call_events(0, name, arguments) {
@@ -265,7 +265,7 @@ fn public_function_id_normalization_keeps_other_tool_projection_ids() {
 
 #[test]
 fn custom_function_arguments_are_emitted_incrementally() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([("raw_echo".to_owned(), ToolType::Custom)]));
     let mut translator = TranslationDispatcher::new(context);
     let mut frames = Vec::new();
@@ -347,7 +347,7 @@ fn custom_function_arguments_are_emitted_incrementally() {
 
 #[test]
 fn custom_input_deltas_match_authoritative_done_input() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([("raw_echo".to_owned(), ToolType::Custom)]));
     let mut translator = TranslationDispatcher::new(context);
     let events = [
@@ -392,7 +392,7 @@ fn custom_input_deltas_match_authoritative_done_input() {
 
 #[test]
 fn custom_input_rejects_authoritative_value_that_contradicts_deltas() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([("raw_echo".to_owned(), ToolType::Custom)]));
     let mut translator = TranslationDispatcher::new(context);
     let events = [
@@ -422,7 +422,7 @@ fn custom_input_rejects_authoritative_value_that_contradicts_deltas() {
 
 #[test]
 fn malformed_custom_input_escape_is_rejected() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([("raw_echo".to_owned(), ToolType::Custom)]));
     let mut translator = TranslationDispatcher::new(context);
     let added = serde_json::json!({
@@ -443,7 +443,7 @@ fn malformed_custom_input_escape_is_rejected() {
 
 #[test]
 fn custom_input_waits_for_split_unicode_surrogate_pair() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([("raw_echo".to_owned(), ToolType::Custom)]));
     let mut translator = TranslationDispatcher::new(context);
     let events = [
@@ -477,7 +477,7 @@ fn custom_input_waits_for_split_unicode_surrogate_pair() {
 
 #[test]
 fn custom_input_over_limit_is_rejected() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([("raw_echo".to_owned(), ToolType::Custom)]));
     let mut translator = TranslationDispatcher::new(context);
     let added = serde_json::json!({
@@ -527,7 +527,7 @@ fn function_call_events(output_index: u32, name: &str, arguments: &str) -> Vec<V
 /// their restored public shape. A streamed item, its event payload and the final output item agree.
 #[test]
 fn async_tool_calls_are_marked_on_stream_items_and_final_output() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([
         ("get_weather".to_owned(), ToolType::Function),
         ("get_time".to_owned(), ToolType::Function),
@@ -604,7 +604,7 @@ fn async_tool_calls_are_marked_on_stream_items_and_final_output() {
 /// `item_id` keeps that ID, and an added call without a status stays in progress.
 #[test]
 fn async_marking_keeps_the_upstream_id_and_in_progress_status() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([("get_weather".to_owned(), ToolType::Function)]))
         .with_async_tool_names(HashSet::from(["get_weather".to_owned()]));
     let mut translator = TranslationDispatcher::new(context);
@@ -641,7 +641,7 @@ fn async_marking_keeps_the_upstream_id_and_in_progress_status() {
 
 #[test]
 fn ordinary_functions_pass_through_unchanged() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([("echo".to_owned(), ToolType::Function)]));
     let mut translator = TranslationDispatcher::new(context);
     let event = serde_json::json!({
@@ -666,7 +666,7 @@ fn ordinary_functions_pass_through_unchanged() {
 
 #[test]
 fn unnamed_function_frames_are_recovered_by_output_index_when_done_binds_id() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([("echo".to_owned(), ToolType::Function)]));
     let mut translator = TranslationDispatcher::new(context);
     let mut frames = Vec::new();
@@ -725,7 +725,7 @@ fn unnamed_function_frames_are_recovered_by_output_index_when_done_binds_id() {
 
 #[test]
 fn unnamed_custom_function_is_recovered_by_output_index_when_done_binds_id() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([("raw_echo".to_owned(), ToolType::Custom)]));
     let mut translator = TranslationDispatcher::new(context);
     let events = [
@@ -767,7 +767,7 @@ fn unnamed_custom_function_is_recovered_by_output_index_when_done_binds_id() {
 
 #[test]
 fn parallel_unnamed_functions_with_empty_ids_remain_distinct() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([
         ("first".to_owned(), ToolType::Function),
         ("second".to_owned(), ToolType::Function),
@@ -825,7 +825,7 @@ fn parallel_unnamed_functions_with_empty_ids_remain_distinct() {
 
 #[test]
 fn parallel_named_custom_functions_with_empty_ids_remain_distinct() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([
         ("first".to_owned(), ToolType::Custom),
         ("second".to_owned(), ToolType::Custom),
@@ -867,7 +867,7 @@ fn parallel_named_custom_functions_with_empty_ids_remain_distinct() {
 
 #[test]
 fn unnamed_custom_function_with_empty_id_uses_one_public_id() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([("raw_echo".to_owned(), ToolType::Custom)]));
     let mut translator = TranslationDispatcher::new(context);
     let events = [
@@ -909,7 +909,7 @@ fn unnamed_custom_function_with_empty_id_uses_one_public_id() {
 
 #[test]
 fn gateway_owned_functions_are_suppressed_and_mark_the_defer_boundary() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([("web_search".to_owned(), ToolType::WebSearch)]));
     let mut translator = TranslationDispatcher::new(context);
     let added = serde_json::json!({
@@ -945,7 +945,7 @@ fn gateway_owned_functions_are_suppressed_and_mark_the_defer_boundary() {
 /// the gateway call's lifecycle, after that tool completes.
 #[test]
 fn async_calls_keep_output_order_around_gateway_calls() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([
         ("get_weather".to_owned(), ToolType::Function),
         ("web_search".to_owned(), ToolType::WebSearch),
@@ -987,7 +987,7 @@ fn async_calls_keep_output_order_around_gateway_calls() {
 
 #[test]
 fn synthetic_tool_search_emits_public_frames_but_accumulates_function_call() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([("tool_search".to_owned(), ToolType::ToolSearch)]));
     let mut translator = TranslationDispatcher::new(context);
     let events = [
@@ -1068,7 +1068,7 @@ fn synthetic_tool_search_emits_public_frames_but_accumulates_function_call() {
         serde_json::json!(["weather", "timezone"])
     );
 
-    let payload = accumulator.finalize("test", None, None);
+    let payload = accumulator.finalize("test", None);
     assert!(matches!(payload.output.as_slice(), [OutputItem::FunctionCall(_)]));
 }
 
@@ -1115,7 +1115,7 @@ fn duplicate_tool_search_call_id_is_rejected_across_native_and_synthetic_shapes(
 
     for (case, first, mut second) in cases {
         second["item"]["call_id"] = first["item"]["call_id"].clone();
-        let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+        let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
         let context = test_context(HashMap::from([("tool_search".to_owned(), ToolType::ToolSearch)]));
         let mut translator = TranslationDispatcher::new(context);
         let first = RoundIngestion::translate_line(&mut accumulator, SseLine::parse(&sse(&first)), &mut translator)
@@ -1137,7 +1137,7 @@ fn duplicate_tool_search_call_id_is_rejected_across_native_and_synthetic_shapes(
 
 #[test]
 fn terminal_output_rejects_duplicate_tool_search_call_ids() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([("tool_search".to_owned(), ToolType::ToolSearch)]));
     let mut translator = TranslationDispatcher::new(context);
     let terminal = serde_json::json!({
@@ -1176,7 +1176,7 @@ fn terminal_output_rejects_duplicate_tool_search_call_ids() {
 
 #[test]
 fn native_done_cannot_reuse_synthetic_identity_after_terminal_event() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([("tool_search".to_owned(), ToolType::ToolSearch)]));
     let mut translator = TranslationDispatcher::new(context);
     for event in [
@@ -1220,7 +1220,7 @@ fn native_done_cannot_reuse_synthetic_identity_after_terminal_event() {
 
 #[test]
 fn synthetic_tool_search_rejects_non_string_name_in_buffered_added_item() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([("tool_search".to_owned(), ToolType::ToolSearch)]));
     let mut translator = TranslationDispatcher::new(context);
     translate(
@@ -1256,7 +1256,7 @@ fn synthetic_tool_search_rejects_non_string_name_in_buffered_added_item() {
 #[test]
 fn native_tool_search_frames_pass_through_and_accumulate_natively() {
     for added_status in ["in_progress", "completed"] {
-        let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+        let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
         let context = test_context(HashMap::new());
         let mut translator = TranslationDispatcher::new(context);
         let events = [
@@ -1298,7 +1298,7 @@ fn native_tool_search_frames_pass_through_and_accumulate_natively() {
         assert_eq!(frames[0].wire.rest["item"]["type"], "tool_search_call");
         assert_eq!(frames[1].wire.rest["item"]["type"], "tool_search_call");
 
-        let payload = accumulator.finalize("test", None, None);
+        let payload = accumulator.finalize("test", None);
         let [OutputItem::ToolSearchCall(call)] = payload.output.as_slice() else {
             panic!("native tool_search_call must remain typed");
         };
@@ -1308,7 +1308,7 @@ fn native_tool_search_frames_pass_through_and_accumulate_natively() {
 
 #[test]
 fn oversized_native_tool_search_done_arguments_are_rejected() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::new());
     let mut translator = TranslationDispatcher::new(context);
     let done = serde_json::json!({
@@ -1331,7 +1331,7 @@ fn oversized_native_tool_search_done_arguments_are_rejected() {
 
 #[test]
 fn oversized_synthetic_tool_search_done_arguments_are_rejected() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([("tool_search".to_owned(), ToolType::ToolSearch)]));
     let mut translator = TranslationDispatcher::new(context);
     let done = serde_json::json!({
@@ -1355,8 +1355,7 @@ fn oversized_synthetic_tool_search_done_arguments_are_rejected() {
 #[test]
 fn successful_eof_rejects_unfinished_synthetic_and_native_searches() {
     let synthetic_context = test_context(HashMap::from([("tool_search".to_owned(), ToolType::ToolSearch)]));
-    let mut synthetic_accumulator =
-        ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut synthetic_accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let mut synthetic = TranslationDispatcher::new(synthetic_context);
     translate(
         &mut synthetic_accumulator,
@@ -1373,7 +1372,7 @@ fn successful_eof_rejects_unfinished_synthetic_and_native_searches() {
     assert!(synthetic.finish().is_err());
 
     let native_context = test_context(HashMap::new());
-    let mut native_accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut native_accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let mut native = TranslationDispatcher::new(native_context);
     translate(
         &mut native_accumulator,
@@ -1392,7 +1391,7 @@ fn successful_eof_rejects_unfinished_synthetic_and_native_searches() {
 
 #[test]
 fn incomplete_stream_preserves_unfinished_synthetic_search() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([("tool_search".to_owned(), ToolType::ToolSearch)]));
     let mut translator = TranslationDispatcher::new(context);
     let mut public_frames = Vec::new();
@@ -1426,7 +1425,7 @@ fn incomplete_stream_preserves_unfinished_synthetic_search() {
         outcome.unfinished_tool_search_item_ids,
         HashSet::from(["fc_search".to_owned()])
     );
-    let mut payload = accumulator.finalize("test", None, None);
+    let mut payload = accumulator.finalize("test", None);
     outcome
         .normalize_response_output(&mut payload.output, crate::types::event::ResponseStatus::Incomplete)
         .expect("unfinished synthetic call is preserved as incomplete");
@@ -1446,7 +1445,7 @@ fn incomplete_stream_preserves_unfinished_synthetic_search() {
 
 #[test]
 fn incomplete_stream_preserves_native_search_and_terminal_item_parity() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::new());
     let mut translator = TranslationDispatcher::new(context);
     let mut public_frames = Vec::new();
@@ -1480,7 +1479,7 @@ fn incomplete_stream_preserves_native_search_and_terminal_item_parity() {
     }
 
     let outcome = translator.finish().expect("incomplete native lifecycle");
-    let mut payload = accumulator.finalize("test", None, None);
+    let mut payload = accumulator.finalize("test", None);
     outcome
         .normalize_response_output(&mut payload.output, crate::types::event::ResponseStatus::Incomplete)
         .expect("incomplete native call remains public");
@@ -1509,7 +1508,7 @@ fn aborted_stream_discards_unnamed_search_candidate_with_empty_raw_id() {
         ),
         ("response.failed", "failed", crate::types::event::ResponseStatus::Error),
     ] {
-        let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+        let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
         let context = test_context(HashMap::from([("tool_search".to_owned(), ToolType::ToolSearch)]));
         let mut translator = TranslationDispatcher::new(context);
         for event in [
@@ -1540,7 +1539,7 @@ fn aborted_stream_discards_unnamed_search_candidate_with_empty_raw_id() {
             .expect("accumulator-generated item id");
         assert!(internal_item_id.starts_with("fc_"));
 
-        let mut payload = accumulator.finalize("test", None, None);
+        let mut payload = accumulator.finalize("test", None);
         let [OutputItem::FunctionCall(call)] = payload.output.as_slice() else {
             panic!("unfinished unnamed call must be accumulated as a function call");
         };
@@ -1555,7 +1554,7 @@ fn aborted_stream_discards_unnamed_search_candidate_with_empty_raw_id() {
 
 #[test]
 fn aborted_stream_discards_unfinished_native_search() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::new());
     let mut translator = TranslationDispatcher::new(context);
     for event in [
@@ -1587,7 +1586,7 @@ fn aborted_stream_discards_unfinished_native_search() {
         .finish()
         .expect("aborted native lifecycle may remain unfinished");
     assert!(outcome.unfinished_tool_search_item_ids.is_empty());
-    let mut payload = accumulator.finalize("test", None, None);
+    let mut payload = accumulator.finalize("test", None);
     outcome
         .normalize_response_output(&mut payload.output, crate::types::event::ResponseStatus::Error)
         .expect("unfinished native call is discarded");
@@ -1596,7 +1595,7 @@ fn aborted_stream_discards_unfinished_native_search() {
 
 #[test]
 fn unresolved_ordinary_function_does_not_become_tool_search_failure() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([("echo".to_owned(), ToolType::Function)]));
     let mut translator = TranslationDispatcher::new(context);
     translate(
@@ -1646,7 +1645,7 @@ fn unnamed_gateway_calls_release_pending_frames_without_losing_deferral() {
         ToolType::CodeInterpreter,
     ] {
         for resolve_at_arguments_done in [false, true] {
-            let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+            let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
             let mut dispatcher = TranslationDispatcher::new(test_context(HashMap::from([("lookup".to_owned(), kind)])));
             for (index, id) in [(1, "fc_gateway"), (0, "fc_client")] {
                 for event in [
@@ -1712,7 +1711,7 @@ fn every_gateway_tool_suppresses_private_events_and_retains_deferral() {
         ToolType::FileSearch,
         ToolType::CodeInterpreter,
     ] {
-        let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+        let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
         let mut dispatcher = TranslationDispatcher::new(test_context(HashMap::from([("lookup".to_owned(), kind)])));
         for event in [
             serde_json::json!({"type":"response.output_item.added", "output_index":3,
@@ -1743,7 +1742,7 @@ fn ordinary_and_namespace_function_translators_preserve_wire_events() {
             HashMap::from([("travel.lookup".to_owned(), ToolType::CodexNamespace)]),
         ),
     ] {
-        let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+        let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
         let mut dispatcher = TranslationDispatcher::new(test_context(types));
         for event in [
             serde_json::json!({"type":"response.output_item.added", "output_index":0,
@@ -1797,7 +1796,7 @@ fn public_catalog_distinguishes_inactive_search_from_an_empty_active_catalog() {
     for catalog in [None, Some(Vec::new())] {
         let active = catalog.is_some();
         let context = TranslationContext::default().with_response_metadata(None, None, catalog, None);
-        let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+        let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
         let mut dispatcher = TranslationDispatcher::new(context);
         let line = r#"data: {"type":"response.created","response":{"id":"upstream","status":"in_progress","tools":[{"type":"function","name":"ordinary"}]}}"#;
         let translated = RoundIngestion::translate_line(&mut accumulator, SseLine::parse(line), &mut dispatcher)
@@ -1809,7 +1808,7 @@ fn public_catalog_distinguishes_inactive_search_from_an_empty_active_catalog() {
         } else {
             assert_eq!(tools[0]["name"], "ordinary");
         }
-        let mut payload = accumulator.finalize("test", None, None);
+        let mut payload = accumulator.finalize("test", None);
         dispatcher
             .finish()
             .unwrap()
@@ -1821,7 +1820,7 @@ fn public_catalog_distinguishes_inactive_search_from_an_empty_active_catalog() {
 
 #[test]
 fn shell_function_arguments_restore_openai_shell_lifecycle() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([("shell".to_owned(), ToolType::Shell)]));
     let mut translator = TranslationDispatcher::new(context);
     let events = [
@@ -1873,7 +1872,7 @@ fn shell_function_arguments_restore_openai_shell_lifecycle() {
 
 #[test]
 fn gateway_owned_shell_suppresses_canonical_lifecycle() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([("shell".to_owned(), ToolType::Shell)]))
         .with_gateway_owned_names(HashSet::from(["shell".to_owned()]));
     let mut translator = TranslationDispatcher::new(context);
@@ -1901,7 +1900,7 @@ fn gateway_owned_shell_suppresses_canonical_lifecycle() {
 
 #[test]
 fn shell_commands_stream_before_arguments_done_with_split_escapes_and_reordered_fields() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([("shell".to_owned(), ToolType::Shell)]));
     let mut translator = TranslationDispatcher::new(context);
     translate(
@@ -1955,7 +1954,7 @@ fn shell_commands_stream_before_arguments_done_with_split_escapes_and_reordered_
 
 #[test]
 fn malformed_shell_arguments_fail_closed() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let context = test_context(HashMap::from([("shell".to_owned(), ToolType::Shell)]));
     let mut translator = TranslationDispatcher::new(context);
     let added = serde_json::json!({
@@ -2016,7 +2015,7 @@ fn translators_preserve_event_and_item_attribution_independently() {
         ),
     ] {
         for (event_agent, item_agent) in [(false, false), (false, true), (true, false), (true, true)] {
-            let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+            let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
             let mut translator = TranslationDispatcher::new(test_context(HashMap::from([(name.to_owned(), kind)])));
             let mut lifecycle_count = 0;
             for (index, mut event) in attributed_call_events(name, arguments).into_iter().enumerate() {
@@ -2048,7 +2047,7 @@ fn translators_preserve_event_and_item_attribution_independently() {
 
 #[test]
 fn buffered_translation_preserves_each_source_events_attribution() {
-    let mut accumulator = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    let mut accumulator = ResponseAccumulator::with_validation(Validation::Lenient);
     let mut translator =
         TranslationDispatcher::new(test_context(HashMap::from([("raw_echo".to_owned(), ToolType::Custom)])));
     let mut events = attributed_call_events("raw_echo", r#"{"input":"hello"}"#);

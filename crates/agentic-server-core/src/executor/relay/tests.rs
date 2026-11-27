@@ -1,5 +1,6 @@
 use super::*;
-use crate::events::{EventPayload, normalize_sse_line};
+use crate::events::{EventPayload, WireEvent, normalize_sse_line};
+use crate::executor::gateway_accumulator::{MAX_STREAM_EVENT_BYTES, STREAM_EVENT_BUFFER};
 use crate::executor::upstream::tests::request_context;
 use crate::types::agent::AgentIdentity;
 use crate::types::io::OutputItem;
@@ -193,6 +194,34 @@ async fn agent_items_complete_streamed_items_and_materialize_new_ones() {
         assert_eq!(attribution.agent_name, agent.as_str());
     }
     assert_eq!(sequence(&materialized), (2..8).map(Some).collect::<Vec<_>>());
+}
+
+#[tokio::test]
+async fn an_agent_mcp_listing_that_failed_streams_its_failure() {
+    let (sender, mut receiver) = mpsc::channel(16);
+    let mut relay = StreamRelay::client(sender, RelayLimits::default());
+    let listing: OutputItem = serde_json::from_value(json!({
+        "type": "mcp_list_tools", "id": "mcpl_1", "server_label": "docs", "tools": [],
+        "error": "Error retrieving tool list from MCP server: 'docs'. Http status code: 424 (Failed Dependency)",
+        "agent": {"agent_name": "/root"}
+    }))
+    .unwrap();
+
+    assert_eq!(relay.emit_agent_item(&listing).await.unwrap(), 0);
+
+    let frames = delivered(&mut receiver);
+    assert_eq!(
+        frames.iter().map(|frame| frame.event_type).collect::<Vec<_>>(),
+        [
+            SSEEventType::OutputItemAdded,
+            SSEEventType::McpListToolsInProgress,
+            SSEEventType::McpListToolsFailed,
+            SSEEventType::OutputItemDone,
+        ],
+        "a failed listing ends as single-agent streaming ends it"
+    );
+    assert_eq!(frames[2].wire.rest["item_id"], "mcpl_1");
+    assert_eq!(frames[2].wire.output_index, Some(0));
 }
 
 #[tokio::test]
@@ -555,6 +584,79 @@ async fn local_and_upstream_events_share_numbering_but_not_id_rewriting() {
     assert_eq!(frames[3].wire.output_index, Some(8));
 }
 
+fn test_stream_event() -> EventFrame {
+    EventFrame {
+        event_type: SSEEventType::Other,
+        payload: EventPayload::None,
+        wire: WireEvent::new("test.event"),
+    }
+}
+
+#[tokio::test]
+async fn stream_event_sender_waits_for_bounded_capacity() {
+    let (sender, mut receiver) = mpsc::channel(1);
+    let mut relay = StreamRelay::client(sender, RelayLimits::default());
+    relay
+        .emit_local(&mut test_stream_event())
+        .await
+        .expect("first event should fill the channel");
+
+    let blocked = tokio::spawn(async move { relay.emit_local(&mut test_stream_event()).await });
+    tokio::task::yield_now().await;
+    assert!(
+        !blocked.is_finished(),
+        "second event should wait for downstream capacity"
+    );
+
+    receiver.recv().await.expect("first buffered event");
+    blocked
+        .await
+        .expect("event task should not panic")
+        .expect("event should send after capacity is released");
+}
+
+#[tokio::test]
+async fn bounded_stream_event_sender_handles_large_healthy_bursts() {
+    let (sender, mut receiver) = mpsc::channel(STREAM_EVENT_BUFFER);
+    let mut relay = StreamRelay::client(sender, RelayLimits::default());
+    let producer = tokio::spawn(async move {
+        for _ in 0..300 {
+            relay
+                .emit_local(&mut test_stream_event())
+                .await
+                .expect("drained event channel should remain writable");
+        }
+    });
+
+    for expected_sequence_number in 0..300 {
+        let event = receiver
+            .recv()
+            .await
+            .expect("all burst events should arrive")
+            .into_frame();
+        assert_eq!(event.sequence_number, expected_sequence_number);
+    }
+    producer.await.expect("producer should not panic");
+}
+
+#[tokio::test]
+async fn oversized_stream_event_fails_before_enqueue() {
+    let (sender, mut receiver) = mpsc::channel(1);
+    let mut relay = StreamRelay::client(sender, RelayLimits::default());
+    let mut frame = test_stream_event();
+    frame
+        .wire
+        .rest
+        .insert("delta".to_owned(), Value::String("x".repeat(MAX_STREAM_EVENT_BYTES)));
+
+    let error = relay
+        .emit_local(&mut frame)
+        .await
+        .expect_err("oversized event must be rejected");
+    assert!(error.to_string().contains("stream event exceeded"));
+    assert!(receiver.try_recv().is_err());
+}
+
 #[tokio::test]
 async fn closed_receiver_does_not_consume_presentation_state() {
     let (sender, receiver) = mpsc::channel(1);
@@ -566,7 +668,7 @@ async fn closed_receiver_does_not_consume_presentation_state() {
     let mut presentation = relay.into_presentation();
     assert_eq!(presentation.upcoming_sequence_number(), 0);
     assert!(
-        presentation.process_event(&mut created("local"), 0),
+        presentation.process_event(&mut created("local")),
         "the undelivered response.created can still be presented"
     );
 }

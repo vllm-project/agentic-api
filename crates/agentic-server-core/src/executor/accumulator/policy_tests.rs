@@ -11,7 +11,7 @@ use serde_json::json;
 #[test]
 fn non_data_lines_do_not_change_lifecycle_or_satisfy_strict_finalization() {
     for validation in [Validation::Strict, Validation::Lenient] {
-        let mut acc = ResponseAccumulator::with_validation("resp_1".to_owned(), None, validation);
+        let mut acc = ResponseAccumulator::with_validation(validation);
         let mut translator = TranslationDispatcher::new(TranslationContext::default());
         for line in ["", ": heartbeat", "event: response.created", "data:   ", "data:[DONE]"] {
             assert!(
@@ -47,7 +47,7 @@ fn non_data_lines_do_not_change_lifecycle_or_satisfy_strict_finalization() {
 #[test]
 fn malformed_data_is_rejected_or_skipped_without_affecting_translation() {
     for validation in [Validation::Strict, Validation::Lenient] {
-        let mut acc = ResponseAccumulator::with_validation("resp_1".to_owned(), None, validation);
+        let mut acc = ResponseAccumulator::with_validation(validation);
         let mut translator = TranslationDispatcher::new(TranslationContext::default());
         for line in [
             "data:{",
@@ -72,7 +72,7 @@ fn malformed_data_is_rejected_or_skipped_without_affecting_translation() {
 fn both_policies_translate_the_same_accepted_custom_call() {
     let mut public_streams = Vec::new();
     for validation in [Validation::Strict, Validation::Lenient] {
-        let mut acc = ResponseAccumulator::with_validation("resp_1".to_owned(), None, validation);
+        let mut acc = ResponseAccumulator::with_validation(validation);
         let context = TranslationContext::new(
             HashMap::from([("raw_echo".to_owned(), ToolType::Custom)]),
             HashSet::new(),

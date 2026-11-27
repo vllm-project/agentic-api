@@ -22,20 +22,13 @@ pub(in crate::executor) struct RoundIngestion {
 
 impl RoundIngestion {
     pub(in crate::executor) fn new(
-        response_id: String,
-        conversation_id: Option<String>,
         validation: Validation,
         translation_context: TranslationContext,
         budget: Option<ExecutorResponseBudget>,
     ) -> Self {
         Self {
             body_kind: BodyKind::Empty,
-            accumulator: ResponseAccumulator::with_validation_and_budget(
-                response_id,
-                conversation_id,
-                validation,
-                budget,
-            ),
+            accumulator: ResponseAccumulator::with_validation_and_budget(validation, budget),
             translator: TranslationDispatcher::new(translation_context),
         }
     }
@@ -88,23 +81,23 @@ impl RoundIngestion {
         };
         let call = function_event_index(&frame.payload).and_then(|index| accumulator.accumulated_function_call(index));
         let item_type = frame
-            .wire
-            .output_index
-            .and_then(|index| u32::try_from(index).ok())
+            .output_index()
             .and_then(|index| accumulator.accumulated_item_type(index));
         translator.translate(frame, call, item_type).map(Some)
     }
 
     /// Consumes the round, applying terminal policy and public tool-search projection once.
+    /// The payload keeps the upstream identity; [`RequestContext::inject_ids`] stamps the gateway's.
+    ///
+    /// [`RequestContext::inject_ids`]: crate::executor::request::RequestContext::inject_ids
     pub(in crate::executor) fn finish(
         self,
         model: &str,
-        previous_response_id: Option<&str>,
         instructions: Option<&str>,
     ) -> ExecutorResult<ResponsePayload> {
         let mut payload = match self.body_kind {
-            BodyKind::Json => self.accumulator.finalize(model, previous_response_id, instructions),
-            BodyKind::Empty | BodyKind::Stream => self.accumulator.finish(model, previous_response_id, instructions)?,
+            BodyKind::Json => self.accumulator.finalize(model, instructions),
+            BodyKind::Empty | BodyKind::Stream => self.accumulator.finish(model, instructions)?,
         };
         let outcome = self.translator.finish()?;
         outcome.normalize_response_payload(&mut payload)?;

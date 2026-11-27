@@ -1290,7 +1290,11 @@ second response assembler. An item that agent frames already presented needs onl
 presented, gets its whole public lifecycle from `item_lifecycle.rs`. That module builds
 each frame lazily from the completed item and decides per item kind, through an
 exhaustive match, what streams between `output_item.added` and `output_item.done`.
-The relay attributes and presents those frames.
+The relay attributes and presents those frames. Gateway-call lifecycles
+(`gateway/lifecycle.rs`) and the failed-listing stream (`engine/streaming.rs`) build their
+`output_item.done` and in-progress status frames with the same builders (`item_done_frame`,
+`item_status_frame`), and `list_tools_finished_event` picks a listing's final event on every path, so a
+listing that carries an error ends with `response.mcp_list_tools.failed`.
 
 **Recorded contract checks.** `tests/multi_agent_contract_test.rs` loads independently
 recorded OpenAI and gateway YAML for review, proposals, mixed tools and client-executed
@@ -1470,7 +1474,7 @@ translation state, classifies each validated function call from an owned
 - `FunctionHandler` → `FunctionTranslator`
 - `CustomHandler` → `CustomTranslator`
 - `ShellHandler` → `ShellTranslator`
-- `CodexNamespaceHandler` → `CodexNamespaceTranslator`
+- `CodexNamespaceHandler` → `FunctionTranslator` (a member call streams as a function call)
 - `ToolSearchHandler` → `ToolSearchTranslator`
 
 This is the reverse side of upstream canonicalization. The model emits the canonical
@@ -1485,9 +1489,24 @@ depend on SSE or executor types. `TranslationContext` is an owned snapshot of th
 registry facts and request metadata needed for classification and restoration. It
 provides each round's tool classification and owns final restoration of public tool
 declarations, custom/namespace shapes, tool choice, and tool-search metadata.
+`TranslationContext::is_client_call` is the one client-or-gateway decision the dispatcher and
+the classification predicates read; the dispatcher then routes a client call by its `ToolType`.
+A function call's public form (its `fc_` ID, `async` marker, namespace member name, and a
+deferred function's self-namespace) is decided once,
+on the model-visible name, by `function_call_rewrite`; `normalize_output_item` applies it
+to typed output and `normalize_wire_item` to provider JSON (`item` frames and snapshot
+`output`), so the stream and the final response cannot disagree. Upstream tool-search
+output is checked by one `SearchOutputRules`: the JSON and SSE entry points use its strict
+parse, unique `call_id`, and finished-call rule, and the typed output uses its `call_id` check
+before projecting calls by the round's status. All three apply it to the calls
+`is_client_tool_search` classifies as the client's search; a hosted search is the gateway's
+own call.
 Nonempty provider message IDs without the public `msg` prefix receive `msg_` during
 translation. Message events and final JSON/SSE snapshots use the same public ID;
-ingestion retains the provider's original identity for lifecycle validation. Client
+ingestion retains the provider's original identity for lifecycle validation, and
+`RoundIngestion::finish` returns the round with it: `RequestContext::inject_ids` stamps the
+response ID, conversation, and parent once on the payload, as `inject_wire_identity` does on
+provider events that carry a `response`. Client
 item-ID validation (`InOutItem::admit`) remains strict, so returned history can be submitted unchanged.
 Output-text `logprobs` use the existing nullable-vector deserializer: missing and
 null values become an empty vector and serialize as `[]`. Wire normalization uses
@@ -1498,8 +1517,8 @@ Async client tools are marked from the same snapshot: the registry's async tool 
 (`ToolRegistry::async_tool_names`) are copied into the context. The dispatcher creates each
 call's translator with its `CallExecution`; for an async call, the function and custom
 translators build the public `output_item.added`/`done` items from the typed accumulated call
-and mark them with `mark_async_call`, which final output normalization also uses on the
-round's call items, before namespace restoration renames them.
+and mark them with `mark_async_call`; final output and snapshot normalization take the marker
+from the call rewrite, decided before namespace restoration renames the call.
 Later stages read the marker from the call item itself.
 
 Gateway-executed types (`Mcp`, `WebSearch`, `FileSearch`, and `CodeInterpreter`) are
@@ -1507,7 +1526,7 @@ classified as gateway calls by the dispatcher, which suppresses their canonical
 upstream function-call lifecycle. `gateway.rs` owns their execution result mapping and
 synthesizes their public item lifecycle because the gateway knows when execution
 starts, completes, or fails. `GatewayStreamAccumulator` then assigns cross-round
-sequence numbers, rebases output indexes, and deduplicates response start events.
+sequence numbers and deduplicates response start events.
 Events that arrive before a function name is known are buffered with a 256 KiB total
 byte limit and replayed when the call resolves.
 
@@ -1529,13 +1548,15 @@ method they call; none of them passes a sender, accumulator, or offset:
 | Method | Frames | Transforms |
 | --- | --- | --- |
 | `accept` | One translation from ingestion | Withhold terminal response events for the engine, defer or present each frame, then release what a moved defer window no longer hides. |
-| `emit_upstream` | One translated provider frame | Restore the public response IDs and rebase the output index onto the round. |
+| `emit_upstream` | One translated provider frame | Restore the public response IDs (`RequestContext::inject_wire_identity`) and rebase the output index onto the round. |
 | `emit_local` | Gateway-synthesized and multi-agent frames | None: they already carry public IDs and absolute indexes. |
 | `release_deferred` | Deferred provider frames that a `Release` admits | As `emit_upstream`. |
 
 `begin_round` sets the round's offset and rejects a new round while the previous round
-still holds deferred frames. Every method reaches the client through one private
-`send`, the only place an output offset is applied. The relay's constructor fixes its
+still holds deferred frames. `emit_upstream` is the only place an output offset is applied.
+Every method reaches the sink through one private `send`, which presents client SSE and
+WebSocket response frames with `GatewayStreamAccumulator::present`: stamp and serialize on a
+copy of the presentation state, which the sink commits once it accepts the frame. The relay's constructor fixes its
 sink: `StreamRelay::client` for the bounded SSE channel, `response` for a retained
 WebSocket response's `ResponseEventSink`, `agent` for a multi-agent round's
 `AgentFrameSink`, and `detached` for collect-only and JSON execution. `AgentPipeline::new`
@@ -1593,8 +1614,7 @@ and only `ResponseRunOwner::join()` marks the producer joined. The adapter uses
 both facts to resolve a successor's accepted input exactly once.
 
 `GatewayStreamAccumulator` carries only cross-round presentation state: monotonic
-`sequence_number`s, public `output_index` rebasing, and deduplication of response start
-events. It holds no `OutputItem` assembly state and no sink. Sending is awaited before
+`sequence_number`s and deduplication of response start events. It holds no `OutputItem` assembly state and no sink. Sending is awaited before
 ingestion continues, so sender closure or delivery failure propagates through the live
 pipeline. After the producer finishes, `engine/streaming.rs` takes the state back from
 the relay and renders the terminal event on a clone, which it discards if persistence

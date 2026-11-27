@@ -202,27 +202,22 @@ impl ResponseAccumulator {
     pub(in crate::executor) fn finish(
         mut self,
         model: &str,
-        previous_response_id: Option<&str>,
         instructions: Option<&str>,
     ) -> ExecutorResult<ResponsePayload> {
         match self.validation {
             Validation::Strict => self.finish_strict_stream()?,
             Validation::Lenient => self.finish_stream()?,
         }
-        Ok(self.finalize(model, previous_response_id, instructions))
+        Ok(self.finalize(model, instructions))
     }
 
     /// Finalizes the accumulator into a `ResponsePayload`.
     ///
     /// The caller supplies fields that come from the original request, not from
-    /// the LLM response stream.
+    /// the LLM response stream; the request context stamps the response's public
+    /// identity afterwards.
     #[must_use]
-    pub fn finalize(
-        self,
-        model: &str,
-        previous_response_id: Option<&str>,
-        instructions: Option<&str>,
-    ) -> ResponsePayload {
+    pub fn finalize(self, model: &str, instructions: Option<&str>) -> ResponsePayload {
         ResponsePayload {
             id: self.response_id,
             object: "response".to_string(),
@@ -233,8 +228,8 @@ impl ResponseAccumulator {
             usage: self.usage,
             incomplete_details: self.incomplete_details,
             error: self.error,
-            previous_response_id: previous_response_id.map(str::to_string),
-            conversation: self.conversation_id,
+            previous_response_id: None,
+            conversation: None,
             instructions: instructions.map(str::to_string),
             max_tool_calls: None,
             service_tier: self.service_tier,

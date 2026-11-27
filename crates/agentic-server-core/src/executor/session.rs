@@ -18,6 +18,7 @@ pub use checkpoint::{ResponseCheckpointPin, ResponseContinuation};
 pub use steering::{SteeringQueue, SteeringSuccessorPublication, SteeringSuccessorReservation};
 
 use super::{ExecutorError, ExecutorResult};
+use crate::utils::common::try_add_within;
 
 #[cfg(test)]
 use crate::storage::ResponseMetadata;
@@ -343,11 +344,9 @@ impl CheckpointBudget {
 
     /// Shared reservation arithmetic; each owner chooses its capacity error.
     fn try_reserve(self: &Arc<Self>, bytes: usize) -> Option<CheckpointReservation> {
-        self.used
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |used| {
-                used.checked_add(bytes).filter(|total| *total <= self.limit.get())
-            })
-            .ok()?;
+        if !try_add_within(&self.used, bytes, self.limit.get()) {
+            return None;
+        }
         Some(CheckpointReservation {
             budget: Arc::clone(self),
             bytes,

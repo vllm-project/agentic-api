@@ -1,10 +1,11 @@
 use super::context::mark_async_call;
+use super::json_string::decode_string_prefix;
 use super::{CallExecution, ToolEvent, ToolTranslator, ensure_function_call_size};
 use crate::events::WireEvent;
 use crate::events::{EventFrame, SSEEventType};
 use crate::executor::accumulator::AccumulatedFunctionCall;
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::gateway_accumulator::synthetic_event;
+use crate::executor::gateway_accumulator::synthetic_event_at;
 use crate::tool::custom::CustomToolMap;
 use crate::types::event::MessageStatus;
 use crate::types::io::{CustomToolCall, OutputItem};
@@ -90,9 +91,9 @@ fn custom_added_frame(call: &AccumulatedFunctionCall<'_>, execution: CallExecuti
         name: call.item.name.clone(),
         async_execution: call.item.async_execution,
     });
-    custom_frame(
+    synthetic_event_at(
         SSEEventType::OutputItemAdded,
-        call.output_index,
+        u64::from(call.output_index),
         [("item".to_owned(), custom_item_value(item, execution)?)],
     )
 }
@@ -111,9 +112,9 @@ fn incremental_custom_delta(state: &mut CustomCallState, arguments: &str) -> Exe
         return Ok(None);
     };
     state.emitted_input.push_str(&delta);
-    custom_frame(
+    synthetic_event_at(
         SSEEventType::CustomToolCallInputDelta,
-        state.output_index,
+        u64::from(state.output_index),
         [
             ("delta".to_owned(), Value::String(delta)),
             ("item_id".to_owned(), Value::String(state.public_item_id.clone())),
@@ -139,18 +140,18 @@ fn finish_custom_input(state: &mut CustomCallState, arguments: &str) -> Executor
 
     let mut frames = Vec::with_capacity(2);
     if let Some(delta) = remaining {
-        frames.push(custom_frame(
+        frames.push(synthetic_event_at(
             SSEEventType::CustomToolCallInputDelta,
-            state.output_index,
+            u64::from(state.output_index),
             [
                 ("delta".to_owned(), Value::String(delta)),
                 ("item_id".to_owned(), Value::String(state.public_item_id.clone())),
             ],
         )?);
     }
-    frames.push(custom_frame(
+    frames.push(synthetic_event_at(
         SSEEventType::CustomToolCallInputDone,
-        state.output_index,
+        u64::from(state.output_index),
         [
             ("input".to_owned(), Value::String(input)),
             ("item_id".to_owned(), Value::String(state.public_item_id.clone())),
@@ -173,21 +174,11 @@ fn custom_done_frame(
         name: call.item.name.clone(),
         async_execution: call.item.async_execution,
     });
-    custom_frame(
+    synthetic_event_at(
         SSEEventType::OutputItemDone,
-        state.output_index,
+        u64::from(state.output_index),
         [("item".to_owned(), custom_item_value(item, execution)?)],
     )
-}
-
-pub(super) fn custom_frame(
-    event_type: SSEEventType,
-    output_index: u32,
-    fields: impl IntoIterator<Item = (String, Value)>,
-) -> ExecutorResult<EventFrame> {
-    let mut frame = synthetic_event(event_type, fields)?;
-    frame.wire.output_index = Some(u64::from(output_index));
-    Ok(frame)
 }
 
 fn partial_custom_input(state: &mut CustomCallState, arguments: &str) -> ExecutorResult<Option<String>> {
@@ -204,69 +195,13 @@ fn partial_custom_input(state: &mut CustomCallState, arguments: &str) -> Executo
     if state.input_cursor < input_start || state.input_cursor > arguments.len() {
         return Ok(None);
     }
-    let encoded = &arguments[state.input_cursor..];
-    let end = complete_json_string_prefix(encoded);
-    if end == 0 {
+    let Some((delta, consumed)) = decode_string_prefix(&arguments[state.input_cursor..])
+        .map_err(|error| ExecutorError::StreamError(format!("invalid custom tool input string: {error}")))?
+    else {
         return Ok(None);
-    }
-    let candidate = format!("\"{}\"", &encoded[..end]);
-    let delta = serde_json::from_str::<String>(&candidate)
-        .map_err(|error| ExecutorError::StreamError(format!("invalid custom tool input string: {error}")))?;
-    state.input_cursor = state.input_cursor.saturating_add(end);
+    };
+    state.input_cursor = state.input_cursor.saturating_add(consumed);
     Ok((!delta.is_empty()).then_some(delta))
-}
-
-pub(super) fn complete_json_string_prefix(value: &str) -> usize {
-    let bytes = value.as_bytes();
-    let mut index = 0;
-    while index < bytes.len() {
-        match bytes[index] {
-            b'"' => return index,
-            b'\\' => {
-                let Some(escape) = bytes.get(index + 1) else {
-                    return index;
-                };
-                if *escape == b'u' {
-                    let unicode_end = index.saturating_add(6);
-                    if unicode_end > bytes.len() {
-                        return index;
-                    }
-                    let Some(code_unit) = json_hex_quad(&bytes[index + 2..unicode_end]) else {
-                        index = unicode_end;
-                        continue;
-                    };
-                    if (0xD800..=0xDBFF).contains(&code_unit) {
-                        let pair_end = index.saturating_add(12);
-                        if pair_end > bytes.len() {
-                            return index;
-                        }
-                        index = pair_end;
-                    } else {
-                        index = unicode_end;
-                    }
-                } else {
-                    index = index.saturating_add(2);
-                }
-            }
-            _ => index = index.saturating_add(1),
-        }
-    }
-    index
-}
-
-fn json_hex_quad(bytes: &[u8]) -> Option<u16> {
-    if bytes.len() != 4 {
-        return None;
-    }
-    bytes.iter().try_fold(0_u16, |value, byte| {
-        let digit = byte.to_ascii_lowercase();
-        let digit = match digit {
-            b'0'..=b'9' => u16::from(digit - b'0'),
-            b'a'..=b'f' => u16::from(digit - b'a' + 10),
-            _ => return None,
-        };
-        value.checked_mul(16)?.checked_add(digit)
-    })
 }
 
 fn custom_input_start(arguments: &str) -> Option<usize> {

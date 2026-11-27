@@ -13,7 +13,9 @@ mod input;
 mod reasoning;
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::AtomicUsize;
+#[cfg(test)]
+use std::sync::atomic::Ordering;
 
 use serde_json::Value;
 
@@ -29,6 +31,7 @@ use crate::types::io::{
 use crate::types::request_response::IncompleteDetails;
 #[cfg(test)]
 use crate::types::request_response::ResponsePayload;
+use crate::utils::common::try_add_within;
 
 #[cfg(test)]
 pub use crate::config::DEFAULT_MAX_RETAINED_RESPONSE_BYTES;
@@ -65,17 +68,14 @@ impl ExecutorResponseBudget {
     }
 
     pub(super) fn consume(&self, bytes: usize) -> ExecutorResult<()> {
-        let limit = self.limit;
-        self.used
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |used| {
-                let next = used.checked_add(bytes)?;
-                if next > limit { None } else { Some(next) }
-            })
-            .map(|_| ())
-            .map_err(|_| ExecutorError::ResourceLimitExceeded {
+        if try_add_within(&self.used, bytes, self.limit) {
+            Ok(())
+        } else {
+            Err(ExecutorError::ResourceLimitExceeded {
                 limit: ResourceLimit::ResponseBudget,
-                max_bytes: limit,
+                max_bytes: self.limit,
             })
+        }
     }
 }
 

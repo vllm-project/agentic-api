@@ -190,11 +190,11 @@ async fn publication_requires_its_exact_sink_and_never_recovers_committed_input(
     let (unrelated, _stream) = ResponseEventSink::channel(4096);
     let response = json!({"id":"resp_next", "previous_response_id":"resp_parent", "status":"in_progress"});
     let mut frame = synthetic_event(SSEEventType::ResponseCreated, [("response".into(), response.clone())]).unwrap();
-    unrelated.emit_frame(&mut frame, 0).await.unwrap();
+    unrelated.emit_frame(&mut frame).await.unwrap();
     let publication = publication.commit(&unrelated.created_receipt().unwrap()).err().unwrap();
     assert_eq!(budget.used.load(Ordering::Acquire), charged);
     let mut frame = synthetic_event(SSEEventType::ResponseCreated, [("response".into(), response)]).unwrap();
-    sink.emit_frame(&mut frame, 0).await.unwrap();
+    sink.emit_frame(&mut frame).await.unwrap();
     sink.mark_failed();
     sink.mark_joined();
     let publication = publication.fail_before_creation().err().unwrap();

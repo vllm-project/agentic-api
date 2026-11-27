@@ -9,7 +9,7 @@ fn test_tool_calls_cassette_auto_streaming() {
     let turn = &cassette.turns[0];
     let data_lines = extract_data_lines(&turn.response.sse);
 
-    let payload = ingest_lenient(data_lines, None, "Qwen/Qwen3-30B-A3B-FP8").expect("valid cassette SSE stream");
+    let payload = ingest_lenient(data_lines, "Qwen/Qwen3-30B-A3B-FP8").expect("valid cassette SSE stream");
 
     assert_eq!(payload.status, "completed");
 
@@ -43,7 +43,7 @@ fn test_tool_calls_cassette_required_streaming() {
     let turn = &cassette.turns[0];
     let data_lines = extract_data_lines(&turn.response.sse);
 
-    let payload = ingest_lenient(data_lines, None, "Qwen/Qwen3-30B-A3B-FP8").expect("valid cassette SSE stream");
+    let payload = ingest_lenient(data_lines, "Qwen/Qwen3-30B-A3B-FP8").expect("valid cassette SSE stream");
 
     assert_eq!(payload.status, "completed");
 
@@ -72,7 +72,7 @@ fn test_tool_calls_cassette_named_streaming() {
     let turn = &cassette.turns[0];
     let data_lines = extract_data_lines(&turn.response.sse);
 
-    let payload = ingest_lenient(data_lines, None, "Qwen/Qwen3-30B-A3B-FP8").expect("valid cassette SSE stream");
+    let payload = ingest_lenient(data_lines, "Qwen/Qwen3-30B-A3B-FP8").expect("valid cassette SSE stream");
 
     assert_eq!(payload.status, "completed");
 
@@ -95,7 +95,7 @@ fn test_tool_calls_cassette_none_streaming() {
     let turn = &cassette.turns[0];
     let data_lines = extract_data_lines(&turn.response.sse);
 
-    let payload = ingest_lenient(data_lines, None, "Qwen/Qwen3-30B-A3B-FP8").expect("valid cassette SSE stream");
+    let payload = ingest_lenient(data_lines, "Qwen/Qwen3-30B-A3B-FP8").expect("valid cassette SSE stream");
 
     assert_eq!(payload.status, "completed");
 
@@ -130,8 +130,8 @@ fn test_tool_calls_cassette_auto_nonstreaming() {
         .expect("non-streaming cassette must have body");
     let body_str = serde_json::to_string(body).unwrap();
 
-    let acc = ResponseAccumulator::from_json(&body_str, None).unwrap();
-    let payload = acc.finalize("Qwen/Qwen3-30B-A3B-FP8", None, None);
+    let acc = ResponseAccumulator::from_json(&body_str).unwrap();
+    let payload = acc.finalize("Qwen/Qwen3-30B-A3B-FP8", None);
 
     assert_eq!(payload.status, "completed");
 
@@ -167,8 +167,8 @@ fn test_tool_calls_cassette_required_nonstreaming() {
         .expect("non-streaming cassette must have body");
     let body_str = serde_json::to_string(body).unwrap();
 
-    let acc = ResponseAccumulator::from_json(&body_str, None).unwrap();
-    let payload = acc.finalize("Qwen/Qwen3-30B-A3B-FP8", None, None);
+    let acc = ResponseAccumulator::from_json(&body_str).unwrap();
+    let payload = acc.finalize("Qwen/Qwen3-30B-A3B-FP8", None);
 
     assert_eq!(payload.status, "completed");
 
@@ -195,8 +195,8 @@ fn test_tool_calls_cassette_named_nonstreaming() {
         .expect("non-streaming cassette must have body");
     let body_str = serde_json::to_string(body).unwrap();
 
-    let acc = ResponseAccumulator::from_json(&body_str, None).unwrap();
-    let payload = acc.finalize("Qwen/Qwen3-30B-A3B-FP8", None, None);
+    let acc = ResponseAccumulator::from_json(&body_str).unwrap();
+    let payload = acc.finalize("Qwen/Qwen3-30B-A3B-FP8", None);
 
     assert_eq!(payload.status, "completed");
 
@@ -223,8 +223,8 @@ fn test_tool_calls_cassette_none_nonstreaming() {
         .expect("non-streaming cassette must have body");
     let body_str = serde_json::to_string(body).unwrap();
 
-    let acc = ResponseAccumulator::from_json(&body_str, None).unwrap();
-    let payload = acc.finalize("Qwen/Qwen3-30B-A3B-FP8", None, None);
+    let acc = ResponseAccumulator::from_json(&body_str).unwrap();
+    let payload = acc.finalize("Qwen/Qwen3-30B-A3B-FP8", None);
 
     assert_eq!(payload.status, "completed");
 

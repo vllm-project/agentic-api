@@ -2,14 +2,16 @@ use std::collections::{HashMap, HashSet};
 
 use super::*;
 use crate::events::SseLine;
+use crate::executor::pipeline::test_support::ingest_lenient;
+use crate::executor::request::RequestContext;
+use crate::executor::upstream::tests::request_context;
 use crate::tool::ToolType;
+use crate::tool::handler::ToolError;
 use crate::types::io::OutputItem;
 use serde_json::{Value, json};
 
 fn pipeline(validation: Validation, tools: &[(&str, ToolType)]) -> RoundIngestion {
     RoundIngestion::new(
-        "resp_1".to_owned(),
-        Some("conv_1".to_owned()),
         validation,
         TranslationContext::new(
             tools
@@ -21,6 +23,15 @@ fn pipeline(validation: Validation, tools: &[(&str, ToolType)]) -> RoundIngestio
         ),
         None,
     )
+}
+
+/// The request whose identity `inject_ids` stamps on these rounds' payloads.
+fn request_identity() -> RequestContext {
+    let mut request = request_context();
+    "resp_1".clone_into(&mut request.response_id);
+    request.conversation_id = Some("conv_1".to_owned());
+    request.original_request.previous_response_id = Some("resp_previous".to_owned());
+    request
 }
 
 fn push(pipeline: &mut RoundIngestion, event: &Value) -> Translation {
@@ -66,7 +77,7 @@ fn ignored_lines_keep_pending_and_gateway_deferral_boundaries() {
             assert_eq!(result.defer_from_output_index, Some(2));
         }
     }
-    assert_eq!(pipeline.finish("model", None, None).unwrap().output.len(), 1);
+    assert_eq!(pipeline.finish("model", None).unwrap().output.len(), 1);
 }
 
 #[test]
@@ -85,11 +96,12 @@ fn finish_applies_strict_and_lenient_eof_policy_and_folds_unfinished_items() {
             "item_id":"fc_1","delta":"{\"value\":1}"}),
         );
         pipeline.push(ClassifiedSseLine::Done).unwrap();
-        let result = pipeline.finish("model", Some("resp_previous"), Some("instructions"));
+        let result = pipeline.finish("model", Some("instructions"));
         match validation {
             Validation::Strict => assert!(result.unwrap_err().to_string().contains("without a terminal event")),
             Validation::Lenient => {
-                let payload = result.unwrap();
+                let mut payload = result.unwrap();
+                request_identity().inject_ids(&mut payload);
                 assert_eq!(payload.status, "completed");
                 assert_eq!(payload.model, "model");
                 assert_eq!(payload.previous_response_id.as_deref(), Some("resp_previous"));
@@ -122,7 +134,8 @@ fn finish_preserves_terminal_metadata_under_both_policies() {
                     "usage":{"input_tokens":3,"output_tokens":2,"total_tokens":5}
                 }}),
             );
-            let payload = pipeline.finish("model", None, None).unwrap();
+            let mut payload = pipeline.finish("model", None).unwrap();
+            request_identity().inject_ids(&mut payload);
             assert_eq!(payload.status, if status == "failed" { "error" } else { status });
             assert_eq!(payload.id, "resp_1");
             assert_eq!(payload.conversation.as_deref(), Some("conv_1"));
@@ -182,7 +195,7 @@ fn native_code_interpreter_stream_passes_through_and_assembles() {
             "response": {"id": "resp_1", "status": "completed", "output": [completed_item.clone()]}
         }),
     );
-    let payload = pipeline.finish("model", None, None).expect("valid native stream");
+    let payload = pipeline.finish("model", None).expect("valid native stream");
     assert_eq!(
         serde_json::to_value(payload.output).expect("serialize output"),
         json!([completed_item])
@@ -215,7 +228,7 @@ fn unfinished_native_and_synthetic_search_require_an_aborted_response() {
                     &json!({"type":terminal,"response":{"id":"resp_1","status":status,"output":[]}}),
                 );
             }
-            let result = pipeline.finish("model", None, None);
+            let result = pipeline.finish("model", None);
             match terminal {
                 None => assert!(result.unwrap_err().to_string().contains("invalid tool-search call")),
                 Some("response.failed") => assert!(result.unwrap().output.is_empty()),
@@ -257,12 +270,72 @@ fn sentinel_sequence_stream_preserves_terminal_usage_and_text() {
         event["sequence_number"] = (-1).into();
         format!("data: {event}")
     });
-    let payload = crate::executor::pipeline::test_support::ingest_lenient(lines, None, "test-model")
-        .expect("sentinel frames remain valid");
+    let payload = ingest_lenient(lines, "test-model").expect("sentinel frames remain valid");
     assert_eq!(payload.status, "completed");
     assert_eq!(payload.output.len(), 1);
     assert!(matches!(&payload.output[0], OutputItem::Message(message) if message.id == "msg_1"));
     let serialized = serde_json::to_value(&payload).unwrap();
     assert_eq!(serialized["output"][0]["content"][0]["text"], "GLOBE");
     assert_eq!(serialized["usage"]["total_tokens"], 18);
+}
+
+/// A hosted search is the gateway's own call, so neither transport holds it to the client search's
+/// rules; a client search is held to them on both.
+#[test]
+fn json_and_stream_classify_a_search_call_the_same_way() {
+    let search = |call_id: &str, status: &str| {
+        json!({
+            "type": "function_call",
+            "id": format!("fc_{call_id}"),
+            "call_id": call_id,
+            "name": "tool_search",
+            "arguments": "{}",
+            "status": status
+        })
+    };
+    let outputs = [
+        ("unfinished call", vec![search("call_1", "in_progress")]),
+        (
+            "repeated call_id",
+            vec![search("call_1", "completed"), search("call_1", "completed")],
+        ),
+    ];
+    for (case, output) in outputs {
+        let response = json!({"id": "resp_1", "object": "response", "status": "completed", "output": output});
+        for hosted in [true, false] {
+            let context = || {
+                let context = TranslationContext::new(
+                    HashMap::from([("tool_search".to_owned(), ToolType::ToolSearch)]),
+                    HashSet::new(),
+                    true,
+                );
+                if hosted {
+                    context.with_gateway_owned_names(HashSet::from(["tool_search".to_owned()]))
+                } else {
+                    context
+                }
+            };
+
+            let json_body =
+                RoundIngestion::new(Validation::Lenient, context(), None).load_json_body(&response.to_string());
+            let mut stream = RoundIngestion::new(Validation::Lenient, context(), None);
+            let streamed = stream
+                .push(SseLine::parse(&format!(
+                    "data: {}",
+                    json!({"type": "response.completed", "response": response})
+                )))
+                .map(|_| ());
+
+            for (transport, result) in [("JSON body", json_body), ("stream", streamed)] {
+                if hosted {
+                    assert!(result.is_ok(), "{case}, {transport}, hosted search: {result:?}");
+                } else {
+                    assert!(
+                        matches!(result, Err(ExecutorError::Tool(ToolError::InvalidUpstreamToolSearch))),
+                        "{case}, {transport}, client search: {result:?}"
+                    );
+                }
+            }
+        }
+    }
 }

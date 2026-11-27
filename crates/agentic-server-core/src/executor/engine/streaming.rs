@@ -7,10 +7,11 @@ use crate::events::SSEEventType;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway_accumulator::{
     GatewayStreamAccumulator, STREAM_EVENT_BUFFER, StreamEvent, executor_error_frame, synthetic_event,
-    terminal_response_frame,
+    synthetic_event_at, terminal_response_frame,
 };
 use crate::executor::inference::UpstreamHeaders;
 use crate::executor::inference::{BoxStream, DONE_MARKER};
+use crate::executor::item_lifecycle::item_status_frame;
 use crate::executor::multi_agent::RunControlReceiver;
 use crate::executor::persist::{TurnOutput, persist};
 use crate::executor::pipeline::AgentPipeline;
@@ -185,30 +186,22 @@ fn mcp_list_tools_failed_chunk(
     let started = serialize_to_value(&started).map_err(ExecutorError::JsonError)?;
     let mut failed = context.failed_payload(error);
     failed.output = vec![item.clone()];
-    let item_fields = || {
-        [
-            ("item_id".to_owned(), serde_json::json!(listing.id)),
-            ("output_index".to_owned(), serde_json::json!(0)),
-        ]
-    };
     let frames = vec![
         synthetic_event(
             SSEEventType::ResponseCreated,
             [("response".to_owned(), started.clone())],
         )?,
         synthetic_event(SSEEventType::ResponseInProgress, [("response".to_owned(), started)])?,
-        synthetic_event(
+        synthetic_event_at(
             SSEEventType::OutputItemAdded,
-            [
-                ("output_index".to_owned(), serde_json::json!(0)),
-                (
-                    "item".to_owned(),
-                    serialize_to_value(&item).map_err(ExecutorError::JsonError)?,
-                ),
-            ],
+            0,
+            [(
+                "item".to_owned(),
+                serialize_to_value(&item).map_err(ExecutorError::JsonError)?,
+            )],
         )?,
-        synthetic_event(SSEEventType::McpListToolsInProgress, item_fields())?,
-        synthetic_event(SSEEventType::McpListToolsFailed, item_fields())?,
+        item_status_frame(SSEEventType::McpListToolsInProgress, 0, &listing.id)?,
+        item_status_frame(SSEEventType::McpListToolsFailed, 0, &listing.id)?,
         executor_error_frame(error),
         terminal_response_frame(&failed)?,
     ];

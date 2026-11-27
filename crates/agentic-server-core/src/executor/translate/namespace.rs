@@ -1,185 +1,40 @@
-use super::function::FunctionTranslator;
-use super::{CallExecution, ToolEvent, ToolTranslator};
-use crate::events::{EventFrame, WireEvent};
-use crate::executor::accumulator::AccumulatedFunctionCall;
-use crate::executor::error::ExecutorResult;
+//! Public names for namespace members in a response's `tool_choice`. Output calls get theirs from
+//! [`TranslationContext`](super::TranslationContext)'s call rewrite.
+
 use crate::tool::NamespaceMap;
-use crate::types::io::{FunctionToolCall, OutputItem};
-use serde_json::{Map, Value};
+use serde_json::Value;
 
-/// Namespace calls retain function-call events; the dispatcher applies their public mapping.
-#[derive(Debug)]
-pub(super) struct CodexNamespaceTranslator {
-    function: FunctionTranslator,
-}
-
-impl ToolTranslator for CodexNamespaceTranslator {
-    fn translate(
-        &mut self,
-        event: ToolEvent<'_>,
-        call: Option<AccumulatedFunctionCall<'_>>,
-    ) -> ExecutorResult<Vec<EventFrame>> {
-        self.function.translate(event, call)
-    }
-}
-
-impl CodexNamespaceTranslator {
-    pub(super) const fn new(execution: CallExecution) -> Self {
-        Self {
-            function: FunctionTranslator::new(execution),
-        }
-    }
-
-    pub(super) fn restore_output_items(output: &mut [OutputItem], map: Option<&NamespaceMap>) {
-        let Some(map) = map else {
-            return;
-        };
-        for item in output {
-            if let OutputItem::FunctionCall(call) = item {
-                restore_function_call_with_map(call, map);
-            }
-        }
-    }
-
-    #[must_use]
-    pub(super) fn restore_response_wire(wire: &mut WireEvent, map: Option<&NamespaceMap>) -> bool {
-        let Some(map) = map else {
-            return false;
-        };
-        restore_response_map_with_map(&mut wire.rest, map)
-    }
-}
-
-fn restore_function_call_with_map(call: &mut FunctionToolCall, map: &NamespaceMap) -> bool {
-    if call.namespace.is_some() {
-        return false;
-    }
-    let Some((namespace, name)) = map.public_member(&call.name) else {
-        return false;
-    };
-    let original_name = call.name.clone();
-
-    call.namespace = Some(namespace.to_owned());
-    name.clone_into(&mut call.name);
-    tracing::debug!(
-        upstream_name = %original_name,
-        namespace = %namespace,
-        member = %name,
-        "restored upstream namespace function call"
-    );
-    true
-}
-
-fn restore_response_value_with_map(value: &mut Value, map: &NamespaceMap) -> bool {
-    let mut changed = false;
-
-    if let Some(object) = value.as_object_mut() {
-        changed |= restore_response_metadata_with_map(object, map);
-    }
-
-    if let Some(item) = value.as_object_mut().and_then(|object| object.get_mut("item")) {
-        changed |= restore_call_value_with_map(item, map);
-    }
-
-    changed |= restore_call_value_with_map(value, map);
-
-    for key in ["response", "payload"] {
-        if let Some(nested) = value.as_object_mut().and_then(|object| object.get_mut(key)) {
-            changed |= restore_response_value_with_map(nested, map);
-        }
-    }
-
-    if let Some(Value::Array(items)) = value.as_object_mut().and_then(|object| object.get_mut("output")) {
-        for item in items {
-            changed |= restore_call_value_with_map(item, map);
-        }
-    }
-
-    changed
-}
-
-fn restore_call_value_with_map(value: &mut Value, map: &NamespaceMap) -> bool {
-    let Some(object) = value.as_object_mut() else {
-        return false;
-    };
-    if object.get("type").and_then(Value::as_str) != Some("function_call") {
-        return false;
-    }
-    if object.get("namespace").and_then(Value::as_str).is_some() {
-        return false;
-    }
-    let Some(name) = object.get("name").and_then(Value::as_str) else {
-        return false;
-    };
-    let Some((namespace, name)) = map.public_member(name) else {
-        return false;
-    };
-    let original_name = object["name"].as_str().unwrap_or_default().to_owned();
-
-    object.insert("namespace".to_string(), Value::String(namespace.to_owned()));
-    object.insert("name".to_string(), Value::String(name.to_owned()));
-    tracing::debug!(
-        upstream_name = %original_name,
-        namespace = %namespace,
-        member = %name,
-        "restored upstream namespace function call"
-    );
-    true
-}
-
-fn restore_response_metadata_with_map(object: &mut Map<String, Value>, map: &NamespaceMap) -> bool {
-    object
-        .get_mut("tool_choice")
-        .is_some_and(|choice| restore_tool_choice_with_map(choice, map))
-}
-
-fn restore_tool_choice_with_map(choice: &mut Value, map: &NamespaceMap) -> bool {
+/// Restores a function `tool_choice` that names a shortened namespace member to its public
+/// namespace and member name.
+pub(super) fn restore_tool_choice(choice: &mut Value, map: &NamespaceMap) {
     let Some(object) = choice.as_object_mut() else {
-        return false;
+        return;
     };
     if object.get("type").and_then(Value::as_str) != Some("function")
         || object.get("namespace").and_then(Value::as_str).is_some()
     {
-        return false;
+        return;
     }
     let Some((namespace, name)) = object
         .get("name")
         .and_then(Value::as_str)
         .and_then(|name| map.public_member(name))
     else {
-        return false;
+        return;
     };
     object.insert("namespace".to_owned(), Value::String(namespace.to_owned()));
     object.insert("name".to_owned(), Value::String(name.to_owned()));
-    true
-}
-
-fn restore_response_map_with_map(object: &mut Map<String, Value>, map: &NamespaceMap) -> bool {
-    let mut changed = restore_response_metadata_with_map(object, map);
-    if let Some(item) = object.get_mut("item") {
-        changed |= restore_call_value_with_map(item, map);
-    }
-    for key in ["response", "payload"] {
-        if let Some(nested) = object.get_mut(key) {
-            changed |= restore_response_value_with_map(nested, map);
-        }
-    }
-    if let Some(Value::Array(items)) = object.get_mut("output") {
-        for item in items {
-            changed |= restore_call_value_with_map(item, map);
-        }
-    }
-    changed
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::super::TranslationContext;
+    use crate::events::WireEvent;
     use crate::tool::ToolDeclaration;
     use crate::tool::codex::model_visible_namespace_member_name;
     use crate::tool::{CodexNamespaceHandler, responses_declarations};
     use crate::types::event::MessageStatus;
-    use crate::types::io::ToolChoice;
+    use crate::types::io::{FunctionToolCall, OutputItem, ToolChoice};
     use crate::types::tools::{CodexNamespaceMember, NonEmptyToolName, ResponsesTool};
     fn completed_call(name: &str, arguments: &str) -> OutputItem {
         OutputItem::FunctionCall(FunctionToolCall {
@@ -208,7 +63,7 @@ mod tests {
             .unwrap(),
         );
         let upstream_name = model_visible_namespace_member_name(namespace, member);
-        let mut output = vec![completed_call(&upstream_name, "{}")];
+        let mut output = [completed_call(&upstream_name, "{}")];
 
         let resolved = CodexNamespaceHandler
             .resolve_namespace_members(&tools)
@@ -234,7 +89,9 @@ mod tests {
                 name: NonEmptyToolName::try_from(upstream_name).unwrap(),
             }
         );
-        CodexNamespaceTranslator::restore_output_items(&mut output, map.as_ref());
+        TranslationContext::default()
+            .with_response_metadata(map, None, None, None)
+            .normalize_output_item(&mut output[0]);
 
         let OutputItem::FunctionCall(call) = &output[0] else {
             panic!("expected function call");
@@ -254,7 +111,7 @@ mod tests {
             ]))
             .unwrap(),
         );
-        let mut output = vec![completed_call(
+        let mut output = [completed_call(
             "agentic_ns__mcp__agentic_fixture__run",
             "{\"tools\":\"legitimate\",\"cmd\":\"pwd\"}",
         )];
@@ -262,7 +119,9 @@ mod tests {
         let map = CodexNamespaceHandler
             .build_namespace_map(Some(&tools))
             .expect("valid namespace map");
-        CodexNamespaceTranslator::restore_output_items(&mut output, map.as_ref());
+        TranslationContext::default()
+            .with_response_metadata(map, None, None, None)
+            .normalize_output_item(&mut output[0]);
 
         let OutputItem::FunctionCall(call) = &output[0] else {
             panic!("expected function call");
@@ -286,12 +145,14 @@ mod tests {
         let resolved = CodexNamespaceHandler
             .resolve_namespace_members(&tools)
             .expect("valid namespace members");
-        let mut output = vec![completed_call("get_weather", "{\"city\":\"SF\"}")];
+        let mut output = [completed_call("get_weather", "{\"city\":\"SF\"}")];
 
         let map = CodexNamespaceHandler
             .build_namespace_map(Some(&tools))
             .expect("valid namespace map");
-        CodexNamespaceTranslator::restore_output_items(&mut output, map.as_ref());
+        TranslationContext::default()
+            .with_response_metadata(map, None, None, None)
+            .normalize_output_item(&mut output[0]);
 
         assert!(matches!(
             resolved.as_slice(),
@@ -329,7 +190,9 @@ mod tests {
         let map = CodexNamespaceHandler
             .build_namespace_map(Some(&tools))
             .expect("valid namespace map");
-        assert!(restore_response_value_with_map(&mut value, map.as_ref().unwrap()));
+        TranslationContext::default()
+            .with_response_metadata(map, None, None, None)
+            .normalize_wire_item(&mut value["item"]);
         assert_eq!(value["item"]["namespace"], "mcp__agentic_fixture");
         assert_eq!(value["item"]["name"], "add_numbers");
         assert_eq!(value["item"]["arguments"], "{\"numbers\":[8,0]}");
@@ -358,7 +221,10 @@ mod tests {
             }),
         );
 
-        assert!(CodexNamespaceTranslator::restore_response_wire(&mut wire, map.as_ref()));
+        TranslationContext::default()
+            .with_response_metadata(map, None, None, None)
+            .restore_stream_event_wire(&mut wire)
+            .unwrap();
         assert_eq!(
             wire.rest["response"]["tool_choice"],
             serde_json::json!({
@@ -396,7 +262,10 @@ mod tests {
             }),
         );
 
-        assert!(CodexNamespaceTranslator::restore_response_wire(&mut wire, map.as_ref()));
+        TranslationContext::default()
+            .with_response_metadata(map, None, None, None)
+            .restore_stream_event_wire(&mut wire)
+            .unwrap();
 
         let item = &wire.rest["item"];
         assert_eq!(item["namespace"], "mcp__agentic_fixture");

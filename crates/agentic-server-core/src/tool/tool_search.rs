@@ -1,4 +1,7 @@
+mod upstream_output;
 mod validation;
+
+pub(crate) use upstream_output::{SearchOutputRules, validate_blocking_response};
 pub(crate) use validation::ensure_request_prepared;
 use validation::{input_contains_tool_search_state, request_contains_tool_search_state, validate_tool_search_request};
 
@@ -711,64 +714,6 @@ pub(crate) fn native_call_id(call: &ToolSearchCall) -> Result<&str, ToolError> {
 
 fn json_value(arguments: &str) -> Result<Value, ToolError> {
     deserialize_from_str(arguments).map_err(|_| invalid_upstream_search_call())
-}
-
-pub(crate) fn validate_blocking_response(
-    body: &str,
-    tool_search_enabled: bool,
-    withheld_function_names: &HashSet<String>,
-) -> Result<(), ToolError> {
-    if !tool_search_enabled && withheld_function_names.is_empty() && !might_contain_tool_search_wire(body) {
-        return Ok(());
-    }
-    let value: Value = match deserialize_from_str(body) {
-        Ok(value) => value,
-        Err(_) => return Ok(()),
-    };
-    let status = value
-        .get("status")
-        .and_then(Value::as_str)
-        .map_or(ResponseStatus::Completed, |status| status.parse().unwrap_or_default());
-    let allow_unfinished = matches!(status, ResponseStatus::Error | ResponseStatus::Incomplete);
-    let mut call_ids = HashSet::new();
-    for item in value.get("output").and_then(Value::as_array).into_iter().flatten() {
-        if item.get("type").and_then(Value::as_str) == Some("function_call")
-            && item
-                .get("name")
-                .and_then(Value::as_str)
-                .is_some_and(|name| withheld_function_names.contains(name))
-        {
-            return Err(invalid_upstream_withheld_function_call());
-        }
-        match item.get("type").and_then(Value::as_str) {
-            Some("tool_search_call") => {
-                let call = strict_native_call(item.clone())?;
-                if !call_ids.insert(native_call_id(&call)?.to_owned()) {
-                    return Err(invalid_upstream_search_call());
-                }
-                if !allow_unfinished && call.status != ToolSearchStatus::Completed {
-                    return Err(invalid_upstream_search_call());
-                }
-            }
-            Some("function_call")
-                if tool_search_enabled && item.get("name").and_then(Value::as_str) == Some(TOOL_SEARCH_NAME) =>
-            {
-                let call = strict_function_call(item)?;
-                if !call_ids.insert(call.call_id.clone()) {
-                    return Err(invalid_upstream_search_call());
-                }
-                if !allow_unfinished && call.status != MessageStatus::Completed {
-                    return Err(invalid_upstream_search_call());
-                }
-            }
-            _ => {}
-        }
-    }
-    Ok(())
-}
-
-fn might_contain_tool_search_wire(wire: &str) -> bool {
-    wire.contains(TOOL_SEARCH_NAME)
 }
 
 /// The deferred entries the synthetic search declaration lists: functions and namespaces not fully loaded, then

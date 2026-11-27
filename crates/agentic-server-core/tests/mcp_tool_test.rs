@@ -1225,8 +1225,8 @@ fn response_output(turn: &support::Turn) -> Vec<OutputItem> {
             .find(|response| response["status"] == "completed" && response["output"].is_array())
             .expect("completed streaming response payload")
     };
-    let accumulator = ResponseAccumulator::from_json(&response.to_string(), None).expect("valid completed response");
-    let payload = accumulator.finalize(MODEL, None, None);
+    let accumulator = ResponseAccumulator::from_json(&response.to_string()).expect("valid completed response");
+    let payload = accumulator.finalize(MODEL, None);
     assert_eq!(payload.status, "completed");
     payload.output
 }

@@ -6,6 +6,7 @@ mod context;
 mod custom;
 mod dispatcher;
 mod function;
+mod json_string;
 mod namespace;
 mod shell;
 mod tool_search;

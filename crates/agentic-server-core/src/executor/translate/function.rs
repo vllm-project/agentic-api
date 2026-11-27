@@ -1,9 +1,9 @@
 use super::context::mark_async_call;
-use super::custom::custom_frame;
 use super::{CallExecution, ToolEvent, ToolTranslator};
 use crate::events::{EventFrame, SSEEventType};
 use crate::executor::accumulator::AccumulatedFunctionCall;
 use crate::executor::error::{ExecutorError, ExecutorResult};
+use crate::executor::gateway_accumulator::synthetic_event_at;
 use crate::types::event::MessageStatus;
 use crate::types::io::{FunctionToolCall, OutputItem};
 use serde_json::Value;
@@ -64,9 +64,9 @@ fn async_item_frame(event_type: SSEEventType, call: Option<AccumulatedFunctionCa
     }
     let mut item = OutputItem::FunctionCall(function);
     mark_async_call(&mut item)?;
-    custom_frame(
+    synthetic_event_at(
         event_type,
-        call.output_index,
+        u64::from(call.output_index),
         [("item".to_owned(), serde_json::to_value(item)?)],
     )
 }

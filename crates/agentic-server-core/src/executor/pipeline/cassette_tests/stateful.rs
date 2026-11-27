@@ -441,14 +441,14 @@ fn test_all_stateful_cassettes_parse_without_error() {
                 .as_ref()
                 .unwrap_or_else(|| panic!("{filename} turn {i} must have body"));
             let body_str = serde_json::to_string(body).unwrap();
-            let result = ResponseAccumulator::from_json(&body_str, None);
+            let result = ResponseAccumulator::from_json(&body_str);
             assert!(
                 result.is_ok(),
                 "{filename} turn {} failed to parse: {:?}",
                 i + 1,
                 result.err()
             );
-            let payload = result.unwrap().finalize("gpt-4o", None, None);
+            let payload = result.unwrap().finalize("gpt-4o", None);
             assert_eq!(
                 payload.status,
                 "completed",
@@ -471,7 +471,7 @@ fn test_all_stateful_cassettes_parse_without_error() {
                 "{filename} turn {} has no SSE data lines",
                 i + 1
             );
-            let payload = ingest_lenient(data_lines, None, "gpt-4o").expect("valid cassette SSE stream");
+            let payload = ingest_lenient(data_lines, "gpt-4o").expect("valid cassette SSE stream");
             assert_eq!(
                 payload.status,
                 "completed",

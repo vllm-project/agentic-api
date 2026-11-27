@@ -11,7 +11,7 @@ fn test_accumulator_cassette_function_call_vllm_gemma4() {
         .expected_function_call
         .expect("cassette must have expected_function_call");
 
-    let payload = ingest_lenient(cassette.sse, None, "google/gemma-4-26B-A4B-it").expect("valid cassette SSE stream");
+    let payload = ingest_lenient(cassette.sse, "google/gemma-4-26B-A4B-it").expect("valid cassette SSE stream");
 
     assert_eq!(payload.status, "completed");
     assert_eq!(payload.output.len(), 1, "expected exactly one output item");
@@ -39,7 +39,7 @@ fn test_accumulator_cassette_function_call_vllm_gemma4() {
 fn test_accumulator_cassette_text_only_no_function_calls() {
     let cassette = load_cassette("text-only-vllm-gemma4.yaml");
 
-    let payload = ingest_lenient(cassette.sse, None, "google/gemma-4-26B-A4B-it").expect("valid cassette SSE stream");
+    let payload = ingest_lenient(cassette.sse, "google/gemma-4-26B-A4B-it").expect("valid cassette SSE stream");
 
     assert_eq!(payload.status, "completed");
     for item in &payload.output {

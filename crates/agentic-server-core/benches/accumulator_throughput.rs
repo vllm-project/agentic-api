@@ -111,9 +111,7 @@ fn bench_accumulator_concurrent_json(c: &mut Criterion, f: &Fixtures) {
                             .iter()
                             .flat_map(|body| {
                                 (0..concurrency).map(move |_| {
-                                    s.spawn(|| {
-                                        black_box(ResponseAccumulator::from_json(black_box(body), None).unwrap())
-                                    })
+                                    s.spawn(|| black_box(ResponseAccumulator::from_json(black_box(body)).unwrap()))
                                 })
                             })
                             .collect();

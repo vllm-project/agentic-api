@@ -7,7 +7,7 @@ use tokio::sync::{mpsc, oneshot, watch};
 use crate::events::{EventFrame, EventPayload, SSEEventType, WireEvent};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway_accumulator::{
-    GatewayStreamAccumulator, StreamEvent, StreamFrame, checked_stream_event, executor_error_frame, synthetic_event,
+    GatewayStreamAccumulator, StreamEvent, checked_stream_event, executor_error_frame, synthetic_event,
     terminal_response_frame,
 };
 use crate::executor::telemetry::metrics::ExecutionClock;
@@ -256,7 +256,7 @@ impl ResponseEventSink {
             payload: EventPayload::None,
             wire,
         };
-        self.emit_frame(&mut frame, 0).await?;
+        self.emit_frame(&mut frame).await?;
         Ok(())
     }
 
@@ -292,19 +292,17 @@ impl ResponseEventSink {
             }
         }
         let mut frame = synthetic_event(event_type, rest)?;
-        self.emit_frame(&mut frame, 0).await?;
+        self.emit_frame(&mut frame).await?;
         Ok(())
     }
 
-    pub(super) async fn emit_frame(&self, frame: &mut EventFrame, offset: usize) -> ExecutorResult<bool> {
+    pub(super) async fn emit_frame(&self, frame: &mut EventFrame) -> ExecutorResult<bool> {
         let permit = self.sender.reserve().await.map_err(|_| closed())?;
         let mut state = self.state.lock().map_err(|_| closed())?;
-        let mut published = state.clone();
-        if !published.process_event(frame, offset) {
+        let Some((presented, published)) = state.present(frame)? else {
             return Ok(false);
-        }
-        let content = checked_stream_event(frame, self.max_bytes)?;
-        let sequence_number = frame.sequence_number().expect("delivery assigned a sequence");
+        };
+        let sequence_number = presented.sequence_number;
         let created = if frame.event_type == SSEEventType::ResponseCreated {
             // The relay rewrites wire IDs to gateway IDs without rewriting the
             // normalized payload. Borrow final wire metadata, not payload IDs.
@@ -332,11 +330,7 @@ impl ResponseEventSink {
         } else {
             None
         };
-        permit.send(StreamEvent::Frame(StreamFrame {
-            content,
-            sequence_number,
-            text: frame.event_type == SSEEventType::OutputTextDelta,
-        }));
+        permit.send(StreamEvent::Frame(presented));
         *state = published;
         if let Some(created) = created {
             self.outcome.send_modify(|outcome| outcome.created = Some(created));
@@ -359,13 +353,13 @@ impl ResponseEventSink {
         } else {
             ResponseCommitState::Committed
         };
-        self.emit_frame(&mut frame, 0).await?;
+        self.emit_frame(&mut frame).await?;
         self.outcome.send_modify(|outcome| outcome.commit = state);
         Ok(())
     }
 
     pub(super) async fn emit_error(&self, error: &ExecutorError) -> ExecutorResult<()> {
-        self.emit_frame(&mut executor_error_frame(error), 0).await?;
+        self.emit_frame(&mut executor_error_frame(error)).await?;
         Ok(())
     }
 }
@@ -448,7 +442,7 @@ mod tests {
         // upstream payload intact. The receipt must describe delivered IDs.
         frame.wire.rest["response"]["id"] = json!("resp_successor");
         frame.wire.rest["response"]["previous_response_id"] = json!("resp_parent");
-        sink.emit_frame(&mut frame, 0).await.unwrap();
+        sink.emit_frame(&mut frame).await.unwrap();
         let receipt = waiting.await.unwrap();
         assert_eq!(receipt.response_id(), "resp_successor");
         assert_eq!(receipt.previous_response_id(), Some("resp_parent"));
@@ -479,12 +473,12 @@ mod tests {
     async fn duplicate_creation_and_later_failure_preserve_the_first_receipt() {
         for aborted in [false, true] {
             let (sink, mut stream) = ResponseEventSink::channel(4096);
-            sink.emit_frame(&mut created("resp_first", Some("resp_parent")), 0)
+            sink.emit_frame(&mut created("resp_first", Some("resp_parent")))
                 .await
                 .unwrap();
             let receipt = sink.created_receipt().unwrap();
             stream.next().await.unwrap();
-            assert!(!sink.emit_frame(&mut created("resp_duplicate", None), 0).await.unwrap());
+            assert!(!sink.emit_frame(&mut created("resp_duplicate", None)).await.unwrap());
             assert!(Arc::ptr_eq(&receipt, &sink.created_receipt().unwrap()));
             assert!(stream.next().now_or_never().is_none());
             if aborted {
@@ -503,11 +497,11 @@ mod tests {
         let (sink, mut stream) = ResponseEventSink::channel(4096);
         sink.emit_local(acknowledgement()).await.unwrap();
         let mut frame = created("resp_cancelled", None);
-        assert!(sink.emit_frame(&mut frame, 0).now_or_never().is_none());
+        assert!(sink.emit_frame(&mut frame).now_or_never().is_none());
         assert!(sink.created_receipt().is_none());
         assert!(sink.wait_created().now_or_never().is_none());
         assert_eq!(sequence(&stream.next().await.unwrap()), 0);
-        sink.emit_frame(&mut created("resp_retry", None), 0).await.unwrap();
+        sink.emit_frame(&mut created("resp_retry", None)).await.unwrap();
         let receipt = sink.wait_created().await.unwrap();
         assert_eq!(receipt.response_id(), "resp_retry");
         assert_eq!(receipt.sequence_number(), 1);
@@ -519,17 +513,17 @@ mod tests {
         let (sink, mut stream) = ResponseEventSink::channel(512);
         let mut oversized = created(&"x".repeat(512), None);
         assert!(matches!(
-            sink.emit_frame(&mut oversized, 0).await,
+            sink.emit_frame(&mut oversized).await,
             Err(ExecutorError::ResourceLimitExceeded { .. })
         ));
         assert!(sink.created_receipt().is_none());
-        assert!(sink.emit_frame(&mut created("", None), 0).await.is_err());
+        assert!(sink.emit_frame(&mut created("", None)).await.is_err());
         let mut invalid_parent = created("resp_test", None);
         invalid_parent.wire.rest["response"]["previous_response_id"] = json!(42);
-        assert!(sink.emit_frame(&mut invalid_parent, 0).await.is_err());
+        assert!(sink.emit_frame(&mut invalid_parent).await.is_err());
         assert!(sink.created_receipt().is_none());
         assert!(stream.next().now_or_never().is_none());
-        sink.emit_frame(&mut created("resp_retry", None), 0).await.unwrap();
+        sink.emit_frame(&mut created("resp_retry", None)).await.unwrap();
         let receipt = sink.wait_created().await.unwrap();
         assert_eq!(receipt.previous_response_id(), None);
         assert_eq!(receipt.sequence_number(), 0);
@@ -557,7 +551,7 @@ mod tests {
         assert!(waiting.as_mut().now_or_never().is_none());
         drop(stream);
         assert!(waiting.await.is_err());
-        assert!(sink.emit_frame(&mut created("resp_closed", None), 0).await.is_err());
+        assert!(sink.emit_frame(&mut created("resp_closed", None)).await.is_err());
         assert!(sink.created_receipt().is_none());
     }
 
