@@ -519,3 +519,40 @@ data:
 
 The shipped `NetworkPolicy` restricts ingress only, so no egress rule is
 needed for the Collector.
+
+### Elastic EDOT / OpenTelemetry operator
+
+The gateway is a Rust binary, so the OpenTelemetry operator's automatic
+instrumentation (`instrumentation.opentelemetry.io/inject-*` annotations) does
+not apply to it — those injectors cover Java, Node.js, Python, Go, and .NET.
+For a cluster running Elastic's EDOT collectors, export with the gateway's
+native OTLP/HTTP support instead of relying on a sidecar or injected agent.
+
+Point the endpoint at the collector that accepts OTLP/HTTP (the EDOT daemon
+collector's Service exposes port `4318` for HTTP and `4317` for gRPC; only
+HTTP/protobuf is supported here, so use `4318`):
+
+```yaml
+data:
+  OTEL_TRACES_EXPORTER: "otlp"
+  OTEL_METRICS_EXPORTER: "otlp"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://opentelemetry-kube-stack-daemon-collector.opentelemetry-operator.svc.cluster.local:4318"
+  OTEL_SERVICE_NAME: "agentic-api"
+  OTEL_RESOURCE_ATTRIBUTES: "deployment.environment=staging"
+```
+
+As with any ConfigMap change, restart the Deployment before the new variables
+take effect (`kubectl -n <namespace> rollout restart deployment/agentic-api`).
+The gateway logs an `HttpClient.ExportSucceeded` event when spans and metrics
+reach the collector; a collector that is down surfaces as exporter warnings
+under the default `RUST_LOG`.
+
+By default the EDOT gateway collector routes OTLP data into Elasticsearch data
+streams named `.ds-traces-generic.otel-default-*`,
+`.ds-metrics-generic.otel-default-*`, and `.ds-logs-generic.otel-default-*`.
+These are **generic OTLP** data streams, not the APM-style `traces-apm-*`
+indices. In Kibana, query the generic OTLP data views by `service.name` and
+`deployment.environment` rather than expecting the data under an APM service.
+If your collector is configured with an `elasticapm` or other exporter, the
+same spans may also be available through that pipeline; check the collector's
+configured exporters before assuming an index name.
