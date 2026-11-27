@@ -781,7 +781,9 @@ Invalid requests are returned as JSON WebSocket error events:
 Pass `conversation` to `POST /v1/responses` to continue a conversation; Responses
 persistence appends each turn's items. Deleting an item detaches it from the
 conversation without removing stored response history. Conversation creation and
-its initial items commit atomically. These routes currently use the default
+its initial items commit atomically. Like response retrieval and file routes,
+these local-storage routes require the configured `OPENAI_API_KEY` as a bearer
+token when OIDC is disabled and a key is set. They currently use the default
 tenant rather than deriving ownership from the authenticated principal
 ([#107](https://github.com/vllm-project/agentic-api/issues/107)).
 

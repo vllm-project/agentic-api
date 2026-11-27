@@ -212,7 +212,10 @@ struct StorageBackedState {
 async fn storage_backed_state(llm_url: &str) -> StorageBackedState {
     let db = TestDb::new();
     let pool = create_pool_with_schema(Some(&db.url())).await.unwrap();
-    let config = test_config(llm_url);
+    let mut config = test_config(llm_url);
+    // These functional tests exercise conversation routes without a bearer
+    // token, so leave the key unset (the documented unauthenticated mode).
+    config.openai_api_key = None;
     let client = Arc::new(reqwest::Client::new());
     let exec_ctx = Arc::new(ExecutionContext::new(
         ConversationHandler::new(ConversationStore::new(Arc::clone(&pool))),

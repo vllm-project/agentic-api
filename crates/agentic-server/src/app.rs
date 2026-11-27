@@ -306,8 +306,9 @@ pub struct AppState {
     /// Whether `/ready` should omit the upstream health check.
     pub skip_llm_ready_check: bool,
     /// Server-configured API key; used as fallback when the request carries no
-    /// `Authorization` header on the executor path. Also authenticates local response
-    /// retrieval when OIDC is disabled.
+    /// `Authorization` header on the executor path. Also authenticates local
+    /// response retrieval, conversations, and file/vector-store routes when
+    /// OIDC is disabled.
     pub openai_api_key: Option<String>,
     /// Ceiling on serialized inbound request bytes, applied uniformly to every
     /// request-bearing endpoint and to WebSocket messages and frames.
@@ -369,14 +370,7 @@ pub fn build_router_with_auth(
         input_items_route = input_items_route.route_layer(middleware::from_fn_with_state(key.clone(), require_api_key));
     }
     let mut file_search_routes = file_search::router(state.max_request_body_size.get());
-    if authenticator.is_none()
-        && let Some(key) = state.openai_api_key.as_ref().filter(|key| !key.is_empty())
-    {
-        file_search_routes =
-            file_search_routes.route_layer(middleware::from_fn_with_state(key.clone(), require_api_key));
-    }
-    let protected_routes = Router::new()
-        .merge(file_search_routes)
+    let mut conversation_routes = Router::new()
         .route("/v1/conversations", post(create_conversation))
         .route(
             "/v1/conversations/{conversation_id}",
@@ -391,7 +385,18 @@ pub fn build_router_with_auth(
         .route(
             "/v1/conversations/{conversation_id}/items/{item_id}",
             get(retrieve_item).delete(delete_item),
-        )
+        );
+    if authenticator.is_none()
+        && let Some(key) = state.openai_api_key.as_ref().filter(|key| !key.is_empty())
+    {
+        file_search_routes =
+            file_search_routes.route_layer(middleware::from_fn_with_state(key.clone(), require_api_key));
+        conversation_routes =
+            conversation_routes.route_layer(middleware::from_fn_with_state(key.clone(), require_api_key));
+    }
+    let protected_routes = Router::new()
+        .merge(file_search_routes)
+        .merge(conversation_routes)
         .route("/v1/chat/completions", post(chat_completions))
         .route("/v1/completions", post(completions))
         .route("/v1/embeddings", post(embeddings))
