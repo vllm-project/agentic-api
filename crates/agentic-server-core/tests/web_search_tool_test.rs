@@ -1860,7 +1860,9 @@ async fn execute_normalizes_forced_web_search_selector_and_releases_after_search
     };
 
     let result = ExecuteRequest::new(payload, Arc::clone(&exec_ctx)).run().await.unwrap();
-    assert!(matches!(result, Either::Left(_)));
+    let Either::Left(response) = result else {
+        panic!("expected non-streaming response");
+    };
     captured_you.recv().await.expect("mock You.com should receive request");
 
     let request_bodies = llm.request_bodies().await;
@@ -1873,6 +1875,66 @@ async fn execute_normalizes_forced_web_search_selector_and_releases_after_search
     assert!(
         request_bodies[1].get("tool_choice").is_none(),
         "follow-up inference must be free to answer"
+    );
+    assert_eq!(
+        serde_json::to_value(&response.tool_choice).unwrap(),
+        serde_json::json!({"type": "web_search"}),
+        "the terminal response must preserve the public selector"
+    );
+    let stored = exec_ctx.resp_handler.get_snapshot(&response.id).await.unwrap();
+    assert_eq!(
+        serde_json::to_value(&stored.tool_choice).unwrap(),
+        serde_json::json!({"type": "web_search"}),
+        "stored response must preserve the public selector"
+    );
+}
+
+#[tokio::test]
+async fn streamed_forced_web_search_selector_preserves_public_selector_and_relaxes_upstream() {
+    let (you_url, mut captured_you, _you_handle) = spawn_mock_you().await;
+    let llm = support::MockServer::start_deque(vec![
+        web_search_function_call_sse_response("call_search"),
+        text_sse_response("Use async carefully."),
+    ])
+    .await;
+    let exec_ctx = build_exec_ctx(llm.url(), you_url).await;
+    let web_search: ResponsesTool = serde_json::from_value(serde_json::json!({"type": "web_search_preview"})).unwrap();
+    let selector: ToolChoice = serde_json::from_value(serde_json::json!({"type": "web_search"})).unwrap();
+    let payload = RequestPayload {
+        tools: Some(vec![web_search]),
+        tool_choice: Some(selector),
+        stream: true,
+        ..base_payload(ResponsesInput::Text("look up rust async".to_owned()))
+    };
+
+    let result = ExecuteRequest::new(payload, Arc::clone(&exec_ctx)).run().await.unwrap();
+    let Either::Right(stream) = result else {
+        panic!("expected streaming response");
+    };
+    let chunks: Vec<String> = stream.collect().await;
+    captured_you.recv().await.expect("mock You.com should receive request");
+
+    let request_bodies = llm.request_bodies().await;
+    assert_eq!(request_bodies.len(), 2);
+    assert_eq!(
+        request_bodies[0]["tool_choice"],
+        serde_json::json!({"type": "function", "name": "web_search"}),
+        "the first streaming upstream request must normalize the public selector"
+    );
+    assert!(
+        request_bodies[1].get("tool_choice").is_none(),
+        "follow-up streaming inference must be free to answer"
+    );
+
+    let events = streamed_sse_events(&chunks);
+    let terminal = events
+        .iter()
+        .find(|event| event["type"] == "response.completed")
+        .expect("streaming response should contain response.completed");
+    assert_eq!(
+        terminal["response"]["tool_choice"],
+        serde_json::json!({"type": "web_search"}),
+        "terminal lifecycle event must preserve the public selector"
     );
 }
 
