@@ -1,7 +1,7 @@
 //! Client shell continuation and public multi-agent lifecycle contracts.
 use super::*;
 use crate::StorageError;
-use crate::executor::{prepare_non_generating_turn, rehydrate::rehydrate_conversation};
+use crate::executor::{prepare_non_generating_turn, rehydrate::rehydrate};
 use crate::types::io::{AgentMessageContent, InOutItem};
 use crate::utils::common::deserialize_from_value;
 
@@ -138,7 +138,7 @@ async fn child_shell_call_survives_checkpoint_and_client_continuation() {
             ] {
                 let mut invalid = continuation.clone();
                 invalid.input.push(serde_json::from_value::<InOutItem>(item).unwrap());
-                let ctx = rehydrate_conversation(invalid, &exec).await.unwrap();
+                let ctx = rehydrate(invalid, &exec, None).await.unwrap();
                 assert!(matches!(
                     prepare_non_generating_turn(ctx, &exec),
                     Err(ExecutorError::InvalidRequest(message))
@@ -218,7 +218,7 @@ async fn child_shell_call_replays_full_history_without_storage() {
         );
         let mut triggered = next.clone();
         triggered.input.push(InputItem::CompactionTrigger);
-        assert!(matches!(rehydrate_conversation(triggered, &exec).await,
+        assert!(matches!(rehydrate(triggered, &exec, None).await,
             Err(ExecutorError::InvalidRequest(message)) if message.contains("compaction_trigger")));
 
         // Each request is independent and carries all public history, with no private checkpoint.

@@ -198,14 +198,6 @@ impl ResponseAccumulator {
         Ok(())
     }
 
-    /// Marks the response as incomplete due to an error or interruption.
-    pub fn mark_incomplete(&mut self, reason: impl Into<String>) {
-        self.status = ResponseStatus::Incomplete;
-        self.incomplete_details = Some(IncompleteDetails {
-            reason: Some(reason.into()),
-        });
-    }
-
     /// Applies the selected stream policy and consumes the assembled response.
     pub(in crate::executor) fn finish(
         mut self,

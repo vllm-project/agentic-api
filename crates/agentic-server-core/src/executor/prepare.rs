@@ -16,12 +16,7 @@ use crate::types::tools::ResponsesTool;
 pub(crate) fn prepare_request_tools(
     mut ctx: RequestContext,
 ) -> ExecutorResult<(RequestContext, Option<ToolSearchState>)> {
-    if ctx
-        .enriched_request
-        .multi_agent
-        .as_ref()
-        .is_some_and(|config| config.enabled)
-    {
+    if ctx.enriched_request.multi_agent_enabled() {
         // Each agent prepares its own search view from its canonical checkpoint.
         return Ok((ctx, None));
     }

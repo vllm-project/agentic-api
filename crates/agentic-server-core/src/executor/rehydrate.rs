@@ -33,27 +33,21 @@ use crate::utils::uuid7_str;
 /// - `conversation`:         rehydrate from the conversation
 /// - no ids:                 normalize the complete history supplied by the client
 ///
-/// # Errors
-/// Returns [`ExecutorError`] if storage is unavailable, a referenced ID does not exist, or the
-/// new/resolved input contains unsupported message content.
-pub async fn rehydrate_conversation(
-    request: RequestPayload,
-    exec_ctx: &ExecutionContext,
-) -> ExecutorResult<RequestContext> {
-    rehydrate_with_continuation(request, exec_ctx, None).await
-}
-
-/// Resolve one turn in a transient session without changing the durable Conversations API.
+/// A transient-session turn passes its `session`: the turn begins there for this request's `previous_response_id`
+/// and continues the session's retained parent without changing the durable Conversations API.
 ///
 /// # Errors
-/// Returns an error when the session is busy/closed or the requested history is unavailable.
-pub async fn rehydrate_in_session(
+/// Returns [`ExecutorError`] if storage is unavailable, a referenced ID does not exist, the
+/// new/resolved input contains unsupported message content, or the session is busy or closed.
+pub async fn rehydrate(
     request: RequestPayload,
     exec_ctx: &ExecutionContext,
-    session: &ResponseSession,
+    session: Option<&ResponseSession>,
 ) -> ExecutorResult<RequestContext> {
-    let continuation = session.begin(request.previous_response_id.as_deref())?;
-    rehydrate_with_continuation(request, exec_ctx, Some(continuation)).await
+    let continuation = session
+        .map(|session| session.begin(request.previous_response_id.as_deref()))
+        .transpose()?;
+    rehydrate_with_continuation(request, exec_ctx, continuation).await
 }
 
 #[tracing::instrument(name = "agentic.rehydrate", skip_all, fields(
@@ -89,14 +83,9 @@ pub(crate) async fn rehydrate_with_continuation(
         // One clone for the unmodified original; `request` is moved as enriched_request.
         let original_request = request.clone();
         let mut ctx = RequestContext {
-            multi_agent_tree: None,
-            enriched_request: request,
-            original_request,
             new_input_items,
-            response_id,
-            conversation_id: None,
-            checkpoint: None,
             continuation,
+            ..RequestContext::fresh(original_request, request, response_id)
         };
 
         let conversation = ctx.original_request.conversation.is_some();
@@ -119,11 +108,7 @@ pub(crate) async fn rehydrate_with_continuation(
         // The explicit trigger extension cannot return a resumable stateless tree.
         if !ctx.original_request.store
             && ctx.original_request.input.has_compaction_trigger()
-            && ctx
-                .enriched_request
-                .multi_agent
-                .as_ref()
-                .is_some_and(|config| config.enabled)
+            && ctx.enriched_request.multi_agent_enabled()
         {
             return Err(ExecutorError::InvalidRequest(
                 "compaction_trigger is not supported with multi_agent and store: false; use automatic compaction"
@@ -264,11 +249,7 @@ fn from_conversation(
     }
     // A multi-agent tree is the latest turn's snapshot, not appended history: a multi-agent turn, which continues or
     // builds one, must be stored right after the turn it continued, or it would replace another turn's tree.
-    checkpoint.requires_latest |= ctx
-        .enriched_request
-        .multi_agent
-        .as_ref()
-        .is_some_and(|config| config.enabled);
+    checkpoint.requires_latest |= ctx.enriched_request.multi_agent_enabled();
     ctx.checkpoint = Some(checkpoint);
     Ok(())
 }

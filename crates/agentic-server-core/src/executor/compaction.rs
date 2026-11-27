@@ -9,6 +9,7 @@ mod summary;
 pub(crate) use carry_over::CompactionCarryOver;
 
 use std::borrow::Cow;
+use std::sync::Arc;
 
 use super::telemetry::metrics::Stage;
 use super::telemetry::stages::CompactionTrigger;
@@ -19,7 +20,7 @@ use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::persist::{TurnOutput, persist};
 use crate::executor::pipeline::AgentPipeline;
 use crate::executor::prepare::prepare_request_tools;
-use crate::executor::rehydrate::rehydrate_conversation;
+use crate::executor::rehydrate::rehydrate;
 use crate::executor::relay::StreamRelay;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::upstream::fetch_blocking_payload;
@@ -68,8 +69,7 @@ impl ResponseCheckpoint {
     /// its window. A compaction the client supplied is not a starting point, and a multi-agent turn keeps its whole
     /// history, as on `OpenAI`.
     pub(in crate::executor) fn continue_from_compaction(&mut self, history: &[InOutItem], request: &RequestPayload) {
-        if self.metadata.multi_agent_tree.is_some() || request.multi_agent.as_ref().is_some_and(|config| config.enabled)
-        {
+        if self.metadata.multi_agent_tree.is_some() || request.multi_agent_enabled() {
             return;
         }
         let latest = history
@@ -88,6 +88,16 @@ pub(crate) struct CompactedWindow {
     pub(crate) compaction: CompactionItem,
     pub(crate) usage: ResponseUsage,
     pub(crate) service_tier: Option<String>,
+}
+
+impl CompactedWindow {
+    /// The compaction item that carries this window, as `OpenAI`'s opaque item carries its state, with the summary
+    /// request's usage and service tier.
+    pub(crate) fn into_carrying_item(self) -> serde_json::Result<(CompactionItem, ResponseUsage, Option<String>)> {
+        let compaction =
+            CompactionItem::carrying(self.compaction.id, self.compaction.encrypted_content, self.retained)?;
+        Ok((compaction, self.usage, self.service_tier))
+    }
 }
 
 #[cfg(test)]
@@ -115,7 +125,7 @@ pub(crate) async fn summarize_items(
     request: &RequestPayload,
     input: ResponsesInput,
     exec_ctx: &ExecutionContext,
-    auth: Option<&UpstreamHeaders>,
+    auth: Option<Arc<UpstreamHeaders>>,
     trigger: CompactionTrigger,
 ) -> ExecutorResult<CompactedWindow> {
     let timer = exec_ctx.metrics.stage(Stage::Compaction);
@@ -157,18 +167,9 @@ pub(crate) async fn summarize_items(
         enriched_request.input = CodexNamespaceHandler
             .resolve_input(None, &functions, Cow::Owned(enriched_request.input))
             .into_owned();
-        let ctx = RequestContext {
-            multi_agent_tree: None,
-            original_request,
-            enriched_request,
-            new_input_items: Vec::new(),
-            response_id: uuid7_str("resp_"),
-            conversation_id: None,
-            checkpoint: None,
-            continuation: None,
-        };
-        let mut agent = AgentPipeline::new(ctx, None, StreamRelay::detached());
-        let response = fetch_blocking_payload(&mut agent, exec_ctx, auth, &ToolRegistry::default(), None).await?;
+        let ctx = RequestContext::fresh(original_request, enriched_request, uuid7_str("resp_"));
+        let mut agent = AgentPipeline::new(ctx, None, StreamRelay::detached(), auth);
+        let response = fetch_blocking_payload(&mut agent, exec_ctx, &ToolRegistry::default(), None).await?;
         exec_ctx.metrics.record_response_usage(response.usage.as_ref());
         let summary = completed_summary_text(&response)?;
 
@@ -196,11 +197,12 @@ pub(crate) async fn summarize_items(
 /// # Errors
 ///
 /// Propagates inference errors from the summarization request.
-pub(crate) async fn maybe_compact_context(
-    ctx: &mut RequestContext,
+pub(super) async fn maybe_compact_context(
+    agent: &mut AgentPipeline,
     exec_ctx: &ExecutionContext,
-    auth: Option<&UpstreamHeaders>,
 ) -> ExecutorResult<Option<(CompactionItem, ResponseUsage)>> {
+    let auth = agent.upstream_headers().cloned();
+    let ctx = &mut agent.request;
     let Some(threshold) = ctx.enriched_request.compact_threshold() else {
         return Ok(None);
     };
@@ -229,17 +231,12 @@ pub(crate) async fn maybe_compact_context(
         CompactionTrigger::ContextManagement,
     )
     .await?;
-    // The item carries its window, as OpenAI's opaque item carries its state: the model and every later turn see the
-    // kept user messages through it.
-    let compaction = CompactionItem::carrying(
-        window.compaction.id,
-        window.compaction.encrypted_content,
-        window.retained,
-    )?;
+    // The model and every later turn see the kept user messages through the item.
+    let (compaction, usage, _) = window.into_carrying_item()?;
     let mut model_input = vec![InputItem::Compaction(compaction.clone())];
     model_input.extend(open_calls);
     ctx.enriched_request.input = ResponsesInput::from(model_input);
-    Ok(Some((compaction, window.usage)))
+    Ok(Some((compaction, usage)))
 }
 
 /// Compact direct input or a stored previous-response chain into a reusable item window.
@@ -253,7 +250,7 @@ pub async fn compact_response(
     exec_ctx: &ExecutionContext,
     auth: Option<&str>,
 ) -> ExecutorResult<CompactedResponse> {
-    let auth = auth.map(|token| UpstreamHeaders::Bearer(token.to_owned()));
+    let auth = auth.map(|token| Arc::new(UpstreamHeaders::Bearer(token.to_owned())));
     if request.input.is_none() && request.previous_response_id.is_none() {
         return Err(ExecutorError::UnsupportedValue {
             param: None,
@@ -274,7 +271,7 @@ pub async fn compact_response(
         prompt_cache_options: request.prompt_cache_options,
         ..RequestPayload::default()
     };
-    let ctx = rehydrate_conversation(payload, exec_ctx).await?;
+    let ctx = rehydrate(payload, exec_ctx, None).await?;
     // OpenAI excludes multi-agent execution from the standalone compact endpoint,
     // including stored trees and public history attributed to a multi-agent run.
     if ctx.multi_agent_tree.is_some() || ctx.enriched_request.input.has_multi_agent_history() {
@@ -295,7 +292,7 @@ pub async fn compact_response(
         &ctx.enriched_request,
         input,
         exec_ctx,
-        auth.as_ref(),
+        auth,
         CompactionTrigger::Explicit,
     )
     .await?;
@@ -334,6 +331,8 @@ mod tests {
     use axum::routing::post;
 
     use crate::executor::modes::{ConversationHandler, ResponseHandler};
+    use crate::executor::pipeline::AgentPipeline;
+    use crate::executor::relay::StreamRelay;
     use crate::executor::request::{ExecutionContext, RequestContext};
     use crate::storage::{ConversationStore, ResponseMetadata, ResponseStore, create_pool_with_schema};
     use crate::types::ServiceTier;
@@ -940,10 +939,15 @@ mod tests {
         let image_estimate = estimate_input_tokens(&large_image_input);
         let threshold = image_estimate.saturating_add(100);
         let (exec_ctx, requests, server) = mock_execution_context(ResponseStore::disabled()).await;
-        let mut image_context = context_with_threshold(large_image_input, threshold);
+        let mut image_context = AgentPipeline::new(
+            context_with_threshold(large_image_input, threshold),
+            None,
+            StreamRelay::detached(),
+            None,
+        );
 
         assert!(
-            maybe_compact_context(&mut image_context, &exec_ctx, None)
+            maybe_compact_context(&mut image_context, &exec_ctx)
                 .await
                 .expect("image-only threshold check succeeds")
                 .is_none()
@@ -966,12 +970,14 @@ mod tests {
         text_context.enriched_request.prompt_cache_retention =
             Some(crate::types::request_response::PromptCacheRetention::TwentyFourHours);
 
+        let mut text_context = AgentPipeline::new(text_context, None, StreamRelay::detached(), None);
         assert!(
-            maybe_compact_context(&mut text_context, &exec_ctx, None)
+            maybe_compact_context(&mut text_context, &exec_ctx)
                 .await
                 .expect("long text compacts")
                 .is_some()
         );
+        let text_context = text_context.request;
         let projected = text_context.enriched_request.input.model_input();
         let ResponsesInput::Items(compacted) = projected.as_ref() else {
             panic!("compaction should produce item input");
@@ -1030,7 +1036,9 @@ mod tests {
         let options = serde_json::from_value(serde_json::json!({"mode":"explicit","ttl":"30m"})).unwrap();
         let mut ctx = context_with_threshold(ResponsesInput::from(vec![user_message(&"context ".repeat(100))]), 1);
         ctx.enriched_request.prompt_cache_options = Some(options);
-        assert!(maybe_compact_context(&mut ctx, &exec, None).await.unwrap().is_some());
+        let mut agent = AgentPipeline::new(ctx, None, StreamRelay::detached(), None);
+        assert!(maybe_compact_context(&mut agent, &exec).await.unwrap().is_some());
+        let mut ctx = agent.request;
         assert_eq!(ctx.enriched_request.prompt_cache_options, Some(options));
         let plan = CompactionPlan::prepare_explicit(
             &AgentIdentity::root(),

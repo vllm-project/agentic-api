@@ -4,26 +4,20 @@
 //! accumulating semantic events into a unified `ResponsePayload` structure.
 //!
 //! The executor processes SSE lines inline through `AgentPipeline` and its
-//! round-scoped ingestion state. The separate [`ResponseAccumulator::from_stream`]
-//! convenience method uses a channel and `spawn_blocking` worker; that worker is
-//! not the executor's main streaming path.
+//! round-scoped ingestion state; `decode_upstream` runs the same round for a
+//! complete upstream body.
 
 use std::collections::HashMap;
-use std::pin::Pin;
-use std::sync::mpsc;
-
-use futures::{Stream, StreamExt};
 
 use crate::events::{
-    ClassifiedSseLine, EventFrame, EventPayload, SSEEventType, SSEItemType, SseLine, ValidatedFrame,
-    normalize_sse_data_checked, validate_frame,
+    ClassifiedSseLine, EventFrame, EventPayload, SSEEventType, SSEItemType, ValidatedFrame, normalize_sse_data_checked,
+    validate_frame,
 };
-use crate::executor::error::{ExecutorError, ExecutorResult};
+use crate::executor::error::ExecutorResult;
 use crate::executor::response_budget::{ExecutorResponseBudget, RETAINED_CONTAINER_OVERHEAD_BYTES, RetainedAccount};
 use crate::types::event::ResponseStatus;
 use crate::types::io::{FunctionToolCall, OutputItem, ResponseUsage};
 use crate::types::request_response::IncompleteDetails;
-use crate::utils::uuid7_str;
 
 mod active;
 mod active_text;
@@ -35,7 +29,6 @@ mod completion;
 mod details;
 mod json;
 mod slot;
-mod source;
 mod terminal;
 
 use active::ActiveItem;
@@ -122,12 +115,6 @@ pub struct ResponseAccumulator {
 }
 
 impl ResponseAccumulator {
-    /// Creates a response accumulator using lenient streaming validation.
-    #[must_use]
-    pub fn new(response_id: String, conversation_id: Option<String>) -> Self {
-        Self::with_validation(response_id, conversation_id, Validation::Lenient)
-    }
-
     pub(super) fn with_validation(
         response_id: String,
         conversation_id: Option<String>,
@@ -163,59 +150,8 @@ impl ResponseAccumulator {
         acc
     }
 
-    /// Accumulates an async stream of raw SSE lines with parallel processing.
-    ///
-    /// The async task feeds raw SSE lines through a channel while a `spawn_blocking`
-    /// worker handles JSON parsing on a blocking thread — keeping the tokio executor
-    /// free between chunk arrivals.
-    ///
-    /// # Errors
-    /// Returns [`ExecutorError::InvalidRequest`] when repeated authoritative
-    /// output-item content conflicts, or [`ExecutorError::StreamError`] when
-    /// the input stream or worker encounters an error.
-    pub async fn from_stream(
-        mut stream: Pin<Box<dyn Stream<Item = Result<String, ExecutorError>> + Send>>,
-        conversation_id: Option<&str>,
-    ) -> ExecutorResult<Self> {
-        let (tx, rx) = mpsc::channel::<String>();
-        // Convert to owned here — spawn_blocking closure must be 'static.
-        let conv_id_owned = conversation_id.map(str::to_string);
-
-        // Spawn blocking task: JSON parsing is CPU-bound, runs off the async executor.
-        let worker_handle = tokio::task::spawn_blocking(move || Self::process_stream_chunks(rx, conv_id_owned));
-
-        // Feed raw SSE lines from the async stream to the blocking worker.
-        while let Some(chunk_result) = stream.next().await {
-            match chunk_result {
-                Ok(chunk) => {
-                    if tx.send(chunk).is_err() {
-                        break;
-                    }
-                }
-                Err(e) => return Err(e),
-            }
-        }
-
-        // Signal EOF to worker.
-        drop(tx);
-
-        // Properly async join — does not block the tokio executor thread.
-        worker_handle
-            .await
-            .map_err(|_| ExecutorError::StreamError("Worker thread panicked".into()))?
-    }
-
-    /// Worker function that processes SSE lines from the channel (runs on blocking thread).
-    fn process_stream_chunks(rx: mpsc::Receiver<String>, conversation_id: Option<String>) -> ExecutorResult<Self> {
-        let mut acc = Self::new(uuid7_str("resp_"), conversation_id);
-        for line in rx {
-            let _ = acc.process_line(SseLine::parse(&line))?;
-        }
-        acc.finish_stream()?;
-        Ok(acc)
-    }
-
     /// Normalize classified data once, then validate and fold under the fixed policy.
+    #[cfg(test)]
     pub(super) fn process_line(&mut self, line: ClassifiedSseLine) -> ExecutorResult<Option<EventFrame>> {
         let Some(frame) = self.normalize_line(line)? else {
             return Ok(None);

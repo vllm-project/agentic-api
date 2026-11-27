@@ -7,19 +7,20 @@ use crate::events::{ClassifiedSseLine, EventFrame, SseLine};
 use crate::executor::accumulator::Validation;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway_accumulator::GatewayStreamAccumulator;
+use crate::executor::inference::UpstreamHeaders;
 use crate::executor::multi_agent::RunControlReceiver;
-use crate::executor::relay::{AgentRoundId, StreamRelay};
+use crate::executor::relay::StreamRelay;
 use crate::executor::request::RequestContext;
 use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::response_events::ResponseEventSink;
 use crate::executor::telemetry::metrics::ExecutionClock;
 use crate::executor::translate::{Translation, TranslationContext};
 use crate::tool::{ToolRegistry, ToolSearchMetadata, ToolSearchState};
-use crate::types::agent::AgentIdentity;
-use crate::types::io::{InputMessage, OutputItem};
+use crate::types::io::InputMessage;
 use crate::types::request_response::ResponsePayload;
 use crate::types::tools::ResponsesTool;
 use futures::{Stream, StreamExt};
+use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
 trait InferenceInput {
@@ -52,6 +53,8 @@ pub(super) struct AgentPipeline {
     builtin_tools_withheld: bool,
     /// Timing state of the execution this pipeline serves, when it streams.
     clock: Option<ExecutionClock>,
+    /// The request's upstream headers, shared with the round and compaction tasks it spawns.
+    upstream_headers: Option<Arc<UpstreamHeaders>>,
 }
 
 impl AgentPipeline {
@@ -86,22 +89,11 @@ impl AgentPipeline {
         self.builtin_tools_withheld
     }
 
-    pub(super) fn has_live_agent_items(&self, agent: &AgentIdentity) -> bool {
-        self.relay.has_live_agent_items(agent)
-    }
-    pub(super) async fn accept_agent_frame(&mut self, source: &AgentRoundId, frame: EventFrame) -> ExecutorResult<()> {
-        self.relay.accept_agent_frame(source, frame).await
-    }
-
-    pub(super) async fn emit_agent_item(&mut self, item: &OutputItem) -> ExecutorResult<usize> {
-        self.relay.emit_agent_item(item).await
-    }
-
-    pub(super) fn finish_agent_source(&mut self, source: &AgentRoundId) {
-        self.relay.finish_agent_source(source);
-    }
     pub(super) fn is_streaming(&self) -> bool {
         self.relay.is_live()
+    }
+    pub(super) fn relay(&self) -> &StreamRelay {
+        &self.relay
     }
     pub(super) fn relay_mut(&mut self) -> &mut StreamRelay {
         &mut self.relay
@@ -110,8 +102,13 @@ impl AgentPipeline {
         self.cancellation.clone()
     }
     /// One pipeline per response or agent round. The relay's sink decides whether
-    /// and where its frames are presented.
-    pub(super) fn new(request: RequestContext, tool_search_state: Option<ToolSearchState>, relay: StreamRelay) -> Self {
+    /// and where its frames are presented; every upstream call it makes sends `upstream_headers`.
+    pub(super) fn new(
+        request: RequestContext,
+        tool_search_state: Option<ToolSearchState>,
+        relay: StreamRelay,
+        upstream_headers: Option<Arc<UpstreamHeaders>>,
+    ) -> Self {
         Self {
             request,
             tool_search_state,
@@ -123,7 +120,12 @@ impl AgentPipeline {
             steering: None,
             builtin_tools_withheld: false,
             clock: None,
+            upstream_headers,
         }
+    }
+
+    pub(super) fn upstream_headers(&self) -> Option<&Arc<UpstreamHeaders>> {
+        self.upstream_headers.as_ref()
     }
 
     pub(super) fn tool_search_state(&self) -> Option<&ToolSearchState> {
@@ -309,4 +311,8 @@ impl AgentPipeline {
 }
 
 #[cfg(test)]
+mod cassette_tests;
+#[cfg(test)]
 mod driver_tests;
+#[cfg(test)]
+pub(super) mod test_support;

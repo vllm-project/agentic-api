@@ -38,7 +38,7 @@ use criterion::{BatchSize, BenchmarkId, Criterion, black_box, criterion_group};
 use either::Either;
 use futures::StreamExt;
 
-use agentic_core::executor::{ConversationHandler, ExecutionContext, ResponseHandler, execute, rehydrate_conversation};
+use agentic_core::executor::{ConversationHandler, ExecutionContext, ResponseHandler, execute, rehydrate};
 use agentic_core::storage::{ConversationStore, DbPool, ResponseStore, create_pool_with_schema};
 use agentic_core::types::io::{ResponsesInput, ToolChoice};
 use agentic_core::types::request_response::RequestPayload;
@@ -261,7 +261,7 @@ fn bench_rehydrate_only(c: &mut Criterion, exec_ctx: &Arc<ExecutionContext>) {
                     let exec_ctx = Arc::clone(exec_ctx);
                     async move {
                         let req = make_request("bench", false, black_box(prev_id));
-                        rehydrate_conversation(req, &exec_ctx).await.expect("rehydrate")
+                        rehydrate(req, &exec_ctx, None).await.expect("rehydrate")
                     }
                 },
                 BatchSize::SmallInput,

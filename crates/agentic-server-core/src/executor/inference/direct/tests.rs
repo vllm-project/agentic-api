@@ -319,12 +319,11 @@ async fn native_steering_waits_for_a_completed_item_and_cancels_the_generation()
     .with_direct_inference(backend.clone());
     let (steering, _stream) = ResponseEventSink::channel(4096);
     steering.request_steering_boundary();
-    let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
+    let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached(), None);
     agent.steering = Some(steering);
     let payload = fetch_stream_payload(
         &mut agent,
         &context,
-        None,
         &ToolRegistry::default(),
         0,
         &ExecutorResponseBudget::new(),

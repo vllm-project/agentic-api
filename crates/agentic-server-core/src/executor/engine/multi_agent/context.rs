@@ -280,17 +280,9 @@ pub(super) async fn prepare_agent(
     )?;
     // Preparation loads the definitions its public search pairs carry; the upstream projection lowers the pairs.
     stored.history = request.input.input_items().map(Cow::into_owned).collect();
-    let ctx = RequestContext {
-        multi_agent_tree: None,
-        original_request: request.clone(),
-        enriched_request: request,
-        new_input_items: Vec::new(),
-        response_id: parent.response_id.clone(),
-        conversation_id: None,
-        checkpoint: None,
-        continuation: None,
-    };
-    let mut pipeline = AgentPipeline::new(ctx, tool_search, StreamRelay::detached());
+    let ctx = RequestContext::fresh(request.clone(), request, parent.response_id.clone());
+    // Preparation discovers tools and makes no inference call, so it sends no upstream headers.
+    let mut pipeline = AgentPipeline::new(ctx, tool_search, StreamRelay::detached(), None);
     let turn = AgentTurn::new(
         &mut pipeline,
         exec,

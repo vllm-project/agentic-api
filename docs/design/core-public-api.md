@@ -11,6 +11,10 @@
 > callers pass explicit headers and configured limits. See [current architecture](https://github.com/vllm-project/agentic-api/blob/main/ARCHITECTURE.md)
 > and [timeout policy](../guides/configuration.md#typed-upstream-timeouts). The PR #46 examples below
 > describe the original design rather than the current transport API.
+>
+> API update (#549): `rehydrate_conversation` and `rehydrate_in_session` are now one `executor::rehydrate(request,
+> exec, session)`, and `ResponseAccumulator::{new, from_stream, from_sse_lines}` are removed; `decode_upstream`
+> decodes a complete upstream body. The PR #46 sections below keep their original names.
 
 ## Foundation: PR #46
 

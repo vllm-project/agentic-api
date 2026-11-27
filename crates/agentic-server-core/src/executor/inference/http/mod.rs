@@ -13,6 +13,7 @@ use futures::{Stream, StreamExt};
 use tracing::Instrument as _;
 
 use crate::executor::error::{ExecutorError, ExecutorResult, ResourceLimit};
+use crate::executor::telemetry::stages;
 use crate::proxy::processed_response_headers;
 
 /// Request-scoped upstream headers. The HTTP handler supplies the proxy's filtered
@@ -21,15 +22,6 @@ use crate::proxy::processed_response_headers;
 pub(crate) enum UpstreamHeaders {
     Bearer(String),
     Forwarded(http::HeaderMap),
-}
-
-impl UpstreamHeaders {
-    fn transport_parts(&self) -> (Option<&str>, Option<&http::HeaderMap>) {
-        match self {
-            Self::Bearer(token) => (Some(token), None),
-            Self::Forwarded(headers) => (None, Some(headers)),
-        }
-    }
 }
 
 fn llm_transport_error(is_timeout: bool) -> ExecutorError {
@@ -144,7 +136,7 @@ pub(in crate::executor) async fn send_request(
     chunk_timeout: Duration,
 ) -> ExecutorResult<reqwest::Response> {
     send_request_traced(client, url, body, upstream_headers, chunk_timeout)
-        .instrument(crate::executor::telemetry::stages::http_client(url))
+        .instrument(stages::http_client(url))
         .await
 }
 
@@ -155,14 +147,16 @@ async fn send_request_traced(
     upstream_headers: Option<&UpstreamHeaders>,
     chunk_timeout: Duration,
 ) -> ExecutorResult<reqwest::Response> {
-    let (auth, forwarded_headers) = upstream_headers.map_or((None, None), UpstreamHeaders::transport_parts);
-    let mut headers = forwarded_headers.cloned().unwrap_or_default();
-    crate::executor::telemetry::stages::inject_context(&mut headers);
+    let mut headers = match upstream_headers {
+        Some(UpstreamHeaders::Forwarded(forwarded)) => forwarded.clone(),
+        Some(UpstreamHeaders::Bearer(_)) | None => http::HeaderMap::new(),
+    };
+    stages::inject_context(&mut headers);
     headers
         .entry(reqwest::header::CONTENT_TYPE)
         .or_insert(reqwest::header::HeaderValue::from_static("application/json"));
     let mut req = client.post(url).headers(headers).body(body);
-    if let Some(key) = auth {
+    if let Some(UpstreamHeaders::Bearer(key)) = upstream_headers {
         req = req.bearer_auth(key);
     }
 

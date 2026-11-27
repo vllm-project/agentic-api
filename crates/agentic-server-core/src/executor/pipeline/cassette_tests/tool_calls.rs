@@ -9,8 +9,7 @@ fn test_tool_calls_cassette_auto_streaming() {
     let turn = &cassette.turns[0];
     let data_lines = extract_data_lines(&turn.response.sse);
 
-    let acc = from_sse_lines(data_lines, None);
-    let payload = acc.finalize("Qwen/Qwen3-30B-A3B-FP8", None, None);
+    let payload = ingest_lenient(data_lines, None, "Qwen/Qwen3-30B-A3B-FP8").expect("valid cassette SSE stream");
 
     assert_eq!(payload.status, "completed");
 
@@ -44,8 +43,7 @@ fn test_tool_calls_cassette_required_streaming() {
     let turn = &cassette.turns[0];
     let data_lines = extract_data_lines(&turn.response.sse);
 
-    let acc = from_sse_lines(data_lines, None);
-    let payload = acc.finalize("Qwen/Qwen3-30B-A3B-FP8", None, None);
+    let payload = ingest_lenient(data_lines, None, "Qwen/Qwen3-30B-A3B-FP8").expect("valid cassette SSE stream");
 
     assert_eq!(payload.status, "completed");
 
@@ -74,8 +72,7 @@ fn test_tool_calls_cassette_named_streaming() {
     let turn = &cassette.turns[0];
     let data_lines = extract_data_lines(&turn.response.sse);
 
-    let acc = from_sse_lines(data_lines, None);
-    let payload = acc.finalize("Qwen/Qwen3-30B-A3B-FP8", None, None);
+    let payload = ingest_lenient(data_lines, None, "Qwen/Qwen3-30B-A3B-FP8").expect("valid cassette SSE stream");
 
     assert_eq!(payload.status, "completed");
 
@@ -98,8 +95,7 @@ fn test_tool_calls_cassette_none_streaming() {
     let turn = &cassette.turns[0];
     let data_lines = extract_data_lines(&turn.response.sse);
 
-    let acc = from_sse_lines(data_lines, None);
-    let payload = acc.finalize("Qwen/Qwen3-30B-A3B-FP8", None, None);
+    let payload = ingest_lenient(data_lines, None, "Qwen/Qwen3-30B-A3B-FP8").expect("valid cassette SSE stream");
 
     assert_eq!(payload.status, "completed");
 

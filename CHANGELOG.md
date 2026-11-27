@@ -54,6 +54,28 @@ All notable changes to Agentic API are documented here.
   and `tool_names` (`[]` when absent). Recordings of every form against OpenAI and the gateway are in
   `tests/cassettes/mcp/mcp-approval-*`.
   `agentic_core`: `McpToolParam::require_approval` is `Option<McpApprovalPolicy>` instead of `Option<String>`.
+- `agentic_core`: one `executor::rehydrate(request, exec_ctx, session)` replaces `rehydrate_conversation` and
+  `rehydrate_in_session` (#549). Pass `None` for a turn outside a session, or `Some(&session)` for a session turn,
+  which begins there for the request's `previous_response_id`. `RequestPayload::multi_agent_enabled` is added.
+- `agentic_core`: `ResponseAccumulator::new`, `from_sse_lines`, `from_stream`, and `mark_incomplete`, and
+  `GatewayStreamAccumulator::process_sse_line` are removed (#549); no request path called them. Decode a complete
+  upstream body with `executor::decode_upstream(ctx, UpstreamBody::Sse(..))` (or `UpstreamBody::Json`), which validates
+  the stream strictly where the removed helpers skipped malformed frames. To stamp a relayed line, normalize it with
+  `events::normalize_sse_line` and pass the frame to `GatewayStreamAccumulator::process_event`.
+
+### Fixed
+
+- A streamed `compaction_trigger` turn's `response.created` and `response.in_progress` events no longer carry a
+  `completed_at` time; it is `null` until the response completes, as on every other response (#549).
+- Multi-agent automatic compaction counts a compaction item that carries its window as that window, as
+  single-agent compaction does, so an agent that continues a compacted history compacts at the same threshold (#549).
+
+### Testing
+
+- Recorded OpenAI's handling of the `store: false` replays of hosted call items that the existing scenarios do not
+  cover: an inline `code_interpreter_call`, and the `mcp_call`, `web_search_call` and `code_interpreter_call` items
+  of a stored response sent back by `id`, as returned and as `item_reference` (`STORE_FALSE_SUITE=hosted-calls`,
+  with a characterization test; follow-up to #492).
 
 ## [0.10.0] - 2026-11-09
 

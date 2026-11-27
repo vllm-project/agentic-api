@@ -948,7 +948,7 @@ async fn assert_continuation_tool_choice(fixture: &support::TestFixture, parent:
         }))
         .unwrap();
         request.tool_choice = choice.clone();
-        let ctx = agentic_core::executor::rehydrate_conversation(request, &fixture.exec_ctx)
+        let ctx = agentic_core::executor::rehydrate(request, &fixture.exec_ctx, None)
             .await
             .unwrap();
         assert_eq!(

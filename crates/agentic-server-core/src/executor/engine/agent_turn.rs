@@ -21,12 +21,12 @@ use crate::executor::gateway::{
     execute_and_emit_output_calls, public_output_items, relay_round_events,
 };
 use crate::executor::pipeline::AgentPipeline;
+use crate::executor::relay::Release;
 use crate::executor::request::ExecutionContext;
 use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::telemetry::metrics::Stage;
 use crate::executor::telemetry::stages::inference_round;
 use crate::executor::upstream::{fetch_blocking_payload, fetch_stream_payload};
-use crate::executor::{inference::UpstreamHeaders, relay::Release};
 use crate::tool::{ToolRegistry, record_discovered_mcp_tools, responses_declarations};
 use crate::types::io::input::InputFunctionToolCall;
 use crate::types::io::{InOutItem, InputItem, OutputItem, ResponseUsage, ResponsesInput};
@@ -212,8 +212,6 @@ impl<'a> AgentTurn<'a> {
     pub(super) async fn run_round(
         &mut self,
         output_offset: usize,
-        auth: Option<&UpstreamHeaders>,
-        stream_upstream: bool,
         response_budget: &ExecutorResponseBudget,
     ) -> ExecutorResult<RoundResult> {
         let round = self.next_round;
@@ -223,19 +221,13 @@ impl<'a> AgentTurn<'a> {
             ));
         }
         self.next_round += 1;
-        let multi_agent = self
-            .pipeline
-            .request
-            .enriched_request
-            .multi_agent
-            .as_ref()
-            .is_some_and(|config| config.enabled);
+        let multi_agent = self.pipeline.request.enriched_request.multi_agent_enabled();
         // The tree coordinator commits multi-agent summaries by generation. A compaction item is the round's first
         // output, as on OpenAI; the model's output follows it.
         let (compaction, compaction_usage) = if multi_agent {
             None
         } else {
-            self.compact(output_offset, auth).await?
+            self.compact(output_offset).await?
         }
         .unzip();
         if compaction.is_some()
@@ -246,11 +238,11 @@ impl<'a> AgentTurn<'a> {
         let output_offset = output_offset + usize::from(compaction.is_some());
         let round_span = inference_round(round);
         let timer = self.exec_ctx.metrics.stage(Stage::Inference);
+        let stream_upstream = self.pipeline.is_streaming();
         let fetched = if stream_upstream {
             fetch_stream_payload(
                 self.pipeline,
                 self.exec_ctx,
-                auth,
                 &self.registry,
                 output_offset,
                 response_budget,
@@ -258,15 +250,9 @@ impl<'a> AgentTurn<'a> {
             .instrument(round_span)
             .await
         } else {
-            fetch_blocking_payload(
-                self.pipeline,
-                self.exec_ctx,
-                auth,
-                &self.registry,
-                Some(response_budget),
-            )
-            .instrument(round_span)
-            .await
+            fetch_blocking_payload(self.pipeline, self.exec_ctx, &self.registry, Some(response_budget))
+                .instrument(round_span)
+                .await
         };
         timer.finish_result(&fetched);
         let mut payload = fetched?;
@@ -321,7 +307,6 @@ impl<'a> AgentTurn<'a> {
         &mut self,
         final_output: &[OutputItem],
         output_offset: usize,
-        auth: Option<&UpstreamHeaders>,
     ) -> ExecutorResult<Option<(OutputItem, ResponseUsage)>> {
         // A compaction this round made is already the start of the model input.
         let answer = final_output
@@ -329,17 +314,13 @@ impl<'a> AgentTurn<'a> {
             .filter(|item| !matches!(item, OutputItem::Compaction(_)))
             .filter_map(OutputItem::to_input_item);
         self.pipeline.request.enriched_request.input.extend(answer);
-        self.compact(output_offset, auth).await
+        self.compact(output_offset).await
     }
 
     /// Compacts the model input once it passes the compaction threshold, and presents the compaction item at
     /// `output_offset` of the public output.
-    async fn compact(
-        &mut self,
-        output_offset: usize,
-        auth: Option<&UpstreamHeaders>,
-    ) -> ExecutorResult<Option<(OutputItem, ResponseUsage)>> {
-        let Some((item, usage)) = maybe_compact_context(&mut self.pipeline.request, self.exec_ctx, auth).await? else {
+    async fn compact(&mut self, output_offset: usize) -> ExecutorResult<Option<(OutputItem, ResponseUsage)>> {
+        let Some((item, usage)) = maybe_compact_context(self.pipeline, self.exec_ctx).await? else {
             return Ok(None);
         };
         let item = OutputItem::Compaction(item);

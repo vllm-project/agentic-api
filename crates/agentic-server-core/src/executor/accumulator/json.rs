@@ -4,7 +4,7 @@ use super::slot::SlotMap;
 use super::{ResponseAccumulator, StreamLifecycle, Validation};
 use crate::events::{UpstreamResponse, UpstreamStatus};
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::response_budget::{RetainedAccount, RetainedSize, retained_response_parts_bytes};
+use crate::executor::response_budget::{RetainedAccount, retained_response_parts_bytes};
 use crate::types::event::ResponseStatus;
 use crate::types::io::{OutputItem, ResponseUsage};
 use crate::types::request_response::IncompleteDetails;
@@ -58,9 +58,13 @@ impl ResponseAccumulator {
 
     pub(in crate::executor) fn load_json_body(&mut self, body: &str) -> ExecutorResult<()> {
         let acc = Self::read_json(body, self.conversation_id.clone(), self.validation)?;
-        let retained = retained_response_parts_bytes(&acc.response_id, &acc.output, acc.service_tier.as_deref())
-            + acc.incomplete_details.retained_bytes()
-            + acc.error.retained_bytes();
+        let retained = retained_response_parts_bytes(
+            &acc.response_id,
+            &acc.output,
+            acc.service_tier.as_deref(),
+            acc.incomplete_details.as_ref(),
+            acc.error.as_ref(),
+        );
         if let Some(budget) = &self.budget {
             budget.consume(retained)?;
         }
