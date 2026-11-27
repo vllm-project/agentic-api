@@ -2,7 +2,6 @@ use super::super::{
     accumulate_usage,
     agent_turn::{AgentTurn, RoundDecision, RoundResult},
 };
-use crate::executor::inference::UpstreamHeaders;
 use crate::executor::{
     error::{ExecutorError, ExecutorResult},
     multi_agent::{
@@ -29,12 +28,7 @@ use super::{
 };
 
 impl MultiAgentRun {
-    pub(super) fn schedule(
-        &mut self,
-        exec: &ExecutionContext,
-        auth: Option<&UpstreamHeaders>,
-        pipeline: &AgentPipeline,
-    ) -> ExecutorResult<()> {
+    pub(super) fn schedule(&mut self, exec: &ExecutionContext, pipeline: &AgentPipeline) -> ExecutorResult<()> {
         let runnable = self
             .registry
             .agents()
@@ -86,10 +80,10 @@ impl MultiAgentRun {
             {
                 context.compacting = true;
                 let exec = exec.clone();
-                let auth = auth.cloned();
+                let auth = pipeline.upstream_headers().cloned();
                 self.tasks
                     .spawn_turn(turn.clone(), async move {
-                        plan.execute(&exec, auth.as_ref()).await.map(CompletedWork::Compaction)
+                        plan.execute(&exec, auth).await.map(CompletedWork::Compaction)
                     })
                     .map_err(|error| invalid(&error.to_string()))?;
                 self.registry
@@ -97,7 +91,7 @@ impl MultiAgentRun {
                     .map_err(registry_error)?;
                 continue;
             }
-            self.spawn_round(&turn, exec, auth, pipeline)?;
+            self.spawn_round(&turn, exec, pipeline)?;
         }
         Ok(())
     }
@@ -106,7 +100,6 @@ impl MultiAgentRun {
         &mut self,
         turn: &AgentTurnKey,
         exec: &ExecutionContext,
-        auth: Option<&UpstreamHeaders>,
         pipeline: &AgentPipeline,
     ) -> ExecutorResult<()> {
         if let Some(context) = self.contexts.get_mut(&turn.agent) {
@@ -127,16 +120,7 @@ impl MultiAgentRun {
         } else {
             context.tool_search.clone()
         };
-        let ctx = RequestContext {
-            multi_agent_tree: None,
-            original_request: request.clone(),
-            enriched_request: request,
-            new_input_items: Vec::new(),
-            response_id: self.payload.id.clone(),
-            conversation_id: None,
-            checkpoint: None,
-            continuation: None,
-        };
+        let ctx = RequestContext::fresh(request.clone(), request, self.payload.id.clone());
         // Round tasks present through the response owner's relay, never the client queue.
         let streaming = pipeline.is_streaming();
         let relay = if streaming {
@@ -152,7 +136,7 @@ impl MultiAgentRun {
         } else {
             StreamRelay::detached()
         };
-        let mut agent = AgentPipeline::new(ctx, tool_search, relay);
+        let mut agent = AgentPipeline::new(ctx, tool_search, relay, pipeline.upstream_headers().cloned());
         if let Some(clock) = &self.clock {
             agent.set_execution_clock(clock.clone());
         }
@@ -163,7 +147,6 @@ impl MultiAgentRun {
             round: self.rounds,
         };
         let exec = exec.clone();
-        let auth = auth.cloned();
         let budget = self.budget.clone();
         self.tasks
             .spawn_turn(turn.clone(), async move {
@@ -171,7 +154,7 @@ impl MultiAgentRun {
                     execution.refresh_tools(&mut agent, &exec, &budget).await?;
                 }
                 let mut turn = AgentTurn::resume(&mut agent, &exec, execution);
-                let result = turn.run_round(0, auth.as_ref(), streaming, &budget).await?;
+                let result = turn.run_round(0, &budget).await?;
                 let execution = turn.execution_state();
                 let tool_search = agent.tool_search_state().cloned();
                 let (ctx, _) = agent.into_parts();
@@ -216,7 +199,7 @@ impl MultiAgentRun {
                     .expect("failed task has an owner")
                     .compacting = false;
                 self.interrupted.remove(&turn);
-                if turn.agent.is_root() || pipeline.has_live_agent_items(&turn.agent) {
+                if turn.agent.is_root() || pipeline.relay().has_live_agent_items(&turn.agent) {
                     return Err(error);
                 }
                 self.settle_turn(&turn, &AgentCompletion::Failed(error.to_string()))
@@ -315,7 +298,7 @@ impl MultiAgentRun {
             item.set_agent(attribution(&turn.agent));
             self.publish(item, pipeline).await?;
         }
-        pipeline.finish_agent_source(&source);
+        pipeline.relay_mut().finish_agent_source(&source);
         if self.interrupted.remove(turn) {
             self.settle_turn(turn, &AgentCompletion::Interrupted)
                 .map_err(registry_error)?;

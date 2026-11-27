@@ -100,13 +100,3 @@ pub(in crate::executor) fn compaction_event_plans(
         })
         .collect()
 }
-
-#[cfg(test)]
-pub(super) fn complete_gateway_event_plans<T: GatewayPublicOutputSource>(
-    plans: &mut [GatewayEventPlan],
-    completed: &[T],
-) {
-    for (plan, source) in plans.iter_mut().zip(completed) {
-        plan.completed_output = source.public_output().cloned();
-    }
-}

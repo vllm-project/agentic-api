@@ -3,6 +3,7 @@ use crate::executor::translate::TranslationDispatcher;
 use serde_json::{Value, json};
 
 use super::*;
+use crate::events::SseLine;
 
 fn push(acc: &mut ResponseAccumulator, event: &Value, strict: bool) -> ExecutorResult<Option<EventFrame>> {
     let line = format!("data: {event}");

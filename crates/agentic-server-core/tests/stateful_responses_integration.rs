@@ -6,7 +6,7 @@
 mod support;
 
 use agentic_core::executor::request::RequestContext;
-use agentic_core::executor::{ExecutionContext, ExecutorError, commit, execute, persist_turn, rehydrate_conversation};
+use agentic_core::executor::{ExecutionContext, ExecutorError, commit, execute, persist_turn, rehydrate};
 use agentic_core::storage::{ResponseStore, StorageError};
 use agentic_core::types::conversations::ConversationMetadata;
 use agentic_core::types::io::InOutItem;
@@ -694,7 +694,7 @@ async fn test_public_persist_steps_honor_the_storage_policy() {
     for store in [false, true] {
         let follow_up = || make_request("follow up", store, false, Some(parent.id.clone()), None);
 
-        let ctx = rehydrate_conversation(follow_up(), &exec_ctx)
+        let ctx = rehydrate(follow_up(), &exec_ctx, None)
             .await
             .expect("hydrates from the stored parent");
         let id = ctx.response_id.clone();
@@ -707,7 +707,7 @@ async fn test_public_persist_steps_honor_the_storage_policy() {
         Box::pin(commit(ctx, payload, &exec_ctx)).await.expect("commit");
         assert_eq!(is_continuable(&exec_ctx, &id).await, store, "commit with store={store}");
 
-        let ctx = rehydrate_conversation(follow_up(), &exec_ctx)
+        let ctx = rehydrate(follow_up(), &exec_ctx, None)
             .await
             .expect("hydrates from the stored parent");
         let id = ctx.response_id.clone();
@@ -722,7 +722,13 @@ async fn test_public_persist_steps_honor_the_storage_policy() {
 
 /// Whether `id` resolves as `previous_response_id`; a missing row is the only accepted failure.
 async fn is_continuable(exec_ctx: &ExecutionContext, id: &str) -> bool {
-    match rehydrate_conversation(make_request("next", true, false, Some(id.to_owned()), None), exec_ctx).await {
+    match rehydrate(
+        make_request("next", true, false, Some(id.to_owned()), None),
+        exec_ctx,
+        None,
+    )
+    .await
+    {
         Ok(_) => true,
         Err(ExecutorError::Storage(StorageError::PreviousResponseNotFound { .. })) => false,
         Err(error) => panic!("unexpected rehydration error for {id}: {error}"),

@@ -471,8 +471,7 @@ fn test_all_stateful_cassettes_parse_without_error() {
                 "{filename} turn {} has no SSE data lines",
                 i + 1
             );
-            let acc = from_sse_lines(data_lines, None);
-            let payload = acc.finalize("gpt-4o", None, None);
+            let payload = ingest_lenient(data_lines, None, "gpt-4o").expect("valid cassette SSE stream");
             assert_eq!(
                 payload.status,
                 "completed",

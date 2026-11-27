@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::borrow::{Borrow, Cow};
 
 use crate::types::io::input::{SearchHistory, expand_carried_windows, is_search_item, model_items};
 use crate::types::io::{
@@ -242,14 +242,17 @@ pub(crate) fn estimate_input_tokens(input: &ResponsesInput) -> u64 {
             estimate.add_text(text);
             estimate.total_tokens()
         }
-        ResponsesInput::Items(_) => {
-            InputTokenEstimate::from_items(expand_carried_windows(input.input_items())).total_tokens()
-        }
+        ResponsesInput::Items(_) => estimate_items(input.input_items()),
     }
 }
 
 pub(crate) fn estimate_history_tokens(items: &[InputItem]) -> u64 {
-    InputTokenEstimate::from_items(items.iter().collect()).total_tokens()
+    estimate_items(items.iter().map(Cow::Borrowed))
+}
+
+/// Estimates items as the model reads them: a compaction that carries its window counts as that window.
+fn estimate_items<'a>(items: impl IntoIterator<Item = Cow<'a, InputItem>>) -> u64 {
+    InputTokenEstimate::from_items(expand_carried_windows(items)).total_tokens()
 }
 
 impl InputTokenEstimate {
@@ -270,5 +273,46 @@ impl InputTokenEstimate {
             }
         }
         estimate
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::executor::multi_agent::CompactionPlan;
+    use crate::types::agent::AgentIdentity;
+    use crate::types::io::{CompactionItem, InputMessage, InputMessageContent};
+    use crate::types::request_response::RequestPayload;
+
+    fn user_message(text: &str) -> InputItem {
+        InputItem::Message(InputMessage {
+            role: "user".to_owned(),
+            content: InputMessageContent::Text(text.to_owned()),
+            ..Default::default()
+        })
+    }
+
+    /// A subagent counts a carried compaction window as the model reads it, as single-agent automatic compaction
+    /// does, so both compact at the same threshold.
+    #[test]
+    fn multi_agent_compaction_counts_a_carried_window_like_single_agent() {
+        let carrying = CompactionItem::carrying(
+            Some("cmp_1".to_owned()),
+            "summary".to_owned(),
+            vec![user_message(&"kept ".repeat(200))],
+        )
+        .unwrap();
+        let history = vec![InputItem::Compaction(carrying), user_message("next")];
+        let single_agent = estimate_input_tokens(&ResponsesInput::from(history.clone()));
+        for (threshold, compacts) in [(single_agent, false), (single_agent - 1, true)] {
+            let mut request = RequestPayload::default();
+            request.set_default_compact_threshold(threshold);
+            let plan = CompactionPlan::prepare(&AgentIdentity::root(), 0, &history, &request).unwrap();
+            assert_eq!(
+                plan.is_some(),
+                compacts,
+                "threshold {threshold}, single-agent estimate {single_agent}"
+            );
+        }
     }
 }

@@ -3,6 +3,7 @@ use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 use super::*;
+use crate::executor::ResponseSession;
 use crate::executor::modes::{ConversationHandler, FileHandler, ResponseHandler};
 use crate::executor::pending_calls::{CallLedger, PendingCall};
 use crate::executor::upstream::upstream_request;
@@ -117,7 +118,7 @@ async fn multi_agent_session_admission_allows_both_storage_values() {
             enabled: true,
             max_concurrent_subagents: Some(3),
         });
-        let ctx = rehydrate_in_session(request, &exec_ctx, &session).await.unwrap();
+        let ctx = rehydrate(request, &exec_ctx, Some(&session)).await.unwrap();
         assert!(ctx.enriched_request.multi_agent.unwrap().enabled);
         assert!(ctx.continuation.is_some());
     }
@@ -159,7 +160,7 @@ async fn invalid_max_tool_calls_is_rejected_before_history_access() {
                 "model": "test", "input": "hello", "previous_response_id": previous, "max_tool_calls": limit
             }))
             .unwrap();
-            let error = rehydrate_conversation(request, &exec_ctx).await.unwrap_err();
+            let error = rehydrate(request, &exec_ctx, None).await.unwrap_err();
             assert!(matches!(error, ExecutorError::InvalidMaxToolCalls(_)), "{error:?}");
             assert_eq!(error.error_code(), code);
         }
@@ -178,7 +179,7 @@ async fn multi_agent_max_tool_calls_is_rejected_before_history_access() {
                     "multi_agent": {"enabled": true}, "max_tool_calls": limit
                 }))
                 .unwrap();
-                let error = rehydrate_conversation(request, &exec_ctx).await.unwrap_err();
+                let error = rehydrate(request, &exec_ctx, None).await.unwrap_err();
                 assert!(matches!(error, ExecutorError::InvalidRequest(message)
                     if message == "max_tool_calls is not supported with multi_agent"));
             }
@@ -282,10 +283,10 @@ async fn inherited_multi_agent_preserves_checkpoint_and_validates_limits() {
             let mut payload = request(conversation_id, previous);
             payload.stream = stream;
             payload.max_tool_calls = Some(MaxToolCalls::new(NonZeroU64::new(5).unwrap()));
-            let error = rehydrate_conversation(payload, &exec_ctx).await.unwrap_err();
+            let error = rehydrate(payload, &exec_ctx, None).await.unwrap_err();
             assert!(matches!(error, ExecutorError::InvalidRequest(message)
                 if message == "max_tool_calls is not supported with multi_agent"));
-            let ctx = rehydrate_conversation(request(conversation_id, previous), &exec_ctx)
+            let ctx = rehydrate(request(conversation_id, previous), &exec_ctx, None)
                 .await
                 .unwrap();
             assert!(ctx.enriched_request.multi_agent.unwrap().enabled);
@@ -321,11 +322,11 @@ async fn nonstored_multi_agent_needs_no_history_store_without_state_ids() {
             enabled: true,
             max_concurrent_subagents: Some(3),
         });
-        let ctx = rehydrate_conversation(request.clone(), &exec_ctx).await.unwrap();
+        let ctx = rehydrate(request.clone(), &exec_ctx, None).await.unwrap();
         assert!(ctx.multi_agent_tree.is_none());
         assert_eq!(ctx.new_input_items.len(), 1);
         request.input.push(InputItem::CompactionTrigger);
-        assert!(matches!(rehydrate_conversation(request, &exec_ctx).await,
+        assert!(matches!(rehydrate(request, &exec_ctx, None).await,
             Err(ExecutorError::InvalidRequest(message)) if message.contains("compaction_trigger")));
     }
 }
@@ -345,7 +346,7 @@ async fn omitted_or_disabled_multi_agent_preserves_rehydration() {
             request.store = store;
             request.multi_agent = multi_agent;
             let expected_input = Vec::<InputItem>::from(&request.input);
-            let ctx = rehydrate_conversation(request, &exec_ctx).await.unwrap();
+            let ctx = rehydrate(request, &exec_ctx, None).await.unwrap();
             assert_eq!(ctx.original_request.store, store);
             assert_eq!(
                 serde_json::to_value(&ctx.enriched_request.input).unwrap(),
@@ -364,7 +365,7 @@ async fn new_conversation_rehydration_has_no_turn_metadata() -> Result<(), Box<d
         .await?;
     let exec_ctx = execution_context(conversation_store, ResponseStore::disabled());
 
-    let ctx = rehydrate_conversation(request(Some(&conversation.conversation_id), None), &exec_ctx).await?;
+    let ctx = rehydrate(request(Some(&conversation.conversation_id), None), &exec_ctx, None).await?;
 
     assert_eq!(
         ctx.conversation_id.as_deref(),
@@ -397,7 +398,7 @@ async fn existing_conversation_rehydration_continues_the_latest_turn() -> Result
         .await?;
     let exec_ctx = execution_context(conversation_store, ResponseStore::disabled());
 
-    let ctx = rehydrate_conversation(request(Some(&conversation.conversation_id), None), &exec_ctx).await?;
+    let ctx = rehydrate(request(Some(&conversation.conversation_id), None), &exec_ctx, None).await?;
 
     assert_eq!(
         ctx.checkpoint.as_ref().and_then(|turn| turn.response_id.as_deref()),
@@ -431,7 +432,7 @@ async fn conversation_rehydration_remembers_listed_mcp_servers() -> Result<(), B
         .await?;
     let exec_ctx = execution_context(conversation_store, ResponseStore::disabled());
 
-    let ctx = rehydrate_conversation(request(Some(&conversation.conversation_id), None), &exec_ctx).await?;
+    let ctx = rehydrate(request(Some(&conversation.conversation_id), None), &exec_ctx, None).await?;
 
     let ResponsesInput::Items(items) = &ctx.enriched_request.input else {
         panic!("rehydrated input should contain items");
@@ -454,7 +455,7 @@ async fn conversation_rehydration_remembers_listed_mcp_servers() -> Result<(), B
 async fn request_without_continuation_has_no_checkpoint() -> Result<(), Box<dyn std::error::Error>> {
     let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
 
-    let ctx = rehydrate_conversation(request(None, None), &exec_ctx).await?;
+    let ctx = rehydrate(request(None, None), &exec_ctx, None).await?;
 
     assert!(ctx.checkpoint.is_none());
     Ok(())
@@ -476,7 +477,7 @@ async fn rehydration_remains_public_until_explicit_tool_search_preparation() {
     }))
     .expect("valid tool-search request");
 
-    let ctx = rehydrate_conversation(request, &exec_ctx)
+    let ctx = rehydrate(request, &exec_ctx, None)
         .await
         .expect("blocking store:false search rehydrates");
 
@@ -529,7 +530,7 @@ async fn rehydration_rejects_orphan_tool_search_outputs() {
         .expect("seed prior response");
     let exec_ctx = execution_context(ConversationStore::disabled(), response_store);
 
-    let error = rehydrate_conversation(request(None, Some("resp_search")), &exec_ctx)
+    let error = rehydrate(request(None, Some("resp_search")), &exec_ctx, None)
         .await
         .expect_err("shared call validation rejects orphan stored search outputs");
     assert!(
@@ -600,7 +601,7 @@ async fn stored_public_search_call_pairs_with_new_output_after_rehydration() {
     }]))
     .expect("valid new public search output");
 
-    let ctx = rehydrate_conversation(continuation, &exec_ctx)
+    let ctx = rehydrate(continuation, &exec_ctx, None)
         .await
         .expect("stored public call rehydrates before new output");
     let (ctx, tool_search_state) = crate::executor::prepare::prepare_request_tools(ctx)
@@ -663,7 +664,7 @@ async fn stored_code_interpreter_call_reaches_the_model_as_its_function_call() -
         request(None, Some("resp_projection")),
         request(Some(&conversation.conversation_id), None),
     ] {
-        let ctx = rehydrate_conversation(request, &exec_ctx).await?;
+        let ctx = rehydrate(request, &exec_ctx, None).await?;
         // History keeps the public item; the upstream projection lowers it to the call the model made.
         let model_input = serde_json::to_value(
             ctx.enriched_request
@@ -689,7 +690,7 @@ async fn previous_response_rehydration_checkpoints_the_parent() -> Result<(), Bo
         .await?;
     let exec_ctx = execution_context(ConversationStore::disabled(), response_store);
 
-    let ctx = rehydrate_conversation(request(None, Some("resp_prior")), &exec_ctx).await?;
+    let ctx = rehydrate(request(None, Some("resp_prior")), &exec_ctx, None).await?;
 
     assert!(
         ctx.checkpoint
@@ -717,7 +718,7 @@ async fn previous_response_rehydration_remembers_listed_mcp_servers() -> Result<
         .await?;
     let exec_ctx = execution_context(ConversationStore::disabled(), response_store);
 
-    let ctx = rehydrate_conversation(request(None, Some("resp_prior")), &exec_ctx).await?;
+    let ctx = rehydrate(request(None, Some("resp_prior")), &exec_ctx, None).await?;
 
     let ResponsesInput::Items(items) = &ctx.enriched_request.input else {
         panic!("rehydrated input should contain items");
@@ -769,8 +770,8 @@ async fn competing_outputs_for_one_pending_call_keep_the_conversation_usable() -
     };
     let output = |temperature: u32| serde_json::json!([{"type":"function_call_output", "call_id":"call_weather", "output":temperature.to_string()}]);
 
-    let first = rehydrate_conversation(answer(output(21)), &exec_ctx).await?;
-    let second = rehydrate_conversation(answer(output(5)), &exec_ctx).await?;
+    let first = rehydrate(answer(output(21)), &exec_ctx, None).await?;
+    let second = rehydrate(answer(output(5)), &exec_ctx, None).await?;
     exec_ctx
         .conv_handler
         .persist(
@@ -793,15 +794,16 @@ async fn competing_outputs_for_one_pending_call_keep_the_conversation_usable() -
     assert!(matches!(error, ExecutorError::ConversationLocked { .. }), "{error}");
 
     // A turn stored meanwhile does not refuse a call and output resubmitted together.
-    let resubmitted = rehydrate_conversation(
+    let resubmitted = rehydrate(
         answer(serde_json::json!([
             {"type":"function_call", "call_id":"call_own", "name":"get_weather", "arguments":"{}"},
             {"type":"function_call_output", "call_id":"call_own", "output":"18"}
         ])),
         &exec_ctx,
+        None,
     )
     .await?;
-    let plain = rehydrate_conversation(request(Some(id), None), &exec_ctx).await?;
+    let plain = rehydrate(request(Some(id), None), &exec_ctx, None).await?;
     for ctx in [plain, resubmitted] {
         exec_ctx
             .conv_handler
@@ -818,7 +820,7 @@ async fn competing_outputs_for_one_pending_call_keep_the_conversation_usable() -
         .filter(|item| item.output_call_id() == Some("call_weather"))
         .count();
     assert_eq!(answers, 1);
-    rehydrate_conversation(request(Some(id), None), &exec_ctx).await?;
+    rehydrate(request(Some(id), None), &exec_ctx, None).await?;
     Ok(())
 }
 
@@ -862,7 +864,7 @@ async fn assert_resent_call_is_refused_only_when_stored(
     previous_response_id: Option<&str>,
 ) {
     let unstored = resend_weather_call(conversation_id, previous_response_id, false);
-    let ctx = rehydrate_conversation(unstored, exec_ctx).await.unwrap();
+    let ctx = rehydrate(unstored, exec_ctx, None).await.unwrap();
     let calls = ctx
         .enriched_request
         .input
@@ -871,7 +873,7 @@ async fn assert_resent_call_is_refused_only_when_stored(
     assert_eq!(calls.count(), 2, "the history's call, then the resent one");
 
     let stored = resend_weather_call(conversation_id, previous_response_id, true);
-    let Err(error) = rehydrate_conversation(stored, exec_ctx).await else {
+    let Err(error) = rehydrate(stored, exec_ctx, None).await else {
         panic!("a stored turn may not resend an item the history it continues holds");
     };
     assert_eq!(error.http_status().as_u16(), 400);
@@ -922,7 +924,7 @@ async fn previous_response_turn_resending_a_stored_item_is_refused_only_when_sto
 
     assert_resent_call_is_refused_only_when_stored(&exec_ctx, None, Some("resp_weather")).await;
     // Without a history to continue, the stored call sent back is accepted (#385).
-    rehydrate_conversation(resend_weather_call(None, None, true), &exec_ctx).await?;
+    rehydrate(resend_weather_call(None, None, true), &exec_ctx, None).await?;
     Ok(())
 }
 
@@ -1002,9 +1004,9 @@ async fn overlapping_multi_agent_turns_keep_the_first_turns_pending_call() -> Re
         .await?;
     let exec_ctx = execution_context(conversation_store, ResponseStore::disabled());
 
-    let first = rehydrate_conversation(request(Some(id), None), &exec_ctx).await?;
-    let stale_tree = rehydrate_conversation(request(Some(id), None), &exec_ctx).await?;
-    let plain_turn = rehydrate_conversation(request(Some(id), None), &exec_ctx).await?;
+    let first = rehydrate(request(Some(id), None), &exec_ctx, None).await?;
+    let stale_tree = rehydrate(request(Some(id), None), &exec_ctx, None).await?;
+    let plain_turn = rehydrate(request(Some(id), None), &exec_ctx, None).await?;
     let first_response_id = first.response_id.clone();
     exec_ctx
         .conv_handler
@@ -1032,7 +1034,7 @@ async fn overlapping_multi_agent_turns_keep_the_first_turns_pending_call() -> Re
     continuation.input = serde_json::from_value(serde_json::json!([
         {"type":"function_call_output", "call_id":"call_first", "output":"sunny"}
     ]))?;
-    let ctx = rehydrate_conversation(continuation, &exec_ctx).await?;
+    let ctx = rehydrate(continuation, &exec_ctx, None).await?;
     assert_eq!(
         ctx.checkpoint.as_ref().and_then(|turn| turn.response_id.as_deref()),
         Some(first_response_id.as_str())
@@ -1081,7 +1083,7 @@ async fn rehydration_keeps_file_references_until_the_upstream_body_is_built() {
     }))
     .unwrap();
 
-    let ctx = rehydrate_conversation(request, &exec_ctx).await.unwrap();
+    let ctx = rehydrate(request, &exec_ctx, None).await.unwrap();
 
     let canonical = serde_json::to_value(&ctx.new_input_items).unwrap();
     assert_eq!(canonical[0]["content"][1]["file_id"], text.id);
@@ -1122,7 +1124,7 @@ async fn upstream_request_rejects_file_references_without_a_file_store() {
         ]}]
     }))
     .unwrap();
-    let ctx = rehydrate_conversation(request, &exec_ctx).await.unwrap();
+    let ctx = rehydrate(request, &exec_ctx, None).await.unwrap();
     let error = upstream_request(&exec_ctx, &ctx, false, None, None).await.unwrap_err();
     assert!(
         matches!(error, ExecutorError::InvalidRequest(ref message) if message.contains("gateway file store")),
@@ -1154,7 +1156,7 @@ async fn continuation_hydrates_file_references_from_stored_history() -> Result<(
     let mut exec_ctx = execution_context(ConversationStore::disabled(), response_store);
     exec_ctx.file_handler = FileHandler::new(service);
 
-    let ctx = rehydrate_conversation(request(None, Some("resp_prior")), &exec_ctx).await?;
+    let ctx = rehydrate(request(None, Some("resp_prior")), &exec_ctx, None).await?;
 
     let model = serde_json::to_value(&ctx.enriched_request.input)?;
     assert_eq!(model[0]["content"][0]["file_id"], text.id);
@@ -1194,7 +1196,7 @@ async fn continuation_reports_a_deleted_file_reference() -> Result<(), Box<dyn s
     let mut exec_ctx = execution_context(ConversationStore::disabled(), response_store);
     exec_ctx.file_handler = FileHandler::new(service);
 
-    let ctx = rehydrate_conversation(request(None, Some("resp_prior")), &exec_ctx).await?;
+    let ctx = rehydrate(request(None, Some("resp_prior")), &exec_ctx, None).await?;
     let error = upstream_request(&exec_ctx, &ctx, false, None, None).await.unwrap_err();
     assert!(
         matches!(&error, ExecutorError::FileReferencesNotFound { ids } if ids.as_slice() == std::slice::from_ref(&text_id)),
@@ -1274,7 +1276,7 @@ async fn restored_agent_history_resolves_its_file_references_per_round() -> Resu
             {"type": "input_image", "file_id": image_id.clone()}
         ]}]
     }))?;
-    let ctx = rehydrate_conversation(payload, &exec_ctx).await?;
+    let ctx = rehydrate(payload, &exec_ctx, None).await?;
 
     // The restored root's round resolves its own history; this turn's items join later.
     let upstream: serde_json::Value =

@@ -19,7 +19,7 @@ use tokio::sync::oneshot;
 impl SteeringState {
     pub(super) fn new(settings: RequestPayload, supported: bool, budget: &Arc<AtomicUsize>) -> Result<Self, WsError> {
         let supported = supported
-            && !settings.multi_agent.as_ref().is_some_and(|config| config.enabled)
+            && !settings.multi_agent_enabled()
             && settings.context_management.as_ref().is_none_or(Vec::is_empty);
         let settings = if supported {
             let fixed_bytes = std::mem::size_of::<SteeringTarget>();

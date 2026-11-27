@@ -180,12 +180,7 @@ fn prepare_metadata(ctx: &mut RequestContext, tool_search_metadata: Option<ToolS
         previous_response_id: ctx.original_request.previous_response_id.clone(),
         effective_tools,
         tool_search_loaded_tools,
-        effective_tool_choice: ctx
-            .original_request
-            .tool_choice
-            .take()
-            .or_else(|| ctx.enriched_request.tool_choice.take())
-            .unwrap_or_default(),
+        effective_tool_choice: ctx.take_public_tool_choice().unwrap_or_default(),
         effective_instructions: ctx.enriched_request.instructions.take(),
     }
 }

@@ -1,15 +1,17 @@
 use super::slot::Slot;
 use super::*;
+use crate::events::SseLine;
 use crate::events::WireEvent;
-use crate::executor::pipeline::RoundIngestion;
+use crate::executor::error::ExecutorError;
+use crate::executor::pipeline::test_support::{ingest_lenient, ingest_lenient_to_eof};
+use crate::executor::pipeline::{AgentPipeline, RoundIngestion};
+use crate::executor::relay::StreamRelay;
 use crate::executor::translate::TranslationContext;
 use crate::executor::translate::TranslationDispatcher;
+use crate::executor::upstream::tests::request_context;
+use crate::tool::ToolRegistry;
 use crate::types::event::MessageStatus;
 use crate::types::io::{McpCallError, McpCallStatus, WebSearchCallStatus};
-
-fn from_sse_lines(lines: impl IntoIterator<Item = String>, conversation_id: Option<&str>) -> ResponseAccumulator {
-    ResponseAccumulator::from_sse_lines(lines, conversation_id).expect("valid SSE stream")
-}
 
 #[test]
 fn keepalive_passes_through_without_advancing_response_or_item_state() {
@@ -654,7 +656,7 @@ fn completed_items_reject_late_events_strictly_and_suppress_lenient_translation(
 
 #[test]
 fn test_accumulator_new() {
-    let acc = ResponseAccumulator::new("resp_123".into(), Some("conv_456".into()));
+    let acc = ResponseAccumulator::with_validation("resp_123".into(), Some("conv_456".into()), Validation::Lenient);
     assert_eq!(acc.response_id, "resp_123");
     assert_eq!(acc.conversation_id, Some("conv_456".into()));
     assert_eq!(acc.status, ResponseStatus::InProgress);
@@ -752,7 +754,7 @@ fn done_only_code_interpreter_call_accumulates_in_lenient_stream() {
             {"type": "image", "url": "https://example.test/plot.png"}
         ]
     });
-    let acc = from_sse_lines(
+    let acc = ingest_lenient(
         [
             json!({"type": "response.output_item.done", "output_index": 0, "item": done.clone()}),
             json!({"type": "response.completed", "response": {"id": "resp_1", "status": "completed"}}),
@@ -760,7 +762,9 @@ fn done_only_code_interpreter_call_accumulates_in_lenient_stream() {
         .into_iter()
         .map(|event| format!("data: {event}")),
         None,
-    );
+        "test",
+    )
+    .expect("valid SSE stream");
 
     assert_eq!(
         serde_json::to_value(acc.output).expect("serialize output"),
@@ -1139,20 +1143,12 @@ fn steering_waits_for_natural_terminal_after_done_only_recovery() {
 }
 
 #[test]
-fn test_accumulator_mark_incomplete() {
-    let mut acc = ResponseAccumulator::new("resp_123".into(), None);
-    acc.mark_incomplete("Stream interrupted");
-    assert_eq!(acc.status, ResponseStatus::Incomplete);
-    assert!(acc.incomplete_details.is_some());
-}
-
-#[test]
 fn test_accumulator_preserves_streamed_failure_details() {
-    let acc = from_sse_lines(
-        [r#"data: {"type":"response.failed","response":{"id":"resp_failed","status":"failed","error":{"code":"tool_catalog_too_large","message":"Too many tools"},"incomplete_details":{"reason":"upstream_error"}}}"#.to_owned()],
+    let payload = ingest_lenient([r#"data: {"type":"response.failed","response":{"id":"resp_failed","status":"failed","error":{"code":"tool_catalog_too_large","message":"Too many tools"},"incomplete_details":{"reason":"upstream_error"}}}"#.to_owned()],
         None,
-    );
-    let payload = acc.finalize("test-model", None, None);
+        "test-model",
+    )
+    .expect("valid SSE stream");
 
     assert_eq!(payload.status, "error");
     assert_eq!(payload.error.as_ref().unwrap()["code"], "tool_catalog_too_large");
@@ -1164,7 +1160,7 @@ fn test_accumulator_preserves_streamed_failure_details() {
 
 #[test]
 fn test_accumulator_finalize() {
-    let acc = ResponseAccumulator::new("resp_123".into(), Some("conv_456".into()));
+    let acc = ResponseAccumulator::with_validation("resp_123".into(), Some("conv_456".into()), Validation::Lenient);
     let payload = acc.finalize("gpt-4o", Some("resp_prev"), Some("be helpful"));
     assert_eq!(payload.id, "resp_123");
     assert_eq!(payload.model, "gpt-4o");
@@ -1175,9 +1171,9 @@ fn test_accumulator_finalize() {
 }
 
 #[test]
-fn test_accumulator_from_sse_lines_empty() {
-    let acc = from_sse_lines(vec![], None);
-    assert_eq!(acc.status, ResponseStatus::InProgress);
+fn test_accumulator_lenient_round_empty() {
+    let acc = ingest_lenient_to_eof(Vec::<String>::new(), None, "test").expect("valid SSE stream");
+    assert_eq!(acc.status, ResponseStatus::Completed.as_str());
     assert!(acc.output.is_empty());
 }
 
@@ -1192,8 +1188,8 @@ fn test_accumulator_text_delta_assigned_to_message() {
             .to_string(),
     ];
 
-    let acc = from_sse_lines(lines, None);
-    assert_eq!(acc.status, ResponseStatus::Completed);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    assert_eq!(acc.status, ResponseStatus::Completed.as_str());
     assert_eq!(acc.output.len(), 1);
 
     if let OutputItem::Message(msg) = &acc.output[0] {
@@ -1216,7 +1212,7 @@ fn test_message_status_enum() {
 
 #[test]
 fn test_process_event_response_created_sets_id() {
-    let mut acc = ResponseAccumulator::new("resp_old".into(), None);
+    let mut acc = ResponseAccumulator::with_validation("resp_old".into(), None, Validation::Lenient);
     let frame = EventFrame {
         event_type: SSEEventType::ResponseCreated,
         payload: EventPayload::Response {
@@ -1233,7 +1229,7 @@ fn test_process_event_response_created_sets_id() {
 
 #[test]
 fn test_process_event_response_created_empty_id_no_overwrite() {
-    let mut acc = ResponseAccumulator::new("resp_keep".into(), None);
+    let mut acc = ResponseAccumulator::with_validation("resp_keep".into(), None, Validation::Lenient);
     let frame = EventFrame {
         event_type: SSEEventType::ResponseCreated,
         payload: EventPayload::Response {
@@ -1250,7 +1246,7 @@ fn test_process_event_response_created_empty_id_no_overwrite() {
 
 #[test]
 fn test_empty_id_response_created_allows_subsequent_created() {
-    let mut acc = ResponseAccumulator::new("resp_keep".into(), None);
+    let mut acc = ResponseAccumulator::with_validation("resp_keep".into(), None, Validation::Lenient);
     let empty_frame = EventFrame {
         event_type: SSEEventType::ResponseCreated,
         payload: EventPayload::Response {
@@ -1282,7 +1278,7 @@ fn test_empty_id_response_created_allows_subsequent_created() {
 
 #[test]
 fn test_process_event_text_delta_accumulates() {
-    let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+    let mut acc = ResponseAccumulator::with_validation("resp_1".into(), None, Validation::Lenient);
 
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
@@ -1351,8 +1347,8 @@ fn test_process_event_mcp_call_done_accumulates_output() {
         r#"data: {"type":"response.done","response":{"id":"resp_1","status":"completed","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}"#.to_string(),
     ];
 
-    let acc = from_sse_lines(lines, None);
-    assert_eq!(acc.status, ResponseStatus::Completed);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    assert_eq!(acc.status, ResponseStatus::Completed.as_str());
     assert_eq!(acc.output.len(), 1);
     assert!(matches!(acc.output[0], OutputItem::McpCall(_)));
 }
@@ -1367,7 +1363,7 @@ fn test_process_event_mcp_list_tools_done_accumulates_output() {
         r#"data: {"type":"response.done","response":{"id":"resp_1","status":"completed"}}"#.to_string(),
     ];
 
-    let mut acc = ResponseAccumulator::new("resp_1".to_owned(), None);
+    let mut acc = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
     let _ = acc.process_line(SseLine::parse(added)).expect("valid SSE event");
     let Some(Slot {
         state: SlotState::Active(ActiveItem::McpListTools { item }),
@@ -1405,10 +1401,10 @@ fn compaction_added_and_done_accumulate_typed_output() {
         r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}"#.to_owned(),
     ];
 
-    let acc = from_sse_lines(lines, None);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
     assert_compaction_output(&acc.output);
 
-    let done_only = from_sse_lines([done.to_owned()], None);
+    let done_only = ingest_lenient_to_eof([done.to_owned()], None, "test").expect("valid SSE stream");
     assert_compaction_output(&done_only.output);
 }
 
@@ -1433,7 +1429,7 @@ fn test_accumulator_reasoning_before_mcp_call_preserves_order() {
         r#"data: {"type":"response.done","response":{"id":"resp_abc","status":"completed","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}"#.to_string(),
     ];
 
-    let acc = from_sse_lines(lines, None);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 2);
     assert!(matches!(acc.output[0], OutputItem::Reasoning(_)));
     assert!(matches!(acc.output[1], OutputItem::McpCall(_)));
@@ -1449,7 +1445,7 @@ fn test_accumulator_reasoning_before_done_only_mcp_call_preserves_order() {
         r#"data: {"type":"response.done","response":{"id":"resp_abc","status":"completed","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}"#.to_string(),
     ];
 
-    let acc = from_sse_lines(lines, None);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 2);
     assert!(matches!(acc.output[0], OutputItem::Reasoning(_)));
     assert!(matches!(acc.output[1], OutputItem::McpCall(_)));
@@ -1467,7 +1463,7 @@ fn test_accumulator_reasoning_before_web_search_call_preserves_order() {
         r#"data: {"type":"response.done","response":{"id":"resp_abc","status":"completed","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}"#.to_string(),
     ];
 
-    let acc = from_sse_lines(lines, None);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 2);
     assert!(matches!(acc.output[0], OutputItem::Reasoning(_)));
     let OutputItem::WebSearchCall(call) = &acc.output[1] else {
@@ -1485,7 +1481,7 @@ fn test_accumulator_preserves_open_page_web_search_action() {
         r#"data: {"type":"response.done","response":{"id":"resp_1","status":"completed"}}"#.to_string(),
     ];
 
-    let acc = from_sse_lines(lines, None);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 1);
     let action = match &acc.output[0] {
         OutputItem::WebSearchCall(call) => serde_json::to_value(&call.action).unwrap(),
@@ -1503,7 +1499,7 @@ fn test_accumulator_preserves_find_in_page_web_search_action() {
         r#"data: {"type":"response.done","response":{"id":"resp_1","status":"completed"}}"#.to_string(),
     ];
 
-    let acc = from_sse_lines(lines, None);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 1);
     let action = match &acc.output[0] {
         OutputItem::WebSearchCall(call) => serde_json::to_value(&call.action).unwrap(),
@@ -1521,7 +1517,7 @@ fn test_accumulator_drops_unfinished_web_search_placeholder() {
         r#"data: {"type":"response.done","response":{"id":"resp_1","status":"completed"}}"#.to_string(),
     ];
 
-    let acc = from_sse_lines(lines, None);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
     assert!(acc.output.is_empty());
 }
 
@@ -1533,7 +1529,7 @@ fn test_accumulator_empty_added_id_then_stable_done_does_not_duplicate() {
         r#"data: {"type":"response.done","response":{"id":"resp_1","status":"completed"}}"#.to_string(),
     ];
 
-    let acc = from_sse_lines(lines, None);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 1);
     let OutputItem::WebSearchCall(call) = &acc.output[0] else {
         panic!("expected web_search_call");
@@ -1549,7 +1545,7 @@ fn test_accumulator_stable_added_id_survives_empty_done_id() {
         r#"data: {"type":"response.done","response":{"id":"resp_1","status":"completed"}}"#.to_string(),
     ];
 
-    let acc = from_sse_lines(lines, None);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 1);
     let OutputItem::WebSearchCall(call) = &acc.output[0] else {
         panic!("expected web_search_call");
@@ -1566,7 +1562,7 @@ fn test_accumulator_uses_authoritative_done_item_with_item_id_fallback() {
         r#"data: {"type":"response.done","response":{"id":"resp_1","status":"completed"}}"#.to_string(),
     ];
 
-    let acc = from_sse_lines(lines, None);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 1);
     let OutputItem::Message(message) = &acc.output[0] else {
         panic!("expected message");
@@ -1582,7 +1578,7 @@ fn repeated_function_call_done_does_not_duplicate_lenient_output() {
     let done = r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":"{}","status":"completed"}}"#;
     let terminal = r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}"#;
 
-    let acc = from_sse_lines([added, done, done, terminal].map(str::to_owned), None);
+    let acc = ingest_lenient([added, done, done, terminal].map(str::to_owned), None, "test").expect("valid SSE stream");
 
     assert_eq!(acc.output.len(), 1);
     let OutputItem::FunctionCall(call) = &acc.output[0] else {
@@ -1597,7 +1593,7 @@ fn repeated_function_call_done_does_not_duplicate_lenient_output() {
 fn repeated_identical_done_is_not_emitted_by_lenient_translation() {
     let added = r#"data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":""}}"#;
     let done = r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":"{}","status":"completed"}}"#;
-    let mut acc = ResponseAccumulator::new("resp_1".to_owned(), None);
+    let mut acc = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
     let context = TranslationContext::default();
     let mut translator = TranslationDispatcher::new(context);
 
@@ -1614,7 +1610,7 @@ fn repeated_function_call_done_rejects_conflicting_lenient_authoritative_content
     let added = r#"data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":""}}"#;
     let first = r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":"{}","status":"completed"}}"#;
     let conflicting = r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":"{\"query\":\"rust\"}","status":"completed"}}"#;
-    let mut acc = ResponseAccumulator::new("resp_1".to_owned(), None);
+    let mut acc = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
     let context = TranslationContext::default();
     let mut translator = TranslationDispatcher::new(context);
 
@@ -1627,29 +1623,38 @@ fn repeated_function_call_done_rejects_conflicting_lenient_authoritative_content
 }
 
 #[test]
-fn from_sse_lines_propagates_conflicting_lenient_authoritative_content() {
+fn lenient_round_propagates_conflicting_lenient_authoritative_content() {
     let added = r#"data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":""}}"#;
     let first = r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":"{}","status":"completed"}}"#;
     let conflicting = r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":"{\"query\":\"rust\"}","status":"completed"}}"#;
 
-    let error = ResponseAccumulator::from_sse_lines([added, first, conflicting].map(str::to_owned), None)
-        .expect_err("conflicting authoritative content must propagate from the constructor");
+    let error = ingest_lenient([added, first, conflicting], None, "test")
+        .expect_err("conflicting authoritative content must propagate from the lenient round");
 
     assert!(error.to_string().contains("conflicting repeated output item.done"));
 }
 
 #[tokio::test]
-async fn from_stream_propagates_conflicting_lenient_authoritative_content() {
+async fn stream_body_propagates_conflicting_lenient_authoritative_content() {
     let lines = [
         r#"data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":""}}"#,
         r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":"{}","status":"completed"}}"#,
         r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":"{\"query\":\"rust\"}","status":"completed"}}"#,
     ];
     let stream = futures::stream::iter(lines.into_iter().map(|line| Ok::<_, ExecutorError>(line.to_owned())));
+    let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached(), None);
 
-    let error = ResponseAccumulator::from_stream(Box::pin(stream), None)
+    let error = agent
+        .run_with_stream_body(
+            stream,
+            Validation::Lenient,
+            TranslationContext::default(),
+            &ToolRegistry::default(),
+            0,
+            None,
+        )
         .await
-        .expect_err("conflicting authoritative content must propagate from the async constructor");
+        .expect_err("conflicting authoritative content must propagate from the stream body");
 
     assert!(error.to_string().contains("conflicting repeated output item.done"));
 }
@@ -1658,7 +1663,7 @@ async fn from_stream_propagates_conflicting_lenient_authoritative_content() {
 fn repeated_done_rejects_a_conflicting_lenient_item_type() {
     let added = r#"data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":""}}"#;
     let conflicting = r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"custom_tool_call","id":"fc_1","call_id":"call_1","name":"lookup","input":"{}","status":"completed"}}"#;
-    let mut acc = ResponseAccumulator::new("resp_1".to_owned(), None);
+    let mut acc = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
     let context = TranslationContext::default();
     let mut translator = TranslationDispatcher::new(context);
 
@@ -1674,7 +1679,7 @@ fn lenient_events_reject_contradictory_explicit_item_id_and_output_index() {
     let added_first = r#"data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":""}}"#;
     let added_second = r#"data: {"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","id":"fc_2","call_id":"call_2","name":"lookup","arguments":""}}"#;
     let contradictory = r#"data: {"type":"response.function_call_arguments.delta","output_index":1,"item_id":"fc_1","call_id":"call_1","delta":"{}"}"#;
-    let mut acc = ResponseAccumulator::new("resp_1".to_owned(), None);
+    let mut acc = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
     let context = TranslationContext::default();
     let mut translator = TranslationDispatcher::new(context);
 
@@ -1697,7 +1702,7 @@ fn test_unknown_mcp_call_error_shape_is_not_dropped() {
         r#"data: {"type":"response.done","response":{"id":"resp_abc","status":"completed","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}"#.to_string(),
     ];
 
-    let acc = from_sse_lines(lines, None);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 1);
     let OutputItem::McpCall(call) = &acc.output[0] else {
         panic!("expected mcp_call");
@@ -1719,7 +1724,7 @@ fn test_streaming_preserves_all_documented_mcp_call_statuses() {
         r#"data: {"type":"response.done","response":{"id":"resp_1","status":"completed","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}"#.to_string(),
     ];
 
-    let acc = from_sse_lines(lines, None);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
     let statuses = acc
         .output
         .iter()
@@ -1744,15 +1749,15 @@ fn test_process_event_web_search_done_accumulates_output() {
         r#"data: {"type":"response.done","response":{"id":"resp_1","status":"completed","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}"#.to_string(),
     ];
 
-    let acc = from_sse_lines(lines, None);
-    assert_eq!(acc.status, ResponseStatus::Completed);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    assert_eq!(acc.status, ResponseStatus::Completed.as_str());
     assert_eq!(acc.output.len(), 1);
     assert!(matches!(acc.output[0], OutputItem::WebSearchCall(_)));
 }
 
 #[test]
 fn test_process_event_completed_with_usage() {
-    let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+    let mut acc = ResponseAccumulator::with_validation("resp_1".into(), None, Validation::Lenient);
     let frame = EventFrame {
         event_type: SSEEventType::ResponseCompleted,
         payload: EventPayload::Response {
@@ -1781,7 +1786,7 @@ fn terminal_service_tier_replaces_created_service_tier() {
         r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","service_tier":"default","usage":null}}"#.to_owned(),
     ];
 
-    let payload = from_sse_lines(lines, None).finalize("test", None, None);
+    let payload = ingest_lenient(lines, None, "test").expect("valid SSE stream");
     assert_eq!(payload.service_tier.as_deref(), Some("default"));
 
     let lines = vec![
@@ -1790,7 +1795,7 @@ fn terminal_service_tier_replaces_created_service_tier() {
         r#"data: {"type":"response.completed","response":{"id":"resp_2","status":"completed","usage":null}}"#
             .to_owned(),
     ];
-    let payload = from_sse_lines(lines, None).finalize("test", None, None);
+    let payload = ingest_lenient(lines, None, "test").expect("valid SSE stream");
     assert!(payload.service_tier.is_none());
 }
 
@@ -1811,7 +1816,7 @@ fn json_response_preserves_actual_service_tier() {
 
 #[test]
 fn test_process_event_failed_sets_error_status() {
-    let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+    let mut acc = ResponseAccumulator::with_validation("resp_1".into(), None, Validation::Lenient);
     acc.process_event(&EventFrame {
         event_type: SSEEventType::ResponseFailed,
         payload: EventPayload::Response {
@@ -1827,7 +1832,7 @@ fn test_process_event_failed_sets_error_status() {
 
 #[test]
 fn test_process_event_incomplete_sets_incomplete_status() {
-    let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+    let mut acc = ResponseAccumulator::with_validation("resp_1".into(), None, Validation::Lenient);
     acc.process_event(&EventFrame {
         event_type: SSEEventType::ResponseIncomplete,
         payload: EventPayload::Response {
@@ -1843,7 +1848,7 @@ fn test_process_event_incomplete_sets_incomplete_status() {
 
 #[test]
 fn test_process_event_unknown_payload_ignored() {
-    let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+    let mut acc = ResponseAccumulator::with_validation("resp_1".into(), None, Validation::Lenient);
     let frame = EventFrame {
         event_type: SSEEventType::ContentPartAdded,
         payload: EventPayload::Raw(serde_json::json!({"type": "response.content_part.added"})),
@@ -1868,8 +1873,8 @@ fn test_accumulator_reasoning_and_message_from_sse() {
         r#"data: {"type":"response.done","response":{"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}"#.to_string(),
     ];
 
-    let acc = from_sse_lines(lines, None);
-    assert_eq!(acc.status, ResponseStatus::Completed);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
+    assert_eq!(acc.status, ResponseStatus::Completed.as_str());
     assert_eq!(acc.output.len(), 2);
 
     if let OutputItem::Reasoning(r) = &acc.output[0] {
@@ -1898,7 +1903,7 @@ fn completed_reasoning_replaces_partial_deltas_without_duplication() {
         r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}"#.to_owned(),
     ];
 
-    let acc = from_sse_lines(lines, None);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
 
     assert_eq!(acc.output.len(), 1);
     assert_eq!(
@@ -1928,7 +1933,7 @@ fn reasoning_done_events_keep_part_index_order() {
         r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}"#.to_owned(),
     ];
 
-    let acc = from_sse_lines(lines, None);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
     let OutputItem::Reasoning(reasoning) = &acc.output[0] else {
         panic!("expected reasoning output");
     };
@@ -1960,7 +1965,7 @@ fn completed_reasoning_preserves_done_fields_when_omitted() {
         r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}"#.to_owned(),
     ];
 
-    let acc = from_sse_lines(lines, None);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
     let OutputItem::Reasoning(reasoning) = &acc.output[0] else {
         panic!("expected reasoning output");
     };
@@ -1995,14 +2000,14 @@ fn completed_reasoning_null_and_empty_fields_are_authoritative_independently() {
         r#"data: {"type":"response.output_item.done","output_index":0,"item":{"id":"rs_summary_empty","type":"reasoning","summary":[]}}"#.to_owned(),
     ];
 
-    let content_null = from_sse_lines(content_null, None);
+    let content_null = ingest_lenient_to_eof(content_null, None, "test").expect("valid SSE stream");
     let OutputItem::Reasoning(content_null) = &content_null.output[0] else {
         panic!("expected reasoning output");
     };
     assert!(content_null.content.is_empty());
     assert_eq!(content_null.summary[0].text, "kept summary");
 
-    let summary_empty = from_sse_lines(summary_empty, None);
+    let summary_empty = ingest_lenient_to_eof(summary_empty, None, "test").expect("valid SSE stream");
     let OutputItem::Reasoning(summary_empty) = &summary_empty.output[0] else {
         panic!("expected reasoning output");
     };
@@ -2012,10 +2017,11 @@ fn completed_reasoning_null_and_empty_fields_are_authoritative_independently() {
 
 #[test]
 fn streaming_and_nonstreaming_nullable_reasoning_fields_are_equivalent() {
-    let streaming = from_sse_lines(
-        [r#"data: {"type":"response.output_item.done","output_index":0,"item":{"id":"rs_1","type":"reasoning","content":null,"summary":null,"encrypted_content":null,"status":"completed"}}"#.to_owned()],
+    let streaming = ingest_lenient_to_eof([r#"data: {"type":"response.output_item.done","output_index":0,"item":{"id":"rs_1","type":"reasoning","content":null,"summary":null,"encrypted_content":null,"status":"completed"}}"#.to_owned()],
         None,
-    );
+        "test",
+    )
+    .expect("valid SSE stream");
     let nonstreaming = ResponseAccumulator::from_json(
         r#"{"id":"resp_1","status":"completed","output":[{"id":"rs_1","type":"reasoning","content":null,"summary":null,"encrypted_content":null,"status":"completed"}]}"#,
         None,
@@ -2095,7 +2101,7 @@ fn ingestion_rejects_reasoning_outside_the_typed_schema() {
         assert!(json(&item, Validation::Lenient).unwrap().is_empty(), "{fields}");
         let error = json(&item, Validation::Strict).unwrap_err();
         assert!(!error.to_string().contains("sensitive-state"), "{fields}");
-        let streamed = from_sse_lines(stream(&item), None);
+        let streamed = ingest_lenient(stream(&item), None, "test").expect("valid SSE stream");
         assert_eq!(
             serde_json::to_value(&streamed.output).unwrap(),
             serde_json::json!([{
@@ -2115,7 +2121,7 @@ fn done_only_reasoning_uses_output_index_order() {
         r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}"#.to_owned(),
     ];
 
-    let acc = from_sse_lines(lines, None);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
 
     assert_eq!(acc.output.len(), 2);
     assert!(matches!(acc.output[0], OutputItem::Reasoning(_)));
@@ -2132,7 +2138,7 @@ fn malformed_completed_reasoning_retains_done_fields() {
         r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}"#.to_owned(),
     ];
 
-    let acc = from_sse_lines(lines, None);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
     let OutputItem::Reasoning(reasoning) = &acc.output[0] else {
         panic!("expected reasoning output");
     };
@@ -2153,7 +2159,7 @@ fn test_accumulator_message_then_reasoning_preserves_order() {
         r#"data: {"type":"response.done","response":{"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}"#.to_string(),
     ];
 
-    let acc = from_sse_lines(lines, None);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 2);
     assert!(matches!(acc.output[0], OutputItem::Message(_)));
     assert!(matches!(acc.output[1], OutputItem::Reasoning(_)));
@@ -2169,7 +2175,7 @@ fn test_accumulator_reasoning_done_without_delta_uses_text() {
             .to_string(),
     ];
 
-    let acc = from_sse_lines(lines, None);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
     if let OutputItem::Reasoning(reasoning) = &acc.output[0] {
         assert_eq!(reasoning.content.len(), 1);
         assert_eq!(reasoning.content[0].text, "done only");
@@ -2249,7 +2255,7 @@ fn test_blocking_preserves_all_documented_mcp_call_statuses() {
 
 #[test]
 fn test_function_call_accumulation_basic() {
-    let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+    let mut acc = ResponseAccumulator::with_validation("resp_1".into(), None, Validation::Lenient);
 
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
@@ -2326,7 +2332,7 @@ fn test_function_call_accumulation_basic() {
 
 #[test]
 fn test_function_call_done_uses_deltas_when_arguments_empty() {
-    let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+    let mut acc = ResponseAccumulator::with_validation("resp_1".into(), None, Validation::Lenient);
 
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
@@ -2376,7 +2382,7 @@ fn test_function_call_done_uses_deltas_when_arguments_empty() {
 
 #[test]
 fn test_function_call_multiple_parallel() {
-    let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+    let mut acc = ResponseAccumulator::with_validation("resp_1".into(), None, Validation::Lenient);
 
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
@@ -2446,7 +2452,7 @@ fn test_function_call_multiple_parallel() {
 
 #[test]
 fn test_function_call_interleaved_with_message() {
-    let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+    let mut acc = ResponseAccumulator::with_validation("resp_1".into(), None, Validation::Lenient);
 
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
@@ -2515,7 +2521,7 @@ fn test_function_call_interleaved_with_message() {
 
 #[test]
 fn test_function_call_done_updates_metadata() {
-    let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+    let mut acc = ResponseAccumulator::with_validation("resp_1".into(), None, Validation::Lenient);
 
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
@@ -2561,7 +2567,7 @@ fn test_output_item_done_restores_initially_unnamed_function_call() {
         r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","usage":null}}"#.to_string(),
     ];
 
-    let acc = from_sse_lines(lines, None);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 1);
     let OutputItem::FunctionCall(call) = &acc.output[0] else {
         panic!("expected function_call");
@@ -2581,7 +2587,7 @@ fn test_function_call_done_matches_empty_added_id_by_output_index() {
         r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","usage":null}}"#.to_string(),
     ];
 
-    let acc = from_sse_lines(lines, None);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 1);
     let OutputItem::FunctionCall(call) = &acc.output[0] else {
         panic!("expected function_call");
@@ -2598,7 +2604,7 @@ fn test_done_only_function_call_is_completed() {
         r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","usage":null}}"#.to_string(),
     ];
 
-    let acc = from_sse_lines(lines, None);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 1);
     let OutputItem::FunctionCall(call) = &acc.output[0] else {
         panic!("expected function_call");
@@ -2611,7 +2617,7 @@ fn test_done_only_function_call_is_completed() {
 
 #[test]
 fn test_function_call_empty_item_id_generates_uuid() {
-    let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+    let mut acc = ResponseAccumulator::with_validation("resp_1".into(), None, Validation::Lenient);
 
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
@@ -2650,7 +2656,7 @@ fn test_function_call_empty_item_id_generates_uuid() {
 /// Orphaned delta (no active function call for this `item_id`) is silently dropped.
 #[test]
 fn test_function_call_orphaned_delta_safe() {
-    let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+    let mut acc = ResponseAccumulator::with_validation("resp_1".into(), None, Validation::Lenient);
 
     acc.process_event(&EventFrame {
         event_type: SSEEventType::FunctionCallArgumentsDelta,
@@ -2669,7 +2675,7 @@ fn test_function_call_orphaned_delta_safe() {
 
 #[test]
 fn test_function_call_finalized_on_response_completed() {
-    let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+    let mut acc = ResponseAccumulator::with_validation("resp_1".into(), None, Validation::Lenient);
 
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
@@ -2716,7 +2722,7 @@ fn test_function_call_finalized_on_response_completed() {
 }
 
 #[test]
-fn test_function_call_from_sse_lines() {
+fn test_function_call_lenient_round() {
     let lines = vec![
         r#"data: {"type":"response.created","response":{"id":"resp_fc"}}"#.to_string(),
         r#"data: {"type":"response.output_item.added","item":{"id":"fc_1","type":"function_call","name":"get_weather","call_id":"call_abc"}}"#.to_string(),
@@ -2726,8 +2732,8 @@ fn test_function_call_from_sse_lines() {
         r#"data: {"type":"response.done","response":{"id":"resp_fc","usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}"#.to_string(),
     ];
 
-    let acc = from_sse_lines(lines, Some("conv_1"));
-    assert_eq!(acc.status, ResponseStatus::Completed);
+    let acc = ingest_lenient(lines, Some("conv_1"), "test").expect("valid SSE stream");
+    assert_eq!(acc.status, ResponseStatus::Completed.as_str());
     assert_eq!(acc.output.len(), 1);
 
     if let OutputItem::FunctionCall(fc) = &acc.output[0] {
@@ -2753,7 +2759,7 @@ fn test_custom_tool_call_accumulates_freeform_input() {
         r#"data: {"type":"response.completed","response":{"id":"resp_custom","status":"completed","usage":null}}"#.to_string(),
     ];
 
-    let acc = from_sse_lines(lines, None);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 1);
     let OutputItem::CustomToolCall(call) = &acc.output[0] else {
         panic!("expected CustomToolCall");
@@ -2774,7 +2780,7 @@ fn test_reasoning_before_done_only_custom_tool_call_preserves_order() {
         r#"data: {"type":"response.completed","response":{"id":"resp_custom","status":"completed","usage":null}}"#.to_string(),
     ];
 
-    let acc = from_sse_lines(lines, None);
+    let acc = ingest_lenient(lines, None, "test").expect("valid SSE stream");
     assert_eq!(acc.output.len(), 2);
     assert!(matches!(acc.output[0], OutputItem::Reasoning(_)));
     let OutputItem::CustomToolCall(call) = &acc.output[1] else {
@@ -2835,7 +2841,7 @@ fn file_search_done_only_is_preserved_leniently_and_rejected_strictly() {
         serde_json::json!({"type":"response.completed","response":{"id":"resp_1","status":"completed"}}),
     ]
     .map(|event| format!("data: {event}"));
-    let payload = from_sse_lines(lines.clone(), None).finalize("test", None, None);
+    let payload = ingest_lenient(lines.clone(), None, "test").expect("valid SSE stream");
     assert_eq!(serde_json::to_value(payload.output).unwrap(), serde_json::json!([call]));
 
     let mut strict = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Strict);

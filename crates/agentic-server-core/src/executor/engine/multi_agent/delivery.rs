@@ -189,7 +189,7 @@ impl MultiAgentRun {
 
     pub(super) async fn publish(&mut self, item: OutputItem, pipeline: &mut AgentPipeline) -> ExecutorResult<()> {
         self.budget.consume(item.retained_bytes())?;
-        let index = pipeline.emit_agent_item(&item).await?;
+        let index = pipeline.relay_mut().emit_agent_item(&item).await?;
         self.completed_items.insert(index, item);
         Ok(())
     }
@@ -217,6 +217,7 @@ impl MultiAgentRun {
                 | SSEEventType::ResponseIncomplete
         ) {
             pipeline
+                .relay_mut()
                 .accept_agent_frame(&AgentRoundId { agent, round }, frame)
                 .await?;
         }

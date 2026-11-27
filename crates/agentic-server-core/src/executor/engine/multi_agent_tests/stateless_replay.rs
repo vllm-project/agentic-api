@@ -1,6 +1,6 @@
 //! Client-supplied history is used directly; stateless requests carry no tree snapshot.
 use super::*;
-use crate::executor::rehydrate::rehydrate_conversation;
+use crate::executor::rehydrate::rehydrate;
 use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 use crate::utils::common::deserialize_from_value;
@@ -41,7 +41,7 @@ async fn attributed_continuation_preserves_resolved_single_agent_history() {
                 "content":[{"type":"input_text", "text":"new attributed input"}]
             }]))
             .unwrap();
-            let mut ctx = rehydrate_conversation(continuation.clone(), &exec).await.unwrap();
+            let mut ctx = rehydrate(continuation.clone(), &exec, None).await.unwrap();
             assert!(ctx.multi_agent_tree.is_none());
             let restored = restore_agents(&mut ctx, &exec, &ExecutorResponseBudget::new()).unwrap();
             let root = restored.agents.iter().find(|agent| agent.identity.is_root()).unwrap();
@@ -86,7 +86,7 @@ async fn complete_history_runs_without_a_synthetic_checkpoint() {
             assert!(exec.resp_handler.get_snapshot(&completed.id).await.is_err());
             history.extend(completed.output.into_iter().map(InOutItem::Output));
             history.push(deserialize_from_value(json!({"role":"user","content":"continue"})).unwrap());
-            let ctx = rehydrate_conversation(request.clone(), &exec).await.unwrap();
+            let ctx = rehydrate(request.clone(), &exec, None).await.unwrap();
             assert!(ctx.multi_agent_tree.is_none());
         }
         server.abort();
@@ -109,7 +109,7 @@ async fn public_collaboration_history_is_not_a_stored_tree() {
     ]))
     .unwrap();
     let expected = serde_json::to_value(&request.input).unwrap();
-    let ctx = rehydrate_conversation(request, &exec).await.unwrap();
+    let ctx = rehydrate(request, &exec, None).await.unwrap();
     assert!(ctx.multi_agent_tree.is_none());
     assert_eq!(serde_json::to_value(ctx.enriched_request.input).unwrap(), expected);
     server.abort();
@@ -120,7 +120,7 @@ async fn stateless_multi_agent_trigger_is_rejected_without_a_checkpoint() {
     let (exec, server) = setup().await;
     let mut request = request(false);
     request.input.push(InputItem::CompactionTrigger);
-    assert!(matches!(rehydrate_conversation(request, &exec).await,
+    assert!(matches!(rehydrate(request, &exec, None).await,
         Err(ExecutorError::InvalidRequest(message)) if message.contains("compaction_trigger")));
     server.abort();
 }
@@ -290,7 +290,7 @@ async fn stateless_partial_namespace_discovery_reaches_forked_children() {
         }
         history.push(serde_json::from_value(json!({"role":"user", "content":"Start a new task"})).unwrap());
         request.input = ResponsesInput::Items(history);
-        let mut ctx = rehydrate_conversation(request, &exec).await.unwrap();
+        let mut ctx = rehydrate(request, &exec, None).await.unwrap();
         let restored = restore_agents(&mut ctx, &exec, &ExecutorResponseBudget::new()).unwrap();
         assert_eq!(
             restored.registry.active_subagents(),

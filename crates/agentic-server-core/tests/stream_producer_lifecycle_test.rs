@@ -16,7 +16,7 @@ use std::{
 
 use agentic_core::executor::{
     BoxStream, ConversationHandler, ExecuteRequest, ExecutionContext, ResponseHandler, ResponseSession,
-    ResponseSessionGroup, rehydrate_conversation, rehydrate_in_session,
+    ResponseSessionGroup, rehydrate,
 };
 use agentic_core::storage::{ConversationStore, DbPool, ResponseStore, create_pool_with_schema};
 use agentic_core::tool::web_search;
@@ -295,9 +295,7 @@ async fn terminal_event_still_follows_persistence_and_checkpoint_publication() {
     let id = terminal.expect("recorded response completed");
     // Do not poll DONE first. State must already be usable at terminal delivery.
     let followup = support::make_request("continue", false, false, Some(id.clone()), None);
-    let mut stored = rehydrate_conversation(followup.clone(), &fixture.context)
-        .await
-        .unwrap();
+    let mut stored = rehydrate(followup.clone(), &fixture.context, None).await.unwrap();
     assert!(
         !fixture
             .context
@@ -307,9 +305,7 @@ async fn terminal_event_still_follows_persistence_and_checkpoint_publication() {
             .unwrap()
             .is_none_or(|checkpoint| checkpoint.history.is_empty())
     );
-    let checkpoint = rehydrate_in_session(followup, &fixture.context, &session)
-        .await
-        .unwrap();
+    let checkpoint = rehydrate(followup, &fixture.context, Some(&session)).await.unwrap();
     assert!(matches!(checkpoint.enriched_request.input, ResponsesInput::Items(_)));
     drop(checkpoint);
     drop(stream);
@@ -366,7 +362,7 @@ async fn dropping_a_streaming_fork_preserves_the_sources_reasoning_checkpoint() 
     drop(cancelled);
     fixture.assert_idle_now(&fork);
     followup.stream = false;
-    let parent = rehydrate_in_session(followup, &fixture.context, &source).await.unwrap();
+    let parent = rehydrate(followup, &fixture.context, Some(&source)).await.unwrap();
     let ResponsesInput::Items(items) = &parent.enriched_request.input else {
         panic!("parent history")
     };

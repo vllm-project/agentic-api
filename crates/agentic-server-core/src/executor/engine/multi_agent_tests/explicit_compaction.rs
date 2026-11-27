@@ -1,6 +1,6 @@
 //! Automatic and explicit compaction preserve agent state and client-call ownership.
 use super::*;
-use crate::executor::{pending_calls::CallLedger, rehydrate::rehydrate_conversation};
+use crate::executor::{pending_calls::CallLedger, rehydrate::rehydrate};
 use crate::types::agent_tree::StoredTreeSnapshot;
 use crate::utils::common::deserialize_from_value;
 
@@ -16,7 +16,7 @@ fn trigger(previous: Option<&str>, stream: bool) -> RequestPayload {
 }
 
 async fn stored_tree(previous: &str, exec: &ExecutionContext) -> StoredTreeSnapshot {
-    rehydrate_conversation(trigger(Some(previous), false), exec)
+    rehydrate(trigger(Some(previous), false), exec, None)
         .await
         .unwrap()
         .multi_agent_tree
@@ -132,7 +132,7 @@ async fn automatic_compaction_is_attributed_and_usage_is_counted_once() {
             history.extend(result.output.into_iter().map(Into::into));
             let mut continuation = request;
             continuation.input = deserialize_from_value(serde_json::to_value(history).unwrap()).unwrap();
-            let ctx = rehydrate_conversation(continuation, &exec).await.unwrap();
+            let ctx = rehydrate(continuation, &exec, None).await.unwrap();
             assert!(ctx.multi_agent_tree.is_none());
             assert!(ctx.enriched_request.input.contains_compaction());
             assert!(exec.resp_handler.get_snapshot(&result.id).await.is_err());

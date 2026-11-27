@@ -9,6 +9,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use serde_json::Value;
 use tokio::sync::mpsc;
 
+use super::tests::run_round;
 use crate::executor::gateway_accumulator::StreamEvent;
 use crate::executor::relay::{RelayLimits, StreamRelay};
 use crate::tool::web_search;
@@ -115,9 +116,10 @@ async fn plan_and_run(
     registry: &ToolRegistry,
     budget: &mut BuiltInToolCallBudget,
 ) -> (GatewayScheduler, Vec<GatewayCallResult>) {
-    let mut scheduler =
-        GatewayScheduler::plan_with_budget(items, registry, 0, GatewaySchedulerPolicy::default(), budget);
-    let results = scheduler.execute().await.expect("round executes");
+    let scheduler = GatewayScheduler::plan_with_budget(items, registry, 0, GatewaySchedulerPolicy::default(), budget);
+    let results = run_round(&scheduler, &ExecutorResponseBudget::new())
+        .await
+        .expect("round executes");
     (scheduler, results)
 }
 
@@ -231,13 +233,15 @@ async fn omitted_refusals_keep_later_public_indexes_contiguous() {
     .expect("message item");
     let items = [call("web_search", "a"), call("web_search", "b"), message];
     let mut budget = limit(1);
-    let mut scheduler =
+    let scheduler =
         GatewayScheduler::plan_with_budget(&items, &registry, 5, GatewaySchedulerPolicy::default(), &mut budget);
 
     assert_eq!(scheduler.public_item_index(0), Some(0));
     assert_eq!(scheduler.public_item_index(1), None);
     assert_eq!(scheduler.public_item_index(2), Some(1));
-    let results = scheduler.execute().await.expect("round executes");
+    let results = run_round(&scheduler, &ExecutorResponseBudget::new())
+        .await
+        .expect("round executes");
     assert!(results[1].omitted);
     let public = public_output_items(&items, &registry, &results).expect("public projection");
     assert_eq!(public.len(), 2);

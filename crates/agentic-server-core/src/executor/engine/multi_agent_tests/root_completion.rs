@@ -1,6 +1,6 @@
 //! Root finalization regression scenarios.
 use super::*;
-use crate::executor::rehydrate::rehydrate_conversation;
+use crate::executor::rehydrate::rehydrate;
 use crate::types::agent_tree::{AgentPhase, AgentState, StoredTreeSnapshot};
 use crate::types::io::{InOutItem, MultiAgentAction, MultiAgentCallOutputContent};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -89,7 +89,7 @@ fn completion_request(scenario: &str, stream: bool) -> RequestPayload {
 }
 
 async fn stored_tree(id: &str, exec: &ExecutionContext) -> StoredTreeSnapshot {
-    rehydrate_conversation(
+    rehydrate(
         RequestPayload {
             model: "test".into(),
             store: true,
@@ -98,6 +98,7 @@ async fn stored_tree(id: &str, exec: &ExecutionContext) -> StoredTreeSnapshot {
             ..Default::default()
         },
         exec,
+        None,
     )
     .await
     .unwrap()
@@ -380,7 +381,7 @@ async fn stateless_interrupt_retains_inflight_boundary_without_restarting_child(
                     .unwrap(),
                 );
                 request.input = ResponsesInput::Items(history);
-                let mut context = rehydrate_conversation(request.clone(), &exec).await.unwrap();
+                let mut context = rehydrate(request.clone(), &exec, None).await.unwrap();
                 let restored = restore_agents(&mut context, &exec, &ExecutorResponseBudget::new()).unwrap();
                 let child = restored.agents.iter().find(|agent| !agent.identity.is_root()).unwrap();
                 assert_eq!(

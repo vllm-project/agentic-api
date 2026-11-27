@@ -496,27 +496,30 @@ impl RetainedSize for OutputItem {
     }
 }
 
-#[cfg(test)]
-pub(in crate::executor) fn retained_output_item_bytes(item: &OutputItem) -> usize {
-    item.retained_bytes()
-}
-
 pub(in crate::executor) fn retained_response_parts_bytes(
     response_id: &str,
     output: &[OutputItem],
     service_tier: Option<&str>,
+    incomplete_details: Option<&IncompleteDetails>,
+    error: Option<&Value>,
 ) -> usize {
     RETAINED_CONTAINER_OVERHEAD_BYTES
         + response_id.len()
         + sum_retained(output)
         + service_tier.map_or(0, |tier| RETAINED_CONTAINER_OVERHEAD_BYTES + tier.len())
+        + incomplete_details.map_or(0, RetainedSize::retained_bytes)
+        + error.map_or(0, RetainedSize::retained_bytes)
 }
 
 #[cfg(test)]
 pub(in crate::executor) fn retained_response_bytes(response: &ResponsePayload) -> usize {
-    retained_response_parts_bytes(&response.id, &response.output, response.service_tier.as_deref())
-        + response.incomplete_details.retained_bytes()
-        + response.error.retained_bytes()
+    retained_response_parts_bytes(
+        &response.id,
+        &response.output,
+        response.service_tier.as_deref(),
+        response.incomplete_details.as_ref(),
+        response.error.as_ref(),
+    )
 }
 
 #[cfg(test)]
@@ -644,7 +647,7 @@ mod tests {
         });
 
         assert_eq!(
-            retained_output_item_bytes(&call),
+            call.retained_bytes(),
             RETAINED_CONTAINER_OVERHEAD_BYTES * 4
                 + "ci_1".len()
                 + "cntr_1".len()
@@ -754,7 +757,7 @@ mod tests {
         let expected = RETAINED_CONTAINER_OVERHEAD_BYTES + "resp_test".len() + RETAINED_CONTAINER_OVERHEAD_BYTES;
         assert_eq!(retained_response_bytes(&payload), expected);
         assert_eq!(
-            retained_response_parts_bytes(&payload.id, &payload.output, None),
+            retained_response_parts_bytes(&payload.id, &payload.output, None, None, None),
             expected
         );
 
@@ -775,7 +778,7 @@ mod tests {
         });
         // `query` mirrors the first entry of `queries` and is retained separately.
         assert_eq!(
-            retained_output_item_bytes(&ws_search),
+            ws_search.retained_bytes(),
             RETAINED_CONTAINER_OVERHEAD_BYTES * 3
                 + "search".len()
                 + "ws_1".len()
@@ -792,7 +795,7 @@ mod tests {
             }),
         });
         assert_eq!(
-            retained_output_item_bytes(&ws_open),
+            ws_open.retained_bytes(),
             RETAINED_CONTAINER_OVERHEAD_BYTES + "ws_2".len() + "https://example.com".len()
         );
 
@@ -808,7 +811,7 @@ mod tests {
             error: Some(McpCallError::Text("error_msg".to_owned())),
         });
         assert_eq!(
-            retained_output_item_bytes(&mcp_call),
+            mcp_call.retained_bytes(),
             RETAINED_CONTAINER_OVERHEAD_BYTES
                 + "mcp_1".len()
                 + "srv".len()
@@ -830,7 +833,7 @@ mod tests {
             }],
             error: Some("list_err".to_owned()),
         });
-        assert!(retained_output_item_bytes(&mcp_list) > RETAINED_CONTAINER_OVERHEAD_BYTES + "list_1".len());
+        assert!(mcp_list.retained_bytes() > RETAINED_CONTAINER_OVERHEAD_BYTES + "list_1".len());
 
         let reasoning = OutputItem::Reasoning(ReasoningOutput {
             agent: None,
@@ -841,7 +844,7 @@ mod tests {
             encrypted_content: Some(OpaqueReasoning::try_from("encrypted_blob".to_owned()).unwrap()),
         });
         assert_eq!(
-            retained_output_item_bytes(&reasoning),
+            reasoning.retained_bytes(),
             RETAINED_CONTAINER_OVERHEAD_BYTES
                 + "rs_1".len()
                 + "encrypted_blob".len()
@@ -858,7 +861,7 @@ mod tests {
         let mut message = OutputMessage::new("msg_1", crate::types::event::MessageStatus::Completed);
         message.content = vec![part.into()];
         assert_eq!(
-            retained_output_item_bytes(&OutputItem::Message(message)),
+            OutputItem::Message(message).retained_bytes(),
             RETAINED_CONTAINER_OVERHEAD_BYTES
                 + "msg_1".len()
                 + "assistant".len()
@@ -875,7 +878,7 @@ mod tests {
             encrypted_content: "x".repeat(1000),
         });
         assert_eq!(
-            retained_output_item_bytes(&compaction),
+            compaction.retained_bytes(),
             RETAINED_CONTAINER_OVERHEAD_BYTES + "cmp_1".len() + 1000
         );
 
@@ -890,7 +893,7 @@ mod tests {
         });
         assert!(nested.retained_bytes() >= 300);
         assert_eq!(
-            retained_output_item_bytes(&tool_search),
+            tool_search.retained_bytes(),
             RETAINED_CONTAINER_OVERHEAD_BYTES + "ts_1".len() + "call_1".len() + nested.retained_bytes()
         );
     }
