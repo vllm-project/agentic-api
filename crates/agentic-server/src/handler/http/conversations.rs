@@ -10,7 +10,7 @@ use agentic_core::types::{
 use super::super::common::{executor_error_response, extract_json, extract_store, read_bytes};
 use crate::app::AppState;
 
-// Authentication is not wired into these management routes yet.
+// These routes are wired into the local-storage API-key layer in `app.rs`.
 pub(super) const DEFAULT_TENANT_ID: &str = "default_tenant";
 
 /// Create a new conversation with optional metadata and initial items.

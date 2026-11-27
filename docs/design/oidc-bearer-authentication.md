@@ -66,4 +66,7 @@ Anthropic-compatible requests may continue to supply an upstream `x-api-key`; ot
 `OPENAI_API_KEY`.
 
 This separation prevents an OIDC identity token from being mistaken for an inference-provider credential. Deployments
-that do not enable OIDC retain the existing pass-through behavior for client credentials.
+that do not enable OIDC retain the existing pass-through behavior for client credentials on executor routes. Routes
+that read or write local persisted state instead require the configured `OPENAI_API_KEY` as a bearer token: stored
+response retrieval and deletion, response `input_items`, conversations and their items, and file/vector-store routes.
+These routes cannot delegate credential validation to the inference service.

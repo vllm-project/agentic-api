@@ -16,7 +16,10 @@ static COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Create test state with in-memory SQLite storage enabled.
 async fn test_state_with_storage(llm_url: &str) -> AppState {
-    let config = test_config(llm_url);
+    let mut config = test_config(llm_url);
+    // These tests cover conversation functionality, not authentication; leave the
+    // key unset so the routes run in their documented unauthenticated mode.
+    config.openai_api_key = None;
     // Use unique in-memory database for each test to avoid migration conflicts and file descriptor exhaustion
     let id = COUNTER.fetch_add(1, Ordering::Relaxed);
     // Use in-memory SQLite with unique name to allow parallel test execution without exhausting file descriptors
