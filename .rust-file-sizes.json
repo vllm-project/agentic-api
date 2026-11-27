@@ -4,7 +4,6 @@
     "crates/agentic-server-core/src/tool/registry.rs": 515,
     "crates/agentic-server-core/src/tool/tool_search.rs": 1077,
     "crates/agentic-server-core/src/types/io/output.rs": 1044,
-    "crates/agentic-server-core/src/types/tools/params.rs": 537,
     "crates/agentic-server/src/auth.rs": 727
   },
   "exceptions": {
@@ -15,10 +14,6 @@
     "crates/agentic-server-core/src/tool/registry.rs": {
       "limit": 567,
       "reason": "The web_fetch executor binds through the existing registry validation and executor registration flow, like the code interpreter; async client tools record their marker on the shared catalog entry."
-    },
-    "crates/agentic-server-core/src/types/tools/params.rs": {
-      "limit": 622,
-      "reason": "The shared tagged tool declaration validates the OpenAI auto-container form and exposes its closed public schema; every declaration variant types the async parameter so validation can accept or reject it."
     },
     "crates/agentic-server/src/main.rs": {
       "limit": 644,
