@@ -1459,6 +1459,7 @@ async fn embedding_service() -> (
         embedding_base_url: Some(format!("http://{addr}/v1")),
         embedding_model: Some("fixture".into()),
         embedding_api_key: Some("never-log-this-key".into()),
+        pgvector: None,
     };
     let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
     let service = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), config.clone()).unwrap();
@@ -1750,6 +1751,7 @@ fn ogx_vector_mode_alias_and_secret_safe_debug_are_supported() {
         embedding_base_url: Some("https://private.example/v1".into()),
         embedding_model: Some("model".into()),
         embedding_api_key: Some("secret-credential".into()),
+        pgvector: None,
     };
     assert!(!format!("{config:?}").contains("secret-credential"));
 }

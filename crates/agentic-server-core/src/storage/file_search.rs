@@ -14,6 +14,7 @@ use crate::types::file_search::{
 
 mod blob_cleanup;
 mod list;
+pub(crate) mod pgvector;
 mod publication;
 pub(crate) mod sqlite_vec_index;
 

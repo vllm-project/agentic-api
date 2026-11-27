@@ -3,6 +3,7 @@
 mod embeddings;
 pub(crate) mod handler;
 mod ingest;
+mod pgvector;
 mod provider;
 mod ranking;
 mod service;
@@ -15,6 +16,7 @@ pub use crate::storage::file_search::{
 pub use crate::storage::local_files::LocalFiles as LocalFileBlobStore;
 pub use crate::types::file_search::FileSearchError;
 pub use handler::{FileSearchExecutionParams, FileSearchExecutor, FileSearchHandler};
+pub use pgvector::PgvectorRepository;
 pub use provider::{FileBlobStore, FileSearchRepository};
 pub use service::{FileSearchService, MAX_FILE_BYTES};
 pub use sqlite_vec::SqliteVecRepository;

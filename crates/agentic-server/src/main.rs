@@ -470,6 +470,7 @@ fn build_config(llm_api_base: String, common: &CommonArgs, file: &FileConfig) ->
         .get(),
         tools: ToolRuntimeConfig {
             file_search: FileSearchConfig {
+                pgvector: file.file_search.pgvector.clone(),
                 sqlite_vec_extension_path: std::env::var_os("AGENTIC_FILE_SEARCH_SQLITE_VEC_EXTENSION_PATH")
                     .map(PathBuf::from)
                     .or_else(|| file.file_search.sqlite_vec_extension_path.clone()),

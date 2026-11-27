@@ -66,7 +66,7 @@ file. The gateway loads this binary at startup, so keep it under deployment
 control. The SQLite vector index stores unit-normalized float32 embeddings and
 uses cosine distance for semantic search. Keyword and hybrid modes use the
 bounded exact SQL ranker. SQLite-vec is optional; without an extension path,
-all search modes use the SQL repository. Existing vector stores retain their
+all search modes use the SQL repository unless pgvector is configured. Existing vector stores retain their
 provider identity and must be reingested to change providers.
 
 ## Integrate storage providers
@@ -82,8 +82,12 @@ service with `FileHandler::new` and assign it to `ExecutionContext.file_handler`
 The HTTP routes and Responses built-in tool use that handler. A repository adapter
 can compose SQL metadata with Milvus or another vector index; a blob-store
 adapter can use S3, GCS, or Azure Blob Storage. This layer provides SQL and
-sqlite-vec repositories and the local blob store. Other adapters and a
+sqlite-vec and pgvector repositories and the local blob store. Other adapters and a
 configuration-file provider catalog are follow-up work.
+Repository adapters expose their shared `FileSearchStorage` through `metadata()`;
+trait defaults forward metadata and blob-cleanup operations there. Adapters
+implement index identity, publication, and search, and override deletion when
+index cleanup needs extra coordination (as sqlite-vec does).
 
 Repository implementations must publish an attachment only after its chunks
 are searchable, keep store embedding identities and dimensions compatible, and
@@ -273,3 +277,89 @@ These limits include embeddings; ingestion enforces them before publication.
 Searching multiple stores shares the same aggregate retrieval budget.
 It does not implement OGX's provider catalog, contextual chunking, query rewriting,
 neural reranking, or asynchronous file batches.
+
+## PostgreSQL pgvector index
+
+For PostgreSQL deployments, enable [pgvector 0.8.0 or later](https://github.com/pgvector/pgvector)
+with a typed configuration in `config.toml`:
+
+```toml
+[file_search.pgvector]
+dimensions = 768
+candidate_limit = 100
+
+[file_search.pgvector.index]
+type = "hnsw"
+m = 16
+ef_construction = 64
+ef_search = 100
+```
+
+Keep the embedding endpoint and model under `[file_search]` as above. Configure
+only one of `pgvector` and `sqlite_vec_extension_path`. `PgvectorRepository`
+implements `FileSearchRepository`, so Rust integrations can also inject it with
+any `FileBlobStore`. The Files API, vector-store API, and Responses tool share
+this adapter and their existing wire contracts.
+
+Dimensions must be 1–2000. Embeddings must match that dimension and contain
+finite float32-representable values with a nonzero, normal float32 component;
+invalid embeddings fail before attachment publication. `candidate_limit` is
+50–1000 per query and retrieval leg. HNSW accepts `m` 2–100,
+`ef_construction` 4–1000 and at least twice `m`, and `ef_search` 1–1000.
+For IVFFlat, replace the index section:
+
+```toml
+[file_search.pgvector.index]
+type = "ivfflat"
+lists = 100
+probes = 10
+```
+
+`lists` must be 2–32768 and `probes` 1–`lists - 1`. The adapter waits for at
+least `lists * 1000` vectors of the configured dimension before building
+IVFFlat. Until then it uses bounded exact distance selection in PostgreSQL.
+Newly sufficient data triggers index construction on the next semantic or hybrid
+search. Both index methods use iterative scans for filtered retrieval.
+
+Semantic candidates use cosine distance; keyword candidates use PostgreSQL's
+`simple` full-text configuration. Hybrid search combines both candidate sets.
+Typed attribute filters are applied in SQL before candidate limits, with binary
+string ordering matching the shared Rust filter. The shared cosine/BM25/fusion
+ranker then applies deduplication, score thresholds, and the global result limit.
+ANN retrieval and candidate-bounded keyword scoring can differ from full-corpus
+exact ranking; increasing recall settings and candidate limits can help. Selected
+candidate reads are limited to 64 MiB and 10,000 rows across all query legs.
+Per-store ingestion retains the SQL provider's 64 MiB and 10,000-chunk limits.
+
+### Startup and existing data
+
+The PostgreSQL backend schema step in `storage/schema/pgvector.rs` creates the
+optional `vector` extension, a stored generated vector projection of chunk data
+(unit-normalized after float32 conversion), a full-text GIN index, and one ANN
+index per configured dimension. This is an optional backend schema step after
+portable migrations; SQLite and unconfigured PostgreSQL databases do not require
+the extension.
+Projection updates and cascading deletion occur in the same transaction as
+metadata, so failed publication cannot expose partial attachments.
+
+The database role needs extension, table-alteration, and index-creation privileges;
+managed services may require an administrator to install `vector` first.
+With `AGENTIC_API_SCHEMA_READY`, startup only verifies the extension version,
+generated projection, GIN index, and configured ANN index. It rejects missing or
+incompatible objects without changing them. Operators must prepare these objects
+with the same index construction settings before enabling supervisor mode.
+An untrained IVFFlat configuration may use exact distance retrieval below its
+training floor; once it reaches the floor, the operator must build its index.
+Supervisor-managed searches never create or rebuild indexes.
+
+Projection backfill and index construction acquire database locks and can be
+expensive on populated databases. Plan an initialization window. Index changes
+rebuild the selected dimension's index transactionally, so replicas sharing a
+database must use identical index construction settings. Established searches do
+not hold the setup advisory lock. Increasing only search-time settings does not
+rebuild the index.
+
+The generated column backfills existing chunk rows without changing their JSON.
+Vector stores retain their provider identity: recreate and reingest stores when
+switching from SQL exact search or sqlite-vec, or changing pgvector dimensions.
+Changing HNSW/IVFFlat construction or recall settings preserves store identity.
