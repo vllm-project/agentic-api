@@ -2,6 +2,8 @@ use futures::StreamExt;
 
 use crate::executor::accumulator::Validation;
 use crate::executor::error::{ExecutorError, ExecutorResult};
+use crate::executor::inference::direct::{self, DirectInferenceBackend};
+use crate::executor::inference::http::encode_request;
 use crate::executor::inference::{fetch_response_json, response_lines, send_request};
 use crate::executor::multi_agent::collaboration;
 use crate::executor::pipeline::AgentPipeline;
@@ -11,8 +13,8 @@ use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::translate::TranslationContext;
 use crate::tool::{ToolRegistry, ToolSearchState};
 use crate::types::io::{InputItem, InputMessage, MultiAgentAction};
-use crate::types::request_response::{ResponsePayload, UpstreamTool};
-use crate::utils::common::serialize_to_string;
+use crate::types::request_response::{ResponsePayload, UpstreamRequest, UpstreamTool};
+use crate::utils::common::serialized_size_up_to;
 use std::sync::Arc;
 
 /// Snapshot tool facts at the orchestration boundary, excluding all execution bindings.
@@ -75,6 +77,16 @@ pub async fn upstream_request(
     guidance: Option<&InputMessage>,
     withheld: Option<&ToolRegistry>,
 ) -> ExecutorResult<String> {
+    encode_request(&model_request(exec_ctx, ctx, stream, guidance, withheld).await?)
+}
+
+async fn model_request<'a>(
+    exec_ctx: &ExecutionContext,
+    ctx: &'a RequestContext,
+    stream: bool,
+    guidance: Option<&InputMessage>,
+    withheld: Option<&ToolRegistry>,
+) -> ExecutorResult<UpstreamRequest<'a>> {
     let files = exec_ctx.file_handler.resolve(&ctx.enriched_request.input).await?;
     let mut request = ctx.enriched_request.to_upstream_request(stream, &files)?;
     if let Some(registry) = withheld {
@@ -102,27 +114,26 @@ pub async fn upstream_request(
     if let Some(guidance) = guidance {
         request.input.to_mut().push(InputItem::Message(guidance.clone()));
     }
-    let body = serialize_to_string(&request).map_err(ExecutorError::JsonError)?;
-    if !files.is_empty() && body.len() > exec_ctx.max_request_body_size {
+    if !files.is_empty() && serialized_size_up_to(&request, exec_ctx.max_request_body_size)?.is_none() {
         return Err(ExecutorError::PayloadTooLarge(format!(
             "resolved file_id references exceed the {}-byte request body limit",
             exec_ctx.max_request_body_size
         )));
     }
-    Ok(body)
+    Ok(request)
 }
 
-/// The upstream body for the pipeline's next round, once its request is prepared. The future borrows the request
+/// The model request for the pipeline's next round, once its request is prepared. The future borrows the request
 /// and guidance, never the pipeline, so it stays `Send`.
-fn round_upstream_request<'a>(
+fn round_model_request<'a>(
     agent: &'a AgentPipeline,
     exec_ctx: &'a ExecutionContext,
     registry: &'a ToolRegistry,
     stream: bool,
-) -> ExecutorResult<impl Future<Output = ExecutorResult<String>> + 'a> {
+) -> ExecutorResult<impl Future<Output = ExecutorResult<UpstreamRequest<'a>>> + 'a> {
     agent.ensure_request_prepared()?;
     let withheld = agent.builtin_tools_withheld().then_some(registry);
-    Ok(upstream_request(
+    Ok(model_request(
         exec_ctx,
         &agent.request,
         stream,
@@ -137,7 +148,10 @@ pub(super) async fn fetch_blocking_payload(
     registry: &ToolRegistry,
     response_budget: Option<&ExecutorResponseBudget>,
 ) -> ExecutorResult<ResponsePayload> {
-    let upstream_json = round_upstream_request(agent, exec_ctx, registry, false)?.await?;
+    if let Some(backend) = &exec_ctx.direct_inference {
+        return fetch_direct_payload(agent, exec_ctx, backend, registry, 0, response_budget).await;
+    }
+    let upstream_json = encode_request(&round_model_request(agent, exec_ctx, registry, false)?.await?)?;
     let auth = agent.upstream_headers().map(Arc::as_ref);
     let (body, _) = fetch_response_json(
         upstream_json,
@@ -201,7 +215,10 @@ pub(super) async fn fetch_stream_payload(
     output_offset: usize,
     response_budget: &ExecutorResponseBudget,
 ) -> ExecutorResult<ResponsePayload> {
-    let upstream_json = round_upstream_request(agent, exec_ctx, registry, true)?.await?;
+    if let Some(backend) = &exec_ctx.direct_inference {
+        return fetch_direct_payload(agent, exec_ctx, backend, registry, output_offset, Some(response_budget)).await;
+    }
+    let upstream_json = encode_request(&round_model_request(agent, exec_ctx, registry, true)?.await?)?;
     let auth = agent.upstream_headers().cloned();
     // Keep sending lazy so the pipeline can cancel header waits at a steering boundary.
     let lines = async_stream::try_stream! {
@@ -226,6 +243,34 @@ pub(super) async fn fetch_stream_payload(
             registry,
             output_offset,
             Some(response_budget.clone()),
+        )
+        .await
+}
+
+async fn fetch_direct_payload(
+    agent: &mut AgentPipeline,
+    exec_ctx: &ExecutionContext,
+    backend: &Arc<dyn DirectInferenceBackend>,
+    registry: &ToolRegistry,
+    output_offset: usize,
+    response_budget: Option<&ExecutorResponseBudget>,
+) -> ExecutorResult<ResponsePayload> {
+    let request = round_model_request(agent, exec_ctx, registry, true)?.await?;
+    let events = direct::call(
+        backend,
+        request,
+        agent.request.response_id.clone(),
+        exec_ctx.streaming_timeout,
+        exec_ctx.responses_config.max_stream_event_bytes,
+    )
+    .await?;
+    agent
+        .run_with_event_body(
+            events,
+            translation_context(registry, agent),
+            registry,
+            output_offset,
+            response_budget.cloned(),
         )
         .await
 }

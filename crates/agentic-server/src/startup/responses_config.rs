@@ -1,7 +1,7 @@
 //! Resolve independent response resource limits from configuration and environment.
 
-use crate::config_file::ResponsesFileConfig;
-use crate::{environment_value, parse_env_nonzero_usize};
+use crate::startup::config_file::ResponsesFileConfig;
+use crate::startup::{environment_value, parse_env_nonzero_usize};
 use agentic_core::config::{
     DEFAULT_MAX_RETAINED_RESPONSE_BYTES, DEFAULT_MAX_STREAM_EVENT_BYTES, DEFAULT_MAX_UPSTREAM_JSON_BYTES,
     DEFAULT_MAX_UPSTREAM_SSE_LINE_BYTES, MAX_RETAINED_RESPONSE_BYTES_ENV, MAX_STREAM_EVENT_BYTES_ENV,
@@ -59,7 +59,7 @@ pub(crate) fn generated_responses_file_config() -> ResponsesFileConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config_file::FileConfig;
+    use crate::startup::config_file::FileConfig;
     use agentic_core::types::ServiceTier;
 
     #[test]

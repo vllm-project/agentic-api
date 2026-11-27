@@ -3,7 +3,7 @@ mod ingest;
 
 pub(super) use ingest::RoundIngestion;
 
-use crate::events::{ClassifiedSseLine, SseLine};
+use crate::events::{ClassifiedSseLine, EventFrame, SseLine};
 use crate::executor::accumulator::Validation;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway_accumulator::GatewayStreamAccumulator;
@@ -22,6 +22,22 @@ use crate::types::tools::ResponsesTool;
 use futures::{Stream, StreamExt};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
+
+trait InferenceInput {
+    fn ingest(self, round: &mut RoundIngestion) -> ExecutorResult<Translation>;
+}
+
+impl InferenceInput for ClassifiedSseLine {
+    fn ingest(self, round: &mut RoundIngestion) -> ExecutorResult<Translation> {
+        round.push(self)
+    }
+}
+
+impl InferenceInput for EventFrame {
+    fn ingest(self, round: &mut RoundIngestion) -> ExecutorResult<Translation> {
+        round.push_frame(self)
+    }
+}
 
 /// Lives for the response, preserving gateway event numbering across inference rounds.
 pub(super) struct AgentPipeline {
@@ -173,11 +189,12 @@ impl AgentPipeline {
         Ok(())
     }
 
-    fn push(&mut self, line: ClassifiedSseLine) -> ExecutorResult<Translation> {
-        self.round
+    fn push(&mut self, input: impl InferenceInput) -> ExecutorResult<Translation> {
+        let round = self
+            .round
             .as_mut()
-            .expect("body runner starts a round before pushing input")
-            .push(line)
+            .expect("body runner starts a round before pushing input");
+        input.ingest(round)
     }
 
     fn finish(&mut self) -> ExecutorResult<ResponsePayload> {
@@ -201,6 +218,31 @@ impl AgentPipeline {
     pub(super) async fn run_with_stream_body(
         &mut self,
         body: impl Stream<Item = ExecutorResult<String>>,
+        validation: Validation,
+        context: TranslationContext,
+        registry: &ToolRegistry,
+        output_offset: usize,
+        budget: Option<ExecutorResponseBudget>,
+    ) -> ExecutorResult<ResponsePayload> {
+        let body = body.map(|line| line.map(|line| SseLine::parse(&line)));
+        Box::pin(self.run_body(body, validation, context, registry, output_offset, budget)).await
+    }
+
+    /// Direct runtime output enters the same ingestion and awaited delivery loop.
+    pub(super) async fn run_with_event_body(
+        &mut self,
+        body: impl Stream<Item = ExecutorResult<EventFrame>>,
+        context: TranslationContext,
+        registry: &ToolRegistry,
+        output_offset: usize,
+        budget: Option<ExecutorResponseBudget>,
+    ) -> ExecutorResult<ResponsePayload> {
+        Box::pin(self.run_body(body, Validation::Strict, context, registry, output_offset, budget)).await
+    }
+
+    async fn run_body<I: InferenceInput>(
+        &mut self,
+        body: impl Stream<Item = ExecutorResult<I>>,
         validation: Validation,
         context: TranslationContext,
         registry: &ToolRegistry,
@@ -243,7 +285,7 @@ impl AgentPipeline {
             if let Some(clock) = &self.clock {
                 clock.upstream_data();
             }
-            let translation = self.push(SseLine::parse(&line))?;
+            let translation = self.push(line)?;
             self.relay.accept(translation, &self.request, registry).await?;
         }
         // Frames still deferred stay with the relay until the engine releases them

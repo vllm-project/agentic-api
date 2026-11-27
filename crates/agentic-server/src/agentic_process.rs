@@ -1,5 +1,9 @@
 mod catalog;
 mod harness;
+mod server;
+
+pub use server::{run_server, server_args, server_binary_path};
+use server::{server_command, stop_server};
 
 pub use catalog::resolve_model;
 #[cfg(test)]
@@ -9,15 +13,16 @@ use catalog::{CodexModelSelection, resolve_codex_selection};
 use harness::{build_harness_command, harness_launch_args};
 use harness::{harness_environment, prepare_attached_harness_environment, spawn_harness, validate_claude_passthrough};
 
-use std::{ffi::OsString, path::Path, time::Duration};
+use std::{path::Path, time::Duration};
 
 use agentic_core::error::Error;
 use reqwest::Client;
 use tokio::time::{Instant, sleep};
 
 use crate::{
-    agentic_cli::{CommonOptions, Harness, HarnessOptions, SourceOptions},
+    agentic_cli::{Harness, HarnessOptions},
     agentic_output::redact_url,
+    server::shutdown_signal,
 };
 
 /// Reasoning effort passed to Claude Code unless `AGENTIC_CLAUDE_EFFORT` overrides it.
@@ -31,47 +36,6 @@ const PLACEHOLDER_MODEL: &str = "agentic-api";
 const ATTACHED_GATEWAY_TIMEOUT: Duration = Duration::from_secs(30);
 /// Readiness poll interval for a gateway the launcher did not start.
 const ATTACHED_GATEWAY_INTERVAL: Duration = Duration::from_millis(250);
-
-#[must_use]
-pub fn server_args(source: &SourceOptions, common: &CommonOptions) -> Vec<OsString> {
-    let mut args = Vec::new();
-    if let Some(upstream) = &source.upstream {
-        args.extend([OsString::from("--llm-api-base"), OsString::from(upstream)]);
-    } else if let Some(model) = &source.model {
-        args.extend([OsString::from("serve"), OsString::from(model)]);
-        args.extend([OsString::from("--port"), OsString::from(source.llm_port.to_string())]);
-    }
-    args.extend([
-        OsString::from("--gateway-host"),
-        OsString::from(&common.gateway_host),
-        OsString::from("--gateway-port"),
-        OsString::from(common.gateway_port.to_string()),
-        OsString::from("--db-url"),
-        OsString::from(&common.database_url),
-        OsString::from("--llm-ready-timeout-s"),
-        OsString::from(common.llm_ready_timeout_s.to_string()),
-        OsString::from("--llm-ready-interval-s"),
-        OsString::from(common.llm_ready_interval_s.to_string()),
-    ]);
-    if let Some(max_request_body_size_bytes) = common.max_request_body_size_bytes {
-        args.extend([
-            OsString::from("--max-request-body-size-bytes"),
-            OsString::from(max_request_body_size_bytes.to_string()),
-        ]);
-    }
-    if let Some(api_key) = &common.api_key {
-        args.extend([OsString::from("--openai-api-key"), OsString::from(api_key)]);
-    }
-    if common.skip_llm_ready_check {
-        args.push(OsString::from("--skip-llm-ready-check"));
-    }
-    args
-}
-
-#[must_use]
-pub fn server_binary_path(current_exe: &Path) -> std::path::PathBuf {
-    current_exe.with_file_name("agentic-server")
-}
 
 #[must_use]
 pub fn claude_effort() -> String {
@@ -157,7 +121,7 @@ async fn resolve_harness_model(
             resolve_codex_selection(
                 client,
                 gateway_url,
-                options.source.model.as_deref(),
+                options.source.upstream.as_ref().and(options.source.model.as_deref()),
                 options.common.api_key.as_deref(),
                 Duration::from_secs_f64(options.common.llm_ready_timeout_s),
                 Duration::from_secs_f64(options.common.llm_ready_interval_s),
@@ -177,99 +141,63 @@ async fn resolve_harness_model(
 /// Returns an error when a child cannot start or readiness fails.
 pub async fn run_session(
     current_exe: &Path,
-    harness: crate::agentic_cli::Harness,
-    options: crate::agentic_cli::HarnessOptions,
+    harness: Harness,
+    options: HarnessOptions,
 ) -> Result<std::process::ExitStatus, Error> {
-    if matches!(harness, crate::agentic_cli::Harness::Claude) {
+    if matches!(harness, Harness::Claude) {
+        if options.source.upstream.is_none() {
+            return Err(Error::Config(
+                "Claude Code requires --upstream; direct Messages inference is not supported yet".to_owned(),
+            ));
+        }
         validate_claude_passthrough(&options.harness_args)?;
     }
+    let shutdown = shutdown_signal()?;
+    tokio::pin!(shutdown);
     let gateway_url = format!("http://{}:{}", options.common.gateway_host, options.common.gateway_port);
     let session_root = create_session_root("agentic-api-session")?;
     let claude_state_root = harness_state_root(harness, session_root.path())?;
-
-    let mut server = start_server(current_exe, &options)?;
-
-    let client = match gateway_client() {
-        Ok(client) => client,
-        Err(error) => {
-            cleanup(&mut server, session_root.path()).await;
-            return Err(error);
+    let mut server = server_command(current_exe, &options.source, &options.common)?.spawn()?;
+    let result = async {
+        let preparation = async {
+            let client = gateway_client()?;
+            wait_for_gateway(
+                &client,
+                &gateway_url,
+                Duration::from_secs_f64(options.common.llm_ready_timeout_s),
+                Duration::from_secs_f64(options.common.llm_ready_interval_s),
+                options.common.skip_llm_ready_check,
+            )
+            .await?;
+            let model = resolve_harness_model(&client, harness, &gateway_url, &options).await?;
+            harness_environment(&model, &gateway_url, &options, session_root.path(), &claude_state_root)
+        };
+        let harness_env = tokio::select! {
+            biased;
+            () = &mut shutdown => return stop_server(&mut server).await.map_err(Into::into),
+            status = server.wait() => return Err(Error::LlmProcessExited { status: status?.to_string() }),
+            result = preparation => result?,
+        };
+        if !options.common.quiet {
+            println!("{}", harness_env.summary);
         }
-    };
-    if let Err(error) = wait_for_gateway(
-        &client,
-        &gateway_url,
-        Duration::from_secs_f64(options.common.llm_ready_timeout_s),
-        Duration::from_secs_f64(options.common.llm_ready_interval_s),
-        options.common.skip_llm_ready_check,
-    )
-    .await
-    {
-        cleanup(&mut server, session_root.path()).await;
-        return Err(error);
+        let mut harness_child = spawn_harness(harness, options.common.yolo, &options.harness_args, &harness_env)?;
+        tokio::select! {
+            status = harness_child.wait() => status.map_err(Into::into),
+            () = &mut shutdown => {
+                let _ = harness_child.kill().await;
+                harness_child.wait().await.map_err(Into::into)
+            }
+            status = server.wait() => {
+                let _ = harness_child.kill().await;
+                let _ = harness_child.wait().await;
+                Err(Error::LlmProcessExited { status: status?.to_string() })
+            }
+        }
     }
-
-    let harness_model = match resolve_harness_model(&client, harness, &gateway_url, &options).await {
-        Ok(harness_model) => harness_model,
-        Err(error) => {
-            cleanup(&mut server, session_root.path()).await;
-            return Err(error);
-        }
-    };
-    let harness_env = match harness_environment(
-        &harness_model,
-        &gateway_url,
-        &options,
-        session_root.path(),
-        &claude_state_root,
-    ) {
-        Ok(environment) => environment,
-        Err(error) => {
-            cleanup(&mut server, session_root.path()).await;
-            return Err(error);
-        }
-    };
-    if !options.common.quiet {
-        println!("{}", harness_env.summary);
-    }
-
-    let mut harness_child = match spawn_harness(harness, options.common.yolo, &options.harness_args, &harness_env) {
-        Ok(child) => child,
-        Err(error) => {
-            cleanup(&mut server, session_root.path()).await;
-            return Err(error);
-        }
-    };
-
-    let harness_status = tokio::select! {
-        status = harness_child.wait() => status?,
-        signal = tokio::signal::ctrl_c() => {
-            signal?;
-            let _ = harness_child.kill().await;
-            harness_child.wait().await?
-        }
-    };
+    .await;
     cleanup(&mut server, session_root.path()).await;
-    Ok(harness_status)
-}
-
-fn start_server(
-    current_exe: &Path,
-    options: &crate::agentic_cli::HarnessOptions,
-) -> Result<tokio::process::Child, Error> {
-    let server_path = server_binary_path(current_exe);
-    if !server_path.is_file() {
-        return Err(Error::Config(format!(
-            "agentic-server binary not found beside {}; run cargo build -p agentic-server --bins first",
-            current_exe.display()
-        )));
-    }
-    let mut server = tokio::process::Command::new(server_path);
-    server.kill_on_drop(true);
-    server.args(server_args(&options.source, &options.common));
-    server.stdout(std::process::Stdio::inherit());
-    server.stderr(std::process::Stdio::inherit());
-    Ok(server.spawn()?)
+    result
 }
 
 /// Launch a coding harness against an already-running Agentic API gateway.
@@ -343,8 +271,9 @@ pub async fn run_attached_harness(
 }
 
 async fn cleanup(server: &mut tokio::process::Child, session_root: &Path) {
-    let _ = server.kill().await;
-    let _ = server.wait().await;
+    if let Err(error) = stop_server(server).await {
+        tracing::warn!(%error, "gateway process cleanup failed");
+    }
     let _ = tokio::fs::remove_dir_all(session_root).await;
 }
 

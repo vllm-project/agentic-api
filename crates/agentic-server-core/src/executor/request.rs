@@ -7,6 +7,7 @@ use crate::config::{Config, ResponsesConfig, SqliteConfig, default_database_url}
 use crate::error::Error;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway::GatewaySchedulerPolicy;
+use crate::executor::inference::direct::DirectInferenceBackend;
 use crate::executor::messages_server_tools::sealing::{MessagesResultKey, process_result_key};
 use crate::executor::modes::{ConversationHandler, FileHandler, ResponseHandler};
 use crate::executor::multi_agent::ValidatedTreeCheckpoint;
@@ -191,6 +192,7 @@ pub struct ExecutionContext {
     /// Bounded-concurrency policy applied to gateway-owned calls in each round.
     pub(crate) gateway_scheduler_policy: GatewaySchedulerPolicy,
     pub responses_config: ResponsesConfig,
+    pub(crate) direct_inference: Option<Arc<dyn DirectInferenceBackend>>,
     pub model_capabilities: ModelCapabilities,
     /// Execution, stage, token, and timing instruments. Defaults to the
     /// globally registered meter provider at construction time.
@@ -229,6 +231,7 @@ impl ExecutionContext {
             streaming_timeout: streaming_timeout_from_env(),
             gateway_scheduler_policy: GatewaySchedulerPolicy::default(),
             responses_config: ResponsesConfig::default(),
+            direct_inference: None,
             model_capabilities: ModelCapabilities::default(),
             metrics: ExecutorMetrics::from_global(),
             storage_pool: None,
@@ -246,6 +249,14 @@ impl ExecutionContext {
     #[must_use]
     pub fn with_responses_config(mut self, responses_config: ResponsesConfig) -> Self {
         self.responses_config = responses_config;
+        self
+    }
+
+    /// Use an injected native runtime for Responses inference, including compaction.
+    /// Shared history, tools, response assembly, and persistence stay in the executor.
+    #[must_use]
+    pub fn with_direct_inference(mut self, backend: Arc<dyn DirectInferenceBackend>) -> Self {
+        self.direct_inference = Some(backend);
         self
     }
 
@@ -398,6 +409,7 @@ impl ExecutionContext {
             streaming_timeout: streaming_timeout_from_env(),
             gateway_scheduler_policy: GatewaySchedulerPolicy::new(cfg.tools.max_concurrent_gateway_calls),
             responses_config: cfg.responses,
+            direct_inference: None,
             model_capabilities: cfg.model_capabilities.clone(),
             metrics: ExecutorMetrics::from_global(),
             storage_pool: Some(pool),

@@ -6,6 +6,11 @@ All notable changes to Agentic API are documented here.
 
 ### Added
 
+- Added normalized `EventFrame` ingestion through the existing response accumulator
+  and tool translation path, and an inference/session contract proposal (#359, #360).
+- Split executor inference into HTTP and injected direct backends. Added unpublished
+  `agentic-vllm` integration using shared vLLM model preparation, parsing, and EngineCore
+  communication, while reusing request preparation, tool orchestration, sessions, and compaction.
 - Resolve Responses message `input_image` and `input_file` `file_id` references from the Files API when the
   gateway builds the model-facing request, so stateless backends receive the referenced media inline. Stored
   history, compaction windows, and multi-agent tree snapshots keep the client's reference and resolve it again

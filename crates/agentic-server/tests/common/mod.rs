@@ -64,6 +64,7 @@ pub fn test_state_with_max_request_body_size(config: &Config, max_request_body_s
         proxy_state,
         exec_ctx,
         llm_readiness_client: llm_readiness_client().expect("readiness client"),
+        direct_status: None,
         readiness_tracker: ReadinessTracker::default(),
         shutdown_token: CancellationToken::new(),
         websocket_tracker: WebSocketTracker::default(),

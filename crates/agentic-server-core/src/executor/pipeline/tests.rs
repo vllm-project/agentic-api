@@ -1,7 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
 use super::*;
-use crate::events::SseLine;
+use crate::events::{SseLine, normalize_sse_line};
+use crate::executor::error::ResourceLimit;
+use crate::executor::gateway_accumulator::GatewayStreamAccumulator;
 use crate::tool::ToolType;
 use crate::types::io::OutputItem;
 use serde_json::{Value, json};
@@ -34,6 +36,118 @@ fn start(pipeline: &mut RoundIngestion) {
             &json!({"type":event,"response":{"id":"resp_1","status":"in_progress"}}),
         );
     }
+}
+
+// Fixtures use the existing normalizer; the direct ingestion path receives frames, not SSE strings.
+fn normalized_frame(event: &Value) -> EventFrame {
+    normalize_sse_line(&format!("data: {event}")).expect("valid event fixture")
+}
+
+#[test]
+fn normalized_frames_preserve_assembly_translation_and_gateway_ordering() {
+    let events = [
+        json!({"type":"response.created","response":{"id":"resp_1","status":"in_progress"}}),
+        json!({"type":"response.in_progress","response":{"id":"resp_1","status":"in_progress"}}),
+        json!({"type":"response.output_item.added","output_index":0,
+            "item":{"id":"rs_1","type":"reasoning","summary":[],"status":"in_progress"}}),
+        json!({"type":"response.reasoning_summary_text.delta","output_index":0,
+            "item_id":"rs_1","summary_index":0,"delta":"thinking"}),
+        json!({"type":"response.output_item.done","output_index":0,
+            "item":{"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"thinking"}],"status":"completed"}}),
+        json!({"type":"response.output_item.added","output_index":1,
+            "item":{"id":"fc_1","type":"function_call","call_id":"call_1","name":"raw_echo","arguments":"","status":"in_progress"}}),
+        json!({"type":"response.function_call_arguments.delta","output_index":1,
+            "item_id":"fc_1","delta":"{\"input\":\"hello\"}"}),
+        json!({"type":"response.output_item.done","output_index":1,
+            "item":{"id":"fc_1","type":"function_call","call_id":"call_1","name":"raw_echo","arguments":"{\"input\":\"hello\"}","status":"completed"}}),
+        json!({"type":"response.completed","response":{"id":"resp_1","status":"completed",
+            "usage":{"input_tokens":6,"output_tokens":3,"total_tokens":9,
+                "input_tokens_details":{"cached_tokens":2},"output_tokens_details":{"reasoning_tokens":1}}}}),
+    ];
+    let mut results = Vec::new();
+    for direct in [false, true] {
+        let mut pipeline = pipeline(Validation::Strict, &[("raw_echo", ToolType::Custom)]);
+        let mut gateway = GatewayStreamAccumulator::new();
+        let mut delivered = Vec::new();
+        for event in &events {
+            let translation = if direct {
+                pipeline.push_frame(normalized_frame(event)).unwrap()
+            } else {
+                push(&mut pipeline, event)
+            };
+            for mut frame in translation.frames {
+                if gateway.process_event(&mut frame, 3) {
+                    delivered.push(serde_json::to_value(frame.wire).unwrap());
+                }
+            }
+        }
+        let payload = pipeline.finish("model", Some("resp_previous"), None).unwrap();
+        assert_eq!(payload.output.len(), 2);
+        let usage = payload.usage.unwrap();
+        assert_eq!(usage.total_tokens, 9);
+        assert_eq!(usage.input_tokens_details.cached_tokens, 2);
+        assert_eq!(usage.output_tokens_details.reasoning_tokens, 1);
+        assert_eq!(delivered[3]["delta"], "thinking");
+        let custom_done = delivered
+            .iter()
+            .find(|event| event["type"] == "response.output_item.done" && event["item"]["type"] == "custom_tool_call")
+            .expect("function call is translated to its public custom-tool shape");
+        assert_eq!(custom_done["item"]["input"], "hello");
+        assert_eq!(custom_done["output_index"], 4);
+        for (sequence, event) in delivered.iter().enumerate() {
+            assert_eq!(event["sequence_number"], sequence);
+        }
+        results.push((delivered, serde_json::to_value(payload).unwrap()));
+    }
+    assert_eq!(results[0], results[1]);
+}
+
+#[test]
+fn normalized_frames_enforce_lifecycle_and_terminal_validation() {
+    let delta = normalized_frame(&json!({"type":"response.output_text.delta","output_index":0,
+        "item_id":"msg_1","content_index":0,"delta":"orphan"}));
+    let mut out_of_order = pipeline(Validation::Strict, &[]);
+    let error = out_of_order.push_frame(delta).unwrap_err();
+    assert!(error.to_string().contains("lifecycle"));
+
+    let mut missing_terminal = pipeline(Validation::Strict, &[]);
+    for event in ["response.created", "response.in_progress"] {
+        missing_terminal
+            .push_frame(normalized_frame(&json!({
+                "type":event,"response":{"id":"resp_1","status":"in_progress"}
+            })))
+            .unwrap();
+    }
+    let error = missing_terminal.finish("model", None, None).unwrap_err();
+    assert!(error.to_string().contains("without a terminal event"));
+}
+
+#[test]
+fn normalized_frames_enforce_retained_output_budget() {
+    let mut pipeline = pipeline(Validation::Strict, &[]);
+    pipeline.accumulator.budget = Some(ExecutorResponseBudget::with_limit(256));
+    start(&mut pipeline);
+    pipeline
+        .push_frame(normalized_frame(
+            &json!({"type":"response.output_item.added","output_index":0,
+                "item":{"id":"msg_1","type":"message","role":"assistant","content":[],"status":"in_progress"}
+            }),
+        ))
+        .unwrap();
+    let error = pipeline
+        .push_frame(normalized_frame(
+            &json!({"type":"response.output_text.delta","output_index":0,
+                "item_id":"msg_1","content_index":0,"delta":"x".repeat(257)
+            }),
+        ))
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        ExecutorError::ResourceLimitExceeded {
+            limit: ResourceLimit::ResponseBudget,
+            ..
+        }
+    ));
 }
 
 #[test]

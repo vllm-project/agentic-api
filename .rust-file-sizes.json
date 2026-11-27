@@ -19,10 +19,6 @@
     "crates/agentic-server-core/src/types/tools/params.rs": {
       "limit": 622,
       "reason": "The shared tagged tool declaration validates the OpenAI auto-container form and exposes its closed public schema; every declaration variant types the async parameter so validation can accept or reject it."
-    },
-    "crates/agentic-server/src/main.rs": {
-      "limit": 644,
-      "reason": "Server configuration resolves the web_fetch settings with the same file and environment precedence as the other tool settings."
     }
   },
   "generated": {}

@@ -1,3 +1,7 @@
+pub(crate) mod direct;
+pub use direct::{DirectInferenceStatus, run_direct};
+
+use std::error::Error as StdError;
 use std::future::{Future, IntoFuture};
 use std::net::SocketAddr;
 use std::num::NonZeroUsize;
@@ -5,17 +9,18 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::app::{
+    AppState, ReadinessTracker, ServerConfig, WebSocketTracker, build_router_with_auth, gateway_listener,
+};
+use crate::auth::{OidcAuthError, OidcAuthenticator, OidcConfig};
+use crate::rate_limit::RateLimitConfig;
+use crate::telemetry::TelemetryError;
 use agentic_core::config::Config;
 use agentic_core::error::Error as CoreError;
 use agentic_core::executor::ExecutionContext;
+use agentic_core::executor::inference::direct::DirectInferenceBackend;
 use agentic_core::proxy::ProxyState;
 use agentic_core::readiness::{llm_readiness_client, wait_llm_ready};
-use agentic_server::app::{
-    AppState, ReadinessTracker, ServerConfig, WebSocketTracker, build_router_with_auth, gateway_listener,
-};
-use agentic_server::auth::{OidcAuthError, OidcAuthenticator, OidcConfig};
-use agentic_server::rate_limit::RateLimitConfig;
-use agentic_server::telemetry::TelemetryError;
 use tokio::{net::TcpListener, task::JoinSet};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
@@ -48,6 +53,8 @@ pub enum ServerError {
     Oidc(#[source] OidcAuthError),
     #[error("failed to initialize telemetry: {0}")]
     Telemetry(#[from] TelemetryError),
+    #[error("native inference startup failed: {0}")]
+    Native(#[source] Box<dyn StdError + Send + Sync>),
 }
 
 impl From<OidcAuthError> for ServerError {
@@ -60,15 +67,21 @@ async fn build_state(
     config: &Config,
     shutdown_token: CancellationToken,
     max_request_body_size: NonZeroUsize,
+    direct: Option<Arc<dyn DirectInferenceBackend>>,
 ) -> Result<AppState, ServerError> {
     let proxy_state = ProxyState::new(config.clone())?;
     // The executor reads `config.max_request_body_size`; the transport keeps its own copy.
-    let exec_ctx = Arc::new(ExecutionContext::from_config(config).await?);
+    let mut exec_ctx = ExecutionContext::from_config(config).await?;
+    if let Some(backend) = direct {
+        exec_ctx = exec_ctx.with_direct_inference(backend);
+    }
+    let exec_ctx = Arc::new(exec_ctx);
 
     Ok(AppState {
         proxy_state,
         exec_ctx,
         llm_readiness_client: llm_readiness_client()?,
+        direct_status: None,
         readiness_tracker: ReadinessTracker::default(),
         shutdown_token,
         websocket_tracker: WebSocketTracker::default(),
@@ -199,8 +212,12 @@ where
     }
 }
 
+/// Register graceful shutdown signals before starting managed resources.
+///
+/// # Errors
+/// Returns an error if a signal listener cannot be installed.
 #[cfg(unix)]
-fn shutdown_signal() -> Result<impl Future<Output = ()>, std::io::Error> {
+pub fn shutdown_signal() -> Result<impl Future<Output = ()>, std::io::Error> {
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let mut interrupt = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
 
@@ -212,8 +229,12 @@ fn shutdown_signal() -> Result<impl Future<Output = ()>, std::io::Error> {
     })
 }
 
+/// Register graceful shutdown signals before starting managed resources.
+///
+/// # Errors
+/// Returns an error if a signal listener cannot be installed.
 #[cfg(not(unix))]
-fn shutdown_signal() -> Result<impl Future<Output = ()>, std::io::Error> {
+pub fn shutdown_signal() -> Result<impl Future<Output = ()>, std::io::Error> {
     let mut interrupt = tokio::signal::windows::ctrl_c()?;
     Ok(async move {
         interrupt.recv().await;
@@ -250,7 +271,7 @@ pub async fn run(config: Config, gateway: GatewayOptions<'_>) -> Result<(), Serv
         None => None,
     };
     wait_until_llm_ready(&config).await?;
-    let state = build_state(&config, CancellationToken::new(), max_request_body_size).await?;
+    let state = build_state(&config, CancellationToken::new(), max_request_body_size, None).await?;
     serve_gateway_until_signal(state, host, port, authenticator, rate_limit).await
 }
 
@@ -302,7 +323,7 @@ pub async fn run_with_llm(
             }
             state = async {
                 wait_until_llm_ready(&config).await?;
-                build_state(&config, shutdown_token.clone(), max_request_body_size).await
+                build_state(&config, shutdown_token.clone(), max_request_body_size, None).await
             } => state?,
         };
 

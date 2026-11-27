@@ -3,6 +3,9 @@
 //! Handles sending requests, reading streaming chunks, and mapping network
 //! and HTTP errors to [`ExecutorError`].
 
+use crate::types::request_response::UpstreamRequest;
+use crate::utils::common::serialize_to_string;
+
 use std::time::Duration;
 
 use async_stream::stream;
@@ -10,6 +13,7 @@ use futures::{Stream, StreamExt};
 use tracing::Instrument as _;
 
 use crate::executor::error::{ExecutorError, ExecutorResult, ResourceLimit};
+use crate::executor::telemetry::stages;
 use crate::proxy::processed_response_headers;
 
 /// Request-scoped upstream headers. The HTTP handler supplies the proxy's filtered
@@ -19,12 +23,6 @@ pub(crate) enum UpstreamHeaders {
     Bearer(String),
     Forwarded(http::HeaderMap),
 }
-
-/// SSE stream of raw lines sent to the client (`data: …\n\n` per event).
-pub type BoxStream = std::pin::Pin<Box<dyn Stream<Item = String> + Send>>;
-
-/// Wire-format marker signalling end-of-stream to the client.
-pub(super) const DONE_MARKER: &str = "data: [DONE]\n\n";
 
 fn llm_transport_error(is_timeout: bool) -> ExecutorError {
     ExecutorError::LLMTransport {
@@ -49,7 +47,10 @@ fn classify_reqwest_error(source: reqwest::Error) -> ExecutorError {
 ///
 /// Returns `Ok(Some(bytes))` on data, `Ok(None)` when the stream ends cleanly,
 /// and `Err` on a network failure or chunk timeout.
-pub(super) async fn next_chunk<S>(stream: &mut S, timeout: Duration) -> ExecutorResult<Option<bytes::Bytes>>
+pub(in crate::executor) async fn next_chunk<S>(
+    stream: &mut S,
+    timeout: Duration,
+) -> ExecutorResult<Option<bytes::Bytes>>
 where
     S: futures::Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Unpin,
 {
@@ -119,7 +120,7 @@ async fn response_text_limited(
 }
 
 /// Maximum size of an upstream error response body retained in [`ExecutorError::LLMRequest`].
-pub(super) const MAX_ERROR_RESPONSE_BYTES: usize = 1024 * 1024;
+pub(in crate::executor) const MAX_ERROR_RESPONSE_BYTES: usize = 1024 * 1024;
 
 /// Build, send, and validate an HTTP POST to the LLM backend.
 ///
@@ -127,7 +128,7 @@ pub(super) const MAX_ERROR_RESPONSE_BYTES: usize = 1024 * 1024;
 /// responses retain their status and filtered headers. `chunk_timeout` bounds the
 /// entire send/header wait and each error-body read; zero disables these bounds.
 /// There is no total deadline. Unreadable error bodies are discarded.
-pub(super) async fn send_request(
+pub(in crate::executor) async fn send_request(
     client: &reqwest::Client,
     url: &str,
     body: String,
@@ -135,7 +136,7 @@ pub(super) async fn send_request(
     chunk_timeout: Duration,
 ) -> ExecutorResult<reqwest::Response> {
     send_request_traced(client, url, body, upstream_headers, chunk_timeout)
-        .instrument(super::telemetry::stages::http_client(url))
+        .instrument(stages::http_client(url))
         .await
 }
 
@@ -150,7 +151,7 @@ async fn send_request_traced(
         Some(UpstreamHeaders::Forwarded(forwarded)) => forwarded.clone(),
         Some(UpstreamHeaders::Bearer(_)) | None => http::HeaderMap::new(),
     };
-    super::telemetry::stages::inject_context(&mut headers);
+    stages::inject_context(&mut headers);
     headers
         .entry(reqwest::header::CONTENT_TYPE)
         .or_insert(reqwest::header::HeaderValue::from_static("application/json"));
@@ -203,7 +204,7 @@ async fn send_request_traced(
 
 /// Fetch a size-bounded JSON body and filtered response headers.
 /// Generation may finish before headers arrive, so JSON has no header or body idle timeout.
-pub(super) async fn fetch_response_json(
+pub(in crate::executor) async fn fetch_response_json(
     upstream_json: String,
     url: &str,
     client: &reqwest::Client,
@@ -218,7 +219,7 @@ pub(super) async fn fetch_response_json(
 
 /// Convert a successful upstream response body into SSE data lines with a `data: ` prefix.
 /// The single space after the field colon is optional on the wire.
-pub(super) fn response_lines(
+pub(in crate::executor) fn response_lines(
     resp: reqwest::Response,
     chunk_timeout: Duration,
     max_sse_line_bytes: usize,
@@ -264,3 +265,7 @@ pub(super) fn response_lines(
 
 #[cfg(test)]
 mod tests;
+
+pub(in crate::executor) fn encode_request(request: &UpstreamRequest<'_>) -> ExecutorResult<String> {
+    Ok(serialize_to_string(request)?)
+}

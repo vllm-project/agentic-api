@@ -79,6 +79,9 @@ pub struct CodexModelCapabilities {
     pub slug: String,
     /// The modalities the gateway resolved for this model.
     pub input_modalities: InputModalities,
+    /// Whether Codex may request reasoning summaries and encrypted reasoning.
+    #[serde(default)]
+    pub supports_reasoning_summaries: bool,
     /// The reasoning levels the gateway advertised, in catalog order.
     #[serde(default)]
     pub supported_reasoning_levels: Vec<CodexReasoningLevel>,
@@ -470,5 +473,28 @@ mod tests {
         assert!(catalog.models.is_empty());
         assert!(catalog.select(None).is_none());
         assert!(catalog.select(Some("any-model")).is_none());
+    }
+}
+
+/// Model metadata obtained from the connected native engine.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct ServedModel {
+    pub id: String,
+    pub max_model_len: u32,
+    object: &'static str,
+    created: u64,
+    owned_by: &'static str,
+}
+
+impl ServedModel {
+    #[must_use]
+    pub fn new(id: String, max_model_len: u32) -> Self {
+        Self {
+            id,
+            max_model_len,
+            object: "model",
+            created: 0,
+            owned_by: "vllm",
+        }
     }
 }

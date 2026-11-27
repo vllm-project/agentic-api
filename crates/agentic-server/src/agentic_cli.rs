@@ -139,17 +139,14 @@ pub struct ValidateOptions {
 #[derive(Args, Clone, Debug)]
 pub struct SourceOptions {
     /// Connect to an already-running OpenAI-compatible upstream (`http://` or `https://` base URL)
-    #[arg(long, required_unless_present = "model", value_parser = parse_upstream_url)]
+    #[arg(long, value_parser = parse_upstream_url)]
     pub upstream: Option<String>,
 
-    /// Model to start with vLLM, or the model name to use with `--upstream`.
-    /// When omitted alongside `--upstream`, the first model served by the upstream is used.
-    #[arg(long, required_unless_present = "upstream")]
+    /// Override the direct model recipe, or select a model with `--upstream`.
+    /// Direct mode loads model.config in the Agentic API home when omitted.
+    /// HTTP mode selects the first model served by the upstream when omitted.
+    #[arg(long)]
     pub model: Option<String>,
-
-    /// vLLM port when starting a model
-    #[arg(long, default_value_t = 8000)]
-    pub llm_port: u16,
 }
 
 #[derive(Args, Clone, Debug)]
@@ -481,4 +478,9 @@ mod tests {
 
         assert_eq!(api_key.get_env(), Some(OsStr::new("AGENTIC_GATEWAY_API_KEY")));
     }
+}
+#[test]
+fn model_recipe_can_supply_the_model_for_serve_and_run() {
+    assert!(Cli::try_parse_from(["agentic", "serve"]).is_ok());
+    assert!(Cli::try_parse_from(["agentic", "run", "codex"]).is_ok());
 }

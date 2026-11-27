@@ -1,6 +1,6 @@
 //! Synchronous semantic state for one inference round.
 
-use crate::events::{ClassifiedSseLine, EventPayload, SSEItemType};
+use crate::events::{ClassifiedSseLine, EventFrame, EventPayload, SSEItemType};
 use crate::executor::accumulator::{ResponseAccumulator, Validation};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::response_budget::ExecutorResponseBudget;
@@ -56,11 +56,18 @@ impl RoundIngestion {
     /// Ignored input emits no frames while retaining the current deferral boundary.
     pub(in crate::executor) fn push(&mut self, line: ClassifiedSseLine) -> ExecutorResult<Translation> {
         self.body_kind = BodyKind::Stream;
+        match self.accumulator.normalize_line(line)? {
+            Some(frame) => self.push_frame(frame),
+            None => Ok(self.empty_translation()),
+        }
+    }
+
+    /// Ingests an already normalized event without parsing an SSE data line.
+    pub(in crate::executor) fn push_frame(&mut self, frame: EventFrame) -> ExecutorResult<Translation> {
+        self.body_kind = BodyKind::Stream;
         Ok(
-            Self::translate_line(&mut self.accumulator, line, &mut self.translator)?.unwrap_or_else(|| Translation {
-                frames: Vec::new(),
-                defer_from_output_index: self.translator.defer_from_output_index(),
-            }),
+            Self::translate_frame(&mut self.accumulator, frame, &mut self.translator)?
+                .unwrap_or_else(|| self.empty_translation()),
         )
     }
 
@@ -78,12 +85,12 @@ impl RoundIngestion {
         self.accumulator.ensure_steering_settled()
     }
 
-    pub(in crate::executor) fn translate_line(
+    pub(in crate::executor) fn translate_frame(
         accumulator: &mut ResponseAccumulator,
-        line: ClassifiedSseLine,
+        frame: EventFrame,
         translator: &mut TranslationDispatcher,
     ) -> ExecutorResult<Option<Translation>> {
-        let Some(frame) = accumulator.process_line(line)? else {
+        let Some(frame) = accumulator.process_event_frame(frame)? else {
             return Ok(None);
         };
         let call = function_event_index(&frame.payload).and_then(|index| accumulator.accumulated_function_call(index));
@@ -93,6 +100,25 @@ impl RoundIngestion {
             .and_then(|index| u32::try_from(index).ok())
             .and_then(|index| accumulator.accumulated_item_type(index));
         translator.translate(frame, call, item_type).map(Some)
+    }
+
+    #[cfg(test)]
+    pub(in crate::executor) fn translate_line(
+        accumulator: &mut ResponseAccumulator,
+        line: ClassifiedSseLine,
+        translator: &mut TranslationDispatcher,
+    ) -> ExecutorResult<Option<Translation>> {
+        let Some(frame) = accumulator.normalize_line(line)? else {
+            return Ok(None);
+        };
+        Self::translate_frame(accumulator, frame, translator)
+    }
+
+    fn empty_translation(&self) -> Translation {
+        Translation {
+            frames: Vec::new(),
+            defer_from_output_index: self.translator.defer_from_output_index(),
+        }
     }
 
     /// Consumes the round, applying terminal policy and public tool-search projection once.

@@ -151,7 +151,15 @@ impl ResponseAccumulator {
     }
 
     /// Normalize classified data once, then validate and fold under the fixed policy.
+    #[cfg(test)]
     pub(super) fn process_line(&mut self, line: ClassifiedSseLine) -> ExecutorResult<Option<EventFrame>> {
+        let Some(frame) = self.normalize_line(line)? else {
+            return Ok(None);
+        };
+        self.process_event_frame(frame)
+    }
+
+    pub(super) fn normalize_line(&self, line: ClassifiedSseLine) -> ExecutorResult<Option<EventFrame>> {
         let ClassifiedSseLine::Data(data) = line else {
             return Ok(None);
         };
@@ -161,6 +169,11 @@ impl ResponseAccumulator {
             }
             return Ok(None);
         };
+        Ok(Some(frame))
+    }
+
+    /// Shares validation and assembly between normalized frames and HTTP/SSE input.
+    pub(super) fn process_event_frame(&mut self, frame: EventFrame) -> ExecutorResult<Option<EventFrame>> {
         let disposition = self.process_normalized_event(&frame)?;
         let Some(mut frame) = disposition.into_frame(frame) else {
             return Ok(None);

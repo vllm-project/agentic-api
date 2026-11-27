@@ -381,8 +381,11 @@ impl ToolChoice {
 
     /// Converts client-facing custom, shell, and file-search selectors to the function-tool shape
     /// used by the normalized upstream tool declarations.
+    ///
+    /// # Panics
+    /// Panics only if the built-in shell function name is changed to an empty string.
     #[must_use]
-    pub(crate) fn normalized_for_upstream(&self) -> Self {
+    pub fn normalized_for_upstream(&self) -> Self {
         match self {
             Self::Shell => Self::Function {
                 namespace: None,

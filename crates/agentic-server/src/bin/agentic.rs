@@ -4,7 +4,7 @@ use agentic_core::error::Error;
 use agentic_server::{
     agentic_cli::{AttachedHarnessCommand, Cli, Command, HarnessCommand},
     agentic_output::{colorize_help, redact_url, redact_urls, render_banner, render_help},
-    agentic_process::{run_attached_harness, run_session, server_args, server_binary_path},
+    agentic_process::{run_attached_harness, run_server, run_session, server_binary_path},
 };
 use clap::{Parser, error::ErrorKind};
 
@@ -74,22 +74,16 @@ async fn serve(
     common: agentic_server::agentic_cli::CommonOptions,
 ) -> Result<ExitCode, Error> {
     let current_exe = std::env::current_exe()?;
-    let server_path = server_binary_path(&current_exe);
-    let mut child = tokio::process::Command::new(server_path);
-    child.args(server_args(&source, &common));
-    child.stdin(std::process::Stdio::inherit());
-    child.stdout(std::process::Stdio::inherit());
-    child.stderr(std::process::Stdio::inherit());
-    let status = child.spawn()?.wait().await?;
+    let status = run_server(&current_exe, &source, &common).await?;
     Ok(ExitCode::from(status.code().unwrap_or(1).try_into().unwrap_or(1)))
 }
 
 async fn validate(options: agentic_server::agentic_cli::ValidateOptions) -> Result<ExitCode, Error> {
     let current_exe = std::env::current_exe()?;
-    let server_path = server_binary_path(&current_exe);
+    let server_path = server_binary_path(&current_exe, &options.source);
     if !server_path.is_file() {
         return Err(Error::Config(format!(
-            "agentic-server binary not found at {}",
+            "gateway binary not found at {}",
             server_path.display()
         )));
     }
@@ -105,11 +99,6 @@ async fn validate(options: agentic_server::agentic_cli::ValidateOptions) -> Resu
     agentic_core::storage::create_pool_with_schema(Some(&options.common.database_url))
         .await
         .map_err(|error| Error::Config(format!("database validation failed: {error}")))?;
-    if options.source.model.is_some() && options.source.upstream.is_none() && which(OsStr::new("python")).is_none() {
-        return Err(Error::Config(
-            "python was not found; it is required for --model".to_owned(),
-        ));
-    }
     if let Some(harness) = options.harness {
         let binary_name = match harness {
             agentic_server::agentic_cli::Harness::Codex => "codex",
@@ -128,7 +117,10 @@ async fn validate(options: agentic_server::agentic_cli::ValidateOptions) -> Resu
         }
     }
     if !options.common.quiet {
-        println!("Agentic API configuration looks valid.");
+        println!("Gateway and harness prerequisites look valid.");
+        if options.source.upstream.is_none() {
+            println!("The native model recipe and engine are checked at startup.");
+        }
     }
     Ok(ExitCode::SUCCESS)
 }

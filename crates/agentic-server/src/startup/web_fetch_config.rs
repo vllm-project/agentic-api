@@ -6,7 +6,7 @@ use std::time::Duration;
 use agentic_core::config::WebFetchConfig;
 use agentic_core::error::Error;
 
-use crate::config_file::WebFetchFileConfig;
+use crate::startup::config_file::WebFetchFileConfig;
 
 /// Environment override for whether native `web_fetch` declarations are executed.
 const WEB_FETCH_ENABLED_ENV: &str = "AGENTIC_WEB_FETCH_ENABLED";

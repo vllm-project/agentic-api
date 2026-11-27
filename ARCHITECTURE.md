@@ -45,6 +45,16 @@ The dependency direction is one-way: `agentic-server` and `agentic-llm-d` depend
 client-facing HTTP/WS transport belongs to the adapter crates, while upstream HTTP/SSE
 I/O lives in core inference transport.
 
+Core reuses `events::EventFrame` for HTTP and direct inference. The injected
+`executor::inference::direct::DirectInferenceBackend` consumes the existing
+`UpstreamRequest` projection and returns normalized events. `agentic-vllm` implements
+that boundary using shared vLLM model preparation and EngineCore communication;
+core and the existing server do not depend on this unpublished integration crate.
+The unpublished `agentic-server-native` composes both libraries and owns a managed headless engine.
+The CLI selects it without `--upstream`, loading startup model settings from `model.config`.
+Distributed contracts remain proposed in the
+[shared inference and session contracts](docs/design/shared-responses-library.md).
+
 ## Request flow at a glance
 
 ```
@@ -122,7 +132,7 @@ The crate produces a library plus two independent binaries. `src/lib.rs` exports
 
 | Binary | Entry point | Uses |
 |---|---|---|
-| `agentic-server` (the gateway) | `src/main.rs` | `app`, `auth`, `handler`, `model_capabilities`, `rate_limit`, plus binary-private `server.rs`, `config_file.rs`, and `server_settings.rs` |
+| `agentic-server` (the gateway) | `src/main.rs` | `app`, `auth`, `handler`, `model_capabilities`, `rate_limit`, plus shared `server.rs` and `startup/` configuration |
 | `agentic` (the CLI launcher) | `src/bin/agentic.rs` | `agentic_cli`, `agentic_harness`, `agentic_output`, `agentic_process`, `model_capabilities` |
 
 These are two unrelated concerns bundled in one crate. If you're working on request
@@ -147,22 +157,23 @@ Catalog display defaults do not become admission limits.
   route and layers [request admission](#request-admission-authentication-then-rate-limits)
   onto the protected ones: optional OIDC auth (`auth::require_oidc`), then optional rate
   limiting (`rate_limit::enforce_rate_limit`).
-- **`server.rs`** (binary-private) owns process lifecycle: `build_state` (constructs
+- **`server.rs`** (library) owns process lifecycle: `build_state` (constructs
   `ExecutionContext::from_config`, i.e. where the DB pool actually gets created),
   `serve_gateway`/`serve_gateway_until_signal` (bind, serve, graceful shutdown with a
   bounded drain), and `run`/`run_with_llm` (standalone mode, optionally spawning a vLLM
   subprocess). It serves with `into_make_service_with_connect_info::<SocketAddr>()`, so
   middleware can read each connection's peer address.
-- **`main.rs`** (binary-private) is the `clap` CLI front end: parses config from
-  flags/env/`config.toml`, then calls `server::run` or `server::run_with_llm`.
-- **`server_settings.rs`** (binary-private) resolves the gateway admission settings from
+- **`main.rs`** calls the shared `startup::main` entry point. `startup/` owns the `clap` CLI and
+  flags/env/`config.toml` resolution. The native composition binary supplies its startup runner;
+  the published server does not depend on the native integration crate.
+- **`startup/server_settings.rs`** resolves the gateway admission settings from
   the `[server]` table: the request body size ceiling (`resolve_max_request_body_size`)
   and the per-caller rate limit (`resolve_rate_limit`, which returns `None` when no rate
   is set and rejects a burst without a rate). Each setting resolves as CLI argument >
   environment variable > configuration file > default, and an explicit CLI argument
   skips the lower sources, so a malformed inherited environment value cannot block
   startup. `generated_server_file_config` records the same environment variables when
-  `main.rs` generates a configuration file.
+  `startup/` generates a configuration file.
 
 ### HTTP handlers (`handler/http/`)
 
@@ -911,16 +922,22 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
 - **`upstream.rs`** — the narrow adapter between inference transport and the pipeline.
   It builds `UpstreamRequest`s, snapshots registry classification facts into an owned
   `TranslationContext`, passes the shared retained-data budget into ingestion, and
-  passes each live JSON or SSE body to `AgentPipeline`. It does not charge SSE wire bytes.
-- **`inference.rs`** — `send_request`, `fetch_response_json`, and `response_lines` own
-  raw HTTP/SSE transport. No parsing beyond splitting `data: ...` lines and stopping at
-  `[DONE]`. The shared client built by `ExecutionContext::from_config` has a 10-second
-  connect timeout. Streaming header waits and body reads use the existing progress window;
+  chooses HTTP or the injected direct backend, passing JSON, SSE, or normalized
+  events to `AgentPipeline`. Request preparation remains shared in `prepare.rs`.
+- **`inference/http/`** — HTTP request encoding, transport, and SSE framing. `send_request`,
+  `fetch_response_json`, and `response_lines` remain available to shared orchestration.
+  Transport splits `data: ...` lines and stops at `[DONE]`; events own semantic parsing.
+  The shared client built by `ExecutionContext::from_config` has a 10-second connect
+  timeout. Streaming header waits and body reads use the existing progress window;
   JSON uses zero (no timeout), and there is no total inference deadline. Progress means
   wire bytes, not semantic tokens. Body byte ceilings remain enforced. See the
   [configuration guide](docs/guides/configuration.md#typed-upstream-timeouts) for the security tradeoff.
+- **`inference/direct/`** — the injected runtime boundary, attempt identity,
+  cancellation, idle/admission timeouts, and event-size enforcement. `agentic-vllm`
+  loads tokenizer/template/parser resources once; its shared frontend renders and
+  tokenizes each prepared request before direct EngineCore submission.
 - **`pipeline.rs`, `pipeline/`** — `AgentPipeline`, the request-owned entry point for
-  both response body formats. `RoundIngestion` owns the synchronous per-round semantic
+  JSON, SSE, and normalized events. `RoundIngestion` owns the synchronous per-round semantic
   core; its `StreamRelay` (`relay.rs`, `relay/`) owns awaited, ordered client delivery
   across rounds.
 - **`engine.rs`** — the top-level orchestrator: `ExecuteRequest`/`execute()`
@@ -1305,12 +1322,12 @@ capture remains in the Python recorder and scenario shell script.
 
 RFC [#241](https://github.com/vllm-project/agentic-api/issues/241) and issue
 [#243](https://github.com/vllm-project/agentic-api/issues/243) established one path for
-JSON and live SSE response bodies:
+JSON, live SSE response bodies, and normalized direct events:
 
 ```text
-inference.rs
-  ├─complete JSON───────────────────────┐
-  └─framed SSE lines─▶ SseLine::parse───┤
+inference/http/ ─complete JSON───────────┐
+               └framed SSE─▶ SseLine────┤
+inference/direct/ ─EventFrame───────────┤
                                         ▼
                                   AgentPipeline
                          │
@@ -1340,9 +1357,10 @@ inference rounds → gateway execution → terminal policy → persistence
 
 | Stage | Responsibility |
 | --- | --- |
-| Inference transport (`inference.rs`) | HTTP I/O, byte chunks, SSE framing, timeouts, and `[DONE]` detection. |
+| HTTP inference (`inference/http/`) | HTTP I/O, request encoding, byte chunks, SSE framing, timeouts, and `[DONE]` detection. |
+| Direct inference (`inference/direct/`, `agentic-vllm`) | Model/runtime preparation, per-round rendering/tokenization, engine submission, and conversion to existing events. |
 | Event parsing (`events/`) | Classify one SSE line and normalize one data payload into an `EventFrame`. |
-| Request pipeline (`pipeline.rs`) | Hold one request context, tool-search state, the response's stream relay, and the JSON/SSE body entry points. |
+| Request pipeline (`pipeline.rs`) | Hold one request context, tool-search state, the response's stream relay, and the JSON/SSE/normalized-event entry points. |
 | Round ingestion (`pipeline/ingest.rs`) | Process one body with one `ResponseAccumulator`, one `TranslationDispatcher`, and final response normalization. |
 | Stream relay (`relay.rs`) | Own the client sink, presentation state, round offset, deferred buffer, and their limits; present local and upstream frames through one send path. |
 | Agent execution (`engine/agent_turn.rs`) | Own the per-agent registry and round progress; perform inference/tool work and return typed round outcomes. |
@@ -1351,7 +1369,7 @@ inference rounds → gateway execution → terminal policy → persistence
 `AgentPipeline` currently lives for the complete public response. `EngineOrchestration`
 creates the shared response budget and an `AgentTurn` that retains its own registry
 and exclusively borrows the pipeline. Each turn step asks `upstream.rs` to run the
-inference body through `run_with_json_body` or live `run_with_stream_body`. A new
+inference body through `run_with_json_body`, live `run_with_stream_body`, or `run_with_event_body`. A new
 `RoundIngestion` is created for every body and consumed by finalization, while
 `StreamRelay` and its `GatewayStreamAccumulator` survive across inference rounds.
 
@@ -1428,12 +1446,19 @@ Steering therefore extends the existing completion transitions and consuming
 finalizer; it has no second parser, completion classifier or output-item hierarchy.
 Only received usage is retained; a cut round may lack terminal usage accounting.
 
-The pipeline's streaming entry is `process_line(ClassifiedSseLine)`. It normalizes and
-validates a data line, applies the event to the slot keyed by its validated output
-index, and returns at most one validated `EventFrame` for translation. For function
-events, `accumulated_function_call(output_index)` exposes a borrowed typed call and its
-folded arguments. `finish` applies SSE end-of-stream policy; `finalize` preserves the
-status loaded from a complete JSON body.
+The pipeline's HTTP/SSE streaming entry is `RoundIngestion::push(ClassifiedSseLine)`.
+It normalizes the data using the accumulator's fixed validation policy, then calls
+`RoundIngestion::push_frame(EventFrame)`. Already normalized events enter at that
+same method. Both paths use `ResponseAccumulator::process_event_frame` for validation
+and assembly, followed by the existing tool translator. `GatewayStreamAccumulator`
+continues to own client sequence numbers and output offsets. Native adapters should
+produce the existing `EventFrame`/`EventPayload`/`SSEEventType` representations; a second
+inference-event enum or output-item assembler is unnecessary. `ExecutionContext::with_direct_inference`
+selects the native backend for inference rounds and compaction. `decode_upstream` uses the same pipeline for buffered bodies.
+For function events,
+`accumulated_function_call(output_index)` exposes a borrowed typed call and its folded
+arguments. `finish` applies SSE end-of-stream policy; `finalize` preserves the status
+loaded from a complete JSON body.
 
 When adding an output-item kind, extend its typed construction and completion logic in
 `types/io/output.rs`, the variants and exhaustive dispatch in `accumulator/active.rs`,
@@ -2384,7 +2409,7 @@ router, reusing the same core logic in-process.
 | Task | Where |
 |---|---|
 | Add a new HTTP or WebSocket route | `agentic-server/src/handler/{http,websocket}/`, wire it in `app.rs`'s `build_router_with_auth` |
-| Change request admission (authentication, rate limits, or gateway-raised errors) | The layer order in `app.rs`'s `build_router_with_auth`, then `auth.rs`, `rate_limit.rs`, or `error_response.rs`; startup settings in `server_settings.rs` |
+| Change request admission (authentication, rate limits, or gateway-raised errors) | The layer order in `app.rs`'s `build_router_with_auth`, then `auth.rs`, `rate_limit.rs`, or `error_response.rs`; startup settings in `startup/server_settings.rs` |
 | Support a new upstream SSE event | `events/types.rs` → `events/normalize.rs` → `executor/accumulator/` → `executor/translate/` when the event needs public tool-shape translation |
 | Add a new tool type | `tool/handler.rs` impl(s) → `tool/declaration.rs` (a `ToolDeclaration` kind and its view) → `tool/normalize.rs` → `tool/registry.rs` → `executor/translate/client.rs` for client-executed function shapes → `tool/executors.rs` for lazy gateway setup |
 | Change gateway-round concurrency or lifecycle ordering | `executor/gateway.rs` (`GatewayScheduler`/event plans) + `executor/engine.rs` (round decision/ordered streaming) + `tool/ownership.rs` (typed binding and same-tool safety) |

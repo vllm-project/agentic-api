@@ -1,9 +1,20 @@
+use serde::de::Error as _;
 use serde_json::Value;
 
 use super::types::{EventFrame, EventPayload, SSEEventType, SSEItemType, ShellCommandUpdate, WireEvent};
 use super::{ClassifiedSseLine, SseLine};
 use crate::types::io::{AgentMessageContent, OutputItem};
-use crate::utils::common::{deserialize_from_str_opt, deserialize_from_value_opt};
+use crate::utils::common::{deserialize_from_str_opt, deserialize_from_value_opt, serialize_to_value};
+
+impl TryFrom<WireEvent> for EventFrame {
+    type Error = serde_json::Error;
+
+    fn try_from(wire: WireEvent) -> Result<Self, Self::Error> {
+        normalize_sse_value(serialize_to_value(&wire)?)
+            .map_err(serde_json::Error::custom)?
+            .ok_or_else(|| serde_json::Error::custom("invalid event envelope"))
+    }
+}
 
 /// Normalize a raw SSE data line into a typed [`EventFrame`].
 ///
