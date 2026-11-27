@@ -19,6 +19,8 @@ All notable changes to Agentic API are documented here.
   call. The gateway forwards `X-Session-ID`, which vLLM reads as the request's `session_id`, set to a SHA-256 of the
   verified OIDC principal (or the default tenant) and the client's id, so a client's own `X-Session-ID` no longer
   reaches the upstream unchanged. With neither header, `vllm_xargs.session_id` in the body is scoped the same way.
+- Added Sofya as a selectable `web_search` provider with `AGENTIC_WEB_SEARCH_PROVIDER=sofya` and `SOFYA_API_KEY`.
+  Domain filters and `freshness` (including date ranges) are forwarded to Sofya's own parameters.
 
 ### Changed
 

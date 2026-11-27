@@ -27,18 +27,21 @@ use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use reqwest::StatusCode;
 use serde::Deserialize;
 
-use super::args::{Freshness, WebSearchArguments, clean_string, clean_vec, retain_allowed_results, validate_count};
+use super::args::{
+    Freshness, SearchArgument, SearchScope, WebSearchArguments, clean_string, log_ignored_arguments,
+    retain_allowed_results,
+};
+use super::provider::{ProviderSettings, failure_from_status};
 use super::{
-    ApiKey, WebSearchProvider, WebSearchProviderMetadata, WebSearchProviderResponse, WebSearchResult, clean_base_url,
-    null_as_default, read_response_limited,
+    ApiKey, WebSearchProvider, WebSearchProviderMetadata, WebSearchProviderResponse, WebSearchResult, null_as_default,
+    read_response_limited,
 };
 use crate::config::WebSearchProviderKind;
 use crate::tool::domain_policy::DomainFilter;
 use crate::tool::handler::ToolError;
-use crate::types::tools::{WebSearchContextSize, WebSearchToolParam};
+use crate::types::tools::WebSearchToolParam;
 
 pub(crate) const SERPLY_API_KEY: &str = WebSearchProviderKind::Serply.default_api_key_env();
 
@@ -66,18 +69,12 @@ impl SerplySearchProvider {
         base_url: Option<String>,
         max_concurrent_requests: NonZeroUsize,
     ) -> Self {
-        let api_key = api_key
-            .map(|value| value.trim().to_owned())
-            .filter(|value| !value.is_empty())
-            .map(ApiKey);
-        let base_url = base_url
-            .and_then(|value| clean_base_url(&value))
-            .or_else(|| WebSearchProviderKind::Serply.default_base_url().map(str::to_owned))
-            .unwrap_or_default();
+        let ProviderSettings { api_key, base_url } =
+            ProviderSettings::from_values(WebSearchProviderKind::Serply, api_key, base_url);
         Self {
             client,
             api_key,
-            base_url,
+            base_url: base_url.unwrap_or_default(),
             max_concurrent_requests,
         }
     }
@@ -108,7 +105,7 @@ impl WebSearchProvider for SerplySearchProvider {
 
             let status = resp.status();
             if !status.is_success() {
-                return Err(failure_from_status(resp).await);
+                return Err(failure_from_status(resp, WebSearchProviderKind::Serply, &[]).await);
             }
 
             let response_text = read_response_limited(resp, WebSearchProviderKind::Serply).await?;
@@ -120,41 +117,6 @@ impl WebSearchProvider for SerplySearchProvider {
 
     fn max_concurrent_requests(&self) -> Option<NonZeroUsize> {
         Some(self.max_concurrent_requests)
-    }
-}
-
-/// Maps a non-2xx Serply response to an actionable, credential-free error.
-///
-/// `401`/`403` name the key variable without echoing the upstream body; `429`
-/// is reported without retrying (a retry loop would blur the gateway tool
-/// timeout) and carries the upstream `Retry-After` so the caller can back off.
-async fn failure_from_status(resp: reqwest::Response) -> ToolError {
-    let status = resp.status();
-    match status {
-        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => ToolError::Execution(format!(
-            "Serply rejected the API key ({status}); check {SERPLY_API_KEY}"
-        )),
-        StatusCode::TOO_MANY_REQUESTS => {
-            let retry_after = resp
-                .headers()
-                .get("retry-after")
-                .and_then(|value| value.to_str().ok())
-                .map(str::trim)
-                .filter(|value| !value.is_empty());
-            let hint = retry_after.map_or_else(
-                || "; no Retry-After header was provided".to_owned(),
-                |value| format!("; retry after {value}"),
-            );
-            ToolError::Execution(format!(
-                "Serply rate limited the request ({status}); the gateway does not retry{hint}"
-            ))
-        }
-        _ => {
-            let body = read_response_limited(resp, WebSearchProviderKind::Serply)
-                .await
-                .unwrap_or_default();
-            ToolError::Execution(format!("Serply search returned {status}: {body}"))
-        }
     }
 }
 
@@ -203,33 +165,8 @@ impl SerplySearchRequest {
         args: &WebSearchArguments,
         config: &WebSearchToolParam,
     ) -> Result<Self, ToolError> {
-        let num = args
-            .count
-            .or_else(|| {
-                config
-                    .search_context_size
-                    .map(WebSearchContextSize::default_count)
-                    .map(u16::from)
-            })
-            .map(validate_count)
-            .transpose()?
-            .map(clamp_count);
-        let config_domains = config
-            .filters
-            .as_ref()
-            .and_then(|filters| clean_vec(filters.allowed_domains.as_deref()));
-        let config_blocked_domains = config
-            .filters
-            .as_ref()
-            .and_then(|filters| clean_vec(filters.blocked_domains.as_deref()));
-        let include_domains = config_domains.or_else(|| args.include_domains.clone());
-        let exclude_domains = config_blocked_domains.or_else(|| args.exclude_domains.clone());
-        if include_domains.is_some() && (exclude_domains.is_some() || args.boost_domains.is_some()) {
-            return Err(ToolError::Config(
-                "include_domains cannot be combined with exclude_domains or boost_domains".to_owned(),
-            ));
-        }
-        log_ignored_arguments(args);
+        let scope = SearchScope::from_args_and_config(args, config, Some(SERPLY_MAX_COUNT))?;
+        log_ignored_arguments(WebSearchProviderKind::Serply, args, config, IGNORED_ARGUMENTS);
         let gl = config
             .user_location
             .as_ref()
@@ -253,11 +190,15 @@ impl SerplySearchRequest {
             Some(freshness) => serply_tbs(freshness),
             None => None,
         };
-        push_site_operators(&mut q, include_domains.as_deref(), exclude_domains.as_deref());
+        push_site_operators(
+            &mut q,
+            scope.include_domains.as_deref(),
+            scope.exclude_domains.as_deref(),
+        );
 
         Ok(Self {
             q,
-            num,
+            num: scope.count,
             tbs,
             gl,
             hl: args.language.clone(),
@@ -267,7 +208,7 @@ impl SerplySearchRequest {
                 .as_deref()
                 .filter(|value| value.eq_ignore_ascii_case("strict"))
                 .map(|_| "active"),
-            domain_filter: DomainFilter::new(include_domains.as_deref(), exclude_domains.as_deref()),
+            domain_filter: scope.domain_filter(),
         })
     }
 }
@@ -294,37 +235,14 @@ fn push_site_operators(q: &mut String, include: Option<&[String]>, exclude: Opti
     }
 }
 
-/// Serply honors at most [`SERPLY_MAX_COUNT`] results; the model cannot know
-/// provider limits, so a larger request is clamped rather than rejected.
-fn clamp_count(count: u8) -> u8 {
-    if count > SERPLY_MAX_COUNT {
-        tracing::debug!(
-            requested = count,
-            max = SERPLY_MAX_COUNT,
-            "clamped web_search count to Serply maximum"
-        );
-        SERPLY_MAX_COUNT
-    } else {
-        count
-    }
-}
-
 /// You.com-specific arguments have no Serply equivalent and are dropped;
 /// `boost_domains` has no filtering semantics, so it is dropped too.
-fn log_ignored_arguments(args: &WebSearchArguments) {
-    let ignored: Vec<&str> = [
-        ("livecrawl", args.livecrawl.is_some()),
-        ("livecrawl_formats", args.livecrawl_formats.is_some()),
-        ("crawl_timeout", args.crawl_timeout.is_some()),
-        ("boost_domains", args.boost_domains.is_some()),
-    ]
-    .into_iter()
-    .filter_map(|(name, present)| present.then_some(name))
-    .collect();
-    if !ignored.is_empty() {
-        tracing::debug!(arguments = ?ignored, "ignored web_search arguments without a Serply equivalent");
-    }
-}
+const IGNORED_ARGUMENTS: &[SearchArgument] = &[
+    SearchArgument::Livecrawl,
+    SearchArgument::LivecrawlFormats,
+    SearchArgument::CrawlTimeout,
+    SearchArgument::BoostDomains,
+];
 
 /// Renders a relative freshness filter as Google's `tbs` value; a range is
 /// expressed as query operators instead and has no `tbs`.
@@ -492,7 +410,7 @@ impl SerplySearchResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::tools::{DomainFilters, WebSearchUserLocation};
+    use crate::types::tools::{DomainFilters, WebSearchContextSize, WebSearchUserLocation};
 
     fn build_provider(api_key: Option<&str>, base_url: Option<&str>) -> SerplySearchProvider {
         SerplySearchProvider::from_values(
