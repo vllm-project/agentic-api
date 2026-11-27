@@ -1368,7 +1368,10 @@ async fn storage_backed_state_with(
     let db = TestDb::new();
     let db_url = db.url();
     let pool = create_pool_with_schema(Some(&db_url)).await.unwrap();
-    let config = test_config(llm_url);
+    let mut config = test_config(llm_url);
+    // Functional websocket tests exercise conversation routes without a bearer
+    // token, so leave the key unset (the documented unauthenticated mode).
+    config.openai_api_key = None;
     let client = Arc::new(reqwest::Client::new());
     let mut exec_ctx = ExecutionContext::new(
         ConversationHandler::new(ConversationStore::new(Arc::clone(&pool))),
