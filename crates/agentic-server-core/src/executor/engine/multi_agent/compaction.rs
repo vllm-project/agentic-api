@@ -1,25 +1,25 @@
 //! Explicit root compaction uses the same safe-prefix plan as automatic compaction.
 use super::{MultiAgentRun, invalid, registry_error, restore_agents};
-use crate::executor::inference::UpstreamHeaders;
 use crate::executor::{
     error::ExecutorResult,
     multi_agent::{CheckpointLimits, CompactionPlan, ValidatedTreeCheckpoint, collaboration::attribution},
-    request::{ExecutionContext, RequestContext},
+    pipeline::AgentPipeline,
+    request::ExecutionContext,
     response_budget::ExecutorResponseBudget,
 };
 use crate::types::{
     agent_tree::StoredTreeSnapshot,
     io::{CompactionItem, InOutItem, InputItem, ResponseUsage},
 };
-
 impl MultiAgentRun {
     // No agent tasks are running during this operation: the restored snapshot is
     // exclusively owned until the caller persists the resulting response and tree.
     pub(crate) async fn compact_root(
-        ctx: &mut RequestContext,
+        pipeline: &mut AgentPipeline,
         exec: &ExecutionContext,
-        auth: Option<&UpstreamHeaders>,
     ) -> ExecutorResult<(CompactionItem, ResponseUsage, Option<String>)> {
+        let auth = pipeline.upstream_headers().cloned();
+        let ctx = &mut pipeline.request;
         let budget = ExecutorResponseBudget::with_limit(exec.responses_config.max_retained_bytes);
         let mut restored = restore_agents(ctx, exec, &budget)?;
         ctx.new_input_items

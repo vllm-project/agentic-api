@@ -15,8 +15,6 @@ pub(super) use lifecycle::{
 pub(crate) use policy::GatewaySchedulerPolicy;
 #[cfg(test)]
 pub(super) use policy::MAX_CONCURRENT_MATERIALIZATIONS;
-#[cfg(test)]
-use public_output::complete_gateway_event_plans;
 pub(super) use public_output::{
     GatewayPublicOutputSource, compaction_event_plans, mcp_list_tools_event_plans, public_output_items,
 };
@@ -26,8 +24,6 @@ use std::time::Duration;
 
 use std::future::Future;
 
-#[cfg(test)]
-use futures::StreamExt;
 use futures::stream::FuturesOrdered;
 use tokio::sync::Semaphore;
 
@@ -123,17 +119,6 @@ pub(super) struct GatewayScheduler {
 }
 
 impl GatewayScheduler {
-    #[cfg(test)]
-    pub(super) fn plan(
-        output_items: &[OutputItem],
-        registry: &ToolRegistry,
-        output_offset: usize,
-        policy: GatewaySchedulerPolicy,
-    ) -> Self {
-        let budget = &mut BuiltInToolCallBudget::new(None);
-        Self::plan_with_budget(output_items, registry, output_offset, policy, budget)
-    }
-
     /// Plans this round's gateway calls, admitting each against the response's
     /// `max_tool_calls` budget in output order before any call executes.
     pub(super) fn plan_with_budget(
@@ -259,23 +244,6 @@ impl GatewayScheduler {
         }
     }
 
-    #[cfg(test)]
-    fn plan_with_test_timeout(
-        output_items: &[OutputItem],
-        registry: &ToolRegistry,
-        output_offset: usize,
-        timeout: Duration,
-    ) -> Self {
-        Self::plan_with_timeout(
-            output_items,
-            registry,
-            output_offset,
-            GatewaySchedulerPolicy::default(),
-            timeout,
-            &mut BuiltInToolCallBudget::new(None),
-        )
-    }
-
     pub(super) fn event_plans(&self) -> impl Iterator<Item = &GatewayEventPlan> {
         self.calls.iter().map(|call| &call.events)
     }
@@ -339,40 +307,6 @@ impl GatewayScheduler {
 
     pub(super) fn call_count(&self) -> usize {
         self.calls.len()
-    }
-
-    /// Records each call's completed public lifecycle on its plan.
-    #[cfg(test)]
-    pub(super) fn record_completed(&mut self, results: &[GatewayCallResult]) {
-        debug_assert_eq!(self.calls.len(), results.len());
-        for (planned, result) in self.calls.iter_mut().zip(results) {
-            debug_assert_eq!(planned.item_index, result.item_index);
-            planned.events.completed_output.clone_from(&result.public_output);
-        }
-    }
-
-    /// Executes planned calls under the bounded-concurrency policy and records
-    /// each tool's completed public lifecycle on the same slot.
-    #[cfg(test)]
-    pub(super) async fn execute(&mut self) -> ExecutorResult<Vec<GatewayCallResult>> {
-        self.execute_with_budget(&ExecutorResponseBudget::new()).await
-    }
-
-    #[cfg(test)]
-    pub(super) async fn execute_with_budget(
-        &mut self,
-        response_budget: &ExecutorResponseBudget,
-    ) -> ExecutorResult<Vec<GatewayCallResult>> {
-        let execution_slots = self.policy.new_round_execution_slots();
-        // Every call finishes before the first error in call order is returned.
-        let results = self
-            .results_in_order(&execution_slots, response_budget)
-            .collect::<Vec<_>>()
-            .await
-            .into_iter()
-            .collect::<ExecutorResult<Vec<_>>>()?;
-        self.record_completed(&results);
-        Ok(results)
     }
 
     /// Answers a refused call with the limit message; it never executes, so it
@@ -562,9 +496,9 @@ pub(super) async fn execute_and_emit_output_calls(
 mod tests {
     use super::GatewayCallResult;
     use super::lifecycle::drive_in_order;
-    use crate::executor::accumulator::ResponseAccumulator;
     use crate::executor::error::ExecutorResult;
     use crate::executor::gateway_accumulator::StreamEvent;
+    use crate::executor::pipeline::test_support::ingest_lenient_to_eof;
     use crate::executor::relay::{RelayLimits, StreamRelay};
     use crate::types::io::output::{FunctionToolCall, McpListTool, McpListTools};
     use crate::types::io::{
@@ -573,6 +507,14 @@ mod tests {
     };
     use futures::StreamExt;
     use tokio::sync::{Notify, Semaphore, mpsc};
+
+    /// Runs a planned round on the non-deferred production path, discarding its events.
+    pub(super) async fn run_round(
+        scheduler: &GatewayScheduler,
+        response_budget: &ExecutorResponseBudget,
+    ) -> ExecutorResult<Vec<GatewayCallResult>> {
+        super::emit_calls_in_order(scheduler, response_budget, &mut StreamRelay::detached()).await
+    }
 
     fn parse_named_sse_event(content: &str) -> Value {
         let body = content.strip_suffix("\n\n").expect("SSE event terminator");
@@ -596,8 +538,8 @@ mod tests {
     use serde_json::Value;
 
     use super::{
-        GatewayCallPlan, GatewayEventPlan, GatewayExecutionPlan, GatewayScheduler, GatewaySchedulerPolicy,
-        MAX_CONCURRENT_MATERIALIZATIONS, PlannedResult,
+        BuiltInToolCallBudget, GatewayCallPlan, GatewayEventPlan, GatewayExecutionPlan, GatewayScheduler,
+        GatewaySchedulerPolicy, MAX_CONCURRENT_MATERIALIZATIONS, PlannedResult,
     };
     use crate::executor::response_budget::ExecutorResponseBudget;
     use crate::tool::ToolDeclaration;
@@ -945,10 +887,15 @@ mod tests {
         // 1ms budget vs a 50ms tool → the timeout fires. Must return (not hang):
         // the stuck call becomes an error output the loop can feed back.
         let output_items = [OutputItem::FunctionCall(web_search_call("call_hang"))];
-        let mut scheduler =
-            GatewayScheduler::plan_with_test_timeout(&output_items, &registry, 0, Duration::from_millis(1));
-        let result = scheduler
-            .execute()
+        let scheduler = GatewayScheduler::plan_with_timeout(
+            &output_items,
+            &registry,
+            0,
+            GatewaySchedulerPolicy::default(),
+            Duration::from_millis(1),
+            &mut BuiltInToolCallBudget::new(None),
+        );
+        let result = run_round(&scheduler, &ExecutorResponseBudget::new())
             .await
             .expect("timeout is isolated as an error output, not a dispatch failure")
             .remove(0);
@@ -983,9 +930,15 @@ mod tests {
             .expect("registry builds");
 
         let output_items = [OutputItem::FunctionCall(web_search_call("call_no_handler"))];
-        let mut scheduler = GatewayScheduler::plan_with_test_timeout(&output_items, &registry, 0, Duration::ZERO);
-        let result = scheduler
-            .execute()
+        let scheduler = GatewayScheduler::plan_with_timeout(
+            &output_items,
+            &registry,
+            0,
+            GatewaySchedulerPolicy::default(),
+            Duration::ZERO,
+            &mut BuiltInToolCallBudget::new(None),
+        );
+        let result = run_round(&scheduler, &ExecutorResponseBudget::new())
             .await
             .expect("a missing provider is isolated as an error output, not a dispatch failure")
             .remove(0);
@@ -1016,11 +969,16 @@ mod tests {
             OutputItem::FunctionCall(web_search_call("call_a")),
             OutputItem::FunctionCall(web_search_call("call_b")),
         ];
-        let mut scheduler = GatewayScheduler::plan(&output_items, &registry, 0, GatewaySchedulerPolicy::default());
+        let scheduler = GatewayScheduler::plan_with_budget(
+            &output_items,
+            &registry,
+            0,
+            GatewaySchedulerPolicy::default(),
+            &mut BuiltInToolCallBudget::new(None),
+        );
         let response_budget = ExecutorResponseBudget::with_limit(500 * 1024);
 
-        let error = scheduler
-            .execute_with_budget(&response_budget)
+        let error = run_round(&scheduler, &response_budget)
             .await
             .err()
             .expect("aggregate gateway output must be bounded");
@@ -1040,10 +998,15 @@ mod tests {
             .await
             .expect("registry builds");
         let output_items = [OutputItem::FunctionCall(web_search_call("call_escaped_error"))];
-        let mut scheduler = GatewayScheduler::plan(&output_items, &registry, 0, GatewaySchedulerPolicy::default());
+        let scheduler = GatewayScheduler::plan_with_budget(
+            &output_items,
+            &registry,
+            0,
+            GatewaySchedulerPolicy::default(),
+            &mut BuiltInToolCallBudget::new(None),
+        );
 
-        let error = scheduler
-            .execute()
+        let error = run_round(&scheduler, &ExecutorResponseBudget::new())
             .await
             .err()
             .expect("materialized gateway error output must be bounded");
@@ -1068,9 +1031,18 @@ mod tests {
             OutputItem::FunctionCall(web_search_call("call_fail")),
             OutputItem::FunctionCall(web_search_call("call_slow")),
         ];
-        let mut scheduler = GatewayScheduler::plan(&output_items, &registry, 0, GatewaySchedulerPolicy::default());
+        let scheduler = GatewayScheduler::plan_with_budget(
+            &output_items,
+            &registry,
+            0,
+            GatewaySchedulerPolicy::default(),
+            &mut BuiltInToolCallBudget::new(None),
+        );
 
-        let error = scheduler.execute().await.err().expect("oversized output must fail");
+        let error = run_round(&scheduler, &ExecutorResponseBudget::new())
+            .await
+            .err()
+            .expect("oversized output must fail");
 
         assert!(error.to_string().contains("gateway tool output exceeded"));
         assert!(
@@ -1096,7 +1068,13 @@ mod tests {
             OutputItem::FunctionCall(web_search_call("call_fail")),
             OutputItem::FunctionCall(web_search_call("call_slow")),
         ];
-        let scheduler = GatewayScheduler::plan(&output_items, &registry, 0, GatewaySchedulerPolicy::default());
+        let scheduler = GatewayScheduler::plan_with_budget(
+            &output_items,
+            &registry,
+            0,
+            GatewaySchedulerPolicy::default(),
+            &mut BuiltInToolCallBudget::new(None),
+        );
         let (sender, _receiver) = mpsc::channel(32);
         let mut relay = StreamRelay::client(sender, RelayLimits::default());
 
@@ -1184,7 +1162,13 @@ mod tests {
         let output_items: Vec<_> = (1..=3)
             .map(|order| OutputItem::FunctionCall(web_search_call(&format!("call_{order}"))))
             .collect();
-        let scheduler = GatewayScheduler::plan(&output_items, &registry, 0, GatewaySchedulerPolicy::default());
+        let scheduler = GatewayScheduler::plan_with_budget(
+            &output_items,
+            &registry,
+            0,
+            GatewaySchedulerPolicy::default(),
+            &mut BuiltInToolCallBudget::new(None),
+        );
         let budget = ExecutorResponseBudget::new();
 
         // The emitter takes the first result, then stalls as a client that stopped reading would.
@@ -1234,11 +1218,23 @@ mod tests {
             .map(|index| OutputItem::FunctionCall(web_search_call(&format!("second_{index}"))))
             .collect::<Vec<_>>();
         let policy = GatewaySchedulerPolicy::new(NonZeroUsize::new(TOTAL_CALLS).expect("nonzero call count"));
-        let mut first = GatewayScheduler::plan(&first_items, &registry, 0, policy.clone());
-        let mut second = GatewayScheduler::plan(&second_items, &registry, 0, policy);
+        let first = GatewayScheduler::plan_with_budget(
+            &first_items,
+            &registry,
+            0,
+            policy.clone(),
+            &mut BuiltInToolCallBudget::new(None),
+        );
+        let second = GatewayScheduler::plan_with_budget(
+            &second_items,
+            &registry,
+            0,
+            policy,
+            &mut BuiltInToolCallBudget::new(None),
+        );
 
-        let first_task = tokio::spawn(async move { first.execute().await });
-        let second_task = tokio::spawn(async move { second.execute().await });
+        let first_task = tokio::spawn(async move { run_round(&first, &ExecutorResponseBudget::new()).await });
+        let second_task = tokio::spawn(async move { run_round(&second, &ExecutorResponseBudget::new()).await });
 
         for _ in 0..MAX_CONCURRENT_MATERIALIZATIONS {
             tokio::time::timeout(Duration::from_secs(1), entered_rx.recv())
@@ -1292,7 +1288,13 @@ mod tests {
             OutputItem::FunctionCall(file_search_call),
             OutputItem::FunctionCall(search_call),
         ];
-        let mut scheduler = GatewayScheduler::plan(&output_items, &registry, 7, GatewaySchedulerPolicy::default());
+        let scheduler = GatewayScheduler::plan_with_budget(
+            &output_items,
+            &registry,
+            7,
+            GatewaySchedulerPolicy::default(),
+            &mut BuiltInToolCallBudget::new(None),
+        );
 
         {
             let plans = scheduler.event_plans().collect::<Vec<_>>();
@@ -1303,7 +1305,9 @@ mod tests {
             assert!(matches!(plans[1].started_output, Some(OutputItem::WebSearchCall(_))));
         }
 
-        let results = scheduler.execute().await.expect("all scheduled slots complete");
+        let results = run_round(&scheduler, &ExecutorResponseBudget::new())
+            .await
+            .expect("all scheduled slots complete");
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].item_index, 0);
         assert!(matches!(results[0].public_output, Some(OutputItem::FileSearchCall(_))));
@@ -1355,8 +1359,16 @@ mod tests {
             .collect();
 
         let started = Instant::now();
-        let mut scheduler = GatewayScheduler::plan(&output_items, &registry, 0, GatewaySchedulerPolicy::default());
-        let results = scheduler.execute().await.expect("all calls execute");
+        let scheduler = GatewayScheduler::plan_with_budget(
+            &output_items,
+            &registry,
+            0,
+            GatewaySchedulerPolicy::default(),
+            &mut BuiltInToolCallBudget::new(None),
+        );
+        let results = run_round(&scheduler, &ExecutorResponseBudget::new())
+            .await
+            .expect("all calls execute");
         let elapsed = started.elapsed();
 
         assert_eq!(results.len(), 4);
@@ -1390,8 +1402,16 @@ mod tests {
         let policy = GatewaySchedulerPolicy::new(NonZeroUsize::MIN);
 
         let started = Instant::now();
-        let mut scheduler = GatewayScheduler::plan(&output_items, &registry, 0, policy);
-        let results = scheduler.execute().await.expect("all calls execute");
+        let scheduler = GatewayScheduler::plan_with_budget(
+            &output_items,
+            &registry,
+            0,
+            policy,
+            &mut BuiltInToolCallBudget::new(None),
+        );
+        let results = run_round(&scheduler, &ExecutorResponseBudget::new())
+            .await
+            .expect("all calls execute");
         let elapsed = started.elapsed();
 
         assert_eq!(results.len(), 4);
@@ -1469,8 +1489,16 @@ mod tests {
             .collect();
 
         let started = Instant::now();
-        let mut scheduler = GatewayScheduler::plan(&output_items, &registry, 0, GatewaySchedulerPolicy::default());
-        let results = scheduler.execute().await.expect("all calls execute");
+        let scheduler = GatewayScheduler::plan_with_budget(
+            &output_items,
+            &registry,
+            0,
+            GatewaySchedulerPolicy::default(),
+            &mut BuiltInToolCallBudget::new(None),
+        );
+        let results = run_round(&scheduler, &ExecutorResponseBudget::new())
+            .await
+            .expect("all calls execute");
         let elapsed = started.elapsed();
 
         assert_eq!(results.len(), 4);
@@ -1595,7 +1623,7 @@ mod tests {
             gateway_call_plan(1, "call_a2", "tool_a", binding_a),
             gateway_call_plan(2, "call_b", "tool_b", binding_b),
         ];
-        let mut scheduler = GatewayScheduler {
+        let scheduler = GatewayScheduler {
             calls,
             omitted_items: Vec::new(),
             expanded_items: Vec::new(),
@@ -1604,7 +1632,7 @@ mod tests {
             metrics: None,
         };
 
-        let execution = tokio::spawn(async move { scheduler.execute().await });
+        let execution = tokio::spawn(async move { run_round(&scheduler, &ExecutorResponseBudget::new()).await });
         tokio::time::timeout(Duration::from_secs(1), blocked_started.notified())
             .await
             .expect("first same-tool call starts");
@@ -1699,7 +1727,7 @@ mod tests {
             gateway_call_plan(1, "call_b", "tool", binding.clone()),
             gateway_call_plan(2, "call_c", "tool", binding),
         ];
-        let mut scheduler = GatewayScheduler {
+        let scheduler = GatewayScheduler {
             calls,
             omitted_items: Vec::new(),
             expanded_items: Vec::new(),
@@ -1708,7 +1736,7 @@ mod tests {
             metrics: None,
         };
 
-        let execution = tokio::spawn(async move { scheduler.execute().await });
+        let execution = tokio::spawn(async move { run_round(&scheduler, &ExecutorResponseBudget::new()).await });
         tokio::time::timeout(Duration::from_secs(1), blocked_started.notified())
             .await
             .expect("first call starts");
@@ -1825,16 +1853,14 @@ mod tests {
         let data_lines = chunks
             .iter()
             .filter_map(|chunk| chunk.lines().find(|line| line.starts_with("data: ")).map(str::to_owned));
-        let response = ResponseAccumulator::from_sse_lines(data_lines, None)
-            .expect("valid SSE stream")
-            .finalize("test-model", None, None);
+        let response = ingest_lenient_to_eof(data_lines, None, "test-model").expect("valid SSE stream");
         assert_eq!(response.output.len(), 1);
         assert!(matches!(response.output[0], OutputItem::Compaction(_)));
     }
 
     #[tokio::test]
     async fn code_interpreter_gateway_events_follow_openai_lifecycle() {
-        let mut plans = vec![super::GatewayEventPlan {
+        let plans = vec![super::GatewayEventPlan {
             follow_up_output: None,
             output_index: 4,
             started_output: Some(OutputItem::CodeInterpreterCall(CodeInterpreterCall {
@@ -1862,7 +1888,6 @@ mod tests {
         super::emit_gateway_start_events(&plans, &mut relay)
             .await
             .expect("start events");
-        super::complete_gateway_event_plans(&mut plans, slice::from_ref(&final_item));
         super::emit_gateway_completed_events(slice::from_ref(&final_item), &plans, &mut relay)
             .await
             .expect("completed events");
@@ -1932,7 +1957,7 @@ mod tests {
             None,
             None,
         ));
-        let mut plans = vec![super::GatewayEventPlan {
+        let plans = vec![super::GatewayEventPlan {
             follow_up_output: None,
             output_index: 0,
             started_output: Some(started),
@@ -1991,8 +2016,6 @@ mod tests {
             public_output: Some(final_item),
             omitted: false,
         }];
-
-        super::complete_gateway_event_plans(&mut plans, &results);
         super::emit_gateway_completed_events(&results, &plans, &mut relay)
             .await
             .expect("completed events");
@@ -2023,7 +2046,7 @@ mod tests {
             status: crate::types::event::MessageStatus::Completed,
             namespace: None,
         };
-        let mut plans = vec![super::GatewayEventPlan {
+        let plans = vec![super::GatewayEventPlan {
             follow_up_output: None,
             output_index: 0,
             started_output: Some(OutputItem::McpCall(crate::types::io::McpCall::new(
@@ -2061,7 +2084,6 @@ mod tests {
         super::emit_gateway_start_events(&plans, &mut relay)
             .await
             .expect("start events");
-        super::complete_gateway_event_plans(&mut plans, &results);
         super::emit_gateway_completed_events(&results, &plans, &mut relay)
             .await
             .expect("failed events");

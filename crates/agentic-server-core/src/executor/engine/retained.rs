@@ -185,19 +185,13 @@ impl ResponseRunOwner {
     async fn execute(
         mut pipeline: AgentPipeline,
         exec: &ExecutionContext,
-        auth: Option<&UpstreamHeaders>,
         sink: &ResponseEventSink,
         execution: &mut ExecutionSpan,
     ) -> ExecutorResult<()> {
         let cancellation = pipeline.cancellation_token();
         // The multi-agent coordinator handles cancellation by joining its children.
-        let multi = pipeline
-            .request
-            .enriched_request
-            .multi_agent
-            .as_ref()
-            .is_some_and(|config| config.enabled);
-        let run = Box::pin(run_until_gateway_tools_complete(&mut pipeline, exec, auth, true));
+        let multi = pipeline.request.enriched_request.multi_agent_enabled();
+        let run = Box::pin(run_until_gateway_tools_complete(&mut pipeline, exec));
         let (payload, metadata) = if multi {
             run.await?
         } else {
@@ -287,7 +281,7 @@ pub(super) fn start(
     let (sender, receiver) = mpsc::channel(STREAM_EVENT_BUFFER);
     let sink = ResponseEventSink::new(sender, max_bytes);
     let relay = StreamRelay::response(sink.clone(), RelayLimits::with_event_bytes(max_bytes));
-    let mut pipeline = AgentPipeline::new(ctx, tools, relay);
+    let mut pipeline = AgentPipeline::new(ctx, tools, relay, auth.map(Arc::new));
     pipeline.steering = Some(sink.clone());
     let (activate, activated) = match mode {
         ResponseStartMode::Immediate => (None, None),
@@ -298,12 +292,7 @@ pub(super) fn start(
     };
     let clock = execution.clock().clone();
     pipeline.set_execution_clock(clock.clone());
-    let control = if pipeline
-        .request
-        .enriched_request
-        .multi_agent
-        .as_ref()
-        .is_some_and(|config| config.enabled)
+    let control = if pipeline.request.enriched_request.multi_agent_enabled()
         && !pipeline.request.original_request.input.has_compaction_trigger()
     {
         let (control, receiver) = RunControl::channel(
@@ -330,7 +319,7 @@ pub(super) fn start(
                     activation = activated => activation.map_err(|_| ExecutorError::StreamError("response activation was abandoned".into()))?,
                 }
             }
-            Box::pin(ResponseRunOwner::execute(pipeline, &exec, auth.as_ref(), &worker_sink, &mut execution)).await
+            Box::pin(ResponseRunOwner::execute(pipeline, &exec, &worker_sink, &mut execution)).await
         }).await;
         if let Err(error) = &result {
             worker_sink.mark_failed();

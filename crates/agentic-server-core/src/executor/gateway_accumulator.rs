@@ -1,5 +1,5 @@
 use crate::config::DEFAULT_MAX_STREAM_EVENT_BYTES;
-use crate::events::{EventFrame, EventPayload, SSEEventType, WireEvent, normalize_sse_line};
+use crate::events::{EventFrame, EventPayload, SSEEventType, WireEvent};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::types::request_response::ResponsePayload;
 use crate::utils::common::{serialize_to_string, serialize_to_value};
@@ -60,11 +60,6 @@ impl GatewayStreamAccumulator {
         }
     }
 
-    pub fn process_sse_line(&mut self, line: &str, output_offset: usize) -> Option<EventFrame> {
-        let mut frame = normalize_sse_line(line)?;
-        self.process_event(&mut frame, output_offset).then_some(frame)
-    }
-
     /// Sequence number that the next successfully enqueued event will receive.
     ///
     /// Typed gateway event construction may use this value, but
@@ -93,7 +88,7 @@ impl GatewayStreamAccumulator {
         let mut chunk = String::new();
         for mut frame in frames {
             if self.process_event(&mut frame, 0) {
-                chunk.push_str(&checked_stream_event_limited(&frame, self.max_stream_event_bytes)?);
+                chunk.push_str(&checked_stream_event(&frame, self.max_stream_event_bytes)?);
             }
         }
         Ok(chunk)
@@ -102,21 +97,13 @@ impl GatewayStreamAccumulator {
     pub(crate) fn terminal_response_chunk(&mut self, payload: &ResponsePayload) -> ExecutorResult<String> {
         let mut frame = terminal_response_frame(payload)?;
         self.stamp_event(&mut frame, 0);
-        checked_stream_event_limited(&frame, self.max_stream_event_bytes)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn executor_error_chunk(&mut self, error: &ExecutorError) -> String {
-        let mut frame = executor_error_frame(error);
-        self.stamp_event(&mut frame, 0);
-        checked_stream_event(&frame)
-            .unwrap_or_else(|_| error_sse_chunk(&error.to_string(), frame.sequence_number().unwrap_or(0)))
+        checked_stream_event(&frame, self.max_stream_event_bytes)
     }
 
     pub(crate) fn executor_error_chunk_at(error: &ExecutorError, sequence_number: u64) -> String {
         let mut frame = executor_error_frame(error);
         frame.wire.sequence_number = Some(sequence_number);
-        checked_stream_event(&frame).unwrap_or_else(|_| {
+        checked_stream_event(&frame, DEFAULT_MAX_STREAM_EVENT_BYTES).unwrap_or_else(|_| {
             error_sse_chunk("executor error event exceeded the response size limit", sequence_number)
         })
     }
@@ -235,7 +222,7 @@ pub(super) async fn emit_sse_frame_limited(
     let sequence_number = frame
         .sequence_number()
         .ok_or_else(|| ExecutorError::StreamError("stream event has no sequence number".to_owned()))?;
-    let content = checked_stream_event_limited(frame, max_bytes)?;
+    let content = checked_stream_event(frame, max_bytes)?;
     sender
         .send(StreamEvent::Frame(StreamFrame {
             content,
@@ -246,11 +233,7 @@ pub(super) async fn emit_sse_frame_limited(
         .map_err(|_| ExecutorError::StreamError("stream receiver closed while emitting gateway event".to_owned()))
 }
 
-pub(super) fn checked_stream_event(frame: &EventFrame) -> ExecutorResult<String> {
-    checked_stream_event_limited(frame, DEFAULT_MAX_STREAM_EVENT_BYTES)
-}
-
-pub(super) fn checked_stream_event_limited(frame: &EventFrame, max_bytes: usize) -> ExecutorResult<String> {
+pub(super) fn checked_stream_event(frame: &EventFrame, max_bytes: usize) -> ExecutorResult<String> {
     let content = serialize_sse_frame(frame)?;
     if content.len() > max_bytes {
         return Err(ExecutorError::ResourceLimitExceeded {
@@ -284,6 +267,7 @@ fn serialize_sse_frame(frame: &EventFrame) -> ExecutorResult<String> {
 mod tests {
     use super::*;
     use crate::StorageError;
+    use crate::events::normalize_sse_line;
     use crate::tool::ToolError;
 
     fn parse_named_sse_event(chunk: &str) -> (&str, serde_json::Value) {
@@ -296,14 +280,12 @@ mod tests {
     }
 
     #[test]
-    fn process_sse_line_numbers_and_rebases_output_index() {
+    fn process_event_numbers_and_rebases_output_index() {
         let mut accumulator = GatewayStreamAccumulator::new();
-        let frame = accumulator
-            .process_sse_line(
-                r#"data: {"type":"response.output_text.delta","output_index":2,"delta":"hi"}"#,
-                3,
-            )
-            .expect("line should normalize");
+        let mut frame =
+            normalize_sse_line(r#"data: {"type":"response.output_text.delta","output_index":2,"delta":"hi"}"#)
+                .expect("line should normalize");
+        assert!(accumulator.process_event(&mut frame, 3));
 
         assert_eq!(frame.sequence_number(), Some(0));
         assert_eq!(frame.wire.sequence_number, Some(0));
@@ -404,13 +386,12 @@ mod tests {
 
     #[test]
     fn executor_conflict_sse_chunk_uses_client_conflict_contract() {
-        let mut accumulator = GatewayStreamAccumulator::new();
         let error = ExecutorError::Persistence(Box::new(ExecutorError::ConversationLocked {
             source: StorageError::ConversationConflict {
                 conversation_id: "conv_test".to_owned(),
             },
         }));
-        let chunk = accumulator.executor_error_chunk(&error);
+        let chunk = GatewayStreamAccumulator::executor_error_chunk_at(&error, 0);
         let (event_name, event) = parse_named_sse_event(&chunk);
 
         assert_eq!(event_name, "error");
@@ -429,11 +410,10 @@ mod tests {
 
     #[test]
     fn missing_tool_output_sse_chunk_matches_openai_error_contract() {
-        let mut accumulator = GatewayStreamAccumulator::new();
         let error = ExecutorError::Tool(ToolError::MissingOutput {
             call_id: "call_test".to_owned(),
         });
-        let chunk = accumulator.executor_error_chunk(&error);
+        let chunk = GatewayStreamAccumulator::executor_error_chunk_at(&error, 0);
         let (event_name, event) = parse_named_sse_event(&chunk);
 
         assert_eq!(event_name, "error");
@@ -452,9 +432,11 @@ mod tests {
     #[test]
     fn emits_in_progress_terminal_event_after_lifecycle_event() {
         let mut accumulator = GatewayStreamAccumulator::new();
-        accumulator
-            .process_sse_line(r#"data: {"type":"response.in_progress"}"#, 0)
-            .expect("first lifecycle event should be emitted");
+        let mut frame = normalize_sse_line(r#"data: {"type":"response.in_progress"}"#).expect("line should normalize");
+        assert!(
+            accumulator.process_event(&mut frame, 0),
+            "first lifecycle event should be emitted"
+        );
 
         let payload: ResponsePayload = serde_json::from_value(serde_json::json!({
             "id": "resp_1",

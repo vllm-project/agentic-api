@@ -1,0 +1,1680 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input:
+      - content: Use the python tool to calculate the sum of the squares of the integers
+          from 1 through 10. The code must print exactly CODE_INTERPRETER_OK=385.
+          After it runs, answer exactly CODE_INTERPRETER_OK=385.
+        role: user
+        type: message
+      max_output_tokens: 2048
+      model: gpt-5.6-sol
+      parallel_tool_calls: false
+      store: false
+      stream: false
+      tool_choice: required
+      tools:
+      - container:
+          type: auto
+        type: code_interpreter
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794747965
+      created_at: 1794747961
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0eb76f1e636fe7c9016af9ae39b0d887d2b3deee0121fb0bb9
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 2048
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - code: 'print(f"CODE_INTERPRETER_OK={sum(i*i for i in range(1, 11))}")
+
+          '
+        container_id: cntr_6af9ae3a00788191a13b4f98565309e404f1728f6048d970
+        id: ci_0eb76f1e636fe7c9016af9ae3aa83887d28db07a74c8b093f1
+        outputs: null
+        status: completed
+        type: code_interpreter_call
+      - content:
+        - annotations: []
+          logprobs: []
+          text: CODE_INTERPRETER_OK=385
+          type: output_text
+        id: msg_0eb76f1e636fe7c9016af9ae3c74d087d288a922017c3029fb
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: required
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - container:
+          type: auto
+        type: code_interpreter
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 1315
+        input_tokens_details:
+          cache_write_tokens: 1143
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 1143
+          cached_tokens: 0
+        output_tokens: 43
+        output_tokens_details:
+          reasoning_tokens: 32
+        total_tokens: 1358
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - content: Use the python tool to calculate the sum of the squares of the integers
+          from 1 through 10. The code must print exactly CODE_INTERPRETER_OK=385.
+          After it runs, answer exactly CODE_INTERPRETER_OK=385.
+        role: user
+        type: message
+      - code: 'print(f"CODE_INTERPRETER_OK={sum(i*i for i in range(1, 11))}")
+
+          '
+        container_id: cntr_6af9ae3a00788191a13b4f98565309e404f1728f6048d970
+        id: ci_0eb76f1e636fe7c9016af9ae3aa83887d28db07a74c8b093f1
+        outputs: null
+        status: completed
+        type: code_interpreter_call
+      - content:
+        - annotations: []
+          logprobs: []
+          text: CODE_INTERPRETER_OK=385
+          type: output_text
+        id: msg_0eb76f1e636fe7c9016af9ae3c74d087d288a922017c3029fb
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      - content: 'Without calling a tool, answer from the code output above only:
+          what exactly did the code print?'
+        role: user
+        type: message
+      max_output_tokens: 2048
+      model: gpt-5.6-sol
+      parallel_tool_calls: false
+      store: false
+      stream: false
+      tool_choice: none
+      tools:
+      - container:
+          type: auto
+        type: code_interpreter
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794747967
+      created_at: 1794747966
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0eb76f1e636fe7c9016af9ae3e067487d2a93b67233cb8a226
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 2048
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - content: []
+        encrypted_content: gAAAAABq-a5APtNcX0a7lsq0zkyN4IBSSsGd-gAnO19wHzUDYSkbN12O2UuvapDvRU1cC38rU8uIDma64sf-y5BpjNJcEShPCT04XFu_VhamN19C8GsIZ1yiU2v6y_v_UMyvFf94glwvfY_WqAuc0mEwqi9-RJ5j4PbRc2cehSoDxSf0oxGwg5SG5-xhvnTvUlLE0gV7DRLkHTo3SK_wVJaZUq-A9ZvKQ7Lj0ofvLlm5xFzYRNwl3v2bGrf8aZrRR5bw2e4-9ZlZuQrJwHvpninB-bl3nzn_d4t41nFeSD21wvymyg0qDf5RuhckltaMrVpJIEh4HNJ_aLeYb7LgB_7fyhKmA33Xe6jNTg44RTMdiC5HeeyY2OyuvQ19Y5Fv1tKzFwAcEnenCMTuQYQc6J6g5tI6k28KtOyKFZjeADwgp5y8XX0Lyfpry6E9ImMNbzkimtVxvAsv8X6VV8CwqZCB3UP0aB3bdFZ9rE6fBA1m4mRX8XYeT6TJ7dXZjDumusalo3j-8cXeiStkLoZuzdu7JKlhk86zIgidHXLDD1OzT3CP9LclRtuzxXl50lqLJFs_-H0NQd1rcJZvBCra0j0Uz3fSVEro2FLQImJWMs_WWbRpwGtC0ZSKVG_51uCtRsIMGj9lq_wqBE1c2TVfqBrhYV1B8VQZKALo1txYMH-z2QF4o6h8W2hCFxt2kSnUym6BNgBfEptAOh2ANvYho909RO3BlGInjy5Ej6hKRrQiNfi7wYmMlU6KY7QGr6WFIN8slS0iqfg16t4rMz6p35e4cD9S9VyD-jjHYTixZwbluu1P9ZjhRnPHQva3fAI38srcYEV1EFm8_N0b5NkiO9n77m6H8d-t8bqyvNI-8cRBgMdI-u1H8dseqwa8fSmPfgaf1a9a-k9efJA79v4I0jObN_42t4onzWkN1OBC6tKNH1ls3D7vrE0kefIjPMq-n1Tel5lA-Gi0QC01JfeDBruc5icS1FZsgWeP1o-4X8Hft-tbt79U6KrFqVWHuQa0pPzbdyNMKkgpTXO_dnffQLTSZsTqRuuZI8cTROHGo4nxh5I3-x0sjMDj_SlW2yG04TZ139ycSEE5dU6FKJOtvVOTYPjXm4-zy_jAC01-vdJOo97hmjCaGxXUUhN1hle4UH8Ijsr9-W7B5EwBtJJOMYMJETkZeRIqTprukuG4mAYArF9w9k5FY5a9-sKglvqoGhQ6JTGAKBTeQ5AWWgktUfTTuttKV_FgkLsla7E2DZPil1JtSelSod0xeezk_cVcyGLCXCn7epO-IZIwONjrkJmEe5pEufpUxz2u1j_5AGqqXEWT2Te1uID8Sl2wcTWH4blGDmzUh3cYkg7qiqafqqRZWh2D12KdVbScSfNmKyhf3vskI9qyt1ZBIlX6-1z1G8ngewPG7BSqcJ1GKkXcq2cVhfHet7a7dJRPFXefej9Ui1ldXuCvZfdvcI-NeqZ1LsItytnzwaf60GcsDVAAGfLuwDSsHvWgbJM15xjNSlgSyLh1YEQkxG0DiIDMndyYC1p458tLQqNbVFCNR88-crVcSqOJZQ6khGXeSKGdpJMu4fasOzX_vbyDjIi4WiR_p7D7U136IBZDyKd31_FArafT2DqMbze-MShkwy4ngvbvpKJZMsKAa5rjcGL1LALP_FEW6hFTXpIwy6-apVLemB2Ia-wFYLdbdDZbz_IeuUjsk6y_ngYi7cywpe863NG_trw0rrpk_kJ5hslZgidwuwgKW_R_KTT3qaetD2heZGiGAkgTR7nKub_lEd-B_I5j_khtAHoW0-Ht4DkpjB1FmKaL4VF2JFC-4C3Ugtu6f86D2T1GcbH6yatKMEvFSn7jO_GZh05b_FcOajIRhAOUkril31dG_kqkebKdUgsYkJsA3fok7gWUeQQXiZyxrRnQac-e8PoZ3K_mAN8SXEkSOHSziJpn7RuIfBmo0TSLINIS7EhCWCXPnSK76Whtb4gaWDGlno5sA7Dm7QIQkFMYrX5vu2cl-Uvk1QEmfhekuHNJ4MB2T_hfjtZeFY86_EAMIaw2FnrYtSSJAUS-CZdTTNwdoQfjSzx-UQgROy5Lh2vSzlnedEfquSe1eBloyr_XgCYtlwxZxgoc23d-aVv5kKjDT-lMXiHxOwO2Z5ZICPXJBaCWvL1iZc04WNKb4oqlgcMKHOVgS6EUvVeFFxQa3OP1-jt9rB2OwhvLlZaZ0PUAUeKEFuhq5CZuyZdW3owFoC0TVijp2HeqKTr9fQ6pI_HbXZMr_IXvskjpAQx3u3Z-aE6q6vB4GOiTk2qFg-wredgyzFrNP2fUpqbmfHO9-MA9bMhIvmE4fKsonWmTts0kl_p3M7IVsW5vmhxisa5Fn6hH4V6Fkt7-sdcxQrJ7f9A5XqERzsJD3VH0Qrq_7DTwnNGMyDNsX0rvC9fvzoSxVwVkMBaUzmBz4206frFyXeH1YcAprPEE_QyIJ7oqubEMw7CEu72Dhz3uyDvHWA7tEtWRSg-I3uj49vaetwnn6k_K-prynXKug7jtQQn93EZMUxsjxf-KArXY9vbMMiudF78jSKUyC8IT03iiAV-gX1uOCBx-6_7LfnY49aSps7NbHnvULTd0Aeq4AUqx1TJf82EPallCe9sT1iUXPVx4xPbwrp978gAw-oRptVdIdJXEiYeoLmRos6dv3eEHFhOAEXTM3Cwm8KQ_9dKWe5xiclkAq2ZWOdPizvelOUV2OeQ8mVCzUfKHOGaGVrq2jyq9VKW4KIJPeKHR0h9iKjlb6C146f6DiVEQ3dyeoR24aSXXSnclXs5T6bbAlYMN9nCDick4WPuUCOfC6lYoRVu6k-3fPQOLzVP82XGPESIqtDFlgh6vh7OrVoSWPpvLT-qC7RXdqHrIDhnFdj4L4S3g9ANjLuTTorc1S8Yq5FXQd2E0xEBTdLoI0wpQwuoWQW3CgjgAoRQ61uTH
+        id: rs_0eb76f1e636fe7c9016af9ae3f1ce887d2a68aff44cb1a506c
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: CODE_INTERPRETER_OK=385
+          type: output_text
+        id: msg_0eb76f1e636fe7c9016af9ae3fddc087d2a82324a28e1c69be
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: none
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - container:
+          type: auto
+        type: code_interpreter
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 1341
+        input_tokens_details:
+          cache_write_tokens: 76
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 76
+          cached_tokens: 1190
+        output_tokens: 117
+        output_tokens_details:
+          reasoning_tokens: 104
+        total_tokens: 1458
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input: Use the tiktoken documentation tool to find which encoding gpt-4o uses.
+        Answer in one sentence.
+      max_output_tokens: 2048
+      model: gpt-5.6-sol
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - allowed_tools:
+        - search_tiktoken_documentation
+        require_approval: never
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794747932
+      created_at: 1794747926
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0efab031d24f75df006af9ae16755887d2bcfe709e6b0345eb
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 2048
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_0efab031d24f75df006af9ae16857c87d2af5981e3d41ac0f7
+        server_label: gitmcp_tiktoken
+        tools:
+        - annotations:
+            read_only: false
+          description: 'Semantically search within the fetched documentation from
+            GitHub repository: openai/tiktoken. Useful for specific queries.'
+          input_schema:
+            $schema: http://json-schema.org/draft-07/schema#
+            additionalProperties: false
+            properties:
+              query:
+                description: The search query to find relevant documentation
+                type: string
+            required:
+            - query
+            type: object
+          name: search_tiktoken_documentation
+        type: mcp_list_tools
+      - approval_request_id: null
+        arguments: '{"query":"Which encoding does gpt-4o use?"}'
+        error: null
+        id: mcp_0efab031d24f75df006af9ae1a0ad887d28052601f9c840e35
+        name: search_tiktoken_documentation
+        output: "### Search Results for: \"Which encoding does gpt-4o use?\"\n\nNo\
+          \ relevant documentation found for your query. It's either being indexed\
+          \ or the search query did not match any documentation.\n\nAs a fallback,\
+          \ this is the documentation for openai/tiktoken:\n\n# ⏳ tiktoken\n\ntiktoken\
+          \ is a fast [BPE](https://en.wikipedia.org/wiki/Byte_pair_encoding) tokeniser\
+          \ for use with\nOpenAI's models.\n\n```python\nimport tiktoken\nenc = tiktoken.get_encoding(\"\
+          o200k_base\")\nassert enc.decode(enc.encode(\"hello world\")) == \"hello\
+          \ world\"\n\n# To get the tokeniser corresponding to a specific model in\
+          \ the OpenAI API:\nenc = tiktoken.encoding_for_model(\"gpt-4o\")\n```\n\n\
+          The open source version of `tiktoken` can be installed from [PyPI](https://pypi.org/project/tiktoken):\n\
+          ```\npip install tiktoken\n```\n\nThe tokeniser API is documented in `tiktoken/core.py`.\n\
+          \nExample code using `tiktoken` can be found in the\n[OpenAI Cookbook](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb).\n\
+          \n\n## Performance\n\n`tiktoken` is between 3-6x faster than a comparable\
+          \ open source tokeniser:\n\n![image](https://raw.githubusercontent.com/openai/tiktoken/main/perf.svg)\n\
+          \nPerformance measured on 1GB of text using the GPT-2 tokeniser, using `GPT2TokenizerFast`\
+          \ from\n`tokenizers==0.13.2`, `transformers==4.24.0` and `tiktoken==0.2.0`.\n\
+          \n\n## Getting help\n\nPlease post questions in the [issue tracker](https://github.com/openai/tiktoken/issues).\n\
+          \nIf you work at OpenAI, make sure to check the internal documentation or\
+          \ feel free to contact\n@shantanu.\n\n## What is BPE anyway?\n\nLanguage\
+          \ models don't see text like you and I, instead they see a sequence of numbers\
+          \ (known as tokens).\nByte pair encoding (BPE) is a way of converting text\
+          \ into tokens. It has a couple desirable\nproperties:\n1) It's reversible\
+          \ and lossless, so you can convert tokens back into the original text\n\
+          2) It works on arbitrary text, even text that is not in the tokeniser's\
+          \ training data\n3) It compresses the text: the token sequence is shorter\
+          \ than the bytes corresponding to the\n   original text. On average, in\
+          \ practice, each token corresponds to about 4 bytes.\n4) It attempts to\
+          \ let the model see common subwords. For instance, \"ing\" is a common subword\
+          \ in\n   English, so BPE encodings will often split \"encoding\" into tokens\
+          \ like \"encod\" and \"ing\"\n   (instead of e.g. \"enc\" and \"oding\"\
+          ). Because the model will then see the \"ing\" token again and\n   again\
+          \ in different contexts, it helps models generalise and better understand\
+          \ grammar.\n\n`tiktoken` contains an educational submodule that is friendlier\
+          \ if you want to learn more about\nthe details of BPE, including code that\
+          \ helps visualise the BPE procedure:\n```python\nfrom tiktoken._educational\
+          \ import *\n\n# Train a BPE tokeniser on a small amount of text\nenc = train_simple_encoding()\n\
+          \n# Visualise how the GPT-4 encoder encodes text\nenc = SimpleBytePairEncoding.from_tiktoken(\"\
+          cl100k_base\")\nenc.encode(\"hello world aaaaaaaaaaaa\")\n```\n\n\n## Extending\
+          \ tiktoken\n\nYou may wish to extend `tiktoken` to support new encodings.\
+          \ There are two ways to do this.\n\n\n**Create your `Encoding` object exactly\
+          \ the way you want and simply pass it around.**\n\n```python\ncl100k_base\
+          \ = tiktoken.get_encoding(\"cl100k_base\")\n\n# In production, load the\
+          \ arguments directly instead of accessing private attributes\n# See openai_public.py\
+          \ for examples of arguments for specific encodings\nenc = tiktoken.Encoding(\n\
+          \    # If you're changing the set of special tokens, make sure to use a\
+          \ different name\n    # It should be clear from the name what behaviour\
+          \ to expect.\n    name=\"cl100k_im\",\n    pat_str=cl100k_base._pat_str,\n\
+          \    mergeable_ranks=cl100k_base._mergeable_ranks,\n    special_tokens={\n\
+          \        **cl100k_base._special_tokens,\n        \"<|im_start|>\": 100264,\n\
+          \        \"<|im_end|>\": 100265,\n    }\n)\n```\n\n**Use the `tiktoken_ext`\
+          \ plugin mechanism to register your `Encoding` objects with `tiktoken`.**\n\
+          \nThis is only useful if you need `tiktoken.get_encoding` to find your encoding,\
+          \ otherwise prefer\noption 1.\n\nTo do this, you'll need to create a namespace\
+          \ package under `tiktoken_ext`.\n\nLayout your project like this, making\
+          \ sure to omit the `tiktoken_ext/__init__.py` file:\n```\nmy_tiktoken_extension\n\
+          ├── tiktoken_ext\n│   └── my_encodings.py\n└── setup.py\n```\n\n`my_encodings.py`\
+          \ should be a module that contains a variable named `ENCODING_CONSTRUCTORS`.\n\
+          This is a dictionary from an encoding name to a function that takes no arguments\
+          \ and returns\narguments that can be passed to `tiktoken.Encoding` to construct\
+          \ that encoding. For an example, see\n`tiktoken_ext/openai_public.py`. For\
+          \ precise details, see `tiktoken/registry.py`.\n\nYour `setup.py` should\
+          \ look something like this:\n```python\nfrom setuptools import setup, find_namespace_packages\n\
+          \nsetup(\n    name=\"my_tiktoken_extension\",\n    packages=find_namespace_packages(include=['tiktoken_ext*']),\n\
+          \    install_requires=[\"tiktoken\"],\n    ...\n)\n```\n\nThen simply `pip\
+          \ install ./my_tiktoken_extension` and you should be able to use your\n\
+          custom encodings! Make sure **not** to use an editable install.\n\n\n\n\
+          If you'd like to retry the search, try changing the query to increase the\
+          \ likelihood of a match."
+        server_label: gitmcp_tiktoken
+        status: completed
+        type: mcp_call
+      - content: []
+        encrypted_content: gAAAAABq-a4cS-QEVd6dQWVfrYiZnZO0wBZgZQ5Ogf-8Qk0DtHT-7nv4vsnp0eAvBW1iec9byu5V_tFuRfOtDW44oV4hYLnBBKOQpJNiqzRjhEKqdO2EU4ENhpw5Eaat3et3kBloA0VpNJa_ODmdZg85f6nbjVdq_oUcqp7GwwpeqYxYvx32cwWDG1mtbtQ9I7fOKHJmXsIzjTVShBPKCKS6TAj2w_1W6FkUJssCA-Ga04lZiFa2N6nHqPSFCirQGua5Zduh-cz_fo_MmUtObi0WZkCt0aLrY77kITgm7Z_tjYbsI0bTuq9BZi8OLcjoNk9WfOxBTXesSheh6XL5omjHARCpStu8-x2bLmjn3rSHgBp7PAwwdxFYPeRKM-WyAd4BhatPMRQbnwUjbnIRgRwK63GrwikgTJyg7HCVV4OYJolPvNkQIPh1gKMWY-ItgHBr6nHF1I0jCyP-d70Tt9j6vTkELbXlhDMwaWRdTCrlXQl_7CjSxjd4YIL0dvVO37PXJoJEEPHZYTHAffPO0Ae7Of2I3o8IpkTg4z4xKVn-mgB7XokJm-QKWKt6Qb3j1RcZJnLKo2kThggpvcTiDWXXMZX9krV5m0R6GnQnrcdm_ltORJnXQGLnI_TEIeM1ypVUmWny8V56ba2wpdpcoX75GJRGBFw6dQtUw9KKW9ujLMsmdJi_R9lzUV6nlgbnDPFgAkfetl568772CGkwem7L7HSFThZghDaXMimVjuo8idCRgT1Knkks1KAaT4bWwSCYMXIzfc1QU1Lna898cth6yWF4-vR-iDZ1nTxvLCy4qT7ed2tlmSDvyyXAu0CJM0rOf01Z4hBhuywIgQytp11VoZBM9d-lCkNaM2xdn2lPlwyslN8Jb3AxM_irTfKV2Yo8I3lWyiNANf0b5JR9fXDb3pJJIZra5yX8AGmP3ssWsxjH6cWmugDEK4cwSVVoZnLgfaouZRr2AKJZU-qpMcklQWNvyMAd26TLpH6kAyxQtVYVoTSMhNXm2eNQLsWNxUIqWRQrtwgfn8sPuqVN3aXwuyTtNCgom3VHHqdbsrKUe79-nUmS9olFqmo1-YNic6NE5JpPp8x5OFWb-mquPerVjbKydJtFsniPxqsoi5wNJPTyzFTZZvvJ6i6c2pM3x73JhhHR1QXX31G2r4fCdGZpnpzuSkUwWqSX9FYlaA0D7thyOMNPmOxItlVdHxz53d-U578Bb592YB49jNWNpX1rfwVLcxhRAsJS0wMLOGm8TWCx6NYVQCOjF67-oNhAqH5kuh0GqhPRA5BeoFdTgFea4wb4azEK9hO3FPZDc5rVW_PXLzNH5CBWuwr-c11B1stw1gRthYue_DXvf2D_nEr86GoSWF5E1k8aeE7bEVMdUzevIlfajyGJJSu7YpYifn11rMfxWWXxbflz3BV6Zd-Aj4W_uqwaiUlcVyUmxiM29rNl_albGqRZkgB9-kKtZ-WHs-p_xYSquB2hC9wuCb6DL_ByzfVxEG1u5Vp9n7f4sR9JLx-Qx1i42dFSH5_YGJiKFGBg2V9X_hAv9YJL3ngOxWExQvbT5yS4cfMIDahJU4nvQAo3XR883cHJwoMw02gTSTPR8JJ8SNWVGNRObcanMHgvVBZmNFqmTzLxL_OWYnC4TtHhHVHt22uFs-a_9uHD3NULSh6YGPPuWUNRWC0ihLaaY5zB20HAu8fW0TwdO6KTTKZuFCdz_utAd1qtlE52gNu1nbmiX3IPecZtNktbonvIb0Q3nMjU39cKnXWGf-YPsCzGj7hLdSqpbpS2zWgEjpjGeo7q4WZcqDGIiNlWcAcv0F4cAvtLjqkklV9utp2PmzpeVgphH7qA93R1NemSj0KBhzzayTdoLskJEFnhbE0bcKISFcFdQiIpKhaEZNCAJ5dhg7B1m9h0z4gR_YMCtaR9t-kI_W7an17m1Id2CQp5dLUkLt6c9bU-2r4R6CT4RIygY8Kay5S5evEc3DJ5E4WMg5XgA_4bs00jWQYWJsuNwF7DcU96omTUs3EkBCuwUvECQPKXr5xGiS_YPplI8LIXGiMxyGn4_Y4dRL_tf-XSqSJ0civJ0rKImrdfu9MAk0x5PsqaoBHbs7fONsGkVoipnkK1pV2p5vvb0QrHr2SnzNmDUZdnfEGQLL-WcOOhFjjBrZg=
+        id: rs_0efab031d24f75df006af9ae1b898487d295472c52f2a29758
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: GPT-4o uses the `o200k_base` encoding.
+          type: output_text
+        id: msg_0efab031d24f75df006af9ae1bdc7487d29efc198e15b1393f
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - search_tiktoken_documentation
+        headers: null
+        require_approval: never
+        server_description: null
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 1526
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 0
+        output_tokens: 102
+        output_tokens_details:
+          reasoning_tokens: 45
+        total_tokens: 1628
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body:
+      input:
+      - content: Use the tiktoken documentation tool to find which encoding gpt-4o
+          uses. Answer in one sentence.
+        role: user
+        type: message
+      - id: mcpl_0efab031d24f75df006af9ae16857c87d2af5981e3d41ac0f7
+        server_label: gitmcp_tiktoken
+        tools:
+        - annotations:
+            read_only: false
+          description: 'Semantically search within the fetched documentation from
+            GitHub repository: openai/tiktoken. Useful for specific queries.'
+          input_schema:
+            $schema: http://json-schema.org/draft-07/schema#
+            additionalProperties: false
+            properties:
+              query:
+                description: The search query to find relevant documentation
+                type: string
+            required:
+            - query
+            type: object
+          name: search_tiktoken_documentation
+        type: mcp_list_tools
+      - approval_request_id: null
+        arguments: '{"query":"Which encoding does gpt-4o use?"}'
+        error: null
+        id: mcp_0efab031d24f75df006af9ae1a0ad887d28052601f9c840e35
+        name: search_tiktoken_documentation
+        output: "### Search Results for: \"Which encoding does gpt-4o use?\"\n\nNo\
+          \ relevant documentation found for your query. It's either being indexed\
+          \ or the search query did not match any documentation.\n\nAs a fallback,\
+          \ this is the documentation for openai/tiktoken:\n\n# ⏳ tiktoken\n\ntiktoken\
+          \ is a fast [BPE](https://en.wikipedia.org/wiki/Byte_pair_encoding) tokeniser\
+          \ for use with\nOpenAI's models.\n\n```python\nimport tiktoken\nenc = tiktoken.get_encoding(\"\
+          o200k_base\")\nassert enc.decode(enc.encode(\"hello world\")) == \"hello\
+          \ world\"\n\n# To get the tokeniser corresponding to a specific model in\
+          \ the OpenAI API:\nenc = tiktoken.encoding_for_model(\"gpt-4o\")\n```\n\n\
+          The open source version of `tiktoken` can be installed from [PyPI](https://pypi.org/project/tiktoken):\n\
+          ```\npip install tiktoken\n```\n\nThe tokeniser API is documented in `tiktoken/core.py`.\n\
+          \nExample code using `tiktoken` can be found in the\n[OpenAI Cookbook](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb).\n\
+          \n\n## Performance\n\n`tiktoken` is between 3-6x faster than a comparable\
+          \ open source tokeniser:\n\n![image](https://raw.githubusercontent.com/openai/tiktoken/main/perf.svg)\n\
+          \nPerformance measured on 1GB of text using the GPT-2 tokeniser, using `GPT2TokenizerFast`\
+          \ from\n`tokenizers==0.13.2`, `transformers==4.24.0` and `tiktoken==0.2.0`.\n\
+          \n\n## Getting help\n\nPlease post questions in the [issue tracker](https://github.com/openai/tiktoken/issues).\n\
+          \nIf you work at OpenAI, make sure to check the internal documentation or\
+          \ feel free to contact\n@shantanu.\n\n## What is BPE anyway?\n\nLanguage\
+          \ models don't see text like you and I, instead they see a sequence of numbers\
+          \ (known as tokens).\nByte pair encoding (BPE) is a way of converting text\
+          \ into tokens. It has a couple desirable\nproperties:\n1) It's reversible\
+          \ and lossless, so you can convert tokens back into the original text\n\
+          2) It works on arbitrary text, even text that is not in the tokeniser's\
+          \ training data\n3) It compresses the text: the token sequence is shorter\
+          \ than the bytes corresponding to the\n   original text. On average, in\
+          \ practice, each token corresponds to about 4 bytes.\n4) It attempts to\
+          \ let the model see common subwords. For instance, \"ing\" is a common subword\
+          \ in\n   English, so BPE encodings will often split \"encoding\" into tokens\
+          \ like \"encod\" and \"ing\"\n   (instead of e.g. \"enc\" and \"oding\"\
+          ). Because the model will then see the \"ing\" token again and\n   again\
+          \ in different contexts, it helps models generalise and better understand\
+          \ grammar.\n\n`tiktoken` contains an educational submodule that is friendlier\
+          \ if you want to learn more about\nthe details of BPE, including code that\
+          \ helps visualise the BPE procedure:\n```python\nfrom tiktoken._educational\
+          \ import *\n\n# Train a BPE tokeniser on a small amount of text\nenc = train_simple_encoding()\n\
+          \n# Visualise how the GPT-4 encoder encodes text\nenc = SimpleBytePairEncoding.from_tiktoken(\"\
+          cl100k_base\")\nenc.encode(\"hello world aaaaaaaaaaaa\")\n```\n\n\n## Extending\
+          \ tiktoken\n\nYou may wish to extend `tiktoken` to support new encodings.\
+          \ There are two ways to do this.\n\n\n**Create your `Encoding` object exactly\
+          \ the way you want and simply pass it around.**\n\n```python\ncl100k_base\
+          \ = tiktoken.get_encoding(\"cl100k_base\")\n\n# In production, load the\
+          \ arguments directly instead of accessing private attributes\n# See openai_public.py\
+          \ for examples of arguments for specific encodings\nenc = tiktoken.Encoding(\n\
+          \    # If you're changing the set of special tokens, make sure to use a\
+          \ different name\n    # It should be clear from the name what behaviour\
+          \ to expect.\n    name=\"cl100k_im\",\n    pat_str=cl100k_base._pat_str,\n\
+          \    mergeable_ranks=cl100k_base._mergeable_ranks,\n    special_tokens={\n\
+          \        **cl100k_base._special_tokens,\n        \"<|im_start|>\": 100264,\n\
+          \        \"<|im_end|>\": 100265,\n    }\n)\n```\n\n**Use the `tiktoken_ext`\
+          \ plugin mechanism to register your `Encoding` objects with `tiktoken`.**\n\
+          \nThis is only useful if you need `tiktoken.get_encoding` to find your encoding,\
+          \ otherwise prefer\noption 1.\n\nTo do this, you'll need to create a namespace\
+          \ package under `tiktoken_ext`.\n\nLayout your project like this, making\
+          \ sure to omit the `tiktoken_ext/__init__.py` file:\n```\nmy_tiktoken_extension\n\
+          ├── tiktoken_ext\n│   └── my_encodings.py\n└── setup.py\n```\n\n`my_encodings.py`\
+          \ should be a module that contains a variable named `ENCODING_CONSTRUCTORS`.\n\
+          This is a dictionary from an encoding name to a function that takes no arguments\
+          \ and returns\narguments that can be passed to `tiktoken.Encoding` to construct\
+          \ that encoding. For an example, see\n`tiktoken_ext/openai_public.py`. For\
+          \ precise details, see `tiktoken/registry.py`.\n\nYour `setup.py` should\
+          \ look something like this:\n```python\nfrom setuptools import setup, find_namespace_packages\n\
+          \nsetup(\n    name=\"my_tiktoken_extension\",\n    packages=find_namespace_packages(include=['tiktoken_ext*']),\n\
+          \    install_requires=[\"tiktoken\"],\n    ...\n)\n```\n\nThen simply `pip\
+          \ install ./my_tiktoken_extension` and you should be able to use your\n\
+          custom encodings! Make sure **not** to use an editable install.\n\n\n\n\
+          If you'd like to retry the search, try changing the query to increase the\
+          \ likelihood of a match."
+        server_label: gitmcp_tiktoken
+        status: completed
+        type: mcp_call
+      - content: []
+        encrypted_content: gAAAAABq-a4cS-QEVd6dQWVfrYiZnZO0wBZgZQ5Ogf-8Qk0DtHT-7nv4vsnp0eAvBW1iec9byu5V_tFuRfOtDW44oV4hYLnBBKOQpJNiqzRjhEKqdO2EU4ENhpw5Eaat3et3kBloA0VpNJa_ODmdZg85f6nbjVdq_oUcqp7GwwpeqYxYvx32cwWDG1mtbtQ9I7fOKHJmXsIzjTVShBPKCKS6TAj2w_1W6FkUJssCA-Ga04lZiFa2N6nHqPSFCirQGua5Zduh-cz_fo_MmUtObi0WZkCt0aLrY77kITgm7Z_tjYbsI0bTuq9BZi8OLcjoNk9WfOxBTXesSheh6XL5omjHARCpStu8-x2bLmjn3rSHgBp7PAwwdxFYPeRKM-WyAd4BhatPMRQbnwUjbnIRgRwK63GrwikgTJyg7HCVV4OYJolPvNkQIPh1gKMWY-ItgHBr6nHF1I0jCyP-d70Tt9j6vTkELbXlhDMwaWRdTCrlXQl_7CjSxjd4YIL0dvVO37PXJoJEEPHZYTHAffPO0Ae7Of2I3o8IpkTg4z4xKVn-mgB7XokJm-QKWKt6Qb3j1RcZJnLKo2kThggpvcTiDWXXMZX9krV5m0R6GnQnrcdm_ltORJnXQGLnI_TEIeM1ypVUmWny8V56ba2wpdpcoX75GJRGBFw6dQtUw9KKW9ujLMsmdJi_R9lzUV6nlgbnDPFgAkfetl568772CGkwem7L7HSFThZghDaXMimVjuo8idCRgT1Knkks1KAaT4bWwSCYMXIzfc1QU1Lna898cth6yWF4-vR-iDZ1nTxvLCy4qT7ed2tlmSDvyyXAu0CJM0rOf01Z4hBhuywIgQytp11VoZBM9d-lCkNaM2xdn2lPlwyslN8Jb3AxM_irTfKV2Yo8I3lWyiNANf0b5JR9fXDb3pJJIZra5yX8AGmP3ssWsxjH6cWmugDEK4cwSVVoZnLgfaouZRr2AKJZU-qpMcklQWNvyMAd26TLpH6kAyxQtVYVoTSMhNXm2eNQLsWNxUIqWRQrtwgfn8sPuqVN3aXwuyTtNCgom3VHHqdbsrKUe79-nUmS9olFqmo1-YNic6NE5JpPp8x5OFWb-mquPerVjbKydJtFsniPxqsoi5wNJPTyzFTZZvvJ6i6c2pM3x73JhhHR1QXX31G2r4fCdGZpnpzuSkUwWqSX9FYlaA0D7thyOMNPmOxItlVdHxz53d-U578Bb592YB49jNWNpX1rfwVLcxhRAsJS0wMLOGm8TWCx6NYVQCOjF67-oNhAqH5kuh0GqhPRA5BeoFdTgFea4wb4azEK9hO3FPZDc5rVW_PXLzNH5CBWuwr-c11B1stw1gRthYue_DXvf2D_nEr86GoSWF5E1k8aeE7bEVMdUzevIlfajyGJJSu7YpYifn11rMfxWWXxbflz3BV6Zd-Aj4W_uqwaiUlcVyUmxiM29rNl_albGqRZkgB9-kKtZ-WHs-p_xYSquB2hC9wuCb6DL_ByzfVxEG1u5Vp9n7f4sR9JLx-Qx1i42dFSH5_YGJiKFGBg2V9X_hAv9YJL3ngOxWExQvbT5yS4cfMIDahJU4nvQAo3XR883cHJwoMw02gTSTPR8JJ8SNWVGNRObcanMHgvVBZmNFqmTzLxL_OWYnC4TtHhHVHt22uFs-a_9uHD3NULSh6YGPPuWUNRWC0ihLaaY5zB20HAu8fW0TwdO6KTTKZuFCdz_utAd1qtlE52gNu1nbmiX3IPecZtNktbonvIb0Q3nMjU39cKnXWGf-YPsCzGj7hLdSqpbpS2zWgEjpjGeo7q4WZcqDGIiNlWcAcv0F4cAvtLjqkklV9utp2PmzpeVgphH7qA93R1NemSj0KBhzzayTdoLskJEFnhbE0bcKISFcFdQiIpKhaEZNCAJ5dhg7B1m9h0z4gR_YMCtaR9t-kI_W7an17m1Id2CQp5dLUkLt6c9bU-2r4R6CT4RIygY8Kay5S5evEc3DJ5E4WMg5XgA_4bs00jWQYWJsuNwF7DcU96omTUs3EkBCuwUvECQPKXr5xGiS_YPplI8LIXGiMxyGn4_Y4dRL_tf-XSqSJ0civJ0rKImrdfu9MAk0x5PsqaoBHbs7fONsGkVoipnkK1pV2p5vvb0QrHr2SnzNmDUZdnfEGQLL-WcOOhFjjBrZg=
+        id: rs_0efab031d24f75df006af9ae1b898487d295472c52f2a29758
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: GPT-4o uses the `o200k_base` encoding.
+          type: output_text
+        id: msg_0efab031d24f75df006af9ae1bdc7487d29efc198e15b1393f
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      - content: 'Without calling a tool, answer from the documentation search result
+          above only: which encoding did it report for gpt-4o?'
+        role: user
+        type: message
+      max_output_tokens: 2048
+      model: gpt-5.6-sol
+      store: false
+      stream: false
+      tool_choice: none
+      tools:
+      - allowed_tools:
+        - search_tiktoken_documentation
+        require_approval: never
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794747935
+      created_at: 1794747934
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0efab031d24f75df016af9ae1e565487d289eeaedb825b10f1
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 2048
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - content: []
+        encrypted_content: gAAAAABq-a4gu-X23tm4qTsq3YhaC46PgxPr3YkPTo7Z0Oz_DvBHx9Tm0fNAWqnVg0XJbrTWzgKUrhdRJESZLtty6jmbJSUHCIXFCOLx4uxFsOQ99haaAoqae2fv0njNuq0zD77_ePcRr7b2wJWX4cZXzQZBktJc9nXoNtz8b_F_CLC87O2AUqlZYF8s3Tq6tM063NQdHfLwQHFAXp_qxdYGaF7VtMcRzy9p3qQ2vO8TghURPC32W5EhjRH32LtYDlW0ZXXkTu0W8Qvk8LwLWOlVPz0C7qkxniXRdUpTt0Qxn8JyQER10jGGr81pO-5vBxuLME4izkQbFET59IqAxmcqh2FIIIRjkJRrhm1WnwrR42Sl40rCg98piO-DVaXfcLuykGX6y5ZysrzbcQtcIFiUNpbfMdZCG7WhSdjXKctQyYlDUYhDC9WFKW1kCwCkaitYsw80ZmA30eaLKvmC5QlI-ziSyZQQ4pS8ZJxRQ6xSYlt-pA-4xv1sscQia4wzJrQ0q6wPrCbxwOfbKfGXH3dsvoGt2Y24w4FaPQvIK99JayYReom_xOc88XnJLFcNPrw0tsXOl6qCX3mAq-uzMJHioiX1RZFs_i8iRBTfhekRvmVInR4KIpWd1xq9TK0JFlyLmWwphsjl3dGdvROqx_6bQpipeq-_J_l13mO8JLuGJ-uxp0LIZ8vslae7CbgN6Xko3o9XpcCQfe0z_n-S2nhOjd12Lx984zW8spaAVrC_zPedDNQOR7x3jFQ39VV3amzgtcOtY3LEGh_64yGMpl773mHJxWwrDP6ACE_zOI43VWCbeqZ7O4zmVDW_VI--O1pSLHqNYbeh_6ajw7QIwzUWgZZ5kFPfANvLtqardZEGz_oBa-f2D0jocm4iMEieG6vM8efJ16SSuVWVrWs07d2v8xQ_JDiTVjoX6sPr-4ET3HueUXawqruZRuUINpYDL8byK8d57MOfnFBjXmB2ydowvhGZitS4hTPcUCFUAqm5OxmBvOdRcUJhC7aOAGMOGNYQG_uJpiXcMzFKuE41vPZ1gq3INWJiMEa-sAnFuoTMkTIRlZIL-qCpI3dXLDHes8kM4wIJDECneWjo4imwv6w9hQFGHmH8uk9giHL5UhaFuVRJ8_CewTKGgwUXJTl8bjSBr4muybsA8j-5J9S-iewJBiNk0PVncjPJcWhRVe_b9Jox66TiwpGxMiH7Q4d8UXodTf2z62igkg8aNCTGeyFm1RkaJPAaV-pVIKuD4aZBDj4WKblDxqyhxqOzupW_Ob4dl6j5T0J1nGEKyeYeLTcj7FVSE2vgRfrZng9HcuJwL-0jk4ktNWuQUBjHRu_3_QVeCIATavjY8ysakf8vt3AcOeQ7xHGKRxkFiny7UVMV0WuAjKFy_BCEP1QNMpDYRycBBMG8caxhO0d0H7CWerMK7QEe55fRnzMJwOxRnuVUP18qDv3NLZxn1K_e5lBO0bmuaxFcOKCJ1g-XReMVuIHeGcLsKFAoD2bdnVp9GxbPTW7fUrFBr6zqV_xIVwj7ou5f1dkfRhqihXW42YyVmVHxpuD5XqmS89T9fqJojY-pFqOYfXobNydk4JiO36nHniA_9z3qkw1CkHg-Wa7bFPOu_s0qn3fuiE19fMEV-AbbvIJ1tGnmPLVgoWkepxzBwj_cDHW46uD9G2sx9jSHuHCyJr5ig6bQ96G3v33S6e8hzRtBqrwtAKa-zAFnuV32FoKWZvlHSvgqanwToDaw8bL24gtSc5coAEGAY0TEd1EDwYI2_5drALyKq7oCHqQQ9i95Yjx_ZxpDZSX2ytP_5bXNlA6jIG5XMVMaj7vxQKL_E6SBBIdR4MhS2g5XGz_RWrzI9QNhOUAHjeWWzmR7BxNKibbqbVwlEebGIiEd-nqGxx0muUP1sJ6EQ2Xp8bTIPlCYNEnQDw7M6buqOR2e2qK_a-G6FB3Go7Cc4_Ek7iMar6-frwQxMt085BkFDvkahQ1AWGkeIpsjfG48hLoCgCU4KnZFkz9HneuYNKYlgwezHc2gdhU68b_9OP1uhavGau51pH0whDKYfeQr412XH1rSFAbvXKW5TtxPrvzdaIpEZHmm11pVhDNkT-1EA35jcwSmPXt7d4GWNss4H5-yIyEzS15o9j43POl23bvRm0Yp5sVXhRqOkNHS5DUixcnuCT54XqMTVSDtyQ6lZheyYFz9RLtZfGnNATES0HHtwf2Dc5qwjJm5A6ehEU_FnfCnOcP4nyjt9Zp85sFEVzWsztN0COkMukP9-BZQ9PgRkM7YFvkCyRtNMalLrv3yKPP2PW4ZmxUUdxXPtEJkgBg23VeAztO2vceDkeTBul6RS9zJEpUTHAQQrlZzbeXIsZNZ51L0Tyyc6yqWtpdpAswk1PmQ8eDOyQci-IjN3wUxOFMIGG67fuq7unWfwdYrQ4HjsQcqxDOmu5J-nKLFWu3Tmdeh-i0E3RoMtCPpwItBmyYxRxZHuXiLCRMnm5wCwRJTuTvSaA81h5OdiI_6MIgJjPfmAXZdXX1cqw==
+        id: rs_0efab031d24f75df016af9ae1eff5487d2845c7798e17faf87
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: It did not explicitly report the encoding name for GPT-4o; it only
+            showed `tiktoken.encoding_for_model("gpt-4o")`.
+          type: output_text
+        id: msg_0efab031d24f75df016af9ae1faae487d286742790ac821253
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: none
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - search_tiktoken_documentation
+        headers: null
+        require_approval: never
+        server_description: null
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 1610
+        input_tokens_details:
+          cache_write_tokens: 1535
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 1535
+          cached_tokens: 0
+        output_tokens: 109
+        output_tokens_details:
+          reasoning_tokens: 71
+        total_tokens: 1719
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      input:
+      - content: Use the tiktoken documentation tool to find which encoding gpt-4o
+          uses. Answer in one sentence.
+        role: user
+        type: message
+      - id: mcpl_0efab031d24f75df006af9ae16857c87d2af5981e3d41ac0f7
+        type: item_reference
+      - id: mcp_0efab031d24f75df006af9ae1a0ad887d28052601f9c840e35
+        type: item_reference
+      - id: rs_0efab031d24f75df006af9ae1b898487d295472c52f2a29758
+        type: item_reference
+      - id: msg_0efab031d24f75df006af9ae1bdc7487d29efc198e15b1393f
+        type: item_reference
+      - content: 'Without calling a tool, answer from the documentation search result
+          above only: which encoding did it report for gpt-4o?'
+        role: user
+        type: message
+      max_output_tokens: 2048
+      model: gpt-5.6-sol
+      store: false
+      stream: false
+      tool_choice: none
+      tools:
+      - allowed_tools:
+        - search_tiktoken_documentation
+        require_approval: never
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794747939
+      created_at: 1794747937
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0efab031d24f75df016af9ae21bb8c87d2a7e77e7ad2585a98
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 2048
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - content: []
+        encrypted_content: gAAAAABq-a4jkzEkz89S-uehUXcQsYqhKdaQ0xaFltq7yswzCw_4wIM7T_k_lXjDU3JAjp7N-LintPJccq_J-8ihd5AYnRJmlgeKBvCObqS7dslYC2qL00g578Rfbw2Js17jaScYPOm-_l8gld_QdZy4PIQ0WDBP-w7kj7BYvJcRP1GqEjREDm3eiwVAj-Z8D2DQ5uuvqnoy42USlUUFXF8OkQPi736fvpq-zE7ZMBinH3n7a-SRlpePx_a8rspJJiZyNWjJpzKAl3IvJzD96ISn_Wa7zFdO5Z9z76SGsLbZ3vuwBdTh5R3zMSbAD7NQiWjFR_p_PiuwR3138ReQPzXsXTkzkhp2p1_VKizuRX-EpEXxSsG9ZynC8OM3n45K96621lV3yUjahDrKgnXQJDJP-SJUfuDfQnQCXAAqX2q4f1RnHHE1jjrLVeqjX7O3KoSx48gI8rAvZCbwVzPOu8h93JSNOhJlFoUl6kkLHimltQmOedak3Wur4C0bCPMxL-QCVZlxLrA6pdmDgS9oqKymid2J1he6fYHyMJ6rHaNikL4VZEqITFhTICgjIWer4JfNkNYcADU-8Tj2JJyeX0ogZzfrtzh156WJUYgk9p7baeqx-Pl20gTYRJFcBPBSirHASVwd8UdqBvh5m-UU7lo6vv7kpwbhNQP3_4xtVGJBdq_W-M-S4s3t7xGL2lHYXfeGMVyloPbTKLZEfHLXl-egETz40TqsTN5gF0ZI7U4Swi2oY_J9L68SL4endahq3_CN1CyyuB9jOgXJcMnOghsjgSlOcs6z5eGx75eP_YGkZTGiUS-ZmN-LL9MS4Kct-ff-zR5kGYGK4hqPArBM6xrStQlQHd3Z7bl15Eh82IZ8TzqUdKgxON9tc_2yr7PqOFWL3BUCLsUrZrJsojOuMjFsgCSsn59o_xnQhmmkWGLcChvkkXpxq75Vb06nAgulx8YTDPyt2LadQKuYmqch3tPIr7e4evx1xkugd5zlZFRosWfY2qiiT6NkyvHo8oSH8T0gdR7gOPwRUu18-p5H7aMZV-toAPKA5jSfRvqLK-3aIc2pkT5pBrbqvxtqzOjD_3GjrDDzOos9rop-xFDJfDygO5ucvrzaGGnO_Jyc4kGOCxJ06C7qcwS6OyCjuuOGar6TCLD0k9hepui72EGN6grF5v8LYWnRP0JUvwy395tC6--Yj-d4g6lMgSEYDh_789f7Ix23vdaA5Wl8I_SWBFLPXkhlD0C5uecafeZVJoy-PQOKOaRZio68kpf-b5oXZmG4CFNt4_bGLYeY-HMca3t0ANpmO52ltnLfEBXFD4gLy4ysyWfpLHsouGjMHuuVTpIl3JoIYQZrfEmxt0C9bziOyc-ehccxdQc3CntmnI7z8cnFetYOgLgAHEZFselU-QCK-4mKBTKvk5C1c4rRdOSMx3epIvQAG9sji6evxmYvq6eA9UD7_AvYe_Q5qoRPKsi-Ey3mODcJ2vffTC9J24osDgS0JoWodms1H_j6YIjqF4v22l7r-Zo3wkdKJBL1ykdPk8AXhonvv1ksr6xl0uKGD-Y64q00vKayJDYNxItBoQnIFcJ1qUB0PEQbQurqP8D3OlGzEJMwB04DZunsjfJQHb0cQy6PiTkbgM3hJB4BujLEdtCnuAe8U_o1um3wuGmngwEniNJUh4Chz-L2l3544Q7pcZYHNlPbfO4vNUxvwgrdr5JD9ChtLozdq7GG83zqgF2DQGYA8FLOS8engl3rrCmC3IyPx9bPGCt95IVWAkUu6aSVN6_5J6f8MrbzZtVVXP6thqcBleIrVgV-yBIgHc89-2DlilHU-uNUERqqWgxfiWq5X6xfso0Faz6odad5WIfQwaIQ87vBEYORZl_yA-EXyj41-bqK2do9bjdI3jqPRFuyu-vVtDRAmhg7IX9qJzal03R1NUkSlTR4wm6fd7yKvt0rVYdO1DJsm4tdrZ57FjRIV1FsF7zApmoYyDK-5Ne6_Zya6dIXCigrP8KLGaJFiOWKEg1TyOsrh8R6aK6MrMgE8I2P16Vr-gazfuQdxW20BR2W7Yex0Rch11DGvOnB9q9O9k1qvJOPUrZqDfmK8mB7sMrNxDBzH3sMl9OcpYadKYxHndR2vzrr4VO7tJeDO-k0_mGaOCUhja1pMsUF6SxVnXsq2m23k1jwsKiUZYvGUzwE7cYKsQ-iZFNbFYU8OC2lN_9vn5kR2ERJJ_LCyODc-l7fFOvLoBFQgAkSzkGS2Ve6lFG42lkG-8hZfLA50iMeO2-7lgP9y0gYcLarphni6DegQM-54ouAhTU41leyN0d-6yJsEHpyzNCTnG6QvjOt_1lufgw0CUkKjjelCnYQ-CWKHEAsELBFlaD6f8z1FQaAiQ9gGiBhuvKTmh6s9JXOit5Jc8Pplx2VszcM_qsyHOQuBrzN18Ss-RoGk7mmpNUEIhyGhVuXHlY3aVNvJdTMXMtsO3ajO8vz82CtEgPmS-i1YkAq6usYvfroNwYy_aKufUjBEBZzA3ZA65FLgMBOb2qOWIoaiANn8lUSmZKa6pN3tllz-2PYrngC9SjWA4t_GXeW3IFNScM3Th2wGYb1SbY2fcEXvi4xrEtt-tZeLYxCPLiE0B3PWggcAEJjQSvZhRWhOKjojSPwYY07VCc08Sq5-ZcFuYCTOCzaCJkQsQioicQJXnPlSRMcwvzWFyYWwKXHpUJC3FXgA6rVxMBeWv7gN4GUzNZmDv_cskK6iRV1KAcMhy_NgIgMWl6NumdRUjTXrkiCv9f7Xe09HFvWBZ9g94MsE27b-cRnXBHElI4=
+        id: rs_0efab031d24f75df016af9ae22433087d29d34cdd2da2368e5
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: It did not explicitly name GPT-4o’s encoding; it only showed `tiktoken.encoding_for_model("gpt-4o")`
+            and separately demonstrated `o200k_base`.
+          type: output_text
+        id: msg_0efab031d24f75df016af9ae2309f087d28a5aa4bb64ec41c2
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: none
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - allowed_tools:
+        - search_tiktoken_documentation
+        headers: null
+        require_approval: never
+        server_description: null
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 1610
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 1535
+        output_tokens: 139
+        output_tokens_details:
+          reasoning_tokens: 94
+        total_tokens: 1749
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body:
+      input: Use web search to search for the exact query "potato", then summarize
+        the result in one sentence.
+      max_output_tokens: 2048
+      model: gpt-5.6-sol
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: web_search_preview
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794747952
+      created_at: 1794747949
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0956e0b76aed2b8a006af9ae2d610887d2860a10a88c0f94df
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 2048
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - content: []
+        encrypted_content: gAAAAABq-a4xMdNPqsLdr2xTshY-xbBVnzq3mQf7BJupFmSxwox_sAKKD3wdNTwF5Dw3FkdBgbur-uta5mngCFF_lyTvhKjlXe0UdOgxP_yp8kHDUT5YCcrfVPfpP4VcQsstFKZlToLWCHsNCn8w4YUWLZ7Kzwe4rny4f7AYg-XzkO9Ajf5wATm2n8Lv8GWKqnz_jpRdsybZa8mACP4NbYGvwLW3iiHRO1liUu3S1b-WOSKBsEK2Kn64WYezmbj0YcmekhVWT3Xim1u3Edj7XGBHxyB9XjaXf68tAjX9l75O6Zplau-XRHElmq-KlfTVzWEADaHtvFtSbHz-8uAGYbQ6d1LpzhP9o6G8Q2ViP9iMvMo2FwnsKa8_4uBKa-3qssM6xlX-11i138mq_qCbq8kO9FO51BLT5yRFu2R7fwMseqRA1ob5ZVnQ_giPXLQVQSFptntXzo6GUCD7pLzHNnNSS7owOL_Q0yV_lyo48DTTfYmatMq2UZZvWx-ROd0Hs2DCK9ZVvskbRbnaj7Xcvke_uJ72yIAFXk8slkvvFS4lOmrao15MrulV2_HHDJVvMw78AXOzTVW-ZwDAPbUqsUhFwYyXrxLR-CYBn8zciITNRhZU2qCZoS7S5dYSvzWVZ17nBmAgw8sIn_FwcRxCRh5aTXubpC5mZ_p85FuVAx2mysBptr3h-kSE65Am8OuIUFiQsppcO0XfTgiipy3k6fQE1b3Z0k9txsidrexBZ09RQlARmTcH9jKHTpS9M-dEcCIgN5KIzUsdEUc_obycpD-5LYNGyQn9VKnXkCtkxMzhYG74zbOr1v5LcHvZhY8BjkKJQPws0r58FfhZLkG1LU9c_2uj66-ipwrocwYKp67C1qEOjzfIBQe9drsWel2mHTzAx41gwenuJSwpB4ifnfIm3afzvHSMNcu1rMbeIX81NvCCrAGonJzAmu44cG_yDrkJWSCM3hvoeH2t3FwmFch4fipdGb9uOCRsmok_7qvWSoQEjE23ZeFoRtvNpOATH-PkjyAIAWTQCBkGPd7QrlHFVMQHmnOaXs_kBLwg5qTsTji4KqN-P5MRSd6DJuQPlpZbM-4bhU22NKNOxHpkMpn_uJ4EPKqDMRgbGErUv4VGEExOI8WKFsPq2Jj-HChJFhwFDBl6DRQHcTLLJj6HuJzEepxsVuggax1Mrfv3GK1YGJ93OvtM5kkV24n4Wgx9Os1r1ik36r0ugK3W1n1FP1Wj-f849bN__lH12Lxyre5WR6JTDd2JwYsXRZAax6bYUqh6H3X6hHR93d2dun9dB2TIrW2DBxUDoEvx9dC-0KLRaFRfCVE6t2kCZAYjYnfkp2dEccwBiFBpnF7u0rgR1ITLB5sCl4njcmEDvmnJPF65JeAuq_zbDtouSNIdZvSRTYV-tfd6Fp3-d_KonEGuANKGDeZ5J4Qj4PH9NIAtZcxEcEP5j4JHFEm6mlbXnavcXHkt8kFJoRkHlEqKs--GA3LL-Y10YWA9By1CfA3nV9JI2aaZO7g7bJLCgeL2tsoElqXxb1H9yNQgWODLPZ4JRjxg3lydyhvfeMY57LRYGouwA0X4_czWkYVQcWxEfWfFBnQgQHuPe_3WTMZ_iZWjjMLiaRB77iCeUjhqTwOci3EElmrgq4cVjNec_XeJFwfDXdYj7nlJPFqQxVpGGBsymWguVTE2umJUcp5UiHtKQSAv2uVeNd2-2py8bUyt4-O5JHgUHX2QhXPfe7kPa_RD2GP9-XlXKtioj3RcERmr1qySPGn91bzRWsY=
+        id: rs_0956e0b76aed2b8a006af9ae2e0da487d28fa8cc531e010fa0
+        summary: []
+        type: reasoning
+      - action:
+          queries:
+          - potato
+          query: potato
+          type: search
+        id: ws_0956e0b76aed2b8a006af9ae2e3d7487d2b509d10e908581df
+        status: completed
+        type: web_search_call
+      - content:
+        - annotations:
+          - end_index: 227
+            start_index: 163
+            title: Potato - Solanum tuberosum | Kew
+            type: url_citation
+            url: https://www.kew.org/plants/potato?utm_source=openai
+          logprobs: []
+          text: Search results identify the potato (*Solanum tuberosum*) as an Andean-origin,
+            globally cultivated starchy tuber and major staple food with thousands
+            of varieties. ([kew.org](https://www.kew.org/plants/potato?utm_source=openai))
+          type: output_text
+        id: msg_0956e0b76aed2b8a006af9ae3056b887d2937f8f746e4ff225
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 1
+      tools:
+      - search_content_types:
+        - text
+        search_context_size: medium
+        type: web_search_preview
+        user_location:
+          city: null
+          country: US
+          region: null
+          timezone: null
+          type: approximate
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 8581
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 4460
+        output_tokens: 99
+        output_tokens_details:
+          reasoning_tokens: 39
+        total_tokens: 8680
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body:
+      input:
+      - content: Use web search to search for the exact query "potato", then summarize
+          the result in one sentence.
+        role: user
+        type: message
+      - content: []
+        encrypted_content: gAAAAABq-a4xMdNPqsLdr2xTshY-xbBVnzq3mQf7BJupFmSxwox_sAKKD3wdNTwF5Dw3FkdBgbur-uta5mngCFF_lyTvhKjlXe0UdOgxP_yp8kHDUT5YCcrfVPfpP4VcQsstFKZlToLWCHsNCn8w4YUWLZ7Kzwe4rny4f7AYg-XzkO9Ajf5wATm2n8Lv8GWKqnz_jpRdsybZa8mACP4NbYGvwLW3iiHRO1liUu3S1b-WOSKBsEK2Kn64WYezmbj0YcmekhVWT3Xim1u3Edj7XGBHxyB9XjaXf68tAjX9l75O6Zplau-XRHElmq-KlfTVzWEADaHtvFtSbHz-8uAGYbQ6d1LpzhP9o6G8Q2ViP9iMvMo2FwnsKa8_4uBKa-3qssM6xlX-11i138mq_qCbq8kO9FO51BLT5yRFu2R7fwMseqRA1ob5ZVnQ_giPXLQVQSFptntXzo6GUCD7pLzHNnNSS7owOL_Q0yV_lyo48DTTfYmatMq2UZZvWx-ROd0Hs2DCK9ZVvskbRbnaj7Xcvke_uJ72yIAFXk8slkvvFS4lOmrao15MrulV2_HHDJVvMw78AXOzTVW-ZwDAPbUqsUhFwYyXrxLR-CYBn8zciITNRhZU2qCZoS7S5dYSvzWVZ17nBmAgw8sIn_FwcRxCRh5aTXubpC5mZ_p85FuVAx2mysBptr3h-kSE65Am8OuIUFiQsppcO0XfTgiipy3k6fQE1b3Z0k9txsidrexBZ09RQlARmTcH9jKHTpS9M-dEcCIgN5KIzUsdEUc_obycpD-5LYNGyQn9VKnXkCtkxMzhYG74zbOr1v5LcHvZhY8BjkKJQPws0r58FfhZLkG1LU9c_2uj66-ipwrocwYKp67C1qEOjzfIBQe9drsWel2mHTzAx41gwenuJSwpB4ifnfIm3afzvHSMNcu1rMbeIX81NvCCrAGonJzAmu44cG_yDrkJWSCM3hvoeH2t3FwmFch4fipdGb9uOCRsmok_7qvWSoQEjE23ZeFoRtvNpOATH-PkjyAIAWTQCBkGPd7QrlHFVMQHmnOaXs_kBLwg5qTsTji4KqN-P5MRSd6DJuQPlpZbM-4bhU22NKNOxHpkMpn_uJ4EPKqDMRgbGErUv4VGEExOI8WKFsPq2Jj-HChJFhwFDBl6DRQHcTLLJj6HuJzEepxsVuggax1Mrfv3GK1YGJ93OvtM5kkV24n4Wgx9Os1r1ik36r0ugK3W1n1FP1Wj-f849bN__lH12Lxyre5WR6JTDd2JwYsXRZAax6bYUqh6H3X6hHR93d2dun9dB2TIrW2DBxUDoEvx9dC-0KLRaFRfCVE6t2kCZAYjYnfkp2dEccwBiFBpnF7u0rgR1ITLB5sCl4njcmEDvmnJPF65JeAuq_zbDtouSNIdZvSRTYV-tfd6Fp3-d_KonEGuANKGDeZ5J4Qj4PH9NIAtZcxEcEP5j4JHFEm6mlbXnavcXHkt8kFJoRkHlEqKs--GA3LL-Y10YWA9By1CfA3nV9JI2aaZO7g7bJLCgeL2tsoElqXxb1H9yNQgWODLPZ4JRjxg3lydyhvfeMY57LRYGouwA0X4_czWkYVQcWxEfWfFBnQgQHuPe_3WTMZ_iZWjjMLiaRB77iCeUjhqTwOci3EElmrgq4cVjNec_XeJFwfDXdYj7nlJPFqQxVpGGBsymWguVTE2umJUcp5UiHtKQSAv2uVeNd2-2py8bUyt4-O5JHgUHX2QhXPfe7kPa_RD2GP9-XlXKtioj3RcERmr1qySPGn91bzRWsY=
+        id: rs_0956e0b76aed2b8a006af9ae2e0da487d28fa8cc531e010fa0
+        summary: []
+        type: reasoning
+      - action:
+          queries:
+          - potato
+          query: potato
+          type: search
+        id: ws_0956e0b76aed2b8a006af9ae2e3d7487d2b509d10e908581df
+        status: completed
+        type: web_search_call
+      - content:
+        - annotations:
+          - end_index: 227
+            start_index: 163
+            title: Potato - Solanum tuberosum | Kew
+            type: url_citation
+            url: https://www.kew.org/plants/potato?utm_source=openai
+          logprobs: []
+          text: Search results identify the potato (*Solanum tuberosum*) as an Andean-origin,
+            globally cultivated starchy tuber and major staple food with thousands
+            of varieties. ([kew.org](https://www.kew.org/plants/potato?utm_source=openai))
+          type: output_text
+        id: msg_0956e0b76aed2b8a006af9ae3056b887d2937f8f746e4ff225
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      - content: 'Without calling a tool, answer from the search result above only:
+          name one source it returned.'
+        role: user
+        type: message
+      max_output_tokens: 2048
+      model: gpt-5.6-sol
+      store: false
+      stream: false
+      tool_choice: none
+      tools:
+      - type: web_search_preview
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794747957
+      created_at: 1794747955
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0956e0b76aed2b8a016af9ae33441887d29c01580f14521055
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 2048
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: Kew Gardens (kew.org).
+          type: output_text
+        id: msg_0956e0b76aed2b8a016af9ae34948087d29c8005bbb51606b8
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: none
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - search_content_types:
+        - text
+        search_context_size: medium
+        type: web_search_preview
+        user_location:
+          city: null
+          country: US
+          region: null
+          timezone: null
+          type: approximate
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 4593
+        input_tokens_details:
+          cache_write_tokens: 130
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 130
+          cached_tokens: 4388
+        output_tokens: 12
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 4605
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body:
+      input:
+      - content: Use web search to search for the exact query "potato", then summarize
+          the result in one sentence.
+        role: user
+        type: message
+      - id: rs_0956e0b76aed2b8a006af9ae2e0da487d28fa8cc531e010fa0
+        type: item_reference
+      - id: ws_0956e0b76aed2b8a006af9ae2e3d7487d2b509d10e908581df
+        type: item_reference
+      - id: msg_0956e0b76aed2b8a006af9ae3056b887d2937f8f746e4ff225
+        type: item_reference
+      - content: 'Without calling a tool, answer from the search result above only:
+          name one source it returned.'
+        role: user
+        type: message
+      max_output_tokens: 2048
+      model: gpt-5.6-sol
+      store: false
+      stream: false
+      tool_choice: none
+      tools:
+      - type: web_search_preview
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794747959
+      created_at: 1794747958
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0956e0b76aed2b8a016af9ae36c3c487d29d35a4ce6684cdfa
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 2048
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: Kew Gardens (kew.org).
+          type: output_text
+        id: msg_0956e0b76aed2b8a016af9ae37845487d286a250576e1865e1
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: none
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - search_content_types:
+        - text
+        search_context_size: medium
+        type: web_search_preview
+        user_location:
+          city: null
+          country: US
+          region: null
+          timezone: null
+          type: approximate
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 4593
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 4518
+        output_tokens: 12
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 4605
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body:
+      input: Use the python tool to calculate the sum of the squares of the integers
+        from 1 through 10. The code must print exactly CODE_INTERPRETER_OK=385. After
+        it runs, answer exactly CODE_INTERPRETER_OK=385.
+      max_output_tokens: 2048
+      model: gpt-5.6-sol
+      parallel_tool_calls: false
+      store: true
+      stream: false
+      tool_choice: required
+      tools:
+      - container:
+          type: auto
+        type: code_interpreter
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794747976
+      created_at: 1794747972
+      error: null
+      frequency_penalty: 0.0
+      id: resp_06691d6465e5a124006af9ae44c81487d2ab098f8f75cb57b2
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 2048
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - code: 'print(f"CODE_INTERPRETER_OK={sum(i*i for i in range(1, 11))}")
+
+          '
+        container_id: cntr_6af9ae44ed908191b0f14d30be49c597011977bc26be6d10
+        id: ci_06691d6465e5a124006af9ae4660b887d2b20710f4bba9fe85
+        outputs: null
+        status: completed
+        type: code_interpreter_call
+      - content:
+        - annotations: []
+          logprobs: []
+          text: CODE_INTERPRETER_OK=385
+          type: output_text
+        id: msg_06691d6465e5a124006af9ae47f7f087d29ad84cb4a35e5221
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: required
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - container:
+          type: auto
+        type: code_interpreter
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 1315
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 1143
+        output_tokens: 43
+        output_tokens_details:
+          reasoning_tokens: 32
+        total_tokens: 1358
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t10
+  request:
+    body:
+      input:
+      - content: Use the python tool to calculate the sum of the squares of the integers
+          from 1 through 10. The code must print exactly CODE_INTERPRETER_OK=385.
+          After it runs, answer exactly CODE_INTERPRETER_OK=385.
+        role: user
+        type: message
+      - code: 'print(f"CODE_INTERPRETER_OK={sum(i*i for i in range(1, 11))}")
+
+          '
+        container_id: cntr_6af9ae44ed908191b0f14d30be49c597011977bc26be6d10
+        id: ci_06691d6465e5a124006af9ae4660b887d2b20710f4bba9fe85
+        outputs: null
+        status: completed
+        type: code_interpreter_call
+      - content:
+        - annotations: []
+          logprobs: []
+          text: CODE_INTERPRETER_OK=385
+          type: output_text
+        id: msg_06691d6465e5a124006af9ae47f7f087d29ad84cb4a35e5221
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      - content: 'Without calling a tool, answer from the code output above only:
+          what exactly did the code print?'
+        role: user
+        type: message
+      max_output_tokens: 2048
+      model: gpt-5.6-sol
+      parallel_tool_calls: false
+      store: false
+      stream: false
+      tool_choice: none
+      tools:
+      - container:
+          type: auto
+        type: code_interpreter
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794747982
+      created_at: 1794747979
+      error: null
+      frequency_penalty: 0.0
+      id: resp_06691d6465e5a124016af9ae4b160087d2a55849f4b5d32057
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 2048
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - content: []
+        encrypted_content: gAAAAABq-a5OINBnT4P-WG4BbV0rXJZ1V4Du9vOGaed3IoFP-dLmlybdlVEmQy4bwPLbjIH2Lb4yVuRLS4KwlM1Ord9qB8NlO3XJWRHGdTeNmq31_Cm9xVuhA5I5PrleZ-X0SiiamZ_f97hoIApevDbbP2Pr0tsKYL84Gjbfor8_zW3y05wCIJ5m9lhTyyP4R7vWjpRTeLoKgWQo35fPr03XGY3CUTJCm9HSY4hPxmBm_HR0fphQLmrLGZBL6ah34Xqk-gtiMosoSxB0LlkNBwnJOVMmy5mwPqFYReyca4IuvTN5ji6XJWt0FOIX5ELAnWz7IotUKKAeBMlO-vEAPxZ3NW6kOCtu7ZoydopgRJVNN9KQ1qhXgvYZbFoFUUnDY8gTybRWx24CFJwkI0xD3sYL9kkjMFhQxl9s6rE4ANA71eMZmcTO8g1jPtY7ydIsYKH-T7cODQxIG9CptxLeO_nHN_fwb6Pwt7za7y940GcKYSJf8FG2WD-S6k62-uX7sY9STcqvax7-GVCYEnkT7dv8RldhSsPH9Rf_4uP6BiS1av7oYUceptASQtKc_s_VTsMkci7PdKONtYwE8FdrJPL-GM8naCVDd5uS6Rc2u7Ifwbif-OYUlOn1oI-D8TNROnrZtLzA43iACywQc1We7eW1XVFZ5Q_qmaxDdjGSqvlbf3dtZE6Jkr_PkNr8KfheoC2kP-EZ_64NGIDEsGirWrfULIK9kch--756nj2AgYTjsnLkiemac7pxw_Cgm2JNSefVAGHYOajqhCDfzx7HQtuJDdi2yH_3a3BdXiL3PQhPBqxDDbr6HtJWi8PY0K6Yw6yrgYLOodh6O_YhlxHOBg3SbLsXQfA7RshV2y-sMFUF5jlawO0IT17hXu8HB97GioGo1-1SSdzusPM2t4rAuXn0be71rmP9w57lZT-pvZOQ9l2ZqAdmxOt1a5xH8OZgHLFTJ3N2Ewqw5bxZUOnI00gqR6fb1dWy8U2eXSmLfXyZZebx-7w4mPmssb_DCfYaaAWEFalVjzuKdP5YpACyriMgYiZDrpwnmqA1Y-yfFVLNhPdmHhF_Q79BRexVc-D50kws_l6GhKJUDE2ch430_KcTOdApskw3Warv6B7QZGTYCfcqP5KMQrKkBabSLycJzQ_4CSYp-FsQUYZVulOhlqPO8cdcIGq-6PnHF-33R4zXV7SFx0xxoRGtl_-21EMcQY3UnZXPRksXkxghp5rruj8HU2FRPvp9lxLuFZsgpV49TptdIRP6QK9kS3KTdGnPMVgaUvoC9gkKH1znU7nBOyBCOfkRw4LPMQpuDT6LxkkoRunvbmXzhiIVxk9J64bTCABmrWkJfZkq8O3m41BcrSTDXYeysUG3dFFYtZJZvFNo12DIkUg6ghE1pZjzy5TBC8D2p6NuXNYfcES5D0RHIBCw7QMbswyNWKKFZCAabDRUXaUg9JbSHqV9kmR5nX_-TvUJlcB3ycCD9wbAW96XuRW4T35cfyuuOMepfKw2ajPSv1uBHPqsCdc9Od2GSWe0hLzr5GJmHsWz0mpAfIxPLvNyiIr_QdSgSr_8MBTbEWtaFydTm9wkl0S4CNrL5lNi6gk_kReiQksYI08utOYPJssdNl-pKkcjV0qz_xLlE6SCKjPEmRK2gssC_kEZjKY5GCTajhX1JYwuksxZPUDQjUrjvg6X3iNyIOy01RDakktGwSAZX0NXlRu_0uwVFainbKBZcl2yz65sgl29UUTK7nNlnbgBL1-YjOmVBOhdmcYSy2_9lKcOSEn61ihn3jfCf_j72JL1gjpt6lPfakVc-9T0KkeOryoO5e6kum1cVsZYcFxH2-gEt82abdjQ3p3yHqvk5t8E-_qaeZz5QdOVLovJLBuc-eimMDg3YWYc5aTEIlcUxEKH6-g0gJv6FOA34HfXoDElnJcoEBOVYcYzbOyvizoX1tYhk8bIpMM5M10y2ZL7os_gPsxV6rTmonXhGGaEnnjA6gBuz4P1SunoVrxSjkhdt3-Vu-jldjWw0B_Ipjk8LEjm9Nu2efiSKXbi3_0fyUcueMvq-gdaFjKo5x71wl2-lpDtedblI9BYksJrVxP2WAvjvyTOtIrCw3qLiUyAi6xNidx7EA2H3ouO8q9CTwixnGD4_fXBE1dZj19m7_l440rMDjdWaqZlq35HVGmYDwO-rwe7qzHsSndS_nA0WWtzfOJBUomOLi006tp-wTdyFi9DXMsECAses_G6pL28NXjOTCvQq9A1iyT7FaS2gCJUSEyHyUtnaPw28SOBOV4DIUMoLkJsPLYcluuM8QARQkJTSQRgiEfqwIqsmU0VfkbMwgnx20AEKQ4SpguqdW2VG3eLFRkCtt0H85ecmY3CNuAnHgprJ2lJIdn-JCm5FLggrCH-QzFAX-pQT5P1HZCqkKh6hUL8Po2rQvMELcykNYpIJrhUzOFGk-UHUgxT2cc15AUS2b9bJ3CtTktcHmZ2h9k2dZJ3Bd1y-kUFLcNP6vD1u62fS3LcW95YdxTNXlkqOpA-YUTFAhlUBdwEyO4HDuyc2DNQd1KnZXoqJKuGk4pmnBvrEWiFBrMxhfIWHp33qHWr4o3tdroVZCGGw7fqvwPe5WpHCcfiAAMaEfgi2V5dgwC7eK9o0dqpaUk4Q3cJR09pJITPc9aJ4jh24NAD0r04e1ZHEDLgoClKTrMNysAfoTGvPkK8Jz_tX3m6L400RooDcNclHLp0SxEH5-6d1SKIwN3h6PmZpBf-SgEXXwIyGJQlud92Ob64koh4DE_z2Hln5P-hd4hMBSNgqUwkqrTiP15YwVX8teK1Kwkegg7xAa3___9BDZCe2RfY16elBa_TBPN1qkuZCyaSE5dWGSprYjGvmiOX1m3zi9wGuHuwGkFfxM9ZsDELTGzPuHQ2_i6dYvKA04BVlkoWXiRw2jl1IUblt9tSAAyPkrJ7yEfLwtZJOEOYbjzsbnvimcu0E_fbG2uXz7UQvlyeDvTKAEapf90nvUt33BpI7lJ2Q176m1myAuRufCja3vUw3LD9vNyeL8SxZYtC-GYV_7b_CvSn4FJIcTOiFyS-Gp_2OyYaHVwbJHoQzAxDpkd0DxzXVGyeLy381qdUcAeX9R14RAR8DSkHZtA_rjITmRY-01jtVHFnqcdCiVRq2pEfJRp_TQFNvlV00iIqpJI_xtvuGMQko3DMntDqOmdW186F2xGXHnHa1DxX7WaHo4kdbAAv1LVwpYCumNaIExw4flUtzr-6ST4mkvefHyTE2-3GtVfr1Ecatrg3qdKQ84EVR0Hx8JbBO9QE27NqNU1Mu7H1MblILlVxrqVdy4OwS6xC-nVkbcUgCvYVjUdOY_GugoLXwQPEaI8qIxu5Ujv6OWOZNCwlmqbFU2x1wCAP5JTbN6IauYMLYhuFOiR4GClzzK4sC68d5iSO3i5jFmsVYG-dlMNuQkloedjojSJN88_vBVms8d08Pnf1nd0HvaK4v5sendYpzACKhHxARG7-7pm9FskTxhb58F-u0TdsICvnhGfIi9Zu_tDTnB3IXXBSRqw7TX-LAY394qB_s-wBOt2mx8PG6eLwJ83IOSkK09bCSVUmcY4kMtUvCOo02TtLTSuBa4l_3dKFZM5mROfbFR97-sE_EAcJsdpmjQAq7q83o-cem7OwNslvSG2QY7hlODKIjIYIT1CF7pg9AIMMWuLESFgb30h_yCAmV4ZOO0LsMYXVoDQYaLTET_XAaBrC6y6oHGvJLKYsYNRyeDv7LkdmSIwnWiLYSTyaVXg-bnZyGPpsLgsd7yIrNucaxggMTsyOlPDQPSL9LajV6bjMjp1IZSniB6VYN0QuloRbLPEcXqW74cro9mMMyhZC0fKGS1kaI8Ezkc1KXHXWfmfC25kYQMoMP16Aj5X1l7TClYwfIFg7Ghl-QeLBBtqIrm-vUI-VRrHBwUOnPjGoncTrjNP5qa44YjoaBmYvERYZ4auXLpBTsH8OGA_JrOYaCfAhjg4IDd0rTjPYp0Njlf98CTmCH-WyPsBSVleDlqs0Mpkbm8zyleOQw3PsD0n_TmnnGBXvcorZfgZIAp6ccgenYn3O6XJVqIlv67YzCQb8knmThQ2LrnkG_bhXrMptdZC7Y4veQ-_GV6bRSV_Zc7sbY1mCylmkMsnuyhjjc2A1MpIkNAdRz7-iW0YiPgfOwWa8pLA-AAiakzSl6_usC3_usdSusQtm2kGvIg6FD68fBk_A_iV2LMOv
+        id: rs_06691d6465e5a124016af9ae4ca81c87d290f9907dfb48d6a3
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: No code output was displayed.
+          type: output_text
+        id: msg_06691d6465e5a124016af9ae4e83c887d28d66b3cc0246dfe2
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: none
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - container:
+          type: auto
+        type: code_interpreter
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 1341
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 1266
+        output_tokens: 208
+        output_tokens_details:
+          reasoning_tokens: 196
+        total_tokens: 1549
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t11
+  request:
+    body:
+      input:
+      - content: Use the python tool to calculate the sum of the squares of the integers
+          from 1 through 10. The code must print exactly CODE_INTERPRETER_OK=385.
+          After it runs, answer exactly CODE_INTERPRETER_OK=385.
+        role: user
+        type: message
+      - id: ci_06691d6465e5a124006af9ae4660b887d2b20710f4bba9fe85
+        type: item_reference
+      - id: msg_06691d6465e5a124006af9ae47f7f087d29ad84cb4a35e5221
+        type: item_reference
+      - content: 'Without calling a tool, answer from the code output above only:
+          what exactly did the code print?'
+        role: user
+        type: message
+      max_output_tokens: 2048
+      model: gpt-5.6-sol
+      parallel_tool_calls: false
+      store: false
+      stream: false
+      tool_choice: none
+      tools:
+      - container:
+          type: auto
+        type: code_interpreter
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1794747986
+      created_at: 1794747984
+      error: null
+      frequency_penalty: 0.0
+      id: resp_06691d6465e5a124016af9ae50888087d2abcd93fe60af73c0
+      image:
+        context_compression: disabled
+      incomplete_details: null
+      input_transformations: []
+      instructions: null
+      max_output_tokens: 2048
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - content: []
+        encrypted_content: gAAAAABq-a5SYVRASAadX7EHJLV4YMj-pdHR7CL8nc5tzEAXzn84SwUjmAmq2dcBg0qGpaMGrgkPa6sOUabdBlJoR8zeH-tHAoInoPkZH2q0yqJvAgQaMcfH4mLsYZ08EC1DnFC6iC6MBtTK-32U8D9lDJjJVIl3XkoEk7WM728to0ImjULTNJoOuD7UkJoxE9DBMIYJw0Z6aOldocmV9fVCFUyJmJEMNNZsBRkAiYQGSE9JV482FOiY3wh2pMmLjjvEVohE-DDKptk-1vS8DRMOHjmSXk0dFA2a3xyAyGO85hsb_vbR9H3pOzz_QpacQdcYzIpGiAp_sYGdPFecf2G36rasOjzZeL-qO3o74WJ7RKXCRv_LCk4gL9Z3Mieb3fLamBm1WjAOCiiXSHo4j0Fg0sjamCH-YXPNkNV60a6MUzKy7EFnn-UAs3bC_4kmuZUz8vBqC0CGG3I8ABdz_pONN2RD6I94GTh_2M2fddes5U2rqD6LVsVS-AB7p4Tfbm5fF8eh3QHc5-8dAOyXS1lrez8j3S8fnsPjiMqw6DimMetZa8_G9YFyP0unL6cpic7n14SwfWDFGpeQL5yczoqbFnX9IFB_9OcIWAiM2xt81Wh4JIvwvCjA-qWHMdOKXlBb7Mz3feeB5et_KMXPDueOyhkUeGKd0-DEzM0RP1iZf-XjhRDaxlca5MMySKJ3uRNyztdHzcn2VBuX7LeERiD6y4XbixqRGdeQD5ben0K_FkEGMzXUlkmk1HV-Z03yzdOuxfvEDObgB3JdhJqWlQmonJn_Cs0xVbZ8wQSUtzKom-lgtGHNRj28mxh8892fbCU3Qv35nKr0rWxHeseGdbnviWXkOoPqUewzD2zUTP-gmtljVFjlDQcK28gDEEo89YybwCHFa2oC-VCFwGx3DdAHgDCmdKuzRH-pS9ThNpeeDwNglexyTiy_E08dkGnLepPiiGzWL0fCWkILVFBwxBvvlVQim7L9NntIqjHpXWS1BF9vsUYJRKS0QoWihyXaHtixwGEeby8rorLapoGzkznSWSfbL6HOXXR_NWlqxK4YBkl-x13SH1e50AAyJBZlErgqPH9-MDTagtNHjpwLmtNtnqelbtcaqs9RhVqZgRr5xS7dVfkoslW_02eL0Gy8-Xlu2rHL4eZSYkV5TT-gEmt40IMa1bxofxGyDZ6g5vQ3VIHkybTTXCLp6YdT1ku2WrF9ZZvbPHHVMSWHq0OTh1iOVakp_aNn2E209NzevPtdOH8dTklPoAfNOK523cvfoH_6EcyePYYI6dEpy52l2QS57iXGmvAGgcr7X2EqJWOSh5qNcyYyR1c-GPZ_nWz3DiP7vsw61E7q_oYwzs-qBYLk1OESVJCkHLu5FQS1A5CZkf4hbqQg3Eo8_I2EUV8BwRs_BaQJclQG4o3vcut4fLiMdbdzCg7f-YQG209DV4ofVUh9nzsysx45EZlOBcjSYl_GA1sjd75ez5_KcsE9qblmJ61t9Cn8mk8txT4AEg3AJA1jKz6RtFsqRsW7QgkIfzQjgMpG1nYf5szbUQCMc8zCLZPcK11aLWTM0TzcDnNlOGQM0NJWApgFNw_yjRI2qbX3fOCqdx8e3yz0O_u8cw_2wrabVGG7z1yfn3z2TpA9lCjUPEq_jreGHG3pgMN4u7Cyo0lo84j61Xt6muVeDoKcTI3F50pmmRLhgAApdrChZtqSuIPVZIqZ5mVfXXGmVr5L3ndIe5E8hE2UOFbWAmo9ZoD4pj5Alw0UZVlckgA3sE06Cfto2NTD9V-2Ct_DRvYROIFnKbyEkn4-1A_IuiU7EV6sCoBZE0KDssDvEtp_PkAShKF_iUUaOL-Guyx1rWfDRANFMsoGC6iZEvqmfm-8bLa8dsVCoIGwmvyjc5h_7j244LLiDTUOeGJdJtAY7poekweCsxMOQirW1wgeQKRhZy_8TpyCSj1FUo0k1R_KI3rLpbwXCBr9KBO1vAeV83BByl4dZcrO7Vo2iX7_NsHsD0b1T6EBD7mzO5LX_9rGmMB4XeYlXoOzIb0XqYWtjsRAXpg2rXLSRLD66jIsH7t0xYCCVf-DdKvajh3noW2V4OBhETNaK-fgoN8Ji8b0Zp5l4d_-qW1dTFe-_HwWICYPa9tDTBYMC7ZTHSyj4lLjohNHSRHRazB8nBQU-YkmIDokrljWQgIpzVF28gS3BMWeyP4JS1kVBy1LJ9CGojREpSqAgh5O2HO9RG0g6UNDC7VueCrl5WdJ9P03qpNbZKRzlUpby24AB6o_GrGiqS4coFGGqWslPUHPfZOq_cFSgMxCJEHNQ_N2K7lRnZ29UTZP_yl6JQ_v1KtMVmNKdjGldXwwjUugNx6JjEhrS_7JDTY5RCzkeqi_QP2PVdjXA0ypz5G3N9htEGruw3wL6jPX7WvwyuqG75I_KzTkZJFSfSWoMnOTHpYvDlLK_DdOsiUUv99R8JQperDZfbufs2f5QRcBCmasHcERQ1CWtDtYZ2EJET-PX8YGj1Q01v1-fmyydiZWWga3fk4glN95wDf_pPMRpZwqRVF9PjFFO6XN1kiUBARV5cVZtK91Ak09SaJU4eeQKKSbpB9AKfRb0lvpxP2wmnCkPn3dp7_8wQUWwtfhFS6DmasSOAgfrgkSLEIS5cYGBQZK0IREh7lSsypQpbDRr15ui5pZ5EowcUd3IWhYQ8h4b3PHtmjb01iSlTdLNN7qtYmrGQ==
+        id: rs_06691d6465e5a124016af9ae51f5ec87d2b0334fbc73b55e26
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: CODE_INTERPRETER_OK=385
+          type: output_text
+        id: msg_06691d6465e5a124016af9ae52c66c87d2aa24c9e7dd1a420e
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: none
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - container:
+          type: auto
+        type: code_interpreter
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 1341
+        input_tokens_details:
+          cache_write_tokens: 0
+          cache_write_tokens_details:
+            ttl_12h_tokens: 0
+            ttl_30m_tokens: 0
+          cached_tokens: 1266
+        output_tokens: 96
+        output_tokens_details:
+          reasoning_tokens: 83
+        total_tokens: 1437
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200

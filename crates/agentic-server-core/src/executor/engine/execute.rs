@@ -380,7 +380,7 @@ impl ExecuteRequest {
             ctx,
             tool_search_state,
             &self.exec_ctx,
-            self.client_auth.as_ref(),
+            self.client_auth.map(Arc::new),
         ))
         .await;
         match result {
@@ -432,11 +432,7 @@ async fn prepare(
     let ctx = rehydrate_with_continuation(payload, exec, continuation).await?;
     if controlled
         && (!ctx.original_request.stream
-            || !ctx
-                .enriched_request
-                .multi_agent
-                .as_ref()
-                .is_some_and(|config| config.enabled)
+            || !ctx.enriched_request.multi_agent_enabled()
             || ctx.original_request.input.has_compaction_trigger())
     {
         return Err(ExecutorError::InvalidRequest(
@@ -458,7 +454,7 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::*;
-    use crate::executor::{ConversationHandler, ResponseHandler, commit, rehydrate_in_session};
+    use crate::executor::{ConversationHandler, ResponseHandler, commit, rehydrate};
     use crate::storage::{ConversationStore, ResponseStore, StorageError};
     use crate::tool::ToolError;
     use crate::types::io::{InputItem, InputMessageContent, ResponsesInput};
@@ -503,7 +499,7 @@ mod tests {
         session: &ResponseSession,
         output: Value,
     ) -> ResponseCheckpointPin {
-        let ctx = rehydrate_in_session(request(None, json!("parent prompt")), exec, session)
+        let ctx = rehydrate(request(None, json!("parent prompt")), exec, Some(session))
             .await
             .unwrap();
         let parent_id = ctx.response_id.clone();

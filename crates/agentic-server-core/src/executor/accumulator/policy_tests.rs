@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use super::*;
+use crate::events::SseLine;
 use crate::executor::pipeline::RoundIngestion;
 use crate::executor::translate::TranslationContext;
 use crate::executor::translate::TranslationDispatcher;

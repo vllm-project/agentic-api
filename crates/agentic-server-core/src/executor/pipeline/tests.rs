@@ -232,3 +232,37 @@ fn unfinished_native_and_synthetic_search_require_an_aborted_response() {
         }
     }
 }
+
+/// Synthetic single-turn stream: the text "GLOBE" split across three deltas.
+// Same fixture as `tests/event_normalizer/cassette_flows.rs`, whose other tests still read it there.
+const SIMULATED_SSE: &[&str] = &[
+    r#"data: {"type":"response.created","response":{"id":"resp_abc","status":"in_progress","usage":null},"sequence_number":0}"#,
+    r#"data: {"type":"response.in_progress","response":{"id":"resp_abc","status":"in_progress","usage":null},"sequence_number":1}"#,
+    r#"data: {"type":"response.output_item.added","item":{"id":"msg_1","type":"message","status":"in_progress","content":[]},"output_index":0,"sequence_number":2}"#,
+    r#"data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_1","output_index":0,"part":{"type":"output_text","text":""},"sequence_number":3}"#,
+    r#"data: {"type":"response.output_text.delta","content_index":0,"delta":"G","item_id":"msg_1","output_index":0,"sequence_number":4}"#,
+    r#"data: {"type":"response.output_text.delta","content_index":0,"delta":"LO","item_id":"msg_1","output_index":0,"sequence_number":5}"#,
+    r#"data: {"type":"response.output_text.delta","content_index":0,"delta":"BE","item_id":"msg_1","output_index":0,"sequence_number":6}"#,
+    r#"data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_1","output_index":0,"text":"GLOBE","sequence_number":7}"#,
+    r#"data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_1","output_index":0,"part":{"type":"output_text","text":"GLOBE"},"sequence_number":8}"#,
+    r#"data: {"type":"response.output_item.done","item":{"id":"msg_1","type":"message","status":"completed","content":[{"type":"output_text","text":"GLOBE"}],"role":"assistant"},"output_index":0,"sequence_number":9}"#,
+    r#"data: {"type":"response.completed","response":{"id":"resp_abc","status":"completed","usage":{"input_tokens":14,"output_tokens":4,"total_tokens":18}},"sequence_number":10}"#,
+];
+
+#[test]
+fn sentinel_sequence_stream_preserves_terminal_usage_and_text() {
+    // Synthetic protocol regression data, not a captured provider recording.
+    let lines = SIMULATED_SSE.iter().map(|line| {
+        let mut event: serde_json::Value = serde_json::from_str(line.strip_prefix("data: ").unwrap()).unwrap();
+        event["sequence_number"] = (-1).into();
+        format!("data: {event}")
+    });
+    let payload = crate::executor::pipeline::test_support::ingest_lenient(lines, None, "test-model")
+        .expect("sentinel frames remain valid");
+    assert_eq!(payload.status, "completed");
+    assert_eq!(payload.output.len(), 1);
+    assert!(matches!(&payload.output[0], OutputItem::Message(message) if message.id == "msg_1"));
+    let serialized = serde_json::to_value(&payload).unwrap();
+    assert_eq!(serialized["output"][0]["content"][0]["text"], "GLOBE");
+    assert_eq!(serialized["usage"]["total_tokens"], 18);
+}

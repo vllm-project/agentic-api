@@ -15,6 +15,9 @@
 # MULTI_AGENT_SUITE=all includes mixed-tools, tool-search, code-interpreter,
 # and client-agent-message. The tool-search case also exercises hosted MCP search.
 # MULTI_AGENT_MAX_CONTINUATIONS bounds client-tool follow-ups (default: 10, range: 1..100).
+# STORE_FALSE_SUITE=hosted-calls records, in one JSON cassette, the hosted call replays the other store:false
+# scenarios leave out: an inline code_interpreter_call, and the mcp_call, web_search_call and code_interpreter_call
+# of a stored response sent back by id, as returned and as item_reference.
 #
 # Records JSON and SSE: full-history replay, stored/unstored parent references,
 # explicit conversations, item-listing persistence probes, and a client-executed
@@ -78,12 +81,112 @@ record_multi_agent() {
   done
 }
 
+# Follow-up input for a by-id replay of the last recorded turn: its user message, its output items as returned
+# (items) or as item_reference (refs), and the follow-up. Fails unless that turn completed with an ITEM_TYPE item.
+hosted_replay_input() {
+  "$PYTHON" - "$@" <<'PY'
+import json, sys, yaml
+path, mode, item_type, follow_up = sys.argv[1:]
+turn = yaml.safe_load(open(path))['turns'][-1]
+response = turn['response'].get('body') or {}
+output = response.get('output') or []
+if response.get('status') != 'completed' or not any(item.get('type') == item_type for item in output):
+    sys.exit(f'no completed {item_type} to replay: {[item.get("type") for item in output]}')
+sent = turn['request']['body']['input']
+if isinstance(sent, str):
+    sent = [{'type': 'message', 'role': 'user', 'content': sent}]
+user = [item for item in sent if item.get('type', 'message') == 'message' and item.get('role') == 'user'][:1]
+replayed = output if mode == 'items' else [{'type': 'item_reference', 'id': item['id']} for item in output]
+print(json.dumps(user + replayed + [{'type': 'message', 'role': 'user', 'content': follow_up}]))
+PY
+}
+
+record_hosted_calls() {
+  local model provider output type item_type prompt follow_up tools first_choice input
+  local -a backend extra
+  case "$STORE_FALSE_RECORD_SET" in
+    openai)
+      : "${OPENAI_API_KEY:?OPENAI_API_KEY must be set}"
+      model="${OPENAI_MODEL:-gpt-5.6-sol}"
+      provider=openai-reference
+      backend=(--openai https://api.openai.com)
+      ;;
+    gateway)
+      model="${GATEWAY_MODEL:-${MODEL:-}}"
+      : "${model:?Set GATEWAY_MODEL to the served model}"
+      provider=gateway
+      backend=(--gateway "${GATEWAY_URL:-http://127.0.0.1:9000}")
+      ;;
+    *) echo 'ERROR: STORE_FALSE_RECORD_SET must be openai or gateway' >&2; exit 1 ;;
+  esac
+  mkdir -p "$BASE_DIR"
+  output="$BASE_DIR/store-false-hosted-calls-$provider-$(printf '%s' "$model" | tr '/: ' '---')-nonstreaming.yaml"
+  rm -f -- "$output"
+  HOSTED_WORK_DIR="$(mktemp -d)"
+  trap 'rm -rf -- "$HOSTED_WORK_DIR"' EXIT
+  local work="$HOSTED_WORK_DIR"
+  hosted_record() {
+    local append=()
+    [[ -s "$output" ]] && append=(--append)
+    "$PYTHON" "$SCRIPTS_DIR/record_cassette.py" "${backend[@]}" --mode responses --no-stream --model "$model" \
+      --max-output-tokens "${MAX_OUTPUT_TOKENS:-2048}" --proxy-port "${PROXY_PORT:-7070}" --output "$output" \
+      ${append[@]+"${append[@]}"} "$@"
+  }
+
+  # The gitmcp tiktoken server of the hosted tool-search fixtures, declared directly (not deferred).
+  "$PYTHON" - "$SCRIPTS_DIR/hosted_tool_search/inputs/tools-mcp-deferred.json" "$work/tools-mcp.json" <<'PY'
+import json, sys
+server = next(tool for tool in json.load(open(sys.argv[1])) if tool['type'] == 'mcp')
+server.pop('defer_loading', None)
+server.pop('server_description', None)
+json.dump([server], open(sys.argv[2], 'w'), indent=2)
+PY
+  printf '["required", "none"]' > "$work/required-none.json"
+  local code_tools="$SCRIPTS_DIR/code_interpreter/openai_tools.json"
+  [[ "$provider" == gateway ]] && code_tools="$SCRIPTS_DIR/code_interpreter/gateway_tools.json"
+  local code_prompt code_follow_up
+  code_prompt="$(cat "$SCRIPTS_DIR/code_interpreter/prompts.txt")"
+  code_follow_up='Without calling a tool, answer from the code output above only: what exactly did the code print?'
+
+  # Inline: t1 runs the code with store=false; t2 sends back t1's input and output items.
+  printf '%s\n%s\n' "$code_prompt" "$code_follow_up" | hosted_record --turns 2 --no-store --manual-item-replay \
+    --tools "$code_tools" --tool-choice-sequence "$work/required-none.json" --parallel-tool-calls false
+
+  # By id: t1 is stored; t2 sends its output items as returned, t3 as item_reference, both with store=false.
+  for type in mcp web-search code-interpreter; do
+    extra=()
+    case "$type" in
+      mcp)
+        item_type=mcp_call tools="$work/tools-mcp.json" first_choice=auto
+        prompt='Use the tiktoken documentation tool to find which encoding gpt-4o uses. Answer in one sentence.'
+        follow_up='Without calling a tool, answer from the documentation search result above only: which encoding did it report for gpt-4o?' ;;
+      web-search)
+        item_type=web_search_call tools="$SCRIPTS_DIR/web_search/tools.json" first_choice=auto
+        prompt='Use web search to search for the exact query "potato", then summarize the result in one sentence.'
+        follow_up='Without calling a tool, answer from the search result above only: name one source it returned.' ;;
+      code-interpreter)
+        item_type=code_interpreter_call tools="$code_tools" first_choice=required
+        prompt="$code_prompt" follow_up="$code_follow_up"
+        extra=(--parallel-tool-calls false) ;;
+    esac
+    printf '%s\n' "$prompt" | hosted_record --turns 1 --tools "$tools" --tool-choice "$first_choice" \
+      ${extra[@]+"${extra[@]}"}
+    hosted_replay_input "$output" items "$item_type" "$follow_up" > "$work/items.json"
+    hosted_replay_input "$output" refs "$item_type" "$follow_up" > "$work/refs.json"
+    for input in items refs; do
+      hosted_record --turns 1 --no-store --input-file "$work/$input.json" --tools "$tools" --tool-choice none \
+        ${extra[@]+"${extra[@]}"} < /dev/null
+    done
+  done
+}
+
 STORE_FALSE_RECORD_SET="${STORE_FALSE_RECORD_SET:-openai}"
 export PYTHON="${PYTHON:-python}"
 case "${STORE_FALSE_SUITE:-responses}" in
   responses) ;;
   multi-agent) record_multi_agent; exit 0 ;;
-  *) echo 'ERROR: STORE_FALSE_SUITE must be responses or multi-agent' >&2; exit 1 ;;
+  hosted-calls) record_hosted_calls; exit 0 ;;
+  *) echo 'ERROR: STORE_FALSE_SUITE must be responses, multi-agent or hosted-calls' >&2; exit 1 ;;
 esac
 
 case "$STORE_FALSE_RECORD_SET" in

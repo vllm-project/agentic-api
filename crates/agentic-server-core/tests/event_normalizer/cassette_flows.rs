@@ -75,28 +75,6 @@ fn test_text_accumulation() {
 }
 
 #[test]
-fn sentinel_sequence_stream_preserves_terminal_usage_and_text() {
-    use agentic_core::executor::accumulator::ResponseAccumulator;
-    use agentic_core::types::io::OutputItem;
-
-    // Synthetic protocol regression data, not a captured provider recording.
-    let lines = SIMULATED_SSE.iter().map(|line| {
-        let mut event: serde_json::Value = serde_json::from_str(line.strip_prefix("data: ").unwrap()).unwrap();
-        event["sequence_number"] = (-1).into();
-        format!("data: {event}")
-    });
-    let payload = ResponseAccumulator::from_sse_lines(lines, None)
-        .expect("sentinel frames remain valid")
-        .finalize("test-model", None, None);
-    assert_eq!(payload.status, "completed");
-    assert_eq!(payload.output.len(), 1);
-    assert!(matches!(&payload.output[0], OutputItem::Message(message) if message.id == "msg_1"));
-    let serialized = serde_json::to_value(&payload).unwrap();
-    assert_eq!(serialized["output"][0]["content"][0]["text"], "GLOBE");
-    assert_eq!(serialized["usage"]["total_tokens"], 18);
-}
-
-#[test]
 fn test_sequence_numbers_increasing() {
     let mut last_seq: Option<u64> = None;
     for line in SIMULATED_SSE {
