@@ -186,6 +186,7 @@ dependencies = [
  "async-stream",
  "futures",
  "http",
+ "jsonschema",
  "num-traits",
  "reqwest 0.12.28",
  "serde",

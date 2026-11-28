@@ -115,8 +115,13 @@ impl DirectInferenceBackend for VllmBackend {
         control: GenerationControl,
     ) -> BoxFuture<'a, ExecutorResult<EventStream>> {
         Box::pin(async move {
-            let request = prepare::chat_request(request, &control.request_id, self.chat.served_model_name())
-                .map_err(|error| *error)?;
+            let request = prepare::chat_request(
+                request,
+                &control.request_id,
+                self.chat.served_model_name(),
+                self.chat.text().request_processor().structured_outputs_backend(),
+            )
+            .map_err(|error| *error)?;
             let stream = tokio::select! {
                 biased;
                 () = control.cancellation.cancelled() => {

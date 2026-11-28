@@ -21,19 +21,7 @@ pub(super) fn convert(input: ResponsesInput, instructions: Option<&str>) -> Resu
                 InputMessageContent::Text(text) => assistant.push(AssistantContentBlock::Text { text: text.clone() }),
                 InputMessageContent::Parts(parts) => {
                     for part in parts {
-                        assistant.push(match part {
-                            InputContent::InputText(text) | InputContent::OutputText(text) if text.extra.is_empty() => {
-                                AssistantContentBlock::Text {
-                                    text: text.text.clone(),
-                                }
-                            }
-                            InputContent::ReasoningText(text) if text.extra.is_empty() => {
-                                AssistantContentBlock::Reasoning {
-                                    text: text.text.clone(),
-                                }
-                            }
-                            _ => return Err(unsupported("assistant content other than plain text or reasoning").into()),
-                        });
+                        assistant.push(assistant_block(part)?);
                     }
                 }
             },
@@ -68,6 +56,30 @@ pub(super) fn convert(input: ResponsesInput, instructions: Option<&str>) -> Resu
     }
     flush_assistant(&mut messages, &mut assistant);
     Ok(messages)
+}
+
+fn assistant_block(part: &InputContent) -> Result<AssistantContentBlock> {
+    let text = match part {
+        InputContent::InputText(text) if text.extra.is_empty() => text,
+        // A completed output_text block carries annotations and logprobs even for plain text.
+        InputContent::OutputText(text)
+            if text.extra.iter().all(|(key, value)| {
+                matches!(key.as_str(), "annotations" | "logprobs")
+                    && (value.is_null() || value.as_array().is_some_and(Vec::is_empty))
+            }) =>
+        {
+            text
+        }
+        InputContent::ReasoningText(text) if text.extra.is_empty() => {
+            return Ok(AssistantContentBlock::Reasoning {
+                text: text.text.clone(),
+            });
+        }
+        _ => return Err(unsupported("assistant content other than plain text or reasoning").into()),
+    };
+    Ok(AssistantContentBlock::Text {
+        text: text.text.clone(),
+    })
 }
 
 fn flush_assistant(messages: &mut Vec<ChatMessage>, blocks: &mut Vec<AssistantContentBlock>) {

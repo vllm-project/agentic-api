@@ -63,6 +63,10 @@ A permanent engine/frontend health failure drains the gateway and stops the owne
 Messages, return 501; use `--upstream` for Claude Code. If `OPENAI_API_KEY` is configured without OIDC, direct
 mode validates it locally on protected routes. A live GPU/model test remains required before serving qualification.
 
+For structured Responses output, set `text.format` to `{"type":"json_object"}` or supply a
+`json_schema` format with a `name` and `schema`. The managed Rust frontend uses XGrammar.
+Each request selects its own format, including turns continued with `previous_response_id`.
+
 ## Gateway settings
 
 On startup, Agentic API creates `~/.agentic-api` and loads `~/.agentic-api/config.toml` when that file exists. On the
