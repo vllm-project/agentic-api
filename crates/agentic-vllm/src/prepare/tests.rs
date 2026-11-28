@@ -78,7 +78,8 @@ fn json_object_selects_constrained_decoding_and_plain_text_does_not() {
 fn json_schema_preserves_property_order_with_each_strict_setting() {
     let schema = json!({
         "type": "object",
-        "properties": {"zeta": {"type": "string"}, "alpha": {"type": "integer"}},
+        "properties": {"zeta": {"$ref": "#/$defs/label"}, "alpha": {"type": "integer"}},
+        "$defs": {"label": {"type": "string"}},
         "required": ["zeta", "alpha"],
         "additionalProperties": false
     });
@@ -126,6 +127,11 @@ fn schema_validation_errors_refer_to_the_public_format() {
     for (schema, message) in [
         (nested, "nested too deeply"),
         (json!({"type":"unknown_kind"}), "unknown_kind"),
+        (
+            json!({"type":"object","properties":{"reading":{"$ref":"#/$defs/Missing"}}}),
+            "Missing",
+        ),
+        (json!({"$ref":"urn:example:measurement"}), "urn:example:measurement"),
         (json!({"type":"integer","multipleOf":2}), "not supported by xgrammar"),
         (json!({"$schema":"https://example.test/unknown-draft"}), "unknown-draft"),
     ] {

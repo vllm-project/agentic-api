@@ -150,9 +150,11 @@ fn structured_outputs(
         .map_err(invalid_text_format)?
         .params;
     if let StructuredOutputConstraint::Json(schema) = &params.constraint {
-        jsonschema::meta::try_validate(schema)
-            .map_err(invalid_text_format)?
-            .map_err(|error| invalid_text_format(error.to_owned()))?;
+        // Resolve references within the submitted schema without fetching external resources.
+        jsonschema::options()
+            .with_retriever(referencing::DefaultRetriever)
+            .build(schema)
+            .map_err(invalid_text_format)?;
     }
     Ok(Some(params))
 }

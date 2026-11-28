@@ -70,7 +70,8 @@ attempt token on admission cancellation, timeout, stream error, or drop.
   tool choice, and cache salt. Omitted sampling values remain omitted for vLLM's
   own defaults. Metadata and prompt-cache hints remain orchestration hints.
 - Responses `text.format` supports `text`, `json_object`, and `json_schema`.
-  The adapter validates the schema and checks the configured decoder's capabilities.
+  The adapter validates the schema, resolves local references such as `#/$defs/Answer`,
+  and checks the configured decoder's capabilities.
   It passes the schema to vLLM in declaration order for constrained decoding.
   The public response retains the schema name, description, and `strict` setting.
   A continuation uses its own format.
