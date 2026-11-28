@@ -22,6 +22,7 @@ pub enum ToolChoice {
     Required,
     Shell,
     FileSearch,
+    WebSearch,
     Function {
         namespace: Option<String>,
         name: NonEmptyToolName,
@@ -154,7 +155,10 @@ impl utoipa::PartialSchema for ToolChoice {
             .item(str_type().enum_values(Some(["auto", "none", "required"])))
             .item(
                 ObjectBuilder::new()
-                    .property("type", str_type().enum_values(Some(["file_search", "shell"])))
+                    .property(
+                        "type",
+                        str_type().enum_values(Some(["file_search", "shell", "web_search"])),
+                    )
                     .required("type"),
             )
             .item(
@@ -232,6 +236,11 @@ impl Serialize for ToolChoice {
                 map.serialize_entry("type", "file_search")?;
                 map.end()
             }
+            Self::WebSearch => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("type", "web_search")?;
+                map.end()
+            }
             Self::Function { namespace, name } => {
                 let mut map = serializer.serialize_map(Some(2 + usize::from(namespace.is_some())))?;
                 map.serialize_entry("type", "function")?;
@@ -291,6 +300,12 @@ impl<'de> Deserialize<'de> for ToolChoice {
                         return Err(de::Error::custom("file_search selector accepts only type"));
                     }
                     return Ok(Self::FileSearch);
+                }
+                if object.get("type").and_then(Value::as_str) == Some("web_search") {
+                    if object.len() != 1 {
+                        return Err(de::Error::custom("web_search selector accepts only type"));
+                    }
+                    return Ok(Self::WebSearch);
                 }
                 if object.get("type").and_then(Value::as_str) == Some("function") {
                     let namespace = object.get("namespace").and_then(Value::as_str).map(str::to_string);
@@ -373,6 +388,7 @@ impl ToolChoice {
             | Self::Required
             | Self::Shell
             | Self::FileSearch
+            | Self::WebSearch
             | Self::Function { .. }
             | Self::Custom { .. }
             | Self::AllowedTools { .. } => true,
@@ -396,6 +412,10 @@ impl ToolChoice {
                 namespace: None,
                 name: file_search_name(),
             },
+            Self::WebSearch => Self::Function {
+                namespace: None,
+                name: web_search_name(),
+            },
             Self::Custom { name } => Self::Function {
                 namespace: None,
                 name: name.clone(),
@@ -414,6 +434,10 @@ impl ToolChoice {
 
 fn file_search_name() -> NonEmptyToolName {
     NonEmptyToolName::try_from("file_search").expect("file_search is a non-empty tool name")
+}
+
+fn web_search_name() -> NonEmptyToolName {
+    NonEmptyToolName::try_from("web_search").expect("web_search is a non-empty tool name")
 }
 
 fn normalize_allowed_tool(mut tool: AllowedTool) -> AllowedTool {
@@ -471,6 +495,25 @@ mod tests {
             serde_json::to_value(choice.normalized_for_upstream()).unwrap(),
             serde_json::json!({"type":"function","name":"file_search"})
         );
+    }
+
+    #[test]
+    fn web_search_tool_choice_round_trips_and_normalizes() {
+        let public = serde_json::json!({"type":"web_search"});
+        let choice: ToolChoice = serde_json::from_value(public.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&choice).unwrap(), public);
+        assert!(choice.is_supported());
+        assert_eq!(
+            serde_json::to_value(choice.normalized_for_upstream()).unwrap(),
+            serde_json::json!({"type":"function","name":"web_search"})
+        );
+    }
+
+    #[test]
+    fn web_search_tool_choice_rejects_extra_fields() {
+        let err = serde_json::from_value::<ToolChoice>(serde_json::json!({"type":"web_search","name":"x"}))
+            .expect_err("web_search selector accepts only type");
+        assert!(err.to_string().contains("only type"));
     }
 
     #[test]
