@@ -1,0 +1,29 @@
+# Example: allow traffic that reaches the gateway through a NodePort or a bare
+# L4 load balancer. Copy this manifest into an overlay alongside the base
+# default-deny policy; keep deploy/kubernetes/network-policy.yaml in place.
+#
+# A NodePort (or an L4 load balancer forwarding to node ports) rewrites the
+# packet source to the node IP when externalTrafficPolicy is Cluster. An
+# ingress rule that only selects source pods with podSelector: {} therefore
+# does not match, and cross-node or external requests are dropped even though
+# same-node requests succeed. Allowing the gateway port from all sources is
+# the simplest policy for this exposure path:
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agentic-api-from-nodeport
+  labels:
+    app.kubernetes.io/name: agentic-api
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/part-of: agentic-api
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: agentic-api
+      app.kubernetes.io/component: gateway
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 9000
