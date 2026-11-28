@@ -20,7 +20,15 @@ tracing.workspace = true
 vllm-managed-engine.workspace = true
 
 [dev-dependencies]
+async-trait.workspace = true
+axum.workspace = true
+reqwest = { workspace = true, features = ["json"] }
+serde_json.workspace = true
+serde_yaml = "0.9"
 tempfile = "3"
+vllm-chat.workspace = true
+vllm-llm = { workspace = true, features = ["test-util"] }
+vllm-text.workspace = true
 
 [lints]
 workspace = true

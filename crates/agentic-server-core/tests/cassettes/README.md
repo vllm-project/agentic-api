@@ -170,6 +170,45 @@ are checked within each provider's pages, while client input must match across p
 Reference: [Responses input items](https://developers.openai.com/api/reference/resources/responses/subresources/input_items/methods/list)
 and [Conversation items](https://developers.openai.com/api/reference/resources/conversations/subresources/items/methods/list).
 
+## Native Responses structured output
+
+The two `responses/response-structured-output-native-*.yaml` captures contain the same nine requests over
+JSON and SSE. They exercise an ordered schema, retrieval, a replacement schema, a plain-text continuation,
+and three answers to one stored function call (explicit text, omitted format and schema). The last input
+page ties the tool output to its original call. The reference for the schema, markers, tool and plain-text
+answers is the existing OpenAI WebSocket capture for `settings-automatic`, `settings-explicit` and
+`settings-explicit-defaults` in `multi_turn_steering/`. The replacement schema is an additional native probe.
+
+Run the offline replay with `cargo test --locked -p agentic-server-native --test structured_output`.
+It runs the native vLLM frontend, HTTP handlers and SQLite. A local ASCII tokenizer exposes the rendered
+history. A token-level model double checks that history and the decoder constraint before emitting the
+captured answer or a Qwen tool call. Both transports
+check the returned format and output. SSE also checks the deltas and completed item.
+
+The live captures used Qwen/Qwen2.5-0.5B-Instruct revision `7ae557604adf67be50417f59c2c2f167def9a775` on
+vLLM Metal 0.34.0 with XGrammar 0.2.8. To repeat with model sampling, start the
+[native gateway](../../../../docs/guides/configuration.md#direct-inference-in-source-builds) with that model,
+SQLite, `tool_call_parser = "qwen3_json"`, `reasoning_parser = "none"` and `generation_config = "vllm"`,
+then run the same requests and assertions against it.
+
+```bash
+NATIVE_STRUCTURED_OUTPUT_URL=http://127.0.0.1:9000 \
+  cargo test --locked -p agentic-server-native --test structured_output live_native_structured_output -- --ignored --exact
+```
+
+To regenerate the captures, run the shared recorder once per transport against that gateway.
+
+```bash
+cassettes=crates/agentic-server-core/tests/cassettes
+for transport in json sse; do
+    stream=--no-stream
+    if [ "$transport" = sse ]; then stream=--stream; fi
+    python "$cassettes/record_cassette.py" --mode items --items-scenario response-structured-output \
+      --turns 9 --gateway http://127.0.0.1:9000 --model Qwen/Qwen2.5-0.5B-Instruct "$stream" \
+      --output "$cassettes/responses/response-structured-output-native-$transport.yaml"
+done
+```
+
 ## Mid-turn steering exploration
 
 `record_multi_turn_steering_cassettes.sh` records OpenAI references or gateway observations of the WebSocket

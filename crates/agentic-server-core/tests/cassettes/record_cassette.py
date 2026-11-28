@@ -65,6 +65,7 @@ from httpx import AsyncClient
 from yaml import dump as yaml_dump
 from yaml import safe_load as yaml_load
 
+from multi_turn_steering.fixtures import steering_settings_profile
 from replay_old_cassettes import run_multi_agent_store_false, run_tool_items
 
 logging.basicConfig(level=logging.WARNING)
@@ -181,7 +182,8 @@ def _append_turn(output_file: Path, turn: dict[str, Any], *, ordered: bool = Fal
         turns.sort(key=lambda recorded: int(recorded["filename"][1:]))
     data["turns"] = turns
     with open(output_file, "w", encoding="utf-8") as f:
-        yaml_dump(data, f, allow_unicode=True, default_flow_style=False)
+        # A JSON Schema's property order is observable in the generated answer.
+        yaml_dump(data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
 
 
 @asynccontextmanager
@@ -612,6 +614,54 @@ def _observed_turn(
     if created_id:
         result.setdefault("id", created_id)
     return result
+
+
+def _record_structured_output(client: httpx.Client, proxy_url: str, model: str, stream: bool) -> None:
+    """Replay the steering reference's answer format and status tool over the Responses HTTP API."""
+    profile = steering_settings_profile("parent", max_output_tokens=128)
+    answer_format = profile["text"]
+    changed_format = {"format": {
+        "type": "json_schema", "name": "phase", "strict": True,
+        "schema": {
+            "type": "object", "properties": {"phase": {"type": "string", "enum": ["DESIGN_COMPLETE"]}},
+            "required": ["phase"], "additionalProperties": False,
+        },
+    }}
+
+    def create(input_data: str | list[dict], **settings: Any) -> dict:
+        result = _observed_turn(client, proxy_url, {
+            "model": model, "input": input_data, "store": True, "stream": stream,
+            "temperature": 0, "max_output_tokens": 128, **settings,
+        })
+        if result.get("status") != "completed":
+            raise RuntimeError(f"structured output turn did not complete: {result}")
+        return result
+
+    parent = create(
+        "Use PARENT_SETTINGS_ORCHID and SETTINGS_STEER_SAPPHIRE as the two markers in that order. "
+        "Set the answer to Ready.", text=answer_format,
+    )
+    _item_request(client, proxy_url, "GET", f"/v1/responses/{parent['id']}")
+    changed = create("Return the current phase in the new JSON format.",
+                     previous_response_id=parent["id"], text=changed_format)
+    create("Reply with only the value of phase from your last answer, in plain text.",
+           previous_response_id=changed["id"])
+
+    called = create("Call get_project_status exactly once for task-tracker.", text=answer_format,
+                    tools=profile["tools"], tool_choice=profile["tool_choice"])
+    call, = (item for item in called["output"] if item["type"] == "function_call")
+    tool_output = [{"type": "function_call_output", "call_id": call["call_id"],
+                    "output": "Design is complete. Development has not started."}]
+    # Branch from the same stored call. One child supplies none of its parent's settings.
+    follow_up = {"previous_response_id": called["id"], "tools": [], "tool_choice": "auto"}
+    create(tool_output, instructions="Quote the tool result inside double quotation marks. Do not paraphrase.",
+           text={"format": {"type": "text"}}, **follow_up)
+    create(tool_output, previous_response_id=called["id"])
+    answered = create(tool_output, text=answer_format, **follow_up,
+                      instructions="Put the two sentences returned by the tool in markers, "
+                                   "and the complete tool result in answer.")
+    _item_request(client, proxy_url, "GET", f"/v1/responses/{answered['id']}/input_items",
+                  params={"order": "asc"})
 
 
 def _input_items_or_conversation(request: Callable[..., dict], response: dict, items_path: str) -> dict:
@@ -1165,6 +1215,9 @@ def run_items(
             conversation=conv_id, stream=stream,
         )
         _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
+        return
+    if scenario == "response-structured-output":
+        _record_structured_output(client, proxy_url, model, stream)
         return
     if scenario == "response-call-ids":
         _record_call_ids(client, proxy_url, model)
@@ -3305,7 +3358,7 @@ def run_responses(
 )
 @click.option(
     "--items-scenario",
-    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "item-id-prefixes", "concurrent-writes", "stale-compaction", *COMPACTION_SCENARIOS, *MCP_SCENARIOS, "competing-tool-outputs", "overlapping-multi-agent", "store-false", "multi-agent-store-false", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items", "response-call-ids", "response-item-id-prefixes"]),
+    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "item-id-prefixes", "concurrent-writes", "stale-compaction", *COMPACTION_SCENARIOS, *MCP_SCENARIOS, "competing-tool-outputs", "overlapping-multi-agent", "store-false", "multi-agent-store-false", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items", "response-call-ids", "response-item-id-prefixes", "response-structured-output"]),
     default="continuation",
     help="Fixed Conversation Items or Responses API scenario (for --mode items).",
 )
@@ -3590,6 +3643,7 @@ def main(
                           26 if items_scenario == "response-replayed-items" else
                           48 if items_scenario == "response-tool-items" else
                           17 if items_scenario == "response-call-ids" else
+                          9 if items_scenario == "response-structured-output" else
                           10 if items_scenario == "pagination" else
                           6 if items_scenario == "branch" else
                           24 if items_scenario == "edge-cases" else

@@ -1,0 +1,805 @@
+turns:
+- filename: t1
+  request:
+    method: POST
+    path: /v1/responses
+    query_params: {}
+    body:
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      input: Use PARENT_SETTINGS_ORCHID and SETTINGS_STEER_SAPPHIRE as the two markers
+        in that order. Set the answer to Ready.
+      store: true
+      stream: false
+      temperature: 0
+      max_output_tokens: 128
+      text:
+        format:
+          type: json_schema
+          name: steering_settings
+          strict: true
+          schema:
+            type: object
+            properties:
+              markers:
+                type: array
+                items:
+                  type: string
+              answer:
+                type: string
+            required:
+            - markers
+            - answer
+            additionalProperties: false
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.29.0
+      content-type: application/json
+  response:
+    status_code: 200
+    headers:
+      content-type: application/json
+    body:
+      id: resp_01a2227b-16c4-7c83-a569-7efaf22dbc93
+      object: response
+      created_at: 1795874822
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      status: completed
+      output:
+      - type: message
+        id: msg_infer_01a2227b-16c4-7c83-a569-7f0db82cc3da_0
+        role: assistant
+        status: completed
+        content:
+        - type: output_text
+          text: '{"markers": ["PARENT_SETTINGS_ORCHID", "SETTINGS_STEER_SAPPHIRE"],
+            "answer": "Ready"}'
+          annotations: []
+          logprobs: []
+      usage:
+        input_tokens: 59
+        output_tokens: 29
+        total_tokens: 88
+        input_tokens_details:
+          cached_tokens: 48
+          cache_write_tokens: 0
+        output_tokens_details:
+          reasoning_tokens: 0
+      incomplete_details: null
+      error: null
+      previous_response_id: null
+      instructions: null
+      max_tool_calls: null
+      service_tier: default
+      tools: []
+      tool_choice: auto
+      completed_at: 1795874822
+      truncation: disabled
+      parallel_tool_calls: false
+      text:
+        format:
+          type: json_schema
+          name: steering_settings
+          schema:
+            type: object
+            properties:
+              markers:
+                type: array
+                items:
+                  type: string
+              answer:
+                type: string
+            required:
+            - markers
+            - answer
+            additionalProperties: false
+          strict: true
+      top_p: 1.0
+      presence_penalty: 0.0
+      frequency_penalty: 0.0
+      top_logprobs: 0
+      temperature: 0.0
+      reasoning: null
+      max_output_tokens: 128
+      store: true
+      background: false
+      metadata: {}
+      safety_identifier: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+- filename: t2
+  request:
+    method: GET
+    path: /v1/responses/resp_01a2227b-16c4-7c83-a569-7efaf22dbc93
+    query_params: {}
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.29.0
+  response:
+    status_code: 200
+    headers:
+      content-type: application/json
+    body:
+      id: resp_01a2227b-16c4-7c83-a569-7efaf22dbc93
+      object: response
+      created_at: 1795874822
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      status: completed
+      output:
+      - type: message
+        id: msg_infer_01a2227b-16c4-7c83-a569-7f0db82cc3da_0
+        role: assistant
+        status: completed
+        content:
+        - type: output_text
+          text: '{"markers": ["PARENT_SETTINGS_ORCHID", "SETTINGS_STEER_SAPPHIRE"],
+            "answer": "Ready"}'
+          annotations: []
+          logprobs: []
+      usage:
+        input_tokens: 59
+        output_tokens: 29
+        total_tokens: 88
+        input_tokens_details:
+          cached_tokens: 48
+          cache_write_tokens: 0
+        output_tokens_details:
+          reasoning_tokens: 0
+      incomplete_details: null
+      error: null
+      previous_response_id: null
+      instructions: null
+      max_tool_calls: null
+      service_tier: default
+      tools: []
+      tool_choice: auto
+      completed_at: 1795874822
+      truncation: disabled
+      parallel_tool_calls: false
+      text:
+        format:
+          type: json_schema
+          name: steering_settings
+          schema:
+            type: object
+            properties:
+              markers:
+                type: array
+                items:
+                  type: string
+              answer:
+                type: string
+            required:
+            - markers
+            - answer
+            additionalProperties: false
+          strict: true
+      top_p: 1.0
+      presence_penalty: 0.0
+      frequency_penalty: 0.0
+      top_logprobs: 0
+      temperature: 0.0
+      reasoning: null
+      max_output_tokens: 128
+      store: true
+      background: false
+      metadata: {}
+      safety_identifier: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+- filename: t3
+  request:
+    method: POST
+    path: /v1/responses
+    query_params: {}
+    body:
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      input: Return the current phase in the new JSON format.
+      store: true
+      stream: false
+      temperature: 0
+      max_output_tokens: 128
+      previous_response_id: resp_01a2227b-16c4-7c83-a569-7efaf22dbc93
+      text:
+        format:
+          type: json_schema
+          name: phase
+          strict: true
+          schema:
+            type: object
+            properties:
+              phase:
+                type: string
+                enum:
+                - DESIGN_COMPLETE
+            required:
+            - phase
+            additionalProperties: false
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.29.0
+      content-type: application/json
+  response:
+    status_code: 200
+    headers:
+      content-type: application/json
+    body:
+      id: resp_01a2227b-17cd-7840-8234-872c53852ac4
+      object: response
+      created_at: 1795874822
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      status: completed
+      output:
+      - type: message
+        id: msg_infer_01a2227b-17ce-7b82-b344-9508ff2fa036_0
+        role: assistant
+        status: completed
+        content:
+        - type: output_text
+          text: '{"phase": "DESIGN_COMPLETE"}'
+          annotations: []
+          logprobs: []
+      usage:
+        input_tokens: 106
+        output_tokens: 10
+        total_tokens: 116
+        input_tokens_details:
+          cached_tokens: 96
+          cache_write_tokens: 0
+        output_tokens_details:
+          reasoning_tokens: 0
+      incomplete_details: null
+      error: null
+      previous_response_id: resp_01a2227b-16c4-7c83-a569-7efaf22dbc93
+      instructions: null
+      max_tool_calls: null
+      service_tier: default
+      tools: []
+      tool_choice: auto
+      completed_at: 1795874822
+      truncation: disabled
+      parallel_tool_calls: false
+      text:
+        format:
+          type: json_schema
+          name: phase
+          schema:
+            type: object
+            properties:
+              phase:
+                type: string
+                enum:
+                - DESIGN_COMPLETE
+            required:
+            - phase
+            additionalProperties: false
+          strict: true
+      top_p: 1.0
+      presence_penalty: 0.0
+      frequency_penalty: 0.0
+      top_logprobs: 0
+      temperature: 0.0
+      reasoning: null
+      max_output_tokens: 128
+      store: true
+      background: false
+      metadata: {}
+      safety_identifier: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+- filename: t4
+  request:
+    method: POST
+    path: /v1/responses
+    query_params: {}
+    body:
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      input: Reply with only the value of phase from your last answer, in plain text.
+      store: true
+      stream: false
+      temperature: 0
+      max_output_tokens: 128
+      previous_response_id: resp_01a2227b-17cd-7840-8234-872c53852ac4
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.29.0
+      content-type: application/json
+  response:
+    status_code: 200
+    headers:
+      content-type: application/json
+    body:
+      id: resp_01a2227b-1810-79a2-b432-ec64427c11dd
+      object: response
+      created_at: 1795874822
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      status: completed
+      output:
+      - type: message
+        id: msg_infer_01a2227b-1810-79a2-b432-ec7d2111836c_0
+        role: assistant
+        status: completed
+        content:
+        - type: output_text
+          text: DESIGN_COMPLETE
+          annotations: []
+          logprobs: []
+      usage:
+        input_tokens: 140
+        output_tokens: 4
+        total_tokens: 144
+        input_tokens_details:
+          cached_tokens: 128
+          cache_write_tokens: 0
+        output_tokens_details:
+          reasoning_tokens: 0
+      incomplete_details: null
+      error: null
+      previous_response_id: resp_01a2227b-17cd-7840-8234-872c53852ac4
+      instructions: null
+      max_tool_calls: null
+      service_tier: default
+      tools: []
+      tool_choice: auto
+      completed_at: 1795874822
+      truncation: disabled
+      parallel_tool_calls: false
+      text:
+        format:
+          type: text
+      top_p: 1.0
+      presence_penalty: 0.0
+      frequency_penalty: 0.0
+      top_logprobs: 0
+      temperature: 0.0
+      reasoning: null
+      max_output_tokens: 128
+      store: true
+      background: false
+      metadata: {}
+      safety_identifier: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+- filename: t5
+  request:
+    method: POST
+    path: /v1/responses
+    query_params: {}
+    body:
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      input: Call get_project_status exactly once for task-tracker.
+      store: true
+      stream: false
+      temperature: 0
+      max_output_tokens: 128
+      text:
+        format:
+          type: json_schema
+          name: steering_settings
+          strict: true
+          schema:
+            type: object
+            properties:
+              markers:
+                type: array
+                items:
+                  type: string
+              answer:
+                type: string
+            required:
+            - markers
+            - answer
+            additionalProperties: false
+      tools:
+      - type: function
+        name: get_project_status
+        description: Get task-tracker project status.
+        parameters:
+          type: object
+          properties: {}
+          required: []
+          additionalProperties: false
+        strict: true
+      tool_choice: auto
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.29.0
+      content-type: application/json
+  response:
+    status_code: 200
+    headers:
+      content-type: application/json
+    body:
+      id: resp_01a2227b-1833-7fe2-ab2c-a7a7d2c690e7
+      object: response
+      created_at: 1795874822
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      status: completed
+      output:
+      - type: function_call
+        id: fc_infer_01a2227b-1833-7fe2-ab2c-a7b9cda9e406_0
+        call_id: call_dea109b211d64d87bace0235
+        name: get_project_status
+        arguments: '{}'
+        status: completed
+      usage:
+        input_tokens: 173
+        output_tokens: 17
+        total_tokens: 190
+        input_tokens_details:
+          cached_tokens: 160
+          cache_write_tokens: 0
+        output_tokens_details:
+          reasoning_tokens: 0
+      incomplete_details: null
+      error: null
+      previous_response_id: null
+      instructions: null
+      max_tool_calls: null
+      service_tier: default
+      tools:
+      - type: function
+        name: get_project_status
+        description: Get task-tracker project status.
+        parameters:
+          type: object
+          properties: {}
+          required: []
+          additionalProperties: false
+        strict: true
+      tool_choice: auto
+      completed_at: 1795874822
+      truncation: disabled
+      parallel_tool_calls: false
+      text:
+        format:
+          type: json_schema
+          name: steering_settings
+          schema:
+            type: object
+            properties:
+              markers:
+                type: array
+                items:
+                  type: string
+              answer:
+                type: string
+            required:
+            - markers
+            - answer
+            additionalProperties: false
+          strict: true
+      top_p: 1.0
+      presence_penalty: 0.0
+      frequency_penalty: 0.0
+      top_logprobs: 0
+      temperature: 0.0
+      reasoning: null
+      max_output_tokens: 128
+      store: true
+      background: false
+      metadata: {}
+      safety_identifier: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+- filename: t6
+  request:
+    method: POST
+    path: /v1/responses
+    query_params: {}
+    body:
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      input:
+      - type: function_call_output
+        call_id: call_dea109b211d64d87bace0235
+        output: Design is complete. Development has not started.
+      store: true
+      stream: false
+      temperature: 0
+      max_output_tokens: 128
+      instructions: Quote the tool result inside double quotation marks. Do not paraphrase.
+      text:
+        format:
+          type: text
+      previous_response_id: resp_01a2227b-1833-7fe2-ab2c-a7a7d2c690e7
+      tools: []
+      tool_choice: auto
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.29.0
+      content-type: application/json
+  response:
+    status_code: 200
+    headers:
+      content-type: application/json
+    body:
+      id: resp_01a2227b-189b-78c2-8f3a-bab6ad422b8d
+      object: response
+      created_at: 1795874822
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      status: completed
+      output:
+      - type: message
+        id: msg_infer_01a2227b-189b-78c2-8f3a-bac5851f9def_0
+        role: assistant
+        status: completed
+        content:
+        - type: output_text
+          text: Design is complete. Development has not started.
+          annotations: []
+          logprobs: []
+      usage:
+        input_tokens: 81
+        output_tokens: 10
+        total_tokens: 91
+        input_tokens_details:
+          cached_tokens: 80
+          cache_write_tokens: 0
+        output_tokens_details:
+          reasoning_tokens: 0
+      incomplete_details: null
+      error: null
+      previous_response_id: resp_01a2227b-1833-7fe2-ab2c-a7a7d2c690e7
+      instructions: Quote the tool result inside double quotation marks. Do not paraphrase.
+      max_tool_calls: null
+      service_tier: default
+      tools: []
+      tool_choice: auto
+      completed_at: 1795874822
+      truncation: disabled
+      parallel_tool_calls: false
+      text:
+        format:
+          type: text
+      top_p: 1.0
+      presence_penalty: 0.0
+      frequency_penalty: 0.0
+      top_logprobs: 0
+      temperature: 0.0
+      reasoning: null
+      max_output_tokens: 128
+      store: true
+      background: false
+      metadata: {}
+      safety_identifier: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+- filename: t7
+  request:
+    method: POST
+    path: /v1/responses
+    query_params: {}
+    body:
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      input:
+      - type: function_call_output
+        call_id: call_dea109b211d64d87bace0235
+        output: Design is complete. Development has not started.
+      store: true
+      stream: false
+      temperature: 0
+      max_output_tokens: 128
+      previous_response_id: resp_01a2227b-1833-7fe2-ab2c-a7a7d2c690e7
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.29.0
+      content-type: application/json
+  response:
+    status_code: 200
+    headers:
+      content-type: application/json
+    body:
+      id: resp_01a2227b-18d4-78b2-b946-870caeff35d5
+      object: response
+      created_at: 1795874822
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      status: completed
+      output:
+      - type: message
+        id: msg_infer_01a2227b-18d5-7033-9a74-36775c8799a9_0
+        role: assistant
+        status: completed
+        content:
+        - type: output_text
+          text: The project status is now Design is complete. Development has not
+            started.
+          annotations: []
+          logprobs: []
+      usage:
+        input_tokens: 216
+        output_tokens: 15
+        total_tokens: 231
+        input_tokens_details:
+          cached_tokens: 208
+          cache_write_tokens: 0
+        output_tokens_details:
+          reasoning_tokens: 0
+      incomplete_details: null
+      error: null
+      previous_response_id: resp_01a2227b-1833-7fe2-ab2c-a7a7d2c690e7
+      instructions: null
+      max_tool_calls: null
+      service_tier: default
+      tools:
+      - type: function
+        name: get_project_status
+        description: Get task-tracker project status.
+        parameters:
+          type: object
+          properties: {}
+          required: []
+          additionalProperties: false
+        strict: true
+      tool_choice: auto
+      completed_at: 1795874822
+      truncation: disabled
+      parallel_tool_calls: false
+      text:
+        format:
+          type: text
+      top_p: 1.0
+      presence_penalty: 0.0
+      frequency_penalty: 0.0
+      top_logprobs: 0
+      temperature: 0.0
+      reasoning: null
+      max_output_tokens: 128
+      store: true
+      background: false
+      metadata: {}
+      safety_identifier: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+- filename: t8
+  request:
+    method: POST
+    path: /v1/responses
+    query_params: {}
+    body:
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      input:
+      - type: function_call_output
+        call_id: call_dea109b211d64d87bace0235
+        output: Design is complete. Development has not started.
+      store: true
+      stream: false
+      temperature: 0
+      max_output_tokens: 128
+      text:
+        format:
+          type: json_schema
+          name: steering_settings
+          strict: true
+          schema:
+            type: object
+            properties:
+              markers:
+                type: array
+                items:
+                  type: string
+              answer:
+                type: string
+            required:
+            - markers
+            - answer
+            additionalProperties: false
+      previous_response_id: resp_01a2227b-1833-7fe2-ab2c-a7a7d2c690e7
+      tools: []
+      tool_choice: auto
+      instructions: Put the two sentences returned by the tool in markers, and the
+        complete tool result in answer.
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.29.0
+      content-type: application/json
+  response:
+    status_code: 200
+    headers:
+      content-type: application/json
+    body:
+      id: resp_01a2227b-1937-79c1-8b4d-a29e1cfe310c
+      object: response
+      created_at: 1795874822
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      status: completed
+      output:
+      - type: message
+        id: msg_infer_01a2227b-1937-79c1-8b4d-a2adff2b59e3_0
+        role: assistant
+        status: completed
+        content:
+        - type: output_text
+          text: '{"markers": ["Design is complete.", "Development has not started."],
+            "answer": "Design is complete. Development has not started."}'
+          annotations: []
+          logprobs: []
+      usage:
+        input_tokens: 86
+        output_tokens: 31
+        total_tokens: 117
+        input_tokens_details:
+          cached_tokens: 80
+          cache_write_tokens: 0
+        output_tokens_details:
+          reasoning_tokens: 0
+      incomplete_details: null
+      error: null
+      previous_response_id: resp_01a2227b-1833-7fe2-ab2c-a7a7d2c690e7
+      instructions: Put the two sentences returned by the tool in markers, and the
+        complete tool result in answer.
+      max_tool_calls: null
+      service_tier: default
+      tools: []
+      tool_choice: auto
+      completed_at: 1795874822
+      truncation: disabled
+      parallel_tool_calls: false
+      text:
+        format:
+          type: json_schema
+          name: steering_settings
+          schema:
+            type: object
+            properties:
+              markers:
+                type: array
+                items:
+                  type: string
+              answer:
+                type: string
+            required:
+            - markers
+            - answer
+            additionalProperties: false
+          strict: true
+      top_p: 1.0
+      presence_penalty: 0.0
+      frequency_penalty: 0.0
+      top_logprobs: 0
+      temperature: 0.0
+      reasoning: null
+      max_output_tokens: 128
+      store: true
+      background: false
+      metadata: {}
+      safety_identifier: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+- filename: t9
+  request:
+    method: GET
+    path: /v1/responses/resp_01a2227b-1937-79c1-8b4d-a29e1cfe310c/input_items
+    query_params:
+      order: asc
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.29.0
+  response:
+    status_code: 200
+    headers:
+      content-type: application/json
+    body:
+      object: list
+      data:
+      - type: message
+        id: msg_01a2227b-1888-7b32-947d-9b92b430d33f
+        role: user
+        status: completed
+        content:
+        - type: input_text
+          text: Call get_project_status exactly once for task-tracker.
+      - type: function_call
+        id: fc_infer_01a2227b-1833-7fe2-ab2c-a7b9cda9e406_0
+        call_id: call_dea109b211d64d87bace0235
+        name: get_project_status
+        arguments: '{}'
+        status: completed
+      - type: function_call_output
+        id: fc_01a2227b-19c3-7103-8457-5a531046fbc5
+        status: completed
+        call_id: call_dea109b211d64d87bace0235
+        output: Design is complete. Development has not started.
+      has_more: false
+      first_id: msg_01a2227b-1888-7b32-947d-9b92b430d33f
+      last_id: fc_01a2227b-19c3-7103-8457-5a531046fbc5
