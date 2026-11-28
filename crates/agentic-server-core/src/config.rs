@@ -657,6 +657,8 @@ fn default_database_url_in(home: &Path) -> Result<String, Error> {
         .ok_or_else(|| Error::Config(format!("default database path is not valid UTF-8: {}", path.display())))?;
     #[cfg(windows)]
     let path = path.replace('\\', "/");
+    #[cfg(windows)]
+    let path = path.as_str();
     let encoded = percent_encoding::utf8_percent_encode(path, SQLITE_PATH_ENCODE_SET);
     Ok(format!("sqlite://{encoded}"))
 }
