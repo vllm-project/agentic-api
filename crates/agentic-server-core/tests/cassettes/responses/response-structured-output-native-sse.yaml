@@ -1,0 +1,1816 @@
+turns:
+- filename: t1
+  request:
+    method: POST
+    path: /v1/responses
+    query_params: {}
+    body:
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      input: Use PARENT_SETTINGS_ORCHID and SETTINGS_STEER_SAPPHIRE as the two markers
+        in that order. Set the answer to Ready.
+      store: true
+      stream: true
+      temperature: 0
+      max_output_tokens: 128
+      text:
+        format:
+          type: json_schema
+          name: steering_settings
+          strict: true
+          schema:
+            type: object
+            properties:
+              markers:
+                type: array
+                items:
+                  type: string
+              answer:
+                type: string
+            required:
+            - markers
+            - answer
+            additionalProperties: false
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.29.0
+      content-type: application/json
+  response:
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a2227b-1e09-7310-9c64-170b6ec258a0","object":"response","created_at":1795874823,"model":"Qwen/Qwen2.5-0.5B-Instruct","status":"in_progress","prompt_cache_options":null,"usage":null,"incomplete_details":null,"error":null,"previous_response_id":null,"instructions":null,"max_tool_calls":null,"service_tier":"default","tools":[],"tool_choice":"auto","completed_at":null,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"json_schema","name":"steering_settings","schema":{"type":"object","properties":{"markers":{"type":"array","items":{"type":"string"}},"answer":{"type":"string"}},"required":["markers","answer"],"additionalProperties":false},"strict":true}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":0.0,"reasoning":null,"max_output_tokens":128,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a2227b-1e09-7310-9c64-170b6ec258a0","object":"response","created_at":1795874823,"model":"Qwen/Qwen2.5-0.5B-Instruct","status":"in_progress","prompt_cache_options":null,"usage":null,"incomplete_details":null,"error":null,"previous_response_id":null,"instructions":null,"max_tool_calls":null,"service_tier":"default","tools":[],"tool_choice":"auto","completed_at":null,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"json_schema","name":"steering_settings","schema":{"type":"object","properties":{"markers":{"type":"array","items":{"type":"string"}},"answer":{"type":"string"}},"required":["markers","answer"],"additionalProperties":false},"strict":true}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":0.0,"reasoning":null,"max_output_tokens":128,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"type":"message","id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","role":"assistant","status":"in_progress","content":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","sequence_number":3,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","content_index":0,"part":{"type":"output_text","text":"","annotations":[],"logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":4,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"{\"","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":5,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"mark","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":6,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"ers","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":7,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"\":","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":8,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"
+      [\"","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":9,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"P","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":10,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"ARENT","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":11,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"_SETTINGS","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":12,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"_OR","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":13,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"CH","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":14,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"ID","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":15,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"\",","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":16,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"
+      \"","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":17,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"SETTINGS","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":18,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"_ST","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":19,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"E","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":20,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"ER","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":21,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"_S","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":22,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"AP","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":23,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"PH","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":24,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"IRE","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":25,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"\"],","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":26,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"
+      \"","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":27,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"answer","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":28,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"\":","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":29,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"
+      \"","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":30,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"Ready","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":31,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","delta":"\"}","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","sequence_number":32,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","content_index":0,"text":"{\"markers\":
+      [\"PARENT_SETTINGS_ORCHID\", \"SETTINGS_STEER_SAPPHIRE\"], \"answer\": \"Ready\"}"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","sequence_number":33,"output_index":0,"item_id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","content_index":0,"part":{"type":"output_text","text":"{\"markers\":
+      [\"PARENT_SETTINGS_ORCHID\", \"SETTINGS_STEER_SAPPHIRE\"], \"answer\": \"Ready\"}","annotations":[],"logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":34,"output_index":0,"item":{"type":"message","id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","role":"assistant","status":"completed","content":[{"type":"output_text","text":"{\"markers\":
+      [\"PARENT_SETTINGS_ORCHID\", \"SETTINGS_STEER_SAPPHIRE\"], \"answer\": \"Ready\"}","annotations":[],"logprobs":[]}]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","sequence_number":35,"response":{"id":"resp_01a2227b-1e09-7310-9c64-170b6ec258a0","object":"response","created_at":1795874823,"model":"Qwen/Qwen2.5-0.5B-Instruct","status":"completed","output":[{"type":"message","id":"msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0","role":"assistant","status":"completed","content":[{"type":"output_text","text":"{\"markers\":
+      [\"PARENT_SETTINGS_ORCHID\", \"SETTINGS_STEER_SAPPHIRE\"], \"answer\": \"Ready\"}","annotations":[],"logprobs":[]}]}],"usage":{"input_tokens":59,"output_tokens":29,"total_tokens":88,"input_tokens_details":{"cached_tokens":48,"cache_write_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":null,"instructions":null,"max_tool_calls":null,"service_tier":"default","tools":[],"tool_choice":"auto","completed_at":1795874823,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"json_schema","name":"steering_settings","schema":{"type":"object","properties":{"markers":{"type":"array","items":{"type":"string"}},"answer":{"type":"string"}},"required":["markers","answer"],"additionalProperties":false},"strict":true}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":0.0,"reasoning":null,"max_output_tokens":128,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null}}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200
+    headers:
+      content-type: text/event-stream; charset=utf-8
+- filename: t2
+  request:
+    method: GET
+    path: /v1/responses/resp_01a2227b-1e09-7310-9c64-170b6ec258a0
+    query_params: {}
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.29.0
+  response:
+    status_code: 200
+    headers:
+      content-type: application/json
+    body:
+      id: resp_01a2227b-1e09-7310-9c64-170b6ec258a0
+      object: response
+      created_at: 1795874823
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      status: completed
+      output:
+      - type: message
+        id: msg_infer_01a2227b-1e09-7310-9c64-171eb8723e5f_0
+        role: assistant
+        status: completed
+        content:
+        - type: output_text
+          text: '{"markers": ["PARENT_SETTINGS_ORCHID", "SETTINGS_STEER_SAPPHIRE"],
+            "answer": "Ready"}'
+          annotations: []
+          logprobs: []
+      usage:
+        input_tokens: 59
+        output_tokens: 29
+        total_tokens: 88
+        input_tokens_details:
+          cached_tokens: 48
+          cache_write_tokens: 0
+        output_tokens_details:
+          reasoning_tokens: 0
+      incomplete_details: null
+      error: null
+      previous_response_id: null
+      instructions: null
+      max_tool_calls: null
+      service_tier: default
+      tools: []
+      tool_choice: auto
+      completed_at: 1795874823
+      truncation: disabled
+      parallel_tool_calls: false
+      text:
+        format:
+          type: json_schema
+          name: steering_settings
+          schema:
+            type: object
+            properties:
+              markers:
+                type: array
+                items:
+                  type: string
+              answer:
+                type: string
+            required:
+            - markers
+            - answer
+            additionalProperties: false
+          strict: true
+      top_p: 1.0
+      presence_penalty: 0.0
+      frequency_penalty: 0.0
+      top_logprobs: 0
+      temperature: 0.0
+      reasoning: null
+      max_output_tokens: 128
+      store: true
+      background: false
+      metadata: {}
+      safety_identifier: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+- filename: t3
+  request:
+    method: POST
+    path: /v1/responses
+    query_params: {}
+    body:
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      input: Return the current phase in the new JSON format.
+      store: true
+      stream: true
+      temperature: 0
+      max_output_tokens: 128
+      previous_response_id: resp_01a2227b-1e09-7310-9c64-170b6ec258a0
+      text:
+        format:
+          type: json_schema
+          name: phase
+          strict: true
+          schema:
+            type: object
+            properties:
+              phase:
+                type: string
+                enum:
+                - DESIGN_COMPLETE
+            required:
+            - phase
+            additionalProperties: false
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.29.0
+      content-type: application/json
+  response:
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a2227b-1ed2-7eb3-97cc-4330fcbcde66","object":"response","created_at":1795874823,"model":"Qwen/Qwen2.5-0.5B-Instruct","status":"in_progress","prompt_cache_options":null,"usage":null,"incomplete_details":null,"error":null,"previous_response_id":"resp_01a2227b-1e09-7310-9c64-170b6ec258a0","instructions":null,"max_tool_calls":null,"service_tier":"default","tools":[],"tool_choice":"auto","completed_at":null,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"json_schema","name":"phase","schema":{"type":"object","properties":{"phase":{"type":"string","enum":["DESIGN_COMPLETE"]}},"required":["phase"],"additionalProperties":false},"strict":true}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":0.0,"reasoning":null,"max_output_tokens":128,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a2227b-1ed2-7eb3-97cc-4330fcbcde66","object":"response","created_at":1795874823,"model":"Qwen/Qwen2.5-0.5B-Instruct","status":"in_progress","prompt_cache_options":null,"usage":null,"incomplete_details":null,"error":null,"previous_response_id":"resp_01a2227b-1e09-7310-9c64-170b6ec258a0","instructions":null,"max_tool_calls":null,"service_tier":"default","tools":[],"tool_choice":"auto","completed_at":null,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"json_schema","name":"phase","schema":{"type":"object","properties":{"phase":{"type":"string","enum":["DESIGN_COMPLETE"]}},"required":["phase"],"additionalProperties":false},"strict":true}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":0.0,"reasoning":null,"max_output_tokens":128,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"type":"message","id":"msg_infer_01a2227b-1ed3-7f71-8af1-74ad9313873e_0","role":"assistant","status":"in_progress","content":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","sequence_number":3,"output_index":0,"item_id":"msg_infer_01a2227b-1ed3-7f71-8af1-74ad9313873e_0","content_index":0,"part":{"type":"output_text","text":"","annotations":[],"logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":4,"output_index":0,"item_id":"msg_infer_01a2227b-1ed3-7f71-8af1-74ad9313873e_0","delta":"{\"","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":5,"output_index":0,"item_id":"msg_infer_01a2227b-1ed3-7f71-8af1-74ad9313873e_0","delta":"phase","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":6,"output_index":0,"item_id":"msg_infer_01a2227b-1ed3-7f71-8af1-74ad9313873e_0","delta":"\":","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":7,"output_index":0,"item_id":"msg_infer_01a2227b-1ed3-7f71-8af1-74ad9313873e_0","delta":"
+      \"","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":8,"output_index":0,"item_id":"msg_infer_01a2227b-1ed3-7f71-8af1-74ad9313873e_0","delta":"D","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":9,"output_index":0,"item_id":"msg_infer_01a2227b-1ed3-7f71-8af1-74ad9313873e_0","delta":"ES","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":10,"output_index":0,"item_id":"msg_infer_01a2227b-1ed3-7f71-8af1-74ad9313873e_0","delta":"IGN","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":11,"output_index":0,"item_id":"msg_infer_01a2227b-1ed3-7f71-8af1-74ad9313873e_0","delta":"_COMPLETE","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":12,"output_index":0,"item_id":"msg_infer_01a2227b-1ed3-7f71-8af1-74ad9313873e_0","delta":"\"}","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","sequence_number":13,"output_index":0,"item_id":"msg_infer_01a2227b-1ed3-7f71-8af1-74ad9313873e_0","content_index":0,"text":"{\"phase\":
+      \"DESIGN_COMPLETE\"}"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","sequence_number":14,"output_index":0,"item_id":"msg_infer_01a2227b-1ed3-7f71-8af1-74ad9313873e_0","content_index":0,"part":{"type":"output_text","text":"{\"phase\":
+      \"DESIGN_COMPLETE\"}","annotations":[],"logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":15,"output_index":0,"item":{"type":"message","id":"msg_infer_01a2227b-1ed3-7f71-8af1-74ad9313873e_0","role":"assistant","status":"completed","content":[{"type":"output_text","text":"{\"phase\":
+      \"DESIGN_COMPLETE\"}","annotations":[],"logprobs":[]}]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","sequence_number":16,"response":{"id":"resp_01a2227b-1ed2-7eb3-97cc-4330fcbcde66","object":"response","created_at":1795874823,"model":"Qwen/Qwen2.5-0.5B-Instruct","status":"completed","output":[{"type":"message","id":"msg_infer_01a2227b-1ed3-7f71-8af1-74ad9313873e_0","role":"assistant","status":"completed","content":[{"type":"output_text","text":"{\"phase\":
+      \"DESIGN_COMPLETE\"}","annotations":[],"logprobs":[]}]}],"usage":{"input_tokens":106,"output_tokens":10,"total_tokens":116,"input_tokens_details":{"cached_tokens":96,"cache_write_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":"resp_01a2227b-1e09-7310-9c64-170b6ec258a0","instructions":null,"max_tool_calls":null,"service_tier":"default","tools":[],"tool_choice":"auto","completed_at":1795874823,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"json_schema","name":"phase","schema":{"type":"object","properties":{"phase":{"type":"string","enum":["DESIGN_COMPLETE"]}},"required":["phase"],"additionalProperties":false},"strict":true}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":0.0,"reasoning":null,"max_output_tokens":128,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null}}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200
+    headers:
+      content-type: text/event-stream; charset=utf-8
+- filename: t4
+  request:
+    method: POST
+    path: /v1/responses
+    query_params: {}
+    body:
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      input: Reply with only the value of phase from your last answer, in plain text.
+      store: true
+      stream: true
+      temperature: 0
+      max_output_tokens: 128
+      previous_response_id: resp_01a2227b-1ed2-7eb3-97cc-4330fcbcde66
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.29.0
+      content-type: application/json
+  response:
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a2227b-1f21-73f3-bae2-ac47dce61ec3","object":"response","created_at":1795874823,"model":"Qwen/Qwen2.5-0.5B-Instruct","status":"in_progress","prompt_cache_options":null,"usage":null,"incomplete_details":null,"error":null,"previous_response_id":"resp_01a2227b-1ed2-7eb3-97cc-4330fcbcde66","instructions":null,"max_tool_calls":null,"service_tier":"default","tools":[],"tool_choice":"auto","completed_at":null,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":0.0,"reasoning":null,"max_output_tokens":128,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a2227b-1f21-73f3-bae2-ac47dce61ec3","object":"response","created_at":1795874823,"model":"Qwen/Qwen2.5-0.5B-Instruct","status":"in_progress","prompt_cache_options":null,"usage":null,"incomplete_details":null,"error":null,"previous_response_id":"resp_01a2227b-1ed2-7eb3-97cc-4330fcbcde66","instructions":null,"max_tool_calls":null,"service_tier":"default","tools":[],"tool_choice":"auto","completed_at":null,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":0.0,"reasoning":null,"max_output_tokens":128,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"type":"message","id":"msg_infer_01a2227b-1f21-73f3-bae2-ac5392fa0e8c_0","role":"assistant","status":"in_progress","content":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","sequence_number":3,"output_index":0,"item_id":"msg_infer_01a2227b-1f21-73f3-bae2-ac5392fa0e8c_0","content_index":0,"part":{"type":"output_text","text":"","annotations":[],"logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":4,"output_index":0,"item_id":"msg_infer_01a2227b-1f21-73f3-bae2-ac5392fa0e8c_0","delta":"DES","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":5,"output_index":0,"item_id":"msg_infer_01a2227b-1f21-73f3-bae2-ac5392fa0e8c_0","delta":"IGN","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":6,"output_index":0,"item_id":"msg_infer_01a2227b-1f21-73f3-bae2-ac5392fa0e8c_0","delta":"_COMPLETE","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","sequence_number":7,"output_index":0,"item_id":"msg_infer_01a2227b-1f21-73f3-bae2-ac5392fa0e8c_0","content_index":0,"text":"DESIGN_COMPLETE"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","sequence_number":8,"output_index":0,"item_id":"msg_infer_01a2227b-1f21-73f3-bae2-ac5392fa0e8c_0","content_index":0,"part":{"type":"output_text","text":"DESIGN_COMPLETE","annotations":[],"logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":9,"output_index":0,"item":{"type":"message","id":"msg_infer_01a2227b-1f21-73f3-bae2-ac5392fa0e8c_0","role":"assistant","status":"completed","content":[{"type":"output_text","text":"DESIGN_COMPLETE","annotations":[],"logprobs":[]}]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","sequence_number":10,"response":{"id":"resp_01a2227b-1f21-73f3-bae2-ac47dce61ec3","object":"response","created_at":1795874823,"model":"Qwen/Qwen2.5-0.5B-Instruct","status":"completed","output":[{"type":"message","id":"msg_infer_01a2227b-1f21-73f3-bae2-ac5392fa0e8c_0","role":"assistant","status":"completed","content":[{"type":"output_text","text":"DESIGN_COMPLETE","annotations":[],"logprobs":[]}]}],"usage":{"input_tokens":140,"output_tokens":4,"total_tokens":144,"input_tokens_details":{"cached_tokens":128,"cache_write_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":"resp_01a2227b-1ed2-7eb3-97cc-4330fcbcde66","instructions":null,"max_tool_calls":null,"service_tier":"default","tools":[],"tool_choice":"auto","completed_at":1795874823,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":0.0,"reasoning":null,"max_output_tokens":128,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null}}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200
+    headers:
+      content-type: text/event-stream; charset=utf-8
+- filename: t5
+  request:
+    method: POST
+    path: /v1/responses
+    query_params: {}
+    body:
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      input: Call get_project_status exactly once for task-tracker.
+      store: true
+      stream: true
+      temperature: 0
+      max_output_tokens: 128
+      text:
+        format:
+          type: json_schema
+          name: steering_settings
+          strict: true
+          schema:
+            type: object
+            properties:
+              markers:
+                type: array
+                items:
+                  type: string
+              answer:
+                type: string
+            required:
+            - markers
+            - answer
+            additionalProperties: false
+      tools:
+      - type: function
+        name: get_project_status
+        description: Get task-tracker project status.
+        parameters:
+          type: object
+          properties: {}
+          required: []
+          additionalProperties: false
+        strict: true
+      tool_choice: auto
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.29.0
+      content-type: application/json
+  response:
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a2227b-1f4c-7a71-ba81-b4dff61f7573","object":"response","created_at":1795874824,"model":"Qwen/Qwen2.5-0.5B-Instruct","status":"in_progress","prompt_cache_options":null,"usage":null,"incomplete_details":null,"error":null,"previous_response_id":null,"instructions":null,"max_tool_calls":null,"service_tier":"default","tools":[{"type":"function","name":"get_project_status","description":"Get
+      task-tracker project status.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false},"strict":true}],"tool_choice":"auto","completed_at":null,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"json_schema","name":"steering_settings","schema":{"type":"object","properties":{"markers":{"type":"array","items":{"type":"string"}},"answer":{"type":"string"}},"required":["markers","answer"],"additionalProperties":false},"strict":true}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":0.0,"reasoning":null,"max_output_tokens":128,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a2227b-1f4c-7a71-ba81-b4dff61f7573","object":"response","created_at":1795874824,"model":"Qwen/Qwen2.5-0.5B-Instruct","status":"in_progress","prompt_cache_options":null,"usage":null,"incomplete_details":null,"error":null,"previous_response_id":null,"instructions":null,"max_tool_calls":null,"service_tier":"default","tools":[{"type":"function","name":"get_project_status","description":"Get
+      task-tracker project status.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false},"strict":true}],"tool_choice":"auto","completed_at":null,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"json_schema","name":"steering_settings","schema":{"type":"object","properties":{"markers":{"type":"array","items":{"type":"string"}},"answer":{"type":"string"}},"required":["markers","answer"],"additionalProperties":false},"strict":true}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":0.0,"reasoning":null,"max_output_tokens":128,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"type":"function_call","id":"fc_infer_01a2227b-1f4d-7a81-94fa-d186e55b3bdf_0","call_id":"call_64bb9ab66367465490aa4a27","name":"get_project_status","arguments":"","status":"in_progress"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":3,"output_index":0,"item_id":"fc_infer_01a2227b-1f4d-7a81-94fa-d186e55b3bdf_0","delta":"{}"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.done
+
+      '
+    - 'data: {"type":"response.function_call_arguments.done","sequence_number":4,"output_index":0,"item_id":"fc_infer_01a2227b-1f4d-7a81-94fa-d186e55b3bdf_0","name":"get_project_status","arguments":"{}"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":5,"output_index":0,"item":{"type":"function_call","id":"fc_infer_01a2227b-1f4d-7a81-94fa-d186e55b3bdf_0","call_id":"call_64bb9ab66367465490aa4a27","name":"get_project_status","arguments":"{}","status":"completed"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","sequence_number":6,"response":{"id":"resp_01a2227b-1f4c-7a71-ba81-b4dff61f7573","object":"response","created_at":1795874824,"model":"Qwen/Qwen2.5-0.5B-Instruct","status":"completed","output":[{"type":"function_call","id":"fc_infer_01a2227b-1f4d-7a81-94fa-d186e55b3bdf_0","call_id":"call_64bb9ab66367465490aa4a27","name":"get_project_status","arguments":"{}","status":"completed"}],"usage":{"input_tokens":173,"output_tokens":17,"total_tokens":190,"input_tokens_details":{"cached_tokens":160,"cache_write_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":null,"instructions":null,"max_tool_calls":null,"service_tier":"default","tools":[{"type":"function","name":"get_project_status","description":"Get
+      task-tracker project status.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false},"strict":true}],"tool_choice":"auto","completed_at":1795874824,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"json_schema","name":"steering_settings","schema":{"type":"object","properties":{"markers":{"type":"array","items":{"type":"string"}},"answer":{"type":"string"}},"required":["markers","answer"],"additionalProperties":false},"strict":true}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":0.0,"reasoning":null,"max_output_tokens":128,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null}}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200
+    headers:
+      content-type: text/event-stream; charset=utf-8
+- filename: t6
+  request:
+    method: POST
+    path: /v1/responses
+    query_params: {}
+    body:
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      input:
+      - type: function_call_output
+        call_id: call_64bb9ab66367465490aa4a27
+        output: Design is complete. Development has not started.
+      store: true
+      stream: true
+      temperature: 0
+      max_output_tokens: 128
+      instructions: Quote the tool result inside double quotation marks. Do not paraphrase.
+      text:
+        format:
+          type: text
+      previous_response_id: resp_01a2227b-1f4c-7a71-ba81-b4dff61f7573
+      tools: []
+      tool_choice: auto
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.29.0
+      content-type: application/json
+  response:
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a2227b-1fbc-71c0-93fb-490f9095970f","object":"response","created_at":1795874824,"model":"Qwen/Qwen2.5-0.5B-Instruct","status":"in_progress","prompt_cache_options":null,"usage":null,"incomplete_details":null,"error":null,"previous_response_id":"resp_01a2227b-1f4c-7a71-ba81-b4dff61f7573","instructions":null,"max_tool_calls":null,"service_tier":"default","tools":[],"tool_choice":"auto","completed_at":null,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":0.0,"reasoning":null,"max_output_tokens":128,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a2227b-1fbc-71c0-93fb-490f9095970f","object":"response","created_at":1795874824,"model":"Qwen/Qwen2.5-0.5B-Instruct","status":"in_progress","prompt_cache_options":null,"usage":null,"incomplete_details":null,"error":null,"previous_response_id":"resp_01a2227b-1f4c-7a71-ba81-b4dff61f7573","instructions":null,"max_tool_calls":null,"service_tier":"default","tools":[],"tool_choice":"auto","completed_at":null,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":0.0,"reasoning":null,"max_output_tokens":128,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"type":"message","id":"msg_infer_01a2227b-1fbc-71c0-93fb-49171dd6482c_0","role":"assistant","status":"in_progress","content":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","sequence_number":3,"output_index":0,"item_id":"msg_infer_01a2227b-1fbc-71c0-93fb-49171dd6482c_0","content_index":0,"part":{"type":"output_text","text":"","annotations":[],"logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":4,"output_index":0,"item_id":"msg_infer_01a2227b-1fbc-71c0-93fb-49171dd6482c_0","delta":"Design","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":5,"output_index":0,"item_id":"msg_infer_01a2227b-1fbc-71c0-93fb-49171dd6482c_0","delta":"
+      is","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":6,"output_index":0,"item_id":"msg_infer_01a2227b-1fbc-71c0-93fb-49171dd6482c_0","delta":"
+      complete","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":7,"output_index":0,"item_id":"msg_infer_01a2227b-1fbc-71c0-93fb-49171dd6482c_0","delta":".","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":8,"output_index":0,"item_id":"msg_infer_01a2227b-1fbc-71c0-93fb-49171dd6482c_0","delta":"
+      Development","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":9,"output_index":0,"item_id":"msg_infer_01a2227b-1fbc-71c0-93fb-49171dd6482c_0","delta":"
+      has","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":10,"output_index":0,"item_id":"msg_infer_01a2227b-1fbc-71c0-93fb-49171dd6482c_0","delta":"
+      not","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":11,"output_index":0,"item_id":"msg_infer_01a2227b-1fbc-71c0-93fb-49171dd6482c_0","delta":"
+      started","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":12,"output_index":0,"item_id":"msg_infer_01a2227b-1fbc-71c0-93fb-49171dd6482c_0","delta":".","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","sequence_number":13,"output_index":0,"item_id":"msg_infer_01a2227b-1fbc-71c0-93fb-49171dd6482c_0","content_index":0,"text":"Design
+      is complete. Development has not started."}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","sequence_number":14,"output_index":0,"item_id":"msg_infer_01a2227b-1fbc-71c0-93fb-49171dd6482c_0","content_index":0,"part":{"type":"output_text","text":"Design
+      is complete. Development has not started.","annotations":[],"logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":15,"output_index":0,"item":{"type":"message","id":"msg_infer_01a2227b-1fbc-71c0-93fb-49171dd6482c_0","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Design
+      is complete. Development has not started.","annotations":[],"logprobs":[]}]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","sequence_number":16,"response":{"id":"resp_01a2227b-1fbc-71c0-93fb-490f9095970f","object":"response","created_at":1795874824,"model":"Qwen/Qwen2.5-0.5B-Instruct","status":"completed","output":[{"type":"message","id":"msg_infer_01a2227b-1fbc-71c0-93fb-49171dd6482c_0","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Design
+      is complete. Development has not started.","annotations":[],"logprobs":[]}]}],"usage":{"input_tokens":81,"output_tokens":10,"total_tokens":91,"input_tokens_details":{"cached_tokens":80,"cache_write_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":"resp_01a2227b-1f4c-7a71-ba81-b4dff61f7573","instructions":"Quote
+      the tool result inside double quotation marks. Do not paraphrase.","max_tool_calls":null,"service_tier":"default","tools":[],"tool_choice":"auto","completed_at":1795874824,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":0.0,"reasoning":null,"max_output_tokens":128,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null}}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200
+    headers:
+      content-type: text/event-stream; charset=utf-8
+- filename: t7
+  request:
+    method: POST
+    path: /v1/responses
+    query_params: {}
+    body:
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      input:
+      - type: function_call_output
+        call_id: call_64bb9ab66367465490aa4a27
+        output: Design is complete. Development has not started.
+      store: true
+      stream: true
+      temperature: 0
+      max_output_tokens: 128
+      previous_response_id: resp_01a2227b-1f4c-7a71-ba81-b4dff61f7573
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.29.0
+      content-type: application/json
+  response:
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a2227b-1ffe-79d3-9bb5-ff012371a8d9","object":"response","created_at":1795874824,"model":"Qwen/Qwen2.5-0.5B-Instruct","status":"in_progress","prompt_cache_options":null,"usage":null,"incomplete_details":null,"error":null,"previous_response_id":"resp_01a2227b-1f4c-7a71-ba81-b4dff61f7573","instructions":null,"max_tool_calls":null,"service_tier":"default","tools":[{"type":"function","name":"get_project_status","description":"Get
+      task-tracker project status.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false},"strict":true}],"tool_choice":"auto","completed_at":null,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":0.0,"reasoning":null,"max_output_tokens":128,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a2227b-1ffe-79d3-9bb5-ff012371a8d9","object":"response","created_at":1795874824,"model":"Qwen/Qwen2.5-0.5B-Instruct","status":"in_progress","prompt_cache_options":null,"usage":null,"incomplete_details":null,"error":null,"previous_response_id":"resp_01a2227b-1f4c-7a71-ba81-b4dff61f7573","instructions":null,"max_tool_calls":null,"service_tier":"default","tools":[{"type":"function","name":"get_project_status","description":"Get
+      task-tracker project status.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false},"strict":true}],"tool_choice":"auto","completed_at":null,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":0.0,"reasoning":null,"max_output_tokens":128,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"type":"message","id":"msg_infer_01a2227b-1fff-7801-8c6e-5ea77a64f2a2_0","role":"assistant","status":"in_progress","content":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","sequence_number":3,"output_index":0,"item_id":"msg_infer_01a2227b-1fff-7801-8c6e-5ea77a64f2a2_0","content_index":0,"part":{"type":"output_text","text":"","annotations":[],"logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":4,"output_index":0,"item_id":"msg_infer_01a2227b-1fff-7801-8c6e-5ea77a64f2a2_0","delta":"The","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":5,"output_index":0,"item_id":"msg_infer_01a2227b-1fff-7801-8c6e-5ea77a64f2a2_0","delta":"
+      project","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":6,"output_index":0,"item_id":"msg_infer_01a2227b-1fff-7801-8c6e-5ea77a64f2a2_0","delta":"
+      status","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":7,"output_index":0,"item_id":"msg_infer_01a2227b-1fff-7801-8c6e-5ea77a64f2a2_0","delta":"
+      is","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":8,"output_index":0,"item_id":"msg_infer_01a2227b-1fff-7801-8c6e-5ea77a64f2a2_0","delta":"
+      now","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":9,"output_index":0,"item_id":"msg_infer_01a2227b-1fff-7801-8c6e-5ea77a64f2a2_0","delta":"
+      Design","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":10,"output_index":0,"item_id":"msg_infer_01a2227b-1fff-7801-8c6e-5ea77a64f2a2_0","delta":"
+      is","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":11,"output_index":0,"item_id":"msg_infer_01a2227b-1fff-7801-8c6e-5ea77a64f2a2_0","delta":"
+      complete","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":12,"output_index":0,"item_id":"msg_infer_01a2227b-1fff-7801-8c6e-5ea77a64f2a2_0","delta":".","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":13,"output_index":0,"item_id":"msg_infer_01a2227b-1fff-7801-8c6e-5ea77a64f2a2_0","delta":"
+      Development","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":14,"output_index":0,"item_id":"msg_infer_01a2227b-1fff-7801-8c6e-5ea77a64f2a2_0","delta":"
+      has","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":15,"output_index":0,"item_id":"msg_infer_01a2227b-1fff-7801-8c6e-5ea77a64f2a2_0","delta":"
+      not","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":16,"output_index":0,"item_id":"msg_infer_01a2227b-1fff-7801-8c6e-5ea77a64f2a2_0","delta":"
+      started","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":17,"output_index":0,"item_id":"msg_infer_01a2227b-1fff-7801-8c6e-5ea77a64f2a2_0","delta":".","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","sequence_number":18,"output_index":0,"item_id":"msg_infer_01a2227b-1fff-7801-8c6e-5ea77a64f2a2_0","content_index":0,"text":"The
+      project status is now Design is complete. Development has not started."}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","sequence_number":19,"output_index":0,"item_id":"msg_infer_01a2227b-1fff-7801-8c6e-5ea77a64f2a2_0","content_index":0,"part":{"type":"output_text","text":"The
+      project status is now Design is complete. Development has not started.","annotations":[],"logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":20,"output_index":0,"item":{"type":"message","id":"msg_infer_01a2227b-1fff-7801-8c6e-5ea77a64f2a2_0","role":"assistant","status":"completed","content":[{"type":"output_text","text":"The
+      project status is now Design is complete. Development has not started.","annotations":[],"logprobs":[]}]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","sequence_number":21,"response":{"id":"resp_01a2227b-1ffe-79d3-9bb5-ff012371a8d9","object":"response","created_at":1795874824,"model":"Qwen/Qwen2.5-0.5B-Instruct","status":"completed","output":[{"type":"message","id":"msg_infer_01a2227b-1fff-7801-8c6e-5ea77a64f2a2_0","role":"assistant","status":"completed","content":[{"type":"output_text","text":"The
+      project status is now Design is complete. Development has not started.","annotations":[],"logprobs":[]}]}],"usage":{"input_tokens":216,"output_tokens":15,"total_tokens":231,"input_tokens_details":{"cached_tokens":208,"cache_write_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":"resp_01a2227b-1f4c-7a71-ba81-b4dff61f7573","instructions":null,"max_tool_calls":null,"service_tier":"default","tools":[{"type":"function","name":"get_project_status","description":"Get
+      task-tracker project status.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false},"strict":true}],"tool_choice":"auto","completed_at":1795874824,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":0.0,"reasoning":null,"max_output_tokens":128,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null}}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200
+    headers:
+      content-type: text/event-stream; charset=utf-8
+- filename: t8
+  request:
+    method: POST
+    path: /v1/responses
+    query_params: {}
+    body:
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      input:
+      - type: function_call_output
+        call_id: call_64bb9ab66367465490aa4a27
+        output: Design is complete. Development has not started.
+      store: true
+      stream: true
+      temperature: 0
+      max_output_tokens: 128
+      text:
+        format:
+          type: json_schema
+          name: steering_settings
+          strict: true
+          schema:
+            type: object
+            properties:
+              markers:
+                type: array
+                items:
+                  type: string
+              answer:
+                type: string
+            required:
+            - markers
+            - answer
+            additionalProperties: false
+      previous_response_id: resp_01a2227b-1f4c-7a71-ba81-b4dff61f7573
+      tools: []
+      tool_choice: auto
+      instructions: Put the two sentences returned by the tool in markers, and the
+        complete tool result in answer.
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.29.0
+      content-type: application/json
+  response:
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a2227b-206f-7d41-a705-e57527bae604","object":"response","created_at":1795874824,"model":"Qwen/Qwen2.5-0.5B-Instruct","status":"in_progress","prompt_cache_options":null,"usage":null,"incomplete_details":null,"error":null,"previous_response_id":"resp_01a2227b-1f4c-7a71-ba81-b4dff61f7573","instructions":null,"max_tool_calls":null,"service_tier":"default","tools":[],"tool_choice":"auto","completed_at":null,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"json_schema","name":"steering_settings","schema":{"type":"object","properties":{"markers":{"type":"array","items":{"type":"string"}},"answer":{"type":"string"}},"required":["markers","answer"],"additionalProperties":false},"strict":true}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":0.0,"reasoning":null,"max_output_tokens":128,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a2227b-206f-7d41-a705-e57527bae604","object":"response","created_at":1795874824,"model":"Qwen/Qwen2.5-0.5B-Instruct","status":"in_progress","prompt_cache_options":null,"usage":null,"incomplete_details":null,"error":null,"previous_response_id":"resp_01a2227b-1f4c-7a71-ba81-b4dff61f7573","instructions":null,"max_tool_calls":null,"service_tier":"default","tools":[],"tool_choice":"auto","completed_at":null,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"json_schema","name":"steering_settings","schema":{"type":"object","properties":{"markers":{"type":"array","items":{"type":"string"}},"answer":{"type":"string"}},"required":["markers","answer"],"additionalProperties":false},"strict":true}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":0.0,"reasoning":null,"max_output_tokens":128,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"type":"message","id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","role":"assistant","status":"in_progress","content":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","sequence_number":3,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","content_index":0,"part":{"type":"output_text","text":"","annotations":[],"logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":4,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"{\"","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":5,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"marker","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":6,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"s","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":7,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"\":","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":8,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"
+      [\"","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":9,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"Design","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":10,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"
+      is","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":11,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"
+      complete","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":12,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":".\",","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":13,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"
+      \"","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":14,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"Development","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":15,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"
+      has","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":16,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"
+      not","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":17,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"
+      started","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":18,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":".\"","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":19,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"],","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":20,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"
+      \"","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":21,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"answer","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":22,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"\":","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":23,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"
+      \"","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":24,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"Design","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":25,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"
+      is","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":26,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"
+      complete","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":27,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":".","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":28,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"
+      Development","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":29,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"
+      has","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":30,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"
+      not","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":31,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"
+      started","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":32,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":".\"","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":33,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","delta":"}","content_index":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","sequence_number":34,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","content_index":0,"text":"{\"markers\":
+      [\"Design is complete.\", \"Development has not started.\"], \"answer\": \"Design
+      is complete. Development has not started.\"}"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","sequence_number":35,"output_index":0,"item_id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","content_index":0,"part":{"type":"output_text","text":"{\"markers\":
+      [\"Design is complete.\", \"Development has not started.\"], \"answer\": \"Design
+      is complete. Development has not started.\"}","annotations":[],"logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":36,"output_index":0,"item":{"type":"message","id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","role":"assistant","status":"completed","content":[{"type":"output_text","text":"{\"markers\":
+      [\"Design is complete.\", \"Development has not started.\"], \"answer\": \"Design
+      is complete. Development has not started.\"}","annotations":[],"logprobs":[]}]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","sequence_number":37,"response":{"id":"resp_01a2227b-206f-7d41-a705-e57527bae604","object":"response","created_at":1795874824,"model":"Qwen/Qwen2.5-0.5B-Instruct","status":"completed","output":[{"type":"message","id":"msg_infer_01a2227b-2070-7872-8b44-7ac620362727_0","role":"assistant","status":"completed","content":[{"type":"output_text","text":"{\"markers\":
+      [\"Design is complete.\", \"Development has not started.\"], \"answer\": \"Design
+      is complete. Development has not started.\"}","annotations":[],"logprobs":[]}]}],"usage":{"input_tokens":86,"output_tokens":31,"total_tokens":117,"input_tokens_details":{"cached_tokens":80,"cache_write_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":"resp_01a2227b-1f4c-7a71-ba81-b4dff61f7573","instructions":"Put
+      the two sentences returned by the tool in markers, and the complete tool result
+      in answer.","max_tool_calls":null,"service_tier":"default","tools":[],"tool_choice":"auto","completed_at":1795874824,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"json_schema","name":"steering_settings","schema":{"type":"object","properties":{"markers":{"type":"array","items":{"type":"string"}},"answer":{"type":"string"}},"required":["markers","answer"],"additionalProperties":false},"strict":true}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":0.0,"reasoning":null,"max_output_tokens":128,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null}}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200
+    headers:
+      content-type: text/event-stream; charset=utf-8
+- filename: t9
+  request:
+    method: GET
+    path: /v1/responses/resp_01a2227b-206f-7d41-a705-e57527bae604/input_items
+    query_params:
+      order: asc
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.29.0
+  response:
+    status_code: 200
+    headers:
+      content-type: application/json
+    body:
+      object: list
+      data:
+      - type: message
+        id: msg_01a2227b-1fa2-7ae0-987d-c8a343e74192
+        role: user
+        status: completed
+        content:
+        - type: input_text
+          text: Call get_project_status exactly once for task-tracker.
+      - type: function_call
+        id: fc_infer_01a2227b-1f4d-7a81-94fa-d186e55b3bdf_0
+        call_id: call_64bb9ab66367465490aa4a27
+        name: get_project_status
+        arguments: '{}'
+        status: completed
+      - type: function_call_output
+        id: fc_01a2227b-20ff-7b61-81ab-32c4c45779ca
+        status: completed
+        call_id: call_64bb9ab66367465490aa4a27
+        output: Design is complete. Development has not started.
+      has_more: false
+      first_id: msg_01a2227b-1fa2-7ae0-987d-c8a343e74192
+      last_id: fc_01a2227b-20ff-7b61-81ab-32c4c45779ca

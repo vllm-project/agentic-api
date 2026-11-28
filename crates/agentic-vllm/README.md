@@ -69,12 +69,18 @@ attempt token on admission cancellation, timeout, stream error, or drop.
 - Temperature, top-p, output-token limit, ignore-EOS, reasoning effort, parallel
   tool choice, and cache salt. Omitted sampling values remain omitted for vLLM's
   own defaults. Metadata and prompt-cache hints remain orchestration hints.
+- Responses `text.format` supports `text`, `json_object`, and `json_schema`.
+  The adapter validates the schema, resolves local references such as `#/$defs/Answer`,
+  and checks the configured decoder's capabilities.
+  It passes the schema to vLLM in declaration order for constrained decoding.
+  The public response retains the schema name, description, and `strict` setting.
+  A continuation uses its own format.
 - Parsed text, reasoning, and function-call events; completed and incomplete
   outcomes; engine usage, including cache writes, converted once into core `ResponseUsage`.
 - The same executor handles JSON/SSE delivery, continuation, and compaction.
 
 Unsupported model/input/options fail before engine submission: multimodal input,
-opaque or summarized reasoning replay, structured output, requested logprobs,
+opaque or summarized reasoning replay, requested logprobs,
 non-disabled truncation, prompt-cache controls, non-default service tiers, upstream
 extension fields, and additional reasoning/text controls. Parser and tool
 support also depend on the loaded frontend/model. This profile does not establish

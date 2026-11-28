@@ -12,7 +12,9 @@ agentic-core.workspace = true
 async-stream.workspace = true
 futures.workspace = true
 http.workspace = true
+jsonschema = { version = "0.28", default-features = false }
 num-traits.workspace = true
+referencing = "0.28"
 serde_json.workspace = true
 serde.workspace = true
 thiserror.workspace = true
